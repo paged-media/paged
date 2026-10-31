@@ -18,9 +18,9 @@
       "value": 0.48746
     },
     "weightedExport": {
-      "covered": 99212,
+      "covered": 99230,
       "total": 633952,
-      "value": 0.156498
+      "value": 0.156526
     },
     "misplacedReads": 30,
     "unseenReads": 438,
@@ -1818,6 +1818,9 @@
     "Spreads|Link@Self|attr",
     "Spreads|Link@ShowInUI|attr",
     "Spreads|Link@StoredState|attr",
+    "Spreads|OpacityGradientStop@Location|attr",
+    "Spreads|OpacityGradientStop@Midpoint|attr",
+    "Spreads|OpacityGradientStop@Opacity|attr",
     "Spreads|OuterGlowSetting@Applied|attr",
     "Spreads|OuterGlowSetting@Opacity|attr",
     "Spreads|OuterGlowSetting@Size|attr",

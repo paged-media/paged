@@ -171,11 +171,13 @@ is not written yet.
 | [1038](1038-the-remaining-codecs-and-the-layered-tiff.md) | The remaining codecs: GIF, BMP, TGA, JPEG XL and AVIF encode, HDR and OpenEXR floats, and the layered TIFF | Accepted 2026-10-28 |
 | [1039](1039-a-symbol-is-drawn-by-its-instances.md) | A symbol is kept once and drawn by its instances: 9-slice, overrides, one PDF form, IDML through labels | Accepted 2026-10-28 |
 | [1040](1040-word-change-tracking.md) | Word's change tracking: changes carried by what they changed, recorded while typing, accepted and rejected as each other's opposite, shown by the markup view (amends 184) | Accepted 2026-10-29 |
+| [1042](1042-live-vector-effects-are-stack-entries.md) | Live vector effects are entries of the effect stack: the build draws the effected outline, editing keeps the source, IDML bakes it | Accepted 2026-10-29 |
 | [1043](1043-an-item-has-several-fills-and-strokes.md) | An item has several fills and strokes (native appearance), drawn as parts, baked to a group in IDML and restored from its label | Accepted 2026-10-29 |
 | [1044](1044-a-photoshop-layer-style-maps-onto-the-effect-stack.md) | A Photoshop layer style maps onto the effect stack: `paged-psd-fx`, losses named | Accepted 2026-10-29 |
 | [1045](1045-an-anchored-frame-paints-as-a-free-frame.md) | An anchored frame paints as a free frame does: its look, its picture in its effects, IDML both ways | Accepted 2026-10-29 |
 | [1046](1046-a-scene-layer-takes-its-frames-effects.md) | A scene layer takes its frame's opacity, blend mode and effects | Accepted 2026-10-30 |
 | [1047](1047-live-shapes.md) | A polygon, a star and a pie stay live shapes: parameters on the item, the outline in IDML, the parameters in a label | Accepted 2026-10-30 |
+| [1048](1048-gradient-mesh-and-freeform-gradient.md) | Gradient meshes and freeform gradients are native fills, drawn as a cached raster | Accepted 2026-10-29 |
 | [1050](1050-anchored-floats-text-frames-and-objects-in-cells.md) | Anchored floats wrap, sit behind the text and keep clear of each other; anchored text frames; tables and objects in table cells | Accepted 2026-10-30 |
 | [1051](1051-paragraph-direction-and-script-font-slots.md) | A paragraph's base direction (logical alignment, indents and tabs, UAX #9 at its level, mirrored right to left) and a run's direction and East Asian / complex-script font slots | Accepted 2026-10-30 |
 | [1052](1052-content-controls.md) | Content controls: a range of runs that is a checkbox, drop-down, date or text field; one value set is one undo step | Accepted 2026-10-30 |

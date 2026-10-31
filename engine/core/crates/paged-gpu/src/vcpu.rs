@@ -1093,6 +1093,27 @@ impl Raster<'_> {
                         PenikoBlendMode::default(),
                     );
                 }
+                DisplayCommand::MeshShade {
+                    mesh_id, transform, ..
+                } => {
+                    let xform = self.active().xform;
+                    let Some((raster, to_px)) =
+                        vello_map::mesh_image(list, *mesh_id, transform, xform)
+                    else {
+                        continue;
+                    };
+                    let Some(pixmap) = mesh_pixmap(&raster) else {
+                        continue;
+                    };
+                    let (surface, res, _) = self.split();
+                    surface.draw_image(
+                        res,
+                        pixmap,
+                        to_px,
+                        image_sampler(),
+                        PenikoBlendMode::default(),
+                    );
+                }
                 DisplayCommand::PushClip { path_id, transform } => {
                     let rule = vello_map::path_fill(list, *path_id);
                     let path = list
@@ -1921,6 +1942,44 @@ fn image_sampler() -> ImageSampler {
     ImageSampler::new().with_extend(Extend::Pad)
 }
 
+/// A mesh raster's cache key and its pixmap.
+type MeshPixmap = ((u64, i32), Arc<Pixmap>);
+
+thread_local! {
+    /// Engine ADR 1048 — the last mesh rasters as pixmaps, so a redraw at
+    /// the same scale copies nothing.
+    static MESH_PIXMAPS: std::cell::RefCell<Vec<MeshPixmap>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A mesh raster as a `vello_cpu` pixmap (straight alpha, as the
+/// GPU lane's image brush reads it).
+fn mesh_pixmap(raster: &paged_compose::MeshRaster) -> Option<Arc<Pixmap>> {
+    if raster.width > u32::from(u16::MAX) || raster.height > u32::from(u16::MAX) {
+        return None;
+    }
+    MESH_PIXMAPS.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some(at) = c.iter().position(|(k, _)| *k == raster.key) {
+            let hit = c.remove(at);
+            let pixmap = hit.1.clone();
+            c.push(hit);
+            return Some(pixmap);
+        }
+        let pixmap = Arc::new(Pixmap::from_parts(
+            raster.rgba.as_ref().clone(),
+            raster.width as u16,
+            raster.height as u16,
+            PixelMetadata::new(ImageAlphaType::Alpha, true),
+        ));
+        if c.len() >= 8 {
+            c.remove(0);
+        }
+        c.push((raster.key, pixmap.clone()));
+        Some(pixmap)
+    })
+}
+
 /// Effect stamps are rasters on a grid at the render's own resolution;
 /// bilinear places them at their sub-pixel origin, as the GPU lane does.
 fn stamp_sampler() -> ImageSampler {
@@ -2272,31 +2331,12 @@ fn gradient_feather_factors(
                         ((rx * rx + ry * ry).sqrt() / radius).clamp(0.0, 1.0)
                     }
                 };
-                sample_gradient_alpha(&stops, t)
+                paged_compose::gradient_sample::sample_alpha(&stops, t)
             };
             out[k] = 1.0 - (aa as f32 / 255.0) * (1.0 - alpha);
         }
     }
     out
-}
-
-/// Gradient alpha at `t` over sorted `(location, alpha)` stops; outside
-/// the stops' range it holds the nearest endpoint.
-fn sample_gradient_alpha(stops: &[(f32, f32)], t: f32) -> f32 {
-    if t <= stops[0].0 {
-        return stops[0].1;
-    }
-    if t >= stops[stops.len() - 1].0 {
-        return stops[stops.len() - 1].1;
-    }
-    for pair in stops.windows(2) {
-        let ((l_loc, l_alpha), (r_loc, r_alpha)) = (pair[0], pair[1]);
-        if t <= r_loc {
-            let f = (t - l_loc) / (r_loc - l_loc).max(1e-6);
-            return l_alpha + (r_alpha - l_alpha) * f;
-        }
-    }
-    stops[stops.len() - 1].1
 }
 
 /// Is every command on the page a plain draw — a `Normal` fill or

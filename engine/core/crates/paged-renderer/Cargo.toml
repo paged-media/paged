@@ -61,6 +61,9 @@ paged-resample = { path = "../paged-resample" }
 # A placed EPS is drawn from its PostScript (engine ADR 1033).
 paged-ps = { path = "../paged-ps" }
 paged-compose = { path = "../paged-compose" }
+# Live vector effects (engine ADR 1042): an item with vector entries in its
+# effect stack is drawn as the item its effected outline describes.
+paged-vector-fx = { path = "../paged-vector-fx" }
 paged-gpu = { path = "../paged-gpu", default-features = false, features = ["svg"] }
 # W3.B2 — IDML save-back, used by the `paged-inspect --roundtrip`
 # conformance hook. Lightweight (idml-import + paged-scene + zip +

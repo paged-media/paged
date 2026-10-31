@@ -327,6 +327,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.placeSymbolInstance", "(symbolId, pageId, [x, y]?, [a, b, c, d]?)", "string | null", "write", "Place an instance, its registration point at [x, y] page pt (omit: the page centre); returns its instance:<id> address."),
         f!("paged.breakSymbolLink", "(elementId)", "string | null", "write", "Break Link to Symbol: the instance becomes ordinary items; returns the new root's address."),
         f!("paged.deleteSymbol", "(symbolId)", "bool", "write", "Delete a symbol; its instances become ordinary items first."),
+        f!("paged.expandAppearance", "(elementId)", "bool", "write", "Expand Appearance: the item becomes what its live vector effects draw (engine ADR 1042)."),
         f!("paged.createMaster", "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })", "bool", "author", "Create a master spread: one page of the given size, or a copy of another master."),
         f!("paged.deleteMaster", "(masterId)", "bool", "author", "Delete a master no page applies."),
         f!("paged.renameMaster", "(masterId, name?)", "bool", "write", "Set (omit/null: clear) a master's name."),
@@ -831,13 +832,18 @@ property_paths! {
         // Engine ADR 1037 — the placed picture's filter stack; IDML has none
         // (the export keeps it in a label and reports it).
         FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
-        // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
+        // Engine ADR 1007 — how a gradient stroke maps onto the stroke; IDML has no attribute.
+        FrameGradientStrokeMode => "frameGradientStrokeMode" : enum_(STROKE_GRADIENT_MODES).default_text("Within"),
+        // Engine ADRs 1007 and 1031 — the gradient fill's start, `[x, y]` in inner coordinates ([] = default).
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
         // Engine ADR 1047 — live shapes; IDML has none (the outline is written, the parameters ride a label).
         FrameShapeSides => "frameShapeSides" : count().range(3.0, 100.0),
         FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
         FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
         FrameShapePieEnd => "frameShapePieEnd" : deg().default_num(360.0),
+        // Engine ADR 1048 — the native mesh fill (no IDML attribute: a
+        // label carries it through an IDML round trip).
+        FrameFillMesh => "frameFillMesh" : structure("MeshFillSpec", Wire::FillMesh),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -931,6 +937,8 @@ property_paths! {
         GroupIsolateBlending => "groupIsolateBlending" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, IsolateBlending)]),
         GroupKnockout => "groupKnockout" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, KnockoutGroup)]),
         GroupClip => "groupClip" : bool_().default_bool(false),
+        // Engine ADR 1042 — a group's vector effects (Pathfinder and the rest).
+        GroupEffectStack => "groupEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         // Engine ADR 1039 — a symbol instance's tint `[r, g, b, amount]`
         // and 9-slice guides `[left, top, right, bottom]`; `[]` clears.
         // Native: IDML has no symbol (the writer expands instances).
@@ -1555,9 +1563,17 @@ mod tests {
         // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
         // inset, an oval's pie angles).
         //
-        // 272 -> 282: ADR 1051 — the paragraph direction and the eight
+        // 272 -> 273: ADR 1042 — a group's vector effects.
+        //
+        // 273 -> 274: ADR 1007 — a frame's stroke gradient mode (its
+        // gradient's start point is ADR 1031's path).
+        //
+        // 274 -> 275: ADR 1048 — a frame's gradient mesh or freeform
+        // gradient.
+        //
+        // 275 -> 285: ADR 1051 — the paragraph direction and the eight
         // script paths; ADR 1052 — a range's content control.
-        assert_eq!(cat.settable_paths.len(), 282, "settable path count drifted");
+        assert_eq!(cat.settable_paths.len(), 285, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

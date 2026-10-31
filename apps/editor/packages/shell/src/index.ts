@@ -228,6 +228,13 @@ export {
   ToolSettingsProvider,
   useToolSettings,
 } from "./state/tool-settings-context";
+export {
+  PAINT_TARGET,
+  usePaintTarget,
+  type PaintColor,
+  type PaintTarget,
+  type PaintTargetStore,
+} from "./tools/paint-target";
 
 export {
   FormattingAffectsProvider,

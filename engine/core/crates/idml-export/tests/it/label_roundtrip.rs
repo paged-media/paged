@@ -306,6 +306,7 @@ fn a_moved_items_label_keeps_its_newlines() {
         corner_option: None,
         corners: Default::default(),
         clip: false,
+        effect_stack: Vec::new(),
     });
     let out = rewrite_spread(SRC, &s).expect("rewrite");
     let text = String::from_utf8_lossy(&out).into_owned();

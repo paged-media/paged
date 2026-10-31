@@ -51,6 +51,11 @@ pub(crate) fn fill_paint_module(
     outer: Transform,
     fill_path: Option<PathId>,
 ) {
+    // Engine ADR 1048 — a gradient mesh or freeform gradient paints
+    // instead of the swatch, whatever the swatch is.
+    if super::mesh_fill::emit_mesh_fill(frame, page, color_ctx, outer, fill_path) {
+        return;
+    }
     if frame_fill_is_transparent(frame.fill_color) {
         return;
     }
@@ -105,11 +110,18 @@ pub(crate) fn fill_paint_module(
             rebase_radial_gradient_to_bbox(page, gid, *bbox);
             Paint::RadialGradient(gid)
         }
+        (Paint::SweepGradient(gid), Geometry::Polygon { bbox, .. }) => {
+            if let Some(g) = page.list.sweep_gradients.get_mut(gid.0 as usize) {
+                g.center = (bbox.x + g.center.0 * bbox.w, bbox.y + g.center.1 * bbox.h);
+            }
+            Paint::SweepGradient(gid)
+        }
         _ => fill,
     };
     match fill {
         Paint::LinearGradient(gid) => place_linear_at_start(page, gid, frame),
         Paint::RadialGradient(gid) => place_radial_at_start(page, gid, frame),
+        Paint::SweepGradient(gid) => place_sweep_at_start(page, gid, frame),
         _ => {}
     }
     let start = page.list.commands.len();
@@ -297,6 +309,36 @@ fn place_radial_at_start(
         {
             g.center = ((sx - rect.x) / rect.w, (sy - rect.y) / rect.h);
             g.radius = 2.0 * len / (rect.w + rect.h);
+        }
+        _ => {}
+    }
+}
+
+/// Engine ADR 1007 — an explicit `GradientFillStart` centres a conic
+/// gradient there (the frame's inner coordinates); without one it turns
+/// about the box's centre, where the paint was built. A polygon's
+/// gradient is in inner coordinates already; a rect's, a text frame's
+/// and an oval's in its unit rectangle.
+fn place_sweep_at_start(
+    page: &mut BuiltPage,
+    gid: paged_compose::GradientId,
+    frame: &ResolvedFrame<'_>,
+) {
+    let Some([sx, sy]) = frame
+        .gradient_fill_start
+        .filter(|[x, y]| x.is_finite() && y.is_finite())
+    else {
+        return;
+    };
+    let Some(g) = page.list.sweep_gradients.get_mut(gid.0 as usize) else {
+        return;
+    };
+    match frame.geometry {
+        Geometry::Polygon { .. } => g.center = (sx, sy),
+        Geometry::Rect { rect } | Geometry::TextFrameRect { rect } | Geometry::Oval { rect }
+            if rect.w > 0.0 && rect.h > 0.0 =>
+        {
+            g.center = ((sx - rect.x) / rect.w, (sy - rect.y) / rect.h);
         }
         _ => {}
     }

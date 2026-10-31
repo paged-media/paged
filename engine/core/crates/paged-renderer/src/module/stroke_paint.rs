@@ -80,6 +80,17 @@ pub(crate) fn stroke_paint_module(
         return;
     };
     let start = page.list.commands.len();
-    emit_stroked(&frame.geometry, page, paint, stroke, outer, stroke_path);
+    // Engine ADR 1007 — a gradient mapped along or across the stroke is
+    // laid down as bands under the stroke's outline; `Within` (and every
+    // solid stroke) emits as it always did.
+    super::stroke_gradient::emit_mapped_stroke(
+        page,
+        frame.gradient_stroke_mode,
+        paint,
+        stroke,
+        |page, paint, stroke| {
+            emit_stroked(&frame.geometry, page, paint, stroke, outer, stroke_path);
+        },
+    );
     rewrite_tail_for_overprint(page, start, false, frame.overprint_stroke);
 }

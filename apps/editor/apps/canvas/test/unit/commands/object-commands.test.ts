@@ -1184,6 +1184,18 @@ describe("inside an edit context the object verbs do not apply", () => {
     expect(
       deleteKeyApplies({ tool: { effectiveTool: "paged.tool.select" } }),
     ).toBe(true);
+    // WP7.2 — the Mesh tool and the freeform Gradient tool remove their
+    // selected point with the keys; the Linear gradient tool does not.
+    expect(
+      deleteKeyApplies({ tool: { effectiveTool: "paged.tool.mesh" } }),
+    ).toBe(false);
+    const gradient = (mode: string) => ({
+      tool: { effectiveTool: "paged.tool.gradientSwatch" },
+      toolSettings: { getValue: () => mode },
+    });
+    expect(deleteKeyApplies(gradient("freeformPoints"))).toBe(false);
+    expect(deleteKeyApplies(gradient("freeformLines"))).toBe(false);
+    expect(deleteKeyApplies(gradient("linear"))).toBe(true);
     expect(
       nudgeKeyApplies({
         overlaySignals: { toolPreview: { rect: [0, 0, 1, 1] } },

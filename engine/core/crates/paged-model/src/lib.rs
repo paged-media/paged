@@ -37,8 +37,10 @@ pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
 pub mod live_shape;
+pub mod mesh;
 pub mod review;
 pub mod script;
+pub mod vector_effect;
 pub mod winding;
 pub mod word_field;
 pub use content_control::{ContentControl, ContentControlKind, ListItem};
@@ -51,6 +53,11 @@ pub use script::{
     ScriptProperties,
 };
 pub use word_field::{WordField, WordFieldKind};
+
+pub use mesh::{
+    FreeformGradient, FreeformPoint, GradientMesh, MeshColor, MeshFill, MeshGrid, MeshHandle,
+    MeshNode, MeshPatch, PatchInput, MESH_FILL_LABEL_KEY,
+};
 
 use std::collections::BTreeMap;
 
@@ -1131,6 +1138,13 @@ pub struct Group {
     /// groups serialises (and hashes) as before the field existed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub clip: bool,
+    /// Engine ADR 1042 — the group's live vector effects: a Pathfinder
+    /// shape mode (Illustrator's compound shape) combining the members
+    /// into one outline, and the other vector effects acting on that
+    /// outline. Vector entries only; empty for every imported group, and
+    /// skipped when empty so documents serialise as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
 }
 
 impl Group {
@@ -1757,6 +1771,15 @@ pub struct TextFrame {
     pub gradient_stroke_angle: Option<f32>,
     /// See [`Rectangle::gradient_stroke_length`].
     pub gradient_stroke_length: Option<f32>,
+    /// See [`Rectangle::gradient_stroke_mode`].
+    #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
+    pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// `AppliedTOCStyle` attribute — `TOCStyle/<id>` reference. Frames
     /// authored as Table-of-Contents hosts carry this; the renderer
     /// detects it at story emission and swaps the story's paragraphs
@@ -1882,6 +1905,8 @@ impl TextFrame {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
+            gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
             effects: None,
             effect_stack: Vec::new(),
             appearance: Vec::new(),
@@ -2272,6 +2297,20 @@ pub struct Rectangle {
     /// `GradientStrokeLength` in points — same role as
     /// `gradient_fill_length` for the stroke gradient.
     pub gradient_stroke_length: Option<f32>,
+    /// Engine ADR 1007 — how a gradient stroke maps onto the stroke:
+    /// `Within` (IDML's only mode, the default) paints the gradient in
+    /// the frame's space and the stroke shows the part it covers;
+    /// `Along` runs the ramp along the path's length and `Across` from
+    /// one edge of the stroke to the other. Native: kept in `.paged`,
+    /// reported as a loss on IDML export.
+    #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
+    pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// `<TextPath>` children attached to this rectangle. See
     /// [`Polygon::text_paths`].
     pub text_paths: Vec<TextPath>,
@@ -2402,6 +2441,8 @@ impl Rectangle {
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
+            gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
         }
     }
 }
@@ -2732,6 +2773,15 @@ pub struct Oval {
     pub gradient_stroke_angle: Option<f32>,
     /// See [`Rectangle::gradient_stroke_length`].
     pub gradient_stroke_length: Option<f32>,
+    /// See [`Rectangle::gradient_stroke_mode`].
+    #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
+    pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// See [`Rectangle::opacity`].
     pub opacity: Option<f32>,
     /// See [`Rectangle::blend_mode`].
@@ -2886,6 +2936,8 @@ impl Oval {
             fill_rule: FillRule::NonZero,
             pie: None,
             image_adjustments: Vec::new(),
+            gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
         }
     }
 }
@@ -2942,6 +2994,11 @@ pub struct GraphicLine {
     /// and re-wound or reported as lost on IDML export.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// See [`Rectangle::gradient_stroke_mode`]. A line has no stroke
+    /// gradient geometry of its own, so `Within` paints the gradient
+    /// over the line's bounds.
+    #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
+    pub gradient_stroke_mode: StrokeGradientMode,
     /// `<TextPath>` children attached to this line. See
     /// [`Polygon::text_paths`].
     pub text_paths: Vec<TextPath>,
@@ -3051,6 +3108,7 @@ impl GraphicLine {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
+            gradient_stroke_mode: StrokeGradientMode::Within,
             text_paths: Vec::new(),
             effects: None,
             opacity: None,
@@ -3100,6 +3158,47 @@ impl FillRule {
         match s {
             "" | "NonZero" => Some(FillRule::NonZero),
             "EvenOdd" => Some(FillRule::EvenOdd),
+            _ => None,
+        }
+    }
+}
+
+/// Engine ADR 1007 — how a stroke's gradient maps onto the stroke.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum StrokeGradientMode {
+    /// The gradient is laid out in the frame's space (angle, start,
+    /// length) and the stroke shows the part it covers — IDML's mode.
+    #[default]
+    Within,
+    /// The ramp's parameter is the arc length along the path, 0 at its
+    /// start and 1 at its end (per contour).
+    Along,
+    /// The ramp's parameter is the signed distance across the stroke,
+    /// 0 on the left edge (seen along the path's direction) and 1 on
+    /// the right.
+    Across,
+}
+
+impl StrokeGradientMode {
+    pub fn is_within(&self) -> bool {
+        *self == StrokeGradientMode::Within
+    }
+
+    /// The wire spelling (`"Within"` / `"Along"` / `"Across"`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            StrokeGradientMode::Within => "Within",
+            StrokeGradientMode::Along => "Along",
+            StrokeGradientMode::Across => "Across",
+        }
+    }
+
+    /// Reads the wire spelling; `""` is `Within`.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "" | "Within" => Some(StrokeGradientMode::Within),
+            "Along" => Some(StrokeGradientMode::Along),
+            "Across" => Some(StrokeGradientMode::Across),
             _ => None,
         }
     }
@@ -3465,6 +3564,15 @@ pub struct Polygon {
     pub gradient_stroke_angle: Option<f32>,
     /// See [`Rectangle::gradient_stroke_length`].
     pub gradient_stroke_length: Option<f32>,
+    /// See [`Rectangle::gradient_stroke_mode`].
+    #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
+    pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// See [`Rectangle::opacity`].
     pub opacity: Option<f32>,
     /// See [`Rectangle::blend_mode`].
@@ -3601,6 +3709,8 @@ impl Polygon {
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
+            gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
             text_wrap: None,
             item_layer: None,
             effects: None,
@@ -3834,12 +3944,47 @@ pub struct GradientEntry {
 pub enum GradientKind {
     Linear,
     Radial,
+    /// Engine ADR 1007 — a conic (sweep) gradient: the ramp turns once
+    /// around the centre (the frame's gradient start, else its box's
+    /// centre), beginning at the frame's gradient angle. Native: IDML
+    /// has no conic gradient, so the export writes it linear and
+    /// reports the loss.
+    Conic,
     Unknown,
 }
 
+/// Engine ADR 1007 — a stop's own colour, when it names no swatch.
+/// `space` and `value` follow [`ColorEntry`]: CMYK percentages, RGB
+/// 0..=255, Lab `L* a* b*`, Gray percent.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InlineStopColor {
+    pub space: ColorSpace,
+    pub value: Vec<f32>,
+}
+
+impl InlineStopColor {
+    /// The colour as an unnamed process [`ColorEntry`], so every
+    /// resolver that reads swatches reads it alike.
+    pub fn as_entry(&self, self_id: &str) -> ColorEntry {
+        ColorEntry {
+            self_id: self_id.to_string(),
+            name: None,
+            space: self.space,
+            value: self.value.clone(),
+            model: ColorModel::Process,
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+        }
+    }
+}
+
 /// One stop in a gradient: a Color reference + a normalised location.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GradientStopRef {
+    /// The `Color/<id>` swatch the stop shows — IDML's only form. Empty
+    /// when the stop carries an [`inline_color`](Self::inline_color).
     pub stop_color: String,
     /// `Location` attribute, 0..=100 in IDML.
     pub location_pct: f32,
@@ -3849,6 +3994,66 @@ pub struct GradientStopRef {
     /// `gradient-geometry` fixture; a first stop's midpoint governs
     /// nothing. `None` ⇒ the file omitted it ⇒ treat as the linear 50.
     pub midpoint_pct: Option<f32>,
+    /// Engine ADR 1007 — the stop's opacity, 0..=100; `None` is 100.
+    /// IDML stops have none: the export turns a fill's opacity stops
+    /// into an equivalent gradient feather where it can and reports
+    /// the rest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_pct: Option<f32>,
+    /// Engine ADR 1007 — the stop's own colour. When set it wins over
+    /// `stop_color`; the IDML export writes it as an unnamed colour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline_color: Option<InlineStopColor>,
+}
+
+impl GradientStopRef {
+    /// A stop showing the swatch `stop_color` (IDML's form).
+    pub fn swatch(
+        stop_color: impl Into<String>,
+        location_pct: f32,
+        midpoint_pct: Option<f32>,
+    ) -> Self {
+        GradientStopRef {
+            stop_color: stop_color.into(),
+            location_pct,
+            midpoint_pct,
+            opacity_pct: None,
+            inline_color: None,
+        }
+    }
+
+    /// The stop's opacity as a 0..=1 factor.
+    pub fn opacity(&self) -> f32 {
+        self.opacity_pct
+            .map(|o| (o / 100.0).clamp(0.0, 1.0))
+            .unwrap_or(1.0)
+    }
+
+    /// Whether the stop is less than fully opaque.
+    pub fn is_translucent(&self) -> bool {
+        self.opacity() < 1.0
+    }
+
+    /// The colour the stop shows: its inline colour, else the swatch
+    /// it names in `palette`.
+    pub fn resolve_color(&self, palette: &Graphic) -> Option<ColorEntry> {
+        match &self.inline_color {
+            Some(c) => Some(c.as_entry(&self.stop_color)),
+            None => palette.resolve(&self.stop_color).cloned(),
+        }
+    }
+}
+
+impl GradientEntry {
+    /// Whether any stop is less than fully opaque.
+    pub fn has_opacity_stops(&self) -> bool {
+        self.stops.iter().any(GradientStopRef::is_translucent)
+    }
+
+    /// Whether any stop carries its own colour instead of a swatch.
+    pub fn has_inline_stops(&self) -> bool {
+        self.stops.iter().any(|s| s.inline_color.is_some())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

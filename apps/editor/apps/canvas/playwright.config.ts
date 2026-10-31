@@ -114,11 +114,16 @@ export default defineConfig({
     viewport: { width: 1600, height: 1000 },
   },
   webServer: {
-    // Vite under Bun (`--bun`), as `bun run dev` starts it. Bound to the
-    // same IPv4 loopback the health check polls (BASE_URL): left to its
-    // default, Vite can listen on `localhost` resolved to ::1 only, and the
-    // 127.0.0.1 probe then never answers.
-    command: `bunx --bun vite --host 127.0.0.1 --port ${PORT} --strictPort`,
+    // Vite on Node, not Bun. Under `bunx --bun vite` (2026-10-18 to
+    // 2026-10-31) about one CI shard in seven lost its runner: from a random
+    // test on, the dev server (Bun, though `ps` names it `node`: Bun runs the
+    // bin through a `node` shim) grew ~1 GB every 30 s to 14 GB, through
+    // passing and failing tests and worker restarts alike, until the runner
+    // ran out of memory. The suite on Node holds ~1 GB. `bun run dev` stays
+    // on Bun. Bound to the same IPv4 loopback the health check polls
+    // (BASE_URL): left to its default, Vite can listen on `localhost`
+    // resolved to ::1 only, and the 127.0.0.1 probe then never answers.
+    command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${PORT} --strictPort`,
     cwd: __dirname,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,

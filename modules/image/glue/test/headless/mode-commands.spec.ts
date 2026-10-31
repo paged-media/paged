@@ -68,6 +68,34 @@ describe("[image.io.depth-color-modes] Image ▸ Mode on the headless host", () 
     k.dispose();
   });
 
+  it("modeBits32, modeIndexed and modeMultichannel are image undo steps; Commit carries them", async () => {
+    covers("command:media.paged.image.command.modeBits32");
+    covers("command:media.paged.image.command.modeIndexed");
+    covers("command:media.paged.image.command.modeMultichannel");
+    const k = await ingested();
+    await run(k, "modeBits32");
+    expect(k.session.state().mode.bits).toBe(32);
+    await run(k, "modeBits8");
+    await run(k, "modeMultichannel");
+    expect(k.session.state().mode.color).toBe("multichannel");
+    await run(k, "modeRgb");
+    await run(k, "modeIndexed");
+    expect(k.session.state().dialog?.kind).toBe("indexedColor");
+    expect(await k.session.setIndexedColor("adaptive", 16)).toBe(true);
+    expect(k.session.state().mode.color).toBe("indexed");
+    expect(k.session.state().history?.undoSteps).toEqual([
+      "32 Bits/Channel",
+      "8 Bits/Channel",
+      "Multichannel",
+      "RGB Color",
+      "Indexed Color",
+    ]);
+    expect(k.changes()).toBe(0);
+    await k.commit();
+    expect(k.changes()).toBe(1);
+    k.dispose();
+  });
+
   it("modeCmyk without a CMYK profile keeps every colour and says so", async () => {
     covers("command:media.paged.image.command.modeCmyk");
     const k = await ingested();

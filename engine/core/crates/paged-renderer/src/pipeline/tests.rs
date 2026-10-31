@@ -909,6 +909,8 @@ fn midpoint_governs_segment_before_its_stop() {
         stop_color: c.into(),
         location_pct: loc,
         midpoint_pct: mid,
+        opacity_pct: None,
+        inline_color: None,
     };
     palette.gradients.insert(
         "Gradient/G".into(),

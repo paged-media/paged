@@ -10,14 +10,18 @@ $ paged read gradient-detail doc.paged Gradient/u0
       "selfId": "Gradient/u0",
       "stops": [
         {
+          "color": null,
           "locationPct": 0.0,
           "midpointPct": null,
+          "opacityPct": null,
           "resolvedRgbHex": "#000000",
           "stopColorRef": "Color/Black"
         },
         {
+          "color": null,
           "locationPct": 100.0,
           "midpointPct": null,
+          "opacityPct": null,
           "resolvedRgbHex": "#ff0000",
           "stopColorRef": "Color/u1"
         }

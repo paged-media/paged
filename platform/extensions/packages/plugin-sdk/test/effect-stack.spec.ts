@@ -65,6 +65,8 @@ describe("frameEffectStack (engine ADR 1008) [effects-transparency.effect-stack]
       "frameEffectStack",
       "frameFillEffectStack",
       "frameStrokeEffectStack",
+      // Engine ADR 1042 — a group's vector effects.
+      "groupEffectStack",
     ]);
     for (const r of rows) {
       expect(r.type.kind).toBe("list");

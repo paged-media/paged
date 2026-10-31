@@ -57,7 +57,7 @@ describe("Effect menu [editor-shell.panels.appearance-transparency]", () => {
   test("a kind core adds later gets its row (plan C16)", () => {
     withFutureKind(() => {
       expect(buildEffectMenuItems().map((i) => i.path)).toContain(
-        "Object/Effects/Distort & Transform/Roughen",
+        "Object/Effects/Distort & Transform/Crystallize",
       );
     });
   });

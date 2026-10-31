@@ -102,6 +102,11 @@ pub struct EffectKindRow {
     /// wire spelling and catalog order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub field_paths: Vec<String>,
+    /// Engine ADR 1042 — a live vector effect: it changes the item's
+    /// geometry before anything paints (no blend or opacity of its own),
+    /// and `expandAppearance` keeps its result.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub vector: bool,
 }
 
 const ALL_TARGETS: &[&str] = &["object", "fill", "stroke", "content"];
@@ -213,6 +218,7 @@ fn indesign(kind: EffectKind, title: &'static str, stem: &str) -> EffectKindRow 
         params: Vec::new(),
         enable_path,
         field_paths,
+        vector: false,
     }
 }
 
@@ -233,6 +239,115 @@ fn stack_only(
         params,
         enable_path: None,
         field_paths: Vec::new(),
+        vector: false,
+    }
+}
+
+// ---- Engine ADR 1042 — the live vector effects ----------------------------
+
+/// A group's stack (the Pathfinder effect).
+const GROUP_ONLY: &[&str] = &["group"];
+const JOINS: &[&str] = &["miter", "round", "bevel"];
+const BOX_POINTS: &[&str] = &[
+    "topLeft",
+    "top",
+    "topRight",
+    "left",
+    "center",
+    "right",
+    "bottomLeft",
+    "bottom",
+    "bottomRight",
+];
+const WARP_STYLES: &[&str] = &[
+    "arc",
+    "arcLower",
+    "arcUpper",
+    "arch",
+    "bulge",
+    "shellLower",
+    "shellUpper",
+    "flag",
+    "wave",
+    "fish",
+    "rise",
+    "fisheye",
+    "inflate",
+    "squeeze",
+    "twist",
+];
+const SHAPES: &[&str] = &["rectangle", "roundedRectangle", "ellipse"];
+const PATHFINDER_OPS: &[&str] = &["add", "subtract", "intersect", "exclude"];
+
+fn bool_p(field: &'static str, title: &'static str, default: bool) -> EffectParam {
+    p(
+        field,
+        title,
+        ContractType::Bool,
+        None,
+        Some(DefaultValue::Bool(default)),
+    )
+}
+
+fn ranged(
+    field: &'static str,
+    title: &'static str,
+    unit: Option<&'static str>,
+    (lo, hi): (f64, f64),
+    default: f64,
+) -> EffectParam {
+    p(
+        field,
+        title,
+        num(unit),
+        Some((lo, hi)),
+        Some(DefaultValue::Number(default)),
+    )
+}
+
+fn count(field: &'static str, title: &'static str, hi: f64, default: f64) -> EffectParam {
+    p(
+        field,
+        title,
+        ContractType::Number {
+            integer: true,
+            unit: None,
+            keywords: &[],
+        },
+        Some((0.0, hi)),
+        Some(DefaultValue::Number(default)),
+    )
+}
+
+fn choice(
+    field: &'static str,
+    title: &'static str,
+    members: &'static [&'static str],
+    default: &'static str,
+) -> EffectParam {
+    p(
+        field,
+        title,
+        ContractType::Enum { members },
+        None,
+        Some(DefaultValue::Text(default)),
+    )
+}
+
+fn seed() -> EffectParam {
+    count("seed", "Seed", 4_294_967_295.0, 0.0)
+}
+
+fn vector(
+    kind: EffectKind,
+    title: &'static str,
+    category: &'static str,
+    params: Vec<EffectParam>,
+) -> EffectKindRow {
+    EffectKindRow {
+        blend: false,
+        vector: true,
+        ..stack_only(kind, title, category, params)
     }
 }
 
@@ -361,6 +476,228 @@ pub fn describe(kind: EffectKind) -> EffectKindRow {
                 ),
             ],
         ),
+        K::Roughen => vector(
+            kind,
+            "Roughen",
+            "distortAndTransform",
+            vec![
+                pt("size", "Size", 5.0),
+                bool_p("relative", "Relative", false),
+                ranged("detailPerInch", "Detail", None, (0.0, 1000.0), 10.0),
+                bool_p("smooth", "Smooth", false),
+                seed(),
+            ],
+        ),
+        K::ZigZag => vector(
+            kind,
+            "Zig zag",
+            "distortAndTransform",
+            vec![
+                pt("size", "Size", 10.0),
+                bool_p("relative", "Relative", false),
+                count("ridges", "Ridges per segment", 1000.0, 4.0),
+                bool_p("smooth", "Smooth", false),
+            ],
+        ),
+        K::PuckerBloat => vector(
+            kind,
+            "Pucker & bloat",
+            "distortAndTransform",
+            vec![ranged(
+                "amountPct",
+                "Amount",
+                Some("percent"),
+                (-200.0, 200.0),
+                0.0,
+            )],
+        ),
+        K::Twist => vector(
+            kind,
+            "Twist",
+            "distortAndTransform",
+            vec![ranged(
+                "angleDeg",
+                "Angle",
+                Some("deg"),
+                (-3600.0, 3600.0),
+                0.0,
+            )],
+        ),
+        K::Tweak => vector(
+            kind,
+            "Tweak",
+            "distortAndTransform",
+            vec![
+                pt("amountH", "Horizontal", 5.0),
+                pt("amountV", "Vertical", 5.0),
+                bool_p("relative", "Relative", false),
+                bool_p("anchors", "Anchor points", true),
+                bool_p("inHandles", "In control points", true),
+                bool_p("outHandles", "Out control points", true),
+                seed(),
+            ],
+        ),
+        K::TransformCopies => vector(
+            kind,
+            "Transform",
+            "distortAndTransform",
+            vec![
+                ranged(
+                    "scaleHPct",
+                    "Scale horizontal",
+                    Some("percent"),
+                    (-10_000.0, 10_000.0),
+                    100.0,
+                ),
+                ranged(
+                    "scaleVPct",
+                    "Scale vertical",
+                    Some("percent"),
+                    (-10_000.0, 10_000.0),
+                    100.0,
+                ),
+                p(
+                    "moveH",
+                    "Move horizontal",
+                    ContractType::Length,
+                    None,
+                    Some(DefaultValue::Number(0.0)),
+                ),
+                p(
+                    "moveV",
+                    "Move vertical",
+                    ContractType::Length,
+                    None,
+                    Some(DefaultValue::Number(0.0)),
+                ),
+                ranged("rotateDeg", "Rotate", Some("deg"), (-360.0, 360.0), 0.0),
+                bool_p("reflectX", "Reflect X", false),
+                bool_p("reflectY", "Reflect Y", false),
+                count("copies", "Copies", 1000.0, 0.0),
+                choice("origin", "Origin", BOX_POINTS, "center"),
+            ],
+        ),
+        K::FreeDistort => vector(
+            kind,
+            "Free distort",
+            "distortAndTransform",
+            vec![p(
+                "corners",
+                "Corners",
+                ContractType::List {
+                    of: Box::new(ContractType::List {
+                        of: Box::new(num(None)),
+                    }),
+                },
+                None,
+                None,
+            )],
+        ),
+        K::Warp => vector(
+            kind,
+            "Warp",
+            "warp",
+            vec![
+                choice("style", "Style", WARP_STYLES, "arc"),
+                bool_p("horizontal", "Horizontal", true),
+                ranged("bendPct", "Bend", Some("percent"), (-100.0, 100.0), 50.0),
+                ranged(
+                    "distortHPct",
+                    "Horizontal distortion",
+                    Some("percent"),
+                    (-100.0, 100.0),
+                    0.0,
+                ),
+                ranged(
+                    "distortVPct",
+                    "Vertical distortion",
+                    Some("percent"),
+                    (-100.0, 100.0),
+                    0.0,
+                ),
+            ],
+        ),
+        K::OffsetPath => vector(
+            kind,
+            "Offset path",
+            "path",
+            vec![
+                p(
+                    "offset",
+                    "Offset",
+                    ContractType::Length,
+                    None,
+                    Some(DefaultValue::Number(10.0)),
+                ),
+                choice("join", "Joins", JOINS, "miter"),
+                ranged("miterLimit", "Miter limit", None, (1.0, 500.0), 4.0),
+            ],
+        ),
+        // The item's own stroke is what it outlines: no parameters.
+        K::OutlinePath => vector(kind, "Outline stroke", "path", Vec::new()),
+        K::RoundCorners => vector(
+            kind,
+            "Round corners",
+            "stylize",
+            vec![pt("radius", "Radius", 10.0)],
+        ),
+        K::Scribble => vector(
+            kind,
+            "Scribble",
+            "stylize",
+            vec![
+                ranged("angleDeg", "Angle", Some("deg"), (-360.0, 360.0), 30.0),
+                p(
+                    "pathOverlap",
+                    "Path overlap",
+                    ContractType::Length,
+                    None,
+                    Some(DefaultValue::Number(0.0)),
+                ),
+                pt("pathOverlapVariation", "Overlap variation", 0.0),
+                pt("strokeWidth", "Stroke width", 3.0),
+                pct("curvinessPct", "Curviness", 5.0),
+                pct("curvinessVariationPct", "Curviness variation", 0.0),
+                pt("spacing", "Spacing", 5.0),
+                pt("spacingVariation", "Spacing variation", 0.0),
+                seed(),
+            ],
+        ),
+        K::ConvertToShape => vector(
+            kind,
+            "Convert to shape",
+            "convertToShape",
+            vec![
+                choice("shape", "Shape", SHAPES, "rectangle"),
+                bool_p("relative", "Relative", true),
+                p(
+                    "extraWidth",
+                    "Extra width",
+                    ContractType::Length,
+                    None,
+                    Some(DefaultValue::Number(0.0)),
+                ),
+                p(
+                    "extraHeight",
+                    "Extra height",
+                    ContractType::Length,
+                    None,
+                    Some(DefaultValue::Number(0.0)),
+                ),
+                pt("width", "Width", 36.0),
+                pt("height", "Height", 36.0),
+                pt("cornerRadius", "Corner radius", 9.0),
+            ],
+        ),
+        K::Pathfinder => EffectKindRow {
+            targets: GROUP_ONLY,
+            ..vector(
+                kind,
+                "Pathfinder",
+                "pathfinder",
+                vec![choice("op", "Shape mode", PATHFINDER_OPS, "add")],
+            )
+        },
     }
 }
 
@@ -405,7 +742,14 @@ mod tests {
                     param.field
                 );
             }
-            assert_eq!(row.indesign, row.params.is_empty(), "{}", row.kind);
+            // Outline Stroke outlines the item's own stroke: a vector kind
+            // without parameters.
+            assert_eq!(
+                row.indesign,
+                row.params.is_empty() && row.kind != "outlinePath",
+                "{}",
+                row.kind
+            );
         }
     }
 
@@ -445,9 +789,27 @@ mod tests {
 
     #[test]
     fn stack_only_kinds_take_the_object_target_and_a_blend() {
-        for row in effect_kinds().into_iter().filter(|r| !r.indesign) {
+        for row in effect_kinds()
+            .into_iter()
+            .filter(|r| !r.indesign && !r.vector)
+        {
             assert_eq!(row.targets, OBJECT_ONLY, "{}", row.kind);
             assert!(row.blend && row.max_per_stack.is_none(), "{}", row.kind);
+        }
+    }
+
+    #[test]
+    fn vector_kinds_change_geometry_and_take_no_blend() {
+        let vector: Vec<EffectKindRow> = effect_kinds().into_iter().filter(|r| r.vector).collect();
+        assert_eq!(vector.len(), paged_model::vector_effect::VECTOR_KINDS.len());
+        for row in &vector {
+            assert!(!row.blend && !row.indesign, "{}", row.kind);
+            let want: &[&str] = if row.kind == "pathfinder" {
+                GROUP_ONLY
+            } else {
+                OBJECT_ONLY
+            };
+            assert_eq!(row.targets, want, "{}", row.kind);
         }
     }
 }

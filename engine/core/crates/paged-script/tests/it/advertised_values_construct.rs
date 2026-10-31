@@ -66,6 +66,13 @@ const STRUCTURED: &[(&str, &str)] = &[
     // Engine ADR 1039 — four numbers each.
     ("symbolInstanceTint", "[1, 0, 0, 0.5]"),
     ("symbolInstanceNineSlice", "[2, 2, 2, 2]"),
+    // Engine ADR 1007 — the gradient's start point, [x, y].
+    ("frameGradientFillStart", "[10, 20]"),
+    // Engine ADR 1048 — a mesh fill (a freeform gradient of one point).
+    (
+        "frameFillMesh",
+        "{ type: 'fillMesh', value: { kind: 'freeform', points: [{ point: [10, 10], color: { space: 'RGB', value: [255, 0, 0] } }], lines: [] } }",
+    ),
     (
         "framePathPoint",
         "{ type: 'pathPoint', value: { address: { index: 0, role: 'anchor' }, position: [5, 5] } }",
@@ -105,6 +112,11 @@ const STRUCTURED: &[(&str, &str)] = &[
     (
         "frameContentEffectStack",
         "{ type: 'effectStack', value: { entries: [] } }",
+    ),
+    // Engine ADR 1042 — a group's vector effects.
+    (
+        "groupEffectStack",
+        "{ type: 'effectStack', value: { entries: [{ kind: 'pathfinder' }] } }",
     ),
     // Engine ADR 1043 — the appearance, whole and by layer.
     (

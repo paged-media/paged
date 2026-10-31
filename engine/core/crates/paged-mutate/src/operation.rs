@@ -1568,6 +1568,13 @@ pub enum PropertyPath {
     /// Rectangle, Oval or Polygon, or hosts pasted-in content. No IDML
     /// attribute: the writer lowers a clip group to paste-into.
     GroupClip,
+    /// Engine ADR 1042 — the group's live vector effects
+    /// (`Value::EffectStack`, vector kinds only): a `pathfinder` entry
+    /// draws the members as one outline (a compound shape) and the other
+    /// vector entries act on it. Whole-list replacement; the inverse
+    /// carries the previous stack (`prev`). Native: IDML export bakes the
+    /// outline and keeps the stack in a label.
+    GroupEffectStack,
     /// Engine ADR 1039 — a symbol instance's colour tint:
     /// `Value::Lengths([r, g, b, amount])` (sRGB and amount `0..=1`); the
     /// empty list removes it. Only `NodeId::Instance` carries it. Native.
@@ -1783,6 +1790,26 @@ pub enum PropertyPath {
     /// ordinary text again. Every run of the range carries the control.
     /// On a `StoryRange` only. Paint-only (the text is the runs').
     CharacterContentControl,
+    // ---- engine ADR 1007 — paint model v2 ---------------------------
+    /// How the frame's gradient stroke maps onto the stroke:
+    /// `Value::Text` `"Within"` (IDML's mode, the default), `"Along"`
+    /// (the ramp runs along the path) or `"Across"` (from one edge of the
+    /// stroke to the other); `""` clears to `"Within"`. On a TextFrame,
+    /// Rectangle, Oval, Polygon or GraphicLine. No IDML attribute carries
+    /// it: the IDML export writes the stroke `Within` and reports the
+    /// loss. Paint-only (`frame_style`).
+    FrameGradientStrokeMode,
+    // ---- engine ADR 1048 — gradient mesh and freeform gradient -------
+    /// The frame's native mesh fill, a gradient mesh or a freeform
+    /// gradient (`Value::FillMesh`), shown instead of its fill swatch;
+    /// `Value::FillMesh(None)` clears it back to the swatch. Points are in
+    /// the frame's inner coordinates. On a TextFrame, Rectangle, Oval or
+    /// Polygon. Whole-value, like `FrameGradientFeather`: the Mesh tool
+    /// sends the edited mesh, and its inverse is the mesh it replaced.
+    /// No IDML attribute carries it: the IDML export keeps the swatch,
+    /// stores the mesh in a label the import restores and reports the
+    /// loss. Paint-only (`frame_style`).
+    FrameFillMesh,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -2147,6 +2174,7 @@ impl PropertyPath {
             PropertyPath::GroupIsolateBlending => "group.isolateBlending",
             PropertyPath::GroupKnockout => "group.knockout",
             PropertyPath::GroupClip => "group.clip",
+            PropertyPath::GroupEffectStack => "group.effectStack",
             PropertyPath::SymbolInstanceTint => "symbolInstance.tint",
             PropertyPath::SymbolInstanceNineSlice => "symbolInstance.nineSlice",
             PropertyPath::SymbolInstanceSymbol => "symbolInstance.symbol",
@@ -2203,6 +2231,8 @@ impl PropertyPath {
             PropertyPath::CharacterComplexScript => "character.complexScript",
             PropertyPath::CharacterFontHint => "character.fontHint",
             PropertyPath::CharacterContentControl => "character.contentControl",
+            PropertyPath::FrameGradientStrokeMode => "frame.gradientStrokeMode",
+            PropertyPath::FrameFillMesh => "frame.fillMesh",
         }
     }
 }
@@ -2321,7 +2351,7 @@ impl GradientFeatherSpec {
 }
 
 /// Engine ADR 1008 — an effect kind on the stack: InDesign's nine, then
-/// the stack-only ones.
+/// the stack-only ones, then (engine ADR 1042) the live vector effects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -2344,10 +2374,25 @@ pub enum EffectKind {
     SoftEdge,
     Noise,
     ColorAdjust,
+    // Engine ADR 1042 — the live vector effects.
+    Roughen,
+    ZigZag,
+    PuckerBloat,
+    Twist,
+    Tweak,
+    TransformCopies,
+    FreeDistort,
+    Warp,
+    OffsetPath,
+    OutlinePath,
+    RoundCorners,
+    Scribble,
+    ConvertToShape,
+    Pathfinder,
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 17] = [
+    pub const ALL: [EffectKind; 31] = [
         EffectKind::DropShadow,
         EffectKind::InnerShadow,
         EffectKind::OuterGlow,
@@ -2365,6 +2410,20 @@ impl EffectKind {
         EffectKind::SoftEdge,
         EffectKind::Noise,
         EffectKind::ColorAdjust,
+        EffectKind::Roughen,
+        EffectKind::ZigZag,
+        EffectKind::PuckerBloat,
+        EffectKind::Twist,
+        EffectKind::Tweak,
+        EffectKind::TransformCopies,
+        EffectKind::FreeDistort,
+        EffectKind::Warp,
+        EffectKind::OffsetPath,
+        EffectKind::OutlinePath,
+        EffectKind::RoundCorners,
+        EffectKind::Scribble,
+        EffectKind::ConvertToShape,
+        EffectKind::Pathfinder,
     ];
 
     fn indesign(self) -> Option<paged_model::effect_stack::IndesignEffect> {
@@ -2403,6 +2462,20 @@ impl EffectKind {
             EffectKind::SoftEdge => "softEdge",
             EffectKind::Noise => "noise",
             EffectKind::ColorAdjust => "colorAdjust",
+            EffectKind::Roughen => "roughen",
+            EffectKind::ZigZag => "zigZag",
+            EffectKind::PuckerBloat => "puckerBloat",
+            EffectKind::Twist => "twist",
+            EffectKind::Tweak => "tweak",
+            EffectKind::TransformCopies => "transformCopies",
+            EffectKind::FreeDistort => "freeDistort",
+            EffectKind::Warp => "warp",
+            EffectKind::OffsetPath => "offsetPath",
+            EffectKind::OutlinePath => "outlinePath",
+            EffectKind::RoundCorners => "roundCorners",
+            EffectKind::Scribble => "scribble",
+            EffectKind::ConvertToShape => "convertToShape",
+            EffectKind::Pathfinder => "pathfinder",
         }
     }
 
@@ -2426,6 +2499,25 @@ impl EffectKind {
 /// | `softEdge` | `sizePt` |
 /// | `noise` | `amountPct`, `monochromatic` |
 /// | `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |
+///
+/// The live vector effects (engine ADR 1042) and their fields:
+///
+/// | kind | fields |
+/// | --- | --- |
+/// | `roughen` | `size`, `relative`, `detailPerInch`, `smooth`, `seed` |
+/// | `zigZag` | `size`, `relative`, `ridges`, `smooth` |
+/// | `puckerBloat` | `amountPct` (−200..200; positive bloats) |
+/// | `twist` | `angleDeg` |
+/// | `tweak` | `amountH`, `amountV`, `relative`, `anchors`, `inHandles`, `outHandles`, `seed` |
+/// | `transformCopies` | `scaleHPct`, `scaleVPct`, `moveH`, `moveV`, `rotateDeg`, `reflectX`, `reflectY`, `copies`, `origin` |
+/// | `freeDistort` | `corners` (four `[x, y]` in the box's unit square) |
+/// | `warp` | `style`, `horizontal`, `bendPct`, `distortHPct`, `distortVPct` |
+/// | `offsetPath` | `offset`, `join`, `miterLimit` |
+/// | `outlinePath` | — (the item's own stroke) |
+/// | `roundCorners` | `radius` |
+/// | `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |
+/// | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
+/// | `pathfinder` | `op` (on a group's stack only) |
 ///
 /// InDesign's kinds carry no parameters here: theirs are the per-field
 /// paths (`frameInnerShadowSize`, …), and the stack keeps them.
@@ -2477,6 +2569,96 @@ pub struct EffectEntrySpec {
     pub saturation: Option<f32>,
     #[serde(default)]
     pub hue_deg: Option<f32>,
+    // Engine ADR 1042 — the vector effects' parameters (see
+    // `vector_effect_spec` for which kind reads which).
+    #[serde(default)]
+    pub size: Option<f32>,
+    #[serde(default)]
+    pub relative: Option<bool>,
+    #[serde(default)]
+    pub detail_per_inch: Option<f32>,
+    #[serde(default)]
+    pub smooth: Option<bool>,
+    #[serde(default)]
+    pub seed: Option<u32>,
+    #[serde(default)]
+    pub ridges: Option<u32>,
+    #[serde(default)]
+    pub amount_h: Option<f32>,
+    #[serde(default)]
+    pub amount_v: Option<f32>,
+    #[serde(default)]
+    pub anchors: Option<bool>,
+    #[serde(default)]
+    pub in_handles: Option<bool>,
+    #[serde(default)]
+    pub out_handles: Option<bool>,
+    #[serde(default)]
+    pub scale_h_pct: Option<f32>,
+    #[serde(default)]
+    pub scale_v_pct: Option<f32>,
+    #[serde(default)]
+    pub move_h: Option<f32>,
+    #[serde(default)]
+    pub move_v: Option<f32>,
+    #[serde(default)]
+    pub rotate_deg: Option<f32>,
+    #[serde(default)]
+    pub reflect_x: Option<bool>,
+    #[serde(default)]
+    pub reflect_y: Option<bool>,
+    #[serde(default)]
+    pub copies: Option<u32>,
+    #[serde(default)]
+    pub origin: Option<String>,
+    #[serde(default)]
+    pub corners: Option<Vec<[f32; 2]>>,
+    #[serde(default)]
+    pub style: Option<String>,
+    #[serde(default)]
+    pub horizontal: Option<bool>,
+    #[serde(default)]
+    pub bend_pct: Option<f32>,
+    #[serde(default)]
+    pub distort_h_pct: Option<f32>,
+    #[serde(default)]
+    pub distort_v_pct: Option<f32>,
+    #[serde(default)]
+    pub offset: Option<f32>,
+    #[serde(default)]
+    pub join: Option<String>,
+    #[serde(default)]
+    pub miter_limit: Option<f32>,
+    #[serde(default)]
+    pub radius: Option<f32>,
+    #[serde(default)]
+    pub path_overlap: Option<f32>,
+    #[serde(default)]
+    pub path_overlap_variation: Option<f32>,
+    #[serde(default)]
+    pub stroke_width: Option<f32>,
+    #[serde(default)]
+    pub curviness_pct: Option<f32>,
+    #[serde(default)]
+    pub curviness_variation_pct: Option<f32>,
+    #[serde(default)]
+    pub spacing: Option<f32>,
+    #[serde(default)]
+    pub spacing_variation: Option<f32>,
+    #[serde(default)]
+    pub shape: Option<String>,
+    #[serde(default)]
+    pub extra_width: Option<f32>,
+    #[serde(default)]
+    pub extra_height: Option<f32>,
+    #[serde(default)]
+    pub width: Option<f32>,
+    #[serde(default)]
+    pub height: Option<f32>,
+    #[serde(default)]
+    pub corner_radius: Option<f32>,
+    #[serde(default)]
+    pub op: Option<String>,
 }
 
 /// Engine ADR 1008 — the wire value of a target's effect stack as the
@@ -2526,6 +2708,50 @@ impl EffectEntrySpec {
             contrast: None,
             saturation: None,
             hue_deg: None,
+            size: None,
+            relative: None,
+            detail_per_inch: None,
+            smooth: None,
+            seed: None,
+            ridges: None,
+            amount_h: None,
+            amount_v: None,
+            anchors: None,
+            in_handles: None,
+            out_handles: None,
+            scale_h_pct: None,
+            scale_v_pct: None,
+            move_h: None,
+            move_v: None,
+            rotate_deg: None,
+            reflect_x: None,
+            reflect_y: None,
+            copies: None,
+            origin: None,
+            corners: None,
+            style: None,
+            horizontal: None,
+            bend_pct: None,
+            distort_h_pct: None,
+            distort_v_pct: None,
+            offset: None,
+            join: None,
+            miter_limit: None,
+            radius: None,
+            path_overlap: None,
+            path_overlap_variation: None,
+            stroke_width: None,
+            curviness_pct: None,
+            curviness_variation_pct: None,
+            spacing: None,
+            spacing_variation: None,
+            shape: None,
+            extra_width: None,
+            extra_height: None,
+            width: None,
+            height: None,
+            corner_radius: None,
+            op: None,
         }
     }
 
@@ -2576,7 +2802,7 @@ impl EffectEntrySpec {
                 s.saturation = Some(p.saturation);
                 s.hue_deg = Some(p.hue_deg);
             }
-            _ => {}
+            other => s.vector_from_model(other),
         }
         s
     }
@@ -2667,7 +2893,7 @@ impl EffectEntrySpec {
                         .map(|h| h.clamp(-180.0, 180.0))
                         .unwrap_or(0.0),
                 }),
-                _ => unreachable!("InDesign kinds handled above"),
+                vector => self.vector_to_model(vector)?,
             },
         };
         let stack_only = self.kind.indesign().is_none();
@@ -3238,6 +3464,9 @@ pub enum Value {
         #[serde(default)]
         prev: Option<String>,
     },
+    /// Engine ADR 1048 — a frame's gradient mesh or freeform gradient
+    /// (`PropertyPath::FrameFillMesh`); `None` clears it.
+    FillMesh(Option<MeshFillSpec>),
     /// Engine ADR 1043 — an item's whole appearance. `prev` is the apply
     /// layer's snapshot of the stored layers (JSON); an inverse carries it
     /// so undo restores exactly. Wire callers leave it `None`.
@@ -3761,6 +3990,286 @@ pub struct GradientStopSpec {
     /// 0..=100 midpoint to the next stop; `None` ⇒ linear (50).
     #[serde(default)]
     pub midpoint_pct: Option<f32>,
+    /// Engine ADR 1007 — the stop's opacity, 0..=100; `None` ⇒ 100.
+    /// Clamped to the range on apply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_pct: Option<f32>,
+    /// Engine ADR 1007 — the stop's own colour instead of a swatch.
+    /// When set it wins over `stop_color`, which may then be `""`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<StopColorSpec>,
+}
+
+/// Engine ADR 1048 — a frame's native mesh fill on the wire: the
+/// mirror of `paged_model::MeshFill` (points in the frame's inner
+/// coordinates; colours inline, `space` as a swatch's).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum MeshFillSpec {
+    /// A gradient mesh: one or more grids of patches.
+    Mesh { grids: Vec<MeshGridSpec> },
+    /// A freeform gradient: coloured points, and lines through some of
+    /// them (each a list of point indices, two or more).
+    Freeform {
+        points: Vec<FreeformPointSpec>,
+        #[serde(default)]
+        lines: Vec<Vec<u32>>,
+    },
+}
+
+/// One grid of a gradient mesh: `rows × cols` patches over
+/// `(rows + 1) × (cols + 1)` nodes, row-major from the top-left.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshGridSpec {
+    pub rows: u32,
+    pub cols: u32,
+    pub nodes: Vec<MeshNodeSpec>,
+    /// Per patch (row-major) its interior control points `p11 p12 p21
+    /// p22` — tensor patches; empty: Coons patches.
+    #[serde(default)]
+    pub tensor: Vec<[[f32; 2]; 4]>,
+}
+
+/// One mesh point: its position, its four handles (towards the previous
+/// column, the next column, the previous row, the next row) and colour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshNodeSpec {
+    pub point: [f32; 2],
+    pub handles: [[f32; 2]; 4],
+    pub color: MeshColorSpec,
+}
+
+/// A mesh or freeform point's colour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshColorSpec {
+    /// `"CMYK"` | `"RGB"` | `"LAB"` | `"Gray"`, as a swatch's `space`.
+    pub space: String,
+    pub value: Vec<f32>,
+    /// 0..=100; absent is 100 (clamped on apply).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_pct: Option<f32>,
+}
+
+/// One freeform colour point.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FreeformPointSpec {
+    pub point: [f32; 2],
+    pub color: MeshColorSpec,
+    /// How far the colour holds before it blends, in percent (0..=100)
+    /// of the frame's box diagonal; absent is 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spread_pct: Option<f32>,
+}
+
+impl MeshColorSpec {
+    fn to_model(&self) -> Result<paged_model::MeshColor, String> {
+        let space = paged_model::ColorSpace::from_attr(&self.space);
+        let channels = match space {
+            paged_model::ColorSpace::Cmyk => 4,
+            paged_model::ColorSpace::Rgb | paged_model::ColorSpace::Lab => 3,
+            paged_model::ColorSpace::Gray => 1,
+            paged_model::ColorSpace::Unknown => {
+                return Err(format!(
+                    "a colour space is CMYK, RGB, LAB or Gray, not {:?}",
+                    self.space
+                ))
+            }
+        };
+        if self.value.len() != channels || self.value.iter().any(|v| !v.is_finite()) {
+            return Err(format!(
+                "a {} colour has {channels} finite values, not {:?}",
+                self.space, self.value
+            ));
+        }
+        Ok(paged_model::MeshColor {
+            space,
+            value: self.value.clone(),
+            opacity_pct: self
+                .opacity_pct
+                .filter(|o| o.is_finite())
+                .map(|o| o.clamp(0.0, 100.0))
+                .filter(|o| *o < 100.0),
+        })
+    }
+
+    fn from_model(c: &paged_model::MeshColor) -> Self {
+        MeshColorSpec {
+            space: c.space.as_attr().to_string(),
+            value: c.value.clone(),
+            opacity_pct: c.opacity_pct,
+        }
+    }
+}
+
+fn finite_point(p: [f32; 2]) -> Result<[f32; 2], String> {
+    if p.iter().all(|v| v.is_finite()) {
+        Ok(p)
+    } else {
+        Err(format!("a point is finite, not {p:?}"))
+    }
+}
+
+impl MeshFillSpec {
+    /// The model's fill, or why the spec is not one: a grid whose node
+    /// count is not `(rows + 1) × (cols + 1)`, a tensor list that is not
+    /// one entry per patch, a line through a point that does not exist,
+    /// an unknown colour space or a value that is not finite.
+    pub fn to_model(&self) -> Result<paged_model::MeshFill, String> {
+        match self {
+            MeshFillSpec::Mesh { grids } => {
+                let mut out = Vec::with_capacity(grids.len());
+                for (gi, g) in grids.iter().enumerate() {
+                    let grid = paged_model::MeshGrid {
+                        rows: g.rows,
+                        cols: g.cols,
+                        nodes: g
+                            .nodes
+                            .iter()
+                            .map(|n| {
+                                Ok(paged_model::MeshNode {
+                                    point: finite_point(n.point)?,
+                                    handles: [
+                                        finite_point(n.handles[0])?,
+                                        finite_point(n.handles[1])?,
+                                        finite_point(n.handles[2])?,
+                                        finite_point(n.handles[3])?,
+                                    ],
+                                    color: n.color.to_model()?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, String>>()?,
+                        tensor: g
+                            .tensor
+                            .iter()
+                            .map(|t| {
+                                Ok([
+                                    finite_point(t[0])?,
+                                    finite_point(t[1])?,
+                                    finite_point(t[2])?,
+                                    finite_point(t[3])?,
+                                ])
+                            })
+                            .collect::<Result<Vec<_>, String>>()?,
+                    };
+                    if !grid.is_well_formed() {
+                        return Err(format!(
+                            "grid {gi}: {} × {} patches need {} nodes and no tensor or {} \
+                             tensor entries, not {} and {}",
+                            g.rows,
+                            g.cols,
+                            (u64::from(g.rows) + 1) * (u64::from(g.cols) + 1),
+                            u64::from(g.rows) * u64::from(g.cols),
+                            g.nodes.len(),
+                            g.tensor.len()
+                        ));
+                    }
+                    out.push(grid);
+                }
+                Ok(paged_model::MeshFill::Mesh(paged_model::GradientMesh {
+                    grids: out,
+                }))
+            }
+            MeshFillSpec::Freeform { points, lines } => {
+                let points = points
+                    .iter()
+                    .map(|p| {
+                        Ok(paged_model::FreeformPoint {
+                            point: finite_point(p.point)?,
+                            color: p.color.to_model()?,
+                            spread_pct: p
+                                .spread_pct
+                                .filter(|s| s.is_finite())
+                                .map(|s| s.clamp(0.0, 100.0))
+                                .filter(|s| *s > 0.0),
+                        })
+                    })
+                    .collect::<Result<Vec<_>, String>>()?;
+                for (li, l) in lines.iter().enumerate() {
+                    if l.len() < 2 {
+                        return Err(format!("line {li} runs through two points or more"));
+                    }
+                    if let Some(i) = l.iter().find(|&&i| i as usize >= points.len()) {
+                        return Err(format!("line {li} names point {i}, which does not exist"));
+                    }
+                }
+                Ok(paged_model::MeshFill::Freeform(
+                    paged_model::FreeformGradient {
+                        points,
+                        lines: lines.clone(),
+                    },
+                ))
+            }
+        }
+    }
+
+    /// The wire form of the model's fill.
+    pub fn from_model(fill: &paged_model::MeshFill) -> Self {
+        match fill {
+            paged_model::MeshFill::Mesh(m) => MeshFillSpec::Mesh {
+                grids: m
+                    .grids
+                    .iter()
+                    .map(|g| MeshGridSpec {
+                        rows: g.rows,
+                        cols: g.cols,
+                        nodes: g
+                            .nodes
+                            .iter()
+                            .map(|n| MeshNodeSpec {
+                                point: n.point,
+                                handles: n.handles,
+                                color: MeshColorSpec::from_model(&n.color),
+                            })
+                            .collect(),
+                        tensor: g.tensor.clone(),
+                    })
+                    .collect(),
+            },
+            paged_model::MeshFill::Freeform(f) => MeshFillSpec::Freeform {
+                points: f
+                    .points
+                    .iter()
+                    .map(|p| FreeformPointSpec {
+                        point: p.point,
+                        color: MeshColorSpec::from_model(&p.color),
+                        spread_pct: p.spread_pct,
+                    })
+                    .collect(),
+                lines: f.lines.clone(),
+            },
+        }
+    }
+}
+
+/// Engine ADR 1007 — a gradient stop's inline colour on the wire.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct StopColorSpec {
+    /// `"CMYK"` | `"RGB"` | `"LAB"` | `"Gray"`, as a swatch's `space`.
+    pub space: String,
+    /// Channel values in `space` (CMYK percent, RGB 0..=255, Lab
+    /// `L* a* b*`, Gray percent).
+    pub value: Vec<f32>,
 }
 
 /// B-04 — creation spec for a page-item group. Members are NodeIds
@@ -3921,7 +4430,7 @@ pub struct GradientSpec {
     pub self_id: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
-    /// `Type`: `"Linear"` | `"Radial"`.
+    /// `Type`: `"Linear"` | `"Radial"` | `"Conic"` (engine ADR 1007).
     pub kind: String,
     pub stops: Vec<GradientStopSpec>,
 }
@@ -4539,6 +5048,18 @@ pub enum Operation {
         story_ids: Vec<String>,
         #[serde(default)]
         added: Vec<String>,
+    },
+    /// Engine ADR 1042 — Expand Appearance: the item becomes the item its
+    /// live vector effects describe, for good — its path the effected
+    /// outline, the vector entries gone from its stack, the paint moved
+    /// where the effect says. An oval becomes a polygon; a group with a
+    /// Pathfinder effect becomes one polygon in its place (its id). The
+    /// other effects stay live. `restore` is inverse-only: the item's
+    /// previous state, put back as it was.
+    ExpandAppearance {
+        node: NodeId,
+        #[serde(default)]
+        restore: Option<String>,
     },
     /// Engine ADR 1039 — make a symbol definition `symbol_id` named `name`
     /// from the page items `sources` (copied whole, as a snippet copies
