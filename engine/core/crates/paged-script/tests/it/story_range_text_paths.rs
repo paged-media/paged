@@ -232,7 +232,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 266: ADR 1037 added an image frame's filter stack.
         // 268: ADR 1043 added an item's appearance and one layer of it.
         // 272: ADR 1047 added the live shapes (sides, star inset, pie angles).
-        272,
+        // 273: ADR 1042 added a group's vector effects.
+        273,
         "the advertised roster changed; move the count with the decision"
     );
 }

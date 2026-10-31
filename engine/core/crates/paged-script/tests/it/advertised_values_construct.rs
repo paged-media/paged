@@ -106,6 +106,11 @@ const STRUCTURED: &[(&str, &str)] = &[
         "frameContentEffectStack",
         "{ type: 'effectStack', value: { entries: [] } }",
     ),
+    // Engine ADR 1042 — a group's vector effects.
+    (
+        "groupEffectStack",
+        "{ type: 'effectStack', value: { entries: [{ kind: 'pathfinder' }] } }",
+    ),
     // Engine ADR 1043 — the appearance, whole and by layer.
     (
         "frameAppearance",

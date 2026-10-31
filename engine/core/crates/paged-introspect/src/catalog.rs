@@ -327,6 +327,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.placeSymbolInstance", "(symbolId, pageId, [x, y]?, [a, b, c, d]?)", "string | null", "write", "Place an instance, its registration point at [x, y] page pt (omit: the page centre); returns its instance:<id> address."),
         f!("paged.breakSymbolLink", "(elementId)", "string | null", "write", "Break Link to Symbol: the instance becomes ordinary items; returns the new root's address."),
         f!("paged.deleteSymbol", "(symbolId)", "bool", "write", "Delete a symbol; its instances become ordinary items first."),
+        f!("paged.expandAppearance", "(elementId)", "bool", "write", "Expand Appearance: the item becomes what its live vector effects draw (engine ADR 1042)."),
         f!("paged.createMaster", "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })", "bool", "author", "Create a master spread: one page of the given size, or a copy of another master."),
         f!("paged.deleteMaster", "(masterId)", "bool", "author", "Delete a master no page applies."),
         f!("paged.renameMaster", "(masterId, name?)", "bool", "write", "Set (omit/null: clear) a master's name."),
@@ -925,6 +926,8 @@ property_paths! {
         GroupIsolateBlending => "groupIsolateBlending" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, IsolateBlending)]),
         GroupKnockout => "groupKnockout" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, KnockoutGroup)]),
         GroupClip => "groupClip" : bool_().default_bool(false),
+        // Engine ADR 1042 — a group's vector effects (Pathfinder and the rest).
+        GroupEffectStack => "groupEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         // Engine ADR 1039 — a symbol instance's tint `[r, g, b, amount]`
         // and 9-slice guides `[left, top, right, bottom]`; `[]` clears.
         // Native: IDML has no symbol (the writer expands instances).
@@ -1538,7 +1541,9 @@ mod tests {
         //
         // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
         // inset, an oval's pie angles).
-        assert_eq!(cat.settable_paths.len(), 272, "settable path count drifted");
+        //
+        // 272 -> 273: ADR 1042 — a group's vector effects.
+        assert_eq!(cat.settable_paths.len(), 273, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

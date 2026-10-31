@@ -113,6 +113,7 @@ pub mod text_frame_prefs;
 mod text_variables;
 pub mod text_wrap;
 pub mod transparency;
+mod vector_fx;
 mod word_fields;
 pub mod xml_structure;
 pub mod zip_layout;
@@ -464,6 +465,11 @@ pub(crate) fn write_package(
     // paste-into that paints the same.
     let lowered = clip_groups::lower(doc);
     let doc = lowered.as_ref().unwrap_or(doc);
+    // Engine ADR 1042: IDML has no live vector effect; each item is
+    // written as the item its effected outline describes, its source in a
+    // label.
+    let baked = vector_fx::lower(doc);
+    let doc = baked.as_ref().unwrap_or(doc);
     // Engine ADR 1022: IDML has no Word fields; each is written as the text
     // variable that does the same, or as its result.
     let fields_lowered = word_fields::lower(doc);
