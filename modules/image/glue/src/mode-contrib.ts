@@ -1,6 +1,7 @@
-// What IMAGE ▸ MODE contributes to the editor (image ADR 479, WP5.13):
-// the depth (8 / 16 bits per channel) and colour-mode commands (Greyscale,
-// RGB, CMYK, Lab) and the proof view (Proof colours, Gamut warning and the
+// What IMAGE ▸ MODE contributes to the editor (image ADRs 479, 484,
+// WP5.13): the depth (8 / 16 / 32 bits per channel) and colour-mode
+// commands (Greyscale, RGB, CMYK, Lab, Multichannel; Indexed Color… opens
+// its dialog) and the proof view (Proof colours, Gamut warning and the
 // proof setup). Registered from `activate.ts` in one call; the menu rows
 // are in `menu.ts`.
 
@@ -17,6 +18,9 @@ import type { ImageSession } from "./session";
 const CMD = defineMessages("image.command", {
   modeBits8: "Mode: 8 bits per channel (image)",
   modeBits16: "Mode: 16 bits per channel (image)",
+  modeBits32: "Mode: 32 bits per channel (image)",
+  modeIndexed: "Mode: indexed colour… (image)",
+  modeMultichannel: "Mode: multichannel (image)",
   modeGray: "Mode: greyscale (image)",
   modeRgb: "Mode: RGB colour (image)",
   modeCmyk: "Mode: CMYK colour (image)",
@@ -27,12 +31,14 @@ const CMD = defineMessages("image.command", {
   proofSetupGray: "Proof setup: working grey (image)",
 });
 
-/** The command id of each colour mode. */
-export const MODE_COMMANDS: Record<ColorModeName, string> = {
+/** The command id of each colour mode a command converts to (a Duotone
+ *  document opens from its file; Indexed Color… is a dialog). */
+export const MODE_COMMANDS: Partial<Record<ColorModeName, string>> = {
   gray: "media.paged.image.command.modeGray",
   rgb: "media.paged.image.command.modeRgb",
   cmyk: "media.paged.image.command.modeCmyk",
   lab: "media.paged.image.command.modeLab",
+  multichannel: "media.paged.image.command.modeMultichannel",
 };
 
 export function contributeMode(
@@ -62,10 +68,29 @@ export function contributeMode(
   add("media.paged.image.command.modeBits16", t(CMD.modeBits16), () =>
     session.setBits(16),
   );
-  add(MODE_COMMANDS.gray, t(CMD.modeGray), () => session.setColorMode("gray"));
-  add(MODE_COMMANDS.rgb, t(CMD.modeRgb), () => session.setColorMode("rgb"));
-  add(MODE_COMMANDS.cmyk, t(CMD.modeCmyk), () => session.setColorMode("cmyk"));
-  add(MODE_COMMANDS.lab, t(CMD.modeLab), () => session.setColorMode("lab"));
+  add("media.paged.image.command.modeBits32", t(CMD.modeBits32), () =>
+    session.setBits(32),
+  );
+  add("media.paged.image.command.modeGray", t(CMD.modeGray), () =>
+    session.setColorMode("gray"),
+  );
+  add("media.paged.image.command.modeRgb", t(CMD.modeRgb), () =>
+    session.setColorMode("rgb"),
+  );
+  add("media.paged.image.command.modeCmyk", t(CMD.modeCmyk), () =>
+    session.setColorMode("cmyk"),
+  );
+  add("media.paged.image.command.modeLab", t(CMD.modeLab), () =>
+    session.setColorMode("lab"),
+  );
+  add("media.paged.image.command.modeIndexed", t(CMD.modeIndexed), async () =>
+    session.openDialog("indexedColor"),
+  );
+  add(
+    "media.paged.image.command.modeMultichannel",
+    t(CMD.modeMultichannel),
+    () => session.setColorMode("multichannel"),
+  );
 
   // The proof view. Proof colours and Gamut warning toggle; with no
   // target chosen yet they simulate CMYK when the document is CMYK and

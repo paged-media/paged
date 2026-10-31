@@ -2000,6 +2000,31 @@ const SYMBOL_PROBES: Probe[] = [
         : null,
     setupUndo: 2,
   },
+  // Engine ADR 1042 — a frame with a zig zag, expanded for good.
+  {
+    op: "expandAppearance",
+    build: async ({ page, fx }) => {
+      const frames = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 40, 40],
+      ]);
+      if (!frames) return null;
+      const set = await tryMutate(page, {
+        op: "setElementProperty",
+        args: {
+          elementId: frames[0],
+          path: "frameEffectStack",
+          value: {
+            type: "effectStack",
+            value: { entries: [{ kind: "zigZag", enabled: true, size: 4 }] },
+          },
+        },
+      });
+      return set.ok
+        ? { op: "expandAppearance", args: { elementId: frames[0] } }
+        : null;
+    },
+    setupUndo: 2,
+  },
 ];
 
 const GEOMETRY_PROBES: Probe[] = [

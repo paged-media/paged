@@ -915,6 +915,11 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             1,
         )
         .function(guarded(paged_delete_symbol), js_string!("deleteSymbol"), 1)
+        .function(
+            guarded(paged_expand_appearance),
+            js_string!("expandAppearance"),
+            1,
+        )
         .function(guarded(paged_symbols), js_string!("symbols"), 0)
         .function(guarded(paged_on_master), js_string!("onMaster"), 2)
         .function(guarded(paged_create_master), js_string!("createMaster"), 2)
@@ -2563,6 +2568,24 @@ fn paged_delete_symbol(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         .to_string(ctx)?
         .to_std_string_escaped();
     Ok(apply_bool(&Mutation::DeleteSymbol { symbol_id }))
+}
+
+/// `paged.expandAppearance(elementId)` — the item becomes, for good, the
+/// item its live vector effects describe (engine ADR 1042,
+/// `Mutation::ExpandAppearance`). `false` when refused (no vector effects).
+fn paged_expand_appearance(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&s) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ExpandAppearance { element_id }))
 }
 
 /// `paged.symbols()` — the document's symbols (the `symbols` collection),

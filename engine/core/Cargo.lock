@@ -2366,6 +2366,7 @@ dependencies = [
  "paged-sniff",
  "paged-template",
  "paged-test-resources",
+ "paged-vector-fx",
  "quick-xml 0.41.0",
  "serde_json",
  "thiserror",
@@ -3548,6 +3549,7 @@ dependencies = [
  "paged-template",
  "paged-test-resources",
  "paged-text",
+ "paged-vector-fx",
  "paged-wire",
  "proptest",
  "regress",
@@ -3885,6 +3887,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-geom"
+version = "0.0.0"
+dependencies = [
+ "flo_curves",
+ "kurbo 0.11.3",
+ "paged-model",
+]
+
+[[package]]
 name = "paged-gpu"
 version = "0.0.0"
 dependencies = [
@@ -3980,10 +3991,12 @@ dependencies = [
  "kurbo 0.11.3",
  "paged-compose",
  "paged-gen",
+ "paged-geom",
  "paged-model",
  "paged-renderer",
  "paged-scene",
  "paged-template",
+ "paged-vector-fx",
  "proptest",
  "schemars",
  "serde",
@@ -4111,6 +4124,7 @@ dependencies = [
  "paged-svg",
  "paged-test-resources",
  "paged-text",
+ "paged-vector-fx",
  "paged-wire",
  "serde",
  "serde_json",
@@ -4296,6 +4310,19 @@ dependencies = [
  "ttf-parser",
  "unicode-bidi",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "paged-vector-fx"
+version = "0.0.0"
+dependencies = [
+ "kurbo 0.11.3",
+ "paged-geom",
+ "paged-model",
+ "paged-warp",
+ "proptest",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

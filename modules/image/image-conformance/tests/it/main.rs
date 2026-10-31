@@ -12,6 +12,7 @@ mod brush_stroke;
 mod codec_jpeg;
 mod codec_png;
 mod codec_png_16bit;
+mod color_modes_photoshop;
 mod composite_defects;
 mod cpu_resample;
 mod cpu_twins;

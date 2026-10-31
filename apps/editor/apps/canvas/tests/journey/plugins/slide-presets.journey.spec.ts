@@ -116,14 +116,22 @@ test.describe("journey · paged.slide live presets", () => {
       .toBe(2);
     expect(roundRectAdj(await exportedSlide1(page))).toBe("30000");
 
-    // Select the rounded rectangle's outline (shape 2, drawn with text, so
-    // its outline is `u2p`) as a click does, through the engine: its yellow
-    // handle appears.
-    await page.evaluate(async () => {
+    // Select the rounded rectangle's outline (shape 2 of slide 1, drawn
+    // with text, so its outline is a polygon) as a click does, through the
+    // engine: its yellow handle appears. Its id is looked up by the label
+    // the importer wrote: the deck's masters and layouts are imported first
+    // (slide ADR 712), so the slide's ids do not start at a fixed number.
+    const outline = await page.evaluate(async () => {
+      type Node = {
+        id?: { kind: string; id: string } | null;
+        pluginMetadata?: { key: string; value: string }[] | null;
+        children?: Node[];
+      };
       const c = (
         globalThis as unknown as {
           __canvas: {
             client: {
+              sceneTree: () => Promise<Node[]>;
               setElementSelection: (
                 ids: { kind: string; id: string }[],
                 mode: string,
@@ -132,12 +140,31 @@ test.describe("journey · paged.slide live presets", () => {
           };
         }
       ).__canvas;
-      await c.client.setElementSelection(
-        [{ kind: "polygon", id: "u2p" }],
-        "replace",
-      );
+      const find = (nodes: Node[] | undefined): string | null => {
+        for (const n of nodes ?? []) {
+          const label = (n.pluginMetadata ?? []).find(
+            (m) => m.key === "x-paged:media.paged.slide",
+          )?.value;
+          if (
+            n.id?.kind === "polygon" &&
+            label?.includes('"shape":"ppt/slides/slide1.xml#2"')
+          )
+            return n.id.id;
+          const inner = find(n.children);
+          if (inner) return inner;
+        }
+        return null;
+      };
+      const id = find(await c.client.sceneTree());
+      if (id)
+        await c.client.setElementSelection(
+          [{ kind: "polygon", id }],
+          "replace",
+        );
+      return id;
     });
-    await designer.selectElement("polygon", "u2p");
+    expect(outline).not.toBeNull();
+    await designer.selectElement("polygon", outline!);
     const handle = page.locator('[data-slide-adjust-handle="0"]');
     await expect(handle).toBeVisible({ timeout: 15_000 });
 

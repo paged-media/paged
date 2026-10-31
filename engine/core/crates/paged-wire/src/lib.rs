@@ -2907,6 +2907,18 @@ pub enum Mutation {
     DeleteSymbol {
         symbol_id: String,
     },
+    /// Rides v78 (engine ADR 1042; added before the first consumer sync of
+    /// v78) — Expand Appearance: the item becomes, for good, the item its
+    /// live vector effects describe: its path the effected outline, the
+    /// vector entries gone from its effect stack, the paint moved where
+    /// the effect says (Outline Stroke fills with the stroke). An oval
+    /// becomes a polygon of the same id; a group with a Pathfinder effect
+    /// becomes one polygon of the group's id in the group's place. The
+    /// other effects stay live. Refused for an item without vector
+    /// effects. One undo step.
+    ExpandAppearance {
+        element_id: ElementId,
+    },
     /// W0.5 — insert a `<Section>` anchored at `at_page`.
     InsertSection {
         at_page: PageId,
@@ -3266,6 +3278,7 @@ mutation_vocabulary! {
     PlaceSymbolInstance,
     BreakSymbolLink,
     DeleteSymbol,
+    ExpandAppearance,
     OnMaster,
     CreateMaster,
     DeleteMaster,

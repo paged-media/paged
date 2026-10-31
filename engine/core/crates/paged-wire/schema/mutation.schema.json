@@ -6119,6 +6119,31 @@
           ]
         },
         {
+          "description": "Rides v78 (engine ADR 1042; added before the first consumer sync of\nv78) — Expand Appearance: the item becomes, for good, the item its\nlive vector effects describe: its path the effected outline, the\nvector entries gone from its effect stack, the paint moved where\nthe effect says (Outline Stroke fills with the stroke). An oval\nbecomes a polygon of the same id; a group with a Pathfinder effect\nbecomes one polygon of the group's id in the group's place. The\nother effects stay live. Refused for an item without vector\neffects. One undo step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "expandAppearance"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "elementId": {
+                  "$ref": "#/$defs/ElementId"
+                }
+              },
+              "required": [
+                "elementId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert a `<Section>` anchored at `at_page`.",
           "type": "object",
           "properties": {
@@ -8832,6 +8857,11 @@
           "const": "groupClip"
         },
         {
+          "description": "Engine ADR 1042 — the group's live vector effects\n(`Value::EffectStack`, vector kinds only): a `pathfinder` entry\ndraws the members as one outline (a compound shape) and the other\nvector entries act on it. Whole-list replacement; the inverse\ncarries the previous stack (`prev`). Native: IDML export bakes the\noutline and keeps the stack in a label.",
+          "type": "string",
+          "const": "groupEffectStack"
+        },
+        {
           "description": "Engine ADR 1039 — a symbol instance's colour tint:\n`Value::Lengths([r, g, b, amount])` (sRGB and amount `0..=1`); the\nempty list removes it. Only `NodeId::Instance` carries it. Native.",
           "type": "string",
           "const": "symbolInstanceTint"
@@ -10241,7 +10271,7 @@
       ]
     },
     "EffectEntrySpec": {
-      "description": "Engine ADR 1008 — one entry of an effect stack on the wire. Every\nentry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`\nand `opacityPct`. The parameter fields are flat and optional; each\nkind reads its own and an absent one takes the kind's default:\n\n| kind | fields |\n| --- | --- |\n| `gaussianBlur` | `radiusPt` (σ, pt) |\n| `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |\n| `colorOverlay` | `color` |\n| `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |\n| `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |\n| `softEdge` | `sizePt` |\n| `noise` | `amountPct`, `monochromatic` |\n| `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |\n\nInDesign's kinds carry no parameters here: theirs are the per-field\npaths (`frameInnerShadowSize`, …), and the stack keeps them.",
+      "description": "Engine ADR 1008 — one entry of an effect stack on the wire. Every\nentry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`\nand `opacityPct`. The parameter fields are flat and optional; each\nkind reads its own and an absent one takes the kind's default:\n\n| kind | fields |\n| --- | --- |\n| `gaussianBlur` | `radiusPt` (σ, pt) |\n| `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |\n| `colorOverlay` | `color` |\n| `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |\n| `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |\n| `softEdge` | `sizePt` |\n| `noise` | `amountPct`, `monochromatic` |\n| `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |\n\nThe live vector effects (engine ADR 1042) and their fields:\n\n| kind | fields |\n| --- | --- |\n| `roughen` | `size`, `relative`, `detailPerInch`, `smooth`, `seed` |\n| `zigZag` | `size`, `relative`, `ridges`, `smooth` |\n| `puckerBloat` | `amountPct` (−200..200; positive bloats) |\n| `twist` | `angleDeg` |\n| `tweak` | `amountH`, `amountV`, `relative`, `anchors`, `inHandles`, `outHandles`, `seed` |\n| `transformCopies` | `scaleHPct`, `scaleVPct`, `moveH`, `moveV`, `rotateDeg`, `reflectX`, `reflectY`, `copies`, `origin` |\n| `freeDistort` | `corners` (four `[x, y]` in the box's unit square) |\n| `warp` | `style`, `horizontal`, `bendPct`, `distortHPct`, `distortVPct` |\n| `offsetPath` | `offset`, `join`, `miterLimit` |\n| `outlinePath` | — (the item's own stroke) |\n| `roundCorners` | `radius` |\n| `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |\n| `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |\n| `pathfinder` | `op` (on a group's stack only) |\n\nInDesign's kinds carry no parameters here: theirs are the per-field\npaths (`frameInnerShadowSize`, …), and the stack keeps them.",
       "type": "object",
       "properties": {
         "kind": {
@@ -10404,6 +10434,356 @@
           ],
           "format": "float",
           "default": null
+        },
+        "size": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "relative": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "detailPerInch": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "smooth": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "seed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "ridges": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "amountH": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "amountV": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "anchors": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "inHandles": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "outHandles": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "scaleHPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "scaleVPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "moveH": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "moveV": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "rotateDeg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "reflectX": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "reflectY": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "copies": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "origin": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "corners": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "default": null
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "horizontal": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "bendPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "distortHPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "distortVPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "offset": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "join": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "miterLimit": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "radius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "pathOverlap": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "pathOverlapVariation": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "strokeWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "curvinessPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "curvinessVariationPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "spacing": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "spacingVariation": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "shape": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "extraWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "extraHeight": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "width": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "height": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "cornerRadius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "op": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "required": [
@@ -10411,7 +10791,7 @@
       ]
     },
     "EffectKind": {
-      "description": "Engine ADR 1008 — an effect kind on the stack: InDesign's nine, then\nthe stack-only ones.",
+      "description": "Engine ADR 1008 — an effect kind on the stack: InDesign's nine, then\nthe stack-only ones, then (engine ADR 1042) the live vector effects.",
       "type": "string",
       "enum": [
         "dropShadow",
@@ -10430,7 +10810,21 @@
         "reflection",
         "softEdge",
         "noise",
-        "colorAdjust"
+        "colorAdjust",
+        "roughen",
+        "zigZag",
+        "puckerBloat",
+        "twist",
+        "tweak",
+        "transformCopies",
+        "freeDistort",
+        "warp",
+        "offsetPath",
+        "outlinePath",
+        "roundCorners",
+        "scribble",
+        "convertToShape",
+        "pathfinder"
       ]
     },
     "PaintLayerSpec": {

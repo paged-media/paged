@@ -32,6 +32,7 @@ const H: u32 = 4;
 fn plate(name: &str, rgb: [u8; 3], opacity: u8, key: &[u8; 4], clipped: bool) -> LayerPlate {
     LayerPlate {
         rgba16: None,
+        rgba32: None,
         name: name.into(),
         blend_key: *key,
         opacity,

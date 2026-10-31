@@ -115,6 +115,7 @@ import {
 import { DEFAULT_CAF } from "../retouch";
 import {
   ImageSizeDialog,
+  IndexedColorDialog,
   RotateDialog,
   TrimDialog,
 } from "./sections/image-dialogs";
@@ -2743,6 +2744,13 @@ export function makeImagePanel(session: ImageSession) {
                 .transform(s.layers.active, f)
                 .then(() => session.closeDialog())
             }
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "indexedColor" && (
+          <IndexedColorDialog
+            busy={s.busy}
+            onApply={(p, n) => void session.setIndexedColor(p, n)}
             onCancel={() => void session.closeDialog()}
           />
         )}

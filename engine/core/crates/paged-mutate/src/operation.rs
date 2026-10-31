@@ -1568,6 +1568,13 @@ pub enum PropertyPath {
     /// Rectangle, Oval or Polygon, or hosts pasted-in content. No IDML
     /// attribute: the writer lowers a clip group to paste-into.
     GroupClip,
+    /// Engine ADR 1042 — the group's live vector effects
+    /// (`Value::EffectStack`, vector kinds only): a `pathfinder` entry
+    /// draws the members as one outline (a compound shape) and the other
+    /// vector entries act on it. Whole-list replacement; the inverse
+    /// carries the previous stack (`prev`). Native: IDML export bakes the
+    /// outline and keeps the stack in a label.
+    GroupEffectStack,
     /// Engine ADR 1039 — a symbol instance's colour tint:
     /// `Value::Lengths([r, g, b, amount])` (sRGB and amount `0..=1`); the
     /// empty list removes it. Only `NodeId::Instance` carries it. Native.
@@ -2111,6 +2118,7 @@ impl PropertyPath {
             PropertyPath::GroupIsolateBlending => "group.isolateBlending",
             PropertyPath::GroupKnockout => "group.knockout",
             PropertyPath::GroupClip => "group.clip",
+            PropertyPath::GroupEffectStack => "group.effectStack",
             PropertyPath::SymbolInstanceTint => "symbolInstance.tint",
             PropertyPath::SymbolInstanceNineSlice => "symbolInstance.nineSlice",
             PropertyPath::SymbolInstanceSymbol => "symbolInstance.symbol",
@@ -2275,7 +2283,7 @@ impl GradientFeatherSpec {
 }
 
 /// Engine ADR 1008 — an effect kind on the stack: InDesign's nine, then
-/// the stack-only ones.
+/// the stack-only ones, then (engine ADR 1042) the live vector effects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -2298,10 +2306,25 @@ pub enum EffectKind {
     SoftEdge,
     Noise,
     ColorAdjust,
+    // Engine ADR 1042 — the live vector effects.
+    Roughen,
+    ZigZag,
+    PuckerBloat,
+    Twist,
+    Tweak,
+    TransformCopies,
+    FreeDistort,
+    Warp,
+    OffsetPath,
+    OutlinePath,
+    RoundCorners,
+    Scribble,
+    ConvertToShape,
+    Pathfinder,
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 17] = [
+    pub const ALL: [EffectKind; 31] = [
         EffectKind::DropShadow,
         EffectKind::InnerShadow,
         EffectKind::OuterGlow,
@@ -2319,6 +2342,20 @@ impl EffectKind {
         EffectKind::SoftEdge,
         EffectKind::Noise,
         EffectKind::ColorAdjust,
+        EffectKind::Roughen,
+        EffectKind::ZigZag,
+        EffectKind::PuckerBloat,
+        EffectKind::Twist,
+        EffectKind::Tweak,
+        EffectKind::TransformCopies,
+        EffectKind::FreeDistort,
+        EffectKind::Warp,
+        EffectKind::OffsetPath,
+        EffectKind::OutlinePath,
+        EffectKind::RoundCorners,
+        EffectKind::Scribble,
+        EffectKind::ConvertToShape,
+        EffectKind::Pathfinder,
     ];
 
     fn indesign(self) -> Option<paged_model::effect_stack::IndesignEffect> {
@@ -2357,6 +2394,20 @@ impl EffectKind {
             EffectKind::SoftEdge => "softEdge",
             EffectKind::Noise => "noise",
             EffectKind::ColorAdjust => "colorAdjust",
+            EffectKind::Roughen => "roughen",
+            EffectKind::ZigZag => "zigZag",
+            EffectKind::PuckerBloat => "puckerBloat",
+            EffectKind::Twist => "twist",
+            EffectKind::Tweak => "tweak",
+            EffectKind::TransformCopies => "transformCopies",
+            EffectKind::FreeDistort => "freeDistort",
+            EffectKind::Warp => "warp",
+            EffectKind::OffsetPath => "offsetPath",
+            EffectKind::OutlinePath => "outlinePath",
+            EffectKind::RoundCorners => "roundCorners",
+            EffectKind::Scribble => "scribble",
+            EffectKind::ConvertToShape => "convertToShape",
+            EffectKind::Pathfinder => "pathfinder",
         }
     }
 
@@ -2380,6 +2431,25 @@ impl EffectKind {
 /// | `softEdge` | `sizePt` |
 /// | `noise` | `amountPct`, `monochromatic` |
 /// | `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |
+///
+/// The live vector effects (engine ADR 1042) and their fields:
+///
+/// | kind | fields |
+/// | --- | --- |
+/// | `roughen` | `size`, `relative`, `detailPerInch`, `smooth`, `seed` |
+/// | `zigZag` | `size`, `relative`, `ridges`, `smooth` |
+/// | `puckerBloat` | `amountPct` (−200..200; positive bloats) |
+/// | `twist` | `angleDeg` |
+/// | `tweak` | `amountH`, `amountV`, `relative`, `anchors`, `inHandles`, `outHandles`, `seed` |
+/// | `transformCopies` | `scaleHPct`, `scaleVPct`, `moveH`, `moveV`, `rotateDeg`, `reflectX`, `reflectY`, `copies`, `origin` |
+/// | `freeDistort` | `corners` (four `[x, y]` in the box's unit square) |
+/// | `warp` | `style`, `horizontal`, `bendPct`, `distortHPct`, `distortVPct` |
+/// | `offsetPath` | `offset`, `join`, `miterLimit` |
+/// | `outlinePath` | — (the item's own stroke) |
+/// | `roundCorners` | `radius` |
+/// | `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |
+/// | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
+/// | `pathfinder` | `op` (on a group's stack only) |
 ///
 /// InDesign's kinds carry no parameters here: theirs are the per-field
 /// paths (`frameInnerShadowSize`, …), and the stack keeps them.
@@ -2431,6 +2501,96 @@ pub struct EffectEntrySpec {
     pub saturation: Option<f32>,
     #[serde(default)]
     pub hue_deg: Option<f32>,
+    // Engine ADR 1042 — the vector effects' parameters (see
+    // `vector_effect_spec` for which kind reads which).
+    #[serde(default)]
+    pub size: Option<f32>,
+    #[serde(default)]
+    pub relative: Option<bool>,
+    #[serde(default)]
+    pub detail_per_inch: Option<f32>,
+    #[serde(default)]
+    pub smooth: Option<bool>,
+    #[serde(default)]
+    pub seed: Option<u32>,
+    #[serde(default)]
+    pub ridges: Option<u32>,
+    #[serde(default)]
+    pub amount_h: Option<f32>,
+    #[serde(default)]
+    pub amount_v: Option<f32>,
+    #[serde(default)]
+    pub anchors: Option<bool>,
+    #[serde(default)]
+    pub in_handles: Option<bool>,
+    #[serde(default)]
+    pub out_handles: Option<bool>,
+    #[serde(default)]
+    pub scale_h_pct: Option<f32>,
+    #[serde(default)]
+    pub scale_v_pct: Option<f32>,
+    #[serde(default)]
+    pub move_h: Option<f32>,
+    #[serde(default)]
+    pub move_v: Option<f32>,
+    #[serde(default)]
+    pub rotate_deg: Option<f32>,
+    #[serde(default)]
+    pub reflect_x: Option<bool>,
+    #[serde(default)]
+    pub reflect_y: Option<bool>,
+    #[serde(default)]
+    pub copies: Option<u32>,
+    #[serde(default)]
+    pub origin: Option<String>,
+    #[serde(default)]
+    pub corners: Option<Vec<[f32; 2]>>,
+    #[serde(default)]
+    pub style: Option<String>,
+    #[serde(default)]
+    pub horizontal: Option<bool>,
+    #[serde(default)]
+    pub bend_pct: Option<f32>,
+    #[serde(default)]
+    pub distort_h_pct: Option<f32>,
+    #[serde(default)]
+    pub distort_v_pct: Option<f32>,
+    #[serde(default)]
+    pub offset: Option<f32>,
+    #[serde(default)]
+    pub join: Option<String>,
+    #[serde(default)]
+    pub miter_limit: Option<f32>,
+    #[serde(default)]
+    pub radius: Option<f32>,
+    #[serde(default)]
+    pub path_overlap: Option<f32>,
+    #[serde(default)]
+    pub path_overlap_variation: Option<f32>,
+    #[serde(default)]
+    pub stroke_width: Option<f32>,
+    #[serde(default)]
+    pub curviness_pct: Option<f32>,
+    #[serde(default)]
+    pub curviness_variation_pct: Option<f32>,
+    #[serde(default)]
+    pub spacing: Option<f32>,
+    #[serde(default)]
+    pub spacing_variation: Option<f32>,
+    #[serde(default)]
+    pub shape: Option<String>,
+    #[serde(default)]
+    pub extra_width: Option<f32>,
+    #[serde(default)]
+    pub extra_height: Option<f32>,
+    #[serde(default)]
+    pub width: Option<f32>,
+    #[serde(default)]
+    pub height: Option<f32>,
+    #[serde(default)]
+    pub corner_radius: Option<f32>,
+    #[serde(default)]
+    pub op: Option<String>,
 }
 
 /// Engine ADR 1008 — the wire value of a target's effect stack as the
@@ -2480,6 +2640,50 @@ impl EffectEntrySpec {
             contrast: None,
             saturation: None,
             hue_deg: None,
+            size: None,
+            relative: None,
+            detail_per_inch: None,
+            smooth: None,
+            seed: None,
+            ridges: None,
+            amount_h: None,
+            amount_v: None,
+            anchors: None,
+            in_handles: None,
+            out_handles: None,
+            scale_h_pct: None,
+            scale_v_pct: None,
+            move_h: None,
+            move_v: None,
+            rotate_deg: None,
+            reflect_x: None,
+            reflect_y: None,
+            copies: None,
+            origin: None,
+            corners: None,
+            style: None,
+            horizontal: None,
+            bend_pct: None,
+            distort_h_pct: None,
+            distort_v_pct: None,
+            offset: None,
+            join: None,
+            miter_limit: None,
+            radius: None,
+            path_overlap: None,
+            path_overlap_variation: None,
+            stroke_width: None,
+            curviness_pct: None,
+            curviness_variation_pct: None,
+            spacing: None,
+            spacing_variation: None,
+            shape: None,
+            extra_width: None,
+            extra_height: None,
+            width: None,
+            height: None,
+            corner_radius: None,
+            op: None,
         }
     }
 
@@ -2530,7 +2734,7 @@ impl EffectEntrySpec {
                 s.saturation = Some(p.saturation);
                 s.hue_deg = Some(p.hue_deg);
             }
-            _ => {}
+            other => s.vector_from_model(other),
         }
         s
     }
@@ -2621,7 +2825,7 @@ impl EffectEntrySpec {
                         .map(|h| h.clamp(-180.0, 180.0))
                         .unwrap_or(0.0),
                 }),
-                _ => unreachable!("InDesign kinds handled above"),
+                vector => self.vector_to_model(vector)?,
             },
         };
         let stack_only = self.kind.indesign().is_none();
@@ -4493,6 +4697,18 @@ pub enum Operation {
         story_ids: Vec<String>,
         #[serde(default)]
         added: Vec<String>,
+    },
+    /// Engine ADR 1042 — Expand Appearance: the item becomes the item its
+    /// live vector effects describe, for good — its path the effected
+    /// outline, the vector entries gone from its stack, the paint moved
+    /// where the effect says. An oval becomes a polygon; a group with a
+    /// Pathfinder effect becomes one polygon in its place (its id). The
+    /// other effects stay live. `restore` is inverse-only: the item's
+    /// previous state, put back as it was.
+    ExpandAppearance {
+        node: NodeId,
+        #[serde(default)]
+        restore: Option<String>,
     },
     /// Engine ADR 1039 — make a symbol definition `symbol_id` named `name`
     /// from the page items `sources` (copied whole, as a snippet copies

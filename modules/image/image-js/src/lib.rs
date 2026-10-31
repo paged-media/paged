@@ -365,6 +365,7 @@ mod wasm {
             D::CmykConverted => 3,
             D::CmykUncalibrated => 4,
             D::HdrClipped => 5,
+            D::Float32 => 6,
         }
     }
 
@@ -507,7 +508,11 @@ mod wasm {
             let img = map
                 .get(&handle)
                 .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
-            Ok(if img.rgba.is_16bit() { 16 } else { 8 })
+            Ok(match img.rgba.depth() {
+                image_core::SampleDepth::F32 => 32,
+                image_core::SampleDepth::U16 => 16,
+                _ => 8,
+            })
         })
     }
 
@@ -1906,11 +1911,30 @@ mod wasm {
             mode,
             cmyk_profile: (mode == crate::color_mode::ColorMode::Cmyk && !cmyk_profile.is_empty())
                 .then(|| Arc::from(cmyk_profile.into_boxed_slice())),
+            table: None,
         };
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {
             let result = async {
-                if !doc.stack.set_mode(doc_mode).map_err(ingest_err)? {
+                // Multichannel (image ADR 484): the channels of the
+                // document's RGB or grey, the stack flattened.
+                let changed = if mode == crate::color_mode::ColorMode::Multichannel {
+                    let from = doc.stack.mode().mode;
+                    let m =
+                        crate::color_mode::DocMode::multichannel_from(from).ok_or_else(|| {
+                            JsValue::from_str(&format!(
+                                "Multichannel is made from an RGB or Grayscale document, not {}",
+                                from.label()
+                            ))
+                        })?;
+                    doc.stack
+                        .convert_flat(ctx.as_deref(), m)
+                        .await
+                        .map_err(ingest_err)?
+                } else {
+                    doc.stack.set_mode(doc_mode).map_err(ingest_err)?
+                };
+                if !changed {
                     return Ok(false);
                 }
                 let rgba = doc
@@ -1920,6 +1944,62 @@ mod wasm {
                     .map_err(ingest_err)?;
                 set_image_pixels(doc.handle, rgba)?;
                 Ok(true)
+            }
+            .await;
+            (doc, result)
+        })
+        .await
+    }
+
+    /// IMAGE ▸ MODE ▸ INDEXED COLOR… (image ADR 484) over the bound stack:
+    /// the visible image flattened and every pixel the nearest colour of
+    /// `palette` — `exact` (the image's own colours, at most 256), `web`
+    /// (216), or `adaptive` (`colours` of them, median cut) — at 8 bits,
+    /// one undo step. Answers whether anything changed.
+    #[wasm_bindgen]
+    pub async fn image_set_indexed(
+        handle: u32,
+        palette: &str,
+        colours: u32,
+    ) -> Result<bool, JsValue> {
+        if LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) != Some(handle) {
+            return Err(JsValue::from_str(
+                "no layer stack open on this image (layers_open first)",
+            ));
+        }
+        let palette = palette.to_string();
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let result = async {
+                let rgba = doc
+                    .stack
+                    .composite(ctx.as_deref(), None)
+                    .await
+                    .map_err(ingest_err)?;
+                let table = match palette.as_str() {
+                    "web" => crate::color_mode::web_palette(),
+                    "exact" => crate::color_mode::exact_palette(&rgba).ok_or_else(|| {
+                        JsValue::from_str(
+                            "the image has more than 256 colours: an Exact palette needs at most 256",
+                        )
+                    })?,
+                    "adaptive" => crate::color_mode::adaptive_palette(&rgba, colours as usize),
+                    p => return Err(JsValue::from_str(&format!("unknown palette {p:?}"))),
+                };
+                let changed = doc
+                    .stack
+                    .convert_flat(ctx.as_deref(), crate::color_mode::DocMode::indexed(table))
+                    .await
+                    .map_err(ingest_err)?;
+                if changed {
+                    let rgba = doc
+                        .stack
+                        .composite_px(ctx.as_deref(), None)
+                        .await
+                        .map_err(ingest_err)?;
+                    set_image_pixels(doc.handle, rgba)?;
+                }
+                Ok(changed)
             }
             .await;
             (doc, result)
@@ -4668,7 +4748,15 @@ mod wasm {
         // `(v << 8) | v`, which maps 255 to 65535 exactly, so an 8-bit
         // image produces byte-identical f16 to the old `/ 255.0` path
         // while a 16-bit one keeps every bit it has.
+        // A 32-bit image is filtered on its linear values (unclamped).
+        let lin = img.rgba.is_float().then(|| img.rgba.to_f32_linear());
         let px_f16 = |px: usize, c: usize| -> [u8; 2] {
+            if let Some(l) = &lin {
+                let a = l[px * 4 + 3];
+                let v = l[px * 4 + c];
+                let v = if associate && c < 3 { v * a } else { v };
+                return f16::from_f32(v).to_le_bytes();
+            }
             let v = f32::from(img.rgba.sample16(px, c)) / 65535.0;
             let a = f32::from(img.rgba.sample16(px, 3)) / 65535.0;
             let v = if associate && c < 3 { v * a } else { v };
@@ -4755,7 +4843,23 @@ mod wasm {
         // so this step was the ONLY place precision was ever lost — and
         // it was lost once per operation, so a chain of N adjustments
         // quantised N times.
-        let landed = if img.rgba.is_16bit() {
+        let landed = if img.rgba.is_float() {
+            let mut f: Vec<f32> = out
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|p| f16::from_le_bytes(*p).to_f32())
+                .collect();
+            for p in f.as_chunks_mut::<4>().0 {
+                p[3] = p[3].clamp(0.0, 1.0);
+                if associate {
+                    for c in 0..3 {
+                        p[c] = if p[3] > 0.0 { p[c] / p[3] } else { 0.0 };
+                    }
+                }
+            }
+            crate::pixels::Pixels::from_rgba32f(&f)
+        } else if img.rgba.is_16bit() {
             let s16 = if associate {
                 crate::fill::f16_to_rgba16_unpremul(&out)
             } else {
@@ -4962,9 +5066,10 @@ mod wasm {
         let depth = match bits {
             8 => image_core::SampleDepth::U8,
             16 => image_core::SampleDepth::U16,
+            32 => image_core::SampleDepth::F32,
             b => {
                 return Err(JsValue::from_str(&format!(
-                    "image_set_bits: {b} bits per channel (8 or 16)"
+                    "image_set_bits: {b} bits per channel (8, 16 or 32)"
                 )))
             }
         };
@@ -5040,6 +5145,33 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&image_handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {image_handle}")))?;
+        // An Indexed or Multichannel document is one image in Photoshop
+        // (no layer records): it opens as its composite in its mode, with
+        // its table, so an edit stays in the mode and the save writes it
+        // back (image ADR 484).
+        let single = PSDS.with(|m| {
+            m.borrow().get(&psd_handle).and_then(|f| {
+                matches!(
+                    f.header.color_mode,
+                    image_psd::model::ColorMode::Indexed
+                        | image_psd::model::ColorMode::Multichannel
+                )
+                .then(|| crate::color_mode::DocMode::of_psd(f))
+                .flatten()
+            })
+        });
+        if let Some(mode) = single {
+            let mut stack = LayerStack::from_image_px(img.width, img.height, img.rgba.clone())
+                .map_err(ingest_err)?;
+            stack.adopt_mode(mode);
+            LAYERS.with(|l| {
+                *l.borrow_mut() = Some(LayerDoc {
+                    handle: image_handle,
+                    stack,
+                })
+            });
+            return Ok(1);
+        }
         let (import, mut stack) = PSDS.with(|m| {
             let map = m.borrow();
             let file = map
@@ -5049,9 +5181,14 @@ mod wasm {
             // the merged composite took at ingest (`decode_psd`), so the
             // layered open and the flattened one agree; the stack then
             // works in RGB, which the image's treatment already states.
+            // A Grayscale or Lab document's plates go through the
+            // transform its composite took (image ADR 484).
+            let stored = crate::color_mode::StoredToSrgb::for_psd(file).map_err(ingest_err)?;
             let import = if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
                 let ink = crate::ingest::psd_ink_transform(file);
                 file.layer_plates_rgba8_via(&|cmyk| ink.to_rgba8(cmyk))
+            } else if let Some(t) = &stored {
+                file.layer_plates_device(&|d| t.rgb_of(d))
             } else {
                 file.layer_plates_rgba8()
             }
@@ -8122,6 +8259,13 @@ mod wasm {
                     .map(|i| (i.width, i.height, i.rgba.clone()))
             })
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        // A 32-bit image exports its display encoding at 16 bits (the
+        // exporters write integer samples).
+        let px = if px.is_float() {
+            px.at_depth(image_core::SampleDepth::U16)
+        } else {
+            px
+        };
         let pixels = if px.is_16bit() {
             crate::export::Rgba::U16(
                 px.raw()
@@ -8204,18 +8348,14 @@ mod wasm {
                 .as_ref()
                 .ok_or_else(|| JsValue::from_str("no layer stack is open"))?;
             let composite = IMAGES
-                .with(|m| {
-                    m.borrow()
-                        .get(&doc.handle)
-                        .map(|i| i.rgba.to_rgba8().into_owned())
-                })
+                .with(|m| m.borrow().get(&doc.handle).map(|i| i.rgba.clone()))
                 .ok_or_else(|| JsValue::from_str("the layer stack's image is gone"))?;
             PSDS.with(|m| {
                 let mut map = m.borrow_mut();
                 let file = map.get_mut(&psd_handle).ok_or_else(|| {
                     JsValue::from_str(&format!("unknown psd handle {psd_handle}"))
                 })?;
-                let shape = crate::saveback::psd_write_stack(file, &doc.stack, &composite)
+                let shape = crate::psd_write::psd_write_stack_px(file, &doc.stack, &composite)
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 Ok(shape.describe().to_string())
             })

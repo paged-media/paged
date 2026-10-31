@@ -120,7 +120,7 @@ pub(super) fn apply_remove_node(
 
 /// What removing `node` removes, leaf by leaf, in paint order: the
 /// node itself, or for a group every leaf under it.
-fn removal_leaves(doc: &Document, node: &NodeId) -> Vec<NodeId> {
+pub(super) fn removal_leaves(doc: &Document, node: &NodeId) -> Vec<NodeId> {
     let NodeId::Group(id) = node else {
         return vec![node.clone()];
     };
