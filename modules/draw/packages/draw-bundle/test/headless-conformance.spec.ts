@@ -234,7 +234,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Offset / Simplify / Outline stroke / the four Insert shapes).
         "panel",
         // WP6.6 — the IMAGE TRACE panel (presets, options, Trace /
-        // Re-trace); WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE.
+        // Re-trace); WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE;
+        // WP6.4 — BRUSHES.
+        "panel",
         "panel",
         "panel",
         "panel",
@@ -430,13 +432,15 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm
         // lane: crates/trace-js over visioncortex), and since WP6.6 its
         // Re-trace and "…" raiser; then WP6.5's Recolor Artwork, its
-        // raiser and the Color Guide's apply.
+        // raiser and the Color Guide's apply; then WP6.4's six brush
+        // and width-profile commands.
         "command",
         "command",
         "command",
         "command",
         "command",
         "command",
+        ...Array<string>(6).fill("command"),
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.
         "editContext",

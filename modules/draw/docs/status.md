@@ -17,8 +17,21 @@ canary added is under [Releases](#releases).
 - **Drawing tools.** Curvature inserts a path. (The Pencil is the host's `paged.tool.pencil`,
   a shim over this repo's `PencilMachine`, ADR 359.) Paintbrush sweeps a calligraphic
   outline, Blob Brush unites the sweep with a selected element of the same fill, Eraser
-  subtracts one from the selected paths. Width outlines an open path at a varying width; the
-  `widthProfile` command does the same with the widths given as data (below).
+  subtracts one from the selected paths; with their `result: live` option the Paintbrush and
+  Blob Brush keep the centreline, stroked, its widths a live width profile instead. Width
+  (`mode: live`, the default) adds or moves a width point where it is dragged on the selected
+  item's stroke, written as the engine's `widthProfile` stroke style (engine ADR 10XX) — the
+  path keeps its anchors, one undo step a drag; `mode: outline` (and a graphic line) outlines
+  an open path at a varying width as before, and the `widthProfile` command does that with the
+  widths given as data (below).
+- **Brushes (ADR 366).** The Brushes panel (Draw ▸ Stroke ▸ Brushes…) lists the Basic,
+  Artistic and Decorative libraries and the document's own brushes; a click applies an Art,
+  Scatter, Pattern or Bristle brush to the selection's stroke as a live stroke style, its
+  Brush Options section edits the selection's brush, Remove takes it off, New makes a brush of
+  the selected artwork (kept in the `brushes/library.json` part), and the width profile
+  library gives the stroke a live profile. Commands: `applyBrush`, `removeBrush`,
+  `brushOptions`, `applyWidthProfile`, `newBrush`, `brushes`, each one batch for the
+  selection. The artwork is painted with the stroke's colour.
 - **The graphic default.** A path drawn with Curvature wears the document's
   `[Normal Graphics Frame]` object style (fill, stroke colour and stroke weight), or
   InDesign's own values for it (no fill, a 1 pt `Color/Black` stroke) when the document has
@@ -432,10 +445,11 @@ Recolouring a raster is pixel work and is not registered.
   holes off by the page's origin, because nothing the placement reads reports it; reset and
   redefine read it from the instance. Create Outlines reads it from the text frame, so on an
   engine that reports no origin its glyphs with holes land off by it there.
-- **Tools.** Width (and `widthProfile`) replaces the path with its outline; the profile is not
-  kept as an editable stroke, because neither the engine's stroke model nor IDML has a
-  variable-width stroke (a stroke is one weight), so the only faithful result on the page and
-  in every export is the outline. Eyedropper samples properties, not
+- **Tools.** The Width tool's live width points are symmetric (one width per point, not one
+  per side), and IDML, which has no variable-width stroke, gets the outline (engine ADR 10XX).
+  Brushes paint their artwork in the stroke's colour only; a bristle brush's strands have no
+  opacity of their own; a pattern brush has no corner tiles; Illustrator's brush libraries
+  cannot be imported. Eyedropper samples properties, not
   pixels. Measure's snap and the gradient annotator's stops use raw engine requests outside
   the host doors. Only Curvature snaps among this bundle's own tools.
 - **Opacity mask and type on a path.** Options cannot be edited in place; release or detach

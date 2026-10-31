@@ -101,6 +101,23 @@ export {
 // Wave 2 — the width tool's peaked per-anchor profile
 // (outlineStrokeVariable stops).
 export { peakedWidthProfile } from "./width";
+// WP6.4 — live width points and the width profile library (engine ADR
+// 10XX's `widthProfile` stroke style).
+export {
+  MAX_WIDTH_POINTS,
+  WIDTH_POINT_MERGE,
+  WIDTH_PROFILE_IDS,
+  WIDTH_PROFILE_PRESETS,
+  nearestOnRun,
+  normalizeWidthPoints,
+  widthFactorAt,
+  widthOutlinePolyline,
+  withWidthPoint,
+  withoutWidthPoint,
+  type RunLocation,
+  type WidthPoint,
+  type WidthProfilePreset,
+} from "./width-points";
 // Wave 2 — blend interpolation (anchor-run lerp + sRGB colour mix).
 export { interpolateAnchors, mixRgb } from "./blend";
 // WP6.6 — blend STRUCTURE matching: keys with different anchor or contour

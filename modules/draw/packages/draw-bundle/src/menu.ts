@@ -58,6 +58,10 @@ defineMessages("menu", {
   Stroke: "Stroke",
   "Dashes…": "Dashes…",
   "Width profile…": "Width profile…",
+  "Brushes…": "Brushes…",
+  "Brush options…": "Brush options…",
+  "Remove brush": "Remove brush",
+  "New brush from selection": "New brush from selection",
   "Update linked recipes": "Update linked recipes",
   Pathfinder: "Pathfinder",
   Unite: "Unite",
@@ -196,6 +200,12 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    The width profile (the Width tool's bake, typed): run bare, the
   //    command raises the panel's Width profile section.
   ["Draw/Stroke/Width profile…", "widthProfile", "stroke"],
+  // WP6.4 — brushes as live stroke styles: the Brushes panel (libraries,
+  // Brush Options, width profiles), and the two verbs that need no row.
+  ["Draw/Stroke/Brushes…", "brushes", "brushes"],
+  ["Draw/Stroke/Brush options…", "brushOptions", "brushes"],
+  ["Draw/Stroke/Remove brush", "removeBrush", "brushes"],
+  ["Draw/Stroke/New brush from selection", "newBrush", "brushes"],
 
   // ── Pathfinder — the ten boolean ops, in Illustrator's own order so
   //    the muscle memory transfers. ──

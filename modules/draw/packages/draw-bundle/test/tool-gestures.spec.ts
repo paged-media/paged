@@ -320,13 +320,13 @@ describe("paged.draw tools through the gesture DSL — drawing", () => {
     await cancelCommitsNothing(`${T}.eraserBrush`, [A], [50, 200], [350, 200]);
   });
 
-  it("Width: a drag at an anchor of the selected open path bakes a width bulge there, as one undo step; Escape commits nothing", async () => {
+  it("Width: a drag on the selected path's stroke writes a live width point there, as one undo step; Escape commits nothing", async () => {
     covers("tool:media.paged.draw.tool.width");
     const { r, g } = rig([POLY]);
     await arm(r, g, `${T}.width`);
     const before = r.picture();
     await g.drag({ from: [250, 650], to: [250, 690], steps: 4 }).settle();
-    expect(paths(r.leaves())).toEqual(["outlineStrokeVariable"]);
+    expect(paths(r.leaves())).toEqual(["frameEffectStack"]);
     await oneUndoStep(r, before);
     await cancelCommitsNothing(`${T}.width`, [POLY], [250, 650], [250, 690]);
   });

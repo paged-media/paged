@@ -1550,6 +1550,39 @@ export {
   makeColorGuidePanel,
   COLOR_GUIDE_PANEL_NOTE,
 } from "./panels/color-guide-panel";
+// WP6.4 — brushes and width profiles as live stroke styles (engine ADR
+// 10XX, draw ADR 366).
+export {
+  APPLY_BRUSH_COMMAND_ID,
+  APPLY_WIDTH_PROFILE_COMMAND_ID,
+  BRUSH_COMMAND_IDS,
+  BRUSH_LIBRARIES,
+  BRUSH_LIBRARY_PART,
+  BRUSH_OPTIONS_COMMAND_ID,
+  BRUSH_TYPES,
+  BRUSHES_COMMAND_ID,
+  BRUSHES_PANEL_ID,
+  BUILTIN_BRUSHES,
+  DEFAULT_BRUSH_OPTIONS,
+  NEW_BRUSH_COMMAND_ID,
+  REMOVE_BRUSH_COMMAND_ID,
+  applyBrush,
+  applyWidthProfileStyle,
+  brushArtOf,
+  brushEntryFor,
+  newBrushFromSelection,
+  removeBrush,
+  setBrushOptions,
+  stackMutationFor,
+  widthProfileEntryFor,
+  withStrokeStyle,
+  type BrushArt,
+  type BrushDef,
+  type BrushOptions,
+  type BrushType,
+} from "./commands/brushes";
+export { makeBrushesPanel, BRUSHES_PANEL_NOTE } from "./panels/brushes-panel";
+export { liveStrokeOpsFor } from "./handlers/brush";
 // The pure tree-parentage resolver Appearance bake + Symbols read,
 // exported for the conformance spec. "Select: Parent group" itself is
 // the host's now (`paged.object.selectParentGroup`) — see

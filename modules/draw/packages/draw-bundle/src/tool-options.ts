@@ -115,6 +115,12 @@ const M = defineMessages("draw.toolOptions", {
   stainRed: "Stain red",
   stainGreen: "Stain green",
   stainBlue: "Stain blue",
+  widthMode: "Result",
+  widthLive: "Live width points",
+  widthOutline: "Outline the stroke",
+  brushResult: "Result",
+  brushOutline: "Filled outline",
+  brushLive: "Live stroke",
 });
 
 type OptionValue = number | boolean | string;
@@ -339,14 +345,29 @@ const nibFields = (): OptionDef[] => [
   { ...FIDELITY, default: 2 },
 ];
 
+/** WP6.4 — what a Paintbrush or Blob Brush stroke becomes: the filled
+ *  outline it always made (the default, first), or a LIVE stroke — the
+ *  centreline, stroked, its pressure a width profile (engine ADR 10XX),
+ *  re-editable with the Width tool and the Brushes panel. */
+const BRUSH_RESULT: SelectOption<"outline" | "live"> = {
+  kind: "select",
+  key: "result",
+  label: M.brushResult,
+  options: [
+    { value: "outline", label: M.brushOutline },
+    { value: "live", label: M.brushLive },
+  ],
+  default: "outline",
+};
+
 export const PAINTBRUSH_OPTIONS = defineToolOptions({
   toolId: "media.paged.draw.tool.paintbrush",
-  fields: nibFields(),
+  fields: [...nibFields(), BRUSH_RESULT],
 });
 
 export const BLOB_BRUSH_OPTIONS = defineToolOptions({
   toolId: "media.paged.draw.tool.blobBrush",
-  fields: nibFields(),
+  fields: [...nibFields(), BRUSH_RESULT],
 });
 
 /** The eraser: a ROUND, pressure-free nib, so its one shape parameter is
@@ -371,6 +392,17 @@ export const ERASER_OPTIONS = defineToolOptions({
 export const WIDTH_OPTIONS = defineToolOptions({
   toolId: "media.paged.draw.tool.width",
   fields: [
+    // WP6.4 — live width points (engine ADR 10XX) first: the default.
+    {
+      kind: "select",
+      key: "mode",
+      label: M.widthMode,
+      options: [
+        { value: "live", label: M.widthLive },
+        { value: "outline", label: M.widthOutline },
+      ],
+      default: "live",
+    },
     {
       kind: "number",
       key: "maxWidth",

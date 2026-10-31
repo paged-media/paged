@@ -575,6 +575,39 @@ export const TWINS: readonly TwinSpec[] = [
   }),
   twin("recolorArtworkOptions", {}),
   twin("applyGuideColor", { ...T, hex: TEXT, stroke: BOOL }),
+  // WP6.4 — brushes and width profiles as live stroke styles (engine ADR
+  // 10XX): a brush by its id (built-in or the document's), its options,
+  // its removal; a width profile by its library id or its points
+  // (`profile: ""` takes `points`: [t, width × weight]); a new brush of
+  // the selected artwork; the Brushes panel's raiser takes nothing.
+  twin("applyBrush", { ...T, brush: TEXT }),
+  twin("brushes", {}),
+  twin("removeBrush", { ...T }),
+  twin("brushOptions", {
+    ...T,
+    scalePct: NUM,
+    spacingPct: NUM,
+    scatterPct: NUM,
+    rotateDeg: DEG,
+    rotateVariationDeg: DEG,
+    sizeMinPct: NUM,
+    flipAlong: BOOL,
+    flipAcross: BOOL,
+    tileAspect: NUM,
+    bristles: INT,
+    bristleThicknessPct: NUM,
+    seed: INT,
+  }),
+  twin("applyWidthProfile", {
+    ...T,
+    profile: TEXT,
+    points: { kind: "list", of: POINT },
+  }),
+  twin("newBrush", {
+    ...T,
+    type: enumOf(["art", "scatter", "pattern"]),
+    name: TEXT,
+  }),
   // WP6.7 — the distortion tools' gestures as data (page pt). A liquify
   // stroke names its kernel and EVERY option of Illustrator's dialog; a
   // puppet warp names the pins that hold, the pin dragged and where to,
