@@ -28,8 +28,8 @@ import type { EffectKindDescriptor } from "@paged-media/plugin-api";
 export function withFutureKind<T>(fn: () => T): T {
   const kinds = CORE_EFFECT_KINDS as EffectKindDescriptor[];
   const future: EffectKindDescriptor = {
-    kind: "roughen",
-    title: "Roughen",
+    kind: "crystallize",
+    title: "Crystallize",
     category: "distortAndTransform",
     indesign: false,
     targets: ["object"],

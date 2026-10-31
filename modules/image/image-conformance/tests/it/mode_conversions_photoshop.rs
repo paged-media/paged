@@ -231,6 +231,7 @@ fn image_mode_conversions_agree_with_photoshop__feat__image_io_depth_color_modes
         let t = ModeTransform::new(&DocMode {
             mode: case.mode,
             cmyk_profile,
+            table: None,
         })
         .expect("transform")
         .expect("the mode projects");

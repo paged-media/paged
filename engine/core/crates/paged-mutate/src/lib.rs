@@ -50,23 +50,23 @@ use paged_scene::Document;
 
 pub mod appearance_wire;
 pub mod apply;
-pub mod bezier_conv;
+pub use paged_geom::bezier_conv;
 pub mod error;
 pub mod group_frame;
 pub mod history;
 pub mod ids;
 pub mod invert;
-pub mod kurbo_kernel;
+pub use paged_geom::kurbo_kernel;
 pub mod notify;
 pub mod operation;
-pub mod orientation;
+pub use paged_geom::orientation;
 pub mod path_math;
-pub mod pathfinder;
-pub mod planar;
-mod planar_dcel;
+pub use paged_geom::pathfinder;
+pub use paged_geom::planar;
 #[cfg(feature = "schema")]
 pub mod schema;
-pub mod stroke_kernel;
+pub use paged_geom::stroke_kernel;
+mod vector_effect_spec;
 
 pub use apply::apply;
 pub use apply::apply_checked;
@@ -2115,6 +2115,7 @@ mod tests {
             corner_option: None,
             corners: Default::default(),
             clip: false,
+            effect_stack: Vec::new(),
         });
         Document {
             designmap: DesignMap::default(),

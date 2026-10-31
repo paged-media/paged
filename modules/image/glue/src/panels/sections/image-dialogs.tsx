@@ -6,6 +6,7 @@
 import { useState } from "react";
 
 import type { ResampleFilter, TrimBy } from "../../engine";
+import type { IndexedPalette } from "../../mode-engine";
 import { defineMessages, t } from "@paged-media/strings";
 import { color, font, space } from "@paged-media/panel-kit";
 
@@ -53,6 +54,16 @@ const M = defineMessages("image.dialogs", {
     "Turns every layer and mask about the centre; the canvas grows to hold " +
     "the corners, which are transparent. Quarter turns are exact; any other " +
     "angle is resampled on the GPU. One undo step.",
+  indexedColor: "Indexed colour",
+  palette: "Palette",
+  paletteExact: "Exact",
+  paletteWeb: "Web",
+  paletteAdaptive: "Local (adaptive)",
+  colours: "Colours",
+  indexedNote:
+    "Flattens the image and gives every pixel the nearest colour of the " +
+    "palette, without dither, at 8 bits per channel — one undo step. Exact " +
+    "takes the image's own colours (at most 256); Web the 216 Web colours.",
 });
 
 const dialogStyle = {
@@ -417,6 +428,72 @@ export function RotateDialog({
         onCancel={onCancel}
       />
       <div style={note}>{t(M.rotateNote)}</div>
+    </section>
+  );
+}
+
+export function IndexedColorDialog({
+  busy,
+  onApply,
+  onCancel,
+}: {
+  busy: boolean;
+  onApply: (palette: IndexedPalette, colours: number) => void;
+  onCancel: () => void;
+}) {
+  const [palette, setPalette] = useState<IndexedPalette>("adaptive");
+  const [colours, setColours] = useState(256);
+  const options: Array<[IndexedPalette, string]> = [
+    ["exact", M.paletteExact],
+    ["web", M.paletteWeb],
+    ["adaptive", M.paletteAdaptive],
+  ];
+  return (
+    <section
+      role="dialog"
+      aria-label={t(M.indexedColor)}
+      data-image-indexed-dialog
+      style={dialogStyle}
+    >
+      <div style={title}>{t(M.indexedColor)}</div>
+      <div style={row}>
+        <label htmlFor="pg-image-indexed-palette">{t(M.palette)}</label>
+        <select
+          id="pg-image-indexed-palette"
+          data-image-indexed-palette
+          value={palette}
+          onChange={(e) => setPalette(e.target.value as IndexedPalette)}
+        >
+          {options.map(([value, label]) => (
+            <option key={value} value={value}>
+              {t(label)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div style={row}>
+        <label htmlFor="pg-image-indexed-colours">{t(M.colours)}</label>
+        <input
+          id="pg-image-indexed-colours"
+          data-image-indexed-colours
+          type="number"
+          min={2}
+          max={256}
+          value={colours}
+          disabled={palette !== "adaptive"}
+          style={numberStyle}
+          onChange={(e) =>
+            setColours(Math.max(2, Math.min(256, Number(e.target.value) || 2)))
+          }
+        />
+      </div>
+      <Buttons
+        okDisabled={busy}
+        okAttr={{ "data-image-indexed-apply": "" }}
+        onOk={() => onApply(palette, colours)}
+        onCancel={onCancel}
+      />
+      <div style={note}>{t(M.indexedNote)}</div>
     </section>
   );
 }
