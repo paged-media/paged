@@ -18,6 +18,7 @@ default = ["cpu"]
 cpu = ["paged-renderer/cpu", "paged-gpu/cpu"]
 
 [dependencies]
+paged-blend = { path = "../paged-blend" }
 paged-renderer = { path = "../paged-renderer", default-features = false }
 # v77 — the view settings name the rasterizers' `RasterView` (editor ADR 287).
 paged-gpu = { path = "../paged-gpu", default-features = false }
@@ -99,6 +100,8 @@ criterion = { workspace = true }
 paged-gen = { path = "../paged-gen" }
 # S4 overset-wire test builds a small inline overflowing IDML.
 zip = { workspace = true }
+# Engine ADR 1034: the blend-mode tests draw the page on the CPU lane.
+paged-gpu = { path = "../paged-gpu", features = ["cpu"] }
 
 # W1.24 (audit B17) — `make bench` lane. `harness = false` hands the
 # bench main to criterion. Not wired into `verify` (benches are not a

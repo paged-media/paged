@@ -1004,32 +1004,14 @@ impl LayerEffect {
     }
 }
 
-/// IDML compositing blend mode. `Normal` (the default, source-over
-/// alpha composite) keeps the existing fast path; everything else
-/// requires the rasterizer to render the fill into an offscreen
-/// pixmap and composite onto the page with the named blend mode.
-/// Names match Adobe / W3C conventions; map straight to
-/// `peniko::Mix` in the rasterizer.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum BlendMode {
-    #[default]
-    Normal,
-    Multiply,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
-}
+/// The compositing blend mode of a group, a layer or a fill: the 27 of
+/// `paged-blend` (engine ADR 1034). `Normal` (the default, source-over)
+/// keeps the fast path. The sixteen [`BlendMode::is_native`] modes map
+/// straight to `peniko::Mix` in both rasterizers; Photoshop's eleven
+/// travel only on a `BeginBlendGroup` / `PushLayer` (the build wraps a
+/// `FillPathBlend` in one, [`crate::extent::lift_photoshop_fill_blends`]),
+/// which the CPU lane composites against its backdrop pixel by pixel.
+pub use paged_blend::BlendMode;
 
 /// One command in the display list.
 #[derive(Debug, Clone)]
@@ -1093,6 +1075,19 @@ pub enum DisplayCommand {
     /// rasterizer.
     Image {
         image_id: ImageId,
+        transform: Transform,
+    },
+    /// Engine ADR 1048 — paint the mesh shading `mesh_id` (a gradient
+    /// mesh or a freeform gradient, in local coordinates `transform`
+    /// takes to the page) under the clips in force; the renderer
+    /// brackets it in a `PushClip` of the frame's outline. `bounds` is
+    /// the shading's local box (what it can paint, for the extent pass).
+    /// Both rasterisers draw it as the cached raster
+    /// [`crate::mesh::mesh_raster`] makes at their display scale; the PDF
+    /// writer emits it as a type-6/7 shading.
+    MeshShade {
+        mesh_id: crate::mesh::MeshId,
+        bounds: Rect,
         transform: Transform,
     },
     /// Push a clip path onto the rasterizer's clip stack. Subsequent
@@ -1453,6 +1448,7 @@ impl DisplayCommand {
             | DisplayCommand::DropShadow { transform, .. }
             | DisplayCommand::PathShadow { transform, .. }
             | DisplayCommand::Image { transform, .. }
+            | DisplayCommand::MeshShade { transform, .. }
             | DisplayCommand::PushClip { transform, .. }
             | DisplayCommand::PopClip(transform)
             | DisplayCommand::BeginBlendGroup { transform, .. }
@@ -1753,6 +1749,9 @@ pub struct DisplayList {
     pub radial_gradients: Vec<RadialGradient>,
     pub sweep_gradients: Vec<SweepGradient>,
     pub images: Vec<DecodedImage>,
+    /// Engine ADR 1048 — the mesh shadings [`DisplayCommand::MeshShade`]
+    /// draws, indexed by [`crate::mesh::MeshId`].
+    pub meshes: Vec<crate::mesh::MeshShading>,
     /// Named spot inks the document references. Indexed by
     /// [`SpotInkId`]. Two `Paint::Cmyk` paints carrying the same spot
     /// name intern to the same id so the rasterizer can identify
@@ -1890,6 +1889,7 @@ impl DisplayList {
             radial_gradients: self.radial_gradients.clone(),
             sweep_gradients: self.sweep_gradients.clone(),
             images: self.images.clone(),
+            meshes: self.meshes.clone(),
             spot_inks: self.spot_inks.clone(),
             glyph_runs: None,
             link_regions: None,
@@ -1943,6 +1943,18 @@ impl DisplayList {
 
     pub fn image(&self, id: ImageId) -> Option<&DecodedImage> {
         self.images.get(id.0 as usize)
+    }
+
+    /// Append a mesh shading and return its id.
+    pub fn push_mesh(&mut self, mesh: crate::mesh::MeshShading) -> crate::mesh::MeshId {
+        let id = crate::mesh::MeshId(self.meshes.len() as u32);
+        self.meshes.push(mesh);
+        id
+    }
+
+    /// The mesh shading `id` names.
+    pub fn mesh(&self, id: crate::mesh::MeshId) -> Option<&crate::mesh::MeshShading> {
+        self.meshes.get(id.0 as usize)
     }
 
     /// Intern a spot ink name. Returns the existing id if the document
@@ -2015,6 +2027,9 @@ impl DisplayList {
             "g{:?}r{:?}w{:?}s{:?}",
             self.gradients, self.radial_gradients, self.sweep_gradients, self.spot_inks
         );
+        for m in &self.meshes {
+            let _ = write!(h, "m{:x}", m.hash);
+        }
         for img in &self.images {
             let _ = write!(h, "i{}x{}", img.width, img.height);
             h.bytes(&img.encoded);

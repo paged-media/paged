@@ -1,0 +1,75 @@
+{
+  "fixture": "mesh-render",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/mesh-render.jsx",
+    "script_sha256": "9067822220d14e023992ef1ecf0dcfc06f8de78debf8007f093b9e0a92bd2037",
+    "runner": "scripts/illustrator/run-probe.sh (PAGED_PROBE_WRITER=write-render-fixture.mjs)",
+    "recorded_at": "2026-10-29T07:10:21.579Z",
+    "host_os": "macOS 26.4"
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down; 1 png pixel = 1 pt",
+  "operation": "open the engine's PDF patch shading; export PNG24 at 100 %; save as PDF",
+  "files": {
+    "coons-four-corners.png": "b904b6ccb73570ac616845e3f366e77cd5fe33551212c754997369fe286613d1",
+    "coons-four-corners.ai.pdf": "470ab7850431db0ef17a350a829103f887ab15cb69d40a80adce6a4454b2b03b",
+    "coons-curved-2x2.png": "c4013ddcadaa7066a0de023569c87fb9192a4da71d449b64fd2f5b7993590b3e",
+    "coons-curved-2x2.ai.pdf": "fe9004446866d13a13fa1d4cf1d681820a5f6f73a9dadd5d51ba1b71fe2f82ea",
+    "tensor-one-patch.png": "19183c7276bf5d70fc78dfc32edd1902883d53fc692939aef8ab56db07544b9c",
+    "tensor-one-patch.ai.pdf": "92e677f087412009af39c76852fac6f78d8c3a0bae0586e0b902fe9ae3a2cdc6"
+  },
+  "cases": [
+    {
+      "id": "coons-four-corners",
+      "input": "coons-four-corners.pdf",
+      "mesh_items": 0,
+      "raster_items": 0,
+      "path_items": 1,
+      "document_color_space": "DocumentColorSpace.RGB",
+      "artboard_rect_app": [
+        0,
+        300,
+        400,
+        0
+      ],
+      "png": "coons-four-corners.png",
+      "pdf": "coons-four-corners.ai.pdf"
+    },
+    {
+      "id": "coons-curved-2x2",
+      "input": "coons-curved-2x2.pdf",
+      "mesh_items": 0,
+      "raster_items": 0,
+      "path_items": 1,
+      "document_color_space": "DocumentColorSpace.RGB",
+      "artboard_rect_app": [
+        0,
+        300,
+        400,
+        0
+      ],
+      "png": "coons-curved-2x2.png",
+      "pdf": "coons-curved-2x2.ai.pdf"
+    },
+    {
+      "id": "tensor-one-patch",
+      "input": "tensor-one-patch.pdf",
+      "mesh_items": 0,
+      "raster_items": 0,
+      "path_items": 1,
+      "document_color_space": "DocumentColorSpace.RGB",
+      "artboard_rect_app": [
+        0,
+        300,
+        400,
+        0
+      ],
+      "png": "tensor-one-patch.png",
+      "pdf": "tensor-one-patch.ai.pdf"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
   "generatedBy": "image-js/tests/it/object_schema.rs",
   "wireLength": 1113,
   "kernels": ["adjust.black_white","adjust.brightness_contrast","adjust.channel_mixer","adjust.color_balance","adjust.exposure","adjust.hue_rotate","adjust.hue_saturation","adjust.invert_rgb","adjust.levels","adjust.levels_rgb","adjust.photo_filter","adjust.posterize","adjust.saturation","adjust.threshold","adjust.vibrance","adjust.white_balance","conv.gaussian_h","conv.unsharp"],
-  "blendModes": ["color","color_burn","color_dodge","darken","darker_color","difference","divide","exclusion","hard_light","hard_mix","hue","lighten","lighter_color","linear_burn","linear_dodge","linear_light","luminosity","multiply","normal","overlay","pin_light","saturation","screen","soft_light","subtract","vivid_light"],
+  "blendModes": ["normal","dissolve","darken","multiply","color_burn","linear_burn","darker_color","lighten","screen","color_dodge","linear_dodge","lighter_color","overlay","soft_light","hard_light","vivid_light","linear_light","pin_light","hard_mix","difference","exclusion","subtract","divide","hue","saturation","color","luminosity"],
   "adjust": [
     {"path":"exposure.ev","kernel":"adjust.exposure","field":"ev","offset":0,"type":"number","default":0},
     {"path":"brightnessContrast.brightness","kernel":"adjust.brightness_contrast","field":"brightness","offset":1,"type":"number","default":0},

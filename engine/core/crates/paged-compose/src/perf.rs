@@ -30,6 +30,10 @@
 //!   (decoded from their bytes on wasm, copied on native): the repaint
 //!   after each write used to redo this for every visible photo;
 //! * `page_scenes_built` — GPU page scenes encoded;
+//! * `blend_cpu_composites` — groups in one of Photoshop's eleven blend
+//!   modes that a lane which cannot read its backdrop (Vello, PDF) had
+//!   the CPU lane composite for it (engine ADR 1034): the render stat
+//!   that says a page took the fallback;
 //! * `grow_passes` / `story_emits` — layout passes, the multipliers on
 //!   everything above.
 //!
@@ -46,6 +50,7 @@ pub struct PerfCounters {
     pub pipeline_image_decodes: u64,
     pub scene_image_decodes: u64,
     pub page_scenes_built: u64,
+    pub blend_cpu_composites: u64,
     pub grow_passes: u64,
     pub story_emits: u64,
 }
@@ -58,6 +63,7 @@ impl PerfCounters {
             pipeline_image_decodes: self.pipeline_image_decodes - earlier.pipeline_image_decodes,
             scene_image_decodes: self.scene_image_decodes - earlier.scene_image_decodes,
             page_scenes_built: self.page_scenes_built - earlier.page_scenes_built,
+            blend_cpu_composites: self.blend_cpu_composites - earlier.blend_cpu_composites,
             grow_passes: self.grow_passes - earlier.grow_passes,
             story_emits: self.story_emits - earlier.story_emits,
         }
@@ -70,6 +76,7 @@ thread_local! {
         pipeline_image_decodes: 0,
         scene_image_decodes: 0,
         page_scenes_built: 0,
+        blend_cpu_composites: 0,
         grow_passes: 0,
         story_emits: 0,
     }) };

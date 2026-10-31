@@ -556,16 +556,19 @@ describe("the paint session (real engine wasm, no GPU in Node)", () => {
     handle.dispose();
   });
 
-  it("the blend list comes from the compose.* kernel registry (26 modes)", async () => {
+  it("the blend list comes from the compose.* kernel registry (27 modes)", async () => {
     // Reading it is pure CPU, so it populates even with no GPU device —
     // and it is the registry's list, which is what stops the panel's
     // picker from ever drifting from the kernels that exist.
     const { handle, session } = await ingest();
     const modes = session.state().blendModes;
-    expect(modes).toHaveLength(26);
+    expect(modes).toHaveLength(27);
+    expect(modes).toContain("dissolve");
     expect(modes).toContain("normal");
     expect(modes).toContain("multiply");
-    expect(modes).toEqual([...modes].sort());
+    // Photoshop's menu order (paged-blend, engine ADR 1034), not sorted.
+    expect(modes.slice(0, 3)).toEqual(["normal", "dissolve", "darken"]);
+    expect(new Set(modes).size).toBe(modes.length);
     session.dispose();
     handle.dispose();
   });

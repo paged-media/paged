@@ -42,6 +42,14 @@
 // `frameFillColor`, or — with nothing selected — the document's
 // `doc.defaultFillColor` virtual path (the same `setDocumentDefaults`
 // op, the other two defaults preserved by the core seam).
+//
+// WP7.2 — the PAINT TARGET (shell `tools/paint-target.ts`). While a tool
+// has coloured parts of an object selected — the Mesh tool's mesh
+// points, the Gradient tool's freeform points — it sets a target in the
+// editor's scope; the panel reads it through `usePaintTarget` and the
+// mixer's Apply colours those parts through `target.apply` (one
+// mutation, one undo step) instead of writing the fill. The panel knows
+// nothing of meshes: the target carries its label and its write.
 
 import { useEffect, useState } from "react";
 
@@ -53,8 +61,10 @@ import {
   useCanvasClient,
   useObjectBindings,
   useDocumentMeta,
+  usePaintTarget,
   useProviderProperty,
   writeSelectionProperty,
+  type PaintColor,
   type ProvidedProperty,
 } from "@paged-media/shell";
 import { ColorMixer, hexToRgb, type MixerValue } from "@paged-media/ui";
@@ -77,7 +87,19 @@ const M = defineMessages("app.colorPanel", {
   strokeWell: "Stroke",
   rawWells:
     "The fill and stroke wells are this content's own colours (in an image: the foreground and background). A swatch click sets the fill, Alt-click the stroke.",
+  paintTarget: "Apply colours the selection: {target}.",
 });
+
+/** The mixer's colour as a paint-target colour: the tint folded into the
+ *  ink channels (CMYK, Gray), which is what a tint of them is. */
+export function mixerToPaint(v: MixerValue): PaintColor {
+  const tint = v.tint < 100 ? Math.max(0, v.tint) / 100 : 1;
+  const inked = v.space === "CMYK" || v.space === "Gray";
+  return {
+    space: v.space,
+    value: v.value.map((c) => (inked ? c * tint : c)),
+  };
+}
 
 /** The current selection, as a provider target (module-level: the hook
  *  keys on it). */
@@ -239,6 +261,7 @@ function DocumentColourPanel() {
   const client = useCanvasClient();
   const resolved = useObjectBindings(FILL_BINDING);
   const meta = useDocumentMeta();
+  const paintTarget = usePaintTarget();
   // W2.5 — with nothing selected the binding has no commit path; the
   // panel then targets the document-default fill instead.
   const hasSelection = resolved.value.onCommit != null;
@@ -266,6 +289,10 @@ function DocumentColourPanel() {
   // `setDocumentDefaults` (whole-triple — the other two members are
   // preserved from the current meta).
   const applyMix = (v: MixerValue) => {
+    if (paintTarget) {
+      void paintTarget.apply(mixerToPaint(v)).catch(() => {});
+      return;
+    }
     const spec: SwatchSpec = {
       selfId: null,
       name: null,
@@ -345,9 +372,23 @@ function DocumentColourPanel() {
       <div
         className="p-3 flex flex-col gap-3"
         data-color-panel="ready"
-        data-target={hasSelection ? "selection" : "document-default"}
+        data-target={
+          paintTarget
+            ? "paint-target"
+            : hasSelection
+              ? "selection"
+              : "document-default"
+        }
       >
-        {!hasSelection ? (
+        {paintTarget ? (
+          <div
+            className="text-[11px]"
+            style={{ color: "var(--pg-muted-fg)" }}
+            data-paint-target={paintTarget.owner}
+          >
+            {strings.t(M.paintTarget, { target: paintTarget.label })}
+          </div>
+        ) : !hasSelection ? (
           <div
             className="text-[11px]"
             style={{ color: "var(--pg-muted-fg)" }}

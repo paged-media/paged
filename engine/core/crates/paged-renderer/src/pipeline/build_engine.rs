@@ -100,6 +100,7 @@ fn other_pools_print(list: &paged_compose::DisplayList) -> u64 {
     list.radial_gradients.len().hash(&mut h);
     list.sweep_gradients.len().hash(&mut h);
     list.images.len().hash(&mut h);
+    list.meshes.len().hash(&mut h);
     for ink in &list.spot_inks {
         ink.name.hash(&mut h);
     }
@@ -4166,6 +4167,8 @@ pub(super) fn build_document_inner(
 
     for (page, adopted) in pages.iter_mut().zip(&adopted) {
         if !adopted {
+            // Photoshop's blend modes travel on groups (ADR 1034).
+            paged_compose::lift_photoshop_fill_blends(&mut page.list);
             paged_compose::fit_transparency_group_bounds(&mut page.list);
         }
     }
