@@ -3678,7 +3678,10 @@ fn style_cases(c: &mut Vec<Case>) {
         story_id
     }
     c.push(paints("SetContentControlValue", "styles-cascade", |m| {
-        let story_id = seed_control(m, paged_model::ContentControlKind::PlainText { multi_line: false });
+        let story_id = seed_control(
+            m,
+            paged_model::ContentControlKind::PlainText { multi_line: false },
+        );
         Mutation::SetContentControlValue {
             story_id,
             control_id: "sweep".into(),
@@ -3707,8 +3710,14 @@ fn style_cases(c: &mut Vec<Case>) {
             paged_model::ContentControlKind::DropDown {
                 combo: false,
                 items: vec![
-                    paged_model::ListItem { display: "First".into(), value: "a".into() },
-                    paged_model::ListItem { display: "Second choice".into(), value: "b".into() },
+                    paged_model::ListItem {
+                        display: "First".into(),
+                        value: "a".into(),
+                    },
+                    paged_model::ListItem {
+                        display: "Second choice".into(),
+                        value: "b".into(),
+                    },
                 ],
                 value: None,
             },
