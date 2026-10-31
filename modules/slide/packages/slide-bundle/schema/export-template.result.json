@@ -1,0 +1,20 @@
+{
+  "kind": "struct",
+  "fields": {
+    "bytes": {
+      "kind": "bytes",
+      "mime": [
+        "application/vnd.openxmlformats-officedocument.presentationml.template"
+      ]
+    },
+    "fileName": {
+      "kind": "text"
+    },
+    "diagnostics": {
+      "kind": "list",
+      "of": {
+        "kind": "text"
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "kind": "struct",
+  "fields": {
+    "comment": { "kind": "text" }
+  }
+}

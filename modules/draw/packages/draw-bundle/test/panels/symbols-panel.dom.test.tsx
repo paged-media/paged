@@ -42,13 +42,14 @@ import {
   applyDefineSymbol,
   applyPlaceSymbolInstance,
   makeSymbolsPanel,
+  readEngineSymbols,
   readSymbolLibrary,
   symbolInstanceOf,
   symbolInstances,
   SYMBOLS_NOTE,
   SYMBOLS_PANEL_ID,
 } from "../../src";
-import { openHost } from "../headless/host";
+import { openHost, withoutEngineSymbols } from "../headless/host";
 import {
   documentBurst,
   drive,
@@ -86,6 +87,7 @@ describe("Symbols panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(emptyDocument());
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
     });
     afterAll(() => h?.dispose());
     afterEach(() => teardownPanels(h));
@@ -137,6 +139,7 @@ describe("Symbols panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(seedRow("s", 3)));
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
     });
     afterAll(() => h?.dispose());
     afterEach(() => teardownPanels(h));
@@ -286,6 +289,7 @@ describe("Symbols panel — rendered against the engine", () => {
       h = await openHost();
       await h.load(panelDocument(seedRow("s", RECORDS)));
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
       perLeaf = await metadataReadsPerLeaf(h.host);
       const panel = await mountPanel(h, makeSymbolsPanel);
       for (let k = 0; k <= RECORDS; k++) {
@@ -401,6 +405,104 @@ describe("Symbols panel — rendered against the engine", () => {
         // As found: 20.
         partReads: 1,
       });
+    });
+  });
+
+  describe("on the engine's symbols (document.symbols@1, engine ADR 1039)", () => {
+    let h: HeadlessHost;
+
+    beforeAll(async () => {
+      h = await openHost();
+      await h.load(panelDocument(seedRow("s", 3)));
+      h.loadBundle(drawBundle);
+    });
+    afterAll(() => h?.dispose());
+    afterEach(() => teardownPanels(h));
+
+    it("defines, places and breaks through the engine, one undo step each", async () => {
+      covers("panel:media.paged.draw.panel.symbols");
+      await h.host.selection.set([poly("s0")]);
+      const panel = await mountPanel(h, makeSymbolsPanel);
+      expect(panel.attr(PANEL, "data-draw-symbols-engine")).toBe("true");
+      panel.reset();
+      await panel.click("[data-draw-symbol-define]");
+      // One wire op, the engine's; no container part is written.
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["createSymbol"]);
+      expect(panel.work.count("parts.write")).toBe(0);
+      expect(panel.attr(PANEL, "data-draw-symbols-panel")).toBe("1");
+      const row = "[data-draw-symbol-row]";
+      expect(panel.attr(row, "data-draw-symbol-instance-count")).toBe("0");
+
+      panel.reset();
+      await panel.click(`${row} [data-draw-symbol-place]`);
+      expect(panel.work.mutations.map((m) => m.op)).toEqual([
+        "placeSymbolInstance",
+      ]);
+      expect(panel.attr(row, "data-draw-symbol-instance-count")).toBe("1");
+      expect(panel.disabled("[data-draw-symbol-break]")).toBe(false);
+      expect(panel.get("[data-draw-symbols-note]").textContent).toContain(
+        "kept by the document",
+      );
+
+      panel.reset();
+      await panel.click("[data-draw-symbol-break]");
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+      expect(panel.attr(row, "data-draw-symbol-instance-count")).toBe("0");
+      await h.host.document.undo();
+    });
+
+    // WP6.8 (draw ADR 365) — choose a symbol, Replace, Symbol Options.
+    it("chooses a symbol, replaces the selected instance's symbol and applies its options, one step each", async () => {
+      await h.host.selection.set([poly("s1")]);
+      const panel = await mountPanel(h, makeSymbolsPanel);
+      const ids = () =>
+        panel
+          .all("[data-draw-symbol-row]")
+          .map((r) => r.getAttribute("data-draw-symbol-row"));
+      const had = new Set(ids());
+      await panel.click("[data-draw-symbol-define]");
+      await h.host.selection.set([poly("s2")]);
+      await panel.click("[data-draw-symbol-define]");
+      const made = ids().filter((id) => !had.has(id));
+      expect(made).toHaveLength(2);
+      const [first, second] = made;
+      await panel.click(
+        `[data-draw-symbol-row="${first}"] [data-draw-symbol-place]`,
+      );
+      // Choosing the second row makes it the Sprayer's and Replace's.
+      await panel.click(`[data-draw-symbol-choose="${second}"]`);
+      expect(
+        panel.attr(`[data-draw-symbol-choose="${second}"]`, "aria-pressed"),
+      ).toBe("true");
+      expect(
+        panel.attr("[data-draw-symbol-options]", "data-draw-symbol-options"),
+      ).toBe(second);
+      // Replace — the placed instance (still selected) draws the second.
+      panel.reset();
+      await panel.click(
+        `[data-draw-symbol-row="${second}"] [data-draw-symbol-replace]`,
+      );
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+      expect(
+        panel.attr(
+          `[data-draw-symbol-row="${second}"]`,
+          "data-draw-symbol-instance-count",
+        ),
+      ).toBe("1");
+      // Options — a new name and 9-slice guides, one redefineSymbol.
+      panel.change("[data-draw-symbol-option-name]", "Badge");
+      await panel.click("[data-draw-symbol-option-guides]");
+      panel.change('[data-draw-symbol-option-inset="0"]', "3");
+      panel.reset();
+      await panel.click("[data-draw-symbol-option-apply]");
+      expect(panel.work.mutations.map((m) => m.op)).toEqual(["redefineSymbol"]);
+      const row = (await readEngineSymbols(h.host)).find(
+        (r) => r.id === second,
+      )!;
+      expect(row.name).toBe("Badge");
+      expect(row.nineSlice?.[0]).toBe(3);
+      await h.host.document.undo();
+      await h.host.document.undo();
     });
   });
 });

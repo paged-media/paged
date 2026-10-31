@@ -185,6 +185,13 @@ pub(super) fn apply_duplicate_page(
     // Without one the section rules number the copy where it lands.
     for pg in &mut clone.spread.pages {
         pg.name = None;
+        // Engine ADR 1011 — a placed page's copy lands beside it on the
+        // canvas, one default gap to its right, instead of on top of it;
+        // an unplaced page's copy takes its own default slot.
+        if let Some([x, y]) = pg.canvas_origin {
+            let width = pg.bounds.right - pg.bounds.left;
+            pg.canvas_origin = Some([x + width + paged_model::CANVAS_PAGE_GAP_PT, y]);
+        }
     }
 
     // The stories: one copy per distinct story, threads kept inside the

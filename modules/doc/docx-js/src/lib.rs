@@ -23,8 +23,10 @@
 //! computes here. The bundle boots this module (`--target web`) and drives it.
 
 pub mod core;
+pub mod files;
 
 pub use crate::core::DocSession;
+pub use crate::files::{FileFormat, FileOptions, OpenReport};
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -54,6 +56,45 @@ mod wasm {
             let session = DocSession::load(bytes).map_err(|e| JsValue::from_str(&e))?;
             self.session = Some(session);
             Ok(())
+        }
+
+        /// Open a file of any format paged.doc reads (doc ADR 616): the
+        /// bytes decide (`.docx`, a template as a new document, `.docm`,
+        /// RTF, OpenDocument when `odt`); `.doc` is refused. Returns the
+        /// open report as JSON (`format`, `untitled`, `macros`,
+        /// `saveName`, `diagnostics`).
+        pub fn open_file(
+            &mut self,
+            bytes: &[u8],
+            name: &str,
+            odt: bool,
+        ) -> Result<String, JsValue> {
+            let (session, report) =
+                DocSession::open_file(bytes, name, crate::files::FileOptions { odt })
+                    .map_err(|e| JsValue::from_str(&e))?;
+            self.session = Some(session);
+            serde_json::to_string(&report).map_err(|e| JsValue::from_str(&e.to_string()))
+        }
+
+        /// The `.docx` bytes the session works on: the file itself, or the
+        /// package written for a template, an RTF or an OpenDocument file.
+        pub fn source_docx(&self) -> Result<Vec<u8>, JsValue> {
+            self.session
+                .as_ref()
+                .map(|s| s.source().to_vec())
+                .ok_or_else(|| JsValue::from_str("no document loaded"))
+        }
+
+        /// "Save as .docx" for a native document (doc ADR 616): the bundle's
+        /// read of the stories, styles, colours and page as JSON; the new
+        /// `.docx` bytes. What it does not carry is `last_save_skips`.
+        pub fn native_docx(&self, input_json: &str) -> Result<Vec<u8>, JsValue> {
+            let input: docx_export::NativeDocIn =
+                serde_json::from_str(input_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let (bytes, left_out) =
+                crate::files::native_docx(&input).map_err(|e| JsValue::from_str(&e))?;
+            *self.last_skips.borrow_mut() = left_out;
+            Ok(bytes)
         }
 
         /// The Tier-0 lowering as a JSON string (the host-model input).
@@ -188,6 +229,10 @@ mod wasm {
                 table_paragraphs: bool,
                 #[serde(default)]
                 styles: Vec<docx_export::StyleIn>,
+                /// Doc ADRs 611/612: the master stories, the notes and
+                /// the text anchors read back (absent: none).
+                #[serde(default)]
+                structure: docx_export::structure::StructureIn,
             }
             let Cells {
                 cells,
@@ -195,6 +240,7 @@ mod wasm {
                 colors,
                 table_paragraphs,
                 styles,
+                structure,
             } = serde_json::from_str(content_json)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let layout = if table_paragraphs {
@@ -203,7 +249,9 @@ mod wasm {
                 docx_export::TableParagraphs::Joined
             };
             let (bytes, skips) = session
-                .save_edited_full(&content, &cells, &tables, &colors, &styles, layout)
+                .save_edited_structure(
+                    &content, &cells, &tables, &colors, &styles, layout, &structure,
+                )
                 .map_err(|e| JsValue::from_str(&e))?;
             *self.last_skips.borrow_mut() = skips;
             Ok(bytes)

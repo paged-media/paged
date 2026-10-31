@@ -60,12 +60,17 @@ pub mod composite;
 pub mod compression;
 pub mod container;
 pub mod descriptor;
+pub mod descriptor_write;
 pub mod edit;
 pub mod effects;
+pub mod engine_data;
 pub mod layer_list;
 pub mod layer_pixels;
 pub mod model;
+pub mod presets;
 pub mod reader;
+pub mod smart_object;
+pub mod text_layer;
 pub mod vector_mask;
 pub mod vm_array;
 pub mod writer;
@@ -74,12 +79,12 @@ mod emit;
 mod parse;
 
 pub use abr::AbrFile;
-pub use composite::{CompositeCmyk8, CompositeRgba8};
+pub use composite::{CompositeCmyk8, CompositeRgba8, CompositeSamples, IndexedPalette};
 pub use container::Container;
 pub use descriptor::{Descriptor, DescriptorValue, RefItem};
 pub use layer_list::{
-    image_source_data_layers, image_source_data_records, summary, LayerList, PsdSummary,
-    IMAGE_SOURCE_DATA_SIGNATURE,
+    image_resource_blocks, image_source_data, image_source_data_layers, image_source_data_records,
+    summary, LayerList, PsdSummary, IMAGE_SOURCE_DATA_SIGNATURE,
 };
 pub use layer_pixels::{
     GroupPlate, ImportBlocker, InkToRgba8, LayerImport, LayerMasks, LayerPlate, MaskPlate,

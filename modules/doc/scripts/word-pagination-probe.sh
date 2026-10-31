@@ -13,7 +13,7 @@
 set -euo pipefail
 IN="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 OUT="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
-STAGE="$HOME/Library/Containers/com.microsoft.Word/Data/Documents/paged-probe"
+STAGE="${WORD_STAGE:-$HOME/Library/Containers/com.microsoft.Word/Data/Documents/paged-probe}"
 mkdir -p "$STAGE"
 NAME="$(basename "$IN")"
 cp "$IN" "$STAGE/$NAME"

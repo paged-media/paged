@@ -1,0 +1,6 @@
+{
+  "kind": "struct",
+  "fields": {
+    "picture": { "kind": "text" }
+  }
+}

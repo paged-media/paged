@@ -194,6 +194,14 @@ fn point_address(path: &str) -> Option<(u32, &str)> {
 
 /// A `Set` that changes nothing but is still one (empty) undo step, so a
 /// `null` on a row with nothing to clear succeeds like any other clear.
+/// The wire spelling of a mask mode.
+fn mask_mode_name(t: paged_model::OpacityMaskType) -> &'static str {
+    match t {
+        paged_model::OpacityMaskType::Luminosity => "luminosity",
+        paged_model::OpacityMaskType::Alpha => "alpha",
+    }
+}
+
 fn no_op() -> Resolved {
     Resolved::Operation(Operation::Batch { ops: Vec::new() })
 }
@@ -587,6 +595,11 @@ impl CanvasModel {
                     grow,
                     max_pages,
                     copy_frame_options: Some(copy),
+                    // The section rules (engine ADR 1022) stay as they are.
+                    master: cur.as_ref().and_then(|g| g.master.clone()),
+                    first_master: cur.as_ref().and_then(|g| g.first_master.clone()),
+                    even_master: cur.as_ref().and_then(|g| g.even_master.clone()),
+                    section_start: cur.as_ref().map(|g| section_start_spec(g.section_start)),
                 })
             }
             // ---- page / master / section
@@ -747,6 +760,57 @@ impl CanvasModel {
                     },
                 }
             }
+            (VirtualTarget::Element { element_id }, "applyOpacityMask") if field != "maskId" => {
+                // Editor ADR 309 — the mask's options (Illustrator's
+                // Transparency panel: the mode, Invert Mask and Clip). The
+                // wire has no op that edits a mask in place, so a change
+                // is the release and the re-apply with the new options,
+                // as one step. The artwork comes back out of the z-order
+                // exactly as it went in, and the undo restores the mask
+                // as it was.
+                let Some(old) = self.opacity_mask_of(element_id.raw_id()) else {
+                    return Err(format!(
+                        "{what}: the item carries no opacity mask (make one first)"
+                    ));
+                };
+                let mut mask_type = old.mask_type;
+                let (mut invert, mut clip) = (old.invert, old.clip);
+                match field {
+                    "maskType" => {
+                        mask_type = match text_of(v).ok_or_else(bad)?.as_deref() {
+                            Some("alpha" | "Alpha") => paged_model::OpacityMaskType::Alpha,
+                            Some("luminosity" | "Luminosity") | None => {
+                                paged_model::OpacityMaskType::Luminosity
+                            }
+                            Some(other) => {
+                                return Err(format!(
+                                    "{what}: {other:?} is not a mask mode (luminosity, alpha)"
+                                ))
+                            }
+                        }
+                    }
+                    "invert" => invert = bool_of(v).ok_or_else(bad)?,
+                    _ => clip = bool_of(v).ok_or_else(bad)?,
+                }
+                if (mask_type, invert, clip) == (old.mask_type, old.invert, old.clip) {
+                    return Ok(no_op());
+                }
+                let mask_id = self.element_ref(&old.mask_item, what)?;
+                m(Mutation::Batch {
+                    ops: vec![
+                        Mutation::ReleaseOpacityMask {
+                            target_id: element_id.clone(),
+                        },
+                        Mutation::ApplyOpacityMask {
+                            target_id: element_id.clone(),
+                            mask_id,
+                            mask_type: Some(mask_mode_name(mask_type).to_string()),
+                            invert: Some(invert),
+                            clip: Some(clip),
+                        },
+                    ],
+                })
+            }
             (VirtualTarget::Element { element_id }, "applyOpacityMask") => {
                 let current = self.opacity_mask_of(element_id.raw_id());
                 let Some(r) = text_of(v).ok_or_else(bad)? else {
@@ -764,6 +828,7 @@ impl CanvasModel {
                         mask_id,
                         mask_type: None,
                         invert: None,
+                        clip: None,
                     });
                 };
                 if old.mask_item == mask_id.raw_id() {
@@ -779,14 +844,9 @@ impl CanvasModel {
                         Mutation::ApplyOpacityMask {
                             target_id: element_id.clone(),
                             mask_id,
-                            mask_type: Some(
-                                match old.mask_type {
-                                    paged_model::OpacityMaskType::Luminosity => "luminosity",
-                                    paged_model::OpacityMaskType::Alpha => "alpha",
-                                }
-                                .to_string(),
-                            ),
+                            mask_type: Some(mask_mode_name(old.mask_type).to_string()),
                             invert: Some(old.invert),
+                            clip: Some(old.clip),
                         },
                     ],
                 })
@@ -977,6 +1037,20 @@ impl CanvasModel {
                 self.opacity_mask_of(element_id.raw_id())
                     .map(|m| m.mask_item.clone()),
             )),
+            // Editor ADR 309 — the mask's options. Without a mask they
+            // read as a new mask would take them (luminosity, not
+            // inverted, clipping); `opacityMask` says whether there is one.
+            "opacityMaskType" | "opacityMaskInvert" | "opacityMaskClip" => {
+                let mask = self.opacity_mask_of(element_id.raw_id());
+                Ok(match path {
+                    "opacityMaskType" => Value::Text(
+                        mask_mode_name(mask.map_or(Default::default(), |m| m.mask_type))
+                            .to_string(),
+                    ),
+                    "opacityMaskInvert" => Value::Bool(mask.is_some_and(|m| m.invert)),
+                    _ => Value::Bool(mask.is_none_or(|m| m.clip)),
+                })
+            }
             _ if path.starts_with("points[") => {
                 let Some((index, member)) = point_address(path) else {
                     return Some(Err(unknown()));
@@ -1224,6 +1298,45 @@ impl CanvasModel {
                         PropertyPath::DocumentGlobalLightAltitude => {
                             return Ok(Value::Length(light.global_light_altitude));
                         }
+                        // Engine ADR 1018 — Word's "show hidden text".
+                        PropertyPath::DocumentShowHiddenText => {
+                            return Ok(Value::Bool(
+                                scene.designmap.document_preference.show_hidden_text == Some(true),
+                            ));
+                        }
+                        // Engine ADR 1022 — Word's "show field codes".
+                        PropertyPath::DocumentShowFieldCodes => {
+                            return Ok(Value::Bool(
+                                scene.designmap.document_preference.show_field_codes == Some(true),
+                            ));
+                        }
+                        // Engine ADR 1040 — Track Changes and the markup view.
+                        PropertyPath::DocumentTrackChanges => {
+                            return Ok(Value::Bool(
+                                scene.designmap.document_preference.track_changes == Some(true),
+                            ));
+                        }
+                        PropertyPath::DocumentTrackChangesAuthor => {
+                            return Ok(Value::Text(
+                                scene
+                                    .designmap
+                                    .document_preference
+                                    .track_changes_author
+                                    .clone()
+                                    .unwrap_or_default(),
+                            ));
+                        }
+                        PropertyPath::DocumentMarkupView => {
+                            return Ok(Value::Text(
+                                scene
+                                    .designmap
+                                    .document_preference
+                                    .markup_view
+                                    .unwrap_or_default()
+                                    .as_str()
+                                    .to_string(),
+                            ));
+                        }
                         _ => {}
                     }
                     // ADR 162 — the document's footnote options.
@@ -1317,6 +1430,13 @@ impl CanvasModel {
                 if p == PropertyPath::PageBounds {
                     let b = &page.bounds;
                     return Ok(Value::Bounds([b.top, b.left, b.bottom, b.right]));
+                }
+                // Engine ADR 1011 — the place the page was put on the canvas
+                // (`[]`: its default slot).
+                if p == PropertyPath::PageCanvasOrigin {
+                    return Ok(Value::Lengths(
+                        page.canvas_origin.map(|o| o.to_vec()).unwrap_or_default(),
+                    ));
                 }
                 // A page with no margins of its own reads what the engine
                 // lays it out with: 0 pt margins in one column, the values
@@ -1971,4 +2091,13 @@ pub fn path_address_kind(path: PropertyPath) -> Option<&'static str> {
 
 fn numbering_style_idml(s: paged_model::NumberingStyle) -> &'static str {
     s.as_idml()
+}
+
+/// Engine ADR 1022 — the wire spelling of a section start.
+pub(crate) fn section_start_spec(start: paged_model::SectionStart) -> paged_wire::SectionStartSpec {
+    match start {
+        paged_model::SectionStart::NewPage => paged_wire::SectionStartSpec::NewPage,
+        paged_model::SectionStart::OddPage => paged_wire::SectionStartSpec::OddPage,
+        paged_model::SectionStart::EvenPage => paged_wire::SectionStartSpec::EvenPage,
+    }
 }

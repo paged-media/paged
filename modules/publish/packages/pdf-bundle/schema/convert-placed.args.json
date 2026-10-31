@@ -1,0 +1,11 @@
+{
+  "kind": "struct",
+  "fields": {
+    "elementId": { "kind": "text", "optional": true },
+    "text": {
+      "kind": "enum",
+      "members": ["frames", "outlines"],
+      "default": "frames"
+    }
+  }
+}

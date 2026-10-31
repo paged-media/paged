@@ -2163,17 +2163,23 @@ export const objectVerbApplies = (state: unknown): boolean => {
 /** The Page tool's id (`@paged-media/tools`), spelled here rather than
  *  imported: this module stays type-only so its pure half runs in Node. */
 const PAGE_TOOL_ID = "paged.tool.page";
+/** The Artboard tool's (engine ADR 1011): its Delete removes the
+ *  selected artboard. */
+const ARTBOARD_TOOL_ID = "paged.tool.artboard";
+
 /** The Mesh tool and the Gradient Swatch tool (same reason). */
 const MESH_TOOL_ID = "paged.tool.mesh";
 const GRADIENT_SWATCH_TOOL_ID = "paged.tool.gradientSwatch";
 
 /** True while the tool in hand takes Backspace/Delete for its own parts:
- *  the Page tool (the armed page), the Mesh tool (the selected mesh
+ *  the Page tool (the armed page), the Artboard tool (the selected
+ *  artboard), the Mesh tool (the selected mesh
  *  point) and the Gradient Swatch tool in a freeform mode (the selected
  *  gradient point; WP7.2). */
 function toolOwnsDeleteKeys(s: KeyOwnerState | null): boolean {
   const tool = s?.tool?.effectiveTool;
-  if (tool === PAGE_TOOL_ID || tool === MESH_TOOL_ID) return true;
+  if (tool === PAGE_TOOL_ID || tool === ARTBOARD_TOOL_ID || tool === MESH_TOOL_ID)
+    return true;
   if (tool !== GRADIENT_SWATCH_TOOL_ID) return false;
   const mode = s?.toolSettings?.getValue?.(GRADIENT_SWATCH_TOOL_ID, "mode");
   return mode === "freeformPoints" || mode === "freeformLines";
@@ -2181,7 +2187,8 @@ function toolOwnsDeleteKeys(s: KeyOwnerState | null): boolean {
 
 /**
  * The Backspace/Delete KEYS, on top of `objectVerbApplies`: while the
- * Page tool is in hand those keys delete the armed PAGE (its `onKey`),
+ * Page tool (or the Artboard tool) is in hand those keys delete the armed
+ * PAGE (its `onKey`),
  * and one press must not take a page and the selected frames with it.
  * The Mesh tool and the freeform Gradient tool remove their selected
  * point with them, under the same rule (`toolOwnsDeleteKeys`).

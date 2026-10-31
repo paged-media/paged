@@ -52,6 +52,9 @@ export interface DecodedRGBA {
    *  `decode_image` call (see `displayTreatmentOf`). Absent on an older
    *  worker build, which reads as "sRGB assumed". */
   display?: number;
+  /** A 16-bit source's samples (`width*height*4`), which the session
+   *  registers instead of `rgba` so the document keeps its depth. */
+  samples16?: Uint16Array;
 }
 
 /** The decode pool surface the session drives. */
@@ -117,6 +120,9 @@ export async function createDecodePool(
           width: reply.width,
           height: reply.height,
           rgba: new Uint8Array(reply.rgba),
+          ...(reply.samples16
+            ? { samples16: new Uint16Array(reply.samples16) }
+            : {}),
         });
       } else {
         p.reject(new Error(reply.error));

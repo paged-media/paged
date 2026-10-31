@@ -1,0 +1,37 @@
+{
+  "kind": "struct",
+  "fields": {
+    "layout": {
+      "kind": "enum",
+      "members": ["slides", "handouts", "notes"]
+    },
+    "perPage": {
+      "kind": "number",
+      "integer": true,
+      "optional": true
+    },
+    "paper": {
+      "kind": "enum",
+      "members": ["letter", "a4"],
+      "optional": true
+    },
+    "dpi": {
+      "kind": "number",
+      "integer": true,
+      "unit": "ppi",
+      "optional": true
+    },
+    "includeHidden": {
+      "kind": "bool",
+      "optional": true
+    },
+    "slides": {
+      "kind": "list",
+      "of": {
+        "kind": "number",
+        "integer": true
+      },
+      "optional": true
+    }
+  }
+}

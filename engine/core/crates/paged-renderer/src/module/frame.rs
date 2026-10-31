@@ -119,7 +119,7 @@ pub(crate) struct ResolvedFrame<'a> {
     /// Engine ADR 1007 — how a gradient stroke maps onto the stroke
     /// (`module::stroke_gradient`).
     pub gradient_stroke_mode: paged_model::StrokeGradientMode,
-    /// Engine ADR 1040 — the gradient mesh or freeform gradient the
+    /// Engine ADR 1048 — the gradient mesh or freeform gradient the
     /// frame fills with instead of its swatch.
     pub fill_mesh: Option<&'a paged_model::MeshFill>,
     /// Engine ADR 1041 — the frame's own placement of a pattern paint.
@@ -660,6 +660,8 @@ mod tests {
             opacity: None,
             blend_mode: None,
             effects: None,
+            effect_stack: Vec::new(),
+            appearance: Vec::new(),
             gradient_fill_angle: None,
             gradient_fill_length: None,
             gradient_fill_start: None,
@@ -675,6 +677,7 @@ mod tests {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
+            image_adjustments: Vec::new(),
             gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
             fill_mesh: None,
             pattern_transform: None,
@@ -749,6 +752,8 @@ mod tests {
             fill_mesh: None,
             pattern_transform: None,
             effects: None,
+            effect_stack: Vec::new(),
+            appearance: Vec::new(),
             gradient_fill_angle: None,
             gradient_fill_length: None,
             gradient_fill_start: None,

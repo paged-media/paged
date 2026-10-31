@@ -230,6 +230,15 @@ fn every_point_twin_is_within_tolerance__feat__image_editor_region_filter() {
         &t,
         &hue_sat_colorize(),
     );
+    // The engine's image filter stack evaluates a duotone through this twin
+    // (engine ADR 1037).
+    point_case(
+        &ADJUST_GRADIENT_MAP,
+        gradient_map_ref,
+        cpu::gradient_map,
+        &t,
+        &AdjustGradientMapParams::two_stop([0.1, 0.2, 0.45], [1.0, 0.85, 0.6]),
+    );
     point_case(
         &ADJUST_INVERT_RGB,
         adjust_invert_rgb,
@@ -327,7 +336,8 @@ fn the_gaussian_twins_are_within_tolerance__feat__image_editor_region_filter() {
     }
 }
 
-/// Every kernel the chain can dispatch has a twin, and nothing else does.
+/// Every kernel the chain can dispatch has a twin, and so does the gradient
+/// map the engine's image filter stack evaluates; nothing else does.
 #[test]
 #[allow(non_snake_case)]
 fn the_twin_list_is_the_chain__feat__image_editor_region_filter() {
@@ -341,7 +351,7 @@ fn the_twin_list_is_the_chain__feat__image_editor_region_filter() {
             "{id} is not registered"
         );
     }
-    assert_eq!(ids.len(), 19);
+    assert_eq!(ids.len(), 20);
 }
 
 // ─────────────────────────── the region filter ───────────────────────────

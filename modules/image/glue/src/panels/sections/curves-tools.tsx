@@ -22,6 +22,9 @@ const M = defineMessages("image.curvesTools", {
   blackTitle: "the colour that should become black",
   greyTitle: "a colour that should be neutral grey",
   whiteTitle: "the colour that should become white",
+  target: "Targeted adjustment",
+  targetTitle:
+    "Drag up or down on the image to move the curve at the tone under the pointer",
 });
 
 const PICKS: Array<[CurvesPick, string, string, string]> = [
@@ -35,11 +38,16 @@ export function CurvesTools({
   disabled,
   onAuto,
   onArm,
+  targeting = false,
+  onTarget = () => {},
 }: {
   armed: CurvesPick | null;
   disabled: boolean;
   onAuto: () => void;
   onArm: (kind: CurvesPick | null) => void;
+  /** Curves' targeted adjustment is armed (I-55). */
+  targeting?: boolean;
+  onTarget?: (on: boolean) => void;
 }) {
   return (
     <div style={row} role="group" aria-label={t(M.group)}>
@@ -66,6 +74,16 @@ export function CurvesTools({
           {glyph} {t(label)}
         </button>
       ))}
+      <button
+        type="button"
+        data-image-curves-target
+        aria-pressed={targeting}
+        disabled={disabled}
+        title={t(M.targetTitle)}
+        onClick={() => onTarget(!targeting)}
+      >
+        ☝ {t(M.target)}
+      </button>
     </div>
   );
 }

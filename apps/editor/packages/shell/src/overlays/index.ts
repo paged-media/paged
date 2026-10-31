@@ -30,6 +30,13 @@ export {
   isolationScopeRoot,
   isolationVeilPath,
 } from "./isolation-dim";
+export { subContextContribution, subContextHole } from "./sub-context";
+export {
+  anchorTouched,
+  layoutBalloons,
+  marginBandContribution,
+  MarginBandView,
+} from "./margin-band";
 export { marginGuidesContribution, marginGuides } from "./margin-guides";
 export { pathEditContribution, elementSupportsPathEdit } from "./path-edit";
 export { resizeHandlesContribution } from "./resize-handles";
@@ -47,6 +54,11 @@ export {
 } from "./data-markers";
 export { tableCellOverlayContribution } from "./table-cell-overlay";
 export { snapLinesContribution } from "./snap-lines";
+export {
+  gridOverlayContribution,
+  gridPath,
+  PIXEL_GRID_MIN_SCALE,
+} from "./grid-overlay";
 
 export { OverlayHost, type OverlayHostProps } from "./overlay-host";
 

@@ -113,6 +113,8 @@ pub mod text_frame_prefs;
 mod text_variables;
 pub mod text_wrap;
 pub mod transparency;
+mod vector_fx;
+mod word_fields;
 pub mod xml_structure;
 pub mod zip_layout;
 
@@ -256,6 +258,53 @@ pub fn write_idml_with(
     original: &[u8],
     opts: &ExportOptions,
 ) -> Result<IdmlExport, WriteError> {
+    // Engine ADR 1043: IDML has one fill and one stroke per item; an
+    // item's appearance is baked to a group of single-paint items, the
+    // source kept in the carrier's label.
+    use paged_model::appearance::interchange as appearance;
+    let baked;
+    let doc = if doc
+        .spreads
+        .iter()
+        .any(|p| appearance::needs_bake(&p.spread))
+        || doc
+            .master_spreads
+            .values()
+            .any(|p| appearance::needs_bake(&p.spread))
+    {
+        let mut d = doc.clone();
+        for p in d.spreads.iter_mut() {
+            appearance::bake_spread(&mut p.spread);
+        }
+        for p in d.master_spreads.values_mut() {
+            appearance::bake_spread(&mut p.spread);
+        }
+        baked = d;
+        &baked
+    } else {
+        doc
+    };
+    // Engine ADR 1008: IDML carries InDesign's effects in their slots
+    // and nothing else; an item's effect stacks ride its label. Engine
+    // ADR 1047: so do its live-shape parameters (the outline itself is
+    // written as its path).
+    use paged_model::effect_stack::label;
+    use paged_model::live_shape::label as shape_label;
+    let needs = |s: &paged_model::Spread| label::any(s) || shape_label::any(s);
+    if doc.spreads.iter().any(|p| needs(&p.spread))
+        || doc.master_spreads.values().any(|p| needs(&p.spread))
+    {
+        let mut stamped = doc.clone();
+        for p in stamped.spreads.iter_mut() {
+            label::stamp(&mut p.spread);
+            shape_label::stamp(&mut p.spread);
+        }
+        for p in stamped.master_spreads.values_mut() {
+            label::stamp(&mut p.spread);
+            shape_label::stamp(&mut p.spread);
+        }
+        return write_package(&stamped, original, false, opts);
+    }
     write_package(doc, original, false, opts)
 }
 
@@ -358,6 +407,37 @@ pub fn story_is_placed(placed: &HashSet<String>, id: &str) -> bool {
     placed.contains(id) || placed.contains(&emit::sanitize_id(id))
 }
 
+/// Engine ADR 1037 — `doc` with every image frame's filter stack written
+/// into its spread's labels, or `None` when no frame carries one and no
+/// source label needs dropping (the document is written as it is).
+fn image_adjustment_labels(doc: &Document) -> Option<Document> {
+    use paged_model::image_adjust::{has_any, write_labels, IMAGE_ADJUSTMENTS_LABEL};
+    let stale = |sp: &paged_model::Spread| {
+        sp.labels
+            .values()
+            .any(|v| v.iter().any(|(k, _)| k == IMAGE_ADJUSTMENTS_LABEL))
+    };
+    let needed = doc
+        .spreads
+        .iter()
+        .any(|p| has_any(&p.spread) || stale(&p.spread))
+        || doc
+            .master_spreads
+            .values()
+            .any(|m| has_any(&m.spread) || stale(&m.spread));
+    if !needed {
+        return None;
+    }
+    let mut out = doc.clone();
+    for p in &mut out.spreads {
+        write_labels(&mut p.spread);
+    }
+    for m in out.master_spreads.values_mut() {
+        write_labels(&mut m.spread);
+    }
+    Some(out)
+}
+
 /// The one writer both [`write_idml`] and [`write_paged`] run. The only
 /// thing that differs between the two products is whether the CONTAINER
 /// parts of `original` — `manifest.json` and everything under `paged/`
@@ -385,6 +465,19 @@ pub(crate) fn write_package(
     // paste-into that paints the same.
     let lowered = clip_groups::lower(doc);
     let doc = lowered.as_ref().unwrap_or(doc);
+    // Engine ADR 1042: IDML has no live vector effect; each item is
+    // written as the item its effected outline describes, its source in a
+    // label.
+    let baked = vector_fx::lower(doc);
+    let doc = baked.as_ref().unwrap_or(doc);
+    // Engine ADR 1022: IDML has no Word fields; each is written as the text
+    // variable that does the same, or as its result.
+    let fields_lowered = word_fields::lower(doc);
+    let doc = fields_lowered.as_ref().unwrap_or(doc);
+    // Engine ADR 1037: IDML has no image filter stack; each rides a label
+    // the import reads back (and `idml_export_losses` reports).
+    let labelled = image_adjustment_labels(doc);
+    let doc = labelled.as_ref().unwrap_or(doc);
     let mut src = zip::ZipArchive::new(Cursor::new(original))?;
     // The files every placed image's `<Link>` will point at (empty
     // without a link base — see `images`).
@@ -1346,6 +1439,7 @@ fn navigation_plan<'a>(
         sections,
         destinations,
         hyperlinks: &doc.designmap.hyperlinks,
+        item_sources: &doc.designmap.hyperlink_page_item_sources,
         bookmarks: &doc.designmap.bookmarks,
         bookmark_parents: &doc.designmap.bookmark_parents,
         conditions: &doc.styles.conditions,

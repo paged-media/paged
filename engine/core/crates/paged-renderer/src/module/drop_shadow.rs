@@ -295,6 +295,26 @@ fn filled_and_stroked_outline_of(frame: &ResolvedFrame<'_>) -> Option<RectOutlin
     aligned_outline_path(&outline, Some("OutsideAlignment"), outside * 2.0).map(RectOutline::Path)
 }
 
+/// Engine ADR 1008 — the outlines the effect stack draws on, in the
+/// frame's inner coordinates: its own outline (the path its fill paints,
+/// by its fill rule) and its visible outline, grown to the stroke's outer
+/// edge (what InDesign and Photoshop measure an effect from). `None` for a
+/// line or an anchorless shape.
+pub(crate) fn stack_outlines(frame: &ResolvedFrame<'_>) -> Option<(PathData, PathData)> {
+    let own = match &frame.geometry {
+        Geometry::Rect { rect } | Geometry::TextFrameRect { rect } => {
+            rect_outline(frame, *rect, 0.0).into_path()
+        }
+        _ => outline_of(frame)?,
+    }
+    .with_fill_rule(frame.fill_rule);
+    let grown = (frame.stroke_outset_pt() > 0.0)
+        .then(|| filled_and_stroked_outline_of(frame).map(RectOutline::into_path))
+        .flatten()
+        .unwrap_or_else(|| own.clone());
+    Some((own, grown))
+}
+
 /// A rectangular frame's outline: the plain rect, or the corner path
 /// when a corner effect resolves.
 enum RectOutline {
@@ -492,25 +512,8 @@ pub(crate) fn line_effects_module(
 
 /// The closed outline of `path` stroked with `stroke` (no dash).
 fn stroke_outline(path: &PathData, stroke: &Stroke) -> PathData {
-    use kurbo::{BezPath, Cap, Join, PathEl, Point, StrokeOpts};
-    let p = |x: f32, y: f32| Point::new(f64::from(x), f64::from(y));
-    let mut centre = BezPath::new();
-    for seg in &path.segments {
-        match *seg {
-            PathSegment::MoveTo { x, y } => centre.move_to(p(x, y)),
-            PathSegment::LineTo { x, y } => centre.line_to(p(x, y)),
-            PathSegment::QuadTo { cx, cy, x, y } => centre.quad_to(p(cx, cy), p(x, y)),
-            PathSegment::CubicTo {
-                cx1,
-                cy1,
-                cx2,
-                cy2,
-                x,
-                y,
-            } => centre.curve_to(p(cx1, cy1), p(cx2, cy2), p(x, y)),
-            PathSegment::Close => centre.close_path(),
-        }
-    }
+    use kurbo::{Cap, Join, StrokeOpts};
+    let centre = path.to_bez();
     let style = kurbo::Stroke::new(f64::from(stroke.width))
         .with_caps(match stroke.cap {
             LineCap::Butt => Cap::Butt,
@@ -524,36 +527,5 @@ fn stroke_outline(path: &PathData, stroke: &Stroke) -> PathData {
         })
         .with_miter_limit(f64::from(stroke.miter_limit));
     let band = kurbo::stroke(centre, &style, &StrokeOpts::default(), 0.05);
-    let f = |pt: Point| (pt.x as f32, pt.y as f32);
-    let segments = band
-        .elements()
-        .iter()
-        .map(|el| match *el {
-            PathEl::MoveTo(a) => {
-                let (x, y) = f(a);
-                PathSegment::MoveTo { x, y }
-            }
-            PathEl::LineTo(a) => {
-                let (x, y) = f(a);
-                PathSegment::LineTo { x, y }
-            }
-            PathEl::QuadTo(c, a) => {
-                let ((cx, cy), (x, y)) = (f(c), f(a));
-                PathSegment::QuadTo { cx, cy, x, y }
-            }
-            PathEl::CurveTo(c1, c2, a) => {
-                let ((cx1, cy1), (cx2, cy2), (x, y)) = (f(c1), f(c2), f(a));
-                PathSegment::CubicTo {
-                    cx1,
-                    cy1,
-                    cx2,
-                    cy2,
-                    x,
-                    y,
-                }
-            }
-            PathEl::ClosePath => PathSegment::Close,
-        })
-        .collect();
-    PathData::new(segments)
+    PathData::from_bez(&band)
 }

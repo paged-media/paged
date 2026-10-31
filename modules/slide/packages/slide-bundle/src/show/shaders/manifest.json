@@ -1,0 +1,744 @@
+{
+  "$comment": "PowerPoint transition id -> WGSL shader (slide ADR 721). `directions` encodes `dir` into Uniforms.direction; each shader's `params` names its Uniforms.params slots; each transition maps its XML attributes to those params. Defaults follow ECMA-376 Part 1 (p:) and [MS-PPTX] (p14:, p15:, p159:).",
+  "version": 1,
+  "directions": {
+    "l": 1,
+    "r": 2,
+    "u": 3,
+    "d": 4,
+    "lu": 5,
+    "ru": 6,
+    "ld": 7,
+    "rd": 8,
+    "horz": 9,
+    "vert": 10,
+    "in": 11,
+    "out": 12,
+    "center": 13
+  },
+  "shaders": {
+    "fade": {
+      "passes": ["fade"],
+      "params": {
+        "thruBlack": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "cut": {
+      "passes": ["cut"],
+      "params": {
+        "thruBlack": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "push": {
+      "passes": ["push"],
+      "params": {}
+    },
+    "wipe": {
+      "passes": ["wipe"],
+      "params": {}
+    },
+    "circle": {
+      "passes": ["circle"],
+      "params": {}
+    },
+    "diamond": {
+      "passes": ["diamond"],
+      "params": {}
+    },
+    "plus": {
+      "passes": ["plus"],
+      "params": {}
+    },
+    "zoom": {
+      "passes": ["zoom"],
+      "params": {}
+    },
+    "newsflash": {
+      "passes": ["newsflash"],
+      "params": {}
+    },
+    "wedge": {
+      "passes": ["wedge"],
+      "params": {}
+    },
+    "checker": {
+      "passes": ["checker"],
+      "params": {}
+    },
+    "blinds": {
+      "passes": ["blinds"],
+      "params": {}
+    },
+    "strips": {
+      "passes": ["strips"],
+      "params": {}
+    },
+    "comb": {
+      "passes": ["comb"],
+      "params": {}
+    },
+    "dissolve": {
+      "passes": ["dissolve"],
+      "params": {}
+    },
+    "cover": {
+      "passes": ["cover"],
+      "params": {}
+    },
+    "pull": {
+      "passes": ["pull"],
+      "params": {}
+    },
+    "randomBar": {
+      "passes": ["randomBar"],
+      "params": {}
+    },
+    "split": {
+      "passes": ["split"],
+      "params": {
+        "vertical": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "reveal": {
+      "passes": ["reveal"],
+      "params": {
+        "thruBlack": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "wheel": {
+      "passes": ["wheel"],
+      "params": {
+        "spokes": {
+          "slot": 0,
+          "default": 4
+        }
+      }
+    },
+    "wheelReverse": {
+      "passes": ["wheelReverse"],
+      "params": {
+        "spokes": {
+          "slot": 0,
+          "default": 4
+        }
+      }
+    },
+    "vortex": {
+      "passes": ["vortex"],
+      "params": {},
+      "approximation": "The tiles spin and shrink in place; PowerPoint also lifts them into a 3D swirl."
+    },
+    "switch": {
+      "passes": ["switch"],
+      "params": {}
+    },
+    "flip": {
+      "passes": ["flip"],
+      "params": {}
+    },
+    "ripple": {
+      "passes": ["ripple"],
+      "params": {}
+    },
+    "honeycomb": {
+      "passes": ["honeycomb"],
+      "params": {},
+      "approximation": "The hexagons shrink and darken; PowerPoint flips them in 3D."
+    },
+    "prism": {
+      "passes": ["prism"],
+      "params": {
+        "inverted": {
+          "slot": 0,
+          "default": 0
+        },
+        "content": {
+          "slot": 1,
+          "default": 0
+        }
+      }
+    },
+    "doors": {
+      "passes": ["doors"],
+      "params": {}
+    },
+    "window": {
+      "passes": ["window"],
+      "params": {}
+    },
+    "ferris": {
+      "passes": ["ferris"],
+      "params": {},
+      "approximation": "The wheel turns in the slide plane with upright slides; PowerPoint's wheel has depth."
+    },
+    "gallery": {
+      "passes": ["gallery"],
+      "params": {}
+    },
+    "conveyor": {
+      "passes": ["conveyor"],
+      "params": {}
+    },
+    "pan": {
+      "passes": ["pan"],
+      "params": {}
+    },
+    "glitter": {
+      "passes": ["glitter"],
+      "params": {
+        "hexagon": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "warp": {
+      "passes": ["warp"],
+      "params": {}
+    },
+    "flythrough": {
+      "passes": ["flythrough", "flythrough_blur"],
+      "params": {
+        "bounce": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "flash": {
+      "passes": ["flash"],
+      "params": {}
+    },
+    "shred": {
+      "passes": ["shred"],
+      "params": {
+        "rectangle": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "curtains": {
+      "passes": ["curtains"],
+      "params": {}
+    },
+    "wind": {
+      "passes": ["wind"],
+      "params": {
+        "invX": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "prestige": {
+      "passes": ["prestige"],
+      "params": {},
+      "approximation": "The slide tips back on its bottom edge while the next rises into place; PowerPoint's camera swing is not reproduced."
+    },
+    "fracture": {
+      "passes": ["fracture"],
+      "params": {},
+      "approximation": "Voronoi shards fall and drift without tumbling in 3D."
+    },
+    "crush": {
+      "passes": ["crush"],
+      "params": {},
+      "approximation": "Noise creases on a shrinking sheet stand in for a crumpled paper ball."
+    },
+    "peelOff": {
+      "passes": ["peelOff"],
+      "params": {
+        "invX": {
+          "slot": 0,
+          "default": 0
+        },
+        "invY": {
+          "slot": 1,
+          "default": 0
+        }
+      }
+    },
+    "pageCurlSingle": {
+      "passes": ["pageCurlSingle"],
+      "params": {
+        "invX": {
+          "slot": 0,
+          "default": 0
+        },
+        "invY": {
+          "slot": 1,
+          "default": 0
+        }
+      }
+    },
+    "pageCurlDouble": {
+      "passes": ["pageCurlDouble"],
+      "params": {
+        "invX": {
+          "slot": 0,
+          "default": 0
+        },
+        "invY": {
+          "slot": 1,
+          "default": 0
+        }
+      }
+    },
+    "airplane": {
+      "passes": ["airplane"],
+      "params": {
+        "invX": {
+          "slot": 0,
+          "default": 0
+        }
+      },
+      "approximation": "The fold is a narrowing dart with shaded flaps, then a flat flight; PowerPoint folds a 3D paper plane."
+    },
+    "origami": {
+      "passes": ["origami"],
+      "params": {},
+      "approximation": "Two hinged folds in perspective and a flat flight; PowerPoint's folds are more elaborate."
+    },
+    "fallOver": {
+      "passes": ["fallOver"],
+      "params": {
+        "invX": {
+          "slot": 0,
+          "default": 0
+        }
+      }
+    },
+    "drape": {
+      "passes": ["drape"],
+      "params": {
+        "invX": {
+          "slot": 0,
+          "default": 0
+        }
+      },
+      "approximation": "The slide drops with rippling folds; PowerPoint drapes a simulated cloth."
+    }
+  },
+  "transitions": {
+    "p:fade": {
+      "kind": "fade",
+      "shader": "fade",
+      "attributes": {
+        "thruBlk": {
+          "param": "thruBlack",
+          "type": "bool"
+        }
+      }
+    },
+    "p:cut": {
+      "kind": "cut",
+      "shader": "cut",
+      "attributes": {
+        "thruBlk": {
+          "param": "thruBlack",
+          "type": "bool"
+        }
+      },
+      "instant": true
+    },
+    "p:push": {
+      "kind": "push",
+      "shader": "push",
+      "dir": {
+        "values": ["l", "r", "u", "d"],
+        "default": "l"
+      }
+    },
+    "p:wipe": {
+      "kind": "wipe",
+      "shader": "wipe",
+      "dir": {
+        "values": ["l", "r", "u", "d"],
+        "default": "l"
+      }
+    },
+    "p:split": {
+      "kind": "split",
+      "shader": "split",
+      "dir": {
+        "values": ["in", "out"],
+        "default": "out"
+      },
+      "attributes": {
+        "orient": {
+          "param": "vertical",
+          "type": "enum",
+          "values": {
+            "horz": 0,
+            "vert": 1
+          },
+          "default": "horz"
+        }
+      }
+    },
+    "p:randomBar": {
+      "kind": "randomBar",
+      "shader": "randomBar",
+      "dir": {
+        "values": ["horz", "vert"],
+        "default": "horz"
+      }
+    },
+    "p:cover": {
+      "kind": "cover",
+      "shader": "cover",
+      "dir": {
+        "values": ["l", "r", "u", "d", "lu", "ru", "ld", "rd"],
+        "default": "l"
+      }
+    },
+    "p:pull": {
+      "kind": "pull",
+      "shader": "pull",
+      "dir": {
+        "values": ["l", "r", "u", "d", "lu", "ru", "ld", "rd"],
+        "default": "l"
+      }
+    },
+    "p:dissolve": {
+      "kind": "dissolve",
+      "shader": "dissolve"
+    },
+    "p:zoom": {
+      "kind": "zoom",
+      "shader": "zoom",
+      "dir": {
+        "values": ["in", "out"],
+        "default": "out"
+      }
+    },
+    "p:newsflash": {
+      "kind": "newsflash",
+      "shader": "newsflash"
+    },
+    "p:wheel": {
+      "kind": "wheel",
+      "shader": "wheel",
+      "attributes": {
+        "spokes": {
+          "param": "spokes",
+          "type": "number"
+        }
+      }
+    },
+    "p:wedge": {
+      "kind": "wedge",
+      "shader": "wedge"
+    },
+    "p:checker": {
+      "kind": "checker",
+      "shader": "checker",
+      "dir": {
+        "values": ["horz", "vert"],
+        "default": "horz"
+      }
+    },
+    "p:blinds": {
+      "kind": "blinds",
+      "shader": "blinds",
+      "dir": {
+        "values": ["horz", "vert"],
+        "default": "horz"
+      }
+    },
+    "p:strips": {
+      "kind": "strips",
+      "shader": "strips",
+      "dir": {
+        "values": ["lu", "ru", "ld", "rd"],
+        "default": "lu"
+      }
+    },
+    "p:comb": {
+      "kind": "comb",
+      "shader": "comb",
+      "dir": {
+        "values": ["horz", "vert"],
+        "default": "horz"
+      }
+    },
+    "p:circle": {
+      "kind": "circle",
+      "shader": "circle"
+    },
+    "p:diamond": {
+      "kind": "diamond",
+      "shader": "diamond"
+    },
+    "p:plus": {
+      "kind": "plus",
+      "shader": "plus"
+    },
+    "p:random": {
+      "kind": "random",
+      "shader": null,
+      "random": [
+        "fade",
+        "push",
+        "wipe",
+        "split",
+        "randomBar",
+        "cover",
+        "pull",
+        "dissolve",
+        "zoom",
+        "newsflash",
+        "wheel",
+        "wedge",
+        "checker",
+        "blinds",
+        "strips",
+        "comb",
+        "circle",
+        "diamond",
+        "plus"
+      ],
+      "note": "PowerPoint picks a transition at random each time; the renderer picks from this pool by the `seed` param (default: fade)."
+    },
+    "p14:vortex": {
+      "kind": "vortex",
+      "shader": "vortex",
+      "dir": {
+        "values": ["l", "r", "u", "d"],
+        "default": "l"
+      }
+    },
+    "p14:switch": {
+      "kind": "switch",
+      "shader": "switch",
+      "dir": {
+        "values": ["l", "r"],
+        "default": "l"
+      }
+    },
+    "p14:flip": {
+      "kind": "flip",
+      "shader": "flip",
+      "dir": {
+        "values": ["l", "r"],
+        "default": "l"
+      }
+    },
+    "p14:ripple": {
+      "kind": "ripple",
+      "shader": "ripple",
+      "dir": {
+        "values": ["center", "lu", "ru", "ld", "rd"],
+        "default": "center"
+      }
+    },
+    "p14:honeycomb": {
+      "kind": "honeycomb",
+      "shader": "honeycomb"
+    },
+    "p14:prism": {
+      "kind": "prism",
+      "shader": "prism",
+      "dir": {
+        "values": ["l", "r", "u", "d"],
+        "default": "l"
+      },
+      "attributes": {
+        "isInverted": {
+          "param": "inverted",
+          "type": "bool"
+        },
+        "isContent": {
+          "param": "content",
+          "type": "bool"
+        }
+      }
+    },
+    "p14:doors": {
+      "kind": "doors",
+      "shader": "doors",
+      "dir": {
+        "values": ["horz", "vert"],
+        "default": "vert"
+      }
+    },
+    "p14:window": {
+      "kind": "window",
+      "shader": "window",
+      "dir": {
+        "values": ["horz", "vert"],
+        "default": "vert"
+      }
+    },
+    "p14:ferris": {
+      "kind": "ferris",
+      "shader": "ferris",
+      "dir": {
+        "values": ["l", "r"],
+        "default": "l"
+      }
+    },
+    "p14:gallery": {
+      "kind": "gallery",
+      "shader": "gallery",
+      "dir": {
+        "values": ["l", "r"],
+        "default": "l"
+      }
+    },
+    "p14:conveyor": {
+      "kind": "conveyor",
+      "shader": "conveyor",
+      "dir": {
+        "values": ["l", "r"],
+        "default": "l"
+      }
+    },
+    "p14:pan": {
+      "kind": "pan",
+      "shader": "pan",
+      "dir": {
+        "values": ["l", "r", "u", "d"],
+        "default": "l"
+      }
+    },
+    "p14:glitter": {
+      "kind": "glitter",
+      "shader": "glitter",
+      "dir": {
+        "values": ["l", "r", "u", "d"],
+        "default": "l"
+      },
+      "attributes": {
+        "pattern": {
+          "param": "hexagon",
+          "type": "enum",
+          "values": {
+            "diamond": 0,
+            "hexagon": 1
+          },
+          "default": "diamond"
+        }
+      }
+    },
+    "p14:warp": {
+      "kind": "warp",
+      "shader": "warp",
+      "dir": {
+        "values": ["in", "out"],
+        "default": "out"
+      }
+    },
+    "p14:flythrough": {
+      "kind": "flythrough",
+      "shader": "flythrough",
+      "dir": {
+        "values": ["in", "out"],
+        "default": "in"
+      },
+      "attributes": {
+        "hasBounce": {
+          "param": "bounce",
+          "type": "bool"
+        }
+      }
+    },
+    "p14:flash": {
+      "kind": "flash",
+      "shader": "flash"
+    },
+    "p14:shred": {
+      "kind": "shred",
+      "shader": "shred",
+      "dir": {
+        "values": ["in", "out"],
+        "default": "in"
+      },
+      "attributes": {
+        "pattern": {
+          "param": "rectangle",
+          "type": "enum",
+          "values": {
+            "strip": 0,
+            "rectangle": 1
+          },
+          "default": "strip"
+        }
+      }
+    },
+    "p14:reveal": {
+      "kind": "reveal",
+      "shader": "reveal",
+      "dir": {
+        "values": ["l", "r"],
+        "default": "l"
+      },
+      "attributes": {
+        "thruBlk": {
+          "param": "thruBlack",
+          "type": "bool"
+        }
+      }
+    },
+    "p14:wheelReverse": {
+      "kind": "wheelReverse",
+      "shader": "wheelReverse",
+      "attributes": {
+        "spokes": {
+          "param": "spokes",
+          "type": "number"
+        }
+      }
+    },
+    "p15:prstTrans": {
+      "kind": "prstTrans",
+      "shader": null,
+      "preset": {
+        "attribute": "prst",
+        "default": "fallOver",
+        "values": {
+          "airplane": "airplane",
+          "crush": "crush",
+          "curtains": "curtains",
+          "drape": "drape",
+          "fallOver": "fallOver",
+          "fracture": "fracture",
+          "origami": "origami",
+          "pageCurlDouble": "pageCurlDouble",
+          "pageCurlSingle": "pageCurlSingle",
+          "peelOff": "peelOff",
+          "prestige": "prestige",
+          "wind": "wind"
+        }
+      },
+      "attributes": {
+        "invX": {
+          "param": "invX",
+          "type": "bool"
+        },
+        "invY": {
+          "param": "invY",
+          "type": "bool"
+        }
+      }
+    },
+    "p159:morph": {
+      "kind": "morph",
+      "shader": "fade",
+      "approximation": "Morph matches objects between the two slides and animates them; the slide renderer only has the two slide images, so it cross-fades. A shape-matching morph needs the object model and belongs to the show runtime."
+    }
+  }
+}

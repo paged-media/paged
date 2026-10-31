@@ -72,6 +72,10 @@ fn grow_rule(m: &mut CanvasModel, section: u32, max_pages: Option<u32>) {
         grow: true,
         max_pages,
         copy_frame_options: Some(true),
+        master: None,
+        first_master: None,
+        even_master: None,
+        section_start: None,
     })
     .expect("setFlowGrowRule");
 }

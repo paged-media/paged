@@ -116,6 +116,27 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.join",
         "media.paged.draw.tool.star",
         "media.paged.draw.tool.flare",
+        // WP6.7 — the distortion tools, keyless: the Liquify flyout, Puppet
+        // Warp in the host's Free Transform flyout, the Perspective pair.
+        "media.paged.draw.tool.warp",
+        "media.paged.draw.tool.twirl",
+        "media.paged.draw.tool.pucker",
+        "media.paged.draw.tool.bloat",
+        "media.paged.draw.tool.scallop",
+        "media.paged.draw.tool.crystallize",
+        "media.paged.draw.tool.wrinkle",
+        "media.paged.draw.tool.puppetWarp",
+        "media.paged.draw.tool.perspectiveGrid",
+        "media.paged.draw.tool.perspectiveSelect",
+        // WP6.8 — the Symbolism flyout (draw ADR 365).
+        "media.paged.draw.tool.symbolSprayer",
+        "media.paged.draw.tool.symbolShifter",
+        "media.paged.draw.tool.symbolScruncher",
+        "media.paged.draw.tool.symbolSizer",
+        "media.paged.draw.tool.symbolSpinner",
+        "media.paged.draw.tool.symbolStainer",
+        "media.paged.draw.tool.symbolScreener",
+        "media.paged.draw.tool.symbolNineSlice",
       ]);
       // The contribution log holds the twenty tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
@@ -160,9 +181,21 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "tool",
         "tool",
         "tool",
+        // WP6.8 — the eight Symbolism tools (draw ADR 365).
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
+        "tool",
         // WP6.1 part 2 — Reflect, Reshape, Shaper, Path Eraser, Join,
         // Star, Flare: twenty-seven tools.
         ...Array<string>(7).fill("tool"),
+        // WP6.7 — the seven Liquify tools, Puppet Warp, Perspective Grid
+        // and Perspective Selection: thirty-seven.
+        ...Array<string>(10).fill("tool"),
         // (The stroke and fill schema panels were here; their rows moved
         // to the host's own panels.)
         // NO Layers panel — ADR 023 phase D retired it behind the
@@ -209,8 +242,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Dotted / Dash-dot).
         // WP6.1 part 2 — six gesture/insert commands and two "…" raisers
         // (registered among the rest; the kinds are what is counted);
-        // Object ▸ Rasterize and its "…" raiser (extensions ADR 338).
-        ...Array<string>(10).fill("command"),
+        // Object ▸ Rasterize and its "…" raiser (extensions ADR 338);
+        // WP6.7 — liquifyStroke, the two Puppet Warp commands and the
+        // twelve perspective-grid commands; WP6.8 — Replace Symbol and
+        // Symbol Options (draw ADR 365).
+        ...Array<string>(27).fill("command"),
         "command",
         "command",
         "command",
@@ -405,10 +441,15 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.
         "editContext",
-        // Phase 8 — the SVG importer + exporter (K-2), recorded through
-        // the harness's recording importer/exporter registries.
+        // Interchange (K-2, ADR 364), recorded through the harness's
+        // recording importer/exporter registries: SVG in and out, DXF in
+        // and out, then the Illustrator and EPS importers.
         "importer",
         "exporter",
+        "importer",
+        "exporter",
+        "importer",
+        "importer",
         // ADR 323 — the Draw properties schema panel (property rows over
         // host.objects), registered after the object model.
         "panel",
@@ -437,22 +478,31 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
           metadata: null,
         }),
       ).toBe(true);
-      // Phase 8 — the SVG importer/exporter are recorded with their
-      // claimed extensions, and the registered ids match the manifest's
-      // contributes declaration.
+      // Interchange (ADR 364) — the importers/exporters are recorded with
+      // their claimed extensions, and the registered ids match the
+      // manifest's contributes declaration.
       const importers = harness.importersContributed();
       expect(importers.map((i) => i.id)).toEqual([
         "media.paged.draw.importer.svg",
+        "media.paged.draw.importer.dxf",
+        "media.paged.draw.importer.ai",
+        "media.paged.draw.importer.eps",
       ]);
-      expect(importers[0].extensions).toEqual([".svg"]);
+      expect(importers.map((i) => i.extensions)).toEqual([
+        [".svg"],
+        [".dxf"],
+        [".ai"],
+        [".eps", ".epsf"],
+      ]);
       expect(importers.map((i) => i.id)).toEqual(
         drawBundle.manifest.contributes?.importers,
       );
       const exporters = harness.exportersContributed();
       expect(exporters.map((e) => e.id)).toEqual([
         "media.paged.draw.exporter.svg",
+        "media.paged.draw.exporter.dxf",
       ]);
-      expect(exporters[0].extension).toBe(".svg");
+      expect(exporters.map((e) => e.extension)).toEqual([".svg", ".dxf"]);
       expect(exporters.map((e) => e.id)).toEqual(
         drawBundle.manifest.contributes?.exporters,
       );
@@ -719,7 +769,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(27);
+    expect(harness.toolsContributed()).toHaveLength(45);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

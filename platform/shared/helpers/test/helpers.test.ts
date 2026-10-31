@@ -19,7 +19,10 @@
 import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 
-import { parseLength as sdkParseLength } from "@paged-media/plugin-sdk";
+import {
+  escapeLabelValue,
+  parseLength as sdkParseLength,
+} from "@paged-media/plugin-sdk";
 
 import {
   asciiEscape,
@@ -216,6 +219,11 @@ describe("labels", () => {
     expect(text).toContain("\\u007f");
     expect(JSON.parse(text)).toEqual(value);
     expect(asciiEscape(JSON.stringify(value))).toBe(text);
+  });
+
+  it("escapes as the SDK's escapeLabelValue does, byte for byte", () => {
+    const text = JSON.stringify({ s: "~\u007f\u0080Grüße 🎉\uffff", n: 1 });
+    expect(asciiEscape(text)).toBe(escapeLabelValue(text));
   });
 
   it("the envelope round-trips and rejects what the engine would", () => {

@@ -17,22 +17,24 @@
  */
 
 //! Word's first-fit composer (`SingleLineOptions::word`, engine ADR 1016)
-//! on real shaped text. JetBrains Mono advances every glyph 0.6 em, so a
-//! line's natural width is its character count times 6 pt at 10 pt and
-//! each measure below sits a few tenths of a point either side of a word
-//! end: what is tested is the breaking rule, not the face.
+//! against Word's own line breaks: `fixtures/first-fit.word.json` is what
+//! Microsoft Word 16 set for the doc module's `first_fit_docx()` probe
+//! (`modules/doc/scripts/word-first-fit-probe.sh`), every line with its
+//! words.
 //!
-//! The rules are Word's documented behaviour for Word 2013+ layout
-//! (compatibilityMode 15), the mode the doc module's `first_fit_docx()`
-//! probe asks Word to confirm (`scripts/word-first-fit-probe.sh`): a word
-//! stays on a line when its glyphs end on or before the margin (the
-//! space after it may hang), justified lines are never compressed, a
-//! hyphen the text has is an ordinary break, and a word wider than the
-//! measure starts its own line and is split where it overflows.
+//! Word set the probe in Courier New 10 pt, every glyph 1229/2048 em
+//! (`char_pt`). The test sets the same texts in JetBrains Mono, every glyph
+//! 0.6 em, at each case's measure scaled by the ratio of the two advances,
+//! so a measure that ends 0.3 pt past a word in Word ends 0.3 pt past the
+//! same word here: what is compared is the breaking rule, not the face.
+//! The picture cases (P..) are the line-height rules of the renderer
+//! (`paged-renderer`, `anchored::line_object_shift`); their words are
+//! checked here too where the text alone decides them.
 
 use paged_text::{
     layout_runs, Alignment, Face, LayoutOptions, ShapingFeatures, SingleLineOptions, StyledRun,
 };
+use serde_json::Value;
 
 const CHAR: f32 = 6.0;
 
@@ -42,6 +44,10 @@ fn face_bytes() -> Vec<u8> {
             .join("../../corpus/fonts/JetBrainsMono-VF.ttf"),
     )
     .expect("corpus/fonts/JetBrainsMono-VF.ttf")
+}
+
+fn word_answer() -> Value {
+    serde_json::from_str(include_str!("fixtures/first-fit.word.json")).expect("first-fit.word.json")
 }
 
 /// The lines `text` breaks into at `measure` pt, as text.
@@ -74,68 +80,138 @@ fn lines(text: &str, measure: f32, align: Alignment, sl: Option<SingleLineOption
         .collect()
 }
 
-fn word(text: &str, measure: f32, align: Alignment) -> Vec<String> {
-    lines(text, measure, align, Some(SingleLineOptions::word()))
+/// One case of the answer: its text set by `sl` at the case's measure,
+/// and Word's lines, each as its words joined by a space.
+fn case_lines(case: &Value, char_pt: f32, sl: SingleLineOptions) -> (Vec<String>, Vec<String>) {
+    let text = case["text"].as_str().unwrap();
+    let measure = case["measure_pt"].as_f64().unwrap() as f32 / char_pt * CHAR;
+    let align = match case["align"].as_str().unwrap() {
+        "both" => Alignment::Justify,
+        _ => Alignment::Left,
+    };
+    let word: Vec<String> = case["word_lines"]
+        .as_array()
+        .expect("Word set every case")
+        .iter()
+        .map(|l| {
+            l["words"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|w| w["t"].as_str().unwrap())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    (lines(text, measure, align, Some(sl)), word)
 }
 
-fn width(s: &str) -> f32 {
-    s.chars().count() as f32 * CHAR
+/// Every text case Word answered (R ragged fits, J justified, H breaks
+/// inside a word, L words wider than the measure) breaks into Word's
+/// lines, word for word.
+#[test]
+fn every_text_case_breaks_where_word_broke_it() {
+    let answer = word_answer();
+    let char_pt = answer["char_pt"].as_f64().unwrap() as f32;
+    let mut checked = 0;
+    let mut misses = Vec::new();
+    for case in answer["cases"].as_array().unwrap() {
+        if !case["picture"].is_null() || !case["spacing"].is_null() {
+            continue;
+        }
+        let label = case["label"].as_str().unwrap();
+        let (ours, word) = case_lines(case, char_pt, SingleLineOptions::word());
+        checked += 1;
+        if ours != word {
+            misses.push(format!("{label}: ours {ours:?}\n      Word {word:?}"));
+        }
+    }
+    assert_eq!(checked, 22, "the answer's single-spaced text cases");
+    assert!(misses.is_empty(), "{}", misses.join("\n"));
 }
 
-const RAGGED: &str = "R01 aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll";
+/// The picture cases and the cases under 1.5-line, at-least and exact
+/// spacing break where Word broke them too: line spacing never moves a
+/// break. A picture's U+FFFC is no word of Word's PDF text; here it is a
+/// glyph narrower than the 20 pt picture, which moves no break in these
+/// texts (the picture's line holds at most 110 pt of a 120 pt measure).
+#[test]
+fn the_picture_and_spaced_cases_break_where_word_broke_them() {
+    let answer = word_answer();
+    let char_pt = answer["char_pt"].as_f64().unwrap() as f32;
+    let mut checked = 0;
+    let mut misses = Vec::new();
+    for case in answer["cases"].as_array().unwrap() {
+        if case["picture"].is_null() && case["spacing"].is_null() {
+            continue;
+        }
+        let label = case["label"].as_str().unwrap();
+        let (ours, word) = case_lines(case, char_pt, SingleLineOptions::word());
+        let ours: Vec<String> = ours
+            .iter()
+            .map(|l| {
+                l.split_whitespace()
+                    .filter(|w| *w != "\u{FFFC}")
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect();
+        checked += 1;
+        if ours != word {
+            misses.push(format!("{label}: ours {ours:?}\n      Word {word:?}"));
+        }
+    }
+    assert_eq!(checked, 11, "the picture and spaced cases");
+    assert!(misses.is_empty(), "{}", misses.join("\n"));
+}
+
+/// The rules Word's answer settled, each against the Single-line Composer
+/// it was split from, so the IDML composer is seen not to move.
+#[test]
+fn a_justified_line_compresses_a_little_for_word_and_more_for_indesign() {
+    let answer = word_answer();
+    let char_pt = answer["char_pt"].as_f64().unwrap() as f32;
+    let case = |label: &str| {
+        answer["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["label"] == label)
+            .unwrap()
+            .clone()
+    };
+    // J02: 3 pt over 15 spaces. Word keeps "oo", compressed.
+    let (ours, word) = case_lines(&case("J02"), char_pt, SingleLineOptions::word());
+    assert_eq!(ours, word);
+    assert!(ours[0].ends_with(" oo"), "{ours:?}");
+    // J03: 8 pt over. Word wraps "oo"; the Single-line Composer, which
+    // may compress a space to 80 %, keeps it.
+    let (ours, word) = case_lines(&case("J03"), char_pt, SingleLineOptions::word());
+    assert_eq!(ours, word);
+    assert!(ours[0].ends_with(" nn"), "{ours:?}");
+    let (indesign, _) = case_lines(&case("J03"), char_pt, SingleLineOptions::default());
+    assert!(indesign[0].ends_with(" oo"), "{indesign:?}");
+}
 
 #[test]
-fn a_word_ending_on_or_inside_the_margin_stays() {
-    let head = "R01 aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii";
-    let l = word(RAGGED, width(head) + 0.3, Alignment::Left);
-    assert_eq!(l[0], head);
-    // The space after it does not fit and does not matter.
-    let l = word(RAGGED, width(head) + 3.0, Alignment::Left);
-    assert_eq!(l[0], head);
-    let l = word(RAGGED, width(head) - 0.3, Alignment::Left);
-    assert_eq!(l[0], "R01 aaaa bbbb cccc dddd eeee ffff gggg hhhh");
-}
-
-#[test]
-fn a_justified_line_is_never_compressed() {
-    let text = "J01 aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo pp qq rr ss tt";
-    let head = "J01 aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo";
-    let measure = width(head) - 0.5;
-    // InDesign's Single-line Composer compresses its 14 spaces to keep
-    // "oo"; Word wraps it.
-    let indesign = lines(
-        text,
-        measure,
-        Alignment::Justify,
-        Some(SingleLineOptions::default()),
-    );
-    assert_eq!(indesign[0], head);
-    let w = word(text, measure, Alignment::Justify);
-    assert_eq!(w[0], "J01 aa bb cc dd ee ff gg hh ii jj kk ll mm nn");
-}
-
-#[test]
-fn a_hyphen_in_the_text_is_an_ordinary_break() {
-    let text = "H01 aaaa bbbb cccc dddd eeee well-known ffff gggg";
-    let head = "H01 aaaa bbbb cccc dddd eeee well-";
-    let l = word(text, width(head) + 0.3, Alignment::Left);
-    assert_eq!(l[0], head);
-    assert!(l[1].starts_with("known"), "{l:?}");
-    // With the hyphen past the margin the compound wraps whole.
-    let l = word(
-        text,
-        width("H01 aaaa bbbb cccc dddd eeee well") + 0.3,
-        Alignment::Left,
-    );
-    assert_eq!(l[0], "H01 aaaa bbbb cccc dddd eeee");
-}
-
-#[test]
-fn a_word_wider_than_the_measure_starts_a_line_and_splits_where_it_overflows() {
-    let long: String = std::iter::repeat_n('x', 100).collect();
-    let text = format!("L01 aa {long} bb cc");
-    let l = word(&text, 468.0, Alignment::Left);
-    assert_eq!(l[0], "L01 aa");
-    assert_eq!(l[1].chars().count(), 78, "{l:?}");
-    assert_eq!(l[2], format!("{} bb cc", "x".repeat(22)));
+fn a_dash_is_a_break_for_word_and_not_for_indesign() {
+    let answer = word_answer();
+    let char_pt = answer["char_pt"].as_f64().unwrap() as f32;
+    for label in ["H03", "H04"] {
+        let case = answer["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["label"] == label)
+            .unwrap();
+        let (ours, word) = case_lines(case, char_pt, SingleLineOptions::word());
+        assert_eq!(ours, word, "{label}");
+        // InDesign offered no break at a dash (`hard_hyphen_opportunities`):
+        // the Single-line Composer keeps the dashed word whole.
+        let (indesign, _) = case_lines(case, char_pt, SingleLineOptions::default());
+        assert!(
+            indesign[0].ends_with("eeee"),
+            "{label}: InDesign {indesign:?}"
+        );
+    }
 }

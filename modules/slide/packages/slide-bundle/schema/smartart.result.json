@@ -1,0 +1,17 @@
+{
+  "kind": "struct",
+  "fields": {
+    "points": {
+      "kind": "list",
+      "of": {
+        "kind": "struct",
+        "fields": {
+          "id": { "kind": "text" },
+          "depth": { "kind": "number", "integer": true },
+          "text": { "kind": "text", "multiline": true },
+          "shown": { "kind": "bool" }
+        }
+      }
+    }
+  }
+}

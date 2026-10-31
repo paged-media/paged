@@ -471,7 +471,13 @@ export async function extractPdf(
 
       // Text comes from the char-level API (proper Unicode) → grouped into
       // positioned lines via the shared heuristics, then drawn on top.
-      const items = extractTextItems(f, textPage, p, heightPt);
+      const items = extractTextItems(
+        f,
+        textPage,
+        p,
+        heightPt,
+        pageOrigin(f, page, heightPt),
+      );
       frames.push(
         ...(itemsToPositionedFrames(
           items,
@@ -570,7 +576,9 @@ function extractTextItems(
   textPage: number,
   p: { a: number; b: number; c: number; d: number; dbl: number },
   pageH: number,
+  origin: PageOrigin = { left: 0, top: pageH },
 ): PositionedItem[] {
+  const fonts = new Map<number, FontInfo>();
   // The per-char loop runs thousands of times per page, so call the RAW wasm
   // exports directly — `cwrap`'s per-call marshaling made this ~4× slower.
   const raw = f.M.wasmExports;
@@ -599,18 +607,121 @@ function extractTextItems(
     ) {
       colorRgb = [hu[p.a >> 2] / 255, hu[p.b >> 2] / 255, hu[p.c >> 2] / 255];
     }
+    const font = fontOfChar(f, textPage, i, fonts);
     items.push({
       text: String.fromCharCode(u),
-      xPt: left,
-      baselineTopY: pageH - bottom, // box bottom ≈ baseline (top-down)
+      // The crop box's top-left is the page's origin (publish ADR 658:
+      // the vector reader measures from it too).
+      xPt: left - origin.left,
+      baselineTopY: origin.top - bottom, // box bottom ≈ baseline (top-down)
       widthPt: Math.max(0, right - left),
       fontSizePt: size > 1 ? size : Math.max(1, top - bottom),
-      bold: false,
-      italic: false,
+      ...(font.family ? { fontFamily: font.family } : {}),
+      bold: font.bold,
+      italic: font.italic,
       colorRgb,
     });
   }
   return items;
+}
+
+/** Where a page's crop box starts, in PDF user space: the left edge and
+ *  the top. */
+interface PageOrigin {
+  left: number;
+  top: number;
+}
+
+/** The crop box's top-left (else the media box's), so text lands in the
+ *  page's own frame whatever box offset the file uses. */
+function pageOrigin(f: Fpdf, page: number, pageH: number): PageOrigin {
+  const raw = f.M.wasmExports;
+  const box = f.malloc(16);
+  try {
+    const at = (i: number) => f.M.HEAPF32[(box >> 2) + i]!;
+    const got =
+      raw.FPDFPage_GetCropBox?.(page, box, box + 4, box + 8, box + 12) ||
+      raw.FPDFPage_GetMediaBox?.(page, box, box + 4, box + 8, box + 12);
+    // left, bottom, right, top
+    return got ? { left: at(0), top: at(3) } : { left: 0, top: pageH };
+  } finally {
+    f.free(box);
+  }
+}
+
+/** A run's font as the editor names it. */
+interface FontInfo {
+  family?: string;
+  bold: boolean;
+  italic: boolean;
+}
+
+/** Read a NUL-terminated string PDFium wrote into `buf`. */
+function cString(f: Fpdf, buf: number, len: number): string {
+  const bytes = f.M.HEAPU8.slice(buf, buf + Math.max(0, len - 1));
+  return new TextDecoder().decode(bytes);
+}
+
+/** A PostScript font name as family and style flags: the subset tag
+ *  (`ABCDEF+`) dropped, the style suffix (`-BoldItalic`, `,Bold`) read
+ *  and split off. Exported for its spec. */
+export function splitFontName(name: string): FontInfo {
+  const base = name.replace(/^[A-Z]{6}\+/, "");
+  const m = /^(.*?)[-,]([A-Za-z]*)$/.exec(base);
+  const family = (m ? m[1]! : base).replace(/(MT|PS)$/, "");
+  const style = m ? m[2]! : "";
+  return {
+    family: family || base,
+    bold: /bold|black|heavy|semibold|demi/i.test(style),
+    italic: /italic|oblique/i.test(style),
+  };
+}
+
+/** The font of character `i`: its family (the embedded program's own
+ *  family name, else the base font name's), weight and slant — cached by
+ *  PDFium font. */
+function fontOfChar(
+  f: Fpdf,
+  textPage: number,
+  i: number,
+  cache: Map<number, FontInfo>,
+): FontInfo {
+  const raw = f.M.wasmExports;
+  const plain: FontInfo = { bold: false, italic: false };
+  if (!raw.FPDFText_GetTextObject || !raw.FPDFTextObj_GetFont) return plain;
+  const obj = raw.FPDFText_GetTextObject(textPage, i);
+  if (!obj) return plain;
+  const font = raw.FPDFTextObj_GetFont(obj);
+  if (!font) return plain;
+  const known = cache.get(font);
+  if (known) return known;
+  const cap = 256;
+  const buf = f.malloc(cap);
+  const angle = f.malloc(4);
+  try {
+    const baseLen = raw.FPDFFont_GetBaseFontName?.(font, buf, cap) ?? 0;
+    const fromName =
+      baseLen > 1 ? splitFontName(cString(f, buf, baseLen)) : plain;
+    let family = fromName.family;
+    if (raw.FPDFFont_GetIsEmbedded?.(font)) {
+      const famLen = raw.FPDFFont_GetFamilyName?.(font, buf, cap) ?? 0;
+      if (famLen > 1) family = cString(f, buf, famLen);
+    }
+    const weight = raw.FPDFFont_GetWeight?.(font) ?? -1;
+    const slanted =
+      raw.FPDFFont_GetItalicAngle?.(font, angle) &&
+      f.M.HEAPU32[angle >> 2] !== 0;
+    const info: FontInfo = {
+      ...(family ? { family } : {}),
+      bold: fromName.bold || weight >= 600,
+      italic: fromName.italic || Boolean(slanted),
+    };
+    cache.set(font, info);
+    return info;
+  } finally {
+    f.free(buf);
+    f.free(angle);
+  }
 }
 
 async function extractImage(
@@ -736,4 +847,58 @@ function isJpeg(f: Fpdf, obj: number): boolean {
   }
   f.free(bufP);
   return name === "DCTDecode";
+}
+
+/**
+ * One page's text as positioned text frames, in the page's own frame
+ * (the crop box's top-left, y down) — what place-as-vectors (publish
+ * ADR 658) places beside the page's vectors.
+ */
+export async function extractPdfPageText(
+  bytes: Uint8Array,
+  pageIndex: number,
+): Promise<{ frames: TextFrameIr[]; widthPt: number; heightPt: number }> {
+  const f = await loadPdfium();
+  if (!f) throw new Error("extractPdfPageText: PDFium wasm failed to load");
+  const buf = f.malloc(bytes.length);
+  f.M.HEAPU8.set(bytes, buf);
+  const doc = f.LoadMemDocument(buf, bytes.length, 0);
+  if (!doc) {
+    f.free(buf);
+    throw new Error("extractPdfPageText: PDFium could not open the document");
+  }
+  const p = {
+    a: f.malloc(4),
+    b: f.malloc(4),
+    c: f.malloc(4),
+    d: f.malloc(4),
+    dbl: f.malloc(32),
+  };
+  try {
+    const page = f.LoadPage(doc, pageIndex);
+    if (!page) throw new Error(`extractPdfPageText: no page ${pageIndex}`);
+    const widthPt = f.PageWidth(page);
+    const heightPt = f.PageHeight(page);
+    const textPage = f.TextLoadPage(page);
+    const items = extractTextItems(
+      f,
+      textPage,
+      p,
+      heightPt,
+      pageOrigin(f, page, heightPt),
+    );
+    f.TextClosePage(textPage);
+    f.ClosePage(page);
+    const frames = itemsToPositionedFrames(
+      items,
+      widthPt,
+      heightPt,
+      DEFAULT_OPTIONS,
+    ) as TextFrameIr[];
+    return { frames, widthPt, heightPt };
+  } finally {
+    Object.values(p).forEach(f.free);
+    f.CloseDoc(doc);
+    f.free(buf);
+  }
 }

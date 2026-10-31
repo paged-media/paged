@@ -22,11 +22,14 @@
 //! every item in page points with absolute colours, resolved fonts and
 //! evaluated outlines, and no inheritance left.
 //!
-//! * **Masters.** The engine has one master level, so each USED layout
-//!   becomes one master page: the slide master's background and shapes
-//!   (when the layout shows master shapes), then the layout's own background
-//!   and shapes (ADR 700). Placeholders on masters and layouts are prompts,
-//!   not art, and are not drawn.
+//! * **Masters** (ADR 712). Each slide master is a master page (its
+//!   background and shapes, placeholders included), and each of its layouts,
+//!   used or not, a master page based on it (the engine's two-level
+//!   masters, engine ADR 1026). A layout hides the master's placeholders
+//!   (it has its own) and, when it hides master shapes, the master's art; a
+//!   layout with a background of its own draws the master's art again over
+//!   it. A slide hides every placeholder of its layout: its own placeholders
+//!   stand in for them.
 //! * **Placeholders.** A slide placeholder finds its layout placeholder by
 //!   `idx`, else by type, and the layout's finds the master's by type;
 //!   position, body properties, list styles and shape properties inherit
@@ -48,9 +51,11 @@ pub mod model;
 mod table;
 pub mod table_styles;
 pub mod text;
+pub mod theme;
 
 use color::{resolve as resolve_color, ColorCtx, Rgba};
 use model::*;
+use paged_ooxml::drawingml::resolved;
 
 // ─── transforms ─────────────────────────────────────────────────────
 
@@ -180,7 +185,20 @@ struct Ctx<'a> {
     next_id: &'a std::cell::Cell<u32>,
     diagnostics: &'a std::cell::RefCell<Vec<String>>,
     part: &'a str,
+    draw: &'a ChartDrawer<'a>,
+    /// The theme's prefix in theme colour keys, when it is not the deck's
+    /// first theme (slide ADR 713).
+    theme_tag: Option<String>,
 }
+
+/// A style reference's colour (`phClr`): its value and its theme key.
+pub(crate) type Ph = (Rgba, Option<String>);
+
+/// Draws a chart frame: the chart part, the frame's width and height (pt)
+/// → the chart's primitives in the frame's points, or `None` for
+/// `slide-chart`'s layout of the deck's chart model (ADR 715: a live chart
+/// the deck's layout does not draw is drawn by paged.sheet).
+pub type ChartDrawer<'a> = dyn Fn(&str, f64, f64) -> Option<Vec<slide_chart::Prim>> + 'a;
 
 impl Ctx<'_> {
     fn id(&self) -> String {
@@ -193,92 +211,34 @@ impl Ctx<'_> {
             .borrow_mut()
             .push(format!("{}: {}", self.part, what.into()));
     }
-    fn colors(&self, placeholder: Option<Rgba>) -> ColorCtx<'_> {
+    fn colors(&self, placeholder: Option<Ph>) -> ColorCtx<'_> {
+        let (placeholder, placeholder_key) = match placeholder {
+            Some((c, k)) => (Some(c), k),
+            None => (None, None),
+        };
         ColorCtx {
             theme: self.theme,
             map: &self.map,
             placeholder,
+            placeholder_key,
+            theme_tag: self.theme_tag.as_deref(),
         }
+    }
+    /// A style reference's colour as `phClr`.
+    fn ph(&self, c: &pptx_core::Color) -> Ph {
+        let cc = self.colors(None);
+        (resolve_color(c, &cc), cc.key(c))
     }
 }
 
 // ─── paint ──────────────────────────────────────────────────────────
 
-fn style_color(ctx: &Ctx, r: &Option<pptx_core::StyleRef>) -> Option<Rgba> {
-    r.as_ref()
-        .and_then(|r| r.color.as_ref())
-        .map(|c| resolve_color(c, &ctx.colors(None)))
+fn style_color(ctx: &Ctx, r: &Option<pptx_core::StyleRef>) -> Option<Ph> {
+    r.as_ref().and_then(|r| r.color.as_ref()).map(|c| ctx.ph(c))
 }
 
-fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Rgba>) -> Paint {
-    let colors = ctx.colors(ph);
-    match fill {
-        Fill::None | Fill::Group => Paint::None,
-        Fill::Solid(c) => {
-            let rgba = resolve_color(c, &colors);
-            let theme = match &c.base {
-                pptx_core::ColorBase::Scheme(s) if c.transforms.is_empty() => Some(s.clone()),
-                _ => None,
-            };
-            Paint::Solid {
-                rgb: rgba.bytes(),
-                alpha: rgba.a,
-                theme,
-            }
-        }
-        Fill::Gradient(g) => {
-            let mut stops: Vec<Stop> = g
-                .stops
-                .iter()
-                .map(|(pos, c)| {
-                    let rgba = resolve_color(c, &colors);
-                    Stop {
-                        pos: *pos as f64 / 1000.0,
-                        rgb: rgba.bytes(),
-                        alpha: rgba.a,
-                    }
-                })
-                .collect();
-            // `a:gsLst` need not be in position order; a gradient swatch's
-            // stops are.
-            stops.sort_by(|a, b| a.pos.total_cmp(&b.pos));
-            if stops.is_empty() {
-                return Paint::None;
-            }
-            if let Some((_, to)) = &g.path {
-                // `a:fillToRect` insets, in 1 000ths of a percent; the
-                // gradient is centred on the rectangle they leave.
-                let (l, t, r, b) = to.unwrap_or((0, 0, 0, 0));
-                let f = |v: i32| v as f64 / 100_000.0;
-                Paint::Radial {
-                    stops,
-                    center: ((f(l) + 1.0 - f(r)) / 2.0, (f(t) + 1.0 - f(b)) / 2.0),
-                }
-            } else {
-                Paint::Linear {
-                    stops,
-                    angle: g.linear.map(|(a, _)| a as f64 / 60_000.0).unwrap_or(0.0),
-                }
-            }
-        }
-        Fill::Blip(b) => match &b.part {
-            Some(p) => Paint::Image { part: p.clone() },
-            None => Paint::None,
-        },
-        Fill::Pattern { fg, .. } => {
-            ctx.note("pattern fill drawn as its foreground colour");
-            fg.as_ref()
-                .map(|c| {
-                    let rgba = resolve_color(c, &colors);
-                    Paint::Solid {
-                        rgb: rgba.bytes(),
-                        alpha: rgba.a,
-                        theme: None,
-                    }
-                })
-                .unwrap_or(Paint::None)
-        }
-    }
+fn paint(fill: &Fill, ctx: &Ctx, ph: Option<Ph>) -> Paint {
+    resolved::paint(fill, &ctx.colors(ph), &mut |n| ctx.note(n))
 }
 
 /// `a:grpFill` means "the enclosing group's fill": substitute it into the
@@ -356,60 +316,114 @@ fn shape_stroke(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Op
     if base.is_none() && own.is_none() {
         return None;
     }
-    let pick = |f: fn(&Line) -> Option<String>| own.and_then(f).or_else(|| base.and_then(f));
-    let fill = own
-        .and_then(|l| l.fill.clone())
-        .or_else(|| base.and_then(|l| l.fill.clone()));
-    let ph = style_color(ctx, &style.and_then(|s| s.line_ref.clone()));
-    let p = paint(fill.as_ref()?, ctx, ph);
-    if matches!(p, Paint::None) {
-        return None;
+    // The shape's own line over the theme's line style, field by field;
+    // the line ends are the shape's own.
+    fn pick<T: Clone>(
+        own: Option<&Line>,
+        base: Option<&Line>,
+        f: fn(&Line) -> Option<T>,
+    ) -> Option<T> {
+        own.and_then(f).or_else(|| base.and_then(f))
     }
-    let width = own
-        .and_then(|l| l.width)
-        .or_else(|| base.and_then(|l| l.width))
-        .unwrap_or(9525) as f64
-        / EMU_PER_PT;
-    Some(Stroke {
-        width,
-        paint: p,
-        dash: pick(|l| l.dash.clone()).filter(|d| d != "solid"),
-        compound: pick(|l| l.compound.clone()).filter(|c| c != "sng"),
-        cap: pick(|l| l.cap.clone()),
-        join: pick(|l| l.join.clone()),
-        head: own
-            .and_then(|l| l.head.as_ref())
-            .map(|e| e.kind.clone())
-            .filter(|k| k != "none"),
-        tail: own
-            .and_then(|l| l.tail.as_ref())
-            .map(|e| e.kind.clone())
-            .filter(|k| k != "none"),
-    })
+    let merged = Line {
+        width: pick(own, base, |l| l.width),
+        fill: pick(own, base, |l| l.fill.clone()),
+        dash: pick(own, base, |l| l.dash.clone()),
+        custom_dash: pick(own, base, |l| {
+            (!l.custom_dash.is_empty()).then(|| l.custom_dash.clone())
+        })
+        .unwrap_or_default(),
+        cap: pick(own, base, |l| l.cap.clone()),
+        join: pick(own, base, |l| l.join.clone()),
+        miter_limit: pick(own, base, |l| l.miter_limit),
+        compound: pick(own, base, |l| l.compound.clone()),
+        align: pick(own, base, |l| l.align.clone()),
+        head: own.and_then(|l| l.head.clone()),
+        tail: own.and_then(|l| l.tail.clone()),
+    };
+    let ph = style_color(ctx, &style.and_then(|s| s.line_ref.clone()));
+    resolved::stroke(&merged, &ctx.colors(ph), 9525, &mut |n| ctx.note(n))
 }
 
-fn shadow(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Option<Shadow> {
-    let fx = props.effects.clone().or_else(|| {
-        let r = style
-            .and_then(|s| s.effect_ref.as_ref())
-            .filter(|r| r.idx > 0)?;
-        ctx.theme?
-            .effect_styles
-            .get(r.idx as usize - 1)
-            .cloned()
-            .flatten()
-    })?;
-    let s = fx.outer_shadow?;
-    let dist = s.dist as f64 / EMU_PER_PT;
-    let dir = (s.dir as f64 / 60_000.0).to_radians();
-    let rgba = resolve_color(&s.color, &ctx.colors(None));
-    Some(Shadow {
-        dx: dist * dir.cos(),
-        dy: dist * dir.sin(),
-        blur: s.blur as f64 / EMU_PER_PT,
-        rgb: rgba.bytes(),
-        alpha: rgba.a,
-    })
+/// The effects a shape draws: its own `a:effectLst`, else the theme's
+/// effect style its `a:effectRef` names (whose `phClr` is the reference's
+/// colour).
+fn effects(props: &ShapeProps, style: Option<&ShapeStyle>, ctx: &Ctx) -> Effects {
+    let (fx, ph) = match &props.effects {
+        Some(fx) => (Some(fx.clone()), None),
+        None => {
+            let r = style
+                .and_then(|s| s.effect_ref.as_ref())
+                .filter(|r| r.idx > 0);
+            let fx = r.and_then(|r| {
+                ctx.theme?
+                    .effect_styles
+                    .get(r.idx as usize - 1)
+                    .cloned()
+                    .flatten()
+            });
+            (
+                fx,
+                style_color(ctx, &style.and_then(|s| s.effect_ref.clone())),
+            )
+        }
+    };
+    fx.map(|fx| resolved::effects(&fx, &ctx.colors(ph), &mut |n| ctx.note(n)))
+        .unwrap_or_default()
+}
+
+/// A shape style as an object style (slide ADR 719): its references as
+/// text, a name, and the fill and line it gives a shape with no fill or
+/// line of its own.
+fn shape_style_look(st: &ShapeStyle, ctx: &Ctx) -> ShapeStyleLook {
+    let key = |c: Option<&pptx_core::Color>| -> String {
+        match c {
+            Some(c) => ctx
+                .colors(None)
+                .key(c)
+                .unwrap_or_else(|| format!("#{:06X}", resolve_color(c, &ctx.colors(None)).hex())),
+            None => "-".into(),
+        }
+    };
+    let r = |name: &str, r: &Option<pptx_core::StyleRef>| match r {
+        Some(r) => format!("{name}{}:{}", r.idx, key(r.color.as_ref())),
+        None => format!("{name}-"),
+    };
+    let font = match &st.font_ref {
+        Some((idx, c)) => format!("font:{idx}:{}", key(c.as_ref())),
+        None => "font-".into(),
+    };
+    let refs = format!(
+        "{} {} {} {font}",
+        r("line", &st.line_ref),
+        r("fill", &st.fill_ref),
+        r("effect", &st.effect_ref)
+    );
+    // Named by the fill's colour, as PowerPoint's Shape Styles gallery
+    // names its rows (`Colored Fill - Accent 1`).
+    let colour = st
+        .fill_ref
+        .as_ref()
+        .and_then(|f| f.color.as_ref())
+        .or(st.line_ref.as_ref().and_then(|l| l.color.as_ref()))
+        .and_then(|c| ctx.colors(None).key(c))
+        .and_then(|k| theme::Key::parse(&k))
+        .map(|k| k.name())
+        .unwrap_or_else(|| "Custom".into());
+    let n = |r: &Option<pptx_core::StyleRef>| r.as_ref().map(|r| r.idx).unwrap_or(0);
+    let name = format!(
+        "Shape Style: {colour} (fill {}, line {}, effect {})",
+        n(&st.fill_ref),
+        n(&st.line_ref),
+        n(&st.effect_ref)
+    );
+    let bare = ShapeProps::default();
+    ShapeStyleLook {
+        refs,
+        name,
+        fill: shape_fill(&bare, Some(st), ctx),
+        stroke: shape_stroke(&bare, Some(st), ctx),
+    }
 }
 
 // ─── placeholders ───────────────────────────────────────────────────
@@ -601,7 +615,7 @@ fn text_frame(
     let font_ref = chain
         .iter()
         .find_map(|sp| sp.style.as_ref().and_then(|s| s.font_ref.clone()))
-        .map(|(idx, c)| (idx, c.map(|c| resolve_color(&c, &colors))));
+        .map(|(idx, c)| (idx, c.map(|c| ctx.ph(&c))));
     let tctx = text::TextCtx {
         lists,
         inherited,
@@ -649,10 +663,10 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             if sp.nv.hidden {
                 return None;
             }
-            // On masters and layouts a placeholder is a prompt, not art.
-            if sp.nv.placeholder.is_some() && ctx.level != Level::Slide {
-                return None;
-            }
+            // On masters and layouts a placeholder is a prompt: an item of
+            // the layout (slide ADR 712) that every slide hides, as its own
+            // placeholder overrides it or it has none.
+            let prompt = sp.nv.placeholder.is_some() && ctx.level != Level::Slide;
             let chain = chain(sp, ctx);
             let x = chain.iter().find_map(|s| s.props.xfrm.clone())?;
             let (t, w, h) = space.place(&x);
@@ -692,7 +706,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 _ => o.text_rect,
             };
             let text = text_frame(&chain, text_rect, w, h, ctx);
-            if matches!(fill, Paint::None) && stroke.is_none() && text.is_none() {
+            if matches!(fill, Paint::None) && stroke.is_none() && text.is_none() && !prompt {
                 return None;
             }
             // The engine has no per-colour alpha, so a translucent colour
@@ -728,7 +742,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     text,
                 },
                 opacity,
-                shadow: shadow(&sp.props, style, ctx),
+                effects: effects(&sp.props, style, ctx),
                 meta: ItemMeta {
                     shape_id: sp.nv.id,
                     order: 0,
@@ -744,7 +758,25 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                         _ => None,
                     },
                     frame: None,
+                    chart: None,
                     link: sp.nv.hyperlink.clone(),
+                    flip: (x.flip_h, x.flip_v),
+                    connector: (sp.st_cxn.is_some() || sp.end_cxn.is_some()).then(|| {
+                        let end = |c: &pptx_core::CxnRef| CxnEnd {
+                            id: c.id,
+                            idx: c.idx,
+                            at: None,
+                        };
+                        Connector {
+                            st: sp.st_cxn.as_ref().map(end),
+                            end: sp.end_cxn.as_ref().map(end),
+                        }
+                    }),
+                    model_id: sp.model_id.clone(),
+                    shape_style: style
+                        .filter(|_| sp.nv.placeholder.is_none())
+                        .map(|st| shape_style_look(st, ctx)),
+                    ..Default::default()
                 },
             })
         }
@@ -752,7 +784,10 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             if p.nv.hidden {
                 return None;
             }
-            let Some(part) = p.blip.part.clone() else {
+            // An SVG picture (Office 2016's `asvg:svgBlip`) is drawn from
+            // its SVG, as vectors; the raster beside it is PowerPoint's
+            // fallback for readers without SVG.
+            let Some(part) = p.blip.svg.clone().or_else(|| p.blip.part.clone()) else {
                 ctx.note(format!("picture {:?} has no embedded image", p.nv.name));
                 return None;
             };
@@ -787,6 +822,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     )
                 })
                 .unwrap_or((0.0, 0.0, 0.0, 0.0));
+            let look = resolved::picture(&p.blip, &ctx.colors(None));
             Some(Item {
                 id: ctx.id(),
                 name: p.nv.name.clone(),
@@ -798,9 +834,10 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     stroke: shape_stroke(line_props, p.style.as_ref(), ctx),
                     image_part: part,
                     crop,
+                    image_effects: look.effects,
                 },
-                opacity: p.blip.alpha.map(|a| a as f64 / 100_000.0).unwrap_or(1.0),
-                shadow: shadow(&p.props, p.style.as_ref(), ctx),
+                opacity: look.opacity,
+                effects: effects(&p.props, p.style.as_ref(), ctx),
                 meta: ItemMeta {
                     shape_id: p.nv.id,
                     link: p.nv.hyperlink.clone(),
@@ -828,7 +865,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 h,
                 kind: ItemKind::Group { children },
                 opacity: 1.0,
-                shadow: None,
+                effects: Effects::default(),
                 meta: ItemMeta {
                     shape_id: g.nv.id,
                     link: g.nv.hyperlink.clone(),
@@ -848,7 +885,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     h,
                     kind: ItemKind::Table(table::table(tbl, ctx)),
                     opacity: 1.0,
-                    shadow: None,
+                    effects: Effects::default(),
                     meta: ItemMeta {
                         shape_id: f.nv.id,
                         ..Default::default()
@@ -862,7 +899,11 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 };
                 let x = f.xfrm.clone()?;
                 let (t, w, h) = space.place(&x);
-                let children = chart::items(c, t, w, h, ctx);
+                let prims = part
+                    .as_deref()
+                    .and_then(|p| (ctx.draw)(p, w, h))
+                    .unwrap_or_else(|| slide_chart::layout(c, w, h));
+                let children = chart::items(prims, t, w, h, ctx);
                 Some(Item {
                     id: ctx.id(),
                     name: f.nv.name.clone(),
@@ -871,10 +912,11 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     h,
                     kind: ItemKind::Group { children },
                     opacity: 1.0,
-                    shadow: None,
+                    effects: Effects::default(),
                     meta: ItemMeta {
                         shape_id: f.nv.id,
                         frame: Some("chart".into()),
+                        chart: part.clone(),
                         link: f.nv.hyperlink.clone(),
                         ..Default::default()
                     },
@@ -897,7 +939,15 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     ch_ext: Some(x.ext),
                     ..x.clone()
                 });
-                let children = ordered(shapes, &inner, ctx);
+                let mut children = ordered(shapes, &inner, ctx);
+                // The text pane (slide W4): each drawing shape names the
+                // points it shows, when its paragraphs are theirs.
+                let model = drawing_part
+                    .as_ref()
+                    .and_then(|p| ctx.deck.diagram_models.get(p));
+                if let Some(m) = model {
+                    label_diagram_text(&mut children, m);
+                }
                 let (t, w, h) = space.place(&x);
                 Some(Item {
                     id: ctx.id(),
@@ -907,11 +957,12 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     h,
                     kind: ItemKind::Group { children },
                     opacity: 1.0,
-                    shadow: None,
+                    effects: Effects::default(),
                     meta: ItemMeta {
                         shape_id: f.nv.id,
                         frame: Some("diagram".into()),
                         link: f.nv.hyperlink.clone(),
+                        smartart: model.cloned(),
                         ..Default::default()
                     },
                 })
@@ -926,6 +977,77 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             None
         }
     }
+}
+
+/// Name on each SmartArt drawing shape the data points it shows (slide
+/// W4): the `presOf` sources of its presentation point, when their
+/// paragraphs add up to the shape's.
+fn label_diagram_text(items: &mut [Item], model: &pptx_core::DiagramModel) {
+    for it in items {
+        match &mut it.kind {
+            ItemKind::Group { children } => label_diagram_text(children, model),
+            ItemKind::Shape { text: Some(tf), .. } => {
+                let Some(srcs) = it.meta.model_id.as_ref().and_then(|m| model.shapes.get(m)) else {
+                    continue;
+                };
+                let n: u32 = srcs.iter().map(|(_, n)| n).sum();
+                if !srcs.is_empty() && n as usize == tf.paragraphs.len() {
+                    it.meta.dgm = Some(srcs.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Where each glued connector end's site is on the page (slide ADR 717):
+/// the site of the shape it names, on that shape's box. The editor routes a
+/// connector again when a site it is glued to moves away from this point.
+fn link_connectors(items: &mut [Item]) {
+    // Every drawn shape's box by shape id: its preset (a rectangle's sites
+    // for any other outline), size and placement. Groups and the members
+    // of a drawn chart or diagram are left out.
+    type Placed = (Option<(String, Vec<(String, String)>)>, f64, f64, [f64; 6]);
+    fn boxes(items: &[Item], out: &mut std::collections::HashMap<u32, Placed>) {
+        for it in items {
+            match &it.kind {
+                ItemKind::Group { children } => {
+                    if it.meta.frame.is_none() {
+                        boxes(children, out);
+                    }
+                }
+                _ => {
+                    out.insert(
+                        it.meta.shape_id,
+                        (it.meta.preset.clone(), it.w, it.h, it.transform),
+                    );
+                }
+            }
+        }
+    }
+    fn fill(items: &mut [Item], at: &std::collections::HashMap<u32, Placed>) {
+        for it in items {
+            if let ItemKind::Group { children } = &mut it.kind {
+                fill(children, at);
+            }
+            let Some(c) = it.meta.connector.as_mut() else {
+                continue;
+            };
+            for e in [c.st.as_mut(), c.end.as_mut()].into_iter().flatten() {
+                e.at = at.get(&e.id).and_then(|(preset, w, h, t)| {
+                    let (name, adj) = preset
+                        .as_ref()
+                        .map(|(n, a)| (n.as_str(), a.as_slice()))
+                        .unwrap_or(("rect", &[]));
+                    let sites = slide_geom::live::sites_on_page(name, adj, *w, *h, t);
+                    sites.get(e.idx as usize).map(|s| s.pos)
+                });
+            }
+        }
+    }
+    let mut placed = std::collections::HashMap::new();
+    boxes(items, &mut placed);
+    fill(items, &placed);
 }
 
 /// Resolve a shape tree, numbering each item by its place in the tree.
@@ -945,7 +1067,7 @@ fn background(bg: &Background, ctx: &Ctx, w: f64, h: f64) -> Option<Item> {
     let fill = match bg {
         Background::Fill(f) => paint(f, ctx, None),
         Background::StyleRef { idx, color } => {
-            let ph = color.as_ref().map(|c| resolve_color(c, &ctx.colors(None)));
+            let ph = color.as_ref().map(|c| ctx.ph(c));
             let i = idx.checked_sub(1001)? as usize;
             let f = ctx.theme?.background_fill_styles.get(i)?;
             paint(f, ctx, ph)
@@ -968,7 +1090,7 @@ fn background(bg: &Background, ctx: &Ctx, w: f64, h: f64) -> Option<Item> {
             text: None,
         },
         opacity: 1.0,
-        shadow: None,
+        effects: Effects::default(),
         meta: ItemMeta::default(),
     })
 }
@@ -980,40 +1102,149 @@ fn overlay(base: &ColorMap, over: Option<&ColorMap>) -> ColorMap {
     }
 }
 
+/// The paragraph styles placeholders map to (slide ADR 719), from the
+/// master whose theme is the deck's first: `Title` and `Body` (the roots,
+/// with the theme's major and minor fonts), `Title`'s look, and `Body L1`–
+/// `L9` and `Other L1`–`L9` based on `Body`, each with its level's look.
+fn paragraph_styles(
+    deck: &Presentation,
+    primary_theme: &Option<String>,
+    next_id: &std::cell::Cell<u32>,
+    diagnostics: &std::cell::RefCell<Vec<String>>,
+    draw: &ChartDrawer,
+) -> Vec<ParagraphStyle> {
+    let Some(master) = deck
+        .masters
+        .iter()
+        .find(|m| m.theme_part == *primary_theme)
+        .or(deck.masters.first())
+    else {
+        return Vec::new();
+    };
+    let theme = master.theme_part.as_deref().and_then(|t| deck.theme(t));
+    let ctx = Ctx {
+        deck,
+        master,
+        layout: None,
+        theme,
+        map: master.color_map.clone(),
+        level: Level::Master,
+        next_id,
+        diagnostics,
+        part: &master.part,
+        draw,
+        theme_tag: None,
+    };
+    let colors = ctx.colors(None);
+    let (major, minor) = match theme {
+        Some(t) => (&t.major_font, &t.minor_font),
+        None => (&EMPTY_FONTS, &EMPTY_FONTS),
+    };
+    let look = |prefix: &'static str, list: Option<&ListStyle>, lvl: u8| -> Para {
+        let mut lists: Vec<&ListStyle> = Vec::new();
+        match list {
+            Some(l) => lists.push(l),
+            None => lists.extend(deck.default_text_style.as_ref()),
+        }
+        let tctx = text::TextCtx {
+            inherited: lists.len(),
+            lists,
+            colors: &colors,
+            major,
+            minor,
+            font_ref: None,
+            style_prefix: Some(prefix),
+            shrink: None,
+        };
+        let p = pptx_core::Paragraph {
+            props: pptx_core::ParagraphProps {
+                level: Some(lvl),
+                ..Default::default()
+            },
+            runs: vec![pptx_core::Run {
+                kind: pptx_core::RunKind::Text("x".into()),
+                props: Default::default(),
+            }],
+            ..Default::default()
+        };
+        text::paragraph(&p, &tctx)
+    };
+    let mut out = vec![
+        ParagraphStyle {
+            name: "Body".into(),
+            based_on: None,
+            theme_font: Some("minor".into()),
+            level: None,
+        },
+        ParagraphStyle {
+            name: "Title".into(),
+            based_on: None,
+            theme_font: Some("major".into()),
+            level: Some(look("Title", master.title_style.as_ref(), 0)),
+        },
+    ];
+    for (prefix, list) in [
+        ("Body", master.body_style.as_ref()),
+        ("Other", master.other_style.as_ref()),
+    ] {
+        for lvl in 0..9u8 {
+            out.push(ParagraphStyle {
+                name: format!("{prefix} L{}", lvl + 1),
+                based_on: Some("Body".into()),
+                theme_font: None,
+                level: Some(look(prefix, list, lvl)),
+            });
+        }
+    }
+    out
+}
+
 /// Resolve a deck.
 pub fn resolve(deck: &Presentation) -> Deck {
+    resolve_with(deck, &|_, _, _| None)
+}
+
+/// [`resolve`] with a drawer for chart frames (see [`ChartDrawer`]).
+pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
     let (w, h) = (
         deck.slide_size.0 as f64 / EMU_PER_PT,
         deck.slide_size.1 as f64 / EMU_PER_PT,
     );
     let next_id = std::cell::Cell::new(0u32);
     let diagnostics = std::cell::RefCell::new(Vec::new());
+    // The deck's first theme (the first used layout's master's): its
+    // colours' keys carry no prefix; another theme's are prefixed with its
+    // part's name (slide ADR 713).
+    let primary_theme = deck
+        .slides
+        .iter()
+        .filter_map(|s| s.layout_part.as_deref())
+        .find_map(|lp| deck.layout(lp))
+        .and_then(|l| deck.master(&l.master_part))
+        .and_then(|m| m.theme_part.clone());
+    let theme_tag = |m: &Master| -> Option<String> {
+        let part = m.theme_part.as_deref()?;
+        if Some(part) == primary_theme.as_deref() {
+            return None;
+        }
+        let stem = part.rsplit('/').next()?.trim_end_matches(".xml");
+        Some(stem.to_string())
+    };
     let mut out = Deck {
         width: w,
         height: h,
         ..Default::default()
     };
 
-    // One master page per used layout, in first-use order.
+    // Slide ADR 712: one master spread per slide master, and one per
+    // layout based on it (every layout, used or not), in the deck's order.
     let mut master_ids: BTreeMap<String, String> = BTreeMap::new();
-    let mut order: Vec<&str> = Vec::new();
-    for s in &deck.slides {
-        if let Some(lp) = s.layout_part.as_deref() {
-            if !order.contains(&lp) {
-                order.push(lp);
-            }
-        }
-    }
-    for (i, lp) in order.iter().enumerate() {
-        let Some(layout) = deck.layout(lp) else {
-            continue;
-        };
-        let Some(master) = deck.master(&layout.master_part) else {
-            continue;
-        };
+    // Each layout's placeholder items: what a slide made from it hides.
+    let mut layout_placeholders: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut layout_no = 0usize;
+    for (mi, master) in deck.masters.iter().enumerate() {
         let theme = master.theme_part.as_deref().and_then(|t| deck.theme(t));
-        let id = format!("m{}", i + 1);
-        let mut items = Vec::new();
+        let mid = format!("M{}", mi + 1);
         let mctx = Ctx {
             deck,
             master,
@@ -1024,36 +1255,39 @@ pub fn resolve(deck: &Presentation) -> Deck {
             next_id: &next_id,
             diagnostics: &diagnostics,
             part: &master.part,
+            draw,
+            theme_tag: theme_tag(master),
         };
-        let lctx = Ctx {
-            layout: Some(layout),
-            map: overlay(&master.color_map, layout.color_map_override.as_ref()),
-            level: Level::Layout,
-            part: &layout.part,
-            ..mctx
-        };
-        let bg = layout
+        let mut items = Vec::new();
+        let bg = master
             .background
             .as_ref()
-            .map(|b| (b, &lctx))
-            .or(master.background.as_ref().map(|b| (b, &mctx)));
-        if let Some((b, c)) = bg {
-            items.extend(background(b, c, w, h));
-        }
-        if layout.show_master_shapes {
-            items.extend(ordered(&master.shapes, &Space::PAGE, &mctx));
-        }
-        items.extend(ordered(&layout.shapes, &Space::PAGE, &lctx));
-        master_ids.insert(lp.to_string(), id.clone());
+            .and_then(|b| background(b, &mctx, w, h));
+        let bg_id = bg.as_ref().map(|b| b.id.clone());
+        items.extend(bg);
+        let shapes = ordered(&master.shapes, &Space::PAGE, &mctx);
+        let master_placeholders: Vec<String> = shapes
+            .iter()
+            .filter(|it| it.meta.placeholder.is_some())
+            .map(|it| it.id.clone())
+            .collect();
+        let master_art: Vec<String> = shapes
+            .iter()
+            .filter(|it| it.meta.placeholder.is_none())
+            .map(|it| it.id.clone())
+            .collect();
+        items.extend(shapes);
         out.masters.push(MasterPage {
-            id,
-            name: layout
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("Layout {}", i + 1)),
-            layout_part: lp.to_string(),
+            id: mid.clone(),
+            name: format!("Slide Master {}", mi + 1),
+            layout_part: String::new(),
             master_part: master.part.clone(),
             items,
+            is_master: true,
+            parent: None,
+            overrides: Vec::new(),
+            layout_type: None,
+            preserve: master.preserve,
         });
         if out.theme_colors.is_empty() {
             if let Some(t) = theme {
@@ -1061,7 +1295,11 @@ pub fn resolve(deck: &Presentation) -> Deck {
                     theme: Some(t),
                     map: &master.color_map,
                     placeholder: None,
+                    placeholder_key: None,
+                    theme_tag: None,
                 };
+                out.theme = Some(theme::ThemeIr::of(t));
+                out.theme_part = master.theme_part.clone();
                 out.theme_colors = t
                     .colors
                     .iter()
@@ -1069,7 +1307,73 @@ pub fn resolve(deck: &Presentation) -> Deck {
                     .collect();
             }
         }
+        for lp in &master.layouts {
+            let Some(layout) = deck.layout(lp) else {
+                continue;
+            };
+            layout_no += 1;
+            let id = format!("m{layout_no}");
+            let lctx = Ctx {
+                theme_tag: theme_tag(master),
+                layout: Some(layout),
+                map: overlay(&master.color_map, layout.color_map_override.as_ref()),
+                level: Level::Layout,
+                part: &layout.part,
+                ..mctx
+            };
+            let mut items = Vec::new();
+            // The master's placeholders are prompts the layout's own stand
+            // in for; its art goes where the layout hides master shapes.
+            let mut overrides = master_placeholders.clone();
+            if !layout.show_master_shapes {
+                overrides.extend(master_art.iter().cloned());
+            }
+            if let Some(b) = layout.background.as_ref() {
+                // The layout's background replaces the master's, under the
+                // master's art. The engine paints a master's items under
+                // the layout's, so that art is drawn again on the layout,
+                // over its background (a copy: an edit of the master's art
+                // does not reach it).
+                items.extend(background(b, &lctx, w, h));
+                overrides.extend(bg_id.iter().cloned());
+                if layout.show_master_shapes && !master_art.is_empty() {
+                    overrides.extend(master_art.iter().cloned());
+                    items.extend(
+                        ordered(&master.shapes, &Space::PAGE, &mctx)
+                            .into_iter()
+                            .filter(|it| it.meta.placeholder.is_none()),
+                    );
+                }
+            }
+            let own = ordered(&layout.shapes, &Space::PAGE, &lctx);
+            layout_placeholders.insert(
+                lp.to_string(),
+                own.iter()
+                    .filter(|it| it.meta.placeholder.is_some())
+                    .map(|it| it.id.clone())
+                    .collect(),
+            );
+            items.extend(own);
+            master_ids.insert(lp.to_string(), id.clone());
+            out.masters.push(MasterPage {
+                id,
+                name: layout
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Layout {layout_no}")),
+                layout_part: lp.to_string(),
+                master_part: master.part.clone(),
+                items,
+                is_master: false,
+                parent: Some(mid.clone()),
+                overrides,
+                layout_type: layout.layout_type.clone(),
+                preserve: layout.preserve,
+            });
+        }
     }
+
+    out.paragraph_styles = paragraph_styles(deck, &primary_theme, &next_id, &diagnostics, draw);
 
     for (i, s) in deck.slides.iter().enumerate() {
         let layout = s.layout_part.as_deref().and_then(|lp| deck.layout(lp));
@@ -1092,12 +1396,15 @@ pub fn resolve(deck: &Presentation) -> Deck {
             next_id: &next_id,
             diagnostics: &diagnostics,
             part: &s.part,
+            draw,
+            theme_tag: theme_tag(master),
         };
         let mut items = Vec::new();
         if let Some(b) = &s.background {
             items.extend(background(b, &ctx, w, h));
         }
         items.extend(ordered(&s.shapes, &Space::PAGE, &ctx));
+        link_connectors(&mut items);
         out.slides.push(SlidePage {
             id: format!("p{}", i + 1),
             index: i,
@@ -1106,6 +1413,13 @@ pub fn resolve(deck: &Presentation) -> Deck {
                 .layout_part
                 .as_ref()
                 .and_then(|lp| master_ids.get(lp).cloned()),
+            // Every placeholder of the layout: the slide's own stand in
+            // for some, and the others are not shown on a slide.
+            overrides: s
+                .layout_part
+                .as_ref()
+                .and_then(|lp| layout_placeholders.get(lp).cloned())
+                .unwrap_or_default(),
             show_master_items: s.show_master_shapes,
             items,
             hidden: s.hidden,
@@ -1116,8 +1430,32 @@ pub fn resolve(deck: &Presentation) -> Deck {
                 .filter(|n| !n.trim().is_empty()),
             transition: s.transition.clone(),
             timing_xml: s.timing_xml.clone(),
+            timing: s.timing.clone(),
+            section: deck
+                .sections
+                .iter()
+                .find(|sec| sec.slide_ids.first() == Some(&s.slide_id))
+                .map(|sec| SectionStart {
+                    id: sec.id.clone(),
+                    name: sec.name.clone(),
+                }),
         });
     }
+    // Custom shows name slide parts; the document knows pages.
+    out.custom_shows = deck
+        .custom_shows
+        .iter()
+        .map(|c| CustomShowPages {
+            id: c.id,
+            name: c.name.clone(),
+            pages: c
+                .slides
+                .iter()
+                .filter_map(|part| out.slides.iter().find(|p| &p.part == part))
+                .map(|p| p.id.clone())
+                .collect(),
+        })
+        .collect();
 
     let mut fonts = std::collections::BTreeSet::new();
     fn collect(items: &[Item], fonts: &mut std::collections::BTreeSet<String>) {

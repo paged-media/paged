@@ -157,6 +157,11 @@ import {
   SELECT_ALL_MENU_ITEM,
 } from "../../src/select-all";
 import {
+  FIND_COMMANDS,
+  FIND_KEYBINDINGS,
+  FIND_MENU_ITEMS,
+} from "../../src/find/find-commands";
+import {
   buildCoreCommandEntries,
   CORE_COMMAND_MENU_ITEMS,
 } from "../../src/core-command-entries";
@@ -608,6 +613,8 @@ export interface HeadlessEditor {
 export interface FakeSystemClipboard extends SystemClipboard {
   text: string;
   html: string;
+  /** The `image/svg+xml` flavour (ADR 289); "" when absent. */
+  svg: string;
   denied: boolean;
 }
 
@@ -914,15 +921,20 @@ export async function createHeadlessEditor(
   const systemClipboard: FakeSystemClipboard = {
     text: "",
     html: "",
+    svg: "",
     denied: false,
-    async write(text, html) {
+    async write({ text, html, svg }) {
       if (this.denied) return false;
       this.text = text;
       this.html = html;
+      this.svg = svg ?? "";
       return true;
     },
     async read() {
-      return this.denied ? null : { text: this.text, html: this.html };
+      if (this.denied) return null;
+      return this.svg
+        ? { text: this.text, html: this.html, svg: this.svg }
+        : { text: this.text, html: this.html };
     },
   };
   const clipboardCommands = buildClipboardCommands({
@@ -1027,12 +1039,14 @@ export async function createHeadlessEditor(
       ),
       ...buildBatchCommands(),
       SELECT_ALL_COMMAND,
+      ...FIND_COMMANDS,
       ...buildCoreCommandEntries(),
       ...shellCommands,
     ].map((c) => registries.commands.register(c)),
     ...[
       ...APP_MENU_ITEMS,
       SELECT_ALL_MENU_ITEM,
+      ...FIND_MENU_ITEMS,
       ...CLIPBOARD_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
@@ -1045,6 +1059,7 @@ export async function createHeadlessEditor(
     ...[
       ...APP_KEYBINDINGS,
       ...SELECT_ALL_KEYBINDINGS,
+      ...FIND_KEYBINDINGS,
       ...CLIPBOARD_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,

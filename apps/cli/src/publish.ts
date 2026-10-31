@@ -62,6 +62,9 @@ import {
 } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deflateRawSync } from "node:zlib";
+
+import { zip } from "@paged-media/helpers";
 
 import { flagBool, flagList, flagStr, type OptionSpec } from "./args";
 import { CliError, EXIT } from "./errors";
@@ -74,7 +77,6 @@ import {
 } from "./pdf";
 import { baseName, writeOutput, type CliSession } from "./session";
 import type { Verb } from "./verbs";
-import { zip } from "./zip";
 
 const OUTPUT_FORMAT: OptionSpec = {
   name: "format",
@@ -541,7 +543,10 @@ export const packageVerb: Verb = {
     if (asZip) {
       writeOutput(
         out,
-        zip(files.map(([p, b]) => [`${baseName(out)}/${p}`, b])),
+        zip(
+          files.map(([p, b]) => [`${baseName(out)}/${p}`, b]),
+          { deflate: (d) => new Uint8Array(deflateRawSync(d)) },
+        ),
       );
     } else {
       const existed = existsSync(out);

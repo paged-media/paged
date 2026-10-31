@@ -345,6 +345,66 @@ impl std::fmt::Debug for PathData {
 }
 
 impl PathData {
+    /// kurbo's path as a `NonZero` path (the one conversion; PM-0014,
+    /// shared capability C8).
+    pub fn from_bez(p: &kurbo::BezPath) -> Self {
+        let f = |pt: kurbo::Point| (pt.x as f32, pt.y as f32);
+        let segments = p
+            .elements()
+            .iter()
+            .map(|el| match *el {
+                kurbo::PathEl::MoveTo(a) => {
+                    let (x, y) = f(a);
+                    PathSegment::MoveTo { x, y }
+                }
+                kurbo::PathEl::LineTo(a) => {
+                    let (x, y) = f(a);
+                    PathSegment::LineTo { x, y }
+                }
+                kurbo::PathEl::QuadTo(c, a) => {
+                    let ((cx, cy), (x, y)) = (f(c), f(a));
+                    PathSegment::QuadTo { cx, cy, x, y }
+                }
+                kurbo::PathEl::CurveTo(c1, c2, a) => {
+                    let ((cx1, cy1), (cx2, cy2), (x, y)) = (f(c1), f(c2), f(a));
+                    PathSegment::CubicTo {
+                        cx1,
+                        cy1,
+                        cx2,
+                        cy2,
+                        x,
+                        y,
+                    }
+                }
+                kurbo::PathEl::ClosePath => PathSegment::Close,
+            })
+            .collect();
+        PathData::new(segments)
+    }
+
+    /// This path as kurbo's (the fill rule is not carried).
+    pub fn to_bez(&self) -> kurbo::BezPath {
+        let p = |x: f32, y: f32| kurbo::Point::new(f64::from(x), f64::from(y));
+        let mut out = kurbo::BezPath::new();
+        for seg in &self.segments {
+            match *seg {
+                PathSegment::MoveTo { x, y } => out.move_to(p(x, y)),
+                PathSegment::LineTo { x, y } => out.line_to(p(x, y)),
+                PathSegment::QuadTo { cx, cy, x, y } => out.quad_to(p(cx, cy), p(x, y)),
+                PathSegment::CubicTo {
+                    cx1,
+                    cy1,
+                    cx2,
+                    cy2,
+                    x,
+                    y,
+                } => out.curve_to(p(cx1, cy1), p(cx2, cy2), p(x, y)),
+                PathSegment::Close => out.close_path(),
+            }
+        }
+        out
+    }
+
     /// A `NonZero` path of `segments`.
     pub fn new(segments: Vec<PathSegment>) -> Self {
         Self {
@@ -921,6 +981,20 @@ pub enum LayerEffect {
     /// (in pt) before compositing. Edges clamp to transparent (the
     /// layer's bounds are padded by 3σ at composite time).
     GaussianBlur { sigma_pt: f32 },
+    /// Photoshop's Add Noise (uniform): each pixel's colour moves by up to
+    /// `amount` (0..=1) of its range, one random value for all channels
+    /// when `monochromatic`. The grain is hashed per page-space cell
+    /// (engine ADR 1008, [`crate::layer_fx`]).
+    Noise { amount: f32, monochromatic: bool },
+    /// A colour adjustment of the layer's pixels: brightness and contrast
+    /// (−1..=1), then saturation (−1..=1) and a hue rotation in degrees
+    /// ([`crate::layer_fx`]).
+    ColorAdjust {
+        brightness: f32,
+        contrast: f32,
+        saturation: f32,
+        hue_deg: f32,
+    },
 }
 
 impl LayerEffect {
@@ -928,8 +1002,8 @@ impl LayerEffect {
     /// pad the layer bounds uniformly.
     pub fn sigma_pt(&self) -> f32 {
         match self {
-            LayerEffect::None => 0.0,
             LayerEffect::GaussianBlur { sigma_pt } => sigma_pt.max(0.0),
+            _ => 0.0,
         }
     }
 }
@@ -1025,7 +1099,7 @@ pub enum DisplayCommand {
         image_id: ImageId,
         transform: Transform,
     },
-    /// Engine ADR 1040 — paint the mesh shading `mesh_id` (a gradient
+    /// Engine ADR 1048 — paint the mesh shading `mesh_id` (a gradient
     /// mesh or a freeform gradient, in local coordinates `transform`
     /// takes to the page) under the clips in force; the renderer
     /// brackets it in a `PushClip` of the frame's outline. `bounds` is
@@ -1344,6 +1418,29 @@ pub enum DisplayCommand {
     /// C-28 — close the masked content, dropping the soft mask. See
     /// [`DisplayCommand::BeginSoftMask`].
     EndSoftMask(Transform),
+    /// Engine ADR 1039 — the commands up to the matching
+    /// [`DisplayCommand::EndSymbol`] are one copy of a symbol
+    /// definition's display list, `DisplayList::symbol_forms[form]`,
+    /// replayed under `transform` (definition list space → this list's
+    /// space). The rasterizers draw the copy and ignore the markers; the
+    /// PDF exporter writes the definition once as a form XObject and
+    /// draws the bracket as one reference to it.
+    BeginSymbol { form: u32, transform: Transform },
+    /// Engine ADR 1039 — closes a [`DisplayCommand::BeginSymbol`]. The
+    /// transform is unused.
+    EndSymbol(Transform),
+}
+
+/// Engine ADR 1039 — a symbol definition's display list, held once per
+/// list that replays it (see [`DisplayCommand::BeginSymbol`]). `key`
+/// identifies the definition revision (and tint) across lists, so a PDF
+/// writes one form per key for the whole document.
+#[derive(Debug, Clone)]
+pub struct SymbolForm {
+    pub key: u64,
+    pub list: std::sync::Arc<DisplayList>,
+    /// The definition list's extent in its own space: `[x, y, w, h]`.
+    pub bbox: [f32; 4],
 }
 
 /// C-28 — how a soft mask's artwork resolves to per-pixel coverage.
@@ -1393,7 +1490,9 @@ impl DisplayCommand {
             | DisplayCommand::StrokePathOverprint { transform, .. }
             | DisplayCommand::BeginSoftMask { transform, .. }
             | DisplayCommand::BeginMaskedContent(transform)
-            | DisplayCommand::EndSoftMask(transform) => transform,
+            | DisplayCommand::EndSoftMask(transform)
+            | DisplayCommand::BeginSymbol { transform, .. }
+            | DisplayCommand::EndSymbol(transform) => transform,
         }
     }
 }
@@ -1436,6 +1535,13 @@ pub struct DecodedImage {
     /// colour space (concept E7); rasterizers ignore it. `None`
     /// default — every existing constructor stays valid.
     pub icc: Option<bytes::Bytes>,
+    /// The intent and black-point compensation the picture's colours
+    /// convert with when the rasterizer decodes `encoded` lazily (the
+    /// wasm32 path): the frame's `ImageRenderingIntent`, or the
+    /// document's Color Settings. `None` is the engine default (relative
+    /// colorimetric with BPC). An eagerly decoded `rgba` was converted
+    /// with it already.
+    pub rendering: Option<paged_color::cms::Rendering>,
 }
 
 /// Stroke parameters. Widths are in pt.
@@ -1599,7 +1705,7 @@ pub struct CellKey {
 }
 
 /// Concept 3 — the per-list glyph capture (see [`GlyphRunEntry`]).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct GlyphRunTable {
     pub entries: Vec<GlyphRunEntry>,
     /// The paragraph the producer is emitting now (ADR 182): every entry
@@ -1657,7 +1763,7 @@ impl LinkRegionTable {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DisplayList {
     pub paths: PathBuffer,
     pub commands: Vec<DisplayCommand>,
@@ -1665,7 +1771,7 @@ pub struct DisplayList {
     pub radial_gradients: Vec<RadialGradient>,
     pub sweep_gradients: Vec<SweepGradient>,
     pub images: Vec<DecodedImage>,
-    /// Engine ADR 1040 — the mesh shadings [`DisplayCommand::MeshShade`]
+    /// Engine ADR 1048 — the mesh shadings [`DisplayCommand::MeshShade`]
     /// draws, indexed by [`crate::mesh::MeshId`].
     pub meshes: Vec<crate::mesh::MeshShading>,
     /// Engine ADR 1041 — the pattern uses [`Paint::Pattern`] names,
@@ -1687,6 +1793,9 @@ pub struct DisplayList {
     /// `PipelineOptions::collect_link_regions`; rasterizers never read
     /// it.
     pub link_regions: Option<LinkRegionTable>,
+    /// Engine ADR 1039 — the symbol definitions this list replays, by
+    /// [`DisplayCommand::BeginSymbol::form`]. Rasterizers never read it.
+    pub symbol_forms: Vec<SymbolForm>,
 }
 
 impl DisplayList {
@@ -1713,6 +1822,31 @@ impl DisplayList {
             for entry in table.entries.iter_mut() {
                 if entry.command_index as usize >= at {
                     entry.command_index += 1;
+                }
+            }
+        }
+    }
+
+    /// Move the commands from `from` to the end of the list so they start
+    /// at `at` (`at <= from`), keeping the glyph-run side channel in step:
+    /// an entry on a moved command moves with it, one between `at` and
+    /// `from` moves past the block. Used to splice what an emitter appended
+    /// back into an earlier slot, such as a frame's module content into
+    /// the frame's object group (engine ADR 1046).
+    pub fn move_tail_to(&mut self, from: usize, at: usize) {
+        let len = self.commands.len();
+        if from >= len || at >= from {
+            return;
+        }
+        let n = len - from;
+        self.commands[at..].rotate_right(n);
+        if let Some(table) = self.glyph_runs.as_mut() {
+            for entry in table.entries.iter_mut() {
+                let i = entry.command_index as usize;
+                if i >= from {
+                    entry.command_index -= (from - at) as u32;
+                } else if i >= at {
+                    entry.command_index += n as u32;
                 }
             }
         }
@@ -1785,6 +1919,7 @@ impl DisplayList {
             spot_inks: self.spot_inks.clone(),
             glyph_runs: None,
             link_regions: None,
+            symbol_forms: Vec::new(),
         };
         list.translate(dx, dy);
         list
@@ -2016,6 +2151,63 @@ mod tests {
         );
     }
 
+    /// Engine ADR 1046 — a tail spliced back into an earlier slot keeps
+    /// every glyph-run entry on the command it was captured for.
+    #[test]
+    fn move_tail_to_moves_commands_and_their_glyph_runs() {
+        let mut list = DisplayList::new();
+        let path_id = list.paths.push_anon(PathData::default());
+        let fill = |x: f32| DisplayCommand::FillPath {
+            path_id,
+            paint: Paint::Solid(Color::WHITE),
+            transform: Transform([1.0, 0.0, 0.0, 1.0, x, 0.0]),
+        };
+        for x in 0..5 {
+            list.push(fill(x as f32));
+        }
+        let entry = |i: u32| GlyphRunEntry {
+            command_index: i,
+            font_id: 0,
+            face_id: None,
+            glyph_id: i,
+            font_size: 10.0,
+            transform: Transform::IDENTITY,
+            paint: Paint::Solid(Color::WHITE),
+            unicode: None,
+            is_stroke: false,
+            structure: None,
+        };
+        list.glyph_runs = Some(GlyphRunTable {
+            entries: (0..5).map(entry).collect(),
+            current: None,
+        });
+        // Commands 3 and 4 move to slot 1.
+        list.move_tail_to(3, 1);
+        let xs: Vec<f32> = list
+            .commands
+            .iter()
+            .map(|c| c.clone().transform_mut().0[4])
+            .collect();
+        assert_eq!(xs, vec![0.0, 3.0, 4.0, 1.0, 2.0]);
+        let table = list.glyph_runs.as_ref().unwrap();
+        for e in &table.entries {
+            let x = list.commands[e.command_index as usize]
+                .clone()
+                .transform_mut()
+                .0[4];
+            assert_eq!(
+                x, e.glyph_id as f32,
+                "entry {} follows its command",
+                e.glyph_id
+            );
+        }
+        // Out-of-range or backwards requests change nothing.
+        let before = list.commands.len();
+        list.move_tail_to(9, 0);
+        list.move_tail_to(2, 2);
+        assert_eq!(list.commands.len(), before);
+    }
+
     #[test]
     fn path_buffer_interns_by_key() {
         let mut pb = PathBuffer::new();
@@ -2058,6 +2250,42 @@ mod tests {
             list.digest()
         };
         assert_ne!(digest(FillRule::NonZero), digest(FillRule::EvenOdd));
+    }
+
+    /// Engine ADR 1039 — the symbol markers are part of what a list draws
+    /// in the digest (ADR 101): a replayed definition digests differently
+    /// from the same commands drawn loose, and a translate moves the
+    /// marker's placement with the copy.
+    #[test]
+    #[allow(non_snake_case)]
+    fn symbol_markers_digest_and_translate__feat__frames_paths_symbol_instance() {
+        let build = |markers: bool| {
+            let mut list = DisplayList::new();
+            let path_id = list.paths.push_anon(PathData::default());
+            if markers {
+                list.push(DisplayCommand::BeginSymbol {
+                    form: 0,
+                    transform: Transform::translate(5.0, 6.0),
+                });
+            }
+            list.push(DisplayCommand::FillPath {
+                path_id,
+                paint: Paint::Solid(Color::BLACK),
+                transform: Transform::translate(5.0, 6.0),
+            });
+            if markers {
+                list.push(DisplayCommand::EndSymbol(Transform::IDENTITY));
+            }
+            list
+        };
+        assert_ne!(build(true).digest(), build(false).digest());
+        assert_eq!(build(true).digest(), build(true).digest());
+        let mut moved = build(true);
+        moved.translate(1.0, 2.0);
+        let DisplayCommand::BeginSymbol { transform, .. } = moved.commands[0] else {
+            panic!("the marker first");
+        };
+        assert_eq!(transform.0, [1.0, 0.0, 0.0, 1.0, 6.0, 8.0]);
     }
 
     #[test]

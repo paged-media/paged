@@ -1,0 +1,12 @@
+{
+  "kind": "struct",
+  "fields": {
+    "bytes": {
+      "kind": "bytes",
+      "mime": ["application/rtf", "text/plain"]
+    },
+    "fileName": {
+      "kind": "text"
+    }
+  }
+}

@@ -29,7 +29,7 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
 
-import { openCanvas } from "./fidelity/canvas-driver";
+import { openCanvas, loadViaFileInput } from "./fidelity/canvas-driver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,16 +38,7 @@ const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idml`;
 const FIXTURE_MULTI = `${REPO_ROOT}/corpus/idml/generated/geometry.idml`;
 
 async function loadFixture(page: Page, path = FIXTURE) {
-  await page.setInputFiles('input[type="file"]', path);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
-            .ready,
-      ),
-    )
-    .toBe(true);
+  await loadViaFileInput(page, path);
 }
 
 // Minimal client view used by the wire-layer evaluates.

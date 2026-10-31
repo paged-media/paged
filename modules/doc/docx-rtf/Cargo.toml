@@ -1,0 +1,14 @@
+[package]
+name = "docx-rtf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.doc RTF reader (doc ADR 616): Rich Text Format onto the docx-core model — paragraphs, runs, fonts, colours, styles, lists, tables, PNG/JPEG pictures, hyperlinks and page setup. A tokenizer and a group-state machine, no dependency beyond docx-core; malformed input reads as far as it goes and never panics."
+
+[lints]
+workspace = true
+
+[dependencies]
+docx-core.workspace = true

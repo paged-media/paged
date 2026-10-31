@@ -77,6 +77,24 @@ impl DocSession {
         })
     }
 
+    /// Open a file of any format paged.doc reads (doc ADR 616): the bytes
+    /// decide the format; templates, RTF and OpenDocument become the
+    /// `.docx` this session works on, `.doc` is refused.
+    pub fn open_file(
+        bytes: &[u8],
+        name: &str,
+        options: crate::files::FileOptions,
+    ) -> Result<(DocSession, crate::files::OpenReport), String> {
+        let (docx, report) = crate::files::to_docx(bytes, name, options)?;
+        Ok((DocSession::load(&docx)?, report))
+    }
+
+    /// The `.docx` bytes this session works on (for a converted file, the
+    /// written package; the source part the bundle stores).
+    pub fn source(&self) -> &[u8] {
+        &self.source
+    }
+
     /// The Tier-0 lowering (the IR the host-model turns into mutations).
     pub fn lowered(&self) -> LoweredDoc {
         lower_with(&self.model, self.options)
@@ -162,7 +180,7 @@ impl DocSession {
     /// cell list) and `para` (the paragraph in the cell); the cell writes
     /// become [`CellRunEdit`]s.
     pub fn object_edits(&self, edits: &ObjectEdits) -> Result<EditSet, String> {
-        let ir = self.lowered();
+        let ir = docx_export::notes::strip_lowered(self.lowered());
         let paragraph = |block: usize| match ir.story.blocks.get(block) {
             Some(LoweredBlock::Paragraph(p)) => Ok(p),
             Some(LoweredBlock::Table(_)) => Err(format!(
@@ -344,11 +362,47 @@ impl DocSession {
         styles: &[docx_export::StyleIn],
         layout: docx_export::TableParagraphs,
     ) -> Result<(Vec<u8>, Vec<String>), String> {
-        let baseline = self.lowered();
-        let mut coloured = baseline.clone();
+        self.save_edited_structure(
+            content,
+            cells,
+            tables,
+            colors,
+            styles,
+            layout,
+            &docx_export::structure::StructureIn::default(),
+        )
+    }
+
+    /// [`Self::save_edited_full`] with the document's structure read back
+    /// too (doc ADRs 611/612, [`docx_export::structure::StructureIn`]):
+    /// the master stories showing each header and footer part, the
+    /// engine's notes in document order and the body's text anchors. A
+    /// header or footer edit is spliced into its part; a note's text edit
+    /// into its notes part; a note added on the canvas is appended to the
+    /// notes part (made, with its relationship and content type, when the
+    /// document had none) and its reference written where it stands; a
+    /// removed note leaves the part with its reference; a field or a
+    /// bookmark added on the canvas is written as Word's complex field or
+    /// `w:bookmarkStart`/`w:bookmarkEnd` where it stands.
+    #[allow(clippy::too_many_arguments)]
+    pub fn save_edited_structure(
+        &self,
+        content: &StoryContentIn,
+        cells: &[CellContentIn],
+        tables: &[docx_export::TableContentIn],
+        colors: &std::collections::BTreeMap<String, String>,
+        styles: &[docx_export::StyleIn],
+        layout: docx_export::TableParagraphs,
+        structure: &docx_export::structure::StructureIn,
+    ) -> Result<(Vec<u8>, Vec<String>), String> {
+        use docx_export::structure as st;
+        // The body as the canvas holds it: note references as the engine's
+        // marker characters, fields as runs (doc ADR 611).
+        let marked = self.lowered();
+        let mut coloured = marked.clone();
         docx_export::add_canvas_colors(&mut coloured, colors);
         let plan =
-            docx_export::plan_styles(&self.model, &baseline, &coloured, &self.bindings, styles);
+            docx_export::plan_styles(&self.model, &marked, &coloured, &self.bindings, styles);
         // The created styles' tokens name their new Word ids.
         let mut bindings = self.bindings.clone();
         for (token, id) in plan.created_ids(true) {
@@ -362,15 +416,103 @@ impl DocSession {
                 .insert(token.to_string(), id.to_string());
         }
         let created = |t: &str| bindings.para_token_to_style_id.contains_key(t);
-        let mut edited = overlay_story_content_with(&baseline, content, layout, &created);
+        // Doc ADR 613 — the read-back paragraphs lined up with the blocks
+        // (tracked paragraph marks inserted or removed in paged).
+        let (prepared, review_plan) = docx_export::review::prepare(&marked, content, layout);
+        let content = &prepared;
+        let mut edited_marked = overlay_story_content_with(&marked, content, layout, &created);
+        // What the canvas put into the text that is not text: notes kept,
+        // added and removed; new fields (taken out of the edited runs).
+        let changes = st::extract_structure(&marked, &mut edited_marked);
+        // Save-back works on Word's text, where a note reference is an
+        // element, not the engine's marker character.
+        let baseline = docx_export::notes::strip_lowered(marked.clone());
+        let mut edited = docx_export::notes::strip_lowered(edited_marked);
         docx_export::add_canvas_colors(&mut edited, colors);
-        let mut skips = docx_export::overlay_tables(&mut edited, tables);
+        let mut skips = changes.skips.clone();
+        skips.extend(docx_export::overlay_tables(&mut edited, tables));
         skips.extend(overlay_cells_known(&mut edited, cells, &created));
-        let edits = diff(&baseline, &edited, &bindings);
+        // Doc ADR 613 — the paragraphs whose review markup changed are
+        // written whole, before the run patcher; the differ sees them as
+        // they were.
+        skips.extend(review_plan.skips.iter().cloned());
+        let dirty = docx_export::review::dirty_blocks(&baseline, &edited, &bindings, &review_plan);
+        let para_edits = docx_export::review::para_edits(&baseline, &edited, &bindings, &dirty);
+        let masked = docx_export::review::masked(&baseline, &edited, &dirty, &review_plan);
+        let mut edits = diff(&baseline, &masked, &bindings);
         let mut package = self.package.clone();
-        skips.extend(
-            apply_edits(&mut package, &self.main_part, &bindings, &edits)
+        let note_plan = st::plan_new_notes(&package, &self.main_part, &changes);
+        let bookmarks = st::new_bookmarks(&marked, content, &structure.anchors, layout);
+        let atoms = st::render_atoms(
+            &self.model,
+            &baseline,
+            &bindings,
+            &changes,
+            &note_plan,
+            &bookmarks,
+            package
+                .require(&self.main_part)
                 .map_err(|e| e.to_string())?,
+        );
+        let mut atoms = atoms;
+        let _ = docx_export::review::take_dirty(&mut edits, &mut atoms, &dirty);
+        let source_comment_ids: std::collections::BTreeSet<i64> =
+            self.model.comments.iter().map(|c| c.id).collect();
+        let review = docx_export::review::write_paragraphs(
+            &mut package,
+            &self.main_part,
+            &baseline,
+            &edited,
+            &bindings,
+            &dirty,
+            &review_plan,
+            &para_edits,
+            &source_comment_ids,
+        )
+        .map_err(|e| e.to_string())?;
+        skips.extend(review.skips);
+        skips.extend(
+            docx_export::apply_edits_with(&mut package, &self.main_part, &bindings, &edits, &atoms)
+                .map_err(|e| e.to_string())?,
+        );
+        docx_export::review::remove_joined(&mut package, &self.main_part)
+            .map_err(|e| e.to_string())?;
+        skips.extend(
+            docx_export::review::save_comments(
+                &mut package,
+                &self.main_part,
+                &marked,
+                &self.model.comments,
+                &review_plan,
+                &review.comment_ids,
+            )
+            .map_err(|e| e.to_string())?,
+        );
+        skips.extend(
+            st::save_notes(
+                &mut package,
+                &self.main_part,
+                &self.model,
+                &marked,
+                &changes,
+                &note_plan,
+                structure,
+            )
+            .map_err(|e| e.to_string())?,
+        );
+        skips.extend(
+            st::save_headers(&mut package, &self.model, &marked, &structure.headers)
+                .map_err(|e| e.to_string())?,
+        );
+        // Doc ADR 614: the text boxes placed as page items.
+        skips.extend(
+            docx_export::textbox::save_text_boxes(
+                &mut package,
+                &self.model,
+                &marked,
+                &structure.text_boxes,
+            )
+            .map_err(|e| e.to_string())?,
         );
         skips.extend(
             docx_export::apply_style_plan(&mut package, self.styles_part.as_deref(), &plan)

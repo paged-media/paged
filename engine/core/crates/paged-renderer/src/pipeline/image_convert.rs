@@ -75,9 +75,19 @@ pub(super) fn cmyk32_to_rgba(
     w: u32,
     h: u32,
     icc_profile: Option<&[u8]>,
+    rendering: paged_color::cms::Rendering,
 ) -> Option<Vec<u8>> {
     if let Some(profile) = icc_profile {
-        match paged_color::IccTransform::cmyk_to_linear_rgb(profile) {
+        let built = if rendering == paged_color::cms::Rendering::default() {
+            paged_color::IccTransform::cmyk_to_linear_rgb(profile)
+        } else {
+            paged_color::IccTransform::cmyk_to_linear_rgb_with(
+                profile,
+                rendering.intent,
+                rendering.bpc,
+            )
+        };
+        match built {
             Ok(xform) => {
                 if let Some(rgba) = cmyk32_to_rgba_via_icc(src, w, h, &xform) {
                     tracing::debug!(

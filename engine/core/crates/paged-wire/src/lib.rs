@@ -123,6 +123,9 @@ pub enum ElementId {
     Polygon(String),
     GraphicLine(String),
     Group(String),
+    /// Engine ADR 1039 — a symbol instance. Rides v78 as an additive
+    /// enum member.
+    Instance(String),
     /// SDK Phase 3 — addresses a half-open `[start, end)` character
     /// range inside a story for character / paragraph property
     /// writes. Maps to `paged_mutate::NodeId::StoryRange { ... }`.
@@ -162,7 +165,8 @@ impl ElementId {
             | ElementId::Oval(id)
             | ElementId::Polygon(id)
             | ElementId::GraphicLine(id)
-            | ElementId::Group(id) => id,
+            | ElementId::Group(id)
+            | ElementId::Instance(id) => id,
             ElementId::StoryRange { story_id, .. } => story_id,
             // The story is the container; table / cell ids ride the
             // variant. `raw_id` returns the story for table addresses
@@ -210,6 +214,7 @@ impl ElementId {
             ElementId::Polygon(_) => "Polygon",
             ElementId::GraphicLine(_) => "GraphicLine",
             ElementId::Group(_) => "Group",
+            ElementId::Instance(_) => "Instance",
             ElementId::StoryRange { .. } => "StoryRange",
             ElementId::Table { .. } => "Table",
             ElementId::TableCell { .. } => "TableCell",
@@ -805,6 +810,7 @@ impl VirtualTarget {
             VirtualTarget::Cell { .. } => "cell",
             VirtualTarget::Element { element_id } => match element_id {
                 ElementId::Group(_) => "group",
+                ElementId::Instance(_) => "instance",
                 ElementId::StoryRange { .. } => "storyRange",
                 ElementId::Table { .. } => "table",
                 ElementId::TableCell { .. } => "cell",
@@ -871,6 +877,7 @@ impl VirtualTarget {
             | Address::Polygon { .. }
             | Address::GraphicLine { .. }
             | Address::Group { .. }
+            | Address::Instance { .. }
             | Address::StoryRange { .. } => VirtualTarget::Element {
                 element_id: a.to_element_id().expect("a page item or a story range"),
             },
@@ -999,6 +1006,136 @@ impl From<Vec<u8>> for ByteBuf {
     fn from(v: Vec<u8>) -> Self {
         Self(v)
     }
+}
+
+/// Engine ADR 1021 — how a find pattern reads.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum FindMode {
+    /// The text as written (Word's specials `^p` `^t` `^l` `^m` `^?` `^#`
+    /// `^$` `^^` still apply).
+    #[default]
+    Literal,
+    /// Word's wildcards: `?` `*` `@` `<` `>` `[…]` `[!…]` `{n;m}` `(…)`.
+    Wildcards,
+    /// An ECMAScript regular expression.
+    Regex,
+}
+
+/// Engine ADR 1021 — what to find.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FindSpec {
+    pub find: String,
+    /// One story; every story when absent.
+    #[serde(default)]
+    pub story_id: Option<String>,
+    #[serde(default)]
+    pub mode: FindMode,
+    #[serde(default)]
+    pub match_case: bool,
+    #[serde(default)]
+    pub whole_word: bool,
+    /// Only hits in paragraphs of this style (`ParagraphStyle/<id>`).
+    #[serde(default)]
+    pub paragraph_style: Option<String>,
+    /// Only hits whose runs all carry this character style.
+    #[serde(default)]
+    pub character_style: Option<String>,
+    /// At most this many hits.
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+/// Engine ADR 1021 — one find hit.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FindHit {
+    pub story_id: String,
+    /// `[start, end)` in caret offsets: UTF-8 bytes, one per paragraph
+    /// break (what `insertText` / `deleteRange` take).
+    pub start: u32,
+    pub end: u32,
+    /// The same hit in story characters (what `applyStyle` and the
+    /// story-range paths take).
+    pub char_start: u32,
+    pub char_end: u32,
+    /// The paragraph the hit starts in.
+    pub paragraph: u32,
+    /// The matched text.
+    pub text: String,
+    /// Up to 30 characters either side, within the paragraph.
+    pub context: String,
+    /// Where the hit starts in `context`, in bytes.
+    pub context_offset: u32,
+    /// The regex groups `$1`…, `None` for one that did not take part.
+    #[serde(default)]
+    pub groups: Vec<Option<String>>,
+}
+
+/// Engine ADR 1022 — where a growing chain's first page must fall (Word's
+/// section break type).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum SectionStartSpec {
+    /// Any page (Word's "next page").
+    #[default]
+    NewPage,
+    /// An odd-numbered page: a blank page goes in front otherwise.
+    OddPage,
+    /// An even-numbered page: a blank page goes in front otherwise.
+    EvenPage,
+}
+
+/// Engine ADR 1022 — what a cross-reference points at: a bookmark (a text
+/// destination, by its name or `Self`), or a paragraph of a story (a
+/// heading), which gets a hidden `_Ref` bookmark of its own as Word gives it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CrossReferenceTarget {
+    #[serde(default)]
+    pub bookmark: Option<String>,
+    #[serde(default)]
+    pub story_id: Option<String>,
+    #[serde(default)]
+    pub paragraph: Option<u32>,
+}
+
+/// Engine ADR 1022 — what a cross-reference says (Word's "Insert reference
+/// to").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum CrossReferenceKind {
+    /// The target's text (`REF`).
+    #[default]
+    Text,
+    /// The target's page number (`PAGEREF`).
+    PageNumber,
+    /// "above" / "below", or "on page N" from another page (`PAGEREF \p`).
+    AboveBelow,
+}
+
+/// Engine ADR 1022 — one level of a table of contents: paragraphs in
+/// `style` (a `ParagraphStyle/…` id) become entries at `level` (1 = top).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct TocLevelSpec {
+    pub style: String,
+    pub level: u32,
 }
 
 /// A content-space mutation. Phase 1 carries the *envelope* only —
@@ -1152,6 +1289,21 @@ pub enum Mutation {
     /// step.
     DeleteHyperlink {
         hyperlink_id: String,
+    },
+    /// v78 rider (engine ADR 1026) — make page item `item` (a page's or a
+    /// master's) the source of a new hyperlink: a clickable shape, a
+    /// PowerPoint shape's click action. It goes to `page` (a page `Self`)
+    /// when given, else to `url`. `name` names the link. Reads back in
+    /// `documentCollection:hyperlinks` with `sourceItem`. Undo
+    /// (`deleteHyperlink` likewise) removes the source with the link.
+    InsertItemHyperlink {
+        item: String,
+        #[serde(default)]
+        url: String,
+        #[serde(default)]
+        page: Option<PageId>,
+        #[serde(default)]
+        name: Option<String>,
     },
     /// v0.71.13 — edit a hyperlink (ADR 164): `name` renames it (empty clears
     /// it); `page` (wins) or `url` sends it somewhere new. Its own
@@ -1570,12 +1722,17 @@ pub enum Mutation {
         miter_limit: f32,
     },
     /// B-05 (protocol v30) — inset (`delta < 0`) / outset
-    /// (`delta > 0`) of a single closed contour.
+    /// (`delta > 0`). Engine ADR 1019: any path — a compound path keeps
+    /// its holes (each contour moves by its nesting), and an OPEN contour
+    /// becomes the two-sided band, or with `side` `"left"` / `"right"`
+    /// one open parallel path on that side of its direction on the page.
     OffsetPath {
         element_id: ElementId,
         delta: f32,
         join: String,
         miter_limit: f32,
+        #[serde(default)]
+        side: Option<String>,
     },
     /// B-05 (protocol v30) — re-express the path within `tolerance`
     /// pt max deviation with fewer anchors.
@@ -1706,6 +1863,10 @@ pub enum Mutation {
         mask_type: Option<String>,
         #[serde(default)]
         invert: Option<bool>,
+        /// Illustrator's Clip: `false` lets the area the artwork does not
+        /// paint show the target. Absent is `true`. Additive (no bump).
+        #[serde(default)]
+        clip: Option<bool>,
     },
     /// v58 (C-28) — **Release Opacity Mask**: drop the relation; the
     /// artwork returns to top level, geometry untouched. Rides
@@ -2222,6 +2383,214 @@ pub enum Mutation {
         path: paged_mutate::PropertyPath,
         value: paged_mutate::Value,
     },
+    // rides v76 (added before first consumer sync) — engine ADR 1018 / 1021.
+    /// Engine ADR 1018 — re-parent style `style_id` of `collection` onto
+    /// `based_on` (`None`: no parent). Refused when that would make the
+    /// style inherit from itself. Undoable in one step.
+    SetStyleBasedOn {
+        collection: paged_mutate::StyleCollection,
+        style_id: String,
+        #[serde(default)]
+        based_on: Option<String>,
+    },
+    /// Engine ADR 1018 — the list level of the paragraphs touching story
+    /// chars `[start, end)` (the caret's paragraph when equal): `level`
+    /// 1–9, or `delta` levels from where each stands (Tab / Shift+Tab).
+    SetListLevel {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        level: Option<u32>,
+        #[serde(default)]
+        delta: Option<i32>,
+    },
+    /// Engine ADR 1018 — Word's Restart Numbering (or, with
+    /// `continueNumbering`, Continue Numbering) on the paragraphs touching
+    /// `[start, end)`, at `startAt` when given.
+    RestartNumbering {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        start_at: Option<i32>,
+        #[serde(default)]
+        continue_numbering: bool,
+    },
+    /// Engine ADR 1021 — find `spec` and replace each hit (the first only
+    /// unless `replaceAll`) with `replace` (Word's `^p` `^t` `^l` `^&` `^^`,
+    /// `$1`… in regex mode, `\1`… with wildcards), styled with
+    /// `paragraphStyle` / `characterStyle` when given. Replace All is ONE
+    /// undo step. Refused when nothing matches.
+    FindReplace {
+        spec: FindSpec,
+        replace: String,
+        #[serde(default)]
+        replace_all: bool,
+        #[serde(default)]
+        paragraph_style: Option<String>,
+        #[serde(default)]
+        character_style: Option<String>,
+    },
+    // rides v77 — engine ADR 1022.
+    /// Engine ADR 1022 — Word's F9: recompute the Word fields' results
+    /// (every story's, or story `storyId`'s, or only the field starting at
+    /// story char `offset` of that story) over the current layout. `DATE`
+    /// and `TIME` take `now` (`2026-10-25T14:05:09`; the engine reads no
+    /// clock) and keep their result without it. Undoable in one step.
+    /// Refused when nothing changes.
+    UpdateFields {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        offset: Option<u32>,
+        #[serde(default)]
+        now: Option<String>,
+    },
+    /// Engine ADR 1022 — Word's Insert ▸ Bookmark: a text destination named
+    /// `name` at story char `offset` (or the caret offset `contentOffset`).
+    /// The model mints its id and reports it in the reply. Undoable.
+    InsertTextAnchor {
+        story_id: String,
+        offset: u32,
+        #[serde(default)]
+        content_offset: Option<u32>,
+        name: String,
+    },
+    /// Engine ADR 1022 — delete text destination `anchorId` (a bookmark).
+    /// Fields that name it show "Error! Reference source not found." at
+    /// their next update, as Word's do. Undoable.
+    DeleteTextAnchor {
+        anchor_id: String,
+    },
+    /// Engine ADR 1022 — Word's Insert Cross-reference at story char
+    /// `offset` (or the caret offset `contentOffset`): a `REF` (the target's
+    /// text), `PAGEREF` (its page) or `PAGEREF \p` (above / below) field
+    /// with its result computed now. A paragraph target gets a hidden
+    /// `_Ref` bookmark first. Undoable in one step.
+    InsertCrossReference {
+        story_id: String,
+        offset: u32,
+        #[serde(default)]
+        content_offset: Option<u32>,
+        target: CrossReferenceTarget,
+        #[serde(default)]
+        refer_to: CrossReferenceKind,
+        /// Word's "Insert as hyperlink" (`\h`), on by default.
+        #[serde(default)]
+        hyperlink: Option<bool>,
+    },
+    /// Engine ADR 1022 — Word's Insert Table of Contents at story char
+    /// `offset` (or the caret offset `contentOffset`): the TOC style
+    /// `tocStyleName` (default "Table of Contents") is made from `levels`
+    /// when the document lacks it, the entry styles `TOC 1`… (a right tab
+    /// with `leader`, default ".", at `tabPosition` pt or the frame's
+    /// width) when missing, and the entries are written in paragraphs of
+    /// their own before the caret's paragraph (after it when the caret is
+    /// inside), with page numbers over the layout the insertion makes.
+    /// `updateTableOfContents` on the story rewrites them. Undoable in one
+    /// step.
+    InsertTableOfContents {
+        story_id: String,
+        offset: u32,
+        #[serde(default)]
+        content_offset: Option<u32>,
+        levels: Vec<TocLevelSpec>,
+        #[serde(default)]
+        title: Option<String>,
+        #[serde(default)]
+        toc_style_name: Option<String>,
+        #[serde(default)]
+        page_numbers: Option<bool>,
+        #[serde(default)]
+        leader: Option<String>,
+        #[serde(default)]
+        tab_position: Option<f32>,
+    },
+    /// Engine ADR 1022 — Word's Mark Entry (`XE`) / InDesign's New Page
+    /// Reference: an index marker for the topic path `topic` (level 1
+    /// first, up to four) in the paragraph holding story char `offset` (or
+    /// the caret offset `contentOffset`). Missing topics are created.
+    /// `generateIndex` lists it. Undoable.
+    InsertIndexMarker {
+        story_id: String,
+        offset: u32,
+        #[serde(default)]
+        content_offset: Option<u32>,
+        topic: Vec<String>,
+        #[serde(default)]
+        sort_order: Option<String>,
+    },
+    /// Engine ADR 1040 — record tracked change `change` over story chars
+    /// `[start, end)` (contiguous, as `applyStyle` counts them; of `cell`
+    /// when set), or on paragraph `paragraph` for the paragraph kinds
+    /// (`paraProps`, `insertMark`, `deleteMark`). What an importer writes
+    /// for Word's `w:ins`, `w:del`, `w:rPrChange` and `w:pPrChange`. The
+    /// reply's `createdId` is the change's id. Undoable.
+    RecordChange {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        #[serde(default)]
+        paragraph: Option<u32>,
+        change: paged_mutate::operation::ChangeSpec,
+    },
+    /// Engine ADR 1040 — Accept: tracked change `id`, every change by
+    /// `author`, or every change (in story `storyId` only when set). One
+    /// undo step.
+    AcceptChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1040 — Reject, scoped as `acceptChange`. One undo step.
+    RejectChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1020 — New Comment on story chars `[start, end)` (not
+    /// empty). The reply's `createdId` is the comment's id. Undoable.
+    InsertComment {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        comment: paged_mutate::operation::CommentSpec,
+    },
+    /// Engine ADR 1020 — Reply to comment `parentId` (a root, or a reply,
+    /// whose root the reply joins). `createdId` is the reply's id. Undoable.
+    ReplyComment {
+        parent_id: String,
+        comment: paged_mutate::operation::CommentSpec,
+    },
+    /// Engine ADR 1020 — Resolve (or reopen, `resolved: false`) the thread
+    /// of comment `commentId`. Undoable.
+    ResolveComment {
+        comment_id: String,
+        resolved: bool,
+    },
+    /// Engine ADR 1020 — delete comment `commentId`; a thread's root takes
+    /// its replies and its range with it. Undoable.
+    DeleteComment {
+        comment_id: String,
+    },
+    /// Engine ADR 1020 — rewrite comment `commentId`'s text. Undoable.
+    EditComment {
+        comment_id: String,
+        text: String,
+        #[serde(default)]
+        date: Option<String>,
+    },
     // ── W0.5 wire-expansion ─────────────────────────────────────────
     /// W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local
     /// `bounds` `(top, left, bottom, right)`; the model resolves the
@@ -2267,6 +2636,24 @@ pub enum Mutation {
         max_pages: Option<u32>,
         #[serde(default)]
         copy_frame_options: Option<bool>,
+        /// Engine ADR 1022 — the master every page of the chain takes
+        /// (Word's section header and footer; the odd pages' when
+        /// `evenMaster` is set). Absent: generated pages copy the page
+        /// before (ADR 026).
+        #[serde(default)]
+        master: Option<String>,
+        /// Engine ADR 1022 — the chain's first page's master (Word's
+        /// "different first page").
+        #[serde(default)]
+        first_master: Option<String>,
+        /// Engine ADR 1022 — the master of pages with an even number (Word's
+        /// "different odd & even").
+        #[serde(default)]
+        even_master: Option<String>,
+        /// Engine ADR 1022 — an odd- or even-page section start, which gets
+        /// a blank page in front when it lands on the wrong number.
+        #[serde(default)]
+        section_start: Option<SectionStartSpec>,
     },
     /// v71 — define a CUSTOM text variable (`<TextVariable
     /// VariableType="CustomTextType">`). Its `Self` is
@@ -2341,7 +2728,10 @@ pub enum Mutation {
     ActivateConditionSet {
         set: String,
     },
-    /// W0.5 — set a page's applied master (`None` detaches).
+    /// W0.5 — set a page's applied master (`None` detaches). v77 rider
+    /// (engine ADR 1026): `page` may be a master page, which bases that
+    /// master on `master` ("Based on Master"; a layout's slide master); a
+    /// cycle or more than four stacked masters is refused.
     ApplyMasterToPage {
         page: PageId,
         #[serde(default)]
@@ -2392,6 +2782,29 @@ pub enum Mutation {
         #[serde(default)]
         name: Option<String>,
     },
+    /// v78 rider (engine ADR 1026) — set page `page`'s override list (a
+    /// body page's or a master page's): the ids of the master items it
+    /// hides (the page holds its own copies, or does not show them). A
+    /// master page's list hides items of the masters it is based on on
+    /// every page that shows it. One undo step.
+    SetPageOverrides {
+        page: PageId,
+        overrides: Vec<String>,
+    },
+    /// v78 rider (engine ADR 1026) — override master items on body page
+    /// `page` (InDesign's Override; a slide's placeholder): copy `items`,
+    /// all on one master the page shows (its own or one it is based on),
+    /// onto the page where the master draws them, with their text, labels
+    /// and styles, and add them to the page's override list. The copies'
+    /// ids come back as `minted`. `emptyText` empties the copies' text,
+    /// keeping its formatting (a new slide's placeholders, whose master
+    /// text is a prompt). One undo step.
+    OverrideMasterItems {
+        page: PageId,
+        items: Vec<String>,
+        #[serde(default)]
+        empty_text: bool,
+    },
     /// v70 — move a page (its single-page spread) to follow `after`, or to
     /// the front when `after` is absent: a slide sorter's reorder. Spreads
     /// stacked down the pasteboard restack in the new order. One undo step.
@@ -2399,6 +2812,95 @@ pub enum Mutation {
         page: PageId,
         #[serde(default)]
         after: Option<PageId>,
+    },
+    /// v77 (engine ADR 1011) — put a page (an artboard) at `origin_pt`
+    /// on the canvas: its top-left in document points. Absent returns the
+    /// page to its default slot, the vertical stack the canvas always
+    /// showed. The page's content keeps its page coordinates and moves
+    /// with it; no other page moves; the page ORDER is `movePage`'s. One
+    /// undo step (a `batch` of them, e.g. rearranging every artboard, is
+    /// one too). Lowers to `set(page, page.canvasOrigin)`.
+    PlacePage {
+        page: PageId,
+        #[serde(default)]
+        origin_pt: Option<(f32, f32)>,
+    },
+    /// v78 (engine ADR 1039) — make a SYMBOL named `name` from the page
+    /// items `element_ids` (copied whole, as a copy takes them: text with
+    /// its story, gradients, placed images, groups). The centre of their
+    /// box is the symbol's registration point. With `replace` (the
+    /// default) the items leave the page and one instance takes their
+    /// place, drawn where they were; the reply's `createdId` is that
+    /// instance. `symbol_id` names the symbol (absent: minted, `Symbol/<n>`).
+    /// `nine_slice` sets 9-slice guides, `[left, top, right, bottom]`
+    /// insets. Refused, by name, for what a copy refuses and for an
+    /// instance among the items. One undo step.
+    CreateSymbol {
+        name: String,
+        element_ids: Vec<ElementId>,
+        #[serde(default)]
+        symbol_id: Option<String>,
+        #[serde(default)]
+        replace: Option<bool>,
+        #[serde(default)]
+        nine_slice: Option<[f32; 4]>,
+    },
+    /// v78 (engine ADR 1039) — edit the symbol `symbol_id`: new artwork
+    /// from `element_ids` (when given; every instance draws it at once),
+    /// a new `name`, new 9-slice guides (`[]` removes them). With
+    /// `replace` (default `true` when items are given) the items become an
+    /// instance. One undo step.
+    RedefineSymbol {
+        symbol_id: String,
+        #[serde(default)]
+        element_ids: Vec<ElementId>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        nine_slice: Option<Vec<f32>>,
+        #[serde(default)]
+        replace: Option<bool>,
+    },
+    /// v78 (engine ADR 1039) — place an instance of `symbol_id` on
+    /// `page_id`, its registration point at `at` (page space; absent: the
+    /// page's centre), scaled / rotated by `linear` (`[a, b, c, d]`, absent:
+    /// identity), on top of the spread's z-order. The reply's `createdId`
+    /// is the instance (`instance:<id>` addresses it). One undo step.
+    PlaceSymbolInstance {
+        symbol_id: String,
+        page_id: PageId,
+        #[serde(default)]
+        at: Option<(f32, f32)>,
+        #[serde(default)]
+        linear: Option<[f32; 4]>,
+        #[serde(default)]
+        nine_slice: Option<[f32; 4]>,
+    },
+    /// v78 (engine ADR 1039) — Break Link to Symbol: the instance
+    /// `element_id` becomes its symbol's artwork as ordinary page items,
+    /// where it was, in its z slot (a group when there is more than one
+    /// item or the instance overrides opacity or blending). The reply's
+    /// `minted` lists the new root. One undo step.
+    BreakSymbolLink {
+        element_id: ElementId,
+    },
+    /// v78 (engine ADR 1039) — delete the symbol `symbol_id`; its
+    /// instances are broken into ordinary items first, so nothing on the
+    /// page disappears. One undo step.
+    DeleteSymbol {
+        symbol_id: String,
+    },
+    /// Rides v78 (engine ADR 1042; added before the first consumer sync of
+    /// v78) — Expand Appearance: the item becomes, for good, the item its
+    /// live vector effects describe: its path the effected outline, the
+    /// vector entries gone from its effect stack, the paint moved where
+    /// the effect says (Outline Stroke fills with the stroke). An oval
+    /// becomes a polygon of the same id; a group with a Pathfinder effect
+    /// becomes one polygon of the group's id in the group's place. The
+    /// other effects stay live. Refused for an item without vector
+    /// effects. One undo step.
+    ExpandAppearance {
+        element_id: ElementId,
     },
     /// W0.5 — insert a `<Section>` anchored at `at_page`.
     InsertSection {
@@ -2584,6 +3086,7 @@ mutation_vocabulary! {
     InsertFootnote,
     DeleteFootnote,
     DeleteHyperlink,
+    InsertItemHyperlink,
     EditHyperlink,
     UpdateTableOfContents,
     GenerateIndex,
@@ -2703,6 +3206,24 @@ mutation_vocabulary! {
     RenameTableStyle,
     DeleteTableStyle,
     SetStyleProperty,
+    SetStyleBasedOn,
+    SetListLevel,
+    RestartNumbering,
+    FindReplace,
+    UpdateFields,
+    InsertTextAnchor,
+    DeleteTextAnchor,
+    InsertCrossReference,
+    InsertTableOfContents,
+    InsertIndexMarker,
+    RecordChange,
+    AcceptChange,
+    RejectChange,
+    InsertComment,
+    ReplyComment,
+    ResolveComment,
+    DeleteComment,
+    EditComment,
     InsertOval,
     InsertGuide,
     MoveGuide,
@@ -2713,10 +3234,19 @@ mutation_vocabulary! {
     ApplyMasterToPage,
     DuplicatePage,
     MovePage,
+    PlacePage,
+    CreateSymbol,
+    RedefineSymbol,
+    PlaceSymbolInstance,
+    BreakSymbolLink,
+    DeleteSymbol,
+    ExpandAppearance,
     OnMaster,
     CreateMaster,
     DeleteMaster,
     RenameMaster,
+    SetPageOverrides,
+    OverrideMasterItems,
     InsertSection,
     EditSection,
     DeleteSection,

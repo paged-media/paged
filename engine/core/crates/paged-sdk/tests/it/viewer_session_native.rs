@@ -48,7 +48,7 @@ use paged_renderer::BytesResolver;
 /// the native geometry check stacks pages exactly as the wasm session
 /// reports them. If the wasm constant ever changes, this assertion (and
 /// the viewer's continuous layout) must move together.
-const PAGE_GAP_PT: f32 = 24.0;
+const PAGE_GAP_PT: f32 = paged_model::CANVAS_PAGE_GAP_PT;
 
 fn fixture(name: &str) -> Option<Vec<u8>> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -170,12 +170,12 @@ fn viewer_session_page_layout_stacks_pages_with_constant_gap() {
         paged_sdk::viewer_build(&document, None, &BytesResolver::new()).expect("viewer_build");
     assert!(built.pages.len() >= 2, "need ≥2 pages to test stacking");
 
-    // Replicate `ViewerSession::page_layout`'s loop exactly.
-    let mut y_pt = 0.0_f32;
+    // `ViewerSession::page_layout` reads each page's canvas origin
+    // (engine ADR 1011); an unplaced document is the default stack.
     let mut rects: Vec<(f32, f32, f32)> = Vec::new(); // (y_pt, width_pt, height_pt)
     for page in &built.pages {
-        rects.push((y_pt, page.width_pt, page.height_pt));
-        y_pt += page.height_pt + PAGE_GAP_PT;
+        assert_eq!(page.canvas_origin.0, 0.0, "the default stack is at x = 0");
+        rects.push((page.canvas_origin.1, page.width_pt, page.height_pt));
     }
 
     // First page sits at the origin.
@@ -289,6 +289,40 @@ fn viewer_session_register_font_keys_and_is_consulted_on_load() {
             with_fonts.pages.len(),
             bare.pages.len(),
             "registering unrelated faces must not change the built page set"
+        );
+    }
+}
+
+/// Engine ADR 1011 — a placed page sits where it was put; the other pages
+/// keep their default slots, which is what `page_layout()` and `present()`
+/// read off the build.
+#[test]
+#[allow(non_snake_case)]
+fn a_placed_page_lays_out_at_its_canvas_origin__feat__layout_model_artboards() {
+    let Some(bytes) = fixture("geometry-groups.idml") else {
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/geometry-groups.idml is absent: run scripts/regen-fixtures.sh"
+        );
+    };
+    let mut document = idml_import::import_idml_doc(&bytes).expect("open fixture");
+    let stacked =
+        paged_sdk::viewer_build(&document, None, &BytesResolver::new()).expect("viewer_build");
+    assert!(stacked.pages.len() >= 2, "need ≥2 pages");
+    document
+        .spreads
+        .iter_mut()
+        .flat_map(|s| s.spread.pages.iter_mut())
+        .next()
+        .expect("a page")
+        .canvas_origin = Some([1200.0, -300.0]);
+    let built =
+        paged_sdk::viewer_build(&document, None, &BytesResolver::new()).expect("viewer_build");
+    assert_eq!(built.pages[0].canvas_origin, (1200.0, -300.0));
+    for i in 1..built.pages.len() {
+        assert_eq!(
+            built.pages[i].canvas_origin, stacked.pages[i].canvas_origin,
+            "page {i} keeps its slot"
         );
     }
 }

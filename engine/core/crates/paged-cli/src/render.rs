@@ -109,6 +109,8 @@ pub fn render_pages(
             format: Default::default(),
             background: Default::default(),
             trim: false,
+            quality: None,
+            story: None,
         })?;
         let png = expect_reply!(reply, WorkerToMainKind::SnapshotReady(p) => p,
             format!("render page {}", index + 1))?;

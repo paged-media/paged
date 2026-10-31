@@ -19,9 +19,17 @@ docx-import.workspace = true
 docx-lower.workspace = true
 docx-export.workspace = true
 docx-skeleton.workspace = true
+# Other formats onto docx-core (doc ADR 616).
+docx-rtf.workspace = true
+docx-odt = { workspace = true, optional = true }
 paged-ooxml.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[features]
+# OpenDocument text, behind a flag while it is new (the bundle asks for it too).
+default = ["odt"]
+odt = ["dep:docx-odt"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen.workspace = true

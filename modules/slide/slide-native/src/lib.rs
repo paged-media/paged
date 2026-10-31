@@ -36,19 +36,24 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use dml_native::{
+    axis_start, compound_type, placement, Mapper, Picture, Placement, StrokeFields, Transparency,
+    NONE_SWATCH,
+};
 use paged_model::{
     ArrowheadType, AutoSizingReferencePoint, AutoSizingType, Bounds, CellStyleDef, CharacterRun,
     CharacterStyleDef, ColorEntry, ColorModel, ColorSpace, DesignMap, DocumentPreference,
-    DropShadowSetting, FirstBaselineOffset, FrameEffects, FrameRef, GradientEntry,
-    GradientFeatherParams, GradientFeatherStop, GradientKind, GradientStopRef, Graphic, Group,
-    Justification, ObjectStyleDef, Page, Paragraph, ParagraphStyleDef, PathAnchor, Polygon,
-    Rectangle, Spread, SpreadRef, Story, StoryRef, StyleSheet, SwatchEntry, Table as NativeTable,
-    TableCell, TableColumn, TableRow, TableStyleDef, TextFrame as NativeFrame,
-    VerticalJustification, XmlTag, AUTO_PAGE_NUMBER_MARKER,
+    FirstBaselineOffset, FrameRef, Graphic, Group, Justification, ObjectStyleDef, Page, Paragraph,
+    ParagraphStyleDef, PathAnchor, Polygon, Rectangle, Spread, SpreadRef, Story, StoryRef,
+    StyleSheet, SwatchEntry, Table as NativeTable, TableCell, TableColumn, TableRow, TableStyleDef,
+    TextFrame as NativeFrame, VerticalJustification, XmlTag, AUTO_PAGE_NUMBER_MARKER,
 };
 use paged_scene::{Document, ParsedMasterSpread, ParsedSpread, ParsedStory};
 use slide_geom::SubPath;
+pub mod live;
+
 use slide_resolve::model::*;
+use slide_resolve::theme::{self as live_theme, Key, ThemeIr};
 
 /// What a deck became: the `.paged` package, and what the bundle needs
 /// beside it.
@@ -69,28 +74,6 @@ pub struct Built {
     pub stories: BTreeMap<String, String>,
     pub elements: BTreeMap<String, (&'static str, String)>,
     pub diagnostics: Vec<String>,
-}
-
-/// Gradient feather: type, angle and (location %, alpha) stops.
-type Feather = (&'static str, Option<f64>, Vec<(f64, f64)>);
-
-/// A gradient feather for a gradient whose stops differ in alpha: type,
-/// angle and (location %, alpha) stops. The engine's gradient swatches
-/// carry no alpha, so the fade rides on the item instead.
-fn feather_of(p: &Paint) -> Option<Feather> {
-    if p.uniform_alpha().is_some() {
-        return None;
-    }
-    let (kind, angle, stops) = match p {
-        Paint::Linear { stops, angle } => ("Linear", Some(-angle), stops),
-        Paint::Radial { stops, .. } => ("Radial", None, stops),
-        _ => return None,
-    };
-    Some((
-        kind,
-        angle,
-        stops.iter().map(|s| (s.pos, s.alpha)).collect(),
-    ))
 }
 
 /// Where PowerPoint puts a text frame's first baseline, in pt below the top
@@ -142,66 +125,26 @@ fn table_border_offset(t: &Table) -> (f64, f64) {
     (left, top)
 }
 
-/// The engine stroke style for a compound line: PowerPoint's `dbl` is two
-/// equal lines a third of the width apart, InDesign's Thick - Thick; its
-/// thick-thin pairs are InDesign's striped pairs. Triple lines are not
-/// modelled and draw single.
-fn compound_type(s: &Stroke) -> Option<&'static str> {
-    match s.compound.as_deref()? {
-        "dbl" => Some("StrokeStyle/$ID/ThickThick"),
-        "thickThin" => Some("StrokeStyle/$ID/ThickThin"),
-        "thinThick" => Some("StrokeStyle/$ID/ThinThick"),
-        _ => None,
-    }
-}
-
-/// A fill gradient's placement on a `w` × `h` item: a linear one's angle
-/// and span, a radial one's centre and reach.
-#[derive(Default)]
-struct GradientPlacement {
-    angle: Option<f32>,
-    length: Option<f32>,
-    start: Option<[f32; 2]>,
-}
-
-fn gradient_placement(p: &Paint, w: f64, h: f64) -> GradientPlacement {
-    match p {
-        // DrawingML angles run clockwise on a y-down page; the engine's
-        // gradient angle runs counter-clockwise.
-        Paint::Linear { angle, .. } => gradient_span(-angle, w, h),
-        Paint::Radial { center, .. } => GradientPlacement {
-            angle: None,
-            length: Some(n(slide_resolve::model::radial_reach(*center, w, h))),
-            start: Some([n(center.0 * w), n(center.1 * h)]),
-        },
-        _ => GradientPlacement::default(),
-    }
-}
-
-/// A linear gradient's angle and span: PowerPoint runs it across the box
-/// projected on its direction (w·|cos| + h·|sin|), the engine across the
-/// diagonal unless told the length.
-fn gradient_span(angle: f64, w: f64, h: f64) -> GradientPlacement {
-    let (sn, cs) = angle.to_radians().sin_cos();
-    GradientPlacement {
-        angle: Some(n(angle)),
-        length: Some(n(w * cs.abs() + h * sn.abs())),
-        start: None,
-    }
-}
-
 /// The width a `wrap="none"` text frame is widened to.
 const UNWRAPPED_WIDTH_PT: f64 = 4000.0;
 
 /// A length or coordinate as the model keeps it: to the thousandth of a
 /// point, the precision a deck has always opened with.
 fn n(v: f64) -> f32 {
-    let r = (v * 1000.0).round() / 1000.0;
-    if r == 0.0 {
-        0.0
-    } else {
-        r as f32
-    }
+    dml_native::pt(v)
+}
+
+/// A fill gradient's placement on an item whose local box is `(0, 0)`–
+/// `(w, h)` (its outline's coordinates, which `transform` places): the
+/// start stated for a linear gradient too. The engine starts an unplaced
+/// linear gradient at the box's bottom-left corner, which is PowerPoint's
+/// start only for an axis running up or right; a vertical or down-diagonal
+/// one would draw mostly its first stop (slide ADR 722, amendment
+/// 2026-10-28).
+fn box_placement(p: &Paint, w: f64, h: f64) -> Placement {
+    let mut gp = placement(p, w, h);
+    gp.start = axis_start(&gp, w, h);
+    gp
 }
 
 fn matrix(m: &[f64; 6]) -> [f32; 6] {
@@ -215,6 +158,40 @@ pub const SLIDE_LABEL_KEY: &str = "x-paged:media.paged.slide";
 /// envelope): its layout, speaker notes, the hidden flag and the
 /// transition. `None` when the slide has none of them.
 pub fn slide_label(s: &SlidePage) -> Option<String> {
+    slide_label_with(s, &BTreeMap::new())
+}
+
+/// A slide's animation timing with the document's names for its shapes
+/// (slide ADR 714): each shape target's `item` is the page element the
+/// top-level shape with that `cNvPr id` became (`elements`, by item id),
+/// its `key` the shape key `<part>#<id>`. A target that names no top-level
+/// shape of the slide keeps neither.
+pub fn named_timing(
+    s: &SlidePage,
+    elements: &BTreeMap<String, (&'static str, String)>,
+) -> Option<pptx_core::anim::Timing> {
+    let mut t = s.timing.clone()?;
+    let by_spid: BTreeMap<String, &Item> = s
+        .items
+        .iter()
+        .filter(|it| it.meta.shape_id != 0)
+        .map(|it| (it.meta.shape_id.to_string(), it))
+        .collect();
+    t.for_each_sp_target(&mut |spid, item, key| {
+        if let Some(it) = by_spid.get(spid.trim()) {
+            *key = Some(format!("{}#{}", s.part, slide_key(it)));
+            *item = elements.get(&it.id).map(|(_, id)| id.clone());
+        }
+    });
+    Some(t)
+}
+
+/// [`slide_label`] with the page elements the slide's items became (by
+/// item id), so the label's timing names them (slide ADR 714).
+pub fn slide_label_with(
+    s: &SlidePage,
+    elements: &BTreeMap<String, (&'static str, String)>,
+) -> Option<String> {
     let mut data = serde_json::Map::new();
     // The layout the slide was made from: its master spread's id. A new
     // slide "from this layout" copies a slide that has it.
@@ -244,6 +221,19 @@ pub fn slide_label(s: &SlidePage) -> Option<String> {
             }),
         );
     }
+    if let Some(t) = named_timing(s, elements) {
+        if let Ok(v) = serde_json::to_value(&t) {
+            data.insert("timing".into(), v);
+        }
+    }
+    // The section that starts here (slide ADR 720): it moves, duplicates
+    // and undoes with its first slide.
+    if let Some(sec) = &s.section {
+        data.insert(
+            "section".into(),
+            serde_json::json!({ "id": sec.id, "name": sec.name }),
+        );
+    }
     if data.is_empty() {
         return None;
     }
@@ -258,25 +248,54 @@ pub fn slide_label(s: &SlidePage) -> Option<String> {
 /// no edit (UX audit F-08). Non-ASCII characters are `\uXXXX` escapes, as
 /// the bundle's envelope writes them (labels travel through InDesign as
 /// XML attribute text).
-pub fn deck_label(name: &str, width: f64, height: f64, fonts: &[String]) -> String {
-    ascii(
-        &serde_json::json!({
-            "v": 1,
-            "data": {
-                "deck": {
-                    "name": name,
-                    "width": width,
-                    "height": height,
-                    "fonts": fonts,
-                },
-            },
-        })
-        .to_string(),
-    )
+///
+/// The deck's custom shows (slide ADR 720) ride the same label, by page id,
+/// so editing one is an undoable write of the document label.
+pub fn deck_label(
+    name: &str,
+    width: f64,
+    height: f64,
+    fonts: &[String],
+    custom_shows: &[slide_resolve::model::CustomShowPages],
+) -> String {
+    deck_label_with_theme(name, width, height, fonts, custom_shows, None)
+}
+
+/// [`deck_label`] with the deck's theme (slide ADR 713): `theme` is the
+/// theme the document shows (changed by Design ▸ Themes, in the same undo
+/// step as its swatches and styles), `deckTheme` the deck's own, which the
+/// gallery keeps offering.
+pub fn deck_label_with_theme(
+    name: &str,
+    width: f64,
+    height: f64,
+    fonts: &[String],
+    custom_shows: &[slide_resolve::model::CustomShowPages],
+    theme: Option<&ThemeIr>,
+) -> String {
+    let mut data = serde_json::json!({
+        "deck": {
+            "name": name,
+            "width": width,
+            "height": height,
+            "fonts": fonts,
+        },
+    });
+    if let Some(t) = theme {
+        data["theme"] = serde_json::to_value(t).unwrap_or_default();
+        data["deckTheme"] = serde_json::to_value(t).unwrap_or_default();
+    }
+    if !custom_shows.is_empty() {
+        data["customShows"] = custom_shows
+            .iter()
+            .map(|c| serde_json::json!({ "id": c.id, "name": c.name, "pages": c.pages }))
+            .collect();
+    }
+    ascii(&serde_json::json!({ "v": 1, "data": data }).to_string())
 }
 
 /// JSON text with every non-ASCII character as a `\uXXXX` escape.
-fn ascii(text: &str) -> String {
+pub(crate) fn ascii(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         if c.is_ascii() {
@@ -289,6 +308,90 @@ fn ascii(text: &str) -> String {
         }
     }
     out
+}
+
+/// The `Self` of master spread `id`'s page.
+pub fn master_page_id(id: &str) -> String {
+    format!("{id}pg")
+}
+
+/// A master spread's page metadata (slide ADR 712): whether it is a slide
+/// master or a layout, its part, a layout's type, its name and the
+/// preserve flag.
+pub fn master_label(m: &slide_resolve::model::MasterPage) -> Option<String> {
+    let mut data = serde_json::Map::new();
+    data.insert(
+        "kind".into(),
+        if m.is_master { "master" } else { "layout" }.into(),
+    );
+    let part = if m.is_master {
+        &m.master_part
+    } else {
+        &m.layout_part
+    };
+    if !part.is_empty() {
+        data.insert("part".into(), part.clone().into());
+    }
+    if let Some(t) = &m.layout_type {
+        data.insert("type".into(), t.clone().into());
+    }
+    if m.preserve {
+        data.insert("preserve".into(), true.into());
+    }
+    Some(ascii(
+        &serde_json::json!({ "v": 1, "data": { "master": data } }).to_string(),
+    ))
+}
+
+/// Every element id on `spread` each of `items` (and its members) became:
+/// the item's own id, or it with a suffix the builder derives (`p`, `s`,
+/// `t`, …, never a hex digit).
+fn item_elements(spread: &Spread, items: &[Item]) -> HashMap<String, Vec<String>> {
+    let mut all: Vec<&str> = Vec::new();
+    all.extend(
+        spread
+            .text_frames
+            .iter()
+            .filter_map(|f| f.self_id.as_deref()),
+    );
+    all.extend(
+        spread
+            .rectangles
+            .iter()
+            .filter_map(|f| f.self_id.as_deref()),
+    );
+    all.extend(spread.ovals.iter().filter_map(|f| f.self_id.as_deref()));
+    all.extend(
+        spread
+            .graphic_lines
+            .iter()
+            .filter_map(|f| f.self_id.as_deref()),
+    );
+    all.extend(spread.polygons.iter().filter_map(|f| f.self_id.as_deref()));
+    all.extend(spread.groups.iter().filter_map(|f| f.self_id.as_deref()));
+    fn of_item(it: &Item, all: &[&str], out: &mut Vec<String>) {
+        for e in all {
+            let derived = e.strip_prefix(it.id.as_str()).is_some_and(|rest| {
+                rest.is_empty() || !rest.starts_with(|c: char| c.is_ascii_hexdigit())
+            });
+            if derived {
+                out.push(e.to_string());
+            }
+        }
+        if let ItemKind::Group { children } = &it.kind {
+            for c in children {
+                of_item(c, all, out);
+            }
+        }
+    }
+    items
+        .iter()
+        .map(|it| {
+            let mut v = Vec::new();
+            of_item(it, &all, &mut v);
+            (it.id.clone(), v)
+        })
+        .collect()
 }
 
 /// A placeholder item's metadata: its PowerPoint type and index.
@@ -336,10 +439,39 @@ pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
         }
     }
     if let Some((prst, adj)) = &it.meta.preset {
+        let mut p = serde_json::json!({ "prst": prst, "adj": adj });
+        // A live preset (slide ADR 717): its flips, as the deck wrote them.
+        if it.meta.flip != (false, false) {
+            p["flip"] = serde_json::json!([it.meta.flip.0, it.meta.flip.1]);
+        }
+        data.insert("preset".into(), p);
+    }
+    // The box the shape's outline was drawn for (slide ADR 717): the
+    // element's own coordinates, `(0, 0)`–`(w, h)`. A live preset is drawn
+    // again from it when the element is resized, and a connector glued to
+    // the shape finds its sites on it.
+    if key.is_some() && !matches!(it.kind, ItemKind::Group { .. }) {
         data.insert(
-            "preset".into(),
-            serde_json::json!({ "prst": prst, "adj": adj }),
+            "box".into(),
+            serde_json::json!([round3(it.w), round3(it.h)]),
         );
+    }
+    if let Some(c) = &it.meta.connector {
+        let end = |e: &slide_resolve::model::CxnEnd| {
+            let mut v = serde_json::json!({ "id": e.id, "idx": e.idx });
+            if let Some((x, y)) = e.at {
+                v["at"] = serde_json::json!([round3(x), round3(y)]);
+            }
+            v
+        };
+        let mut v = serde_json::Map::new();
+        if let Some(e) = &c.st {
+            v.insert("st".into(), end(e));
+        }
+        if let Some(e) = &c.end {
+            v.insert("end".into(), end(e));
+        }
+        data.insert("connector".into(), serde_json::Value::Object(v));
     }
     if let Some(h) = &it.meta.link {
         data.insert("link".into(), link_json(h));
@@ -347,12 +479,46 @@ pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
     if let Some(f) = &it.meta.frame {
         data.insert("frame".into(), f.clone().into());
     }
+    // SmartArt (slide W4, the text pane): a drawing shape's points, and the
+    // frame's outline of them with their text as the deck had it.
+    if let (Some(d), Some(m)) = (&it.meta.dgm, &it.meta.model_id) {
+        data.insert("dgm".into(), serde_json::json!({ "shape": m, "points": d }));
+    }
+    if let Some(m) = &it.meta.smartart {
+        let points: Vec<serde_json::Value> = m
+            .points
+            .iter()
+            .map(|p| serde_json::json!({ "id": p.id, "depth": p.depth, "text": p.paragraphs.join("\n") }))
+            .collect();
+        data.insert("smartart".into(), serde_json::json!({ "points": points }));
+    }
+    if let Some(c) = &it.meta.chart {
+        data.insert("chart".into(), c.clone().into());
+        // The frame's box on the page (x, y, w, h), where a redraw of the
+        // live chart starts from (ADR 715).
+        let m = &it.transform;
+        let r = |v: f64| (v * 1000.0).round() / 1000.0;
+        data.insert(
+            "box".into(),
+            serde_json::json!([
+                r(m[4]),
+                r(m[5]),
+                r(it.w * m[0].hypot(m[1])),
+                r(it.h * m[2].hypot(m[3]))
+            ]),
+        );
+    }
     if data.is_empty() {
         return None;
     }
     Some(ascii(
         &serde_json::json!({ "v": 1, "data": data }).to_string(),
     ))
+}
+
+/// A length to the thousandth of a point, as labels keep it.
+fn round3(v: f64) -> f64 {
+    (v * 1000.0).round() / 1000.0
 }
 
 /// A name as the model keeps it: no control characters, and the white
@@ -391,37 +557,10 @@ fn clean_value(s: &str) -> String {
         .to_string()
 }
 
-/// Pixel size of a PNG, JPEG or GIF.
+/// Pixel size of a picture (pptx-core's `media`: every format the engine
+/// decodes, an SVG in CSS pixels).
 fn image_size(b: &[u8]) -> Option<(u32, u32)> {
-    if b.len() > 24 && b.starts_with(b"\x89PNG") {
-        let w = u32::from_be_bytes(b[16..20].try_into().ok()?);
-        let h = u32::from_be_bytes(b[20..24].try_into().ok()?);
-        return Some((w, h));
-    }
-    if b.len() > 10 && (b.starts_with(b"GIF87a") || b.starts_with(b"GIF89a")) {
-        return Some((
-            u16::from_le_bytes([b[6], b[7]]) as u32,
-            u16::from_le_bytes([b[8], b[9]]) as u32,
-        ));
-    }
-    if b.len() > 4 && b[0] == 0xff && b[1] == 0xd8 {
-        let mut i = 2;
-        while i + 9 < b.len() {
-            if b[i] != 0xff {
-                i += 1;
-                continue;
-            }
-            let marker = b[i + 1];
-            let len = u16::from_be_bytes([b[i + 2], b[i + 3]]) as usize;
-            if (0xc0..=0xcf).contains(&marker) && !matches!(marker, 0xc4 | 0xc8 | 0xcc) {
-                let h = u16::from_be_bytes([b[i + 5], b[i + 6]]) as u32;
-                let w = u16::from_be_bytes([b[i + 7], b[i + 8]]) as u32;
-                return Some((w, h));
-            }
-            i += 2 + len;
-        }
-    }
-    None
+    pptx_core::media::pixel_size(b)
 }
 
 const NO_CHAR_STYLE: &str = "CharacterStyle/$ID/[No character style]";
@@ -430,7 +569,19 @@ const NORMAL_PARA_STYLE: &str = "ParagraphStyle/$ID/NormalParagraphStyle";
 const NO_OBJECT_STYLE: &str = "ObjectStyle/$ID/[None]";
 const NO_CELL_STYLE: &str = "CellStyle/$ID/[None]";
 const NO_TABLE_STYLE: &str = "TableStyle/$ID/[No table style]";
-const NONE_SWATCH: &str = "Swatch/None";
+/// The character styles a run in a theme font takes when its paragraph's
+/// style is not rooted in that font (slide ADR 713).
+pub const HEADINGS_FONT_STYLE: &str = "CharacterStyle/Headings font";
+pub const BODY_FONT_STYLE: &str = "CharacterStyle/Body font";
+/// The root paragraph styles the theme fonts live on.
+pub const TITLE_STYLE: &str = "ParagraphStyle/Title";
+pub const BODY_STYLE: &str = "ParagraphStyle/Body";
+
+/// The swatch a theme colour key fills with (slide ADR 713).
+fn theme_namer(key: &str) -> Option<(String, String)> {
+    let k = Key::parse(key)?;
+    Some((k.swatch_id(), k.name()))
+}
 /// The interchange DOM version the model records. The engine reads it
 /// only to report it; it is kept so a deck reads as it did.
 const DOM_VERSION: &str = "20.0";
@@ -441,15 +592,14 @@ fn swatch(id: String) -> Option<String> {
     (id != NONE_SWATCH).then_some(id)
 }
 
-/// A gradient swatch: id, kind, (location %, colour id) stops.
-type GradientSwatch = (String, &'static str, Vec<(f64, String)>);
-
 /// The paths of one outline as the model keeps them: the anchors, where
 /// each contour after the first starts, which contours are open.
 struct Outline {
     anchors: Vec<PathAnchor>,
     starts: Vec<usize>,
     open: Vec<bool>,
+    /// The `a:path` each contour belongs to (one entry per contour).
+    paths: Vec<usize>,
 }
 
 impl Outline {
@@ -457,9 +607,11 @@ impl Outline {
         let mut anchors = Vec::new();
         let mut starts = Vec::new();
         let mut open = Vec::new();
+        let mut paths = Vec::new();
         for sp in subpaths {
             starts.push(anchors.len());
             open.push(!sp.closed);
+            paths.push(sp.path);
             for p in &sp.points {
                 anchors.push(PathAnchor {
                     anchor: (n(p.anchor.0), n(p.anchor.1)),
@@ -472,11 +624,16 @@ impl Outline {
         // contour is the canonical empty list (an open one keeps its
         // flag).
         let len = anchors.len();
-        let (starts, open): (Vec<usize>, Vec<bool>) = starts
+        let (starts, (open, paths)): (Vec<usize>, (Vec<bool>, Vec<usize>)) = starts
             .into_iter()
-            .zip(open)
+            .zip(open.into_iter().zip(paths))
             .filter(|(s, _)| *s < len)
             .unzip();
+        let paths = if starts.len() <= 1 {
+            paths.into_iter().take(1).collect()
+        } else {
+            paths
+        };
         let (starts, open) = if starts.len() <= 1 {
             if open.first().copied().unwrap_or(false) {
                 (Vec::new(), vec![true])
@@ -490,6 +647,7 @@ impl Outline {
             anchors,
             starts,
             open,
+            paths,
         }
     }
 
@@ -561,27 +719,8 @@ fn rect_path(l: f64, t: f64, r: f64, b: f64) -> Vec<SubPath> {
         filled: true,
         stroked: true,
         fill_mode: None,
+        path: 0,
     }]
-}
-
-/// A stroke as the model's item fields hold it.
-#[derive(Default)]
-struct StrokeFields {
-    color: Option<String>,
-    weight: Option<f32>,
-    kind: Option<String>,
-    cap: Option<String>,
-    join: Option<String>,
-    head: Option<ArrowheadType>,
-    tail: Option<ArrowheadType>,
-}
-
-/// The transparency of an item: opacity, drop shadow, gradient feather.
-#[derive(Default)]
-struct Transparency {
-    opacity: Option<f32>,
-    shadow: Option<DropShadowSetting>,
-    effects: Option<FrameEffects>,
 }
 
 /// The items of one spread, as the model's spread holds them, and the
@@ -628,9 +767,9 @@ impl SpreadBuilder {
 
 struct Builder<'a> {
     images: &'a dyn Fn(&str) -> Option<Vec<u8>>,
-    colors: BTreeMap<Rgb, String>,
-    theme_names: BTreeMap<Rgb, String>,
-    gradients: Vec<GradientSwatch>,
+    /// The shared DrawingML mapper (slide ADR 722): swatches, strokes,
+    /// effects, and what the engine cannot hold.
+    dml: Mapper,
     stories: Vec<ParsedStory>,
     story_of: BTreeMap<String, String>,
     para_styles: BTreeSet<String>,
@@ -643,6 +782,12 @@ struct Builder<'a> {
     page_of_part: BTreeMap<String, String>,
     /// Text hyperlinks: (number, destination).
     links: Vec<(usize, paged_model::HyperlinkDestinationKind)>,
+    /// Shape click actions as the engine's page-item hyperlinks (engine ADR
+    /// 1026): the element clicked, and where it goes.
+    item_links: Vec<(String, paged_model::HyperlinkDestinationKind)>,
+    /// Object styles from shape styles (slide ADR 719): references → id,
+    /// and each one's definition.
+    object_styles: Vec<(String, ObjectStyleDef)>,
     diagnostics: Vec<String>,
 }
 
@@ -662,148 +807,53 @@ impl Builder<'_> {
             .or_insert_with(|| (kind, id.to_string()));
     }
 
-    fn color(&mut self, rgb: Rgb) -> String {
-        if let Some(id) = self.colors.get(&rgb) {
-            return id.clone();
+    /// A text run's colour: its theme colour's swatch, else a plain one.
+    fn run_color(&mut self, rgb: Rgb, theme: Option<&str>) -> String {
+        match theme.and_then(theme_namer) {
+            Some((id, name)) => self.dml.palette.themed(&id, &name, rgb),
+            None => self.dml.palette.literal(rgb),
         }
-        let id = match self.theme_names.get(&rgb) {
-            Some(name) => format!("Color/{name}"),
-            None => format!("Color/R{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]),
+    }
+
+    /// The object style a shape style maps to (slide ADR 719), made the
+    /// first time it is met.
+    fn object_style(&mut self, look: &ShapeStyleLook) -> String {
+        if let Some(i) = self.object_styles.iter().position(|(r, _)| *r == look.refs) {
+            return self.object_styles[i].1.self_id.clone();
+        }
+        let mut id = format!("ObjectStyle/{}", clean_name(&look.name));
+        let taken =
+            |id: &str, all: &[(String, ObjectStyleDef)]| all.iter().any(|(_, d)| d.self_id == id);
+        let mut n = 2;
+        while taken(&id, &self.object_styles) {
+            id = format!("ObjectStyle/{} {n}", clean_name(&look.name));
+            n += 1;
+        }
+        let fill = self.paint(&look.fill);
+        let sf = self.stroke(look.stroke.as_ref());
+        let def = ObjectStyleDef {
+            self_id: id.clone(),
+            name: Some(id["ObjectStyle/".len()..].to_string()),
+            fill_color: Some(fill),
+            stroke_color: sf.color,
+            stroke_weight: sf.weight,
+            ..ObjectStyleDef::default()
         };
-        self.colors.insert(rgb, id.clone());
+        self.object_styles.push((look.refs.clone(), def));
         id
     }
 
     /// The swatch a paint fills with.
     fn paint(&mut self, p: &Paint) -> String {
-        match p {
-            Paint::None | Paint::Image { .. } => NONE_SWATCH.into(),
-            Paint::Solid { rgb, .. } => self.color(*rgb),
-            Paint::Linear { stops, .. } => self.gradient("Linear", stops),
-            Paint::Radial { stops, .. } => self.gradient("Radial", stops),
-        }
+        self.dml.paint(p)
     }
 
-    fn gradient(&mut self, kind: &'static str, stops: &[Stop]) -> String {
-        let refs: Vec<(f64, String)> = stops.iter().map(|s| (s.pos, self.color(s.rgb))).collect();
-        if let Some((id, _, _)) = self
-            .gradients
-            .iter()
-            .find(|(_, k, s)| *k == kind && *s == refs)
-        {
-            return id.clone();
-        }
-        let id = format!("Gradient/g{}", self.gradients.len() + 1);
-        self.gradients.push((id.clone(), kind, refs));
-        id
-    }
-
-    fn transparency(
-        &mut self,
-        opacity: f64,
-        shadow: Option<&Shadow>,
-        feather: Option<&Paint>,
-    ) -> Transparency {
-        let feather = feather.and_then(feather_of);
-        let mut t = Transparency::default();
-        if opacity >= 0.999 && shadow.is_none() && feather.is_none() {
-            return t;
-        }
-        if opacity < 0.999 {
-            t.opacity = Some(n(opacity * 100.0));
-        }
-        if let Some(s) = shadow {
-            t.shadow = Some(DropShadowSetting {
-                mode: "Drop".into(),
-                x_offset: n(s.dx),
-                y_offset: n(s.dy),
-                size: n(s.blur / 2.0),
-                opacity_pct: n(s.alpha * 100.0),
-                effect_color: Some(self.color(s.rgb)),
-                blend_mode: None,
-                spread_pct: None,
-                noise_pct: None,
-                knocked_out: None,
-                honor_other_effects: None,
-                use_global_light: None,
-            });
-        }
-        if let Some((kind, angle, stops)) = feather {
-            t.effects = Some(FrameEffects {
-                gradient_feather: Some(GradientFeatherParams {
-                    gradient_type: Some(kind.into()),
-                    start_point: None,
-                    end_point: None,
-                    angle_deg: angle.map(n),
-                    stops: stops
-                        .into_iter()
-                        .map(|(pos, alpha)| GradientFeatherStop {
-                            stop_color: None,
-                            location_pct: n(pos),
-                            alpha_pct: n(alpha * 100.0),
-                            midpoint_pct: 50.0,
-                        })
-                        .collect(),
-                    hilite_angle: None,
-                    hilite_length: None,
-                }),
-                ..FrameEffects::default()
-            });
-        }
-        t
+    fn transparency(&mut self, opacity: f64, fx: &Effects, fade: Option<&Paint>) -> Transparency {
+        self.dml.transparency(opacity, fx, fade)
     }
 
     fn stroke(&mut self, s: Option<&Stroke>) -> StrokeFields {
-        let Some(s) = s else {
-            return StrokeFields {
-                color: Some(NONE_SWATCH.into()),
-                weight: Some(0.0),
-                ..StrokeFields::default()
-            };
-        };
-        let mut f = StrokeFields {
-            color: Some(self.paint(&s.paint)),
-            weight: Some(n(s.width)),
-            ..StrokeFields::default()
-        };
-        // One stroke style: a dashed line's dashes win over its compound.
-        if let Some(t) = compound_type(s).filter(|_| s.dash.is_none()) {
-            f.kind = Some(t.into());
-        }
-        if let Some(cap) = &s.cap {
-            f.cap = Some(
-                match cap.as_str() {
-                    "rnd" => "RoundEndCap",
-                    "sq" => "ProjectingEndCap",
-                    _ => "ButtEndCap",
-                }
-                .into(),
-            );
-        }
-        if let Some(j) = &s.join {
-            f.join = Some(
-                match j.as_str() {
-                    "round" => "RoundEndJoin",
-                    "bevel" => "BevelEndJoin",
-                    _ => "MiterEndJoin",
-                }
-                .into(),
-            );
-        }
-        let arrow = |k: &str| match k {
-            "triangle" => ArrowheadType::Triangle,
-            "arrow" => ArrowheadType::Simple,
-            "stealth" => ArrowheadType::Barbed,
-            "diamond" => ArrowheadType::Square,
-            "oval" => ArrowheadType::CircleSolid,
-            _ => ArrowheadType::Triangle,
-        };
-        f.head = s.head.as_deref().map(arrow);
-        f.tail = s.tail.as_deref().map(arrow);
-        if s.dash.is_some() {
-            f.kind = Some("StrokeStyle/$ID/Dashed".into());
-        }
-        f
+        self.dml.stroke(s)
     }
 
     /// Write `it`; `key` is its shape key on a slide (`None` on a master
@@ -815,6 +865,39 @@ impl Builder<'_> {
         // of a slide's shape names the shape (ADR 711).
         let label = item_label(it, key);
         self.item_body(sb, it, label.as_deref(), key);
+        // A slide shape's click action is also the engine's page-item
+        // hyperlink (engine ADR 1026), so every host follows it; the label
+        // keeps PowerPoint's own spelling for export.
+        if let (Some(h), Some(_)) = (&it.meta.link, key) {
+            if let Some((_, element)) = self.elements.get(&it.id) {
+                if let Some(dest) = self.link_destination(h) {
+                    self.item_links.push((element.clone(), dest));
+                }
+            }
+        }
+    }
+
+    /// Where a link goes in the document: its URL, the page of the slide it
+    /// jumps to, or a show action as a `ppaction://` URL.
+    fn link_destination(
+        &self,
+        h: &pptx_core::Hyperlink,
+    ) -> Option<paged_model::HyperlinkDestinationKind> {
+        use paged_model::HyperlinkDestinationKind as K;
+        let action = h.action.as_deref().filter(|a| !a.is_empty());
+        if let Some(u) = &h.url {
+            Some(K::Url(u.clone()))
+        } else if let Some(page) = h
+            .target_part
+            .as_ref()
+            .and_then(|p| self.page_of_part.get(p))
+        {
+            Some(K::Page(page.clone()))
+        } else {
+            action
+                .filter(|a| a.starts_with("ppaction://"))
+                .map(|a| K::Url(a.to_string()))
+        }
     }
 
     fn item_body(
@@ -866,7 +949,7 @@ impl Builder<'_> {
                 if has_fill || stroke.is_some() {
                     let fc = self.paint(fill);
                     let sf = self.stroke(stroke.as_ref());
-                    let gp = gradient_placement(fill, it.w, it.h);
+                    let gp = box_placement(fill, it.w, it.h);
                     // Item ids are `u` + hex, so derived ids take suffixes
                     // that are not hex digits (`p`, `s`, `t`, `i`).
                     let pid = if text.is_some() {
@@ -882,8 +965,22 @@ impl Builder<'_> {
                     } else {
                         stroke.as_ref().map(|s| &s.paint)
                     };
-                    let tr = self.transparency(it.opacity, it.shadow.as_ref(), feather);
-                    self.polygon(sb, it, &pid, Some(fc.clone()), &sf, &gp, &paths, tr, label);
+                    let tr = self.transparency(it.opacity, &it.effects, feather);
+                    // A shape with a style (`p:style`) takes the object style
+                    // it maps to; its own fill and line stay (slide ADR 719).
+                    let os = it.meta.shape_style.as_ref().map(|l| self.object_style(l));
+                    self.polygon(
+                        sb,
+                        it,
+                        &pid,
+                        Some(fc.clone()),
+                        &sf,
+                        &gp,
+                        &paths,
+                        tr,
+                        label,
+                        os.as_deref(),
+                    );
                     let details: Vec<SubPath> = outline
                         .iter()
                         .filter(|s| !s.filled && s.stroked)
@@ -891,7 +988,7 @@ impl Builder<'_> {
                         .collect();
                     if has_fill && stroke.is_some() && !details.is_empty() {
                         let sf = self.stroke(stroke.as_ref());
-                        let tr = self.transparency(it.opacity, None, None);
+                        let tr = self.transparency(it.opacity, &Effects::default(), None);
                         let sid = format!("{}s", it.id);
                         self.polygon(
                             sb,
@@ -899,10 +996,11 @@ impl Builder<'_> {
                             &sid,
                             Some(NONE_SWATCH.into()),
                             &sf,
-                            &GradientPlacement::default(),
+                            &Placement::default(),
                             &details,
                             tr,
                             label,
+                            None,
                         );
                     }
                 }
@@ -915,21 +1013,29 @@ impl Builder<'_> {
                 stroke,
                 image_part,
                 crop,
+                image_effects,
             } => {
+                // Engine ADR 1037 — the blip's picture effects the engine
+                // models ride the frame's filter stack; the rest are reported.
+                let pic = Picture {
+                    opacity: it.opacity,
+                    effects: image_effects.clone(),
+                };
                 let Some(bytes) = (self.images)(image_part) else {
                     self.diagnostics
                         .push(format!("{image_part}: image bytes missing"));
                     return;
                 };
                 let Some((pw, ph)) = image_size(&bytes) else {
-                    self.diagnostics
-                        .push(format!("{image_part}: not PNG / JPEG / GIF, not placed"));
+                    self.diagnostics.push(format!(
+                        "{image_part}: not a picture format the engine reads, not placed"
+                    ));
                     return;
                 };
                 let sf = self.stroke(stroke.as_ref());
                 self.element(&it.id, "rectangle", &it.id);
                 sb.name(&it.id, &it.name);
-                let tr = self.transparency(it.opacity, it.shadow.as_ref(), None);
+                let tr = self.transparency(it.opacity, &it.effects, None);
                 // The visible part of the image is (l, t)–(1-r, 1-b); stretch it
                 // over the frame.
                 let (l, t, r, b) = *crop;
@@ -938,6 +1044,10 @@ impl Builder<'_> {
                 let disp_w = it.w / vis_w;
                 let disp_h = it.h / vis_h;
                 let (iw, ih) = (pw as f64, ph as f64);
+                // A picture blur is in the image's own pixels: its pixels
+                // per point as placed.
+                let px_per_pt = (iw / disp_w.max(1e-6) + ih / disp_h.max(1e-6)) / 2.0;
+                let mapped = self.dml.picture_at(&pic, Some(px_per_pt));
                 let m = [disp_w / iw, 0.0, 0.0, disp_h / ih, -l * disp_w, -t * disp_h];
                 let uri = format!(
                     "file:{}",
@@ -957,6 +1067,8 @@ impl Builder<'_> {
                     stroke_type: sf.kind,
                     end_cap: sf.cap,
                     end_join: sf.join,
+                    miter_limit: sf.miter_limit,
+                    stroke_dash: sf.dash,
                     applied_object_style: Some(NO_OBJECT_STYLE.into()),
                     has_image_element: true,
                     image_link: Some(uri),
@@ -965,6 +1077,14 @@ impl Builder<'_> {
                     opacity: tr.opacity,
                     drop_shadow: tr.shadow,
                     effects: tr.effects,
+                    effect_stack: tr.stack,
+                    image_adjustments: mapped.adjustments,
+                    fill_rule: self.dml.fill_rule(
+                        &path.anchors,
+                        &path.starts,
+                        &path.open,
+                        &path.paths,
+                    ),
                     ..Rectangle::new(it.id.clone(), path.bounds())
                 };
                 if !path.is_plain_box() {
@@ -988,10 +1108,11 @@ impl Builder<'_> {
         id: &str,
         fill: Option<String>,
         sf: &StrokeFields,
-        gp: &GradientPlacement,
+        gp: &Placement,
         paths: &[SubPath],
         tr: Transparency,
         label: Option<&str>,
+        object_style: Option<&str>,
     ) {
         sb.name(id, &it.name);
         sb.label(id, label);
@@ -1000,6 +1121,15 @@ impl Builder<'_> {
             // An outline with no point is no item.
             return;
         }
+        // PowerPoint fills a path even-odd (engine ADR 1006); an outline
+        // with no fill has no rule to keep.
+        let fill_rule = match fill.as_deref() {
+            Some(f) if f != NONE_SWATCH => {
+                self.dml
+                    .fill_rule(&path.anchors, &path.starts, &path.open, &path.paths)
+            }
+            _ => paged_model::FillRule::NonZero,
+        };
         let poly = Polygon {
             item_transform: Some(matrix(&it.transform)),
             fill_color: fill,
@@ -1008,15 +1138,19 @@ impl Builder<'_> {
             stroke_type: sf.kind.clone(),
             end_cap: sf.cap.clone(),
             end_join: sf.join.clone(),
+            miter_limit: sf.miter_limit,
+            stroke_dash: sf.dash.clone(),
             start_arrow: sf.head.unwrap_or(ArrowheadType::None),
             end_arrow: sf.tail.unwrap_or(ArrowheadType::None),
             gradient_fill_angle: gp.angle,
             gradient_fill_length: gp.length,
             gradient_fill_start: gp.start,
-            applied_object_style: Some(NO_OBJECT_STYLE.into()),
+            applied_object_style: Some(object_style.unwrap_or(NO_OBJECT_STYLE).into()),
             opacity: tr.opacity,
             drop_shadow: tr.shadow,
             effects: tr.effects,
+            effect_stack: tr.stack,
+            fill_rule,
             bounds: path.bounds(),
             anchors: path.anchors,
             subpath_starts: path.starts,
@@ -1038,7 +1172,7 @@ impl Builder<'_> {
         story: &str,
         transform: [f32; 6],
         fill: String,
-        gp: &GradientPlacement,
+        gp: &Placement,
         paths: &[SubPath],
         label: Option<&str>,
     ) -> Option<usize> {
@@ -1164,7 +1298,7 @@ impl Builder<'_> {
         let bg = self.paint(&t.background);
         let h: f64 = t.rows.iter().map(|r| r.0).sum();
         let w: f64 = t.columns.iter().sum();
-        let gp = gradient_placement(&t.background, w, h);
+        let gp = box_placement(&t.background, w, h);
         let (dx, dy) = table_border_offset(t);
         let m = &it.transform;
         let shifted = [
@@ -1282,7 +1416,7 @@ impl Builder<'_> {
                         Some(s) => (
                             Some(self.paint(&s.paint)),
                             Some(n(border_width(s))),
-                            compound_type(s).map(str::to_string),
+                            compound_type(s.compound.as_deref()).map(str::to_string),
                         ),
                         None => (None, Some(0.0), None),
                     };
@@ -1394,7 +1528,7 @@ impl Builder<'_> {
             &story,
             matrix(&transform),
             NONE_SWATCH.into(),
-            &GradientPlacement::default(),
+            &Placement::default(),
             &paths,
             label,
         ) {
@@ -1474,6 +1608,14 @@ impl Builder<'_> {
     fn paragraphs(&mut self, paras: &[Para]) -> Vec<Paragraph> {
         let mut out = Vec::with_capacity(paras.len());
         for p in paras {
+            // The theme font the paragraph's style is rooted in: a run in
+            // that font takes it from the style, a run in the other theme
+            // font from its character style (slide ADR 713).
+            let root_font = match p.style.as_deref() {
+                Some("Title") => Some("major"),
+                Some(_) => Some("minor"),
+                None => None,
+            };
             let style = match &p.style {
                 Some(name) => {
                     self.para_styles.insert(name.clone());
@@ -1510,7 +1652,16 @@ impl Builder<'_> {
             }
             // An empty paragraph's line is its size alone: no run.
             for r in &p.runs {
-                let color = self.color(r.rgb);
+                let color = self.run_color(r.rgb, r.theme.as_deref());
+                let (font, character_style) = match r.theme_font.as_deref() {
+                    Some(f) if Some(f) == root_font => (None, NO_CHAR_STYLE),
+                    Some("major") => (None, HEADINGS_FONT_STYLE),
+                    Some(_) => (None, BODY_FONT_STYLE),
+                    None => (
+                        Some(clean_value(&r.font)).filter(|f| !f.is_empty()),
+                        NO_CHAR_STYLE,
+                    ),
+                };
                 let text = if r.line_break {
                     "\u{2028}".to_string()
                 } else if r.field.as_deref() == Some("slidenum") {
@@ -1529,8 +1680,8 @@ impl Builder<'_> {
                     0.0
                 };
                 para.runs.push(CharacterRun {
-                    character_style: Some(NO_CHAR_STYLE.into()),
-                    font: Some(clean_value(&r.font)).filter(|f| !f.is_empty()),
+                    character_style: Some(character_style.into()),
+                    font,
                     font_style: Some(
                         match (r.bold, r.italic) {
                             (true, true) => "Bold Italic",
@@ -1581,13 +1732,7 @@ pub fn slide_key(it: &Item) -> String {
 pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) -> Built {
     let mut w = Builder {
         images,
-        colors: BTreeMap::new(),
-        theme_names: deck
-            .theme_colors
-            .iter()
-            .map(|(k, c)| (*c, k.clone()))
-            .collect(),
-        gradients: Vec::new(),
+        dml: Mapper::with_theme_keys(&deck.theme_colors, theme_namer),
         stories: Vec::new(),
         story_of: BTreeMap::new(),
         para_styles: BTreeSet::new(),
@@ -1600,6 +1745,8 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             .map(|s| (s.part.clone(), s.id.clone()))
             .collect(),
         links: Vec::new(),
+        item_links: Vec::new(),
+        object_styles: Vec::new(),
         diagnostics: Vec::new(),
     };
     const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
@@ -1619,18 +1766,49 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
 
     let mut master_spreads = HashMap::new();
     let mut master_srcs = Vec::new();
+    // Slide ADR 712: every element each master spread's items became, so
+    // the spreads based on it (layouts, slides) can hide them by id.
+    let mut elements_of: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
     for m in &deck.masters {
-        let mut p = page(format!("{}pg", m.id), "n", m.id.to_uppercase());
+        let parent = m.parent.as_deref().unwrap_or("n");
+        let page_name = if m.is_master {
+            format!("S{}", m.id)
+        } else {
+            m.id.to_uppercase()
+        };
+        let mut p = page(master_page_id(&m.id), parent, page_name);
         p.show_master_items = Some(true);
+        p.override_list = m
+            .overrides
+            .iter()
+            .flat_map(|id| {
+                m.parent
+                    .as_ref()
+                    .and_then(|pm| elements_of.get(pm))
+                    .and_then(|e| e.get(id))
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect();
         let mut sb = SpreadBuilder::new(Spread {
             self_id: Some(m.id.clone()),
             item_transform: Some(IDENTITY),
             pages: vec![p],
             ..Spread::default()
         });
+        // A master's and a layout's items carry their shape keys, as a
+        // slide's do: export writes an edited layout back from them.
+        let part = if m.is_master {
+            &m.master_part
+        } else {
+            &m.layout_part
+        };
         for it in &m.items {
-            w.item(&mut sb, it, None);
+            let key = (it.meta.shape_id != 0).then(|| format!("{part}#{}", slide_key(it)));
+            w.item(&mut sb, it, key.as_deref());
         }
+        sb.label(&master_page_id(&m.id), master_label(m).as_deref());
+        elements_of.insert(m.id.clone(), item_elements(&sb.spread, &m.items));
         let src = format!("MasterSpreads/MasterSpread_{}.xml", m.id);
         master_srcs.push(src.clone());
         let name = clean_name(&m.name);
@@ -1650,6 +1828,20 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         let master = s.master.as_deref().unwrap_or("n");
         let mut p = page(s.id.clone(), master, (s.index + 1).to_string());
         p.show_master_items = Some(s.show_master_items);
+        // Slide ADR 712: the slide hides its layout's placeholders; its own
+        // stand in for them.
+        p.override_list = s
+            .overrides
+            .iter()
+            .flat_map(|id| {
+                s.master
+                    .as_ref()
+                    .and_then(|m| elements_of.get(m))
+                    .and_then(|e| e.get(id))
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect();
         let mut sb = SpreadBuilder::new(Spread {
             self_id: Some(format!("s{}", s.id)),
             item_transform: Some(IDENTITY),
@@ -1658,14 +1850,74 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         });
         // The slide's notes, hidden flag and transition ride its page as
         // plugin metadata, so they move, duplicate and undo with it.
-        sb.label(&s.id, slide_label(s).as_deref());
         for it in &s.items {
             w.item(&mut sb, it, Some(&format!("{}#{}", s.part, slide_key(it))));
         }
+        // After the items: the timing names the elements they became.
+        sb.label(&s.id, slide_label_with(s, &w.elements).as_deref());
         spreads.push(ParsedSpread {
             src: format!("Spreads/Spread_s{}.xml", s.id),
             spread: sb.spread,
         });
+    }
+
+    // The theme (slide ADR 713): every slot and the colour picker's tints
+    // as swatches, whether the deck's art uses them or not, so a colour
+    // picked from the "Theme" group stays a theme colour.
+    let theme_table: Vec<(String, Rgb)> = deck
+        .theme
+        .as_ref()
+        .map(ThemeIr::rgb_table)
+        .unwrap_or_else(|| deck.theme_colors.clone());
+    if !theme_table.is_empty() {
+        for k in live_theme::group_keys(&theme_table) {
+            if let Some(rgb) = k.rgb(&theme_table) {
+                w.dml.palette.themed(&k.swatch_id(), &k.name(), rgb);
+            }
+        }
+    }
+    // The paragraph styles placeholders map to (slide ADR 719): the roots
+    // carry the theme fonts, each level its master text style's look.
+    let (major, minor) = deck
+        .theme
+        .as_ref()
+        .map(|t| (t.major.clone(), t.minor.clone()))
+        .unwrap_or_default();
+    let font_of = |which: &str| {
+        let f = if which == "major" { &major } else { &minor };
+        Some(clean_value(f)).filter(|f| !f.is_empty())
+    };
+    let mut para_defs: Vec<ParagraphStyleDef> = Vec::new();
+    for ps in &deck.paragraph_styles {
+        let id = format!("ParagraphStyle/{}", ps.name);
+        let mut def = ParagraphStyleDef {
+            self_id: id.clone(),
+            name: Some(ps.name.clone()),
+            based_on: ps.based_on.as_ref().map(|b| format!("ParagraphStyle/{b}")),
+            font: ps.theme_font.as_deref().and_then(font_of),
+            ..ParagraphStyleDef::default()
+        };
+        if let Some(p) = &ps.level {
+            if let Some(r) = p.runs.first() {
+                def.point_size = Some(n(r.size));
+                def.fill_color = Some(w.run_color(r.rgb, r.theme.as_deref()));
+                if r.theme_font.is_none() && ps.theme_font.is_none() {
+                    def.font = Some(clean_value(&r.font)).filter(|f| !f.is_empty());
+                }
+            }
+            def.justification = Some(match p.align.as_str() {
+                "ctr" => Justification::CenterAlign,
+                "r" => Justification::RightAlign,
+                "just" => Justification::LeftJustified,
+                "dist" => Justification::FullyJustified,
+                _ => Justification::LeftAlign,
+            });
+            def.left_indent = Some(n(p.margin_left));
+            def.first_line_indent = Some(n(p.indent));
+            def.space_before = Some(n(p.space_before));
+            def.space_after = Some(n(p.space_after));
+        }
+        para_defs.push(def);
     }
 
     // Resources (after the items, which registered colours and styles).
@@ -1693,35 +1945,11 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         vec![0.0, 0.0, 0.0, 100.0],
     );
     color("Color/Paper", "Paper", ColorSpace::Cmyk, vec![0.0; 4]);
-    for (rgb, id) in &w.colors {
-        color(
-            id,
-            id.trim_start_matches("Color/"),
-            ColorSpace::Rgb,
-            rgb.iter().map(|&c| c as f32).collect(),
-        );
+    for c in w.dml.palette.color_entries() {
+        palette.colors.insert(c.self_id.clone(), c);
     }
-    for (id, kind, stops) in &w.gradients {
-        palette.gradients.insert(
-            id.clone(),
-            GradientEntry {
-                self_id: id.clone(),
-                name: Some(id.trim_start_matches("Gradient/").to_string()),
-                kind: if *kind == "Radial" {
-                    GradientKind::Radial
-                } else {
-                    GradientKind::Linear
-                },
-                stops: stops
-                    .iter()
-                    .map(|(pos, c)| GradientStopRef {
-                        stop_color: c.clone(),
-                        location_pct: n(*pos),
-                        midpoint_pct: None, opacity_pct: None, inline_color: None, 
-                    })
-                    .collect(),
-            },
-        );
+    for g in w.dml.palette.gradient_entries() {
+        palette.gradients.insert(g.self_id.clone(), g);
     }
     palette.swatches.insert(
         NONE_SWATCH.into(),
@@ -1731,6 +1959,27 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             color_ref: None,
         },
     );
+    // The "Theme" swatch group: the slots, their tints, then any other
+    // theme colour the deck's art names (slide ADR 713).
+    if !theme_table.is_empty() {
+        let mut members: Vec<String> = live_theme::group_keys(&theme_table)
+            .iter()
+            .map(Key::swatch_id)
+            .collect();
+        for (id, _) in w.dml.palette.named() {
+            if Key::of_swatch(id).is_some() && !members.contains(id) {
+                members.push(id.clone());
+            }
+        }
+        palette.color_groups.insert(
+            live_theme::GROUP_ID.into(),
+            paged_model::ColorGroupEntry {
+                self_id: live_theme::GROUP_ID.into(),
+                name: Some(live_theme::GROUP_NAME.into()),
+                members,
+            },
+        );
+    }
 
     let mut styles = StyleSheet::default();
     styles.character_styles.insert(
@@ -1755,6 +2004,22 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
     para_style(NORMAL_PARA_STYLE.into(), "$ID/NormalParagraphStyle".into());
     for s in &w.para_styles {
         para_style(format!("ParagraphStyle/{s}"), s.clone());
+    }
+    for def in para_defs {
+        styles.paragraph_styles.insert(def.self_id.clone(), def);
+    }
+    // The theme fonts as character styles, for runs in a theme font their
+    // paragraph's style is not rooted in.
+    for (id, which) in [(HEADINGS_FONT_STYLE, "major"), (BODY_FONT_STYLE, "minor")] {
+        styles.character_styles.insert(
+            id.to_string(),
+            CharacterStyleDef {
+                self_id: id.to_string(),
+                name: Some(id["CharacterStyle/".len()..].to_string()),
+                font: font_of(which),
+                ..CharacterStyleDef::default()
+            },
+        );
     }
     let mut cell_style = |id: &str, name: &str, fill: Option<String>| {
         styles.cell_styles.insert(
@@ -1790,6 +2055,9 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             ..ObjectStyleDef::default()
         },
     );
+    for (_, def) in w.object_styles.drain(..) {
+        styles.object_styles.insert(def.self_id.clone(), def);
+    }
 
     let mut hyperlinks = Vec::new();
     let mut hyperlink_destinations = Vec::new();
@@ -1810,9 +2078,35 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             destination: Some(did),
         });
     }
+    let mut hyperlink_page_item_sources = Vec::new();
+    for (n, (element, dest)) in std::mem::take(&mut w.item_links).into_iter().enumerate() {
+        let n = n + 1;
+        let kind = match dest {
+            paged_model::HyperlinkDestinationKind::Page(_) => "HyperlinkPageDestination",
+            _ => "HyperlinkURLDestination",
+        };
+        let did = format!("{kind}/hs{n}");
+        hyperlink_destinations.push(paged_model::HyperlinkDestination {
+            self_id: did.clone(),
+            kind: dest,
+        });
+        let src = format!("HyperlinkPageItemSource/hs{n}");
+        hyperlink_page_item_sources.push(paged_model::HyperlinkPageItemSource {
+            self_id: src.clone(),
+            source_page_item: element,
+            name: None,
+        });
+        hyperlinks.push(paged_model::Hyperlink {
+            self_id: format!("Hyperlink/hs{n}"),
+            name: Some(format!("Shape link {n}")),
+            source: Some(src),
+            destination: Some(did),
+        });
+    }
     let designmap = DesignMap {
         hyperlinks,
         hyperlink_destinations,
+        hyperlink_page_item_sources,
         spreads: spreads
             .iter()
             .map(|s| SpreadRef { src: s.src.clone() })
@@ -1827,7 +2121,14 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         document_name: Some(name.to_string()),
         labels: vec![(
             SLIDE_LABEL_KEY.to_string(),
-            deck_label(name, deck.width, deck.height, &deck.fonts),
+            deck_label_with_theme(
+                name,
+                deck.width,
+                deck.height,
+                &deck.fonts,
+                &deck.custom_shows,
+                deck.theme.as_ref(),
+            ),
         )],
         document_preference: DocumentPreference {
             page_width: Some(n(deck.width)),
@@ -1855,12 +2156,19 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         text_frame_index: HashMap::new(),
         styles,
         anchors: Vec::new(),
+        symbols: Vec::new(),
     };
     Built {
         document,
         stories: w.story_of,
         elements: w.elements,
-        diagnostics: w.diagnostics,
+        diagnostics: {
+            // What the engine could not hold of the deck's paint, once
+            // per kind.
+            let mut d = w.diagnostics;
+            d.extend(w.dml.take_losses());
+            d
+        },
     }
 }
 
@@ -1883,13 +2191,88 @@ pub fn write(
     })
 }
 
+/// The `format` of the engine's page-item snippets (engine ADR 193).
+pub const SNIPPET_FORMAT: &str = "paged.snippet/1";
+
+/// One item of a slide as a page-item snippet (engine ADR 193): the item
+/// built exactly as [`build`] builds it on its slide (its members, stories,
+/// label and the colours, gradients and styles they name), in the JSON the
+/// engine's `pasteElements` takes. A live chart redrawn after its data
+/// changed (ADR 715) is pasted in place of the group it replaces. `slide`
+/// is the item's slide in `deck`; the item must be one of its top-level
+/// items.
+pub fn snippet(deck: &Deck, slide: usize, item: &Item) -> Result<String, String> {
+    let page = deck
+        .slides
+        .get(slide)
+        .ok_or_else(|| format!("no slide {slide}"))?;
+    let mini = Deck {
+        masters: Vec::new(),
+        slides: vec![SlidePage {
+            items: vec![item.clone()],
+            notes: None,
+            transition: None,
+            timing_xml: None,
+            ..page.clone()
+        }],
+        diagnostics: Vec::new(),
+        ..deck.clone()
+    };
+    let built = build(&mini, &|_| None, "snippet");
+    let mut doc = built.document;
+    let mut spread = doc
+        .spreads
+        .pop()
+        .ok_or_else(|| "the item built no spread".to_string())?
+        .spread;
+    spread.pages.clear();
+    spread.labels.remove(&page.id);
+    // The box of the item's outline, spread space: [top, left, bottom, right].
+    let m = &item.transform;
+    let corners = [(0.0, 0.0), (item.w, 0.0), (0.0, item.h), (item.w, item.h)];
+    let (mut l, mut t, mut r, mut b) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for (x, y) in corners {
+        let (px, py) = (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]);
+        l = l.min(px);
+        t = t.min(py);
+        r = r.max(px);
+        b = b.max(py);
+    }
+    let text = doc
+        .stories
+        .iter()
+        .flat_map(|s| s.story.paragraphs.iter())
+        .flat_map(|p| p.runs.iter())
+        .map(|r| r.text.as_str())
+        .collect::<Vec<_>>()
+        .join("");
+    let value = serde_json::json!({
+        "format": SNIPPET_FORMAT,
+        "spread": spread,
+        "stories": doc.stories,
+        "hyperlinks": [],
+        "bounds": [n(t), n(l), n(b), n(r)],
+        "page_origin": [0.0, 0.0],
+        "page_id": page.id,
+        "resources": {
+            "colors": doc.palette.colors,
+            "swatches": doc.palette.swatches,
+            "gradients": doc.palette.gradients,
+            "paragraph_styles": doc.styles.paragraph_styles,
+            "character_styles": doc.styles.character_styles,
+        },
+        "text": text,
+    });
+    serde_json::to_string(&value).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn the_deck_label_is_an_ascii_envelope_of_the_deck() {
-        let label = deck_label("Präsentation 🎉", 960.0, 540.0, &["Calibri".into()]);
+        let label = deck_label("Präsentation 🎉", 960.0, 540.0, &["Calibri".into()], &[]);
         assert!(label.is_ascii(), "{label}");
         assert!(
             label.contains("Pr\\u00e4sentation \\ud83c\\udf89"),
@@ -1900,41 +2283,5 @@ mod tests {
         assert_eq!(v["data"]["deck"]["name"], "Präsentation 🎉");
         assert_eq!(v["data"]["deck"]["width"], 960.0);
         assert_eq!(v["data"]["deck"]["fonts"][0], "Calibri");
-    }
-
-    fn stroke(compound: Option<&str>, dash: Option<&str>) -> Stroke {
-        Stroke {
-            width: 3.0,
-            paint: Paint::None,
-            dash: dash.map(str::to_string),
-            compound: compound.map(str::to_string),
-            cap: None,
-            join: None,
-            head: None,
-            tail: None,
-        }
-    }
-
-    #[test]
-    fn compound_lines_map_to_engine_stroke_styles() {
-        let t = |c| compound_type(&stroke(Some(c), None));
-        assert_eq!(t("dbl"), Some("StrokeStyle/$ID/ThickThick"));
-        assert_eq!(t("thickThin"), Some("StrokeStyle/$ID/ThickThin"));
-        assert_eq!(t("thinThick"), Some("StrokeStyle/$ID/ThinThick"));
-        assert_eq!(t("tri"), None);
-        assert_eq!(compound_type(&stroke(None, None)), None);
-    }
-
-    #[test]
-    fn a_radial_gradient_is_placed_at_its_centre_with_the_farthest_corner_as_reach() {
-        let p = Paint::Radial {
-            stops: Vec::new(),
-            center: (0.25, 0.5),
-        };
-        // Centre (50, 50) on a 200 × 100 box; farthest corner (200, 0).
-        let g = gradient_placement(&p, 200.0, 100.0);
-        assert_eq!(g.start, Some([50.0, 50.0]));
-        assert_eq!(g.length, Some(n((150.0f64 * 150.0 + 50.0 * 50.0).sqrt())));
-        assert_eq!(g.angle, None);
     }
 }

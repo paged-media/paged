@@ -101,11 +101,30 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   (rav1d) and JPEG XL (jxl-oxide) behind default features, the web and small formats through
   `image`; CMYK/Lab through paged-color. The renderer and paged-gpu's wasm32 raster-time decode both call
   `decode_rgba8`.
+- `crates/paged-ps/` — a clean-room PostScript Level 2 interpreter for placed EPS (ADR 1033):
+  `interpret` returns the art (fills, strokes, clips, images, gradients) in default user
+  space; the renderer's `pipeline/placed_eps.rs` lays it into the display list. Geometry on
+  kurbo, decode filters from `paged-raster::filters`, colour maths from `paged-color::math`.
+- `crates/paged-geom/` — the path kernels (outline stroke, offset, simplify, the
+  Pathfinder booleans, the planar arrangement, the `PathAnchor` ↔ kurbo/flo_curves
+  converters), moved out of `paged-mutate` (which re-exports each module under its
+  old path) so the renderer reaches them (plan C8, ADR 1042).
+  `crates/paged-vector-fx/` — live vector effects (ADR 1042): the stack's vector
+  entries run on an item's source outline, cached by hash; `bake` is the item the
+  renderer draws, IDML export writes and `expandAppearance` keeps.
 - `crates/paged-psd/` — PSD/PSB model, parser, preservation writer, composite decode,
   layer records (also of a layered TIFF's tag 37724). `crates/paged-pixel/` — the frozen
   pixel types (`PixelFormat`, tiles, regions). Both moved from paged.image (PM-0014,
   image ADR 466), which still names them `image-psd` / `image-core` through `package`
   aliases; they stay leaf crates (a core-ci `cargo tree` guard).
+- `crates/paged-kernels/` — one kernel definition for the engine and paged.image (PM-0014,
+  ADR 1013's first step): the pixel type, the param blocks and the shipped CPU twins of the
+  adjustment and convolution kernels, moved from `image-kernels` (which re-exports them and
+  keeps the WGSL and the registry until the rest moves). The renderer evaluates an image
+  frame's filter stack through them (ADR 1037). A leaf crate.
+- `crates/paged-resample/` — the CPU resample of RGBA8 rasters (separable Lanczos-3 /
+  bilinear, premultiplied; a bilinear rotate-and-crop): the supported backend of paged.image's
+  headless and batch actions (image ADR 467). A leaf crate, under the same guard.
 - `crates/paged-fidelity/` — ΔE2000 + SSIM diff library + `paged-diff` CLI.
   Reference is positional arg #1, candidate #2.
 - `crates/paged-mutate/`, `paged-introspect/`, `paged-canvas/`,

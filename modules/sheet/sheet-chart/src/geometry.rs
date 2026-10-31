@@ -42,6 +42,10 @@
 //!   `characterStyle` and `role` (`title`, `axisTitle`, `tick`, `dataLabel`,
 //!   `legend`, `note`): the text role's concrete run properties and document
 //!   style references.
+//! - a rect's, line's, polygon's and wedge's `fx` (sheet ADR 527): the
+//!   role's DrawingML gradient, translucency and effects as the shared
+//!   mapper (`dml-native`) lowers them ([`crate::native::NativeFx`]); and
+//!   the geometry's `losses`, what the page items cannot hold.
 //!
 //! ## Layout
 //!
@@ -61,7 +65,8 @@ use plotters::style::text_anchor::{HPos, Pos, VPos};
 
 use crate::backend::{GeomBackend, Sink};
 use crate::colors::{Paint, Theme};
-use crate::model::{ChartKind, ChartModel, TextStyleRef};
+use crate::model::{ChartKind, ChartModel, DmlFx, TextStyleRef};
+use crate::native::{bbox, wedge_bbox, NativeFx, NativeLowering};
 
 /// Text alignment for a [`Primitive::Text`] anchor point.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -96,6 +101,9 @@ pub enum Primitive {
         fill_swatch_ref: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         stroke_swatch_ref: Option<String>,
+        /// Gradient, translucency and effects (sheet ADR 527).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fx: Option<Box<NativeFx>>,
     },
     /// A polyline (series lines, axis rules, gridlines). At least two points.
     #[serde(rename_all = "camelCase")]
@@ -107,6 +115,9 @@ pub enum Primitive {
         stroke_swatch_ref: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         dash: Option<String>,
+        /// Gradient, translucency and effects (sheet ADR 527).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fx: Option<Box<NativeFx>>,
     },
     /// A closed polygon (area bands, markers, contour bands).
     #[serde(rename_all = "camelCase")]
@@ -119,6 +130,9 @@ pub enum Primitive {
         fill_swatch_ref: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         stroke_swatch_ref: Option<String>,
+        /// Gradient, translucency and effects (sheet ADR 527).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fx: Option<Box<NativeFx>>,
     },
     /// A pie slice or ring segment: centre `(cx, cy)`, radius `r` (and an
     /// inner radius for a ring segment), angular span in degrees clockwise
@@ -138,6 +152,9 @@ pub enum Primitive {
         fill_swatch_ref: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         stroke_swatch_ref: Option<String>,
+        /// Gradient, translucency and effects (sheet ADR 527).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fx: Option<Box<NativeFx>>,
     },
     /// A text label; `(x, y)` is the baseline anchor point.
     #[serde(rename_all = "camelCase")]
@@ -198,6 +215,10 @@ pub struct ChartGeometry {
     /// The chart was a 3-D kind drawn as its 2-D equivalent.
     #[serde(skip_serializing_if = "is_false")]
     pub flattened_3d: bool,
+    /// What the chart's DrawingML asks for that the page items cannot
+    /// hold, one line per kind (sheet ADR 527; `dml-native`'s report).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub losses: Vec<String>,
 }
 
 /// Custom error amounts of one error-bar set: (plus, minus) per point.
@@ -281,11 +302,13 @@ pub fn generate(
         ChartKind::Unsupported => crate::special::placeholder(&pen, model),
         _ => crate::cartesian::cartesian(&pen, model, data),
     }
+    let losses = pen.native.borrow_mut().take_losses();
     ChartGeometry {
         width_pt,
         height_pt,
         prims: pen.finish(),
         flattened_3d: model.flattened_3d,
+        losses,
     }
 }
 
@@ -382,19 +405,51 @@ pub(crate) struct Pen {
     pub theme: Theme,
     pub w: f64,
     pub h: f64,
+    /// The chart's DrawingML lowering (sheet ADR 527).
+    pub native: RefCell<NativeLowering>,
+    /// The role whose gradient and effects the items drawn now carry.
+    fx: RefCell<Option<DmlFx>>,
 }
 
 impl Pen {
     pub fn new(w: f64, h: f64, theme: Theme) -> Pen {
         let sink: Sink = Rc::new(RefCell::new(Vec::new()));
         let backend = GeomBackend::new(w, h, Rc::clone(&sink));
+        let native = RefCell::new(NativeLowering::new(&theme.colors));
         Pen {
             sink,
             root: backend.into_drawing_area(),
             theme,
             w,
             h,
+            native,
+            fx: RefCell::new(None),
         }
+    }
+
+    /// Draw with `fx` (a role's gradient and effects) on every filled item
+    /// and line `f` draws; `None` draws plain.
+    pub fn with_fx<R>(&self, fx: Option<&DmlFx>, f: impl FnOnce() -> R) -> R {
+        let fx = fx.filter(|x| !x.is_empty()).cloned();
+        let prev = self.fx.replace(fx);
+        let out = f();
+        self.fx.replace(prev);
+        out
+    }
+
+    /// The native look of an item drawn now over `b`, and a pattern's
+    /// colour in place of its fill.
+    fn native_of(
+        &self,
+        b: (f64, f64, f64, f64),
+        filled: bool,
+    ) -> (Option<Box<NativeFx>>, Option<String>) {
+        let fx = self.fx.borrow();
+        let Some(fx) = fx.as_ref() else {
+            return (None, None);
+        };
+        let l = self.native.borrow_mut().lower(fx, b, filled);
+        (l.fx.map(Box::new), l.fill)
     }
 
     pub fn finish(self) -> Vec<Primitive> {
@@ -420,15 +475,17 @@ impl Pen {
         }
         let fill = fill.map(|c| self.theme.paint(c, "#FFFFFF"));
         let stroke = line.map(|l| self.theme.paint(l.color.as_ref().unwrap(), AXIS_STROKE));
-        self.rect(
-            0.0,
-            0.0,
-            self.w,
-            self.h,
-            fill.as_ref(),
-            stroke.as_ref(),
-            line.and_then(|l| l.width_pt).unwrap_or(0.75),
-        );
+        self.with_fx(a.fx.as_deref(), || {
+            self.rect(
+                0.0,
+                0.0,
+                self.w,
+                self.h,
+                fill.as_ref(),
+                stroke.as_ref(),
+                line.and_then(|l| l.width_pt).unwrap_or(0.75),
+            )
+        });
     }
 
     /// A rectangle (`w`/`h` may be negative: normalised).
@@ -445,16 +502,18 @@ impl Pen {
     ) {
         let (x, w) = if w < 0.0 { (x + w, -w) } else { (x, w) };
         let (y, h) = if h < 0.0 { (y + h, -h) } else { (y, h) };
+        let (fx, pattern) = self.native_of((x, y, w, h), fill.is_some());
         self.push(Primitive::Rect {
             x,
             y,
             w,
             h,
-            fill: fill.map(|p| p.hex.clone()),
+            fill: pattern.or_else(|| fill.map(|p| p.hex.clone())),
             stroke: stroke.map(|p| p.hex.clone()),
             stroke_w: if stroke.is_some() { stroke_w } else { 0.0 },
             fill_swatch_ref: fill.and_then(|p| p.swatch.clone()),
             stroke_swatch_ref: stroke.and_then(|p| p.swatch.clone()),
+            fx,
         });
     }
 
@@ -467,12 +526,14 @@ impl Pen {
         if pts.len() < 2 {
             return;
         }
+        let (fx, _) = self.native_of(bbox(&pts), false);
         self.push(Primitive::Line {
             pts,
             stroke: stroke.hex.clone(),
             stroke_w: w,
             stroke_swatch_ref: stroke.swatch.clone(),
             dash: dash.map(str::to_string),
+            fx,
         });
     }
 
@@ -486,13 +547,15 @@ impl Pen {
         if pts.len() < 3 {
             return;
         }
+        let (fx, pattern) = self.native_of(bbox(&pts), fill.is_some());
         self.push(Primitive::Polygon {
             pts,
-            fill: fill.map(|p| p.hex.clone()),
+            fill: pattern.or_else(|| fill.map(|p| p.hex.clone())),
             stroke: stroke.map(|p| p.hex.clone()),
             stroke_w: if stroke.is_some() { stroke_w } else { 0.0 },
             fill_swatch_ref: fill.and_then(|p| p.swatch.clone()),
             stroke_swatch_ref: stroke.and_then(|p| p.swatch.clone()),
+            fx,
         });
     }
 
@@ -511,17 +574,19 @@ impl Pen {
         if r <= 0.0 || end <= start {
             return;
         }
+        let (fx, pattern) = self.native_of(wedge_bbox(cx, cy, r, inner, start, end), true);
         self.push(Primitive::Wedge {
             cx,
             cy,
             r,
             start_deg: start,
             end_deg: end,
-            fill: Some(fill.hex.clone()),
+            fill: Some(pattern.unwrap_or_else(|| fill.hex.clone())),
             stroke: stroke.map(|p| p.hex.clone()),
             inner_r: (inner > 0.0).then_some(inner),
             fill_swatch_ref: fill.swatch.clone(),
             stroke_swatch_ref: stroke.and_then(|p| p.swatch.clone()),
+            fx,
         });
     }
 

@@ -19,8 +19,10 @@
 
 // Document-space page layout helpers.
 //
-// Pages stack vertically with a fixed gap; spreads are TBD (Phase 2).
-// All coordinates are in points (pt), the IDML unit. The camera
+// Every page sits at its place on the canvas (engine ADR 1011: an
+// artboard's position, `DocumentHandle.pageOriginsPt`); a page nobody
+// placed sits in the default vertical stack, `gapPt` under the one
+// before. All coordinates are in points (pt), the IDML unit. The camera
 // transform maps these to viewport (CSS) pixels.
 
 import type { Camera } from "@paged-media/client";
@@ -41,24 +43,55 @@ export interface PageRect {
   h: number;
 }
 
+/** The default gap between stacked pages, pt (`CANVAS_PAGE_GAP_PT`). */
+export const PAGE_GAP_PT = 24;
+
 /**
- * Stack `pageSizesPt` vertically with `gapPt` between adjacent pages.
- * Returns one rect per page, in the same order as the input.
- * Result is centred-x within the document (each page starts at x=0,
- * letting the viewport's pan + a centred default camera handle
- * horizontal alignment).
+ * One rect per page, in the same order as `pageSizesPt`. With
+ * `pageOriginsPt` (the engine's canvas origins, one per page) each page
+ * sits at its origin; without them — an older worker, a test — the
+ * pages stack vertically at x = 0 with `gapPt` between them, the layout
+ * the engine's default slots reproduce exactly.
  */
 export function layoutPages(
   pageSizesPt: ReadonlyArray<readonly [number, number]>,
-  gapPt = 24,
+  pageOriginsPt?: ReadonlyArray<readonly [number, number]> | null,
+  gapPt = PAGE_GAP_PT,
 ): PageRect[] {
   const out: PageRect[] = [];
+  const placed =
+    pageOriginsPt != null && pageOriginsPt.length === pageSizesPt.length;
   let y = 0;
-  for (const [w, h] of pageSizesPt) {
-    out.push({ x: 0, y, w, h });
+  pageSizesPt.forEach(([w, h], i) => {
+    const at = placed ? pageOriginsPt[i] : null;
+    out.push(at ? { x: at[0], y: at[1], w, h } : { x: 0, y, w, h });
     y += h + gapPt;
-  }
+  });
   return out;
+}
+
+/**
+ * The page at document point (`x`, `y`): the one containing it, else the
+ * nearest one (the later page on a tie — in the default stack, the lower
+ * half of a gap belongs to the page below). -1 without pages.
+ */
+export function pageNearest(
+  rects: ReadonlyArray<PageRect>,
+  x: number,
+  y: number,
+): number {
+  let best = -1;
+  let bestD = Infinity;
+  rects.forEach((r, i) => {
+    const dx = Math.max(r.x - x, 0, x - (r.x + r.w));
+    const dy = Math.max(r.y - y, 0, y - (r.y + r.h));
+    const d = dx * dx + dy * dy;
+    if (d <= bestD) {
+      best = i;
+      bestD = d;
+    }
+  });
+  return best;
 }
 
 /**
@@ -99,16 +132,27 @@ export function fitCamera(
   viewportHeightPx: number,
   rect: PageRect,
   marginPx = 40,
+  rotation = 0,
 ): Camera {
   if (rect.w <= 0 || rect.h <= 0) {
-    return { scale: 1, tx: 0, ty: 0 };
+    return { scale: 1, tx: 0, ty: 0, rotation };
   }
-  const scaleX = (viewportWidthPx - 2 * marginPx) / rect.w;
-  const scaleY = (viewportHeightPx - 2 * marginPx) / rect.h;
+  // v77 (editor ADR 287) — in a turned view the rect's turned box fits.
+  const c = Math.abs(Math.cos(rotation));
+  const s = Math.abs(Math.sin(rotation));
+  const w = rect.w * c + rect.h * s;
+  const h = rect.w * s + rect.h * c;
+  const scaleX = (viewportWidthPx - 2 * marginPx) / w;
+  const scaleY = (viewportHeightPx - 2 * marginPx) / h;
   const scale = Math.max(0.01, Math.min(scaleX, scaleY));
-  const tx = (viewportWidthPx - rect.w * scale) / 2 - rect.x * scale;
-  const ty = (viewportHeightPx - rect.h * scale) / 2 - rect.y * scale;
-  return { scale, tx, ty };
+  // The rect's centre lands on the viewport's.
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h / 2;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const tx = viewportWidthPx / 2 - scale * (cos * cx - sin * cy);
+  const ty = viewportHeightPx / 2 - scale * (sin * cx + cos * cy);
+  return { scale, tx, ty, rotation };
 }
 
 /** Apply a zoom-to-cursor zoom delta. `factor > 1` zooms in. */

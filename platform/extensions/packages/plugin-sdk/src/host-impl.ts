@@ -46,6 +46,11 @@ import type {
   AssetSurface,
   BindingCollectionRequest,
   BindingCollectionResult,
+  BindingGuideEdit,
+  BindingReadoutRequest,
+  BindingReadoutsResult,
+  BindingWorkspaceResult,
+  BindingWorkspaceView,
   BindingProvider,
   BindingProviderHandle,
   BindingPropertyRequest,
@@ -76,11 +81,26 @@ import type {
   DocumentOpenedEvent,
   FrameChainLink,
   StoryContent,
+  SvgExportRequest,
+  SvgExportResult,
+  SvgImportRequest,
+  SvgImportResult,
   DocumentSurface,
   EditContextContribution,
   FrameSurfaceContribution,
+  PresentationContribution,
+  PresentationState,
+  RenderedLayer,
+  RenderedElement,
+  RenderRect,
+  RenderStory,
+  RenderStoryOptions,
+  ViewContribution,
+  SubContextProviderContribution,
+  SubContextState,
   ControlBarGroupContribution,
   StatusItemContribution,
+  MarginBandContribution,
   ElementId,
   FontFaceAsset,
   HitFilter,
@@ -105,9 +125,12 @@ import type {
   DataProviderSnapshot,
   Mutation,
   MutationInput,
+  PageId,
   MutateOptions,
   MutateWithBytesOptions,
   MutationOutcome,
+  UndoLog,
+  UndoLogStep,
   NetworkSurface,
   ObjectTypeContribution,
   OverlayLayer,
@@ -135,6 +158,9 @@ import type {
   TextSelection,
   TextPropertyRead,
   TextFormatResult,
+  TextFindSpec,
+  TextFindHit,
+  TextFindResult,
   ViewportSurface,
   RenderSurface,
   SnapshotPng,
@@ -146,6 +172,7 @@ import type {
 import { DisposableStore, toDisposable } from "./disposables.js";
 import {
   caretReadRange,
+  charToContent,
   contentToChar,
   paragraphsRange,
   paragraphTexts,
@@ -158,6 +185,12 @@ import {
   type ActionBackend,
   type DataBackend,
 } from "./doors-data-actions.js";
+import {
+  createHandleSets,
+  createTransformBoxes,
+  hostDrawsHandles,
+  wrapToolGesture,
+} from "./overlay-handles.js";
 import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
@@ -301,6 +334,14 @@ export const HOST_FEATURES: readonly string[] = [
   // Extensions ADR 334 — the frame-surface DOOR (static); whether a host
   // will mount it is the dynamic `editContext.frameSurface@1`.
   "contribute.frameSurface@1",
+  // Extensions ADR 345 — the presentation and module-view DOORS (static);
+  // a host that shows them is the dynamic `shell.present@1` /
+  // `shell.views@1`.
+  "contribute.presentation@1",
+  "contribute.view@1",
+  // Extensions ADR 349 (C6) — the sub-context provider DOOR (static); a
+  // host that enters sub-contexts is the dynamic `shell.subContext@1`.
+  "contribute.subContextProvider@1",
   // Extensions ADR 348 — the control-bar group and status-item DOORS
   // (static); a host that renders them is the dynamic
   // `controlBar.groups@1` / `statusBar.items@1`. The keybinding `scope`
@@ -308,6 +349,11 @@ export const HOST_FEATURES: readonly string[] = [
   // when the host's registry reads it).
   "contribute.controlBarGroup@1",
   "contribute.statusItem@1",
+  // Extensions ADR 349 amendment 1 (C5) — the margin-band DOOR (static);
+  // a host that shows bands is the dynamic `shell.marginBand@1`. The
+  // character-to-content conversion is the SDK's own.
+  "contribute.marginBand@1",
+  "text.contentRange@1",
   "contribute.keybinding.scope@1",
   // ADR 323 — the object model: the contribution door and `host.objects`
   // (core addresses always route; a private registry serves core + this
@@ -329,6 +375,17 @@ export const HOST_FEATURES: readonly string[] = [
   // STATIC like @1: the same pinned protocol answers both.
   "document.mutate.amend@2",
   "document.undo@1",
+  // Engine ADR 1030 (protocol 77) — the named undo timeline: `undoLog`,
+  // `undoTo` / `redoTo` (several steps, one round trip), and `label` on
+  // `mutate` and `host.objects.set/batch`. STATIC: the worker handshake
+  // refuses an engine older than the pinned protocol, which answers them.
+  "document.undoLog@1",
+  // Engine ADR 1039 (protocol 78) — symbols: `createSymbol`,
+  // `redefineSymbol`, `placeSymbolInstance`, `breakSymbolLink` and
+  // `deleteSymbol`, the `symbols` collection and `instance:<id>` items.
+  // STATIC: the worker handshake refuses an engine older than the pinned
+  // protocol, which applies them.
+  "document.symbols@1",
   "document.collection@1",
   "document.frameChain@1",
   "document.meta@1",
@@ -427,6 +484,19 @@ export const HOST_FEATURES: readonly string[] = [
   // draws the whole page as a PNG — and the SDK answers null wherever
   // the reply cannot honour the request (no `region`, no `rgba`).
   "render.snapshot@2",
+  // Extensions ADR 346 — a page as layers (background + items), built on
+  // the snapshot doors above; static for the same reason.
+  "render.layers@1",
+  // Extensions ADR 346 amendment C4 (slide ADR 714) — `paragraphs`: a text
+  // frame's paragraphs as layers of their own, cut from the frame's image
+  // along its line geometry (`requestSelectionGeometry`). Static: built on
+  // doors every engine at this protocol answers.
+  "render.layers.paragraphs@1",
+  // Extensions ADR 342 — a story the document does not hold, laid out and
+  // drawn by the engine (`requestSnapshot.story`, additive on protocol
+  // 76). Static: an engine without the field draws the page instead, and
+  // its reply lacks `story`, so the door answers null — never the page.
+  "render.story@1",
   // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
   // reason as storage.parts@1: the pinned engine is the server, and the worker
   // handshake refuses a protocol older than the pin — so a running bundle is
@@ -454,6 +524,58 @@ export const HOST_FEATURES: readonly string[] = [
   // ignores `clip` (a plain group) and refuses a group child. paged.draw's
   // clipped repeat asks it before choosing a clip group over paste-into.
   "document.clipGroups@1",
+  // Engine ADR 1047 — live shapes. The vendored wire and catalog carry
+  // `frameShapeSides` / `frameShapeStarInset` (a live polygon or star on
+  // a Polygon) and `frameShapePieStart` / `frameShapePieEnd` (a pie on an
+  // Oval), through the ordinary property doors. STATIC, like
+  // `document.fillRule@1`: the paths are additive at protocol 78, so the
+  // handshake does not prove the engine has them — an older engine
+  // refuses the write as an unknown path. paged.draw's Star tool asks it
+  // before it makes a live star (a polygon, then its points and inset)
+  // rather than a plain path.
+  "document.liveShapes@1",
+  // Engine ADR 1031 (protocol v77) — SVG in and out through paged-svg.
+  // STATIC: the flag says this SDK forwards both doors. The worker
+  // handshake pins the protocol, and an engine without the messages
+  // answers an outcome (`applied: false` / `svg: null` with the reason),
+  // never a throw. paged.draw delegates its SVG importer and exporter here
+  // and keeps its own TypeScript reader for a host without the flags.
+  "document.importSvg@1",
+  "document.exportSvg@1",
+  // Engine ADR 1008 — the ordered effect stack. The vendored wire and
+  // catalog carry `frameEffectStack` (and the fill / stroke / content
+  // twins): the whole stack as `{ type: "effectStack", value: { entries } }`,
+  // one write and one undo step per gesture, with the stack-only effects
+  // (Gaussian blur, outline stroke, colour and gradient overlays,
+  // reflection, soft edge, noise, colour adjustment) on the object target.
+  // STATIC like the fill rule: additive at protocol 76, so an older engine
+  // refuses the path (an outcome) and reads no row. A bundle that would
+  // otherwise bake an effect into pixels asks this flag first.
+  "document.effectStack@1",
+  // Engine ADR 1042 (protocol 78) — live vector effects: the vector kinds
+  // on `frameEffectStack`, `groupEffectStack` (a group's Pathfinder
+  // effect) and the `expandAppearance` op. STATIC: the worker handshake
+  // pins protocol 78, which applies them.
+  "document.vectorEffects@1",
+  // Engine ADR 1043 — native appearance: several fills and strokes on one
+  // page item. The vendored wire and catalog carry `frameAppearance` (the
+  // whole layer list, `{ type: "appearance", value: { layers } }`, one
+  // write and one undo step per gesture) and `frameAppearanceLayer` (one
+  // layer by index, `{ type: "appearanceLayer", value: { index, layer } }`).
+  // STATIC like the effect stack: additive at protocol 78, so an older
+  // engine refuses the paths (an outcome) and reads no row. paged.draw
+  // asks it before it moves an appearance off its metadata stack.
+  "document.appearance@1",
+  // Engine ADR 1037 — an image frame's filter stack: `frameImageAdjustments`
+  // (a list of `RasterOp`: exposure, levels, curves, hue/saturation,
+  // recolor, duotone, black & white, sharpen, blur, posterize, threshold,
+  // invert) reads and writes through the ordinary property doors on a
+  // rectangle, oval or polygon. STATIC, like `document.fillRule@1`: the
+  // path and its `imageAdjustments` value are additive at protocol 77, so
+  // an older engine refuses the write as an unknown path (an outcome) and
+  // reads no row. A bundle that would otherwise bake a picture fix into
+  // the pixels (paged.slide's DrawingML picture effects) asks it first.
+  "document.imageAdjustments@1",
   // Engine ADR 1007 — paint model v2. The vendored wire carries a gradient
   // stop's `opacityPct` and inline `color` (`createGradient` /
   // `editGradient`), the `"Conic"` kind, `frameGradientStrokeMode`
@@ -464,7 +586,7 @@ export const HOST_FEATURES: readonly string[] = [
   // ramp) and refuses the paths. paged.draw's SVG importer asks it before
   // writing a gradient with inline, translucent stops.
   "document.paint2@1",
-  // Engine ADR 1040 — gradient meshes and freeform gradients. The vendored
+  // Engine ADR 1048 — gradient meshes and freeform gradients. The vendored
   // wire carries `frameFillMesh` (`Value` `fillMesh`: a `MeshFillSpec`, a
   // grid of Coons/tensor patches or freeform points and lines, points in
   // the frame's inner coordinates; `null` clears it back to the swatch).
@@ -833,7 +955,7 @@ export interface SecretStoreBackend {
  * thin read/write pair over the REAL system clipboard (`navigator.clipboard`
  * in-browser; a fake in the headless harness). The SDK adapter owns the
  * capability gate + the `"vector"` tabular-stripping; this backend only does
- * the raw IO. `read` recovers a `{ text?, tabular? }` payload (or `null` when
+ * the raw IO. `read` recovers a `{ text?, tabular?, svg? }` payload (or `null` when
  * the platform offers nothing / refuses); `write` puts a payload on the
  * clipboard (the editor backend lays down BOTH `text/plain` TSV and a
  * `text/html` `<table>` so a paste into Excel/Sheets/Word lands a real grid).
@@ -841,6 +963,11 @@ export interface SecretStoreBackend {
 export interface ClipboardBackend {
   read(): Promise<ClipboardPayload | null>;
   write(payload: ClipboardPayload): Promise<void>;
+  /** The backend carries the `svg` half (extensions ADR 341): it writes
+   *  it as `image/svg+xml` where the platform takes that type and reads
+   *  the clipboard's SVG back. Absent/false: the door strips `svg` from a
+   *  write and a read, and `supports("clipboard.svg@1")` is false. */
+  readonly svg?: boolean;
 }
 
 /**
@@ -1081,6 +1208,19 @@ export interface BindingProviderBackend {
   /** Offer a structural mutation to the active providers before sending
    *  it to core (`layerMove`, `createSwatch`, …). */
   applyMutation(mutation: MutationInput): Promise<BindingWriteResult>;
+  /** Extensions ADR 340 — the active context's workspace (the frame the
+   *  rulers measure in, its guides, the grid's area), innermost claimer
+   *  first; `resolved: false` keeps the page rulers and guides. */
+  readWorkspace(): Promise<BindingWorkspaceResult>;
+  /** A guide edit from the host's guide machinery, to the provider whose
+   *  workspace the host is showing (the innermost claimer). */
+  editGuide(edit: BindingGuideEdit): Promise<BindingWriteResult>;
+  /** The host's grid and snapping state. Remembered, and delivered to
+   *  every workspace provider now and whenever one becomes active. */
+  setWorkspaceView(view: BindingWorkspaceView): void;
+  /** Rows the active providers add to a host readout surface (the Info
+   *  panel), innermost claimer first. */
+  readReadouts(request: BindingReadoutRequest): Promise<BindingReadoutsResult>;
   /** Fires when the active stack changes OR a provider invalidates —
    *  the host panel's re-read signal. */
   onDidChange(listener: () => void): Disposable;
@@ -1104,6 +1244,17 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
     elementId: string | null;
   }[] = [];
   const listeners = new Set<() => void>();
+  /** The host's last view state (extensions ADR 340), handed to every
+   *  workspace provider as it becomes active. */
+  let workspaceView: BindingWorkspaceView | null = null;
+  const deliverView = (entry: RegisteredBindingProvider) => {
+    if (!workspaceView || !entry.provider.provides.workspace) return;
+    try {
+      entry.provider.workspaceView?.(workspaceView);
+    } catch {
+      // A throwing provider must not break the host's view sync.
+    }
+  };
   // The separator is the ESCAPE `\u0000`, not a literal NUL byte. A raw
   // control character in the source makes every tool that sniffs content
   // treat this 3k-line file as BINARY — `grep` silently matches nothing
@@ -1174,6 +1325,8 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
     setContextActive(plugin, contextType, elementId, isActive) {
       if (isActive) {
         stack.push({ plugin, contextType, elementId });
+        for (const entry of providers.get(key(plugin, contextType)) ?? [])
+          deliverView(entry);
       } else {
         // Pop the INNERMOST matching frame: the same context type can be
         // entered twice (a frame inside a frame), and exiting must
@@ -1289,6 +1442,71 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
         reason: `no active binding provider claimed the "${mutation.op}" op`,
       };
     },
+    async readWorkspace() {
+      for (const { frame, entry } of active()) {
+        if (!entry.provider.provides.workspace) continue;
+        if (!entry.provider.readWorkspace) continue;
+        const read = await entry.provider.readWorkspace();
+        if (read.kind === "decline") continue;
+        return {
+          resolved: true,
+          provider: entry.plugin,
+          elementId: frame.elementId,
+          workspace: read.workspace,
+        };
+      }
+      return {
+        resolved: false,
+        reason: "no active binding provider claimed the workspace",
+      };
+    },
+    async editGuide(edit) {
+      // The provider whose workspace is SHOWN takes the edit: the same
+      // walk as readWorkspace, so a guide is never edited in a frame the
+      // rulers are not measuring.
+      for (const { entry } of active()) {
+        if (!entry.provider.provides.workspace) continue;
+        if (!entry.provider.readWorkspace || !entry.provider.editGuide)
+          continue;
+        const read = await entry.provider.readWorkspace();
+        if (read.kind === "decline") continue;
+        const write = await entry.provider.editGuide(edit);
+        if (write.kind === "decline") break;
+        return {
+          handled: true,
+          provider: entry.plugin,
+          outcome: write.outcome,
+        };
+      }
+      return {
+        handled: false,
+        reason: `no active binding provider took the guide ${edit.kind}`,
+      };
+    },
+    setWorkspaceView(view) {
+      workspaceView = view;
+      for (const { entry } of active()) deliverView(entry);
+    },
+    async readReadouts(request) {
+      for (const { entry } of active()) {
+        if (!(
+          entry.provider.provides.readouts?.includes(request.surface) ?? false
+        ))
+          continue;
+        if (!entry.provider.readReadouts) continue;
+        const read = await entry.provider.readReadouts(request);
+        if (read.kind === "decline") continue;
+        return {
+          resolved: true,
+          provider: entry.plugin,
+          sections: read.sections,
+        };
+      }
+      return {
+        resolved: false,
+        reason: `no active binding provider adds readouts to "${request.surface}"`,
+      };
+    },
     onDidChange(listener) {
       listeners.add(listener);
       return toDisposable(() => listeners.delete(listener));
@@ -1324,7 +1542,24 @@ export type BundleTrust = "first-party";
  */
 export type ShellBackend = Omit<
   ShellSurface,
-  "saveFile" | "enterEditContext" | "exitEditContext" | "setDocumentContext"
+  | "saveFile"
+  | "enterEditContext"
+  | "exitEditContext"
+  | "setDocumentContext"
+  // Extensions ADR 345 — served by the editor's registries
+  // (`presentations`, `views`), not by the app's shell backend.
+  | "present"
+  | "exitPresent"
+  | "presentation"
+  | "onDidChangePresentation"
+  | "showView"
+  | "activeView"
+  | "onDidChangeView"
+  // Extensions ADR 349 — served by the editor's `subContexts` registry.
+  | "enterSubContext"
+  | "exitSubContext"
+  | "subContext"
+  | "onDidChangeSubContext"
 > &
   Partial<Pick<ShellSurface, "saveFile" | "enterEditContext">> & {
     /** Leave the active edit context of `type` (extensions ADR 334); the
@@ -1448,6 +1683,11 @@ export interface CreateBundleHostOptions {
    *  makes `supports("editContext.enterPoint@1")` true, so it is the HOST
    *  that vouches for delivery. */
   editContextEnterPoint?: boolean;
+  /** Editor ADR 285 — the host's History panel lists an active edit
+   *  context's `historySteps` instead of the document's. Only makes
+   *  `supports("editContext.historySteps@1")` true; the SDK passes the
+   *  contribution through either way. */
+  editContextHistorySteps?: boolean;
   /** The host's tool-options store. When absent, `host.tools.settings`
    *  answers `{}` and `supports("tools.settings@1")` is false. */
   toolSettings?: ToolSettingsBackend;
@@ -1588,6 +1828,65 @@ export interface BundleHostHandle {
 }
 
 /** Refuse a malformed scene image before any lane sees it. */
+/** Extensions ADR 342 — a {@link RenderStory} as the wire's
+ *  `SnapshotStory`: only the fields the contract names, each checked, so
+ *  a bundle cannot smuggle anything else into the engine request. */
+function wireStory(story: RenderStory): Record<string, unknown> {
+  const num = (v: unknown) =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+  const strip = (o: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  const rgb = (v: unknown) =>
+    Array.isArray(v) &&
+    v.length === 3 &&
+    v.every((c) => typeof c === "number" && Number.isFinite(c))
+      ? (v as number[]).map((c) => Math.max(0, Math.min(255, Math.round(c))))
+      : undefined;
+  const paragraphs = Array.isArray(story.paragraphs) ? story.paragraphs : [];
+  return strip({
+    bounds: story.bounds.map(Number),
+    verticalJustification: str(story.verticalJustification),
+    firstBaseline: num(story.firstBaseline),
+    paragraphs: paragraphs.map((p) =>
+      strip({
+        runs: (Array.isArray(p?.runs) ? p.runs : []).map((r) =>
+          strip({
+            text: typeof r?.text === "string" ? r.text : "",
+            font: str(r?.font),
+            fontStyle: str(r?.fontStyle),
+            pointSize: num(r?.pointSize),
+            leading: num(r?.leading),
+            fillRgb: rgb(r?.fillRgb),
+            tracking: num(r?.tracking),
+            baselineShift: num(r?.baselineShift),
+            horizontalScale: num(r?.horizontalScale),
+            verticalScale: num(r?.verticalScale),
+            skew: num(r?.skew),
+            underline: bool(r?.underline),
+            strikethru: bool(r?.strikethru),
+            ligatures: bool(r?.ligatures),
+            capitalization: str(r?.capitalization),
+            position: str(r?.position),
+          }),
+        ),
+        justification: str(p?.justification),
+        firstLineIndent: num(p?.firstLineIndent),
+        leftIndent: num(p?.leftIndent),
+        rightIndent: num(p?.rightIndent),
+        spaceBefore: num(p?.spaceBefore),
+        spaceAfter: num(p?.spaceAfter),
+        hyphenation: bool(p?.hyphenation),
+        composer:
+          p?.composer === "paragraph" || p?.composer === "single"
+            ? p.composer
+            : undefined,
+      }),
+    ),
+  });
+}
+
 function checkImage(image: SceneImage): void {
   const { width, height, rgba } = image;
   if (
@@ -1799,6 +2098,24 @@ export function createBundleHost(
   const lists = (arr: readonly string[] | undefined, id: string): boolean =>
     arr?.includes(id) ?? false;
 
+  // Extensions ADR 339 — the pointer-answering overlay doors: handle sets
+  // and the transform box. Created up front because the TOOL door wraps
+  // every contributed gesture handler with their router.
+  const overlayDoorDeps = {
+    getEditor,
+    manifestId: manifest.id,
+    requireOverlay: (door: string) =>
+      requireDeclared(
+        hasRendering("overlay"),
+        door,
+        'capabilities.rendering must include "overlay"',
+      ),
+    warn: (message: string) => log.warn(message),
+  };
+  const handleSets = createHandleSets(overlayDoorDeps);
+  const transformBoxes = createTransformBoxes(overlayDoorDeps);
+  store.add(toDisposable(() => transformBoxes.disposeAll()));
+
   /** W3.2 — an edit-context / object-type `type` is DECLARED when the
    *  manifest's `contributes.editContexts[]` / `contributes.objectTypes[]`
    *  lists an entry with that `type`. (These are object arrays keyed by
@@ -1872,6 +2189,10 @@ export function createBundleHost(
   // resolver that can never be consulted — refused loudly below rather
   // than accepted and silently inert.
   const registeredContexts = new Set<string>();
+  /** Extensions ADR 345 — the presentations and views THIS bundle
+   *  registered (it presents and shows only its own). */
+  const ownPresentations = new Set<string>();
+  const ownViews = new Set<string>();
   const bindingRegistry = options?.bindingProviders;
   /** Extensions ADR 348 — a scope names a context THIS bundle declared
    *  and registered (the contribution borrows its declaration). */
@@ -1907,6 +2228,12 @@ export function createBundleHost(
       gaps.push("provides.collections declared without readCollection()");
     if ((p.provides.ops?.length ?? 0) > 0 && !p.applyMutation)
       gaps.push("provides.ops declared without applyMutation()");
+    if (p.provides.workspace && !p.readWorkspace)
+      gaps.push("provides.workspace declared without readWorkspace()");
+    if (p.provides.workspace && !p.editGuide)
+      gaps.push("provides.workspace declared without editGuide()");
+    if ((p.provides.readouts?.length ?? 0) > 0 && !p.readReadouts)
+      gaps.push("provides.readouts declared without readReadouts()");
     // A declaration list is a SET: a repeated entry means two intents
     // fought over one key and one lost silently. Say so instead.
     const dupes = (label: string, xs: readonly string[] | undefined) => {
@@ -1920,6 +2247,7 @@ export function createBundleHost(
     dupes("collections", p.provides.collections);
     dupes("ops", p.provides.ops);
     dupes("writablePaths", p.provides.writablePaths);
+    dupes("readouts", p.provides.readouts);
     // `writablePaths` NARROWS `paths`; a member outside it is a path the
     // provider believes it writes and will never be asked about, which is
     // the silent-loss shape the dupe check exists for.
@@ -1940,7 +2268,9 @@ export function createBundleHost(
     if (
       (p.provides.paths?.length ?? 0) === 0 &&
       (p.provides.collections?.length ?? 0) === 0 &&
-      (p.provides.ops?.length ?? 0) === 0
+      (p.provides.ops?.length ?? 0) === 0 &&
+      !p.provides.workspace &&
+      (p.provides.readouts?.length ?? 0) === 0
     ) {
       gaps.push("provides declares nothing — the provider could never answer");
     }
@@ -1959,7 +2289,20 @@ export function createBundleHost(
         "contribute.tool",
         `contributes.tools[] must include "${c.id}"`,
       );
-      return store.add(getEditor().registries.tools.register(c));
+      // ADR 339 — the bundle's own tools hear the handle sets and the
+      // transform box: the router wraps each handler the factory makes.
+      const gesture = c.gesture;
+      return store.add(
+        getEditor().registries.tools.register(
+          gesture
+            ? {
+                ...c,
+                gesture: () =>
+                  wrapToolGesture(gesture(), handleSets, transformBoxes),
+              }
+            : c,
+        ),
+      );
     },
     panel(c) {
       assertNamespaced(c.id, "panel");
@@ -2166,6 +2509,10 @@ export function createBundleHost(
       const stamped: EditContextContribution = {
         ...c,
         metadataKey: metadataKey(manifest),
+        // ADR 339 — an open transform box is a sub-edit: Esc and Enter
+        // end the BOX (through the bundle's tool), not the context.
+        isDirty: () =>
+          transformBoxes.surface.active() !== null || (c.isDirty?.() ?? false),
         ...(bindingRegistry
           ? {
               onEnter: (ctx) => {
@@ -2238,6 +2585,73 @@ export function createBundleHost(
       }
       return store.add(reg.register(c));
     },
+    // Extensions ADR 345 (C1) — a presentation the host shows on
+    // `shell.present`. Declared like an importer; registered on the
+    // host's presenter, which owns the screen and the windows.
+    presentation(c: PresentationContribution) {
+      assertNamespaced(c.id, "presentation");
+      requireDeclared(
+        lists(declared?.presentations, c.id),
+        "contribute.presentation",
+        `contributes.presentations[] must include "${c.id}"`,
+      );
+      const reg = getEditor()?.registries?.presentations;
+      if (!reg) {
+        log.warn(
+          `contribute.presentation("${c.id}") registered nothing — the host ` +
+            `wired no presenter (probe supports("shell.present@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      ownPresentations.add(c.id);
+      const d = reg.register(c);
+      return store.add(
+        toDisposable(() => {
+          ownPresentations.delete(c.id);
+          d.dispose();
+        }),
+      );
+    },
+    // Extensions ADR 345 (C5) — a module view that replaces the canvas.
+    view(c: ViewContribution) {
+      assertNamespaced(c.id, "view");
+      requireDeclared(
+        lists(declared?.views, c.id),
+        "contribute.view",
+        `contributes.views[] must include "${c.id}"`,
+      );
+      const reg = getEditor()?.registries?.views;
+      if (!reg) {
+        log.warn(
+          `contribute.view("${c.id}") registered nothing — the host wired ` +
+            `no view registry (probe supports("shell.views@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      ownViews.add(c.id);
+      const d = reg.register(c);
+      return store.add(
+        toDisposable(() => {
+          ownViews.delete(c.id);
+          d.dispose();
+        }),
+      );
+    },
+    // Extensions ADR 349 (C6) — a header / footer / note provider borrows
+    // its edit context's declaration, like a control-bar group.
+    subContextProvider(c: SubContextProviderContribution) {
+      requireOwnContext(c.editContext, "contribute.subContextProvider");
+      const reg = getEditor()?.registries?.subContexts;
+      if (!reg) {
+        log.warn(
+          `contribute.subContextProvider("${c.editContext}") registered ` +
+            `nothing — the host wired no sub-contexts (probe ` +
+            `supports("shell.subContext@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      return store.add(reg.register(manifest.id, c));
+    },
     // Extensions ADR 348 (C1, C3) — both borrow their context's
     // declaration, like a frame surface: a group for a context that can
     // never be active is a silently dead group.
@@ -2262,6 +2676,21 @@ export function createBundleHost(
         log.warn(
           `contribute.statusItem("${c.id}") registered nothing — the host ` +
             `wired no status-bar registry (probe supports("statusBar.items@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      return store.add(reg.register(c));
+    },
+    // Extensions ADR 349 amendment 1 (C5) — a margin band borrows its
+    // context's declaration, like a status item.
+    marginBand(c: MarginBandContribution) {
+      assertNamespaced(c.id, "marginBand");
+      requireOwnContext(c.scope?.editContext, "contribute.marginBand");
+      const reg = getEditor()?.registries?.marginBands;
+      if (!reg) {
+        log.warn(
+          `contribute.marginBand("${c.id}") registered nothing — the host ` +
+            `wired no margin bands (probe supports("shell.marginBand@1"))`,
         );
         return store.add(toDisposable(() => {}));
       }
@@ -2723,6 +3152,36 @@ export function createBundleHost(
     };
   };
 
+  /** Engine ADR 1030 — name the step a write just made (`labelStep`).
+   *  Best effort: a step that is no longer the top keeps its default, and
+   *  an engine that does not know the message changes nothing. */
+  const labelStep = async (
+    outcome: MutationOutcome,
+    label: string,
+  ): Promise<void> => {
+    if (!outcome.applied || typeof outcome.appliedSeq !== "number") return;
+    await getEditor()
+      .client.send({
+        kind: "labelStep",
+        payload: { appliedSeq: outcome.appliedSeq, label },
+      })
+      .catch(() => undefined);
+  };
+
+  /** The page a page-scoped door acts on when the caller names none: the
+   *  document's active page, else its first. */
+  const activePageId = async (): Promise<PageId | null> => {
+    const meta = (await getEditor().client.documentMeta()) as {
+      activePage?: PageId | null;
+    };
+    if (meta.activePage) return meta.activePage;
+    const pages = (await getEditor().client.collection("pages")) as Array<{
+      selfId?: string;
+    }>;
+    const first = pages.find((p) => typeof p.selfId === "string");
+    return first ? (first.selfId as PageId) : null;
+  };
+
   const document: DocumentSurface = {
     async mutate(
       mutation: MutationInput,
@@ -2730,6 +3189,11 @@ export function createBundleHost(
     ): Promise<MutationOutcome> {
       const gated = gateRawWrite(mutation, "document.mutate");
       if (gated !== null) return gated;
+      // Engine ADR 1030 — a caller's name for the step; blank is none.
+      const label =
+        typeof options?.label === "string" && options.label.trim() !== ""
+          ? options.label
+          : undefined;
       if (options?.amend !== undefined) {
         // Engine ADR 1004 — join the undo step `amend` names. The engine
         // checks it is still the last step and that no undo or redo ran
@@ -2744,7 +3208,11 @@ export function createBundleHost(
         try {
           const reply = await getEditor().client.send({
             kind: "amendMutation",
-            payload: { appliedSeq: amend, mutation: mutation as Mutation },
+            payload: {
+              appliedSeq: amend,
+              mutation: mutation as Mutation,
+              ...(label !== undefined ? { label } : {}),
+            },
           });
           return mutateOutcome(reply);
         } catch (error) {
@@ -2760,7 +3228,9 @@ export function createBundleHost(
         // union absorbs it. Widening the handle instead would demand
         // more of every host than the published wire promises.
         const reply = await getEditor().client.mutate(mutation as Mutation);
-        return mutateOutcome(reply);
+        const outcome = mutateOutcome(reply);
+        if (label !== undefined) await labelStep(outcome, label);
+        return outcome;
       } catch (error) {
         return { applied: false, error };
       }
@@ -2821,6 +3291,11 @@ export function createBundleHost(
           return { applied: false, error };
         }
       }
+      // Engine ADR 1030 — the step's name, set once the write landed.
+      const label =
+        typeof options?.label === "string" && options.label.trim() !== ""
+          ? options.label
+          : undefined;
       try {
         const editor = getEditor();
         if (typeof editor.mutateWithBytes === "function") {
@@ -2829,13 +3304,17 @@ export function createBundleHost(
             bytes,
             options?.transfer === true,
           );
-          return mutateOutcome(reply);
+          const outcome = mutateOutcome(reply);
+          if (label !== undefined) await labelStep(outcome, label);
+          return outcome;
         }
         // Older host: the bytes ride the JSON channel as a `number[]`.
         const reply = await editor.client.mutate(
           spliceBytesSlot(mutation, Array.from(bytes)) as Mutation,
         );
-        return mutateOutcome(reply);
+        const outcome = mutateOutcome(reply);
+        if (label !== undefined) await labelStep(outcome, label);
+        return outcome;
       } catch (error) {
         return { applied: false, error };
       }
@@ -2858,6 +3337,62 @@ export function createBundleHost(
         "capabilities.document.write",
       );
       await getEditor().client.redo();
+    },
+    async undoLog(opts?: { limit?: number }): Promise<UndoLog> {
+      requireDocRead("document.undoLog");
+      const limit = opts?.limit;
+      const reply = await getEditor().client.send({
+        kind: "requestUndoLog",
+        payload:
+          typeof limit === "number" && Number.isSafeInteger(limit) && limit >= 0
+            ? { limit }
+            : {},
+      });
+      if (reply.kind !== "undoLog")
+        throw new Error(`document.undoLog: unexpected reply ${reply.kind}`);
+      const step = (e: {
+        appliedSeq: number;
+        label: string;
+        key?: string | null;
+      }): UndoLogStep => ({
+        appliedSeq: e.appliedSeq,
+        label: e.label,
+        key: e.key ?? null,
+      });
+      const p = reply.payload;
+      return {
+        undo: p.undo.map(step),
+        redo: p.redo.map(step),
+        undoLen: p.undoLen,
+        redoLen: p.redoLen,
+        depth: p.depth,
+      };
+    },
+    async undoTo(appliedSeq: number): Promise<boolean> {
+      requireDeclared(
+        hasDoc("write"),
+        "document.undoTo",
+        "capabilities.document.write",
+      );
+      if (!Number.isSafeInteger(appliedSeq) || appliedSeq < 0) return false;
+      const reply = await getEditor().client.send({
+        kind: "undoTo",
+        payload: { appliedSeq },
+      });
+      return reply.kind === "undoApplied";
+    },
+    async redoTo(appliedSeq: number): Promise<boolean> {
+      requireDeclared(
+        hasDoc("write"),
+        "document.redoTo",
+        "capabilities.document.write",
+      );
+      if (!Number.isSafeInteger(appliedSeq) || appliedSeq < 0) return false;
+      const reply = await getEditor().client.send({
+        kind: "redoTo",
+        payload: { appliedSeq },
+      });
+      return reply.kind === "redoApplied";
     },
     collection(name) {
       requireDocRead("document.collection");
@@ -3187,6 +3722,85 @@ export function createBundleHost(
         ? (reply.payload.content ?? null)
         : null;
     },
+    async importSvg(
+      bytes: Uint8Array,
+      options: SvgImportRequest = {},
+    ): Promise<SvgImportResult> {
+      // Engine ADR 1031 (protocol v77). The engine PLANS (a read) and the
+      // plan's one batch goes through `mutate`, so the write gate, the
+      // namespace check and the undo step are the ordinary ones.
+      const empty = { items: 0, notes: [] };
+      const { pageId: wanted, ...svgOptions } = options;
+      try {
+        const pageId = wanted ?? (await activePageId());
+        if (pageId === null) {
+          return {
+            applied: false,
+            report: empty,
+            error: "no page to import onto",
+          };
+        }
+        const reply = await getEditor().client.send({
+          kind: "requestSvgImport",
+          payload: { pageId, bytes: Array.from(bytes), options: svgOptions },
+        });
+        if (reply.kind !== "svgImportPlanned") {
+          return {
+            applied: false,
+            report: empty,
+            error: `the engine did not plan the import (${reply.kind}); it predates protocol 77`,
+          };
+        }
+        const plan = reply.payload;
+        if (!plan.mutation) {
+          return {
+            applied: false,
+            report: plan.report,
+            error: plan.error ?? "the SVG draws nothing",
+          };
+        }
+        const outcome = await document.mutate(plan.mutation as MutationInput);
+        return outcome.applied
+          ? { applied: true, outcome, report: plan.report }
+          : {
+              applied: false,
+              outcome,
+              report: plan.report,
+              error: String(outcome.error ?? "the batch was refused"),
+            };
+      } catch (error) {
+        return { applied: false, report: empty, error: String(error) };
+      }
+    },
+    async exportSvg(request: SvgExportRequest = {}): Promise<SvgExportResult> {
+      // Engine ADR 1031 (protocol v77): a pure read.
+      requireDocRead("document.exportSvg");
+      const empty = { items: 0, notes: [] };
+      const { pageId: wanted, elementIds, ...options } = request;
+      try {
+        const pageId = wanted ?? (await activePageId());
+        if (pageId === null) {
+          return { svg: null, report: empty, error: "no page to export" };
+        }
+        const reply = await getEditor().client.send({
+          kind: "exportSvg",
+          payload: { pageId, elementIds: [...(elementIds ?? [])], options },
+        });
+        if (reply.kind === "svgExported") {
+          return { svg: reply.payload.svg, report: reply.payload.report };
+        }
+        if (reply.kind === "exportSvgFailed") {
+          return { svg: null, report: empty, error: reply.payload.error };
+        }
+        return {
+          svg: null,
+          report: empty,
+          error: `the engine did not export (${reply.kind}); it predates protocol 77`,
+        };
+      } catch (error) {
+        return { svg: null, report: empty, error: String(error) };
+      }
+    },
     onDidChange(listener: (e: DocumentChangeEvent) => void): Disposable {
       requireDocRead("document.onDidChange");
       // Every committed change, whatever committed it (ADR 327): a
@@ -3365,6 +3979,7 @@ export function createBundleHost(
     }
   };
   const render: RenderSurface = {
+    story: (pageId, story, opts) => renderStory(pageId, story, opts),
     async snapshot(pageId, opts) {
       requireDocRead("render.snapshot");
       const dpi = opts?.dpi;
@@ -3464,7 +4079,249 @@ export function createBundleHost(
         opts?.background === "paper" ? "paper" : "transparent",
       );
     },
+    // Extensions ADR 346 (C2) — a page as layers, on the doors above: the
+    // background is the page without the layered (and hidden) items, each
+    // item its own transparent image cropped to what it draws. One scale
+    // for all, so the layers composite back onto the background exactly.
+    async layers(pageId, opts) {
+      requireDocRead("render.layers");
+      const scale = opts?.scale ?? 1;
+      const dpi = scale * 72;
+      checkDpi(dpi, "host.render.layers (scale × 72)");
+      const items = Array.isArray(opts?.items) ? opts.items : [];
+      const hide = Array.isArray(opts?.hideItems) ? opts.hideItems : [];
+      const paragraphs = Array.isArray(opts?.paragraphs) ? opts.paragraphs : [];
+      const format =
+        opts?.format ??
+        (typeof createImageBitmap === "function" ? "bitmap" : "png");
+      const wire = format === "rgba" ? "rgba" : "png";
+      const bg = await render.snapshot(pageId, {
+        dpi,
+        hideItems: [...hide, ...items, ...paragraphs],
+        ...(wire === "rgba" ? { format: "rgba" as const } : {}),
+      });
+      if (!bg) return null;
+      const background = await toLayer(
+        null,
+        bg,
+        { x: 0, y: 0, width: bg.widthPx / scale, height: bg.heightPx / scale },
+        format,
+      );
+      const out: RenderedLayer[] = [];
+      for (const id of items) {
+        const el = await render.element(id, {
+          dpi,
+          format: wire,
+          background: "transparent",
+          ...(opts?.marginPt !== undefined ? { marginPt: opts.marginPt } : {}),
+        });
+        if (!el || el.pageId !== pageId) continue;
+        out.push(await toLayer(id, el, el.region, format));
+      }
+      const paras: RenderedLayer[] = [];
+      for (const id of paragraphs) {
+        for (const band of await paragraphBands(
+          pageId,
+          id,
+          opts?.marginPt ?? 72,
+        )) {
+          const shot = await render.snapshot(pageId, {
+            dpi,
+            only: [id],
+            clip: band.region,
+            ...(wire === "rgba" ? { format: "rgba" as const } : {}),
+            background: "transparent",
+            trim: true,
+          });
+          if (!shot?.region) continue;
+          paras.push({
+            ...(await toLayer(id, shot, shot.region, format)),
+            paragraph: band.paragraph,
+          });
+        }
+      }
+      return {
+        pageId,
+        scale,
+        layoutGeneration: bg.layoutGeneration,
+        background,
+        items: out,
+        ...(paragraphs.length > 0 ? { paragraphs: paras } : {}),
+      };
+    },
   };
+
+  /** C4 — the page bands of a text frame's paragraphs: from each
+   *  paragraph's first line to the next paragraph's first line (the first
+   *  band from the frame's top, the last to its bottom, both grown by
+   *  `marginPt`), across the frame's width grown by `marginPt`. The line
+   *  geometry is the engine's selection geometry of the paragraph's content
+   *  range, restricted to this frame. */
+  async function paragraphBands(
+    pageId: string,
+    id: ElementId,
+    marginPt: number,
+  ): Promise<Array<{ paragraph: number; region: RenderRect }>> {
+    let geometry;
+    try {
+      [geometry] = await getEditor().client.elementGeometry([id]);
+    } catch {
+      return [];
+    }
+    const storyId = (geometry as { storyId?: string | null } | undefined)
+      ?.storyId;
+    if (!geometry || geometry.pageId !== pageId || !storyId) return [];
+    const frameId = (id as { id: unknown }).id;
+    const content = await document.storyContent(storyId);
+    if (!content) return [];
+    const frame = regionAround([geometry], marginPt);
+    const lines: Array<{ paragraph: number; top: number; bottom: number }> = [];
+    let offset = 0;
+    const utf8 = new TextEncoder();
+    for (const [i, p] of content.paragraphs.entries()) {
+      const text = p.runs.map((r) => r.text).join("");
+      const start = offset;
+      const end = start + utf8.encode(text).length;
+      offset = end + 1;
+      if (end === start) continue;
+      let reply: { kind: string; payload?: unknown };
+      try {
+        reply = (await getEditor().client.send({
+          kind: "requestSelectionGeometry",
+          payload: { selection: { storyId, start, end } },
+        } as never)) as { kind: string; payload?: unknown };
+      } catch {
+        continue;
+      }
+      if (reply.kind !== "selectionGeometry") continue;
+      const rects = (
+        reply.payload as {
+          rects: Array<{
+            pageId: string;
+            frameId: string | null;
+            topPt: number;
+            heightPt: number;
+          }>;
+        }
+      ).rects.filter((r) => r.pageId === pageId && r.frameId === frameId);
+      if (rects.length === 0) continue;
+      lines.push({
+        paragraph: i,
+        top: Math.min(...rects.map((r) => r.topPt)),
+        bottom: Math.max(...rects.map((r) => r.topPt + r.heightPt)),
+      });
+    }
+    return lines.map((l, k) => {
+      const top = k === 0 ? Math.min(frame.y, l.top) : l.top;
+      const next = lines[k + 1];
+      const bottom = next
+        ? Math.max(l.bottom, next.top)
+        : Math.max(frame.y + frame.height, l.bottom);
+      return {
+        paragraph: l.paragraph,
+        region: {
+          x: frame.x,
+          y: top,
+          width: frame.width,
+          height: bottom - top,
+        },
+      };
+    });
+  }
+
+  // Extensions ADR 342 — the story door, on the snapshot request. The
+  // engine lays the story out in a copy of the document; this side only
+  // validates and maps the reply.
+  async function renderStory(
+    pageId: PageId,
+    story: RenderStory,
+    opts?: RenderStoryOptions,
+  ): Promise<RenderedElement | null> {
+    requireDocRead("render.story");
+    const dpi = opts?.dpi ?? 72;
+    checkDpi(dpi, "host.render.story");
+    const margin = opts?.marginPt ?? 0;
+    if (!(Number.isFinite(margin) && margin >= 0)) {
+      throw new Error("host.render.story: marginPt must be 0 or more");
+    }
+    const [top, left, bottom, right] = story?.bounds ?? [];
+    if (
+      ![top, left, bottom, right].every(
+        (v) => typeof v === "number" && Number.isFinite(v),
+      ) ||
+      !(bottom! > top! && right! > left!)
+    ) {
+      throw new Error("host.render.story: bounds must have an area");
+    }
+    const rgba = opts?.format !== "png";
+    const trim = opts?.trim !== false;
+    let reply: { kind: string; payload?: unknown };
+    try {
+      reply = (await getEditor().client.send({
+        kind: "requestSnapshot",
+        payload: {
+          pageId,
+          targetWidthPx: 0,
+          hideItems: [],
+          dpi,
+          clip: {
+            x: left! - margin,
+            y: top! - margin,
+            width: right! - left! + 2 * margin,
+            height: bottom! - top! + 2 * margin,
+          },
+          ...(rgba ? { format: "rgba" } : {}),
+          background: "transparent",
+          ...(trim ? { trim: true } : {}),
+          story: wireStory(story),
+        },
+      } as never)) as { kind: string; payload?: unknown };
+    } catch {
+      return null;
+    }
+    if (reply.kind !== "snapshotReady") return null;
+    const p = reply.payload as SnapshotPng & { story?: boolean };
+    // An engine without the field drew the PAGE in that region.
+    if (p.story !== true || !p.region) return null;
+    if (rgba && p.format !== "rgba") return null;
+    return {
+      pageId: p.pageId,
+      widthPx: p.widthPx,
+      heightPx: p.heightPx,
+      png: Uint8Array.from(p.pngBytes ?? []),
+      layoutGeneration: p.layoutGeneration,
+      format: p.format === "rgba" ? "rgba" : "png",
+      ...(p.rgba && p.rgba.length > 0 ? { rgba: Uint8Array.from(p.rgba) } : {}),
+      region: {
+        x: p.region.x,
+        y: p.region.y,
+        width: p.region.width,
+        height: p.region.height,
+      },
+    };
+  }
+
+  /** A snapshot reply as a layer in the asked format. */
+  async function toLayer(
+    id: ElementId | null,
+    shot: {
+      widthPx: number;
+      heightPx: number;
+      png: Uint8Array;
+      rgba?: Uint8Array;
+    },
+    region: RenderRect,
+    format: "bitmap" | "png" | "rgba",
+  ): Promise<RenderedLayer> {
+    const base = { id, widthPx: shot.widthPx, heightPx: shot.heightPx, region };
+    if (format === "rgba")
+      return { ...base, rgba: shot.rgba ?? new Uint8Array() };
+    if (format === "png") return { ...base, png: shot.png };
+    const bitmap = await createImageBitmap(
+      new Blob([shot.png as Uint8Array<ArrayBuffer>], { type: "image/png" }),
+    );
+    return { ...base, bitmap };
+  }
 
   // --------------------------------------------------------- text
   // Font measurement (S-13). A read door — no capability gate (like
@@ -3573,7 +4430,119 @@ export function createBundleHost(
         },
       ]);
     },
+    // Extensions ADR 348 amendment 1 — the selection in characters, and
+    // find / replace over the engine's `RequestFindText` and `findReplace`
+    // (engine ADR 1021): hits come back in caret AND character offsets, so
+    // nothing converts here; Replace All is the engine's one batch.
+    async characterRange() {
+      requireDocRead("text.characterRange");
+      const sel = textSelection?.read() ?? null;
+      if (!sel) return null;
+      const content = await document.storyContent(sel.storyId);
+      if (!content) return null;
+      const paras = paragraphTexts(content);
+      return {
+        storyId: sel.storyId,
+        start: contentToChar(paras, sel.start),
+        end: contentToChar(paras, sel.end),
+      };
+    },
+    async contentRange(range) {
+      requireDocRead("text.contentRange");
+      const content = await document.storyContent(range.storyId);
+      if (!content) return null;
+      const paras = paragraphTexts(content);
+      return {
+        storyId: range.storyId,
+        start: charToContent(paras, range.start),
+        end: charToContent(paras, range.end),
+      };
+    },
+    async find(spec) {
+      requireDocRead("text.find");
+      return findText(spec);
+    },
+    async replace(spec) {
+      if (!spec.find) {
+        return { applied: false, replaced: 0, error: "nothing to find" };
+      }
+      const found = await findText(spec);
+      if (found.error) {
+        return { applied: false, replaced: 0, error: found.error };
+      }
+      if (found.hits.length === 0) {
+        return { applied: false, replaced: 0, error: "nothing matches" };
+      }
+      const outcome = await document.mutate({
+        op: "findReplace",
+        args: {
+          spec: wireFindSpec(spec),
+          replace: spec.replace,
+          replaceAll: spec.all === true,
+          ...(spec.replaceParagraphStyle
+            ? { paragraphStyle: spec.replaceParagraphStyle }
+            : {}),
+          ...(spec.replaceCharacterStyle
+            ? { characterStyle: spec.replaceCharacterStyle }
+            : {}),
+        },
+      } as Mutation);
+      return outcome.applied
+        ? { applied: true, replaced: spec.all === true ? found.hits.length : 1 }
+        : {
+            applied: false,
+            replaced: 0,
+            error: describeError(outcome.error),
+          };
+    },
   };
+
+  /** The wire's `FindSpec` for a contract spec (absent fields stay absent). */
+  function wireFindSpec(
+    spec: TextFindSpec,
+  ): { find: string } & Record<string, unknown> {
+    const out: { find: string } & Record<string, unknown> = {
+      find: spec.find,
+    };
+    if (spec.storyId) out.storyId = spec.storyId;
+    if (spec.mode) out.mode = spec.mode;
+    if (spec.matchCase) out.matchCase = true;
+    if (spec.wholeWord) out.wholeWord = true;
+    if (spec.paragraphStyle) out.paragraphStyle = spec.paragraphStyle;
+    if (spec.characterStyle) out.characterStyle = spec.characterStyle;
+    if (typeof spec.limit === "number") out.limit = spec.limit;
+    return out;
+  }
+
+  async function findText(spec: TextFindSpec): Promise<TextFindResult> {
+    if (!spec.find) return { hits: [] };
+    try {
+      const r = (await getEditor().client.send({
+        kind: "requestFindText",
+        payload: { spec: wireFindSpec(spec) },
+      } as never)) as {
+        kind: string;
+        payload?: { hits?: TextFindHit[]; error?: string | null };
+      };
+      if (r?.kind !== "foundText" || !r.payload) {
+        return { hits: [], error: "the host answered no find result" };
+      }
+      const hits = (r.payload.hits ?? []).map((h) => ({
+        storyId: h.storyId,
+        start: h.start,
+        end: h.end,
+        charStart: h.charStart,
+        charEnd: h.charEnd,
+        paragraph: h.paragraph,
+        text: h.text,
+        context: h.context,
+        contextOffset: h.contextOffset,
+      }));
+      return r.payload.error ? { hits, error: r.payload.error } : { hits };
+    } catch (err) {
+      return { hits: [], error: String(err) };
+    }
+  }
 
   async function readTextPath(
     address: string,
@@ -3747,6 +4716,10 @@ export function createBundleHost(
       };
       store.add(handle);
       return handle;
+    },
+    // ADR 339 — retained handle sets the host draws and hit-tests.
+    handles(id?: string) {
+      return store.add(handleSets.handles(id));
     },
   };
 
@@ -4005,11 +4978,13 @@ export function createBundleHost(
   // bundle as `host.shell.saveFile is not a function`.
   const shellBackend = options?.shell;
   let holdsDocumentContext = false;
+  let leavesSubContextOnDispose = false;
   const documentContextBackend = options?.documentContext;
   const shell: ShellSurface = {
-    openPanel(panelId) {
+    openPanel(panelId, panelOptions) {
       if (shellBackend) {
-        shellBackend.openPanel(panelId);
+        if (panelOptions) shellBackend.openPanel(panelId, panelOptions);
+        else shellBackend.openPanel(panelId);
         return;
       }
       log.warn(
@@ -4110,6 +5085,86 @@ export function createBundleHost(
         );
       }
       return took;
+    },
+    // Extensions ADR 345 (C1) — the presenter. Only this bundle's own
+    // presentations; the host owns where and how they are shown.
+    async present(request) {
+      if (!ownPresentations.has(request.id)) {
+        throw new Error(
+          `plugin-api: shell.present("${request.id}") — ${manifest.id} has ` +
+            `registered no presentation of that id.`,
+        );
+      }
+      const reg = getEditor()?.registries?.presentations;
+      if (!reg) return { presented: false, reason: "no presenter" };
+      return reg.present({
+        id: request.id,
+        target: request.target,
+        options: request.options ?? {},
+      });
+    },
+    async exitPresent() {
+      const reg = getEditor()?.registries?.presentations;
+      const now = reg?.current();
+      if (reg && now && ownPresentations.has(now.id)) await reg.exit();
+    },
+    presentation(): PresentationState | null {
+      return getEditor()?.registries?.presentations?.current() ?? null;
+    },
+    onDidChangePresentation(handler) {
+      const reg = getEditor()?.registries?.presentations;
+      if (!reg) return toDisposable(() => {});
+      return store.add(reg.onChange(() => handler(reg.current())));
+    },
+    // Extensions ADR 345 (C5) — module views.
+    showView(id) {
+      const reg = getEditor()?.registries?.views;
+      if (!reg) return false;
+      if (id !== null && !ownViews.has(id)) {
+        throw new Error(
+          `plugin-api: shell.showView("${id}") — ${manifest.id} has ` +
+            `registered no view of that id.`,
+        );
+      }
+      if (reg.active() === id) return false;
+      return reg.show(id);
+    },
+    activeView() {
+      return getEditor()?.registries?.views?.active() ?? null;
+    },
+    onDidChangeView(handler) {
+      const reg = getEditor()?.registries?.views;
+      if (!reg) return toDisposable(() => {});
+      return store.add(reg.onChange(() => handler(reg.active())));
+    },
+    // Extensions ADR 349 (C6) — a header, footer or note edited in place.
+    // A bundle leaves only its own; the host owns the chrome.
+    enterSubContext(spec) {
+      const reg = getEditor()?.registries?.subContexts;
+      if (!reg) {
+        log.warn(
+          `shell.enterSubContext ignored — the host wired no sub-contexts ` +
+            `(probe supports("shell.subContext@1"))`,
+        );
+        return false;
+      }
+      const took = reg.enter(manifest.id, spec);
+      if (took && !leavesSubContextOnDispose) {
+        leavesSubContextOnDispose = true;
+        store.add(toDisposable(() => void reg.exit(manifest.id)));
+      }
+      return took;
+    },
+    exitSubContext() {
+      return getEditor()?.registries?.subContexts?.exit(manifest.id) ?? false;
+    },
+    subContext(): SubContextState | null {
+      return getEditor()?.registries?.subContexts?.current() ?? null;
+    },
+    onDidChangeSubContext(handler) {
+      const reg = getEditor()?.registries?.subContexts;
+      if (!reg) return toDisposable(() => {});
+      return store.add(reg.onChange(() => handler(reg.current())));
     },
   };
 
@@ -4751,7 +5806,7 @@ export function createBundleHost(
 
   // ----------------------------------------------------- clipboard
   // The capability-gated SYSTEM-clipboard door (K-6 / S-14). Read/write a
-  // `{ text?, tabular? }` payload through the injected backend. The gate
+  // `{ text?, tabular?, svg? }` payload through the injected backend. The gate
   // is a READ-AND-WRITE door: it THROWS in 'enforce' (a manifest bug —
   // the bundle used a door it didn't declare), warns+proceeds in 'warn',
   // like every other gated door. The TIER decides tabular: `"full"` ⇒
@@ -4760,6 +5815,7 @@ export function createBundleHost(
   // wired → read answers `null`, write no-ops (the honest no-clipboard
   // door); supports("clipboard@1") is false.
   const clipboardBackend = options?.clipboard;
+  const clipboardSvg = clipboardBackend?.svg === true;
   const clipboardGate = (door: string): "full" | "vector" => {
     const grant = clipboardGrant();
     requireDeclared(
@@ -4785,6 +5841,11 @@ export function createBundleHost(
         return null;
       }
       if (!payload) return null;
+      // A backend without the svg half never surfaces one (ADR 341).
+      if (!clipboardSvg && payload.svg !== undefined) {
+        const { svg: _dropped, ...rest } = payload;
+        payload = rest;
+      }
       // A "vector" grant never receives the tabular half.
       if (tier === "vector" && payload.tabular !== undefined) {
         const { tabular: _dropped, ...rest } = payload;
@@ -4804,6 +5865,11 @@ export function createBundleHost(
             'is "vector" (text only); declare "full" to copy a cell grid',
         );
         const { tabular: _dropped, ...rest } = payload;
+        toWrite = rest;
+      }
+      // The svg half goes only to a backend that carries it.
+      if (!clipboardSvg && toWrite.svg !== undefined) {
+        const { svg: _dropped, ...rest } = toWrite;
         toWrite = rest;
       }
       try {
@@ -5151,6 +6217,18 @@ export function createBundleHost(
     // disposed bundle's shapes onto the canvas.
     featureSet.add("overlay.layers@1");
   }
+  if (options?.editContextHistorySteps === true) {
+    // Editor ADR 285 — the host's History panel reads a context's
+    // `historySteps` (see the option).
+    featureSet.add("editContext.historySteps@1");
+  }
+  if (hostDrawsHandles(getEditor())) {
+    // ADR 339 — the host draws the handle primitive on the same layer
+    // sink, so handle sets and transform boxes are visible. Without it
+    // both still answer hits and route (pure geometry) but draw nothing.
+    featureSet.add("overlay.handles@1");
+    featureSet.add("host.transformBox@1");
+  }
   if (options?.editContextEnterPoint === true) {
     // W-19 — the host shell vouches that a pointer entry carries the
     // entering point (see the option).
@@ -5209,6 +6287,21 @@ export function createBundleHost(
   }
   if (getEditor()?.registries?.statusItems) {
     featureSet.add("statusBar.items@1");
+  }
+  if (getEditor()?.registries?.presentations) {
+    featureSet.add("shell.present@1");
+    if (getEditor()?.registries?.presentations?.secondary) {
+      featureSet.add("shell.present.secondary@1");
+    }
+  }
+  if (getEditor()?.registries?.views) {
+    featureSet.add("shell.views@1");
+  }
+  if (getEditor()?.registries?.subContexts) {
+    featureSet.add("shell.subContext@1");
+  }
+  if (getEditor()?.registries?.marginBands) {
+    featureSet.add("shell.marginBand@1");
   }
   if (getEditor()?.registries?.frameSurfaces) {
     featureSet.add("editContext.frameSurface@1");
@@ -5290,6 +6383,13 @@ export function createBundleHost(
     // provider will actually be consulted by the host's panels and the
     // adapter reports context activation into it.
     featureSet.add("bindings.provider@1");
+    // Extensions ADR 340 — the same registry carries the workspace lane
+    // (the host rulers, guides and grid follow an active context's frame)
+    // and the readout lane (the Info panel shows a context's rows). The
+    // flags say the REGISTRY routes them; a host that reads them is the
+    // editor that wired it.
+    featureSet.add("bindings.workspace@1");
+    featureSet.add("bindings.readouts@1");
   }
   if (options?.blobStore) {
     // The blob door always exists (no-store fallback); this flag means a
@@ -5302,7 +6402,14 @@ export function createBundleHost(
     // means a real system-clipboard backend is wired, so a bundle can
     // actually read/write the clipboard (K-6 / S-14).
     featureSet.add("clipboard@1");
+    // Extensions ADR 341 — the backend carries the `svg` half
+    // (`image/svg+xml`, the vector interchange).
+    if (options.clipboard.svg === true) featureSet.add("clipboard.svg@1");
   }
+  // Extensions ADR 348 amendment 1 — find and replace go to the engine
+  // (`RequestFindText`, `findReplace`), which every host of this contract
+  // runs; no selection reader is needed.
+  featureSet.add("text.find@1");
   if (options?.textSelection) {
     // Extensions ADR 348 (C4) — a real selection reader is wired: the
     // property reads and format writes have a selection to work on.
@@ -5445,6 +6552,7 @@ export function createBundleHost(
     render,
     text,
     overlay,
+    transformBox: transformBoxes.surface,
     shell,
     storage,
     blob,

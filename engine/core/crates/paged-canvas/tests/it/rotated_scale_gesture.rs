@@ -285,6 +285,7 @@ fn drag(
         page_id: PageId("p1".into()),
         point_in_page: grabbed,
         pivot_in_page: pivot,
+        shear_axis: None,
     };
     let h = model
         .begin_gesture(targets, gesture, Some(anchor))

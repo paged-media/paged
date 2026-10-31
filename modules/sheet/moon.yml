@@ -26,6 +26,10 @@ dependsOn:
   # dml-chart, the shared DrawingML chart reader (slide ADR 709).
   - id: "dml-chart"
     scope: "production"
+  # dml-native, the shared DrawingML paint and effect mapper onto the
+  # engine model (slide ADR 722, sheet ADR 527).
+  - id: "dml-native"
+    scope: "production"
 
 fileGroups:
   rust-sources:
@@ -40,6 +44,10 @@ fileGroups:
     - "/platform/shared/ooxml/Cargo.toml"
     - "/platform/shared/dml-chart/src/**/*.rs"
     - "/platform/shared/dml-chart/Cargo.toml"
+    - "/platform/shared/dml-native/src/**/*.rs"
+    - "/platform/shared/dml-native/Cargo.toml"
+    - "/engine/core/crates/paged-model/**/*.rs"
+    - "/engine/core/crates/paged-model/Cargo.toml"
     - "!fuzz/**"
   rust-tests:
     - "**/*"
@@ -51,6 +59,10 @@ fileGroups:
     - "/platform/shared/ooxml/Cargo.toml"
     - "/platform/shared/dml-chart/src/**/*.rs"
     - "/platform/shared/dml-chart/Cargo.toml"
+    - "/platform/shared/dml-native/src/**/*.rs"
+    - "/platform/shared/dml-native/Cargo.toml"
+    - "/engine/core/crates/paged-model/**/*.rs"
+    - "/engine/core/crates/paged-model/Cargo.toml"
 
 tasks:
   js-test:

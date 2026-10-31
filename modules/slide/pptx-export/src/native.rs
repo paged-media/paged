@@ -77,6 +77,16 @@ pub struct Label {
     pub preset: Option<(String, Vec<(String, String)>)>,
     pub link: Option<Link>,
     pub frame: Option<String>,
+    /// The box the shape's outline was drawn for (slide ADR 717).
+    pub size: Option<(f64, f64)>,
+    /// A stroke-only element of a preset made in the editor: its preset is
+    /// written by the shape's outline element.
+    pub detail: bool,
+    /// The chart part a chart frame draws (ADR 715).
+    pub chart: Option<String>,
+    /// A SmartArt drawing shape (slide W4): its `modelId` and the data
+    /// points whose text it shows, with their paragraph counts.
+    pub dgm: Option<(String, Vec<(String, u32)>)>,
 }
 
 fn s(v: &Value, k: &str) -> Option<String> {
@@ -123,6 +133,24 @@ pub fn parse_label(json: &str) -> Label {
             tooltip: s(l, "tooltip"),
         }),
         frame: s(&d, "frame"),
+        size: d
+            .get("box")
+            .and_then(Value::as_array)
+            .and_then(|b| Some((b.first()?.as_f64()?, b.get(1)?.as_f64()?))),
+        detail: s(&d, "part").as_deref() == Some("detail"),
+        chart: s(&d, "chart"),
+        dgm: d.get("dgm").and_then(|g| {
+            let points = g
+                .get("points")?
+                .as_array()?
+                .iter()
+                .filter_map(|p| {
+                    let p = p.as_array()?;
+                    Some((p.first()?.as_str()?.to_string(), p.get(1)?.as_u64()? as u32))
+                })
+                .collect();
+            Some((s(g, "shape")?, points))
+        }),
     }
 }
 
@@ -308,7 +336,7 @@ fn elem(spread: &Spread, r: &FrameRef) -> Option<Elem> {
             Kind::TextFrame,
             serde_json::to_value(spread.text_frames.get(i)?).ok()?,
         ),
-        FrameRef::Group(_) => return None,
+        FrameRef::Group(_) | FrameRef::Instance(_) => return None,
     };
     let id = s(&v, "self_id").unwrap_or_default();
     Some(Elem { kind, id, v })

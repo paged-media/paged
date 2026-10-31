@@ -1,0 +1,99 @@
+{
+  "fixture": "filters-pixelate",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/filters-pixelate.jsx",
+    "script_sha256": "83c854461f868a536553eb213d248f7248813ddf843f1a8850af93cd1836ddbf",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-25T06:57:25.277Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "identity",
+      "params": {},
+      "output": "filters-pixelate/identity.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "facet",
+      "params": {
+        "am": "Fct "
+      },
+      "output": "filters-pixelate/facet.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "crystallize-10",
+      "params": {
+        "cell": 10,
+        "compare": "stats",
+        "am": "Crst"
+      },
+      "output": "filters-pixelate/crystallize-10.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "pointillize-6",
+      "params": {
+        "cell": 6,
+        "bg": [
+          255,
+          255,
+          255
+        ],
+        "compare": "stats",
+        "am": "Pntl"
+      },
+      "output": "filters-pixelate/pointillize-6.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "mezzotint-fine-dots",
+      "params": {
+        "kind": "fine-dots",
+        "compare": "stats",
+        "am": "Mztn"
+      },
+      "output": "filters-pixelate/mezzotint-fine-dots.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "mezzotint-long-lines",
+      "params": {
+        "kind": "long-lines",
+        "compare": "stats",
+        "am": "Mztn"
+      },
+      "output": "filters-pixelate/mezzotint-long-lines.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "color-halftone-8",
+      "params": {
+        "max_radius": 8,
+        "angles": [
+          108,
+          162,
+          90,
+          45
+        ],
+        "am": "ClrH"
+      },
+      "output": "filters-pixelate/color-halftone-8.png",
+      "profile": "none",
+      "bits": 16
+    }
+  ]
+}

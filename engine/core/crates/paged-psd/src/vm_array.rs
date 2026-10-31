@@ -355,6 +355,18 @@ fn malformed(detail: String) -> PsdError {
 pub fn read_vm_array_list(r: &mut ByteReader) -> Result<VmArrayList> {
     let start = r.pos();
     let unknown = r.u32()?;
+    read_vm_array_list_from(r, start, unknown)
+}
+
+/// The list WITHOUT the leading word: a pattern record (`.pat`, `.asl`,
+/// the `Patt` block) starts its list at the version (Adobe's file format
+/// specification, "Virtual Memory Array List"). `unknown` reads as 0.
+pub fn read_vm_array_list_body(r: &mut ByteReader) -> Result<VmArrayList> {
+    let start = r.pos();
+    read_vm_array_list_from(r, start, 0)
+}
+
+fn read_vm_array_list_from(r: &mut ByteReader, start: usize, unknown: u32) -> Result<VmArrayList> {
     let version = r.u32()?;
     let declared_length = r.u32()?;
     let bounds = VmRect::read(r)?;

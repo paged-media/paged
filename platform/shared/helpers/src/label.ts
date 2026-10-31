@@ -37,11 +37,18 @@ export function labelKey(pluginId: string, sub?: string): string {
 
 /** Escape every character from U+007F up of a JSON text as `\uXXXX`
  *  (surrogate pairs as two escapes). The text parses to the same value; an
- *  ASCII-only label comes back from InDesign byte-exact. */
+ *  ASCII-only label comes back from InDesign byte-exact. The SDK's one
+ *  label escape (`escapeLabelValue`, the lowering kit, extensions ADR 347),
+ *  re-exported: a plugin and a built-in write the same bytes. */
+/** Every character from U+007F up as `\uXXXX` (a surrogate pair as two
+ *  escapes): plugin-sdk's `escapeLabelValue`, the one label escape
+ *  (extensions ADR 347), byte for byte — a test holds the two equal. A
+ *  twin, not a re-export: an import of the SDK's entry here would load its
+ *  catalog in every page and spec that reads a label. */
 export function asciiEscape(json: string): string {
   return json.replace(
-    /[\u007f-￿]/g,
-    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    /[\u007f-\uffff]/g,
+    (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
   );
 }
 

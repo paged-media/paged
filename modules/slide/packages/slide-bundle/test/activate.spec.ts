@@ -22,6 +22,7 @@
 // real slide wasm; the host is a recording fake (the open itself is the
 // conformance spec's business).
 
+import { ANIMATIONS_PANEL_ID } from "../src/anim/pane";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
@@ -46,6 +47,9 @@ import {
   SOURCE_PART,
 } from "../src/activate";
 import type { ImportReport } from "../src/engine";
+import { SHAPES_PANEL_ID } from "../src/shapes";
+import { SMARTART_PANEL_ID } from "../src/smartart";
+import { DESIGN_PANEL_ID } from "../src/design";
 import { SLIDE_KEY } from "../src/slides-model";
 
 const FIXTURE = new URL(
@@ -214,11 +218,25 @@ describe("paged.slide importer", () => {
       },
     } as unknown as BundleHost;
     const handle = activate(host);
-    expect(panels.map((p) => p.id)).toEqual([SLIDES_PANEL_ID, NOTES_PANEL_ID]);
+    // The Shapes panel (Insert ▸ Shapes, ADR 717), the SmartArt text pane
+    // (slide W4) and the Animations pane (ADR 714) beside them.
+    // The Design panel (Design ▸ Themes, ADR 713) too, never in the rail.
+    expect(panels.map((p) => p.id)).toEqual([
+      SLIDES_PANEL_ID,
+      SHAPES_PANEL_ID,
+      SMARTART_PANEL_ID,
+      DESIGN_PANEL_ID,
+      NOTES_PANEL_ID,
+      ANIMATIONS_PANEL_ID,
+    ]);
     // A document that is not a deck keeps them out of the panel rail.
     expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([
       false,
+      undefined,
       false,
+      false,
+      false,
+      undefined,
     ]);
     handle.dispose();
 

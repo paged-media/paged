@@ -67,19 +67,35 @@ async function touch(
   const cdp = await page.context().newCDPSession(page);
   const points = (at: ReadonlyArray<readonly [number, number]>) =>
     at.map(([x, y], id) => ({ x, y, id }));
+  // Each step a frame apart, and the fingers rest before they lift: a
+  // finger lifted while still moving flings, and the browser spends the
+  // next tap stopping the fling instead of clicking.
+  const t0 = Date.now() / 1000;
+  const at = (ms: number) => t0 + ms / 1000;
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchStart",
     touchPoints: points(steps[0]!),
+    timestamp: at(0),
   });
-  for (const at of steps.slice(1)) {
+  let ms = 0;
+  for (const step of steps.slice(1)) {
+    ms += 16;
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
-      touchPoints: points(at),
+      touchPoints: points(step),
+      timestamp: at(ms),
     });
   }
+  ms += 300;
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: points(steps[steps.length - 1]!),
+    timestamp: at(ms),
+  });
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchEnd",
     touchPoints: [],
+    timestamp: at(ms + 16),
   });
   await cdp.detach();
 }

@@ -151,10 +151,14 @@ test.describe("journey · paged.data refresh and undo", () => {
     await expect
       .poll(() => values(page), { timeout: 20_000 })
       .toEqual(["Engineer", "Grace Hopper"]);
+    // The label is read from the document a moment after the values show.
+    await expect
+      .poll(() => sessionLabel(page), {
+        message: "the refresh carried a new session label",
+        timeout: 10_000,
+      })
+      .not.toBe(lowered);
     const refreshed = await sessionLabel(page);
-    expect(refreshed, "the refresh carried a new session label").not.toBe(
-      lowered,
-    );
     expect(
       await partText(page, `paged/media.paged.data/sessions/${refreshed}.json`),
     ).toContain("WHERE");

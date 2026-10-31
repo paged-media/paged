@@ -393,6 +393,15 @@ pub(super) fn placed_visible_top_left(obj: &InlineObject, at: &PlacedObject) -> 
     }
 }
 
+/// A Word first-fit paragraph's line, as [`line_object_shift`] needs it:
+/// its auto leading as a multiple of the size (`LayoutOptions::auto_leading`)
+/// and its face's `hhea` ascent in ems (`FontMetrics::hhea_ascender`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct WordLine {
+    pub auto_leading: f32,
+    pub ascent: f32,
+}
+
 /// An in-line object's character in a composed line: the object, the
 /// glyph's cluster, and the anchor character's point size.
 #[derive(Debug, Clone, Copy)]
@@ -420,12 +429,23 @@ pub(super) struct LineObject {
 ///   is a glyph as tall as its rise, so the baseline is at least `top +
 ///   rise` (ascent rule, both leading modes); with an above-line object
 ///   the line sits a full leading below it, `top + room + leading`.
+///
+/// **Word's first-fit** (`word`, engine ADR 1016) sets a line otherwise,
+/// as Word 16 answered `first-fit.word.json` (P01–P07): a line is the text's
+/// ascent above the baseline and the rest of its auto-leaded line below it
+/// (the descent, plus all of a 1.5-line spacing's extra), and a picture
+/// replaces only the ascent. So under auto leading the line moves down by
+/// `rise + auto leading − ascent` where its leading is less: 43 pt for a
+/// 40 pt picture in single-spaced Courier New 10 pt (a 3 pt descent), 48.67
+/// at 1.5 lines, where the InDesign rule gives 42 for both. The ascent is
+/// the face's `hhea` one, Word's.
 pub(super) fn line_object_shift(
     objects: &InlineObjects,
     on_line: &[LineObject],
     auto_leading: bool,
     leading_64: i32,
     first: Option<(i32, i32)>,
+    word: Option<WordLine>,
 ) -> i32 {
     let to_64 = |pt: f32| (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
     let mut above = 0;
@@ -439,7 +459,11 @@ pub(super) fn line_object_shift(
             above += to_64(o.above_room());
         } else {
             rise = rise.max(to_64(o.rise()));
-            need = need.max(to_64(o.rise() + 0.2 * lo.point_size));
+            let below = match word {
+                Some(w) => (w.auto_leading - w.ascent) * lo.point_size,
+                None => 0.2 * lo.point_size,
+            };
+            need = need.max(to_64(o.rise() + below));
         }
     }
     match first {
@@ -839,7 +863,11 @@ fn emit_one_anchored_frame(
             // bakes the page-local placement into a Rectangle whose
             // bounds sit in spread coords so `frame_outer_transform`
             // unwinds back to the right page-local position.
-            if frame_w > 0.0 && frame_h > 0.0 {
+            // A picture frame with a look (engine ADR 1045) paints its body
+            // in the picture pass, around its picture, so its opacity,
+            // blend mode and effects take the picture in: see
+            // `emit_anchored_rect_image`.
+            if frame_w > 0.0 && frame_h > 0.0 && !paints_with_picture(af) {
                 emit_anchored_rect_via_pipeline(
                     em,
                     af,
@@ -952,79 +980,7 @@ fn emit_anchored_rect_via_pipeline(
         bottom: place_y + oy + h,
         right: place_x + ox + w,
     };
-    let synthetic = Rectangle {
-        self_id: af.self_id.clone(),
-        bounds,
-        item_transform: None,
-        fill_color: af.fill_color.clone(),
-        fill_tint: af.fill_tint,
-        stroke_color: af.stroke_color.clone(),
-        stroke_weight: af.stroke_weight,
-        drop_shadow: None,
-        stroke_drop_shadow: None,
-        fill_transparency: None,
-        stroke_transparency: None,
-        content_transparency: None,
-        fill_drop_shadow: None,
-        content_drop_shadow: None,
-        // Image emission for anchored Rectangles is deferred — the
-        // per-page image cache lives in the pre-pass scope, outside
-        // StoryEmitter. The parser still surfaces image_link /
-        // image_item_transform on AnchoredFrame so a future renderer
-        // pass can pick them up. Today's anchored.idml ships no
-        // image-bearing anchored Rectangles.
-        image_link: None,
-        image_bytes: None,
-        image_clip: None,
-        has_image_element: false,
-        has_inline_pdf: false,
-        has_inline_eps: false,
-        placed_pdf: None,
-        image_item_transform: None,
-        applied_object_style: af.applied_object_style.clone(),
-        text_wrap: None,
-        frame_fitting: None,
-        stroke_type: None,
-        stroke_gap_color: None,
-        stroke_gap_tint: None,
-        stroke_dash: Vec::new(),
-        stroke_alignment: None,
-        end_cap: None,
-        end_join: None,
-        miter_limit: None,
-        item_layer: None,
-        corner_radius: None,
-        corner_option: None,
-        corners: Default::default(),
-        is_anchored: true,
-        opacity: None,
-        blend_mode: None,
-        effects: None,
-        gradient_fill_angle: af.gradient_fill_angle,
-        // `AnchoredFrame` carries no `GradientFillStart` / `Length` (the
-        // adapter reads only the angle on an anchored frame), so the
-        // ramp takes InDesign's default placement — bottom-left corner,
-        // the frame's width — which `gradient-geometry` case 27 measures.
-        gradient_fill_length: None,
-        gradient_fill_start: None,
-        gradient_stroke_angle: None,
-        gradient_stroke_length: None,
-        text_paths: Vec::new(),
-        // Anchored frames don't currently carry overprint attrs in our
-        // AnchoredFrame mirror; default to knockout (the IDML default).
-        overprint_fill: false,
-        overprint_stroke: false,
-        nonprinting: false,
-        visible: true,
-        locked: false,
-        anchors: Vec::new(),
-        subpath_starts: Vec::new(),
-        subpath_open: Vec::new(),
-        fill_rule: paged_model::FillRule::NonZero,
-        gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
-        fill_mesh: None,
-        pattern_transform: None,
-    };
+    let synthetic = synthetic_rectangle(af, bounds, false);
     // `emit_rectangle_into` increments `page.stats.frames` internally.
     // An anchored frame's picture paints in its own pass (see
     // `emit_anchored_rect_image`).
@@ -1036,6 +992,7 @@ fn emit_anchored_rect_via_pipeline(
         em.options.fallback_frame_fill,
         em.color_ctx,
         None,
+        &mut |_: &mut BuiltPage| {},
         &mut |_: &mut BuiltPage| {},
     );
 }
@@ -1051,6 +1008,14 @@ fn emit_anchored_rect_via_pipeline(
 /// emitted earlier by the body / master story pass — same z-order
 /// as a spread-level Rectangle whose `<Image>` child overlays the
 /// rectangle's solid fill.
+///
+/// A picture frame with a look (engine ADR 1045: an opacity, a blend
+/// mode, an effect, a target setting) is painted WHOLE here instead —
+/// its fill, picture and stroke as one run through `emit_rectangle_into`,
+/// the picture as the run's content — so the look takes the picture in,
+/// as a free frame's does (ADR 203, ADR 1008). Its body was not drawn in
+/// the story pass ([`paints_with_picture`]).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_anchored_rect_image(
     page: &mut BuiltPage,
     af: &paged_model::AnchoredFrame,
@@ -1059,6 +1024,7 @@ pub(super) fn emit_anchored_rect_image(
     w: f32,
     h: f32,
     options: &PipelineOptions,
+    look: AnchoredLook<'_>,
     page_image_cache: &mut HashMap<String, paged_compose::ImageId>,
     decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
 ) {
@@ -1069,7 +1035,97 @@ pub(super) fn emit_anchored_rect_image(
         bottom: place_y + oy + h,
         right: place_x + ox + w,
     };
-    let synthetic = Rectangle {
+    let mut synthetic = synthetic_rectangle(af, bounds, true);
+    // An anchored frame's `<Image>` keeps no metadata of its own here: it
+    // follows the document's Color Settings.
+    let rendering = image_rendering(options, None);
+    if !paints_with_picture(af) {
+        emit_rectangle_image(
+            page,
+            &synthetic,
+            options,
+            page_image_cache,
+            decoded_cache,
+            None,
+            rendering,
+        );
+        return;
+    }
+    // A picture frame with neither a fill nor a stroke paints only its
+    // picture, so its object shadow is cast by the picture (a Word or
+    // Office picture's shadow): stamped under the picture's box, inside
+    // the object's group. The outline-cast object shadow finds nothing to
+    // cast from on such a frame. A stored stack draws its own shadow.
+    let bare = frame_fill_is_transparent(synthetic.fill_color.as_deref())
+        && !frame_stroke_is_visible(
+            synthetic.stroke_color.as_deref(),
+            synthetic.stroke_weight.unwrap_or(0.0),
+        )
+        && synthetic.effect_stack.is_empty();
+    let object_shadow = if bare {
+        synthetic.drop_shadow.take()
+    } else {
+        None
+    };
+    let shadow = resolve_frame_shadow(
+        synthetic
+            .content_drop_shadow
+            .as_ref()
+            .or(object_shadow.as_ref()),
+        None,
+        look.palette,
+        look.color_ctx,
+    );
+    emit_rectangle_into(
+        page,
+        &synthetic,
+        look.document,
+        look.palette,
+        options.fallback_frame_fill,
+        look.color_ctx,
+        None,
+        &mut |page: &mut BuiltPage| {
+            emit_rectangle_image(
+                page,
+                &synthetic,
+                options,
+                page_image_cache,
+                decoded_cache,
+                shadow,
+                rendering,
+            )
+        },
+        &mut |_: &mut BuiltPage| {},
+    );
+}
+
+/// What the picture pass needs to paint a whole anchored frame.
+#[derive(Clone, Copy)]
+pub(super) struct AnchoredLook<'a> {
+    pub document: &'a Document,
+    pub palette: &'a Graphic,
+    pub color_ctx: ColorCtx<'a>,
+}
+
+/// Whether an anchored frame paints its body in the picture pass: it
+/// places a picture and carries a look the picture must be inside of
+/// (engine ADR 1045). A frame without a look keeps the two passes, and
+/// so its display list, exactly as before.
+pub(super) fn paints_with_picture(af: &paged_model::AnchoredFrame) -> bool {
+    af.image_link.is_some()
+        && matches!(af.frame_kind, paged_model::AnchoredFrameKind::Rectangle)
+        && af.has_transparency()
+}
+
+/// The rectangle an anchored frame paints as, its bounds in spread
+/// coordinates: the anchored frame's own paint and look (engine ADR 1045:
+/// the free frames' fields, copied), and its picture when `with_image`.
+fn synthetic_rectangle(
+    af: &paged_model::AnchoredFrame,
+    bounds: paged_model::Bounds,
+    with_image: bool,
+) -> Rectangle {
+    Rectangle {
         self_id: af.self_id.clone(),
         bounds,
         item_transform: None,
@@ -1077,45 +1133,56 @@ pub(super) fn emit_anchored_rect_image(
         fill_tint: af.fill_tint,
         stroke_color: af.stroke_color.clone(),
         stroke_weight: af.stroke_weight,
-        drop_shadow: None,
-        stroke_drop_shadow: None,
-        fill_transparency: None,
-        stroke_transparency: None,
-        content_transparency: None,
-        fill_drop_shadow: None,
-        content_drop_shadow: None,
-        image_link: af.image_link.clone(),
-        has_image_element: af.image_link.is_some(),
+        drop_shadow: af.drop_shadow.clone(),
+        stroke_drop_shadow: af.stroke_drop_shadow.clone(),
+        fill_transparency: af.fill_transparency.clone(),
+        stroke_transparency: af.stroke_transparency.clone(),
+        content_transparency: af.content_transparency.clone(),
+        fill_drop_shadow: af.fill_drop_shadow.clone(),
+        content_drop_shadow: af.content_drop_shadow.clone(),
+        image_link: af.image_link.clone().filter(|_| with_image),
+        has_image_element: with_image && af.image_link.is_some(),
         has_inline_pdf: false,
         has_inline_eps: false,
         placed_pdf: None,
-        image_item_transform: af.image_item_transform,
+        image_item_transform: af.image_item_transform.filter(|_| with_image),
         image_bytes: None,
         image_clip: None,
         applied_object_style: af.applied_object_style.clone(),
         text_wrap: None,
         frame_fitting: None,
-        stroke_type: None,
+        stroke_type: af.stroke_type.clone(),
         stroke_gap_color: None,
         stroke_gap_tint: None,
-        stroke_dash: Vec::new(),
-        stroke_alignment: None,
-        end_cap: None,
-        end_join: None,
-        miter_limit: None,
+        stroke_dash: af.stroke_dash.clone(),
+        stroke_alignment: af.stroke_alignment.clone(),
+        end_cap: af.end_cap.clone(),
+        end_join: af.end_join.clone(),
+        miter_limit: af.miter_limit,
         item_layer: None,
         corner_radius: None,
         corner_option: None,
         corners: Default::default(),
         is_anchored: true,
-        opacity: None,
-        blend_mode: None,
-        effects: None,
+        opacity: af.opacity,
+        blend_mode: af.blend_mode.clone(),
+        effects: af.effects.clone(),
+        effect_stack: af.effect_stack.clone(),
+        appearance: Vec::new(),
         gradient_fill_angle: af.gradient_fill_angle,
-        gradient_fill_length: None,
-        gradient_fill_start: None,
+        // Without a `GradientFillStart` / `Length` of its own the ramp
+        // takes InDesign's default placement — bottom-left corner, the
+        // frame's width — which `gradient-geometry` case 27 measures. A
+        // start is in the frame's inner coordinates, which for a frame
+        // placed by the anchored pass are its own box from (0, 0): moved
+        // with the box onto the page.
+        gradient_fill_length: af.gradient_fill_length,
+        gradient_fill_start: af
+            .gradient_fill_start
+            .map(|[x, y]| [bounds.left + x - af_left(af), bounds.top + y - af_top(af)]),
         gradient_stroke_angle: None,
         gradient_stroke_length: None,
+        gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         text_paths: Vec::new(),
         // Anchored frames don't currently carry overprint attrs in our
         // AnchoredFrame mirror; default to knockout (the IDML default).
@@ -1128,18 +1195,20 @@ pub(super) fn emit_anchored_rect_image(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
-        gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
+        image_adjustments: Vec::new(),
         fill_mesh: None,
         pattern_transform: None,
-    };
-    emit_rectangle_image(
-        page,
-        &synthetic,
-        options,
-        page_image_cache,
-        decoded_cache,
-        None,
-    );
+    }
+}
+
+/// The left and top of an anchored frame's own box (its `bounds` in its
+/// inner coordinates; 0 without one).
+fn af_left(af: &paged_model::AnchoredFrame) -> f32 {
+    af.bounds.map_or(0.0, |b| b.left)
+}
+
+fn af_top(af: &paged_model::AnchoredFrame) -> f32 {
+    af.bounds.map_or(0.0, |b| b.top)
 }
 
 /// Flow the story referenced by an anchored TextFrame into the
@@ -1250,6 +1319,8 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         fill_mesh: None,
         pattern_transform: None,
         effects: None,
+        effect_stack: Vec::new(),
+        appearance: Vec::new(),
         gradient_fill_angle: None,
         gradient_fill_length: None,
         gradient_fill_start: None,
@@ -1516,6 +1587,7 @@ mod tests {
             ascender: 0.800,
             descender: 0.200,
             em_top: None,
+            hhea_ascender: 0.800,
         }
     }
 
@@ -1573,6 +1645,7 @@ mod tests {
             ascender: 0.750,
             descender: 0.250,
             em_top: None,
+            hhea_ascender: 0.750,
         };
         let lm = LineRefMetrics::resolve(BASELINE_Y, PT, LEADING, Some(&m));
         assert!(
@@ -1613,10 +1686,142 @@ mod tests {
             ascender: 0.0,
             descender: 0.0,
             em_top: None,
+            hhea_ascender: 0.0,
         };
         let lm = LineRefMetrics::resolve(BASELINE_Y, PT, LEADING, Some(&m));
         assert!(lm.top_of_leading_y.is_finite());
         assert!(close(lm.top_of_leading_y, 500.0 - 0.8 * LEADING));
+    }
+
+    // --- line_object_shift: a picture's line, InDesign's and Word's ----
+    //
+    // Word's numbers are its answer to the doc module's first-fit probe
+    // (`paged-text/tests/fixtures/first-fit.word.json`): Courier New 10 pt,
+    // whose hhea ascent is 1705/2048 em and single line 2320/2048 em (the
+    // lowering's measured table), a 20 x 40 pt picture.
+
+    const COURIER_ASCENT: f32 = 1705.0 / 2048.0;
+    const COURIER_SINGLE: f32 = 2320.0 / 2048.0;
+
+    fn picture(height: f32) -> InlineObjects {
+        InlineObjects {
+            objects: vec![InlineObject {
+                frame: 0,
+                above_line: false,
+                width: 20.0,
+                height,
+                stroke_half: 0.0,
+                y_offset: 0.0,
+                alignment: String::new(),
+            }],
+            next: 0,
+            placed: vec![None],
+        }
+    }
+
+    const ON_LINE: [LineObject; 1] = [LineObject {
+        object: 0,
+        cluster: 0,
+        point_size: 10.0,
+    }];
+
+    fn to_64(pt: f32) -> i32 {
+        (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32
+    }
+
+    fn to_pt(v: i32) -> f32 {
+        v as f32 / paged_text::shape::ADVANCE_PRECISION
+    }
+
+    /// How far below the line before it a line holding a `height` pt
+    /// picture sits, under auto leading `pitch` pt (10 pt text).
+    fn step(height: f32, pitch: f32, word: bool) -> f32 {
+        let word = word.then_some(WordLine {
+            auto_leading: pitch / 10.0,
+            ascent: COURIER_ASCENT,
+        });
+        let l = to_64(pitch);
+        to_pt(l + line_object_shift(&picture(height), &ON_LINE, true, l, None, word))
+    }
+
+    /// Word's baseline step INTO a picture case's line `k` from line
+    /// `k - 1` of the same paragraph (same face: the difference of the
+    /// glyph tops pdftotext reports).
+    fn word_step(label: &str, k: usize) -> f32 {
+        let answer: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../paged-text/tests/fixtures/first-fit.word.json"
+        ))
+        .unwrap();
+        let case = answer["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["label"] == label)
+            .unwrap();
+        let lines = case["word_lines"].as_array().unwrap();
+        let top = |i: usize| lines[i]["top_pt"].as_f64().unwrap() as f32;
+        top(k) - top(k - 1)
+    }
+
+    /// Word places its line positions on a grid of about a quarter point
+    /// (its 11.33 pt single lines step 11.25 and 11.5 in the PDF).
+    const WORD_GRID: f32 = 0.2;
+
+    #[test]
+    fn a_picture_line_under_word_first_fit_takes_words_height() {
+        let single = COURIER_SINGLE * 10.0;
+        let one_and_half = single * 1.5;
+        // P06: single spacing, the picture on the paragraph's 2nd line.
+        let word = word_step("P06", 1);
+        let ours = step(40.0, single, true);
+        assert!(
+            (ours - word).abs() < WORD_GRID,
+            "P06: {ours} vs Word {word}"
+        );
+        assert!((ours - 43.0).abs() < 0.01, "40 pt plus the 3 pt descent");
+        // ... and the line after it steps the text's pitch again.
+        assert!((word_step("P06", 2) - single).abs() < WORD_GRID);
+        // P07: 1.5 lines. The extra half line stays below the baseline.
+        let word = word_step("P07", 1);
+        let ours = step(40.0, one_and_half, true);
+        assert!(
+            (ours - word).abs() < WORD_GRID,
+            "P07: {ours} vs Word {word}"
+        );
+        assert!((word_step("P07", 2) - one_and_half).abs() < WORD_GRID);
+        // P05: a 4 pt picture is lower than the text: the pitch holds.
+        assert!((step(4.0, single, true) - single).abs() < 0.01);
+        // P03: at least 14 pt, which the lowering sets as auto leading at
+        // the single line with the text runs at 14 pt (the line's leading
+        // below): 40 + 3, as at single spacing — Word's 43.1 (from P02o
+        // and P03n, `word_step` cannot see across paragraphs).
+        let l = to_64(14.0);
+        let w = WordLine {
+            auto_leading: COURIER_SINGLE,
+            ascent: COURIER_ASCENT,
+        };
+        let ours = to_pt(l + line_object_shift(&picture(40.0), &ON_LINE, true, l, None, Some(w)));
+        assert!((ours - 43.0).abs() < 0.01, "P03: {ours}");
+    }
+
+    #[test]
+    fn a_picture_line_keeps_indesigns_rule_outside_word_first_fit() {
+        // `rise + 0.2 x pt`, measured on InDesign 20.0.1: 42 pt, whatever
+        // the auto leading — the rule Word's lines were set by before.
+        assert!((step(40.0, 12.0, false) - 42.0).abs() < 0.01);
+        assert!((step(40.0, COURIER_SINGLE * 15.0, false) - 42.0).abs() < 0.01);
+        // At a frame's first line both put the baseline a rise below the
+        // top (Word's P01, the first line of page 2: its glyph top at
+        // 103.70 pt, 72 + 40 less the 8.3 pt ascent pdftotext reports).
+        let first = Some((to_64(8.0), 0));
+        let w = Some(WordLine {
+            auto_leading: COURIER_SINGLE,
+            ascent: COURIER_ASCENT,
+        });
+        for word in [None, w] {
+            let d = line_object_shift(&picture(40.0), &ON_LINE, true, to_64(11.33), first, word);
+            assert!((to_pt(to_64(8.0) + d) - 40.0).abs() < 0.01);
+        }
     }
 
     // --- PageMargins vs PageEdge span divergence ----------------------

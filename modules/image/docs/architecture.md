@@ -180,7 +180,12 @@ is journaled one byte per texel under the scope `layer id | MASK_SCOPE_BIT`, so 
 step on the same undo list and replays into the mask of the right layer. The fold itself is
 unchanged: a painted mask is an ordinary mask.
 
-A layer's kind is pixels, smart object, fill or adjustment (`layers/kinds.rs`). A fill layer's
+A layer's kind is pixels, smart object, fill or adjustment (`layers/kinds.rs`). A smart
+object is a source, a placement and smart filters (`smart.rs`, `layers/smart_ops.rs`,
+[ADR 482](adr/482-smart-objects-in-full.md)): its pixels are the source drawn through the
+placement's homography on the CPU (`paged-resample`'s projective warp), then its filters run by
+the bundle through the Filter dialog's catalogue on a detached handle and landed through the
+filter mask; Edit Contents parks the stack and binds the source's own (`wasm/smart_doors.rs`). A fill layer's
 pixels are a render of its source by the `gen.*` kernels (a gradient is the style's generator
 from black to white, then `adjust.gradient_map` with the stops' ramp), kept like a smart
 object's render and redrawn when stale. A typed adjustment lowers onto the adjust chain

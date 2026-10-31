@@ -72,6 +72,8 @@ export type {
   ValueTypeKind,
   PropertySchema,
   IdmlSpelling,
+  EffectKindDescriptor,
+  EffectParamDescriptor,
   ContentSchema,
   ObjectErrorCode,
   ObjectValue,
@@ -127,7 +129,13 @@ export type {
   SecretsSurface,
   SecretMaterial,
   DocumentSurface,
+  SvgExportRequest,
+  SvgExportResult,
+  SvgImportRequest,
+  SvgImportResult,
   MutateOptions,
+  UndoLog,
+  UndoLogStep,
   SwatchDisplay,
   MutateWithBytesOptions,
   SelectionSurface,
@@ -139,6 +147,13 @@ export type {
   RenderedElement,
   RenderElementOptions,
   RenderRect,
+  RenderLayersOptions,
+  RenderedLayer,
+  RenderedLayers,
+  RenderStory,
+  RenderStoryParagraph,
+  RenderStoryRun,
+  RenderStoryOptions,
   TextSurface,
   TextMetrics,
   TextCaret,
@@ -146,6 +161,13 @@ export type {
   TextPropertyRead,
   TextPropertyWrite,
   TextFormatResult,
+  // Extensions ADR 348 amendment 1 — find and replace on host.text.
+  TextFindMode,
+  TextFindSpec,
+  TextFindHit,
+  TextFindResult,
+  TextReplaceSpec,
+  TextReplaceResult,
   FrameChainLink,
   // B-22 (protocol v57) — the planar-region read door's result shapes.
   PlanarFace,
@@ -156,7 +178,20 @@ export type {
   OverlaySurface,
   // W-20 — a retained, data-only overlay layer.
   OverlayLayer,
+  // Extensions ADR 339 — handle sets and the host-drawn transform box.
+  OverlayHandleSet,
+  OverlayHandleSpace,
+  OverlayHandleSpec,
+  ProjectiveMatrix,
+  TransformQuad,
+  TransformBoxMode,
+  TransformBoxOperation,
+  TransformBoxUpdate,
+  TransformBoxOptions,
+  TransformBoxSession,
+  TransformBoxSurface,
   ShellSurface,
+  OpenPanelOptions,
   FilePickerOptions,
   PickedFile,
   // K-10 — the save-file door's payload (the inverse of PickedFile).
@@ -222,6 +257,7 @@ export type {
   ObjectTypeContribution,
   EditContextCandidate,
   EnteredEditContext,
+  EditContextHistory,
   ContentPointerEvent,
   ContentWheelEvent,
   EditContextDescriptor,
@@ -282,6 +318,7 @@ export type {
   BindingDecline,
   BindingWrite,
   BindingCollection,
+  ProvidedLinkRow,
   BindingOp,
   BindingProvider,
   BindingProviderScope,
@@ -291,6 +328,21 @@ export type {
   BindingWriteResult,
   BindingCollectionResult,
   ActiveBindingProvider,
+  // Extensions ADR 340 — the workspace (rulers, guides, grid) and
+  // readout lanes.
+  BindingReadoutSurface,
+  BindingRulerUnit,
+  BindingWorkspace,
+  BindingWorkspaceGuide,
+  BindingWorkspaceRead,
+  BindingGuideEdit,
+  BindingWorkspaceView,
+  BindingReadoutRow,
+  BindingReadoutSection,
+  BindingReadoutRequest,
+  BindingReadoutsRead,
+  BindingWorkspaceResult,
+  BindingReadoutsResult,
 } from "./binding-provider.js";
 
 export type {
@@ -315,6 +367,22 @@ export type {
   SnapExclude,
   SnapSource,
   SnapSettings,
+} from "./wire.js";
+
+// Engine ADR 1037 — one step of an image frame's filter stack, the item of
+// the `imageAdjustments` value `frameImageAdjustments` carries.
+export type { RasterOp } from "./wire.js";
+
+// Engine ADR 1031 — `host.document.importSvg` / `exportSvg`'s options and
+// their report.
+export type {
+  SvgExportOptions,
+  SvgImportOptions,
+  SvgImportText,
+  SvgNote,
+  SvgNoteSeverity,
+  SvgReport,
+  SvgTextMode,
 } from "./wire.js";
 
 // One element a mutation minted (`MutationOutcome.minted`): the element,

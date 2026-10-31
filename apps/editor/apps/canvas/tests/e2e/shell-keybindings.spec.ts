@@ -62,6 +62,11 @@ const HOST_KEYS = [
   "ctrl+shift+s→paged.file.saveAsIdml",
   "cmd+a→paged.edit.selectAll",
   "ctrl+a→paged.edit.selectAll",
+  "cmd+f→paged.edit.find",
+  "ctrl+f→paged.edit.find",
+  "cmd+alt+f→paged.edit.replace",
+  "ctrl+h→paged.edit.replace",
+  "cmd+j→paged.edit.goTo",
   "cmd+shift+]→paged.object.bringToFront",
   "ctrl+shift+]→paged.object.bringToFront",
   "cmd+shift+}→paged.object.bringToFront",
@@ -111,6 +116,21 @@ const HOST_KEYS = [
   "end→paged.view.lastPage",
   "cmd+1→paged.view.zoom100",
   "ctrl+1→paged.view.zoom100",
+  // The View menu (editor ADR 287).
+  "cmd+y→paged.view.outline",
+  "ctrl+y→paged.view.outline",
+  "alt+shift+cmd+y→paged.view.overprintPreview",
+  "alt+shift+ctrl+y→paged.view.overprintPreview",
+  "alt+cmd+y→paged.view.pixelPreview",
+  "alt+ctrl+y→paged.view.pixelPreview",
+  "cmd+'→paged.view.showGrid",
+  "ctrl+'→paged.view.showGrid",
+  "shift+cmd+'→paged.view.snapToGrid",
+  "shift+ctrl+'→paged.view.snapToGrid",
+  "cmd+u→paged.view.smartGuides",
+  "ctrl+u→paged.view.smartGuides",
+  "shift+cmd+1→paged.view.resetRotation",
+  "shift+ctrl+1→paged.view.resetRotation",
   "cmd+c→paged.edit.copy",
   "ctrl+c→paged.edit.copy",
   "cmd+x→paged.edit.cut",
@@ -136,6 +156,9 @@ const hostSignatures = async (page: Page) =>
   (await liveKeybindings(page))
     .filter(
       (k) =>
+        // A bundle's binding scoped to its own context is the bundle's,
+        // even when it names a host command (Word's Cmd+H and Cmd+G).
+        !k.scoped &&
         !isPluginCommand(k.command) &&
         !k.command.startsWith("paged.tool.activate."),
     )
@@ -232,6 +255,11 @@ test.describe("host keybindings", () => {
       "keybinding:ctrl+shift+s→paged.file.saveAsIdml",
       "keybinding:cmd+a→paged.edit.selectAll",
       "keybinding:ctrl+a→paged.edit.selectAll",
+      "keybinding:cmd+f→paged.edit.find",
+      "keybinding:ctrl+f→paged.edit.find",
+      "keybinding:cmd+alt+f→paged.edit.replace",
+      "keybinding:ctrl+h→paged.edit.replace",
+      "keybinding:cmd+j→paged.edit.goTo",
       "keybinding:cmd+shift+]→paged.object.bringToFront",
       "keybinding:ctrl+shift+]→paged.object.bringToFront",
       "keybinding:cmd+shift+}→paged.object.bringToFront",

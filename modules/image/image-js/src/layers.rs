@@ -145,16 +145,39 @@ mod fold;
 // Typed adjustments, fill layers, blending options, locks, comps.
 pub mod kinds;
 pub use kinds::*;
+pub mod type_layer;
+pub use type_layer::{TypeFrame, TypeLayer, TypeParagraph, TypeRun, TypeSource, TypeWarp};
 // A fill layer's render (the `gen.*` kernels).
 mod fill_render;
+// Layer styles: the effects' fold steps and their GPU recipes (WP5.4).
+mod styles;
 pub use fill_render::render_fill;
+pub use styles::{style_from_json, style_to_json};
 // The Layer menu's verbs (merges, via copy/cut, comps, align, links).
 mod verbs;
 pub use verbs::{AlignEdge, Axis};
+#[cfg(test)]
+mod depth_tests;
+#[cfg(test)]
+mod float_tests;
 pub mod mask;
 #[cfg(test)]
 mod parity_tests;
+// Selection steps, document channels and paths (ADR 470).
+mod masking_ops;
+// Vector masks, shape layers and the paths as geometry (ADR 476).
+mod vector_ops;
+// Smart objects: transform, smart filters, sources (ADR 482).
+mod smart_ops;
+// Snapshots, the journal's bounds and past states (ADR 477).
+pub mod history;
+pub use history::{set_default_history_budget, SnapshotInfo};
+// Guides, count marks, notes and slices (image ADR 475).
+#[cfg(test)]
+mod type_tests;
+mod workspace_ops;
 pub use mask::{BoundedMask, LayerMask};
+pub use vector_ops::VectorMaskStart;
 
 /// The default name of the layer an ingested image becomes.
 pub const BACKGROUND_LAYER_NAME: &str = "Background";
@@ -193,21 +216,102 @@ pub enum LayerKind {
     /// pattern ([`FillLayer`]); like a smart object it composites as
     /// pixels and re-renders from its source when that changes.
     Fill(Box<FillLayer>),
+    /// A TYPE LAYER (WP5.10, image ADR 474): its pixels are the engine's
+    /// render of a text source ([`TypeLayer`]), re-rendered by the bundle
+    /// when the text, its styles, its frame or its warp change.
+    Type(Box<TypeLayer>),
 }
 
-/// The preserved original behind a smart object, plus the scale its
-/// cached pixels were rendered at.
+/// The preserved original behind a smart object, where it is placed, and
+/// its smart filters (image ADR 482; `crate::smart`).
 #[derive(Debug, Clone)]
 pub struct SmartSource {
     /// The ORIGINAL, at its own resolution. Never resampled in place —
-    /// every re-render reads this.
+    /// every re-render reads this. EMPTY when the source is a FILE that is
+    /// decoded on demand (`file`): a PSD's smart object opens without
+    /// decoding its source until something re-renders it.
     pub rgba: Arc<[u8]>,
     pub width: u32,
     pub height: u32,
-    /// The scale the layer's current `rgba` was rendered at (1.0 = the
-    /// source's own size). Kept so a re-render knows what changed and a
-    /// UI can show it.
+    /// The scale the placement draws the source at (1.0 = the source's
+    /// own size): what the panel shows. `placement` is the truth.
     pub scale: f32,
+    /// Where the source's rectangle lands: its four corners on the canvas
+    /// (ADR 482). `None` only in a stack stored before ADR 482, which
+    /// meant the top-left corner at `scale`.
+    pub placement: Option<crate::smart::Quad>,
+    /// The file the source is (embedded, or linked), when it is one.
+    pub file: Option<Arc<crate::smart::SmartFile>>,
+    /// The smart filters and their mask.
+    pub filters: Option<Arc<crate::smart::SmartFilterStack>>,
+    /// A vector smart object: the page items it draws.
+    pub vector: Option<Arc<crate::smart::VectorSource>>,
+    /// The PSD placed-layer record it was read from (kept for the save:
+    /// its warp, page, comp and every other item).
+    pub record: Option<Arc<image_psd::smart_object::PlacedLayer>>,
+    /// The record carries a warp paged does not draw: the render stays
+    /// Photoshop's until the object is re-placed.
+    pub warped: bool,
+    /// The layer's pixels are the unfiltered render: its live smart
+    /// filters still have to run (a GPU pass the bundle drives).
+    pub pending_filters: bool,
+}
+
+impl SmartSource {
+    /// A source of raw pixels placed at its own size at the origin.
+    pub fn from_pixels(rgba: Arc<[u8]>, width: u32, height: u32) -> Self {
+        Self {
+            rgba,
+            width,
+            height,
+            scale: 1.0,
+            placement: Some(crate::smart::rect_quad(
+                0.0,
+                0.0,
+                f64::from(width),
+                f64::from(height),
+            )),
+            file: None,
+            filters: None,
+            vector: None,
+            record: None,
+            warped: false,
+            pending_filters: false,
+        }
+    }
+
+    /// The placement, or what a pre-ADR-482 stack meant (the top-left
+    /// corner at `scale`).
+    pub fn quad(&self) -> crate::smart::Quad {
+        self.placement.unwrap_or_else(|| {
+            let s = f64::from(self.scale);
+            crate::smart::rect_quad(
+                0.0,
+                0.0,
+                f64::from(self.width) * s,
+                f64::from(self.height) * s,
+            )
+        })
+    }
+
+    /// The source, decoded: the pixels it holds, else its file's.
+    pub fn raster(&self) -> Result<Arc<crate::smart::SourceRaster>, IngestError> {
+        if !self.rgba.is_empty() || self.file.is_none() {
+            return Ok(Arc::new(crate::smart::SourceRaster {
+                width: self.width,
+                height: self.height,
+                rgba: Arc::clone(&self.rgba),
+            }));
+        }
+        self.file.as_ref().expect("checked above").raster()
+    }
+
+    /// The filters that draw something, when any do.
+    pub fn live_filters(&self) -> Option<&crate::smart::SmartFilterStack> {
+        self.filters
+            .as_deref()
+            .filter(|f| f.live().next().is_some())
+    }
 }
 
 /// A whole-canvas geometric change: every layer, every mask (layer and
@@ -268,6 +372,17 @@ pub enum CanvasOp {
     RotateArbitrary {
         degrees: f32,
     },
+    /// The Perspective Crop tool's commit (WP5.6): the quadrilateral
+    /// `quad` (NW, NE, SE, SW corners, canvas px, flat x/y pairs) drawn
+    /// upright onto a `width`×`height` canvas through the homography that
+    /// takes the new canvas's corners onto it (`paged-warp`), sampled by
+    /// `geom.warp_projective` (bicubic, transparent outside the old
+    /// canvas).
+    Perspective {
+        quad: [f32; 8],
+        width: u32,
+        height: u32,
+    },
 }
 
 /// The reconstruction filter of [`CanvasOp::Resample`] — the three T1
@@ -313,6 +428,23 @@ pub fn rotated_bounds(w: u32, h: u32, degrees: f32) -> (u32, u32) {
     (fit(w * c + h * s), fit(w * s + h * c))
 }
 
+/// The Perspective Crop's homographies: `(forward, inverse)`, forward
+/// taking the old canvas's points onto the new canvas (the quad onto its
+/// `width`×`height` rectangle) and inverse the other way (what
+/// `geom.warp_projective` samples through). `None` for a degenerate quad.
+pub fn perspective_crop_maps(
+    quad: [f32; 8],
+    width: u32,
+    height: u32,
+) -> Option<(paged_warp::Homography, paged_warp::Homography)> {
+    let q = |i: usize| (f64::from(quad[2 * i]), f64::from(quad[2 * i + 1]));
+    let (w, h) = (f64::from(width), f64::from(height));
+    let rect = [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)];
+    let inverse = paged_warp::from_quads(rect, [q(0), q(1), q(2), q(3)])?;
+    let forward = paged_warp::invert(inverse)?;
+    Some((forward, inverse))
+}
+
 impl CanvasOp {
     /// Image ▸ Image Rotation ▸ Arbitrary as the op it is: a quarter or
     /// half turn (and a whole one, which is no op) becomes the EXACT
@@ -343,7 +475,8 @@ impl CanvasOp {
             CanvasOp::Resize { width, height, .. }
             | CanvasOp::Crop { width, height, .. }
             | CanvasOp::Resample { width, height, .. }
-            | CanvasOp::Straighten { width, height, .. } => (width, height),
+            | CanvasOp::Straighten { width, height, .. }
+            | CanvasOp::Perspective { width, height, .. } => (width, height),
             CanvasOp::RotateArbitrary { degrees } => rotated_bounds(w, h, degrees),
         }
     }
@@ -356,6 +489,7 @@ impl CanvasOp {
             CanvasOp::Resample { .. }
                 | CanvasOp::Straighten { .. }
                 | CanvasOp::RotateArbitrary { .. }
+                | CanvasOp::Perspective { .. }
         )
     }
 
@@ -372,6 +506,7 @@ impl CanvasOp {
             CanvasOp::Resample { .. } => "Image size",
             CanvasOp::Straighten { .. } => "Straighten and crop",
             CanvasOp::RotateArbitrary { .. } => "Rotate canvas",
+            CanvasOp::Perspective { .. } => "Perspective crop",
         }
     }
 
@@ -451,13 +586,14 @@ impl CanvasOp {
             }
             CanvasOp::Resample { .. }
             | CanvasOp::Straighten { .. }
-            | CanvasOp::RotateArbitrary { .. } => None,
+            | CanvasOp::RotateArbitrary { .. }
+            | CanvasOp::Perspective { .. } => None,
         }
     }
 
     /// Remap a `bpp`-bytes-per-pixel buffer of extent `(w, h)`; added
     /// area takes `fill`. Exact ops only.
-    fn remap(&self, src: &[u8], w: u32, h: u32, bpp: usize, fill: u8) -> Vec<u8> {
+    pub(crate) fn remap(&self, src: &[u8], w: u32, h: u32, bpp: usize, fill: u8) -> Vec<u8> {
         debug_assert!(self.is_exact(), "a resampling op has no CPU remap");
         let (ow, oh) = self.output_size(w, h);
         let mut out = vec![fill; ow as usize * oh as usize * bpp];
@@ -566,6 +702,7 @@ impl Layer {
             && self.live_mask().is_none()
             && self.ext.fill_opacity >= 1.0
             && self.live_blend_if().is_none()
+            && self.ext.style.as_ref().is_none_or(|s| !s.draws())
             && self.fill().is_none_or(|f| !f.stale)
     }
 
@@ -577,8 +714,16 @@ impl Layer {
         // layer's render is the same.
         matches!(
             self.kind,
-            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_)
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) | LayerKind::Type(_)
         )
+    }
+
+    /// The type layer's source and render state.
+    pub fn type_layer(&self) -> Option<&TypeLayer> {
+        match &self.kind {
+            LayerKind::Type(t) => Some(t),
+            _ => None,
+        }
     }
 
     /// The fill layer's source and render state.
@@ -609,6 +754,7 @@ impl Layer {
             LayerKind::Pixels => "pixels",
             LayerKind::Smart(_) => "smart",
             LayerKind::Fill(_) => "fill",
+            LayerKind::Type(_) => "type",
             LayerKind::Adjustment(_) => "adjustment",
         }
     }
@@ -666,21 +812,50 @@ impl Layer {
             },
             // A smart object or fill layer contributes PIXELS (its render),
             // not a transform of the backdrop — so it has no adjust params.
-            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) => None,
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) | LayerKind::Type(_) => {
+                None
+            }
         }
     }
 
     /// The mask that actually applies: `None` when there is none or it is
     /// disabled, and `None` too when it is all-one (which is the identity
-    /// — materializing it would cost an upload to change nothing).
-    pub fn live_mask(&self) -> Option<&LayerMask> {
-        if !self.mask_enabled {
-            return None;
+    /// — materializing it would cost an upload to change nothing). An
+    /// enabled VECTOR mask (image ADR 476) multiplies in; the product is
+    /// made once per user mask and handed back as the same allocation.
+    pub fn live_mask(&self) -> Option<LayerMask> {
+        let user = if self.mask_enabled {
+            match self.mask.as_ref() {
+                Some(m) if !m.is_all_one() => Some(m),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        match self.live_vector_mask() {
+            Some(v) => Some(v.combined(user)).filter(|m| !m.is_all_one()),
+            None => user.cloned(),
         }
-        match self.mask.as_ref() {
-            Some(m) if !m.is_all_one() => Some(m),
-            _ => None,
-        }
+    }
+
+    /// The vector mask, when there is one and it is enabled.
+    pub fn live_vector_mask(&self) -> Option<&crate::vectors::LayerVectorMask> {
+        self.ext.vector_mask.as_deref().filter(|v| v.enabled)
+    }
+}
+
+/// Move a layer's vector mask through a canvas operation's point map and
+/// draw it again on the `ow × oh` canvas (image ADR 476).
+pub(crate) fn follow_vector_mask(
+    layer: &mut Layer,
+    f: impl Fn([f32; 2]) -> [f32; 2],
+    ow: u32,
+    oh: u32,
+) {
+    if let Some(v) = layer.ext.vector_mask.take() {
+        let mut subpaths = v.subpaths.clone();
+        crate::vectors::map_points(&mut subpaths, f);
+        layer.ext.vector_mask = Some(Arc::new(v.with_subpaths(subpaths, ow, oh)));
     }
 }
 
@@ -698,6 +873,14 @@ impl Layer {
 /// second compositing mode.
 fn alpha_of(rgba: &[u8]) -> Vec<u8> {
     rgba.as_chunks::<4>().0.iter().map(|p| p[3]).collect()
+}
+
+/// [`alpha_of`] at the pixels' own depth (8-bit coverage either way).
+fn alpha_of_px(px: &crate::pixels::Pixels) -> Vec<u8> {
+    match px.depth() {
+        image_core::SampleDepth::U8 => alpha_of(px.raw()),
+        _ => (0..px.pixel_count()).map(|i| px.alpha8(i)).collect(),
+    }
 }
 
 /// The journal-scope bit that marks an entry as a MASK edit. Layer ids
@@ -789,6 +972,14 @@ fn is_fully_transparent(rgba: &[u8]) -> bool {
     rgba.as_chunks::<4>().0.iter().all(|t| t[3] == 0)
 }
 
+/// [`is_fully_transparent`] at the pixels' own depth.
+fn is_fully_transparent_px(px: &crate::pixels::Pixels) -> bool {
+    match px.depth() {
+        image_core::SampleDepth::U8 => is_fully_transparent(px.raw()),
+        _ => (0..px.pixel_count()).all(|i| px.sample16(i, 3) == 0),
+    }
+}
+
 /// `new` with the alpha of `old` inside `damage` (Lock Transparent
 /// Pixels): the colour an edit painted stays, its coverage does not.
 fn keep_alpha(
@@ -811,6 +1002,51 @@ fn keep_alpha(
         }
     }
     crate::pixels::Pixels::from_raw(Arc::from(out.into_boxed_slice()), new.depth())
+}
+
+/// `edit` (canvas-sized, at another depth) at `layer`'s depth: the
+/// layer's own samples, with `damage` taken from `edit` converted to that
+/// depth ([`Pixels::at_depth`](crate::pixels::Pixels::at_depth)'s rules).
+/// A pixel inside `damage` the edit did not change — its value is the
+/// layer's own seen at the edit's depth — keeps the layer's sample, so a
+/// brush stroke's rectangle does not quantise (or, in a 32-bit document,
+/// clip) the pixels the stroke never touched.
+fn adopt_depth(
+    layer: &crate::pixels::Pixels,
+    edit: &crate::pixels::Pixels,
+    damage: Region,
+    width: u32,
+) -> crate::pixels::Pixels {
+    let converted = edit.at_depth(layer.depth());
+    let bpp = layer.bytes_per_pixel();
+    let mut out = layer.raw().to_vec();
+    let src = converted.raw();
+    let (x0, y0) = (damage.x.max(0) as usize, damage.y.max(0) as usize);
+    let n = layer.pixel_count().min(edit.pixel_count());
+    let edit8 = edit.depth() == image_core::SampleDepth::U8;
+    let untouched = |i: usize| -> bool {
+        (0..4).all(|c| {
+            if edit8 {
+                edit.display8(i, c) == layer.display8(i, c)
+            } else {
+                edit.sample16(i, c) == layer.sample16(i, c)
+            }
+        })
+    };
+    for y in y0..y0 + damage.h as usize {
+        for x in x0..x0 + damage.w as usize {
+            let i = y * width as usize + x;
+            let at = i * bpp;
+            if x >= width as usize || i >= n || at + bpp > out.len() || at + bpp > src.len() {
+                continue;
+            }
+            if untouched(i) {
+                continue;
+            }
+            out[at..at + bpp].copy_from_slice(&src[at..at + bpp]);
+        }
+    }
+    crate::pixels::Pixels::from_raw(Arc::from(out.into_boxed_slice()), layer.depth())
 }
 
 /// The undo/redo readout the panel shows.
@@ -852,7 +1088,9 @@ pub struct HistoryStats {
 /// inside it.
 #[derive(Clone)]
 pub(crate) struct Plate {
-    pub px: Arc<[u8]>,
+    /// At the layer's own depth (a 16-bit layer's plate is 16-bit; the
+    /// fold uploads each at its depth and reads back at the stack's).
+    pub px: crate::pixels::Pixels,
     pub rect: Option<Region>,
 }
 
@@ -946,6 +1184,80 @@ pub struct LayerStack {
     /// LAYER COMPS, in the panel's order. Document state: in every
     /// snapshot (an edit to a comp is an undo step) and persisted.
     comps: Vec<LayerComp>,
+    /// The HISTORY BRUSH's sources per layer (session state, like the
+    /// edit target): see [`Self::history_source`].
+    history_states: HistoryStates,
+    /// Channels, paths, the selection's undo mirror and the channel edit
+    /// target (ADR 470; `layers/masking_ops.rs`).
+    masking: crate::masking::MaskingState,
+    /// The document's GLOBAL LIGHT and the patterns its styles draw.
+    /// Document state: in every snapshot and persisted.
+    styles: StyleDoc,
+    /// Named SNAPSHOTS of the whole stack, oldest first (ADR 477;
+    /// `layers/history.rs`). Session state: not persisted, not undone.
+    snapshots: Vec<history::NamedSnapshot>,
+    next_snapshot_id: u32,
+    /// The id the next recorded step takes (see [`Step`]).
+    next_step_id: u64,
+    /// The document's COLOUR MODE (Image ▸ Mode, ADR 479): the colours
+    /// its pixels may hold. Document state: in every snapshot, persisted.
+    mode: crate::color_mode::DocMode,
+    /// Guides, count marks, notes and slices (image ADR 475,
+    /// `workspace.rs`). Document state: in every snapshot and persisted.
+    workspace: crate::workspace::Workspace,
+}
+
+/// What a document's layer styles share: the Global Light every effect
+/// with Use Global Light is lit by, and the PATTERNS a Pattern Overlay, a
+/// pattern Stroke or a bevel's Texture draws (matched by id, else name).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StyleDoc {
+    pub global_light: image_psd::effects::GlobalLight,
+    pub patterns: Vec<Arc<PatternFill>>,
+}
+
+/// Which earlier state of a layer the History / Art History brushes
+/// paint from: the two states the session names on its own, any step on
+/// the undo or redo list (by its id), or a named snapshot (ADR 477).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryKind {
+    /// The layer as it was when the image was opened — precisely, before
+    /// its first pixel edit in this session (a layer added later starts
+    /// from its state at creation).
+    Open,
+    /// The layer before its NEWEST pixel edit — "the step before this
+    /// one". Recorded at that edit; an undo does not move it.
+    Previous,
+    /// The layer as it was right AFTER the step with this id (an undo
+    /// or a redo step).
+    Step(u64),
+    /// The layer in the named snapshot with this id.
+    Snapshot(u32),
+}
+
+impl HistoryKind {
+    pub fn from_wire(s: &str) -> Option<HistoryKind> {
+        match s {
+            "open" => Some(HistoryKind::Open),
+            "previous" => Some(HistoryKind::Previous),
+            _ => {
+                if let Some(id) = s.strip_prefix("step:") {
+                    id.parse().ok().map(HistoryKind::Step)
+                } else if let Some(id) = s.strip_prefix("snapshot:") {
+                    id.parse().ok().map(HistoryKind::Snapshot)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// Per layer id, straight RGBA8 at the canvas extent.
+#[derive(Debug, Default)]
+pub(crate) struct HistoryStates {
+    open: std::collections::HashMap<u32, Arc<[u8]>>,
+    previous: std::collections::HashMap<u32, Arc<[u8]>>,
 }
 
 /// Most structure steps kept (the journal bounds the pixel ones).
@@ -962,6 +1274,15 @@ struct Snapshot {
     active: usize,
     next_id: u32,
     comps: Vec<LayerComp>,
+    /// Channels and paths (ADR 470).
+    masking: crate::masking::MaskingDoc,
+    /// The selection at the time (ADR 470: each selection change is a
+    /// structure step, so undo walks back through selections too).
+    selection: Option<Arc<SelectionCoverage>>,
+    styles: StyleDoc,
+    mode: crate::color_mode::DocMode,
+    /// Guides, count marks, notes and slices.
+    workspace: crate::workspace::Workspace,
 }
 
 /// One undo step.
@@ -973,11 +1294,14 @@ struct Snapshot {
 /// history instead of wiping it.
 #[derive(Debug, Clone)]
 enum Step {
-    /// One journal entry (its label lives in the journal).
-    Pixels,
+    /// One journal entry (its label lives in the journal). `id` names
+    /// the step for its life (undo and redo keep it; ADR 477): the
+    /// History brush's source refers to a step by it.
+    Pixels { id: u64 },
     /// A structure change; `other` is the state on the far side of it
     /// (before, on the undo list; after, on the redo list).
     Structure {
+        id: u64,
         label: String,
         /// Consecutive steps with the same key merge into one (a slider
         /// drag is one undo step, not twenty).
@@ -1004,11 +1328,15 @@ impl LayerStack {
                 rgba.len()
             )));
         }
-        // Build through the 8-bit door with a correctly-sized dummy so
-        // all the stack's other invariants are established exactly
-        // once, then swap the real buffer in.
-        let dummy = vec![0u8; (width as usize) * (height as usize) * 4];
-        let mut st = Self::from_image(width, height, Arc::from(dummy))?;
+        // Build through the 8-bit door with a correctly-sized buffer so
+        // all the stack's other invariants are established exactly once,
+        // then put the real one in. An 8-bit image goes straight through
+        // (its `Arc` shared, not copied).
+        if rgba.depth() == image_core::SampleDepth::U8 {
+            return Self::from_image(width, height, rgba.raw_arc());
+        }
+        let placeholder = vec![0u8; (width as usize) * (height as usize) * 4];
+        let mut st = Self::from_image(width, height, Arc::from(placeholder))?;
         st.layers[0].rgba = rgba.into();
         Ok(st)
     }
@@ -1044,7 +1372,7 @@ impl LayerStack {
             }],
             active: 0,
             next_id: 2,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -1052,6 +1380,14 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            history_states: HistoryStates::default(),
+            masking: Default::default(),
+            styles: StyleDoc::default(),
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
+            mode: Default::default(),
+            workspace: Default::default(),
         })
     }
 
@@ -1080,16 +1416,8 @@ impl LayerStack {
                 "PSD layer import produced no layers".into(),
             ));
         }
-        // A Color Overlay becomes a layer of its own (below), so the stack
-        // holds one layer per plate plus one per overlay.
-        // …and an ARTBOARD's background is a layer at the bottom of its
-        // group.
+        // An ARTBOARD's background is a layer at the bottom of its group.
         let n_layers = import.layers.len()
-            + import
-                .layers
-                .iter()
-                .filter(|p| p.color_overlay.is_some())
-                .count()
             + import
                 .groups
                 .iter()
@@ -1125,15 +1453,7 @@ impl LayerStack {
             })
             .collect();
         let mut layers: Vec<Layer> = Vec::with_capacity(n_layers);
-        // A base's Color Overlay waits until its clipped layers are in.
-        let mut pending_overlay: Option<Layer> = None;
         for (i, plate) in import.layers.iter().enumerate() {
-            if !plate.clipped {
-                if let Some(mut o) = pending_overlay.take() {
-                    o.id = layers.len() as u32 + 1;
-                    layers.push(o);
-                }
-            }
             // ARTBOARD backgrounds of the groups this plate enters, the
             // outermost first: each a solid layer at the artboard's
             // rectangle, at the bottom of its group.
@@ -1173,9 +1493,20 @@ impl LayerStack {
                 });
             }
             let adjustment = plate.adjustment.as_ref().map(psd_adjustment);
-            // The user and vector masks fold into the layer's one mask
-            // (`psd_vector_mask::plate_mask`).
-            let mask = crate::psd_vector_mask::plate_mask(plate, width, height);
+            // A vector mask stays PATHS when it can (image ADR 476): the
+            // user mask alone is the layer's mask and the vector mask
+            // multiplies in live. One with a density or feather of its own
+            // folds into the one mask (`psd_vector_mask::plate_mask`).
+            let editable_vector = crate::psd_vector_mask::editable_vector_mask(plate);
+            let mask = match editable_vector {
+                Some(_) => crate::psd_vector_mask::plate_user_mask(plate, width, height),
+                None => crate::psd_vector_mask::plate_mask(plate, width, height),
+            };
+            let mut vector_mask = editable_vector.map(|v| {
+                Arc::new(crate::vectors::LayerVectorMask::from_psd_mask(
+                    v, width, height,
+                ))
+            });
             let plate_rect = plate.rect.unwrap_or(Region::new(0, 0, width, height));
             let plate_want = plate_rect.w as usize * plate_rect.h as usize * 4;
             if adjustment.is_none() && plate.rgba.len() != plate_want {
@@ -1193,9 +1524,12 @@ impl LayerStack {
                 plate.name.clone()
             };
             let record = records.and_then(|r| r.get(plate.record));
-            let ext = record
+            let mut ext = record
                 .map(crate::psd_layer_ext::record_ext)
                 .unwrap_or_default();
+            // The layer's STYLE (its effects), drawn by the fold around
+            // its pixels (`layers::styles`).
+            ext.style = plate.style.clone().map(Arc::new);
             // With the record, opacity and fill opacity are kept apart (the
             // plate folds them, which is the same picture outside the
             // special modes the import declines).
@@ -1208,6 +1542,33 @@ impl LayerStack {
             let fill = record
                 .filter(|_| adjustment.is_none() && !import.converted_from_cmyk && !plate.smart)
                 .and_then(crate::psd_layer_ext::fill_source);
+            // A SHAPE layer (a fill cut by its vector mask, ADR 476): the
+            // fill renders over the canvas and the mask cuts the shape, so
+            // the stored render (the shape already cut) is not kept — it
+            // would be cut twice. A shape whose path cannot be drawn
+            // stays the pixels Photoshop stored.
+            let shape = record
+                .filter(|_| fill.is_some() && plate.vector_mask.is_none())
+                .and_then(|r| crate::psd_layer_ext::shape_vector_mask(r, width, height));
+            let fill = match (&fill, &shape, record) {
+                (Some(_), None, Some(r))
+                    if r.addl.iter().any(|a| matches!(&a.key, b"vmsk" | b"vsms")) =>
+                {
+                    None
+                }
+                _ => fill,
+            };
+            if let Some(v) = &shape {
+                vector_mask = Some(Arc::new(crate::vectors::LayerVectorMask::from_psd_mask(
+                    v, width, height,
+                )));
+            }
+            ext.vector_mask = vector_mask;
+            // A TYPE layer keeps its text editable; its pixels stay
+            // Photoshop's render until the text is edited (WP5.10).
+            let typed = record
+                .filter(|_| plate.text && adjustment.is_none() && !plate.smart)
+                .and_then(type_layer::from_psd_record);
             layers.push(Layer {
                 id: layers.len() as u32 + 1,
                 name: name.clone(),
@@ -1217,27 +1578,48 @@ impl LayerStack {
                 blend: psd_blend_kernel(&plate.blend_key),
                 // At its BOUNDS (ADR 464): an adjustment keeps an empty
                 // rectangle, a pixel layer its record's.
-                rgba: bounded_pixels(
-                    if adjustment.is_some() {
-                        Region::new(0, 0, 0, 0)
-                    } else {
-                        plate_rect
-                    },
-                    if adjustment.is_some() {
-                        Vec::new()
-                    } else {
-                        plate.rgba.clone()
-                    },
-                    width,
-                    height,
-                )?,
+                rgba: match (&adjustment, &plate.rgba16) {
+                    // A 32-bit document's layer: linear floats (ADR 484).
+                    (None, _) if plate.rgba32.is_some() => bounded_px(
+                        plate_rect,
+                        crate::pixels::Pixels::from_rgba32f(
+                            plate.rgba32.as_deref().expect("checked"),
+                        ),
+                        width,
+                        height,
+                    )?,
+                    // A 16-bit RGB document's layer at full depth (ADR 479).
+                    (None, Some(deep)) => bounded_px(
+                        plate_rect,
+                        crate::pixels::Pixels::from_rgba16(deep),
+                        width,
+                        height,
+                    )?,
+                    _ => bounded_pixels(
+                        if adjustment.is_some() {
+                            Region::new(0, 0, 0, 0)
+                        } else {
+                            plate_rect
+                        },
+                        if adjustment.is_some() {
+                            Vec::new()
+                        } else {
+                            plate.rgba.clone()
+                        },
+                        width,
+                        height,
+                    )?,
+                },
                 // A smart object's stored render arrives as pixels: the
                 // source is not rendered here (`smart_renders_agree`).
                 kind: match (adjustment, fill) {
                     (Some(a), _) => LayerKind::Adjustment(Box::new(a)),
+                    (None, _) if typed.is_some() => {
+                        LayerKind::Type(Box::new(typed.expect("checked")))
+                    }
                     (None, Some(source)) => LayerKind::Fill(Box::new(FillLayer {
                         source,
-                        stale: false,
+                        stale: shape.is_some(),
                     })),
                     (None, None) => LayerKind::Pixels,
                 },
@@ -1260,49 +1642,20 @@ impl LayerStack {
                     .then_some(TEXT_BLEND_GAMMA),
                 ext,
             });
-            // COLOR OVERLAY: Photoshop draws it over the layer's content —
-            // and over the layers CLIPPED to it, which it covers (measured:
-            // a normal 100 % overlay hides a clipped multiply layer
-            // completely) — inside the layer's shape, before the clipping
-            // group blends. That is a solid layer clipped to the base,
-            // placed after the base's own clipped layers.
-            if let Some(o) = &plate.color_overlay {
-                // Drawn only inside its base, so it lives at the base's
-                // rectangle.
-                let solid: Vec<u8> = (0..plate_want / 4)
-                    .flat_map(|_| [o.rgb[0], o.rgb[1], o.rgb[2], 255])
-                    .collect();
-                pending_overlay = Some(Layer {
-                    id: 0,
-                    name: format!("{name} · Color Overlay"),
-                    visible: !plate.hidden,
-                    locked: false,
-                    opacity: f32::from(o.opacity) / 255.0,
-                    blend: psd_blend_kernel(&o.blend_key),
-                    rgba: bounded_pixels(plate_rect, solid, width, height)?,
-                    kind: LayerKind::Pixels,
-                    mask: None,
-                    mask_enabled: true,
-                    group: plate.group.map(group_id),
-                    clipped: true,
-                    blend_gamma: None,
-                    ext: LayerExt::default(),
-                });
+            // The record it came from, for the layered save (ADR 478).
+            if let (Some(r), Some(l)) = (record, layers.last_mut()) {
+                crate::psd_source::attach(l, r);
             }
         }
-        if let Some(mut o) = pending_overlay.take() {
-            o.id = layers.len() as u32 + 1;
-            layers.push(o);
-        }
         let next_id = (layers.len() + groups.len()) as u32 + 1;
-        let stack = LayerStack {
+        let mut stack = LayerStack {
             groups,
             width,
             height,
             active: layers.len() - 1,
             layers,
             next_id,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -1310,7 +1663,26 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps: Vec::new(),
+            history_states: HistoryStates::default(),
+            masking: Default::default(),
+            styles: StyleDoc::default(),
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
+            // A CMYK document stays one (its profile, when the caller has
+            // the file, comes with `adopt_mode`).
+            mode: if import.converted_from_cmyk {
+                crate::color_mode::DocMode {
+                    mode: crate::color_mode::ColorMode::Cmyk,
+                    cmyk_profile: None,
+                    table: None,
+                }
+            } else {
+                Default::default()
+            },
+            workspace: Default::default(),
         };
+        stack.styles.global_light = import.global_light;
         if let Some(deep) = stack
             .groups
             .iter()
@@ -1464,9 +1836,10 @@ impl LayerStack {
         self.check_canvas_op(op)?;
         // Always recorded, for the reason `remove` is: older pixel steps
         // address the old extent and must not be reachable across it.
-        self.recorded(op.label(), None, |s| {
+        let old = (self.width, self.height);
+        self.recorded(op.label(), None, move |s| {
             s.transform_canvas_unrecorded(op);
-            s.after_canvas_op(op);
+            s.after_canvas_op(op, old);
             Ok(())
         })
     }
@@ -1476,8 +1849,49 @@ impl LayerStack {
     /// mirroring with a rotate or flip, as Photoshop's does), and a
     /// layer comp's recorded positions — pixels at the old extent — are
     /// dropped (its visibility and appearance still apply).
-    fn after_canvas_op(&mut self, op: CanvasOp) {
+    ///
+    /// A TYPE layer's pixels moved with the canvas; its source follows: a
+    /// crop or Canvas Size moves its frame, Image Size scales it (and the
+    /// text re-renders at the new size), and a rotation, flip or
+    /// straighten — which upright text cannot follow — rasterizes it.
+    fn after_canvas_op(&mut self, op: CanvasOp, (old_w, old_h): (u32, u32)) {
+        // The workspace (guides, count marks, notes, slices) moves with the
+        // image through the same point map the paths take (image ADR 475).
+        let (ow, oh) = (self.width, self.height);
+        self.workspace
+            .map_canvas(|p| masking_ops::map_point(op, old_w, old_h, p), ow, oh);
         for layer in &mut self.layers {
+            if let LayerKind::Type(t) = &mut layer.kind {
+                let moved = match op {
+                    CanvasOp::Crop { x, y, .. } => Some((-f64::from(x), -f64::from(y))),
+                    CanvasOp::Resize {
+                        width,
+                        height,
+                        anchor_x,
+                        anchor_y,
+                    } => Some((
+                        (f64::from(width) - f64::from(old_w)) * f64::from(anchor_x) / 2.0,
+                        (f64::from(height) - f64::from(old_h)) * f64::from(anchor_y) / 2.0,
+                    )),
+                    _ => None,
+                };
+                match (op, moved) {
+                    (_, Some((dx, dy))) => {
+                        t.source.frame.translate(dx, dy);
+                        t.psd = None;
+                    }
+                    (CanvasOp::Resample { width, height, .. }, None) => {
+                        t.source = t.source.scaled(
+                            f64::from(width) / f64::from(old_w.max(1)),
+                            f64::from(height) / f64::from(old_h.max(1)),
+                        );
+                        t.stale = true;
+                        t.psd = None;
+                    }
+                    _ => layer.kind = LayerKind::Pixels,
+                }
+                continue;
+            }
             if let LayerKind::Fill(f) = &mut layer.kind {
                 f.stale = true;
                 if let FillSource::Gradient(g) = &mut f.source {
@@ -1555,48 +1969,22 @@ impl LayerStack {
         let (ow, oh) = op.output_size(w, h);
         let mut layers = self.layers.clone();
         for layer in &mut layers {
-            let mut rerendered = false;
-            if let (LayerKind::Smart(src), CanvasOp::Resample { filter, .. }) =
-                (&mut layer.kind, op)
-            {
-                let f = ow as f32 / w as f32;
-                if (h as f32 * f).round() as u32 == oh {
-                    let scale = src.scale * f;
-                    let render = render_smart(ctx, src, scale, filter, ow, oh).await?;
-                    src.scale = scale;
-                    layer.rgba =
-                        crate::pixels::Pixels::from_rgba8(Arc::from(render.into_boxed_slice()))
-                            .into();
-                    rerendered = true;
-                } else {
-                    let (sw, sh) = (
-                        ((src.width as f32) * ow as f32 / w as f32).round().max(1.0) as u32,
-                        ((src.height as f32) * oh as f32 / h as f32)
-                            .round()
-                            .max(1.0) as u32,
-                    );
-                    let resample = CanvasOp::Resample {
-                        width: sw,
-                        height: sh,
-                        filter,
-                    };
-                    let out = gpu_canvas_op(
-                        ctx,
-                        resample,
-                        &rgba8_to_f16(&src.rgba),
-                        src.width,
-                        src.height,
-                    )
-                    .await?;
-                    src.rgba = Arc::from(f16_to_rgba8(&out).into_boxed_slice());
-                    src.width = sw;
-                    src.height = sh;
-                }
-            }
+            // A smart object is RE-RENDERED from its source into its
+            // placement mapped through the op (ADR 482): nothing is
+            // resampled twice, whatever the op does to the canvas.
+            let rerendered = crate::smart::follow_canvas_op(
+                layer,
+                |p| masking_ops::map_point(op, w, h, p),
+                ow,
+                oh,
+            )?;
             if !rerendered {
                 let canvas = layer.rgba.canvas();
                 let depth = canvas.depth();
-                let out = if matches!(op, CanvasOp::RotateArbitrary { .. }) {
+                let out = if matches!(
+                    op,
+                    CanvasOp::RotateArbitrary { .. } | CanvasOp::Perspective { .. }
+                ) {
                     // The rotated edge blends with the transparent
                     // surround: interpolate ASSOCIATED colour, or the
                     // fringe darkens towards the black of rgb(0,0,0,0).
@@ -1607,16 +1995,23 @@ impl LayerStack {
                 };
                 layer.rgba = f16_to_pixels(&out, depth).into();
             }
-            if let (
-                LayerKind::Smart(src),
-                CanvasOp::Straighten { .. } | CanvasOp::RotateArbitrary { .. },
-            ) = (&mut layer.kind, op)
-            {
-                // `check_canvas_op` admitted it only at 1:1 over the
-                // canvas, where the source IS the render: it turns with it.
-                src.rgba = layer.rgba.canvas().to_rgba8().into_owned().into();
-                src.width = ow;
-                src.height = oh;
+            if let LayerKind::Smart(src) = &mut layer.kind {
+                // The filter mask resamples like a layer mask.
+                if let Some(f) = src.filters.as_mut() {
+                    if let Some(m) = &f.mask {
+                        let out = gpu_canvas_op_mask(
+                            ctx,
+                            op,
+                            &coverage_to_f16(m.to_canvas().data()),
+                            w,
+                            h,
+                        )
+                        .await?;
+                        Arc::make_mut(f).mask =
+                            SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out))
+                                .map(|c| Arc::new(c).into());
+                    }
+                }
             }
             if let Some(mask) = &layer.mask {
                 let out = gpu_canvas_op_mask(ctx, op, &coverage_to_f16(mask.canvas().data()), w, h)
@@ -1624,6 +2019,8 @@ impl LayerStack {
                 layer.mask = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out))
                     .map(|c| Arc::new(c).into());
             }
+            // A vector mask's paths map exactly and are drawn again.
+            follow_vector_mask(layer, |p| masking_ops::map_point(op, w, h, p), ow, oh);
         }
         let mut groups = self.groups.clone();
         for g in &mut groups {
@@ -1632,12 +2029,22 @@ impl LayerStack {
                 g.mask = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out)).map(Arc::new);
             }
         }
+        // Channels resample like masks (but grow unselected); paths map.
+        let mut masking = self.masking.doc.clone();
+        for c in &mut masking.channels {
+            let out = gpu_canvas_op(ctx, op, &coverage_to_f16(c.data.data()), w, h).await?;
+            if let Some(cov) = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out)) {
+                c.data = Arc::new(cov);
+            }
+        }
+        masking.map_paths(|p| masking_ops::map_point(op, w, h, p));
         self.recorded(op.label(), None, move |s| {
             s.layers = layers;
             s.groups = groups;
+            s.masking.doc = masking;
             s.width = ow;
             s.height = oh;
-            s.after_canvas_op(op);
+            s.after_canvas_op(op, (w, h));
             Ok(())
         })
     }
@@ -1652,6 +2059,7 @@ impl LayerStack {
                 CanvasOp::Crop { .. } | CanvasOp::Straighten { .. } => {
                     format!("the crop rectangle is empty against {w}×{h}")
                 }
+                CanvasOp::Perspective { .. } => "the perspective crop's size is empty".into(),
                 _ => "canvas size must be at least 1×1".into(),
             }));
         }
@@ -1662,38 +2070,22 @@ impl LayerStack {
                 ));
             }
         }
-        let smart = |pred: &dyn Fn(&SmartSource) -> bool| {
-            self.layers
-                .iter()
-                .filter_map(|l| l.smart_source())
-                .any(pred)
-        };
-        match op {
-            CanvasOp::Resize { .. } if smart(&|_| true) => Err(IngestError::Unsupported(
-                "Canvas Size with a smart object in the stack is not supported \
-                 (its render would no longer line up with its source)"
-                    .into(),
-            )),
-            CanvasOp::Crop { .. } | CanvasOp::Straighten { .. }
-                if smart(&|s| s.scale != 1.0 || s.width != w || s.height != h) =>
+        if let CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        } = op
+        {
+            if quad.iter().any(|v| !v.is_finite())
+                || perspective_crop_maps(quad, width, height).is_none()
             {
-                Err(IngestError::Unsupported(
-                    "cropping a smart object that is rendered at another scale is not \
-                     supported (its render would no longer line up with its source)"
-                        .into(),
-                ))
+                return Err(IngestError::Unsupported(
+                    "the perspective crop's corners make no quadrilateral (three in a line)".into(),
+                ));
             }
-            CanvasOp::RotateArbitrary { .. }
-                if smart(&|s| s.scale != 1.0 || s.width != w || s.height != h) =>
-            {
-                Err(IngestError::Unsupported(
-                    "rotating a smart object that is rendered at another scale is not \
-                     supported (its render would no longer line up with its source)"
-                        .into(),
-                ))
-            }
-            _ => Ok(()),
         }
+        // A smart object follows every op from its source (ADR 482).
+        Ok(())
     }
 
     /// The exact ops' CPU remap of every buffer. `op` is checked.
@@ -1711,14 +2103,25 @@ impl LayerStack {
                 let m = op.remap(mask.canvas().data(), w, h, 1, 255);
                 layer.mask = SelectionCoverage::from_data(ow, oh, m).map(|c| Arc::new(c).into());
             }
+            follow_vector_mask(layer, |p| masking_ops::map_point(op, w, h, p), ow, oh);
             if let LayerKind::Smart(src) = &mut layer.kind {
-                // Rotations and flips move the source in its own extent; a
-                // crop reaches here only at 1:1, where the extents agree.
-                let s = op.remap(&src.rgba, src.width, src.height, 4, 0);
-                let (sw, sh) = op.output_size(src.width, src.height);
-                src.rgba = Arc::from(s.into_boxed_slice());
-                src.width = sw;
-                src.height = sh;
+                // The render moved exactly; the placement and the filter
+                // mask move with it, and the source stays as it is.
+                let q = src.quad();
+                src.placement = Some(crate::smart::map_quad(&q, |(x, y)| {
+                    let p = masking_ops::map_point(op, w, h, [x as f32, y as f32]);
+                    (f64::from(p[0]), f64::from(p[1]))
+                }));
+                // A filter's direction is the canvas's: it runs again.
+                let live = src.live_filters().is_some();
+                if let Some(f) = src.filters.as_mut() {
+                    if let Some(m) = &f.mask {
+                        let mm = op.remap(m.to_canvas().data(), w, h, 1, 255);
+                        Arc::make_mut(f).mask =
+                            SelectionCoverage::from_data(ow, oh, mm).map(|c| Arc::new(c).into());
+                    }
+                }
+                src.pending_filters |= live;
             }
         }
         for g in &mut self.groups {
@@ -1727,10 +2130,23 @@ impl LayerStack {
                 g.mask = SelectionCoverage::from_data(ow, oh, m).map(Arc::new);
             }
         }
+        // Channels and paths follow (added area unselected).
+        self.masking.doc.follow_exact(
+            ow,
+            oh,
+            |d| op.remap(d, w, h, 1, 0),
+            |p| masking_ops::map_point(op, w, h, p),
+        );
         self.width = ow;
         self.height = oh;
     }
 
+    /// CONVERT a pixel (or fill) layer into a smart object: its pixels,
+    /// cut to what they cover, become the SOURCE, placed where they are
+    /// (image ADR 482). From here every transform re-renders from it.
+    /// Idempotent on a smart object; refused on an adjustment layer and on
+    /// a layer with nothing in it. A 16-bit layer's source is its 8-bit
+    /// reduction (stated by the panel).
     pub fn make_smart(&mut self, index: usize) -> Result<(), IngestError> {
         let (w, h) = (self.width, self.height);
         let layer = self.layer_mut(index)?;
@@ -1742,22 +2158,35 @@ impl LayerStack {
         if layer.smart_source().is_some() {
             return Ok(()); // already smart — idempotent, not an error
         }
-        layer.kind = LayerKind::Smart(Box::new(SmartSource {
-            rgba: layer.rgba.raw_arc(),
-            width: w,
-            height: h,
-            scale: 1.0,
-        }));
+        // The pixels' own extent: the bounded rectangle, cut further to
+        // what is not transparent.
+        let (rect, px) = match layer.rgba.bounded() {
+            Some(b) => (b.rect, b.px.to_rgba8().into_owned()),
+            None => (Region::new(0, 0, w, h), layer.rgba.to_rgba8().into_owned()),
+        };
+        let Some(tight) = crate::smart::opaque_bounds(&px, rect.w, rect.h) else {
+            return Err(IngestError::Unsupported(format!(
+                "layer \"{}\" has no pixels to make a smart object of",
+                layer.name
+            )));
+        };
+        let src = crate::smart::crop_rgba8(&px, rect.w, tight);
+        let mut source =
+            SmartSource::from_pixels(Arc::from(src.into_boxed_slice()), tight.w, tight.h);
+        source.placement = Some(crate::smart::rect_quad(
+            f64::from(rect.x + tight.x),
+            f64::from(rect.y + tight.y),
+            f64::from(tight.w),
+            f64::from(tight.h),
+        ));
+        layer.kind = LayerKind::Smart(Box::new(source));
         Ok(())
     }
 
-    /// Record a re-render of a smart object at `scale`.
-    ///
-    /// The CALLER does the resampling (it is a GPU kernel dispatch and
-    /// this module holds no device), but the invariant lives here: the
-    /// source is never replaced, only the cached render is. That is what
-    /// makes scaling down and back up lossless, and it is asserted
-    /// directly in the tests.
+    /// Record a re-render of a smart object at `scale` (of its source's
+    /// size, from the placement's first corner) — the panel's scale.
+    /// The CALLER rendered it; the source is never replaced, only the
+    /// render, which is what makes scaling down and back up lossless.
     pub fn set_smart_render(
         &mut self,
         index: usize,
@@ -1774,6 +2203,13 @@ impl LayerStack {
         let layer = self.layer_mut(index)?;
         match &mut layer.kind {
             LayerKind::Smart(src) => {
+                let q = src.quad();
+                src.placement = Some(crate::smart::rect_quad(
+                    q[0],
+                    q[1],
+                    f64::from(src.width) * f64::from(scale),
+                    f64::from(src.height) * f64::from(scale),
+                ));
                 src.scale = scale;
                 layer.rgba = crate::pixels::Pixels::from_rgba8(rendered).into();
                 Ok(())
@@ -1816,9 +2252,11 @@ impl LayerStack {
                 };
                 Ok(())
             }
-            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) => Err(
-                IngestError::Unsupported(format!("layer {index} holds pixels, not an adjustment")),
-            ),
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) | LayerKind::Type(_) => {
+                Err(IngestError::Unsupported(format!(
+                    "layer {index} holds pixels, not an adjustment"
+                )))
+            }
         }
     }
 
@@ -1865,6 +2303,9 @@ impl LayerStack {
     pub fn add(&mut self, name: &str) -> usize {
         let id = self.fresh_id();
         let at = self.active + 1;
+        // At the document's depth: a new layer in a 16-bit document is
+        // 16-bit, as Photoshop's is.
+        let depth = self.depth();
         let pixels = self.transparent();
         self.layers.insert(
             at,
@@ -1879,7 +2320,9 @@ impl LayerStack {
                 locked: false,
                 opacity: 1.0,
                 blend: &COMPOSE_NORMAL,
-                rgba: crate::pixels::Pixels::from_rgba8(pixels).into(),
+                rgba: crate::pixels::Pixels::from_rgba8(pixels)
+                    .at_depth(depth)
+                    .into(),
                 kind: LayerKind::Pixels,
                 // A new layer is unmasked; the mask is authored later.
                 mask: None,
@@ -1918,6 +2361,54 @@ impl LayerStack {
         );
         self.active = at;
         Some(at)
+    }
+
+    /// A new layer directly above the active one holding `pixels`
+    /// (canvas-extent straight RGBA8), made active — ONE undo step labelled
+    /// `label`. Content-Aware Fill's "new layer" output.
+    pub fn add_with_pixels(
+        &mut self,
+        label: &str,
+        name: &str,
+        pixels: Arc<[u8]>,
+    ) -> Result<usize, IngestError> {
+        self.check_canvas_pixels(&pixels)?;
+        self.recorded(label, None, |s| {
+            let at = s.add(name);
+            s.layers[at].rgba = crate::pixels::Pixels::from_rgba8(pixels).into();
+            Ok(at)
+        })
+    }
+
+    /// Duplicate `index` and give the copy `pixels`, made active — ONE undo
+    /// step. Content-Aware Fill's "duplicate layer" output.
+    pub fn duplicate_with_pixels(
+        &mut self,
+        label: &str,
+        index: usize,
+        pixels: Arc<[u8]>,
+    ) -> Result<usize, IngestError> {
+        self.check_canvas_pixels(&pixels)?;
+        self.recorded(label, None, |s| {
+            let at = s
+                .duplicate(index)
+                .ok_or_else(|| IngestError::Unsupported(format!("no layer {index}")))?;
+            s.layers[at].rgba = crate::pixels::Pixels::from_rgba8(pixels).into();
+            Ok(at)
+        })
+    }
+
+    fn check_canvas_pixels(&self, pixels: &[u8]) -> Result<(), IngestError> {
+        let want = (self.width as usize) * (self.height as usize) * 4;
+        if pixels.len() != want {
+            return Err(IngestError::Decode(format!(
+                "layer pixels: {} bytes for {}×{} (expected {want})",
+                pixels.len(),
+                self.width,
+                self.height
+            )));
+        }
+        Ok(())
     }
 
     /// Remove `index`. Refused for the LAST layer — a document with no
@@ -2086,6 +2577,7 @@ impl LayerStack {
         }
         self.set_active(index)?;
         self.edit_mask = mask;
+        self.masking.edit_channel = None;
         Ok(())
     }
 
@@ -2093,7 +2585,7 @@ impl LayerStack {
     /// while the mask target was chosen AND the layer still has a mask
     /// (an undo or a delete can take the mask away under the target).
     pub fn edit_target_is_mask(&self) -> bool {
-        self.edit_mask && self.layers[self.active].mask.is_some()
+        self.edit_channel().is_some() || (self.edit_mask && self.layers[self.active].mask.is_some())
     }
 
     /// The active layer's mask as an OPAQUE GREY RGBA8 plate (`v, v, v,
@@ -2101,6 +2593,9 @@ impl LayerStack {
     /// is the mask. Painting a mask is then painting a grey image through
     /// the very same stroke compositor; [`mask_from_grey`] reads it back.
     pub fn active_mask_as_grey(&self) -> Option<Arc<[u8]>> {
+        if let Some(ch) = self.edit_channel() {
+            return Some(mask_to_grey(&ch.data));
+        }
         let m = self.layers[self.active].mask.as_ref()?;
         Some(mask_to_grey(&m.to_canvas()))
     }
@@ -2127,6 +2622,9 @@ impl LayerStack {
                 mask.height()
             )));
         }
+        if self.edit_channel().is_some() {
+            return self.edit_channel_data(label, damage, mask);
+        }
         let active = &self.layers[self.active];
         active.pixels_editable()?;
         let Some(old) = active.mask.as_ref() else {
@@ -2148,8 +2646,7 @@ impl LayerStack {
         };
         self.layers[self.active].mask = Some(Arc::new(mask).into());
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
-            self.steps.push(Step::Pixels);
-            self.undone.clear();
+            self.push_pixel_step();
         }
         self.sync_with_journal();
         Ok(outcome)
@@ -2164,6 +2661,12 @@ impl LayerStack {
         ctx: Option<&GpuContext>,
         mask: Arc<SelectionCoverage>,
     ) -> Result<Arc<[u8]>, IngestError> {
+        if self.edit_channel().is_some() {
+            // A channel is not part of the composite: the stroke in
+            // flight shows through the display view (`channel_preview`).
+            self.masking.channel_preview = Some(mask);
+            return self.composite(ctx, None).await;
+        }
         let i = self.active;
         let saved = self.layers[i].mask.replace(mask.into());
         let out = self.composite(ctx, None).await;
@@ -2274,7 +2777,7 @@ impl LayerStack {
     pub fn shrink_to_content(&mut self, index: usize) -> Result<Option<Region>, IngestError> {
         let (w, h) = (self.width, self.height);
         let layer = self.layer_mut(index)?;
-        if !layer.is_pixels() || layer.rgba.is_16bit() {
+        if !layer.is_pixels() || layer.rgba.depth() != image_core::SampleDepth::U8 {
             return Ok(None);
         }
         let px = layer.rgba.canvas().raw_arc();
@@ -2572,25 +3075,49 @@ impl LayerStack {
         }
         let active = &self.layers[self.active];
         active.pixels_editable()?;
+        if active.type_layer().is_some() {
+            return Err(IngestError::Unsupported(format!(
+                "\"{}\" is a type layer — rasterize it to paint on it (Layer ▸ Rasterize ▸ Type)",
+                active.name
+            )));
+        }
+        // A smart object's pixels are its render (ADR 482): Photoshop's
+        // "the smart object is not directly editable".
+        if active.smart_source().is_some() {
+            return Err(IngestError::Unsupported(format!(
+                "the smart object \"{}\" is not directly editable: edit its contents, add a smart \
+                 filter or rasterize it",
+                active.name
+            )));
+        }
         let clipped = damage
             .intersect(Region::new(0, 0, self.width, self.height))
             .unwrap_or(Region::new(0, 0, 0, 0));
+        // A layer and the edit landing on it must agree on depth, or the
+        // journal would snapshot tiles in one geometry and restore them
+        // in another. An edit made at another depth (a tool that paints
+        // 8-bit onto a 16-bit layer) ADOPTS THE LAYER'S inside its
+        // damage — widened or rounded there, the layer's own samples
+        // kept everywhere else — so the document keeps its depth and
+        // only the pixels the edit touched carry the edit's precision.
+        let pixels = if active.rgba.depth() != pixels.depth() {
+            adopt_depth(active.rgba.canvas(), &pixels, clipped, self.width)
+        } else {
+            pixels
+        };
+        // THE DOCUMENT'S MODE: what the edit painted inside its damage is
+        // put through the mode's space, so a Grayscale document stays
+        // grey and a CMYK one inside its press gamut (ADR 479).
+        let pixels = match crate::color_mode::ModeTransform::new(&self.mode)? {
+            Some(t) => t.project_pixels(&pixels, self.width, Some(clipped)),
+            None => pixels,
+        };
         // LOCK TRANSPARENT PIXELS: the edit keeps every pixel's alpha.
-        let pixels = if active.ext.locks.transparency && active.rgba.depth() == pixels.depth() {
+        let pixels = if active.ext.locks.transparency {
             keep_alpha(active.rgba.canvas(), pixels, clipped, self.width)
         } else {
             pixels
         };
-        // A layer and the edit landing on it must agree on depth, or
-        // the journal would snapshot tiles in one geometry and restore
-        // them in another. Refuse rather than silently narrow.
-        if active.rgba.depth() != pixels.depth() {
-            return Err(IngestError::Unsupported(format!(
-                "layer edit at {:?} onto a {:?} layer — depths must match",
-                pixels.depth(),
-                active.rgba.depth()
-            )));
-        }
         let outcome = {
             let bpp = active.rgba.canvas().bytes_per_pixel();
             let raw = active.rgba.canvas().raw();
@@ -2601,13 +3128,76 @@ impl LayerStack {
             // happens to be selected when the user reaches for it.
             self.journal.record(label, active.id as u64, &view, clipped)
         };
+        // The history brush's sources: the state before this edit.
+        {
+            // An 8-bit layer's buffer is shared, not copied (the edit
+            // REPLACES the `Arc`, it never writes through it); a 16-bit
+            // one is reduced once, since the history brush paints 8-bit.
+            let rgba = &self.layers[self.active].rgba;
+            let before: Arc<[u8]> = if rgba.depth() == image_core::SampleDepth::U8 {
+                rgba.raw_arc()
+            } else {
+                Arc::from(rgba.canvas().to_rgba8().into_owned().into_boxed_slice())
+            };
+            let id = self.layers[self.active].id;
+            self.history_states
+                .open
+                .entry(id)
+                .or_insert_with(|| Arc::clone(&before));
+            self.history_states.previous.insert(id, before);
+        }
+        // A CMYK layer's own inks (ADR 481) are kept outside the damage.
+        let old_inks = {
+            let l = &self.layers[self.active];
+            l.ext.inks.0.clone().filter(|i| i.of(&l.rgba))
+        };
         self.layers[self.active].rgba = pixels.into();
+        let inks = match (old_inks, self.ink_transform()?) {
+            (Some(old), Some(t)) => Some(Arc::new(old.carried(
+                &t,
+                self.layers[self.active].rgba.canvas(),
+                clipped,
+                self.width,
+            ))),
+            _ => None,
+        };
+        self.layers[self.active].ext.inks = InkCell(inks);
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
-            self.steps.push(Step::Pixels);
-            self.undone.clear();
+            self.push_pixel_step();
         }
         self.sync_with_journal();
         Ok(outcome)
+    }
+
+    /// The ACTIVE layer's history state `kind` as canvas-extent straight
+    /// RGBA8 — the History brush's source. A layer never edited since it
+    /// was opened IS its open state (and its previous one). A state
+    /// recorded before the canvas changed size no longer fits and is
+    /// refused (`None`), never stretched.
+    pub fn history_source(&self, kind: HistoryKind) -> Option<Arc<[u8]>> {
+        let layer = self.active();
+        if !layer.is_pixels() {
+            return None;
+        }
+        let want = (self.width as usize) * (self.height as usize) * 4;
+        let stored = match kind {
+            HistoryKind::Step(id) => return self.layer_after_step(layer.id, id),
+            HistoryKind::Snapshot(id) => return self.layer_in_snapshot(layer.id, id),
+            HistoryKind::Open => self.history_states.open.get(&layer.id),
+            HistoryKind::Previous => self
+                .history_states
+                .previous
+                .get(&layer.id)
+                .or_else(|| self.history_states.open.get(&layer.id)),
+        };
+        match stored {
+            Some(px) if px.len() == want => Some(Arc::clone(px)),
+            Some(_) => None,
+            None => {
+                let now = layer.rgba.canvas().to_rgba8().into_owned();
+                Some(Arc::from(now.into_boxed_slice()))
+            }
+        }
     }
 
     /// Is the active layer editable (present, unlocked)? The doors check
@@ -2642,7 +3232,9 @@ impl LayerStack {
             (Some(Step::Structure { merge_key: Some(k), .. }), Some(m)) if k == m
         );
         if !merges {
+            let id = self.take_step_id();
             self.steps.push(Step::Structure {
+                id,
                 label: label.to_string(),
                 merge_key: merge_key.map(str::to_string),
                 other: Box::new(before),
@@ -2666,7 +3258,9 @@ impl LayerStack {
         let before = self.snapshot();
         let changed = f(self)?;
         if changed {
+            let id = self.take_step_id();
             self.steps.push(Step::Structure {
+                id,
                 label: label.to_string(),
                 merge_key: None,
                 other: Box::new(before),
@@ -2687,6 +3281,11 @@ impl LayerStack {
             active: self.active,
             next_id: self.next_id,
             comps: self.comps.clone(),
+            masking: self.masking.doc.clone(),
+            selection: self.masking.live_selection.clone(),
+            styles: self.styles.clone(),
+            mode: self.mode.clone(),
+            workspace: self.workspace.clone(),
         }
     }
 
@@ -2698,6 +3297,11 @@ impl LayerStack {
         self.active = s.active;
         self.next_id = s.next_id;
         self.comps = s.comps;
+        self.masking.doc = s.masking;
+        self.workspace = s.workspace;
+        self.restore_selection(s.selection);
+        self.styles = s.styles;
+        self.mode = s.mode;
     }
 
     /// The journal bounds its own entries (and clears itself when one
@@ -2709,12 +3313,12 @@ impl LayerStack {
         let mut pixel_steps = self
             .steps
             .iter()
-            .filter(|s| matches!(s, Step::Pixels))
+            .filter(|s| matches!(s, Step::Pixels { .. }))
             .count();
         while pixel_steps > held {
             match self.steps.remove(0) {
                 // The journal already counted its own eviction.
-                Step::Pixels => pixel_steps -= 1,
+                Step::Pixels { .. } => pixel_steps -= 1,
                 Step::Structure { .. } => self.dropped_steps += 1,
             }
         }
@@ -2729,7 +3333,7 @@ impl LayerStack {
             .iter()
             .filter(|s| matches!(s, Step::Structure { .. }))
             .count()
-            > MAX_STRUCTURE_STEPS
+            > self.structure_step_bound()
         {
             self.steps.remove(0);
             self.dropped_steps += 1;
@@ -2741,9 +3345,9 @@ impl LayerStack {
     pub fn undo(&mut self) -> Option<String> {
         let step = self.steps.pop()?;
         match step {
-            Step::Pixels => match self.apply_pixels(true) {
+            Step::Pixels { id } => match self.apply_pixels(true) {
                 Some(label) => {
-                    self.undone.push(Step::Pixels);
+                    self.undone.push(Step::Pixels { id });
                     Some(label)
                 }
                 None => {
@@ -2754,6 +3358,7 @@ impl LayerStack {
                 }
             },
             Step::Structure {
+                id,
                 label,
                 merge_key,
                 other,
@@ -2762,6 +3367,7 @@ impl LayerStack {
                 self.restore(*other);
                 self.structure_generation += 1;
                 self.undone.push(Step::Structure {
+                    id,
                     label: label.clone(),
                     merge_key,
                     other: Box::new(now),
@@ -2775,12 +3381,13 @@ impl LayerStack {
     pub fn redo(&mut self) -> Option<String> {
         let step = self.undone.pop()?;
         match step {
-            Step::Pixels => {
+            Step::Pixels { id } => {
                 let label = self.apply_pixels(false)?;
-                self.steps.push(Step::Pixels);
+                self.steps.push(Step::Pixels { id });
                 Some(label)
             }
             Step::Structure {
+                id,
                 label,
                 merge_key,
                 other,
@@ -2789,6 +3396,7 @@ impl LayerStack {
                 self.restore(*other);
                 self.structure_generation += 1;
                 self.steps.push(Step::Structure {
+                    id,
                     label: label.clone(),
                     merge_key,
                     other: Box::new(now),
@@ -2814,6 +3422,9 @@ impl LayerStack {
         }?;
         if scope & MASK_SCOPE_BIT != 0 {
             return self.apply_mask_entry(scope & !MASK_SCOPE_BIT, undo);
+        }
+        if scope & masking_ops::CHANNEL_SCOPE_BIT != 0 {
+            return self.apply_channel_entry(scope & !masking_ops::CHANNEL_SCOPE_BIT, undo);
         }
         let idx = self.layers.iter().position(|l| l.id as u64 == scope)?;
         let (w, h) = (self.width, self.height);
@@ -2890,7 +3501,7 @@ impl LayerStack {
         self.steps
             .iter()
             .map(|s| match s {
-                Step::Pixels => pixel.next().unwrap_or("Edit"),
+                Step::Pixels { .. } => pixel.next().unwrap_or("Edit"),
                 Step::Structure { label, .. } => label.as_str(),
             })
             .collect()
@@ -2903,7 +3514,7 @@ impl LayerStack {
             .iter()
             .rev()
             .map(|s| match s {
-                Step::Pixels => pixel.next().unwrap_or("Edit"),
+                Step::Pixels { .. } => pixel.next().unwrap_or("Edit"),
                 Step::Structure { label, .. } => label.as_str(),
             })
             .collect()
@@ -2946,12 +3557,15 @@ impl LayerStack {
     /// and other whole-canvas readers); the resident fold uses
     /// [`Self::plates_indexed`], which keeps the bounds.
     #[cfg_attr(not(any(test, feature = "reference-fold")), allow(dead_code))]
-    fn plates<'a>(&'a self, override_active: Option<&'a Arc<[u8]>>) -> Vec<(&'a Layer, Arc<[u8]>)> {
+    fn plates<'a>(
+        &'a self,
+        override_active: Option<&'a crate::pixels::Pixels>,
+    ) -> Vec<(&'a Layer, crate::pixels::Pixels)> {
         self.plates_indexed(override_active)
             .into_iter()
             .map(|(i, p)| {
                 let px = match p.rect {
-                    Some(_) => self.layers[i].rgba.raw_arc(),
+                    Some(_) => self.layers[i].rgba.canvas().clone(),
                     None => p.px,
                 };
                 (&self.layers[i], px)
@@ -2961,7 +3575,10 @@ impl LayerStack {
 
     /// The contributing layers by index, each with its plate: canvas-sized,
     /// or a bounded layer's own rectangle and pixels (ADR 464).
-    fn plates_indexed(&self, override_active: Option<&Arc<[u8]>>) -> Vec<(usize, Plate)> {
+    fn plates_indexed(
+        &self,
+        override_active: Option<&crate::pixels::Pixels>,
+    ) -> Vec<(usize, Plate)> {
         self.plates_indexed_with(override_active, &[])
     }
 
@@ -2969,9 +3586,13 @@ impl LayerStack {
     /// replaced (`fresh`: a stale fill layer's render for this composite).
     fn plates_indexed_with(
         &self,
-        override_active: Option<&Arc<[u8]>>,
+        override_active: Option<&crate::pixels::Pixels>,
         fresh: &[(usize, Arc<[u8]>)],
     ) -> Vec<(usize, Plate)> {
+        // A 32-bit document blends linear light: a plate at an integer
+        // depth in it (a fill's 8-bit render, a stroke's preview) is
+        // decoded first, or the fold would mix encoded and linear values.
+        let float = self.depth() == image_core::SampleDepth::F32;
         self.layers
             .iter()
             .enumerate()
@@ -2984,20 +3605,24 @@ impl LayerStack {
                 // out a clone of its handle, not a reference into
                 // itself. The clone is a refcount bump, not a copy.
                 let plate = match (override_active, l.rgba.bounded()) {
+                    // A fill layer's render is 8-bit (its generator reads
+                    // back RGBA8); the fold takes each plate at its depth.
                     _ if renewed.is_some() => Plate {
-                        px: Arc::clone(renewed.expect("checked")),
+                        px: crate::pixels::Pixels::from_rgba8(Arc::clone(
+                            renewed.expect("checked"),
+                        )),
                         rect: None,
                     },
                     (Some(o), _) if i == self.active => Plate {
-                        px: Arc::clone(o),
+                        px: o.clone(),
                         rect: None,
                     },
                     (_, Some(b)) => Plate {
-                        px: b.px.raw_arc(),
+                        px: b.px.clone(),
                         rect: Some(b.rect),
                     },
                     _ => Plate {
-                        px: l.rgba.raw_arc(),
+                        px: l.rgba.canvas().clone(),
                         rect: None,
                     },
                 };
@@ -3005,15 +3630,273 @@ impl LayerStack {
                 // `rgba` is a transparent placeholder — so the
                 // transparency skip would drop exactly the layers whose
                 // whole job is to change what is beneath them.
-                if l.is_pixels() && is_fully_transparent(&plate.px) {
+                if l.is_pixels() && is_fully_transparent_px(&plate.px) {
                     return None;
                 }
+                let plate = if float && !plate.px.is_float() {
+                    Plate {
+                        px: plate.px.at_depth(image_core::SampleDepth::F32),
+                        rect: plate.rect,
+                    }
+                } else {
+                    plate
+                };
                 Some((i, plate))
             })
             .collect()
     }
 
-    /// Fold the stack bottom-up into one straight-RGBA8 canvas.
+    /// Image ▸ Mode ▸ 8 or 16 Bits/Channel: every layer's pixels at
+    /// `depth` (masks are coverage and stay 8-bit; a smart object's source
+    /// keeps its own). One undo step, like a canvas operation, and for
+    /// the same reason: older pixel steps were recorded at the old depth
+    /// and are reachable only by undoing this first. Answers whether
+    /// anything changed (the same depth records nothing).
+    pub fn set_depth(&mut self, depth: image_core::SampleDepth) -> Result<bool, IngestError> {
+        if !matches!(
+            depth,
+            image_core::SampleDepth::U8
+                | image_core::SampleDepth::U16
+                | image_core::SampleDepth::F32
+        ) {
+            return Err(IngestError::Unsupported(format!(
+                "a layer stack holds 8, 16 or 32 bits per channel, not {depth:?}"
+            )));
+        }
+        // A 32-bit document is RGB or Grayscale in Photoshop; the stack's
+        // other modes have no float encoding.
+        if depth == image_core::SampleDepth::F32
+            && !matches!(
+                self.mode.mode,
+                crate::color_mode::ColorMode::Rgb | crate::color_mode::ColorMode::Gray
+            )
+        {
+            return Err(IngestError::Unsupported(format!(
+                "32 Bits/Channel needs an RGB or Grayscale document, not {}",
+                self.mode.mode.label()
+            )));
+        }
+        let label = match depth {
+            image_core::SampleDepth::U16 => "16 Bits/Channel",
+            image_core::SampleDepth::F32 => "32 Bits/Channel",
+            _ => "8 Bits/Channel",
+        };
+        self.recorded_if_changed(label, |s| {
+            let mut changed = false;
+            for l in &mut s.layers {
+                if l.rgba.depth() != depth {
+                    l.rgba = l.rgba.at_depth(depth);
+                    changed = true;
+                }
+            }
+            Ok(changed)
+        })
+    }
+
+    /// The document's colour mode (Image ▸ Mode).
+    pub fn mode(&self) -> &crate::color_mode::DocMode {
+        &self.mode
+    }
+
+    /// Keep a CMYK file's own INKS on the layers read from it (image ADR
+    /// 481): `cmy` and `k` are the same import read through transforms
+    /// that hand the ink through (`PsdFile::layer_plates_rgba8_via`). The
+    /// layers read from records pair with the import's plates in order; a
+    /// layer whose shape is not its plate's keeps none (its inks are then
+    /// its pixels through the profile). Answers how many layers kept theirs.
+    pub fn attach_inks(
+        &mut self,
+        cmy: &image_psd::LayerImport,
+        k: &image_psd::LayerImport,
+    ) -> usize {
+        let from_records: Vec<usize> = (0..self.layers.len())
+            .filter(|&i| self.layers[i].ext.source.is_some())
+            .collect();
+        if from_records.len() != cmy.layers.len() || cmy.layers.len() != k.layers.len() {
+            return 0;
+        }
+        let mut kept = 0;
+        for (n, &i) in from_records.iter().enumerate() {
+            let (c, kp) = (&cmy.layers[n], &k.layers[n]);
+            let l = &mut self.layers[i];
+            if !l.is_pixels() || l.rgba.depth() != image_core::SampleDepth::U8 {
+                continue;
+            }
+            // The plate at the layer's shape: its own rectangle, or the
+            // canvas (a plate may name the whole canvas as its rectangle).
+            let (w, h) = (cmy.width, cmy.height);
+            let at_shape = |p: &image_psd::LayerPlate| -> Option<Vec<u8>> {
+                match (l.rgba.bounded(), p.rect) {
+                    (Some(b), Some(r)) if b.rect == r => Some(p.rgba.clone()),
+                    (None, None) => Some(p.rgba.clone()),
+                    (None, Some(_)) => Some(p.canvas_rgba8(w, h)),
+                    _ => None,
+                }
+            };
+            let (Some(ci), Some(ki)) = (at_shape(c), at_shape(kp)) else {
+                continue;
+            };
+            if let Some(inks) = crate::planes::InkPlanes::from_ink_rgba8(&l.rgba, &ci, &ki) {
+                l.ext.inks = InkCell(Some(Arc::new(inks)));
+                kept += 1;
+            }
+        }
+        kept
+    }
+
+    /// Take the mode a document was OPENED in (a CMYK, Grayscale or Lab
+    /// file): its pixels already are that mode's colours, so nothing is
+    /// projected and nothing is recorded — the layered save then writes
+    /// the file's own mode back (image ADR 481).
+    pub fn adopt_mode(&mut self, mode: crate::color_mode::DocMode) {
+        self.mode = mode;
+    }
+
+    /// Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color:
+    /// every layer's pixels (each at its bounds, its alpha kept) put
+    /// through the new mode's space and back ([`crate::color_mode`]), and
+    /// the mode kept, so later pixel edits land projected too. One undo
+    /// step; the same mode (and profile) again records nothing. A smart
+    /// object's source and a fill layer's settings are not converted
+    /// (their render is; a re-render shows the source's colours).
+    pub fn set_mode(&mut self, mode: crate::color_mode::DocMode) -> Result<bool, IngestError> {
+        if self.mode == mode {
+            return Ok(false);
+        }
+        if matches!(
+            mode.mode,
+            crate::color_mode::ColorMode::Indexed
+                | crate::color_mode::ColorMode::Multichannel
+                | crate::color_mode::ColorMode::Duotone
+        ) {
+            return Err(IngestError::Unsupported(format!(
+                "{} is converted with its table (Indexed Color…, Multichannel); a Duotone \
+                 document opens from its file",
+                mode.mode.label()
+            )));
+        }
+        if self.depth() == image_core::SampleDepth::F32
+            && !matches!(
+                mode.mode,
+                crate::color_mode::ColorMode::Rgb | crate::color_mode::ColorMode::Gray
+            )
+        {
+            return Err(IngestError::Unsupported(format!(
+                "{} needs 8 or 16 bits per channel: convert the 32-bit document first",
+                mode.mode.label()
+            )));
+        }
+        let t = crate::color_mode::ModeTransform::new(&mode)?;
+        let w = self.width;
+        self.recorded(mode.mode.label(), None, |s| {
+            if let Some(t) = &t {
+                for l in &mut s.layers {
+                    if matches!(l.kind, LayerKind::Adjustment(_)) {
+                        continue;
+                    }
+                    l.rgba = match &l.rgba {
+                        crate::pixels::LayerPixels::Canvas(p) => {
+                            crate::pixels::LayerPixels::Canvas(t.project_pixels(p, w, None))
+                        }
+                        crate::pixels::LayerPixels::Bounded(b) => {
+                            let px = t.project_pixels(&b.px, b.rect.w, None);
+                            match crate::pixels::Bounded::new(b.rect, px, b.canvas_w, b.canvas_h) {
+                                Some(nb) => crate::pixels::LayerPixels::Bounded(nb),
+                                None => l.rgba.clone(),
+                            }
+                        }
+                    };
+                }
+            }
+            s.mode = mode;
+            Ok(true)
+        })
+    }
+
+    /// Image ▸ Mode ▸ Indexed Color… or Multichannel (image ADR 484): the
+    /// modes Photoshop keeps as ONE image. The visible stack is flattened
+    /// (over white, as Flatten Image), put in the mode — every pixel the
+    /// nearest table colour; a Multichannel document's inks reproduce its
+    /// RGB or grey — and the mode kept, all as ONE undo step named for the
+    /// mode. Indexed is 8 bits a channel. `mode` carries its table.
+    pub async fn convert_flat(
+        &mut self,
+        ctx: Option<&GpuContext>,
+        mode: crate::color_mode::DocMode,
+    ) -> Result<bool, IngestError> {
+        use crate::color_mode::ColorMode as M;
+        if !matches!(mode.mode, M::Indexed | M::Multichannel) || mode.table.is_none() {
+            return Err(IngestError::Unsupported(format!(
+                "{} is not a single-image mode with its table",
+                mode.mode.label()
+            )));
+        }
+        if self.mode == mode {
+            return Ok(false);
+        }
+        if self.depth() == image_core::SampleDepth::F32 {
+            return Err(IngestError::Unsupported(format!(
+                "{} needs 8 or 16 bits per channel: convert the 32-bit document first",
+                mode.mode.label()
+            )));
+        }
+        let depth = if mode.mode == M::Indexed {
+            image_core::SampleDepth::U8
+        } else {
+            self.depth()
+        };
+        let composite = self.composite_px(ctx, None).await?;
+        let (w, h) = (self.width, self.height);
+        // Over white, as Flatten Image does (the image has no transparency).
+        let lin = composite.at_depth(image_core::SampleDepth::U16);
+        let flat: Vec<u16> = (0..lin.pixel_count())
+            .flat_map(|i| {
+                let a = u32::from(lin.sample16(i, 3));
+                let over = |c: usize| {
+                    ((u32::from(lin.sample16(i, c)) * a + 65535 * (65535 - a) + 32767) / 65535)
+                        as u16
+                };
+                [over(0), over(1), over(2), u16::MAX]
+            })
+            .collect();
+        let mut px = crate::pixels::Pixels::from_rgba16(&flat).at_depth(depth);
+        if let Some(t) = crate::color_mode::ModeTransform::new(&mode)? {
+            px = t.project_pixels(&px, w, None);
+        }
+        let _ = h;
+        let label = mode.mode.label();
+        self.recorded(label, None, move |s| {
+            let layer = s.plain_layer(BACKGROUND_LAYER_NAME.into(), px, None);
+            s.layers = vec![layer];
+            s.groups.clear();
+            s.active = 0;
+            s.edit_mask = false;
+            s.mode = mode;
+            Ok(true)
+        })
+    }
+
+    /// The document's DEPTH: 16 bits when any layer holds 16-bit pixels,
+    /// else 8 (Image ▸ Mode ▸ 8/16 Bits/Channel sets every layer's;
+    /// [`set_depth`](Self::set_depth)). The composite is read back at it.
+    pub fn depth(&self) -> image_core::SampleDepth {
+        if self
+            .layers
+            .iter()
+            .any(|l| l.rgba.depth() == image_core::SampleDepth::F32)
+        {
+            image_core::SampleDepth::F32
+        } else if self.layers.iter().any(|l| l.rgba.is_16bit()) {
+            image_core::SampleDepth::U16
+        } else {
+            image_core::SampleDepth::U8
+        }
+    }
+
+    /// Fold the stack bottom-up into one straight-RGBA8 canvas — the
+    /// DISPLAY view of [`composite_px`](Self::composite_px), narrowed by
+    /// the high byte when the document is 16-bit (an 8-bit document's
+    /// composite is handed back as it is, the same allocation).
     ///
     /// `override_active` replaces the ACTIVE layer's pixels for this
     /// composite only — how a stroke in flight previews through the rest
@@ -3025,34 +3908,72 @@ impl LayerStack {
     pub async fn composite(
         &self,
         ctx: Option<&GpuContext>,
-        override_active: Option<&Arc<[u8]>>,
+        override_active: Option<&crate::pixels::Pixels>,
     ) -> Result<Arc<[u8]>, IngestError> {
+        let px = self.composite_px(ctx, override_active).await?;
+        Ok(match px.depth() {
+            image_core::SampleDepth::U8 => px.raw_arc(),
+            _ => Arc::from(px.to_rgba8().into_owned().into_boxed_slice()),
+        })
+    }
+
+    /// The composite at the document's [`depth`](Self::depth): a 16-bit
+    /// document folds its 16-bit plates in rgba16float and reads the
+    /// result back at 16 bits, so a layered 16-bit image keeps its levels
+    /// through the fold (within f16's precision) instead of being cut to
+    /// 256 at every composite.
+    pub async fn composite_px(
+        &self,
+        ctx: Option<&GpuContext>,
+        override_active: Option<&crate::pixels::Pixels>,
+    ) -> Result<crate::pixels::Pixels, IngestError> {
+        let depth = self.depth();
         let fresh = self.stale_fill_renders(ctx).await?;
         let plates = self.plates_indexed_with(override_active, &fresh);
         crate::counters::bump(|c| c.composites += 1);
 
         match plates.as_slice() {
             // Nothing contributes: an honest transparent canvas.
-            [] => return Ok(self.transparent()),
+            [] => return Ok(crate::pixels::Pixels::from_rgba8(self.transparent()).at_depth(depth)),
             // The identity fold — the pixels ARE the composite. Handed
             // back as the very same allocation (an `Arc` clone), so a
             // one-layer document costs nothing to composite.
             [(i, p)] if self.layers[*i].is_plain() => {
-                return Ok(match p.rect {
-                    Some(_) => self.layers[*i].rgba.raw_arc(),
-                    None => Arc::clone(&p.px),
-                })
+                let px = match p.rect {
+                    Some(_) => self.layers[*i].rgba.canvas().clone(),
+                    None => p.px.clone(),
+                };
+                return Ok(px.at_depth(depth));
             }
             _ => {}
         }
-        let ctx = ctx.ok_or_else(|| {
-            IngestError::Unsupported(
-                "compositing layers is GPU-only — call init_gpu first (the blend \
-                 is a registered WGSL kernel dispatch; no CPU blend path ships)"
-                    .into(),
-            )
-        })?;
-        self.composite_resident(ctx, &plates).await
+        // A CMYK document folds in its inks (ADR 481) when its plan is
+        // separable; otherwise in RGB, as below.
+        if let Some(px) = self.composite_inks(ctx, &plates, depth).await? {
+            return Ok(px);
+        }
+        // Without a device the fold runs on the CPU twins (ADR 480):
+        // pixel, adjustment, group and clipping layers; a style needs one.
+        let Some(ctx) = ctx else {
+            return self
+                .composite_tiled(None, &plates, depth, fold::CPU_TILE_SIDE)
+                .await;
+        };
+        self.fold_on(ctx, &plates, depth).await
+    }
+
+    /// The fold on the device: whole, or tile by tile past the device's
+    /// limits (ADR 480).
+    async fn fold_on(
+        &self,
+        ctx: &GpuContext,
+        plates: &[(usize, Plate)],
+        depth: image_core::SampleDepth,
+    ) -> Result<crate::pixels::Pixels, IngestError> {
+        match self.fold_tile_side(ctx) {
+            Some(side) => self.composite_tiled(Some(ctx), plates, depth, side).await,
+            None => self.composite_resident(ctx, plates, depth).await,
+        }
     }
 
     /// Every visible fill layer whose render is stale, rendered now (for
@@ -3111,6 +4032,52 @@ impl LayerStack {
         Ok(any)
     }
 
+    /// The composite of the active layer and everything BELOW it — the
+    /// clone and healing tools' "Current & Below" sample. Same fold as
+    /// [`Self::composite`], over the plates up to the active one.
+    pub async fn composite_through_active(
+        &self,
+        ctx: Option<&GpuContext>,
+    ) -> Result<Arc<[u8]>, IngestError> {
+        let upto = self.active;
+        let plates: Vec<(usize, Plate)> = self
+            .plates_indexed(None)
+            .into_iter()
+            .filter(|(i, _)| *i <= upto)
+            .collect();
+        match plates.as_slice() {
+            [] => return Ok(self.transparent()),
+            [(i, p)] if self.layers[*i].is_plain() => {
+                let px = match p.rect {
+                    Some(_) => self.layers[*i].rgba.canvas().clone(),
+                    None => p.px.clone(),
+                };
+                return Ok(match px.depth() {
+                    image_core::SampleDepth::U8 => px.raw_arc(),
+                    _ => Arc::from(px.to_rgba8().into_owned().into_boxed_slice()),
+                });
+            }
+            _ => {}
+        }
+        // The tools sample 8-bit.
+        let px = match ctx {
+            Some(ctx) => {
+                self.fold_on(ctx, &plates, image_core::SampleDepth::U8)
+                    .await?
+            }
+            None => {
+                self.composite_tiled(
+                    None,
+                    &plates,
+                    image_core::SampleDepth::U8,
+                    fold::CPU_TILE_SIDE,
+                )
+                .await?
+            }
+        };
+        Ok(px.raw_arc())
+    }
+
     /// The fold as it ran before it became resident: every blend its own
     /// upload, dispatch and readback. Kept, test-only, as the reference
     /// the resident fold is proven byte-equal against.
@@ -3119,10 +4086,15 @@ impl LayerStack {
     pub async fn composite_reference(
         &self,
         ctx: Option<&GpuContext>,
-        override_active: Option<&Arc<[u8]>>,
+        override_active: Option<&crate::pixels::Pixels>,
     ) -> Result<Arc<[u8]>, IngestError> {
         let (w, h) = (self.width, self.height);
-        let plates = self.plates(override_active);
+        // The reference is the 8-bit fold it always was.
+        let plates: Vec<(&Layer, Arc<[u8]>)> = self
+            .plates(override_active)
+            .into_iter()
+            .map(|(l, p)| (l, Arc::from(p.to_rgba8().into_owned().into_boxed_slice())))
+            .collect();
 
         match plates.as_slice() {
             // Nothing contributes: an honest transparent canvas.
@@ -3284,7 +4256,7 @@ impl LayerStack {
                     with_opacity(
                         effective_coverage(
                             multiply_coverage(
-                                layer.live_mask().cloned(),
+                                layer.live_mask(),
                                 self.pass_through_mask(layer.group),
                             )
                             .as_ref(),
@@ -3321,10 +4293,7 @@ impl LayerStack {
             };
             // Lower the layer's coverage to the ABI mask. `None` keeps
             // the constant-1 fast path, so an unmasked layer pays nothing.
-            let own = multiply_coverage(
-                layer.live_mask().cloned(),
-                self.pass_through_mask(layer.group),
-            );
+            let own = multiply_coverage(layer.live_mask(), self.pass_through_mask(layer.group));
             let mask_bytes: Option<Vec<u8>> =
                 effective_coverage(own.as_ref(), clip, w, h).map(|cov| {
                     SelectionMask::from_fn(w, h, |x, y| f32::from(cov.coverage_at(x, y)) / 255.0)
@@ -3706,6 +4675,16 @@ fn bounded_pixels(
     height: u32,
 ) -> Result<crate::pixels::LayerPixels, IngestError> {
     let px = crate::pixels::Pixels::from_rgba8(Arc::from(rgba.into_boxed_slice()));
+    bounded_px(rect, px, width, height)
+}
+
+/// [`bounded_pixels`] for pixels that already know their depth.
+fn bounded_px(
+    rect: Region,
+    px: crate::pixels::Pixels,
+    width: u32,
+    height: u32,
+) -> Result<crate::pixels::LayerPixels, IngestError> {
     if rect == Region::new(0, 0, width, height) {
         return Ok(px.into());
     }
@@ -3725,7 +4704,9 @@ fn bounded_pixels(
 /// ([`Adjustment::to_chain`]: natural-spline curves, Levels and an
 /// Exposure offset/gamma as tables).
 pub fn psd_adjustment(adj: &image_psd::adjustment::Adjustment) -> Adjustment {
-    use image_psd::adjustment::Adjustment as Psd;
+    use image_psd::adjustment::{Adjustment as Psd, FilterColor};
+    let f = |v: i16| f32::from(v);
+    let f3 = |t: &[i16; 3]| t.map(f32::from);
     match adj {
         Psd::Curves { curves } => Adjustment::Curves {
             curves: std::array::from_fn(|c| curves[c].clone().unwrap_or_default()),
@@ -3757,16 +4738,214 @@ pub fn psd_adjustment(adj: &image_psd::adjustment::Adjustment) -> Adjustment {
             master,
             ranges,
             ..
+        } => Adjustment::HueSaturation {
+            colorize: *colorized,
+            colorize_hsl: f3(colorize),
+            master: f3(master),
+            ranges: ranges.map(|r| f3(&r)),
+        },
+        Psd::BrightnessContrast {
+            brightness,
+            contrast,
+            ..
+        } => Adjustment::BrightnessContrast {
+            brightness: *brightness as f32,
+            contrast: *contrast as f32,
+        },
+        Psd::ColorBalance {
+            shadows,
+            midtones,
+            highlights,
+            ..
+        } => Adjustment::ColorBalance {
+            shadows: f3(shadows),
+            midtones: f3(midtones),
+            highlights: f3(highlights),
+        },
+        Psd::Vibrance {
+            vibrance,
+            saturation,
+        } => Adjustment::Vibrance {
+            vibrance: *vibrance as f32,
+            saturation: *saturation as f32,
+        },
+        Psd::BlackWhite { weights, .. } => Adjustment::BlackWhite {
+            weights: weights.map(|w| w as f32),
+        },
+        Psd::PhotoFilter {
+            color,
+            density,
+            preserve_luminosity,
         } => {
-            let hsl = |t: &[i16; 3]| t.map(f32::from);
-            Adjustment::HueSaturation {
-                colorize: *colorized,
-                colorize_hsl: hsl(colorize),
-                master: hsl(master),
-                ranges: ranges.map(|r| hsl(&r)),
+            let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let color = match color {
+                FilterColor::Lab([l, a, b]) => {
+                    paged_color::lab::lab_d50_to_srgb_encoded(*l as f32, *a as f32, *b as f32)
+                        .map(q)
+                }
+                FilterColor::Rgb(c) => c.map(|v| ((u32::from(v) + 128) / 257) as u8),
+                // Declined by `unmodelled`; the warming filter's colour.
+                FilterColor::Xyz(_) => [236, 138, 0],
+            };
+            Adjustment::PhotoFilter {
+                color,
+                density: *density as f32,
+                preserve_luminosity: *preserve_luminosity,
             }
         }
+        Psd::ChannelMixer { rows, monochrome } => Adjustment::ChannelMixer {
+            rows: rows.map(|r| r.map(f)),
+            monochrome: *monochrome,
+        },
+        Psd::Posterize { levels } => Adjustment::Posterize {
+            levels: f32::from(*levels),
+        },
+        Psd::Threshold { level } => Adjustment::Threshold {
+            level: f32::from(*level),
+        },
+        Psd::GradientMap { stops, reverse, .. } => Adjustment::GradientMap {
+            stops: stops
+                .iter()
+                .map(|s| ColorStop {
+                    at: (s.location as f32 / 4096.0).clamp(0.0, 1.0),
+                    rgb: s.rgb16.map(|v| ((u32::from(v) + 128) / 257) as u8),
+                })
+                .collect(),
+            reverse: *reverse,
+        },
+        Psd::SelectiveColor { ranges, absolute } => Adjustment::SelectiveColor {
+            ranges: ranges.map(|r| r.map(f)),
+            absolute: *absolute,
+        },
     }
+}
+
+/// A typed adjustment as Photoshop's adjustment (the inverse of
+/// [`psd_adjustment`]), for the layered PSD save: `None` for what
+/// Photoshop has no adjustment layer for in this form — a stored chain,
+/// Develop (a Camera Raw filter, not a layer) and Color Lookup (whose
+/// look Photoshop compiles into an embedded profile, image ADR 478).
+pub fn adjustment_to_psd(adj: &Adjustment) -> Option<image_psd::adjustment::Adjustment> {
+    use image_psd::adjustment::{
+        Adjustment as Psd, FilterColor, GradientMapStop, LevelsRecord, BLACK_WHITE_DEFAULT_TINT,
+        HUE_RANGE_DEFAULTS,
+    };
+    let i = |v: f32| v.round() as i16;
+    let i3 = |t: &[f32; 3]| t.map(i);
+    Some(match adj {
+        Adjustment::Chain(_) | Adjustment::Develop { .. } | Adjustment::ColorLookup { .. } => {
+            return None
+        }
+        Adjustment::Curves { curves } => Psd::Curves {
+            curves: std::array::from_fn(|c| (!curves[c].is_empty()).then(|| curves[c].clone())),
+        },
+        Adjustment::Levels { records } => Psd::Levels {
+            records: records.map(|r| {
+                let lv = |v: f32| v.round().clamp(0.0, 255.0) as u16;
+                LevelsRecord {
+                    in_black: lv(r[0]),
+                    in_white: lv(r[1]),
+                    out_black: lv(r[3]),
+                    out_white: lv(r[4]),
+                    gamma_x100: (r[2] * 100.0).round().clamp(10.0, 999.0) as u16,
+                }
+            }),
+            extra_records: false,
+        },
+        Adjustment::Exposure {
+            exposure,
+            offset,
+            gamma,
+        } => Psd::Exposure {
+            exposure: *exposure,
+            offset: *offset,
+            gamma: *gamma,
+        },
+        Adjustment::Invert => Psd::Invert,
+        Adjustment::HueSaturation {
+            colorize,
+            colorize_hsl,
+            master,
+            ranges,
+        } => Psd::HueSaturation {
+            colorized: *colorize,
+            colorize: i3(colorize_hsl),
+            master: i3(master),
+            ranges: ranges.map(|r| i3(&r)),
+            bounds: HUE_RANGE_DEFAULTS,
+        },
+        Adjustment::BrightnessContrast {
+            brightness,
+            contrast,
+        } => Psd::BrightnessContrast {
+            brightness: brightness.round() as i32,
+            contrast: contrast.round() as i32,
+            mean: 127,
+            lab: false,
+            legacy: false,
+            auto: false,
+        },
+        Adjustment::ColorBalance {
+            shadows,
+            midtones,
+            highlights,
+        } => Psd::ColorBalance {
+            shadows: i3(shadows),
+            midtones: i3(midtones),
+            highlights: i3(highlights),
+            preserve_luminosity: true,
+        },
+        Adjustment::Vibrance {
+            vibrance,
+            saturation,
+        } => Psd::Vibrance {
+            vibrance: vibrance.round() as i32,
+            saturation: saturation.round() as i32,
+        },
+        Adjustment::BlackWhite { weights } => Psd::BlackWhite {
+            weights: weights.map(|w| w.round() as i32),
+            tint: false,
+            tint_rgb: BLACK_WHITE_DEFAULT_TINT,
+        },
+        Adjustment::PhotoFilter {
+            color,
+            density,
+            preserve_luminosity,
+        } => {
+            // Photoshop stores the filter colour as Lab [OBS].
+            let lab = paged_color::lab::srgb_to_lab_d50(color.map(|c| f32::from(c) / 255.0));
+            Psd::PhotoFilter {
+                color: FilterColor::Lab(lab.map(|v| f64::from((v * 100.0).round()) / 100.0)),
+                density: density.round().clamp(1.0, 100.0) as u32,
+                preserve_luminosity: *preserve_luminosity,
+            }
+        }
+        Adjustment::ChannelMixer { rows, monochrome } => Psd::ChannelMixer {
+            rows: rows.map(|r| r.map(i)),
+            monochrome: *monochrome,
+        },
+        Adjustment::Posterize { levels } => Psd::Posterize {
+            levels: levels.round().clamp(2.0, 255.0) as u16,
+        },
+        Adjustment::Threshold { level } => Psd::Threshold {
+            level: level.round().clamp(1.0, 255.0) as u16,
+        },
+        Adjustment::GradientMap { stops, reverse } => Psd::gradient_map(
+            stops
+                .iter()
+                .map(|s| GradientMapStop {
+                    location: (s.at.clamp(0.0, 1.0) * 4096.0).round() as u32,
+                    midpoint: 50,
+                    rgb16: s.rgb.map(|v| u16::from(v) * 257),
+                })
+                .collect(),
+            *reverse,
+        ),
+        Adjustment::SelectiveColor { ranges, absolute } => Psd::SelectiveColor {
+            ranges: ranges.map(|r| r.map(i)),
+            absolute: *absolute,
+        },
+    })
 }
 
 /// [`psd_adjustment`] as the adjust chain it evaluates to.
@@ -4063,6 +5242,32 @@ async fn gpu_canvas_op(
         CanvasOp::RotateArbitrary { degrees } => {
             rotate_onto_bounds(ctx, win, w, h, degrees, [0; 8]).await
         }
+        CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        } => {
+            use image_kernels::families::geom::{
+                WarpInterp, WarpProjectiveParams, GEOM_WARP_PROJECTIVE,
+            };
+            let (_, inverse) = perspective_crop_maps(quad, width, height).ok_or_else(|| {
+                IngestError::Unsupported("the perspective crop's quad is degenerate".into())
+            })?;
+            let params = WarpProjectiveParams::from_inverse(inverse, WarpInterp::Bicubic, false);
+            image_gpu::execute_windowed_once_async(
+                ctx,
+                &GEOM_WARP_PROJECTIVE,
+                win,
+                w,
+                h,
+                params.as_bytes(),
+                None,
+                width,
+                height,
+            )
+            .await
+            .map_err(|e| IngestError::Pipeline(e.to_string()))
+        }
         _ => Err(IngestError::Unsupported(format!(
             "{} is an exact op with no dispatch",
             op.label()
@@ -4187,31 +5392,12 @@ fn cut_window(src: &[u8], w: u32, bpp: usize, (x, y, cw, ch): (u32, u32, u32, u3
 /// A layer's pixels as the rgba16float working window, at their own
 /// depth (a 16-bit sample is not narrowed to a byte on the way in).
 fn pixels_to_f16(px: &crate::pixels::Pixels) -> Vec<u8> {
-    use half::f16;
-    if !px.is_16bit() {
-        return rgba8_to_f16(px.raw());
-    }
-    let mut out = Vec::with_capacity(px.raw().len());
-    for pair in px.raw().as_chunks::<2>().0 {
-        let v = f32::from(u16::from_ne_bytes(*pair)) / 65535.0;
-        out.extend_from_slice(&f16::from_f32(v).to_le_bytes());
-    }
-    out
+    px.to_f16()
 }
 
 /// The window back to pixels at `depth`.
 fn f16_to_pixels(win: &[u8], depth: image_core::SampleDepth) -> crate::pixels::Pixels {
-    use half::f16;
-    if depth != image_core::SampleDepth::U16 {
-        return crate::pixels::Pixels::from_rgba8(Arc::from(f16_to_rgba8(win).into_boxed_slice()));
-    }
-    let samples: Vec<u16> = win
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|p| (f16::from_le_bytes(*p).to_f32().clamp(0.0, 1.0) * 65535.0).round() as u16)
-        .collect();
-    crate::pixels::Pixels::from_rgba16(&samples)
+    crate::pixels::Pixels::from_f16(win, depth)
 }
 
 /// A one-byte coverage field as a window (the value in every channel).
@@ -4230,40 +5416,39 @@ fn f16_to_coverage(win: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-/// RENDER a smart object's SOURCE at `scale` with `filter`, letterboxed
-/// (top-left) into a `cw × ch` canvas as straight RGBA8 — the one
-/// re-render both the smart-scale door and Image Size use. GPU-only.
-pub async fn render_smart(
-    ctx: &GpuContext,
-    src: &SmartSource,
-    scale: f32,
-    filter: ResampleFilter,
-    cw: u32,
-    ch: u32,
-) -> Result<Vec<u8>, IngestError> {
-    let out_w = ((src.width as f32) * scale).round().max(1.0) as u32;
-    let out_h = ((src.height as f32) * scale).round().max(1.0) as u32;
-    let op = CanvasOp::Resample {
-        width: out_w,
-        height: out_h,
-        filter,
-    };
-    let small = f16_to_rgba8(
-        &gpu_canvas_op(ctx, op, &rgba8_to_f16(&src.rgba), src.width, src.height).await?,
-    );
-    let mut canvas = vec![0u8; (cw as usize) * (ch as usize) * 4];
-    for y in 0..out_h.min(ch) {
-        let srow = (y as usize) * (out_w as usize) * 4;
-        let drow = (y as usize) * (cw as usize) * 4;
-        let n = (out_w.min(cw) as usize) * 4;
-        canvas[drow..drow + n].copy_from_slice(&small[srow..srow + n]);
-    }
-    Ok(canvas)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_layer_added_or_duplicated_with_pixels_is_one_undo_step__feat__image_editor_content_aware_move(
+    ) {
+        let px: Arc<[u8]> = Arc::from(vec![9u8; 4 * 4 * 4].into_boxed_slice());
+        let mut s = LayerStack::from_image(4, 4, Arc::from(vec![200u8; 64].into_boxed_slice()))
+            .expect("stack");
+        let at = s
+            .add_with_pixels("Content-Aware Fill", "Fill", Arc::clone(&px))
+            .expect("add");
+        assert_eq!(s.len(), 2);
+        assert_eq!(s.active_index(), at);
+        assert_eq!(&*s.active().rgba.to_rgba8(), &px[..]);
+        assert_eq!(s.undo_label(), Some("Content-Aware Fill"));
+        assert!(s.undo().is_some());
+        assert_eq!(s.len(), 1, "one undo takes the layer and its pixels back");
+        let at = s
+            .duplicate_with_pixels("Content-Aware Fill", 0, Arc::clone(&px))
+            .expect("dup");
+        assert_eq!((s.len(), at), (2, 1));
+        assert_eq!(&*s.layers()[1].rgba.to_rgba8(), &px[..]);
+        assert_eq!(&*s.layers()[0].rgba.to_rgba8(), &[200u8; 64][..]);
+        assert!(s.undo().is_some());
+        assert_eq!(s.len(), 1);
+        assert!(s
+            .add_with_pixels("x", "x", Arc::from(vec![0u8; 3].into_boxed_slice()))
+            .is_err());
+        assert_eq!(s.len(), 1, "a mis-sized buffer changes nothing");
+    }
 
     fn px(w: u32, h: u32, v: u8) -> Arc<[u8]> {
         Arc::from(vec![v; (w * h * 4) as usize].into_boxed_slice())
@@ -4445,7 +5630,7 @@ mod tests {
 
     #[test]
     #[allow(non_snake_case)]
-    fn canvas_ops_are_undoable_and_refuse_resize_over_a_smart_object__feat__image_editor_layers() {
+    fn canvas_ops_are_undoable_and_move_a_smart_object__feat__image_editor_layers() {
         let mut s = numbered();
         s.edit_active("paint", Region::new(0, 0, 3, 2), px(3, 2, 9).into())
             .expect("edit");
@@ -4462,23 +5647,21 @@ mod tests {
         assert_eq!(s.redo().as_deref(), Some("Rotate 90° clockwise"));
         assert_eq!((s.width, s.height), (2, 3));
         s.make_smart(0).expect("smart");
-        let err = s
-            .transform_canvas(CanvasOp::Resize {
-                width: 4,
-                height: 4,
-                anchor_x: 0,
-                anchor_y: 0,
-            })
-            .expect_err("refused");
-        assert!(err.to_string().contains("smart object"));
-        assert_eq!(
-            s.undo_labels().last().copied(),
-            Some("Rotate 90° clockwise"),
-            "a refused op records nothing"
-        );
-        // Rotation is fine: the source rotates with the render.
+        let source = s.layers[0].smart_source().expect("src").rgba.to_vec();
+        // Canvas Size moves the placement (ADR 482): no longer refused.
+        s.transform_canvas(CanvasOp::Resize {
+            width: 4,
+            height: 4,
+            anchor_x: 2,
+            anchor_y: 0,
+        })
+        .expect("canvas size");
+        let src = s.layers[0].smart_source().expect("src");
+        assert_eq!(src.placement.map(|q| q[0]), Some(2.0));
+        assert_eq!(src.rgba.to_vec(), source, "the source does not move");
         s.transform_canvas(CanvasOp::Rotate180)
             .expect("rotate smart");
+        assert_eq!(s.undo_labels().last().copied(), Some("Rotate 180°"));
     }
 
     /// `numbered()` plus an empty top layer with a mask, both in a group
@@ -4582,8 +5765,7 @@ mod tests {
 
     #[test]
     #[allow(non_snake_case)]
-    fn crop_moves_a_smart_source_at_1_to_1_and_refuses_a_scaled_one__feat__image_editor_canvas_ops()
-    {
+    fn crop_moves_a_smart_placement_and_keeps_its_source__feat__image_editor_canvas_ops() {
         let mut s = numbered();
         s.make_smart(0).expect("smart");
         let crop = CanvasOp::Crop {
@@ -4594,21 +5776,14 @@ mod tests {
         };
         s.transform_canvas(crop).expect("crop smart");
         let src = s.layers[0].smart_source().expect("source");
-        assert_eq!((src.width, src.height), (3, 1));
-        assert_eq!(
-            src.rgba
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|p| p[0])
-                .collect::<Vec<_>>(),
-            vec![10, 11, 12]
-        );
+        assert_eq!((src.width, src.height), (3, 2), "the source is whole");
+        assert_eq!(src.placement.map(|q| (q[0], q[1])), Some((0.0, -1.0)));
+        assert_eq!(reds(&s), vec![10, 11, 12]);
+        // A scaled one crops too: its placement just moves.
         let mut s = numbered();
         s.make_smart(0).expect("smart");
         s.set_smart_render(0, px(3, 2, 5), 0.5).expect("render");
-        let err = s.transform_canvas(crop).expect_err("scaled");
-        assert!(err.to_string().contains("smart object"), "{err}");
+        s.transform_canvas(crop).expect("scaled");
     }
 
     #[test]
@@ -4644,6 +5819,59 @@ mod tests {
             Some(ResampleFilter::Lanczos3)
         );
         assert_eq!(ResampleFilter::from_wire("bicubic"), None);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn perspective_crop_maps_the_quad_upright_in_one_undo_step__feat__image_editor_transform_warp()
+    {
+        // The maps: the quad's corners land on the new canvas's corners.
+        let quad = [1.0, 0.0, 3.0, 0.0, 3.0, 2.0, 1.0, 2.0];
+        let (fwd, inv) = perspective_crop_maps(quad, 2, 2).expect("a rectangle");
+        let p = paged_warp::apply(&fwd, (3.0, 2.0));
+        assert!((p.0 - 2.0).abs() < 1e-9 && (p.1 - 2.0).abs() < 1e-9);
+        let q = paged_warp::apply(&inv, (0.0, 0.0));
+        assert!((q.0 - 1.0).abs() < 1e-9 && q.1.abs() < 1e-9);
+        let map = masking_ops::map_point(
+            CanvasOp::Perspective {
+                quad,
+                width: 2,
+                height: 2,
+            },
+            3,
+            2,
+            [2.0, 1.0],
+        );
+        assert!(
+            (map[0] - 1.0).abs() < 1e-5 && (map[1] - 1.0).abs() < 1e-5,
+            "{map:?}"
+        );
+        // A degenerate quad is refused before anything changes.
+        let mut s = numbered();
+        let flat = CanvasOp::Perspective {
+            quad: [0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0],
+            width: 2,
+            height: 2,
+        };
+        assert!(pollster::block_on(s.transform_canvas_gpu(None, flat)).is_err());
+        assert!(s.undo_labels().is_empty());
+        let Some(ctx) = device() else { return };
+        // An axis-aligned quad on whole pixels is the plain crop: the
+        // bicubic taps land on pixel centres.
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Perspective {
+                quad,
+                width: 2,
+                height: 2,
+            },
+        ))
+        .expect("perspective crop");
+        assert_eq!((s.width, s.height), (2, 2));
+        assert_eq!(reds(&s), vec![1, 2, 11, 12]);
+        assert_eq!(s.undo_labels(), vec!["Perspective crop"]);
+        assert_eq!(s.undo().as_deref(), Some("Perspective crop"));
+        assert_eq!((s.width, s.height), (3, 2));
     }
 
     #[test]
@@ -4706,8 +5934,16 @@ mod tests {
         let src = s.layers[0].smart_source().expect("src");
         assert_eq!(src.scale, 2.0, "the scale follows the canvas");
         assert_eq!(src.rgba.to_vec(), source, "the source itself is untouched");
-        assert_eq!(&reds_of(&s, 0)[..6], &[0, 0, 1, 1, 2, 2]);
-        // A stretch cannot be one scale: the source is resampled with it.
+        // Drawn from the source at twice its size (ADR 482's render).
+        let want = crate::smart::render_placed(
+            &src.raster().expect("raster"),
+            &crate::smart::rect_quad(0.0, 0.0, 6.0, 4.0),
+            6,
+            4,
+        )
+        .expect("render");
+        assert_eq!(&*s.layers[0].rgba.to_rgba8(), &*want.to_rgba8());
+        // A stretch is a placement too: the source is not resampled.
         pollster::block_on(s.transform_canvas_gpu(
             Some(ctx),
             CanvasOp::Resample {
@@ -4718,7 +5954,7 @@ mod tests {
         ))
         .expect("stretch");
         let src = s.layers[0].smart_source().expect("src");
-        assert_eq!((src.width, src.height), (3, 1));
+        assert_eq!((src.width, src.height), (3, 2));
         assert_eq!((s.width, s.height), (6, 2));
     }
 
@@ -5329,6 +6565,8 @@ mod tests {
     #[test]
     fn image_editor_layers_a_psd_import_becomes_a_stack_bottom_first() {
         let plate = |name: &str, key: &[u8; 4], opacity: u8, hidden: bool| image_psd::LayerPlate {
+            rgba16: None,
+            rgba32: None,
             clipped: false,
             group: None,
             mask: None,
@@ -5337,7 +6575,7 @@ mod tests {
             smart: false,
             text: false,
             adjustment: None,
-            color_overlay: None,
+            style: None,
             record: usize::MAX,
             name: name.to_string(),
             blend_key: *key,
@@ -5350,6 +6588,7 @@ mod tests {
             groups: Vec::new(),
             depth_reduced: false,
             converted_from_cmyk: false,
+            global_light: Default::default(),
             width: 4,
             height: 4,
             layers: vec![
@@ -5373,9 +6612,12 @@ mod tests {
             groups: Vec::new(),
             depth_reduced: false,
             converted_from_cmyk: false,
+            global_light: Default::default(),
             width: 4,
             height: 4,
             layers: vec![image_psd::LayerPlate {
+                rgba16: None,
+                rgba32: None,
                 clipped: false,
                 group: None,
                 mask: None,
@@ -5384,7 +6626,7 @@ mod tests {
                 smart: false,
                 text: false,
                 adjustment: None,
-                color_overlay: None,
+                style: None,
                 record: usize::MAX,
                 name: "short".into(),
                 blend_key: *b"norm",
@@ -5434,15 +6676,22 @@ mod tests {
     }
 
     #[test]
-    fn image_editor_layers_a_second_painted_layer_makes_the_composite_gpu_only() {
+    fn image_editor_layers_a_second_painted_layer_folds_on_the_cpu_without_a_device() {
         let mut s = stack(4, 4);
         s.add("Paint");
         s.edit_active("fill", Region::new(0, 0, 4, 4), px(4, 4, 200).into())
             .expect("unlocked");
         assert!(!s.composite_is_trivial());
-        // …and says so rather than inventing a CPU blend.
-        let err = pollster::block_on(s.composite(None, None)).expect_err("GPU-only");
-        assert!(format!("{err}").contains("GPU-only"));
+        // …and folds on the kernels' CPU twins (ADR 480): source-over,
+        // alpha 200 over alpha 128 is 200 + 128 · (1 − 200/255) ≈ 228.
+        assert!(s.composite_runs_without_gpu());
+        let out = pollster::block_on(s.composite(None, None)).expect("the CPU fold");
+        assert_eq!(out.len(), 64);
+        assert!(
+            out.chunks(4).all(|p| p[3].abs_diff(228) <= 1),
+            "{:?}",
+            &out[..4]
+        );
     }
 
     #[test]
@@ -5607,7 +6856,7 @@ mod tests {
         let mut s = stack(8, 8);
         s.add("Paint");
         // The override stands in for the active layer WITHOUT committing.
-        let white: Arc<[u8]> = px(8, 8, 255);
+        let white = crate::pixels::Pixels::from_rgba8(px(8, 8, 255));
         let out = pollster::block_on(s.composite(Some(ctx), Some(&white))).expect("composite");
         assert!(out.iter().all(|&b| b == 255), "the override composited");
         assert!(

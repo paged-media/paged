@@ -57,6 +57,7 @@ fn build_document_accepts_a_hand_constructed_empty_document() {
         text_frame_index: HashMap::new(),
         styles: StyleSheet::default(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     };
 
     let built = pipeline::build_document(&document, &PipelineOptions::default())
@@ -89,6 +90,7 @@ fn build_document_accepts_a_hand_constructed_single_page_document() {
         master_page_transform: None,
         override_list: Vec::new(),
         show_master_items: None,
+        canvas_origin: None,
     });
 
     let document = Document {
@@ -104,6 +106,7 @@ fn build_document_accepts_a_hand_constructed_single_page_document() {
         text_frame_index: HashMap::new(),
         styles: StyleSheet::default(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     };
 
     let built = pipeline::build_document(&document, &PipelineOptions::default())

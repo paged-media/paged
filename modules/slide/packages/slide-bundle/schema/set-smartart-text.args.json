@@ -1,0 +1,8 @@
+{
+  "kind": "struct",
+  "fields": {
+    "diagram": { "kind": "text" },
+    "point": { "kind": "text" },
+    "text": { "kind": "text", "multiline": true }
+  }
+}

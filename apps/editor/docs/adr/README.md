@@ -91,12 +91,28 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [282](282-enter-enters-owned-content.md) | Enter enters the content a plugin owns | Accepted 2026-10-23 |
 | [283](283-a-frame-surface-goes-full-screen.md) | A frame surface goes full screen through a chrome override | Accepted 2026-10-23 |
 | [284](284-the-breadcrumb-stays-under-the-title-bar.md) | The edit-context breadcrumb stays under the title bar; full screen carries its own | Accepted 2026-10-24 |
+| [285](285-the-history-panel.md) | The History panel lists every step by name, and a snapshot restore is one step | Accepted 2026-10-24 |
+| [287](287-view-modes.md) | View modes, grids and smart guides: Outline, Overprint and Pixel Preview, the grids, snapping v2, Rotate View | Accepted 2026-10-24 |
+| [289](289-the-vector-clipboard.md) | The vector clipboard: copy writes SVG, paste reads SVG | Accepted 2026-10-28 |
+| [288](288-asset-export.md) | Asset Export | Accepted 2026-10-28 |
 | [291](291-the-data-panel.md) | The Data panel: the document's data as a grid, over the data door | Accepted 2026-10-24 |
 | [292](292-the-bind-popover.md) | The bind popover: field, rules, map or expression on any property field | Accepted 2026-10-24 |
 | [293](293-a-template-opened-as-a-document-says-so.md) | A template opened as a document says so, and offers "Edit template" | Accepted 2026-10-24 |
 | [294](294-the-fill-presets-on-phones-and-tablets.md) | The fill presets on phones and tablets | Accepted 2026-10-24 |
+| [295](295-free-transform.md) | Free Transform: one box, the engine's arms, a destructive distort until envelopes | Accepted 2026-10-24 |
 | [298](298-control-bar-groups-per-edit-context.md) | Control-bar groups and status items follow the edit context | Accepted 2026-10-24 |
 | [299](299-scoped-keybindings-over-text-input.md) | Keybindings scoped to an edit context win over the text input | Accepted 2026-10-24 |
+| [300](300-markup-margin-band.md) | The markup margin band: balloons beside the page follow their anchors | Accepted 2026-10-29 |
+| [301](301-in-place-header-footer-editing.md) | Headers, footers and notes are edited in place | Accepted 2026-10-28 |
+| [303](303-find-and-replace.md) | Find & Replace | Accepted 2026-10-25 |
+| [304](304-a-module-presentation-fills-the-screen.md) | A module's presentation fills the screen | Accepted 2026-10-25 |
+| [305](305-the-audience-gets-a-window-of-its-own.md) | The audience gets a window of its own | Accepted 2026-10-25 |
+| [306](306-module-views-replace-the-canvas.md) | Module views replace the canvas | Accepted 2026-10-25 |
+| [307](307-the-slide-profile.md) | The slide profile: PowerPoint's Normal view and its keys | Accepted 2026-10-25 |
+| [308](308-video-export-runner.md) | Video export runner: the show drawn offline, WebCodecs, an MP4 muxer, progress and Cancel | Accepted 2026-10-28 |
+| [309](309-effects-transparency-and-appearance-panels.md) | The Effects, Transparency and Appearance panels and the Effect menu: kinds from core's catalog, the mask's options and Clip, every edit context | Accepted 2026-10-29 |
+| [310](310-live-shape-widgets.md) | Live-shape widgets on the canvas and the Transform panel's Shape section | Accepted 2026-10-30 |
+| [311](311-shared-host-surfaces-in-every-context.md) | Gradients, Picture adjustments, History and Free Transform in every edit context | Accepted 2026-10-30 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

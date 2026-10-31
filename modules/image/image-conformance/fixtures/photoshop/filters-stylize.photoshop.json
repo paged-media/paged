@@ -1,0 +1,126 @@
+{
+  "fixture": "filters-stylize",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/filters-stylize.jsx",
+    "script_sha256": "f65f7dae1d29a2e24cad9a80f1a14ec49a40c9152b560b62dc55423fdf506f5f",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-25T06:57:08.159Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "identity",
+      "params": {},
+      "output": "filters-stylize/identity.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "solarize",
+      "params": {
+        "am": "Slrz"
+      },
+      "output": "filters-stylize/solarize.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "trace-contour-128-lower",
+      "params": {
+        "level": 128,
+        "edge": "lower",
+        "am": "TrcC"
+      },
+      "output": "filters-stylize/trace-contour-128-lower.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "trace-contour-128-upper",
+      "params": {
+        "level": 128,
+        "edge": "upper",
+        "am": "TrcC"
+      },
+      "output": "filters-stylize/trace-contour-128-upper.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "wind-right",
+      "params": {
+        "method": "wind",
+        "direction": "from-right",
+        "am": "Wnd ",
+        "eight_bit": true
+      },
+      "output": "filters-stylize/wind-right.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "wind-blast-left",
+      "params": {
+        "method": "blast",
+        "direction": "from-left",
+        "am": "Wnd ",
+        "eight_bit": true
+      },
+      "output": "filters-stylize/wind-blast-left.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "tiles-8-10-bg",
+      "params": {
+        "tiles": 8,
+        "max_offset": 10,
+        "fill": "background",
+        "compare": "stats",
+        "am": "Tls ",
+        "eight_bit": true
+      },
+      "output": "filters-stylize/tiles-8-10-bg.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "extrude-blocks-16-20-level",
+      "params": {
+        "kind": "blocks",
+        "size": 16,
+        "depth": 20,
+        "depth_mode": "level",
+        "solid_front": true,
+        "mask_incomplete": false,
+        "am": "Extr",
+        "eight_bit": true
+      },
+      "output": "filters-stylize/extrude-blocks-16-20-level.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "extrude-pyramids-16-20-level",
+      "params": {
+        "kind": "pyramids",
+        "size": 16,
+        "depth": 20,
+        "depth_mode": "level",
+        "solid_front": false,
+        "mask_incomplete": false,
+        "am": "Extr",
+        "eight_bit": true
+      },
+      "output": "filters-stylize/extrude-pyramids-16-20-level.png",
+      "profile": "none",
+      "bits": 16
+    }
+  ]
+}

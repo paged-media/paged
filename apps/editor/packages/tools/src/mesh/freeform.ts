@@ -18,7 +18,7 @@
  */
 
 // The freeform-gradient edits of the Gradient tool's freeform modes
-// (engine ADR 1040): colour points anywhere on the frame, and lines
+// (engine ADR 1048): colour points anywhere on the frame, and lines
 // through some of them. Pure: every edit returns a new spec, committed as
 // one whole-value `frameFillMesh` write.
 

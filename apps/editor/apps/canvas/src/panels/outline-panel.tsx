@@ -50,6 +50,7 @@ export function OutlinePanel(_props: PanelProps) {
       resolution={resolution}
       pageIds={handle.pageIds}
       pageSizesPt={handle.pageSizesPt}
+      pageOriginsPt={handle.pageOriginsPt}
       viewportSize={viewportSize}
       onCameraChange={animateCamera}
     />

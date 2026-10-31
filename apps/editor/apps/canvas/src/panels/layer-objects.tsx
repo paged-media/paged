@@ -64,6 +64,8 @@ import type {
 } from "@paged-media/client";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
+import { PAGED_ELEMENTS_MIME } from "../asset-export/model";
+
 const M = defineMessages("app.layerObjects", {
   objects: "Objects",
   locate: "Locate object",
@@ -518,6 +520,12 @@ export function LayerObjects({ layers, run }: LayerObjectsProps) {
           onClick={() => void select(n.id)}
           onDragStart={(e) => {
             e.dataTransfer?.setData("text/plain", n.key);
+            // Editor ADR 288 — the Asset Export panel collects a row
+            // dropped on it: the item's id rides as JSON.
+            e.dataTransfer?.setData(
+              PAGED_ELEMENTS_MIME,
+              JSON.stringify([n.id]),
+            );
             setDragKey(n.key);
           }}
           onDragOver={(e) => e.preventDefault()}

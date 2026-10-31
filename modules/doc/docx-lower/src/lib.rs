@@ -41,8 +41,11 @@ use docx_core::{
 };
 
 pub mod ir;
+mod ir_objects;
 pub mod line_height;
+pub mod objects;
 pub mod sections;
+pub mod structure;
 
 pub use sections::LowerOptions;
 use sections::{SectionColumns, SectionPlacement};
@@ -54,6 +57,8 @@ use ir::{
     LoweredStory, LoweredStyle, LoweredSwatch, LoweredTabStop, LoweredTable, PropValue,
     StyleCollection, StyleProp,
 };
+
+use paged_ooxml::units::{EMU_PER_PT, TWIPS_PER_PT};
 
 const PARA_PREFIX: &str = "ParagraphStyle/docx-";
 
@@ -118,7 +123,7 @@ const CHAR_PREFIX: &str = "CharacterStyle/docx-";
 
 /// Twips (1/1440 inch) -> points (1/72 inch). 20 twips per point.
 fn twip_to_pt(twips: i32) -> f32 {
-    twips as f32 / 20.0
+    twips as f32 / TWIPS_PER_PT as f32
 }
 
 /// Half-points -> points.
@@ -126,10 +131,10 @@ fn half_pt_to_pt(half: u32) -> f32 {
     half as f32 / 2.0
 }
 
-/// EMU (English Metric Units) -> points. 914400 EMU/inch, 72 pt/inch ⇒ 12700
-/// EMU/pt.
+/// EMU (English Metric Units) -> points (`paged_ooxml::units`: 914 400
+/// EMU/inch, 12 700 EMU/pt).
 fn emu_to_pt(emu: i64) -> f32 {
-    emu as f32 / 12700.0
+    emu as f32 / EMU_PER_PT as f32
 }
 
 /// Lower an image to an anchored-frame placement, embedding the media bytes as a
@@ -143,7 +148,13 @@ fn lower_image(img: &docx_core::Image) -> LoweredImage {
         width_pt: emu_to_pt(img.width_emu),
         height_pt: emu_to_pt(img.height_emu),
         uri: format!("data:{};base64,{}", img.mime, b64),
-        float: img.float.as_ref().map(lower_float),
+        float: img
+            .float
+            .as_ref()
+            .map(|f| lower_float(f, img.width_emu, img.height_emu)),
+        anchor: None,
+        fx: None,
+        losses: Vec::new(),
     }
 }
 
@@ -159,8 +170,17 @@ fn anchor_at(before: u32, total: u32) -> u32 {
     }
 }
 
-/// A floating drawing's position and wrap, carried in points (ADR 035).
-fn lower_float(f: &docx_core::Float) -> LoweredFloat {
+/// A row's height Word holds it to: `w:trHeight/@w:val`, unless its rule
+/// is `auto`.
+fn row_height(r: &docx_core::TableRow) -> Option<i32> {
+    r.height
+        .filter(|_| r.height_rule != docx_core::HeightRule::Auto)
+}
+
+/// A floating drawing's position and wrap, carried in points (ADR 035);
+/// `width_emu` x `height_emu` is the drawing's extent, which its wrap
+/// polygon's 21600-unit square spans.
+fn lower_float(f: &docx_core::Float, width_emu: i64, height_emu: i64) -> LoweredFloat {
     let pos = |p: &docx_core::FloatPosition| LoweredFloatPosition {
         relative_from: p.relative_from.clone(),
         offset_pt: p.offset.map(emu_to_pt),
@@ -182,49 +202,17 @@ fn lower_float(f: &docx_core::Float) -> LoweredFloat {
         locked: f.locked,
         relative_height: f.relative_height,
         simple_pos_pt: f.simple_pos.map(|(x, y)| (emu_to_pt(x), emu_to_pt(y))),
+        wrap_polygon_pt: f
+            .wrap_polygon
+            .iter()
+            .map(|&(x, y)| {
+                (
+                    x as f32 / 21600.0 * emu_to_pt(width_emu),
+                    y as f32 / 21600.0 * emu_to_pt(height_emu),
+                )
+            })
+            .collect(),
     }
-}
-
-/// One axis of a float's position, for a diagnostic: `column +12 pt`.
-fn describe_position(p: &LoweredFloatPosition) -> String {
-    if let Some(a) = &p.align {
-        format!("{} {a}", p.relative_from)
-    } else if let Some(o) = p.offset_pt {
-        format!("{} {o:+.1} pt", p.relative_from)
-    } else if let Some(pc) = p.percent {
-        format!("{} {pc}%", p.relative_from)
-    } else {
-        p.relative_from.clone()
-    }
-}
-
-/// The ADR-007 diagnostic for one floating drawing placed inline (ADR 035
-/// work item 0): what it is, how Word places and wraps it, and what it gets.
-fn float_diagnostic(block: usize, img: &LoweredImage, f: &LoweredFloat) -> Diagnostic {
-    let mut how = f.wrap.clone();
-    if let Some(side) = &f.wrap_text {
-        how.push_str(&format!(" {side}"));
-    }
-    if f.behind_doc {
-        how.push_str(", behind the text");
-    }
-    let place = match (&f.simple_pos_pt, &f.horizontal, &f.vertical) {
-        (Some((x, y)), _, _) => format!("at ({x:.1}, {y:.1}) pt from the page's top-left"),
-        (None, h, v) => format!(
-            "horizontally {}, vertically {}",
-            h.as_ref().map_or("unset".into(), describe_position),
-            v.as_ref().map_or("unset".into(), describe_position)
-        ),
-    };
-    Diagnostic::warning(
-        format!(
-            "a floating picture in body block {block} ({:.1} x {:.1} pt; {how}; {place}) is \
-             placed INLINE at the start of its paragraph: Word's position and text wrap are \
-             not carried onto the page yet, so the text does not flow around it",
-            img.width_pt, img.height_pt
-        ),
-        2,
-    )
 }
 
 /// Word's numbering vocabulary for a [`docx_core::NoteRestart`].
@@ -283,6 +271,18 @@ fn describe_note_numbering(n: Option<&LoweredNoteNumbering>, endnote: bool) -> S
         dflt(n.num_restart, "continuous"),
         dflt(n.pos, "pageBottom")
     )
+}
+
+/// A note's text as the engine's note holds it (doc ADR 611): its
+/// paragraphs' run text joined by `\n`, without the space Word writes
+/// after its reference mark.
+pub fn note_text(paragraphs: &[LoweredParagraph]) -> String {
+    let joined: Vec<String> = paragraphs
+        .iter()
+        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+        .collect();
+    let text = joined.join("\n");
+    text.strip_prefix(' ').map(str::to_string).unwrap_or(text)
 }
 
 /// ADR 033 — a section's headers and footers for the IR, by part name.
@@ -448,6 +448,11 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             .find(|s| s.kind == StyleKind::Paragraph && s.is_default)
             .map(|s| s.style_id.clone()),
         diagnostics,
+        dml_slots: doc
+            .theme
+            .as_ref()
+            .map(docx_core::Theme::drawingml_slots)
+            .unwrap_or_default(),
         ..Lowering::default()
     };
 
@@ -488,6 +493,9 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     //    Word's measurements): no break, a `NextColumn` rule, or the margin
     //    difference as paragraph indents.
     let placements = sections::place_sections_with(&doc.sections, options, &mut ctx.diagnostics);
+    // Doc ADR 614: the floats and text boxes placed as page items.
+    ctx.w4.plan = objects::plan_page_items(doc, options);
+    ctx.w4.scope = objects::Scope::Body;
     let section_starts: Vec<(usize, SectionKind, Option<&SectionPlacement>)> = doc
         .sections
         .iter()
@@ -521,6 +529,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                 .unwrap_or(&default);
             story_width = twip_to_pt(s.page_width - s.margin_left - s.margin_right);
             ctx.text_height = Some(twip_to_pt(s.page_height - s.margin_top - s.margin_bottom));
+            ctx.w4.geo = Some(objects::PageGeo::of_section(s));
         }
         let section_start = starts_section(idx);
         if let Some((_, _, joined)) = section_start {
@@ -557,9 +566,13 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         }
         // The FIRST section's kind is not applied: it has nothing before it
         // to start after, and Word was not asked about it.
+        // An odd- or even-page section that opens a story starts by its
+        // grow rule's section start instead (engine ADR 1022, doc ADR 611):
+        // the engine puts a blank page before it, showing the previous
+        // section's header, as Word prints it.
         let entry = match section_start.filter(|_| idx > 0) {
-            Some((_, SectionKind::OddPage, _)) => Some("NextOddPage"),
-            Some((_, SectionKind::EvenPage, _)) => Some("NextEvenPage"),
+            Some((_, SectionKind::OddPage, Some(_))) => Some("NextOddPage"),
+            Some((_, SectionKind::EvenPage, Some(_))) => Some("NextEvenPage"),
             Some((_, _, Some(p))) if p.next_column => Some("NextColumn"),
             _ => None,
         };
@@ -627,6 +640,7 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             }
         }
     }
+    ctx.w4.scope = objects::Scope::Other;
     blank_line_styles(&blocks, &starts_story, &mut ctx.diagnostics);
     if ctx.breaks > 0 {
         ctx.diagnostics.push(Diagnostic::info(
@@ -681,22 +695,29 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
 
     // W0 — what the import shows simplified rather than drops.
     let held = doc.held;
+    // Doc ADR 613 — tracked changes are read as the engine's changes.
+    let moves = doc
+        .body
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            Block::Table(_) => None,
+        })
+        .flat_map(|p| p.runs.iter())
+        .filter(|r| r.change.as_ref().is_some_and(|c| c.revision.moved))
+        .count();
     if held.tracked_changes > 0 {
         let mut msg = format!(
-            "{} tracked change(s) shown as accepted; review them in Word. Insertions \
-             show as plain text, deletions are not shown, formatting changes show \
-             the new formatting; the markup is kept in the .docx on save, and an \
-             edit that reaches it is refused",
+            "{} tracked change(s) read: accept or reject them in the Review panel",
             held.tracked_changes
         );
-        if held.deleted_marks_kept > 0 {
+        if moves > 0 {
             msg.push_str(&format!(
-                ". {} paragraph(s) whose mark is a tracked deletion stay paragraphs of \
-                 their own (accepting would join each to the next)",
-                held.deleted_marks_kept
+                "; {moves} moved run(s) read as an insertion and a deletion, saved as \
+                 Word's move while unchanged"
             ));
         }
-        ctx.diagnostics.push(Diagnostic::warning(msg, 3));
+        ctx.diagnostics.push(Diagnostic::info(msg, 3));
     }
     if held.hidden_runs > 0 {
         ctx.diagnostics.push(Diagnostic::info(
@@ -788,15 +809,11 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             ));
         }
         msg.push_str(&format!(
-            " parsed ({refs} in-text reference(s)), the numbering carried per section; \
-             NOT placed on the page: neither the note text nor its reference mark is \
-             shown, because footnotes cannot be added to the page yet{}. The note text \
-             is preserved in the source .docx and round-trips on save",
-            if endnotes > 0 {
-                " and endnotes are not supported yet"
-            } else {
-                ""
-            }
+            " ({refs} in-text reference(s)) placed as native notes at their references \
+             when the document is opened (an inserted document keeps them unplaced); \
+             the note text is set plain in the engine's note style (Word's note styles \
+             and the separator are the engine's), and a reference in a table cell is \
+             not placed"
         ));
         ctx.diagnostics.push(Diagnostic::info(msg, 3));
     }
@@ -815,8 +832,9 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                 _ => None,
             })
             .flat_map(|p| p.runs.iter())
+            .filter(|r| structure::word_field(r).is_none())
             .filter_map(|r| r.field.as_deref())
-            .filter(|f| *f != "HYPERLINK")
+            .filter(|f| !["HYPERLINK", "MERGEFIELD", "TOC"].contains(f))
             .collect();
         kinds.sort_unstable();
         let total = kinds.len();
@@ -824,10 +842,10 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         if total > 0 {
             ctx.diagnostics.push(Diagnostic::info(
                 format!(
-                    "{total} field(s) ({}) lowered as their last-computed TEXT — a \
-                     frozen snapshot. The value is preserved and round-trips on \
-                     save, but nothing recomputes it (the native model has no \
-                     equivalent for these field kinds)",
+                    "{total} field result run(s) ({}) lowered as their last-computed \
+                     TEXT — a frozen snapshot (in a table cell, or holding a picture or \
+                     a break). The value is preserved and round-trips on save, but \
+                     nothing recomputes it",
                     kinds.join(", ")
                 ),
                 3,
@@ -872,10 +890,9 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             kinds.push("inherited from an earlier section");
         }
         msg.push_str(&format!(
-            " parsed across {} section(s){}, each section's headers and footers read; \
-             NOT placed on the page yet (headers and footers are not shown on the pages \
-             yet). Their text is preserved in the source .docx and \
-             round-trips on save",
+            " across {} section(s){} placed on section masters when the document is \
+             opened (an inserted document keeps them unplaced); pictures and tables in \
+             them are not shown",
             doc.sections.len().max(1),
             if kinds.is_empty() {
                 String::new()
@@ -917,6 +934,28 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
                 ctx.cell_pictures, ctx.cell_floats
             ),
             2,
+        ));
+    }
+    // Pictures' DrawingML looks (doc ADR 618): lowered through the shared
+    // mapper, carried in the IR and painted on the pictures' anchored frames
+    // (engine ADR 1045, doc ADR 619). What the engine cannot hold is listed
+    // per kind below.
+    if ctx.looked_pictures > 0 {
+        let kinds: Vec<&str> = ctx.look_kinds.iter().map(String::as_str).collect();
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} picture(s) carry a DrawingML look ({}), drawn natively on their \
+                 anchored frames",
+                ctx.looked_pictures,
+                kinds.join(", ")
+            ),
+            3,
+        ));
+    }
+    for (loss, n) in &ctx.look_losses {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!("picture look in {n} picture(s): {loss}"),
+            3,
         ));
     }
     // Drawings that are not pictures (ADR 035 decision 8).
@@ -974,7 +1013,90 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
 
+    // Doc ADRs 611 / 612: headers and footers on masters, notes, tables
+    // of contents.
+    let header_footer_parts: Vec<ir::LoweredHeaderFooterPart> = doc
+        .headers_footers
+        .iter()
+        .enumerate()
+        .map(|(hi, h)| {
+            ctx.current_block = 0;
+            ir::LoweredHeaderFooterPart {
+                part: h.part.clone(),
+                footer: h.footer,
+                paragraphs: {
+                    // A header's text is as wide as its first section's
+                    // margin box; positional tabs reach its right edge.
+                    let s = doc.sections.get(h.section).cloned().unwrap_or_default();
+                    ctx.text_width =
+                        Some(twip_to_pt(s.page_width - s.margin_left - s.margin_right));
+                    ctx.section_indent = (0.0, 0.0);
+                    ctx.section_columns = SectionColumns::Frame;
+                    h.paragraphs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| {
+                            ctx.spacing_override = (None, false);
+                            ctx.w4.scope = objects::Scope::Part(hi, i);
+                            let para = ctx.lower_body_paragraph(p, i as u32, None, Some(false)).0;
+                            ctx.w4.scope = objects::Scope::Other;
+                            para
+                        })
+                        .collect()
+                },
+            }
+        })
+        .collect();
+    let referenced: BTreeSet<(bool, i64)> = doc
+        .body
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.runs.iter())
+        .filter_map(|r| r.note_ref.map(|id| (r.note_is_endnote, id)))
+        .collect();
+    let notes: Vec<ir::LoweredNote> = doc
+        .notes
+        .iter()
+        .filter(|n| referenced.contains(&(n.endnote, n.id)))
+        .map(|n| {
+            let paragraphs: Vec<LoweredParagraph> = n
+                .paragraphs
+                .iter()
+                .enumerate()
+                .map(|(i, p)| ctx.lower_paragraph(p, i as u32))
+                .collect();
+            ir::LoweredNote {
+                id: n.id,
+                endnote: n.endnote,
+                text: note_text(&paragraphs),
+                paragraphs,
+            }
+        })
+        .collect();
+    let (masters, section_masters) = structure::plan_masters(doc, &placements);
+    let tocs = structure::find_tocs(doc);
+    if ctx.live_fields > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} field result run(s) kept as live Word fields (PAGE, NUMPAGES, \
+                 SECTIONPAGES, PAGEREF and STYLEREF follow the layout; DATE, REF and SEQ \
+                 update on F9; other kinds keep the result Word stored)",
+                ctx.live_fields
+            ),
+            3,
+        ));
+    }
+
+    // Doc ADR 614: the page items, text boxes with their paragraphs.
+    let page_items = ctx.lower_page_items(doc);
+    ctx.w4_diagnostics();
+
     let full = |k: usize, s: Option<&Section>| LoweredSection {
+        masters: section_masters.get(k).cloned().flatten(),
+        section_start: structure::section_start(doc, &placements, k),
         header_footer: s.and_then(|s| lower_header_footer(doc, s)),
         footnote_numbering: lower_note_numbering(&doc.footnote_numbering(k)),
         endnote_numbering: lower_note_numbering(&doc.endnote_numbering(k)),
@@ -1032,7 +1154,51 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         diagnostics: ctx.diagnostics,
         color_groups,
         theme_fonts,
+        header_footer_parts,
+        masters,
+        notes,
+        tocs,
+        comments: lower_comments(doc),
+        track_changes: doc.track_revisions,
+        page_items,
     }
+}
+
+/// Doc ADR 613 — a run's (or, with `mark`, a paragraph mark's) tracked
+/// insertion or deletion as the engine records it.
+fn lowered_change(c: &docx_core::RunChange, mark: bool) -> ir::LoweredChange {
+    let kind = match (c.kind, mark) {
+        (docx_core::ChangeKind::Insert, false) => "insert",
+        (docx_core::ChangeKind::Delete, false) => "delete",
+        (docx_core::ChangeKind::Insert, true) => "insertMark",
+        (docx_core::ChangeKind::Delete, true) => "deleteMark",
+    };
+    ir::LoweredChange {
+        id: docx_core::review::change_token(&c.revision.id),
+        kind: kind.into(),
+        author: c.revision.author.clone(),
+        date: c.revision.date.clone(),
+    }
+}
+
+/// Doc ADR 613 — the document's comments as the pour inserts them.
+pub fn lower_comments(doc: &DocxDocument) -> Vec<ir::LoweredComment> {
+    doc.comments
+        .iter()
+        .map(|c| ir::LoweredComment {
+            id: docx_core::review::comment_token(c.id),
+            parent_id: c.parent.map(docx_core::review::comment_token),
+            author: c.author.clone(),
+            initials: c.initials.clone(),
+            date: c.date.clone(),
+            text: c.text.clone(),
+            resolved: match c.parent {
+                // A reply's thread is resolved when its first comment is.
+                Some(root) => doc.comments.iter().any(|r| r.id == root && r.done) || c.done,
+                None => c.done,
+            },
+        })
+        .collect()
 }
 
 /// The swatch token of a theme colour reference (doc ADR 609):
@@ -1154,9 +1320,59 @@ struct Lowering {
     cell_floats: usize,
     /// Drawings that are not pictures, per body block.
     other_drawings: BTreeMap<usize, u32>,
+    /// Field result runs lowered as live engine fields (doc ADR 612).
+    live_fields: usize,
+    /// The document theme as DrawingML scheme slots, for the pictures'
+    /// looks (doc ADR 618).
+    dml_slots: Vec<(String, paged_ooxml::drawingml::Rgba)>,
+    /// Body pictures whose look lowered to native effects, and what those
+    /// are (`drop shadow`, `glow`, …), by kind.
+    looked_pictures: usize,
+    look_kinds: BTreeSet<String>,
+    /// What the engine cannot hold of the pictures' looks: each line, with
+    /// how many pictures it is about.
+    look_losses: BTreeMap<String, usize>,
+    /// Wave W4a's state (doc ADR 614): floats, text boxes, tables.
+    w4: objects::W4,
 }
 
 impl Lowering {
+    /// A picture's DrawingML look through the shared mapper (doc ADR 618):
+    /// what it lowers to rides the IR; what the engine cannot hold is
+    /// counted for the diagnostics.
+    fn lower_look(&mut self, img: &docx_core::Image, li: &mut LoweredImage) {
+        let Some(look) = &img.look else {
+            return;
+        };
+        let mut mapper = dml_native::native::Lowering::new(self.dml_slots.clone());
+        let fx = mapper.picture(
+            &look.blip,
+            &look.shape,
+            li.width_pt as f64,
+            li.height_pt as f64,
+        );
+        li.losses = mapper.take_losses();
+        if self.in_cell {
+            // Not poured at all; the cell-picture diagnostic says so.
+        } else {
+            for l in &li.losses {
+                *self.look_losses.entry(l.clone()).or_default() += 1;
+            }
+            if !fx.is_empty() {
+                self.looked_pictures += 1;
+                self.look_kinds
+                    .extend(fx.describe().split(", ").map(str::to_string));
+                // Engine ADR 1045: the host model paints the look on the
+                // picture's anchored frame, each colour a document swatch
+                // (`Color/docx-RRGGBB`, the host model's mapping).
+                for c in fx.colors() {
+                    self.swatch_for(c.trim_start_matches('#'));
+                }
+            }
+        }
+        li.fx = (!fx.is_empty()).then_some(fx);
+    }
+
     /// Create the `docx-Default` base paragraph style from docDefaults (if it
     /// carries anything), so every un-based style and un-styled paragraph
     /// inherits Word's document defaults.
@@ -1390,6 +1606,26 @@ impl Lowering {
         start: Option<&'static str>,
         can_carry: Option<bool>,
     ) -> (LoweredParagraph, Option<BreakKind>) {
+        // A note reference reads as the engine's marker character (doc ADR
+        // 611): give its run that text, so every offset below counts it.
+        let marked;
+        let p = if !self.in_cell && p.runs.iter().any(|r| r.note_ref.is_some()) {
+            let mut q = p.clone();
+            for r in q.runs.iter_mut() {
+                if let Some(mark) = r.note_marker() {
+                    let at = r
+                        .text
+                        .char_indices()
+                        .nth(r.note_at)
+                        .map_or(r.text.len(), |(b, _)| b);
+                    r.text.insert(at, mark);
+                }
+            }
+            marked = q;
+            &marked
+        } else {
+            p
+        };
         let explicit = self
             .style_of(p)
             .map(|id| format!("{PARA_PREFIX}{}", sanitize(id)));
@@ -1483,27 +1719,44 @@ impl Lowering {
         // one the object overlaps the lines above. So a body paragraph with
         // a picture takes auto leading, which a leading of 0 asks for, at
         // the percentage that makes its text lines step Word's pitch.
-        let exact = {
+        let spacing_rule = {
             let style = self.style_of(p).map(str::to_owned);
             self.resolve_spacing(p.props.line_spacing, style.as_deref())
-                .is_some_and(|ls| ls.rule == LineRule::Exact)
+                .map(|ls| ls.rule)
         };
+        let exact = spacing_rule == Some(LineRule::Exact);
         let grows_for_picture =
             can_carry.is_some() && !exact && p.runs.iter().any(|r| !r.images.is_empty());
+        // Under at-least spacing above the face's single line, the pitch
+        // the picture paragraph's text runs carry (below).
+        let mut picture_run_pitch: Option<f32> = None;
         if grows_for_picture {
             props.push(len("characterLeading", 0.0));
             // Auto leading scaled to Word's pitch, so the paragraph's text
             // lines keep Word's step (13.8 pt for 12 pt Times New Roman, not
             // 1.2 x 12) while the picture's line still grows to the picture
-            // (ADR 617).
+            // (ADR 617). Under Word's first-fit the engine sets the picture's
+            // line as Word does: the picture over the baseline, the rest of
+            // the auto-leaded line (descent and a 1.5-line spacing's extra)
+            // under it (engine ADR 1016, `first-fit.word.json` P01-P07).
             let style = self.style_of(p).map(str::to_owned);
             let first = p.runs.iter().find(|r| !r.text.is_empty());
-            let size_pt = self
-                .resolve_face(first, style.as_deref())
-                .1
-                .map_or(10.0, |h| h as f32 / 2.0);
+            let (font, half_pts) = self.resolve_face(first, style.as_deref());
+            let size_pt = half_pts.map_or(10.0, |h| h as f32 / 2.0);
             if let Some(pitch) = self.paragraph_pitch(p).filter(|_| size_pt > 0.0) {
-                props.push(len("paragraphAutoLeading", pitch / size_pt * 100.0));
+                // At-least spacing puts its extra ABOVE the text, so under a
+                // picture only the descent remains (P03: a 40 pt picture's
+                // line is 43 pt at "at least 14 pt", as at single spacing).
+                // The auto leading is then the face's single line, and the
+                // text runs carry the pitch, so text lines keep it.
+                let single = self.single_line(font.as_deref(), half_pts);
+                let auto = if spacing_rule == Some(LineRule::AtLeast) && pitch > single + 0.001 {
+                    picture_run_pitch = Some(pitch);
+                    single
+                } else {
+                    pitch
+                };
+                props.push(len("paragraphAutoLeading", auto / size_pt * 100.0));
             }
         } else if let Some(pt) = self.paragraph_pitch(p) {
             let inherited = self
@@ -1660,9 +1913,12 @@ impl Lowering {
         }
 
         // A picture paragraph is auto-leaded as a whole (above): its runs
-        // carry no leading of their own. Nor do a cell's (the engine sets a
-        // cell paragraph by its first run's leading).
-        let run_leadings = if grows_for_picture || can_carry.is_none() {
+        // carry no leading of their own, except its at-least pitch. Nor do a
+        // cell's (the engine sets a cell paragraph by its first run's
+        // leading).
+        let run_leadings = if let Some(pitch) = picture_run_pitch {
+            vec![Some(pitch); p.runs.iter().filter(|r| !r.text.is_empty()).count()]
+        } else if grows_for_picture || can_carry.is_none() {
             Vec::new()
         } else {
             self.run_pitches(p)
@@ -1681,6 +1937,13 @@ impl Lowering {
                         run.char_style_id.take(),
                         vec![len("characterLeading", pt)],
                     ));
+                    if let Some(f) = run.format_change.as_mut() {
+                        f.before_char_style_id = Some(self.synthesize(
+                            StyleCollection::Character,
+                            f.before_char_style_id.take(),
+                            vec![len("characterLeading", pt)],
+                        ));
+                    }
                 }
                 run
             })
@@ -1709,9 +1972,19 @@ impl Lowering {
                     .is_some_and(|o| emu_to_pt(o) >= 0.5 * first_line)
         };
         let mut pushed_below = false;
-        for r in &p.runs {
-            for img in &r.images {
+        for (ri, r) in p.runs.iter().enumerate() {
+            for (ii, img) in r.images.iter().enumerate() {
+                // A float placed as a page item (doc ADR 614) is not in
+                // the text.
+                if !self.in_cell
+                    && self
+                        .w4
+                        .planned(self.current_block, ri, objects::ObjectRef::Picture(ii))
+                {
+                    continue;
+                }
                 let mut li = lower_image(img);
+                self.lower_look(img, &mut li);
                 if below_text(img) {
                     // The break joins the last run: read back, the
                     // paragraph has the runs it was poured with, so an
@@ -1728,6 +2001,9 @@ impl Lowering {
                 }
                 li.at = anchor_at(before, total);
                 if !self.in_cell {
+                    self.anchor_float(&mut li);
+                }
+                if !self.in_cell && li.anchor.is_none() {
                     if total == 0 {
                         self.pictures_alone += 1;
                     } else if before >= total {
@@ -1736,19 +2012,21 @@ impl Lowering {
                 }
                 images.push(li);
             }
+            for ti in 0..r.text_boxes.len() {
+                if self.in_cell
+                    || !self
+                        .w4
+                        .planned(self.current_block, ri, objects::ObjectRef::TextBox(ti))
+                {
+                    self.w4.unplaced_boxes += 1;
+                }
+            }
             before += r.text.chars().count() as u32;
         }
         let others: u32 = p.runs.iter().map(|r| r.other_drawings).sum();
         if self.in_cell {
             self.cell_pictures += images.len();
             self.cell_floats += images.iter().filter(|i| i.float.is_some()).count();
-        } else {
-            for img in &images {
-                if let Some(f) = &img.float {
-                    self.diagnostics
-                        .push(float_diagnostic(self.current_block, img, f));
-                }
-            }
         }
         if others > 0 {
             *self.other_drawings.entry(self.current_block).or_default() += others;
@@ -1765,6 +2043,28 @@ impl Lowering {
                 list: p.list.as_ref().map(|l| LoweredListRef {
                     num_id: l.num_id,
                     level: l.level,
+                }),
+                mark_change: p.review.mark.as_ref().map(|c| lowered_change(c, true)),
+                props_change: p.review.props.as_ref().map(|c| {
+                    let explicit = c
+                        .old_style_id
+                        .as_ref()
+                        .map(|id| format!("{PARA_PREFIX}{}", sanitize(id)));
+                    let base = self.para_base(explicit);
+                    let props = self.para_props(&c.old_props);
+                    ir::LoweredPropsChange {
+                        change: ir::LoweredChange {
+                            id: docx_core::review::change_token(&c.revision.id),
+                            kind: "paraProps".into(),
+                            author: c.revision.author.clone(),
+                            date: c.revision.date.clone(),
+                        },
+                        before_para_style_id: if props.is_empty() {
+                            base
+                        } else {
+                            Some(self.synthesize(StyleCollection::Paragraph, base, props))
+                        },
+                    }
                 }),
             },
             tail,
@@ -1821,11 +2121,66 @@ impl Lowering {
         } else {
             Some(self.synthesize(StyleCollection::Character, base, props))
         };
+        // A note reference (doc ADR 611): the engine's marker character,
+        // which the pour writes with `insertFootnote` / `insertEndnote`. A
+        // cell's runs carry text only.
+        let note = r
+            .note_ref
+            .filter(|_| !self.in_cell)
+            .map(|id| ir::LoweredNoteRef {
+                id,
+                endnote: r.note_is_endnote,
+            });
+        // (`lower_body_paragraph` has put the marker into the run's text.)
+        let text = r.text.clone();
+        // A field the engine keeps live (doc ADR 612): not in a cell, whose
+        // text the cell pour writes as it is.
+        let field = if self.in_cell {
+            None
+        } else {
+            structure::word_field(r)
+        };
+        if field.is_some() {
+            self.live_fields += 1;
+        }
+        // Doc ADR 613 — the run's tracked changes and comments.
+        let change = r.change.as_ref().map(|c| lowered_change(c, false));
+        let format_change = r.format_change.as_ref().map(|f| {
+            let base = f
+                .old_style_id
+                .as_ref()
+                .map(|id| format!("{CHAR_PREFIX}{}", sanitize(id)));
+            let props = self.run_props(&f.old_props, size);
+            ir::LoweredFormatChange {
+                change: ir::LoweredChange {
+                    id: docx_core::review::change_token(&f.revision.id),
+                    kind: "format".into(),
+                    author: f.revision.author.clone(),
+                    date: f.revision.date.clone(),
+                },
+                // A look with nothing set is still a style of its own, so
+                // the engine's rejection puts the run's look back to it.
+                before_char_style_id: Some(self.synthesize(
+                    StyleCollection::Character,
+                    base,
+                    props,
+                )),
+            }
+        });
         LoweredRun {
-            text: r.text.clone(),
+            text,
             char_style_id,
             hyperlink_url: external_url,
             merge_field: r.merge_field.clone(),
+            field,
+            note,
+            change,
+            format_change,
+            comments: r
+                .comments
+                .iter()
+                .map(|id| docx_core::review::comment_token(*id))
+                .collect(),
         }
     }
 
@@ -1934,6 +2289,9 @@ impl Lowering {
                 .unwrap_or(1)
         };
         let column_widths_pt = t.column_widths.iter().map(|w| twip_to_pt(*w)).collect();
+        // Doc ADR 614: Word's borders, shading and alignment.
+        let look = self.resolved_table_look(t);
+        let row_count = t.rows.len();
 
         let mut cells: Vec<LoweredCell> = Vec::new();
         // column index -> index into `cells` of the active vMerge restart cell.
@@ -1942,10 +2300,15 @@ impl Lowering {
             let mut col = 0u32;
             for cell in &row.cells {
                 let span = cell.grid_span.max(1);
+                self.w4.nested_tables += cell.nested_tables.len();
                 match cell.v_merge {
                     docx_core::VMerge::Continue => {
                         if let Some(&idx) = vmerge_anchor.get(&col) {
                             cells[idx].row_span += 1;
+                            let bottom = self.merged_bottom(&look, cell, r, row_count);
+                            if let Some(l) = cells[idx].look.as_mut() {
+                                l.bottom = bottom;
+                            }
                         }
                     }
                     _ => {
@@ -1961,7 +2324,10 @@ impl Lowering {
                             .collect();
                         let idx = cells.len();
                         let insets_pt = self.cell_insets(t, cell);
+                        let cell_look =
+                            self.lowered_cell_look(&look, cell, r, row_count, col, span, cols);
                         cells.push(LoweredCell {
+                            look: Some(cell_look),
                             row: r as u32,
                             col,
                             row_span: 1,
@@ -1995,14 +2361,17 @@ impl Lowering {
             cols,
             column_widths_pt,
             cells,
-            row_heights_pt: if t.rows.iter().any(|r| r.height.is_some()) {
+            // `w:hRule="auto"`: Word ignores the height.
+            row_heights_pt: if t.rows.iter().any(|r| row_height(r).is_some()) {
                 t.rows
                     .iter()
-                    .map(|r| r.height.map_or(0.0, twip_to_pt))
+                    .map(|r| row_height(r).map_or(0.0, twip_to_pt))
                     .collect()
             } else {
                 Vec::new()
             },
+            para_style_id: self.table_para_style(&look),
+            layout: Some(self.table_layout(t, &look)),
             // A table that is all header rows has no body to repeat them over.
             header_rows: if (header_rows as usize) < t.rows.len() {
                 header_rows
@@ -2671,6 +3040,10 @@ impl Lowering {
             let size_pt = size_half_pts.map_or(10.0, half_pt_to_pt);
             out.push(len("characterTracking", tracking_of_twips(tw, size_pt)));
         }
+        // Doc ADR 614: the Latin language picks the hyphenation patterns.
+        if let Some(tag) = &r.lang.latin {
+            out.push(text("characterLanguage", &objects::applied_language(tag)));
+        }
         out
     }
 }
@@ -2845,6 +3218,8 @@ fn lower_section(section: Option<&Section>) -> LoweredSection {
         header_footer: None,
         footnote_numbering: None,
         endnote_numbering: None,
+        masters: None,
+        section_start: None,
     }
 }
 
@@ -2988,6 +3363,8 @@ mod tests {
                 source_cell: None,
                 held: Default::default(),
                 bookmarks: Vec::new(),
+                toc_field: None,
+                review: Default::default(),
             }));
         }
         let lowered = lower(&doc);
@@ -3045,6 +3422,8 @@ mod tests {
                 source_cell: None,
                 held: Default::default(),
                 bookmarks: Vec::new(),
+                toc_field: None,
+                review: Default::default(),
             })
         };
         // Body, a 24 pt heading, body, body.
@@ -3097,6 +3476,7 @@ mod tests {
                 height_emu: 12700 * 200,
                 float: None,
                 band_offset_emu: Some(12700 * offset_pt),
+                look: None,
             }],
             ..Default::default()
         };
@@ -3113,6 +3493,8 @@ mod tests {
                 source_cell: None,
                 held: Default::default(),
                 bookmarks: Vec::new(),
+                toc_field: None,
+                review: Default::default(),
             }));
         }
         let lowered = lower(&doc);
@@ -3136,9 +3518,13 @@ mod tests {
     #[test]
     fn a_row_is_never_shorter_than_its_declared_height__feat__plugin_doc_word_pagination() {
         let row = |height: Option<i32>| TableRow {
+            height_rule: Default::default(),
+            cant_split: false,
             height,
             is_header: false,
             cells: vec![TableCell {
+                look: Default::default(),
+                nested_tables: Vec::new(),
                 paragraphs: vec![Paragraph {
                     style_id: None,
                     props: ParaProps::default(),
@@ -3150,6 +3536,8 @@ mod tests {
                     source_cell: None,
                     held: Default::default(),
                     bookmarks: Vec::new(),
+                    toc_field: None,
+                    review: Default::default(),
                 }],
                 grid_span: 1,
                 v_merge: VMerge::None,
@@ -3160,6 +3548,7 @@ mod tests {
         let table = |rows: Vec<TableRow>| {
             let mut doc = DocxDocument::default();
             doc.body.push(Block::Table(Table {
+                look: Default::default(),
                 column_widths: vec![2000],
                 rows,
                 cell_margins: docx_core::CellMargins::default(),
@@ -3196,6 +3585,8 @@ mod tests {
                 source_cell: None,
                 held: Default::default(),
                 bookmarks: Vec::new(),
+                toc_field: None,
+                review: Default::default(),
             }));
         }
         let lowered = lower(&doc);
@@ -3235,6 +3626,7 @@ mod tests {
     fn lowers_styles_paragraphs_and_synthesizes_direct_bold() {
         let mut doc = DocxDocument::default();
         doc.styles.styles.push(Style {
+            table: None,
             style_id: "Heading1".into(),
             name: Some("heading 1".into()),
             kind: StyleKind::Paragraph,
@@ -3279,6 +3671,8 @@ mod tests {
             source_cell: None,
             held: Default::default(),
             bookmarks: Vec::new(),
+            toc_field: None,
+            review: Default::default(),
         }));
 
         let lowered = lower(&doc);
@@ -3409,6 +3803,8 @@ mod tests {
             ..Default::default()
         };
         let cell = |margins: docx_core::CellMargins, v_align| TableCell {
+            look: Default::default(),
+            nested_tables: Vec::new(),
             paragraphs: vec![para(Some(120), None), para(None, Some(200))],
             grid_span: 1,
             v_merge: VMerge::None,
@@ -3417,8 +3813,11 @@ mod tests {
         };
         let mut doc = DocxDocument::default();
         doc.body.push(Block::Table(Table {
+            look: Default::default(),
             column_widths: vec![2000, 2000],
             rows: vec![TableRow {
+                height_rule: Default::default(),
+                cant_split: false,
                 height: None,
                 is_header: false,
                 cells: vec![
@@ -3524,6 +3923,8 @@ mod tests {
         doc.body.push(Block::Table(Table {
             column_widths: vec![2000],
             rows: vec![TableRow {
+                height_rule: Default::default(),
+                cant_split: false,
                 height: None,
                 is_header: false,
                 cells: vec![TableCell {
@@ -3584,6 +3985,7 @@ mod tests {
                 height_emu: 12700 * 36,
                 float: None,
                 band_offset_emu: None,
+                look: None,
             }],
             ..run("", RunProps::default())
         }

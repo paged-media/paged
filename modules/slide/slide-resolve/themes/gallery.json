@@ -1,0 +1,130 @@
+{
+  "themes": [
+    {
+      "id": "office",
+      "name": "Office",
+      "colors": [
+        ["dk1", "000000"],
+        ["lt1", "FFFFFF"],
+        ["dk2", "0E2841"],
+        ["lt2", "E8E8E8"],
+        ["accent1", "156082"],
+        ["accent2", "E97132"],
+        ["accent3", "196B24"],
+        ["accent4", "0F9ED5"],
+        ["accent5", "A02B93"],
+        ["accent6", "4EA72E"],
+        ["hlink", "467886"],
+        ["folHlink", "96607D"]
+      ],
+      "major": "Aptos Display",
+      "minor": "Aptos",
+      "source": "modules/slide/slide-conformance/fixtures/text.pptx"
+    },
+    {
+      "id": "office-2007",
+      "name": "Office 2007 \u2013 2010",
+      "colors": [
+        ["dk1", "000000"],
+        ["lt1", "FFFFFF"],
+        ["dk2", "1F497D"],
+        ["lt2", "EEECE1"],
+        ["accent1", "4F81BD"],
+        ["accent2", "C0504D"],
+        ["accent3", "9BBB59"],
+        ["accent4", "8064A2"],
+        ["accent5", "4BACC6"],
+        ["accent6", "F79646"],
+        ["hlink", "0000FF"],
+        ["folHlink", "800080"]
+      ],
+      "major": "Cambria",
+      "minor": "Calibri",
+      "source": "modules/sheet/corpus/xlsx-recalc/54686_fraction_formats.xls.xlsx"
+    },
+    {
+      "id": "paper",
+      "name": "Paper",
+      "colors": [
+        ["dk1", "1B1B1B"],
+        ["lt1", "FFFFFF"],
+        ["dk2", "3A3226"],
+        ["lt2", "F3EEE4"],
+        ["accent1", "B5523B"],
+        ["accent2", "D99A2B"],
+        ["accent3", "5B7F4A"],
+        ["accent4", "3F6E8C"],
+        ["accent5", "8A5A83"],
+        ["accent6", "7A6F5D"],
+        ["hlink", "2F5D86"],
+        ["folHlink", "7D5A7A"]
+      ],
+      "major": "Georgia",
+      "minor": "Verdana",
+      "source": "paged"
+    },
+    {
+      "id": "slate",
+      "name": "Slate",
+      "colors": [
+        ["dk1", "000000"],
+        ["lt1", "FFFFFF"],
+        ["dk2", "1F2A36"],
+        ["lt2", "DDE3EA"],
+        ["accent1", "2E86AB"],
+        ["accent2", "F18F01"],
+        ["accent3", "C73E1D"],
+        ["accent4", "3B1F2B"],
+        ["accent5", "6A994E"],
+        ["accent6", "A23B72"],
+        ["hlink", "1D70A2"],
+        ["folHlink", "6C4F70"]
+      ],
+      "major": "Trebuchet MS",
+      "minor": "Trebuchet MS",
+      "source": "paged"
+    },
+    {
+      "id": "harbour",
+      "name": "Harbour",
+      "colors": [
+        ["dk1", "0A0A0A"],
+        ["lt1", "FFFFFF"],
+        ["dk2", "12355B"],
+        ["lt2", "E4EEF5"],
+        ["accent1", "1B9AAA"],
+        ["accent2", "06D6A0"],
+        ["accent3", "FFC43D"],
+        ["accent4", "EF476F"],
+        ["accent5", "26547C"],
+        ["accent6", "8D99AE"],
+        ["hlink", "1B6CA8"],
+        ["folHlink", "5E548E"]
+      ],
+      "major": "Palatino Linotype",
+      "minor": "Segoe UI",
+      "source": "paged"
+    },
+    {
+      "id": "meadow",
+      "name": "Meadow",
+      "colors": [
+        ["dk1", "141414"],
+        ["lt1", "FFFFFF"],
+        ["dk2", "2D4030"],
+        ["lt2", "EEF2E6"],
+        ["accent1", "6A8D3A"],
+        ["accent2", "C9A227"],
+        ["accent3", "A4573A"],
+        ["accent4", "4F7CAC"],
+        ["accent5", "8C6E9E"],
+        ["accent6", "3E8E7E"],
+        ["hlink", "3F7D3A"],
+        ["folHlink", "7F6A8C"]
+      ],
+      "major": "Gill Sans MT",
+      "minor": "Gill Sans MT",
+      "source": "paged"
+    }
+  ]
+}

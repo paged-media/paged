@@ -1,0 +1,9 @@
+{
+  "kind": "struct",
+  "fields": {
+    "slide": { "kind": "ref", "to": "plugin:media.paged.slide/slide" },
+    "comment": { "kind": "text" },
+    "text": { "kind": "text", "multiline": true },
+    "author": { "kind": "text", "optional": true }
+  }
+}

@@ -157,6 +157,12 @@ impl BlendMode {
     }
 
     /// A stable identifier for logs and for the wasm/TS surface.
+    /// The legacy four-character code, where the mode has one (the
+    /// writer prefers it: it is what the classic vocabulary readers know).
+    pub fn legacy_code(self) -> Option<&'static [u8; 4]> {
+        LEGACY.iter().find(|(_, m)| *m == self).map(|(c, _)| *c)
+    }
+
     pub fn name(self) -> &'static str {
         LONG_FORM
             .iter()

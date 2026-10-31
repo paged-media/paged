@@ -349,9 +349,18 @@ fn the_kept_cmyk_transform_follows_the_colour_settings() {
         })
         .expect("set colour settings");
     };
+    // Each step changes ONE key against the previous one. Perceptual
+    // without BPC is not compared with relative colorimetric WITH BPC:
+    // Coated FOGRA39's perceptual table is its colorimetric table with
+    // the black point compensated, so those two render identically.
+    set(&mut model, "RelativeColorimetric", false);
+    let rel_col_raw = cold(paged_color::Intent::RelativeColorimetric, false);
+    assert_ne!(rel_col_raw, rel_col, "BPC changes the render");
+    assert_eq!(digests(&model), rel_col_raw, "the cache re-keyed on BPC");
+
     set(&mut model, "Perceptual", false);
     let perceptual = cold(paged_color::Intent::Perceptual, false);
-    assert_ne!(perceptual, rel_col, "the intent changes the render");
+    assert_ne!(perceptual, rel_col_raw, "the intent changes the render");
     assert_eq!(digests(&model), perceptual, "the cache re-keyed on intent");
 
     set(&mut model, "RelativeColorimetric", true);

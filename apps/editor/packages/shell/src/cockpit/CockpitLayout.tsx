@@ -59,6 +59,8 @@ import { Icon } from "../icons";
 import { PanelHost } from "./PanelHost";
 import { TouchZoomControls } from "./TouchZoom";
 import { RightDock } from "./RightDock";
+import { ModuleViewHost } from "./ModuleViewHost";
+import { PresentationChrome } from "./PresentationChrome";
 import { StatusBar } from "../chrome/ContributedBarItems";
 import { DocTitleBar } from "./canvas-frame/DocTitleBar";
 import { GuideDragController } from "./canvas-frame/GuideDragController";
@@ -122,9 +124,14 @@ export function CockpitLayout({
   const canvasOverride = slots?.canvas?.startsWith("panel:")
     ? slots.canvas.slice("panel:".length)
     : undefined;
+  // Editor ADR 306 — a module view (a slide sorter) takes the canvas's
+  // place the same way, and wins over the mode's panel while shown.
+  const views = useRegistryView(useRegistries().views);
+  const activeViewId = views.active();
+  const moduleView = activeViewId ? views.get(activeViewId) : undefined;
   // Export-style modes replace the document viewport with a centred
   // work surface — no rulers / filmstrip around it (kit canvas.jsx).
-  const isOverride = canvasOverride != null;
+  const isOverride = canvasOverride != null || moduleView !== undefined;
   // Editor ADR 291: a Data panel field, table or record dropped on the
   // document is placed.
   const fieldDrop = useDataDrop();
@@ -154,6 +161,8 @@ export function CockpitLayout({
         background: "var(--pg-bg)",
       }}
     >
+      {/* Editor ADR 304 — a presentation hides the chrome. */}
+      <PresentationChrome />
       {titleBar && <DocTitleBar />}
       {!isOverride && rulers && <HRuler />}
       <div
@@ -205,7 +214,11 @@ export function CockpitLayout({
           <Activity mode={isOverride ? "hidden" : "visible"} name="canvas">
             <CanvasComponent paged={paged} api={{ id: "paged.canvas" }} />
           </Activity>
-          {isOverride && <PanelHost id={canvasOverride} />}
+          {moduleView ? (
+            <ModuleViewHost view={moduleView} />
+          ) : (
+            canvasOverride != null && <PanelHost id={canvasOverride} />
+          )}
         </div>
         {!isOverride && touch && <TouchZoomControls />}
       </div>

@@ -29,6 +29,10 @@
 pub mod abi;
 #[macro_use]
 pub mod family;
+/// The compose family's scalar twins: the test-only reference and (feature
+/// `cpu`) the layer fold's CPU path (image ADR 480).
+#[cfg(any(feature = "reference", feature = "cpu"))]
+pub mod compose_twin;
 /// The shipped CPU twins of the adjustment chain's kernels (feature
 /// `cpu`; ADR 465). The `reference` feature stays test-only.
 #[cfg(feature = "cpu")]

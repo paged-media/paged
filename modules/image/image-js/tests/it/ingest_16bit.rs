@@ -165,19 +165,30 @@ fn a_16bit_layer_edit_journals_and_undoes_at_16_bits() {
 }
 
 #[test]
-fn a_mismatched_depth_edit_is_refused_rather_than_narrowed() {
+fn a_mismatched_depth_edit_adopts_the_layers_depth_inside_its_damage() {
     // The journal snapshots tiles in one geometry and restores them in
-    // another, so a depth mismatch corrupts an UNDO rather than merely
-    // degrading the edit. Refuse loudly.
+    // another, so an edit at another depth must not land as it is. It
+    // ADOPTS the layer's depth inside its damage (image ADR 479): an
+    // 8-bit tool on a 16-bit layer widens what it painted, and every
+    // pixel outside the damage keeps its 16-bit sample.
     let mut s = LayerStack::from_image_px(4, 4, px16(4, 4, 0x1234)).unwrap();
     let eight = image_js::pixels::Pixels::from_rgba8(Arc::from(vec![9u8; 4 * 4 * 4]));
-    let err = s
-        .edit_active("paint", Region::new(0, 0, 4, 4), eight)
-        .expect_err("a depth mismatch must be refused");
-    assert!(
-        format!("{err}").contains("depths must match"),
-        "the refusal must say why: {err}"
+    s.edit_active("paint", Region::new(0, 0, 2, 2), eight)
+        .expect("an edit at another depth adopts the layer's");
+    let px = s.active().rgba.canvas().clone();
+    assert!(px.is_16bit(), "the layer keeps its depth");
+    assert_eq!(
+        px.sample16(0, 0),
+        0x0909,
+        "inside the damage: the edit, widened"
     );
+    assert_eq!(
+        px.sample16(15, 0),
+        0x1234,
+        "outside: the layer's own sample"
+    );
+    s.undo().expect("something to undo");
+    assert_eq!(s.active().rgba.canvas().sample16(0, 0), 0x1234);
 }
 
 #[test]

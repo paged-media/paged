@@ -32,4 +32,5 @@
 pub mod columns;
 pub mod core;
 pub mod labels;
+pub mod record_status;
 pub mod review;

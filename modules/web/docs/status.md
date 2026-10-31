@@ -115,8 +115,13 @@ and the performance reading are in [`design/analysis-2026-10-05.md`](design/anal
   ([ADR 414](adr/414-baked-faces-are-kept-with-the-document.md)). A box
   with one `border-radius` becomes a rectangle with rounded corners of that radius; a box
   with unequal corners stays a path. Strokes, item opacity for translucent paint and box
-  shadows (as the native drop shadow of the rectangle or path that casts them) are kept; it
-  reports what it left out. InDesign opens the result with each item, face, stroke, opacity,
+  shadows (as the native drop shadow of the rectangle or path that casts them) are kept, an
+  inset box shadow becomes the native inner shadow of its box. An element's CSS effects
+  ([ADR 415](adr/415-css-effects-map-onto-native-items.md)) map onto native items: `opacity`
+  and `filter: opacity()` onto the item's or a native group's opacity, `mix-blend-mode` onto
+  its blend mode, `isolation` onto an isolated group, `filter: drop-shadow()` onto the item's
+  drop shadow, `clip-path` onto a clip group, a gradient or image `mask-image` onto an opacity
+  mask. It reports what it left out. InDesign opens the result with each item, face, stroke, opacity,
   shadow (offset and size), corner radius, path and image where the bake put it (the InDesign
   lane in `packages/web-conformance`).
 
@@ -166,8 +171,14 @@ and the performance reading are in [`design/analysis-2026-10-05.md`](design/anal
   `justify-content`, `vertical-align`, a no-break space that breaks, multi-column, percentage
   padding, table spacing and collapsed borders, `position: sticky`, `text-align-last`,
   `hyphens: none`); upstream reports are drafted in `chrome/UPSTREAM.md`.
-- **The flatten does not carry** sweep gradients, gradient strokes, blended fills, inner
-  shadows or translucent gradient stops (baked opaque); each is counted in the report. A box
+- **The flatten does not carry** sweep gradients, gradient strokes, translucent gradient
+  stops (baked opaque), `filter: blur()` and the colour filters (`brightness`, `contrast`,
+  `grayscale`, `hue-rotate`, `invert`, `saturate`, `sepia` — the engine has no image
+  adjustment stack yet), `background-blend-mode`, `mix-blend-mode: plus-lighter`, a
+  `url()` filter or clip path, a drop-shadow filter or a mask on an element that bakes to
+  more than one item, a mask on text, and the effects of an inline element; each is counted
+  in the report. The live render on the canvas paints none of these element effects (box
+  shadows aside): the scene layer has no group item. A box
   with elliptical or unequal corners is a path, not a rectangle with corner options. A
   gradient keeps its angle and length but not its start point. Each text run becomes its own
   text frame. Items are created by kind (rectangles, paths, images, then text), not in paint

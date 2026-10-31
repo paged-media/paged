@@ -9,5 +9,6 @@ mod composite;
 mod layer_list;
 mod mutatable;
 mod padding;
+mod presets_photoshop;
 mod psb;
 mod roundtrip;

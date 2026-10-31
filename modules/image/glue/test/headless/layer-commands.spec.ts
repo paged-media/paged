@@ -342,7 +342,7 @@ describe("the Layer menu's parity commands over the real document [image.layers.
     const before = imageShape(k.session);
     await k.run(`${C}.rasterizeLayer`);
     expect(k.session.state().status).toMatch(
-      /not a fill layer or smart object/,
+      /not a fill layer, smart object or type layer/,
     );
     expect(imageShape(k.session)).toEqual(before);
     expect(k.changes()).toBe(0);
@@ -361,7 +361,8 @@ describe("the Layer menu's parity commands over the real document [image.layers.
       "Background",
       "Layer 1",
     ]);
-    expect(s.history?.undoSteps).toEqual(["Layer via Copy"]);
+    // Select All is a step of its own (a selection change, ADR 470).
+    expect(s.history?.undoSteps).toEqual(["Select All", "Layer via Copy"]);
     await k.run(`${C}.undo`);
     expect(k.session.state().layers.layers).toHaveLength(1);
     expect(k.changes()).toBe(0);
@@ -379,7 +380,8 @@ describe("the Layer menu's parity commands over the real document [image.layers.
       "Background",
       "Layer 1",
     ]);
-    expect(s.history?.undoSteps).toEqual(["Layer via Cut"]);
+    // Select All is a step of its own (a selection change, ADR 470).
+    expect(s.history?.undoSteps).toEqual(["Select All", "Layer via Cut"]);
     // The cut layer alone shows: the composite is the original.
     expect(await sourcePixels(k.session)).toEqual(before);
     await k.run(`${C}.undo`);
@@ -437,14 +439,18 @@ describe("the Layer menu's parity commands over the real document [image.layers.
     k.dispose();
   });
 
-  it("flattenImage declines without WebGPU (the white matte is a blend) and changes nothing", async () => {
+  it("flattenImage flattens without WebGPU, on the CPU fold (image ADR 480); undo brings the layers back", async () => {
     covers("command:media.paged.image.command.flattenImage");
     const k = await ingested();
     const before = imageShape(k.session);
+    const layers = k.session.state().layers.layers.length;
     await k.run(`${C}.flattenImage`);
-    expect(k.session.state().status).toMatch(/GPU-only/);
-    expect(imageShape(k.session)).toEqual(before);
-    expect(k.changes()).toBe(0);
+    expect(k.session.state().status).toMatch(/Flatten image done/);
+    expect(k.session.state().layers.layers).toHaveLength(1);
+    expect(imageShape(k.session).source).toEqual(before.source);
+    expect(k.session.state().history?.undoLabel).toBe("Flatten Image");
+    await k.run(`${C}.undo`);
+    expect(k.session.state().layers.layers).toHaveLength(layers);
     k.dispose();
   });
 

@@ -339,8 +339,9 @@ export function shapeBuildBatchFor(
       inserts.push(...insertRawPathOps(ctx.pageId, tables[k]!, handle, stored));
       rest.push(handleElementId(handle));
     }
-    // The engine's arrangement takes at most 12 inputs: unite in runs of
-    // eleven onto the carrier, each run growing it.
+    // The engine's arrangement takes at most MAX_PLANAR_INPUTS inputs
+    // (1000, engine ADR 1019): unite in runs of one fewer onto the
+    // carrier, each run growing it.
     for (let k = 0; k < rest.length; k += MAX_PLANAR_INPUTS - 1) {
       const run = rest.slice(k, k + MAX_PLANAR_INPUTS - 1);
       union.push(

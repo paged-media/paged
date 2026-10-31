@@ -21,10 +21,10 @@
 //
 // The drawing office's opener imports annual-crest.svg through the host
 // importer registry and says, on the page, that the contours below are
-// what came back. They were not below: all six landed on PAGE ONE, on
+// what came back. They were not below: all four landed on PAGE ONE, on
 // top of the cover's wordmark, and the finished container proves it —
 // the cover spread carries four polygons the cover module never wrote
-// (six contours less the two consumed by the compound merges).
+// (one per crest shape, the annulus and the shield compound).
 //
 // The cause is not the importer, which resolves its target correctly:
 //
@@ -68,6 +68,10 @@ interface Contour {
   fill: string | null;
   stroke: string | null;
   weight: number | null;
+  /** The element's own fill rule; the importer writes `EvenOdd` for the
+   *  crest's even-odd compounds and keeps their contours as authored, so
+   *  a copy without it paints the shield's keyway solid. */
+  fillRule: string | null;
 }
 
 async function readContour(
@@ -105,6 +109,7 @@ async function readContour(
       fill: read("frameFillColor") as string | null,
       stroke: read("frameStrokeColor") as string | null,
       weight: read("frameStrokeWeight") as number | null,
+      fillRule: read("frameFillRule") as string | null,
     };
   }, id);
   return {
@@ -117,6 +122,7 @@ async function readContour(
     fill: paint.fill,
     stroke: paint.stroke,
     weight: paint.weight,
+    fillRule: paint.fillRule,
   };
 }
 
@@ -213,6 +219,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         value: contour.weight,
       });
     }
+    if (contour.fillRule !== null && contour.fillRule !== "NonZero") {
+      await doc.setProperty("polygon", stub, "frameFillRule", {
+        type: "text",
+        value: contour.fillRule,
+      });
+    }
     await assignLayer(ctx, "polygon", stub, LAYER.content);
     elements.push(stub);
     carried += 1;
@@ -244,7 +256,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   notes.push(
     `carried ${carried} contour(s) to page ${page77 + 1} by copying ` +
       `framePath (anchors + subpathStarts, so compounds stay compound) and ` +
-      `re-basing by the probed spread seam (${dx}, ${dy})`,
+      `the fill rule, and re-basing by the probed spread seam (${dx}, ${dy})`,
   );
 
   return {

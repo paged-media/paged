@@ -12,11 +12,14 @@ import {
 } from "@paged-media/plugin-sdk";
 import { createFakeEditor } from "@paged-media/plugin-sdk/gesture-kit";
 
-import { createAssetPipeline, mediaTypeOf } from "../assets";
+import { createAssetPipeline, mediaTypeOf, type AssetDeps } from "../assets";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 
-function setup(consented: string[] = ["https://img.example"]) {
+function setup(
+  consented: string[] = ["https://img.example"],
+  fromDocument?: AssetDeps["fromDocument"],
+) {
   const actions = createActionRegistry();
   const editor = createFakeEditor().editor;
   const painter = createBundleHost(
@@ -66,6 +69,7 @@ function setup(consented: string[] = ["https://img.example"]) {
       if (url.endsWith("/missing.png")) throw new Error("HTTP 404");
       return PNG;
     },
+    ...(fromDocument ? { fromDocument } : {}),
   });
   return { pipeline, fetches };
 }
@@ -147,4 +151,54 @@ describe("asset columns [data.assets.columns]", () => {
     );
     expect(mediaTypeOf(new Uint8Array([0]), "a.svg?v=1")).toBe("image/svg+xml");
   });
+
+  it("reads a reference the document carries from its part, without consent or a fetch, and keeps it", async () => {
+    const hash = await sha256Hex(PNG);
+    const reads: string[] = [];
+    const { pipeline, fetches } = setup([], async (reference) =>
+      reference === "https://img.example/p/1.png"
+        ? {
+            hash,
+            mediaType: "image/png",
+            read: async () => {
+              reads.push(reference);
+              return PNG;
+            },
+          }
+        : null,
+    );
+    const a = await pipeline.resolve("https://img.example/p/1.png", {});
+    expect(a.ok && a.cached).toBe(true);
+    expect(a.ok && Array.from(decode(a.uri))).toEqual(Array.from(PNG));
+    expect(fetches).toEqual([]);
+    expect(pipeline.kept("https://img.example/p/1.png")).toMatchObject({
+      hash,
+      mediaType: "image/png",
+    });
+    // Kept: a second resolve does not read the part again.
+    await pipeline.resolve("https://img.example/p/1.png", {});
+    expect(reads).toHaveLength(1);
+    // What the document does not carry still needs consent.
+    const b = await pipeline.resolve("https://img.example/p/2.png", {});
+    expect(!b.ok && b.reason).toMatch(/has no consent/);
+    expect(pipeline.kept("https://img.example/p/2.png")).toBeNull();
+  });
+
+  it("refuses a document part whose bytes are not its hash, and falls back to the fetch", async () => {
+    const { pipeline, fetches } = setup(["https://img.example"], async () => ({
+      hash: "00".repeat(32),
+      mediaType: "image/png",
+      read: async () => PNG,
+    }));
+    const a = await pipeline.resolve("https://img.example/p/1.png", {});
+    expect(a.ok && a.cached).toBe(false);
+    expect(fetches).toEqual(["https://img.example/p/1.png"]);
+  });
 });
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
+  return Array.from(new Uint8Array(d), (x) =>
+    x.toString(16).padStart(2, "0"),
+  ).join("");
+}

@@ -1,0 +1,199 @@
+{
+  "fixture": "codecs-open",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/codecs-open.jsx",
+    "script_sha256": "67deb3ec4e8a8ebc240d2f75ebf7ee8404eec18c7cc404021d9f95356d6418cf",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-28T16:53:27.731Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "layered-tiff",
+      "params": {
+        "file": "codecs-open/layered.tif"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "codecs-open/layered.tif"
+      ],
+      "values": {
+        "width": 400,
+        "height": 300,
+        "mode": "DocumentMode.RGB",
+        "bits": 8,
+        "layers": [
+          {
+            "name": "Signal",
+            "opacity": 62.7450980392157,
+            "blend": "SCREEN",
+            "visible": true,
+            "bounds": [
+              180,
+              120,
+              340,
+              240
+            ]
+          },
+          {
+            "name": "Plate",
+            "opacity": 78.4313725490196,
+            "blend": "MULTIPLY",
+            "visible": true,
+            "bounds": [
+              60,
+              60,
+              260,
+              200
+            ]
+          },
+          {
+            "name": "Backdrop",
+            "opacity": 100,
+            "blend": "NORMAL",
+            "visible": true,
+            "bounds": [
+              0,
+              0,
+              400,
+              300
+            ]
+          }
+        ],
+        "composite": [
+          [
+            5,
+            5,
+            16,
+            36,
+            83.0038910505837
+          ],
+          [
+            100,
+            100,
+            18,
+            21.0038910505837,
+            37.0038910505837
+          ],
+          [
+            200,
+            150,
+            161,
+            159.996108949416,
+            163.996108949416
+          ],
+          [
+            300,
+            200,
+            163,
+            173,
+            199.996108949416
+          ],
+          [
+            395,
+            295,
+            27.0038910505837,
+            62,
+            147
+          ]
+        ],
+        "alone": [
+          [
+            "Signal",
+            260,
+            180,
+            243.996108949416,
+            241,
+            233.996108949416
+          ],
+          [
+            "Plate",
+            160,
+            130,
+            217,
+            79.0038910505837,
+            43.0038910505837
+          ],
+          [
+            "Backdrop",
+            200,
+            150,
+            22,
+            49.0038910505837,
+            115.003891050584
+          ]
+        ]
+      }
+    },
+    {
+      "id": "radiance-hdr",
+      "params": {
+        "file": "codecs-open/scene.hdr"
+      },
+      "profile": "sRGB IEC61966-2.1 (Lineares RGB-Profil)",
+      "bits": 32,
+      "files": [
+        "codecs-open/scene.hdr",
+        "codecs-open/radiance-hdr.photoshop.tif"
+      ],
+      "values": {
+        "width": 64,
+        "height": 32,
+        "mode": "DocumentMode.RGB",
+        "bits": 32,
+        "layers": 1,
+        "channels": 3,
+        "transparent": false
+      }
+    },
+    {
+      "id": "openexr",
+      "params": {
+        "file": "codecs-open/scene.exr"
+      },
+      "profile": "OpenEXR Default",
+      "bits": 32,
+      "files": [
+        "codecs-open/scene.exr",
+        "codecs-open/openexr.photoshop.tif"
+      ],
+      "values": {
+        "width": 64,
+        "height": 32,
+        "mode": "DocumentMode.RGB",
+        "bits": 32,
+        "layers": 1,
+        "channels": 3,
+        "transparent": false
+      }
+    },
+    {
+      "id": "openexr-alpha",
+      "params": {
+        "file": "codecs-open/scene-alpha.exr"
+      },
+      "profile": "OpenEXR Default",
+      "bits": 32,
+      "files": [
+        "codecs-open/scene-alpha.exr",
+        "codecs-open/openexr-alpha.photoshop.tif"
+      ],
+      "values": {
+        "width": 64,
+        "height": 32,
+        "mode": "DocumentMode.RGB",
+        "bits": 32,
+        "layers": 1,
+        "channels": 3,
+        "transparent": true
+      }
+    }
+  ]
+}

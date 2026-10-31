@@ -731,7 +731,90 @@ export type WorkerToMain = WorkerToMainKind & {
 //   `TooLarge` / `NothingDrawn`.
 //   An older worker ignores the new fields and answers a whole-page PNG,
 //   which a caller detects by the reply's missing `format` / `region`.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
+// Additive on 76, no bump (governance rule 1) — data ADR 564:
+//   `RunContent.textVariable`, the text variable a run is an instance of.
+// Additive on 77, no bump (governance rule 1) — data ADR 564:
+//   `StorySummary.oversetCells`, the table cells whose text overflows.
+// Additive on 76, no bump (governance rule 1) — engine ADR 1035,
+//   `RequestSnapshot.story`: a story the document does not hold, laid out
+//   and drawn alone (paged.image's type layers). Optional; an older worker
+//   ignores it and draws the page, which a caller detects by the reply's
+//   region (it covers the story's box only when the story was drawn).
+// Rides v76 (unreleased; added before first consumer sync, governance rule
+//   4) — engine ADRs 1018 and 1021: the mutations setStyleBasedOn,
+//   setListLevel, restartNumbering and findReplace (Operations
+//   SetStyleBasedOn, SetListLevel, RestartNumbering and the inverse-only
+//   SetParagraphListState); `RequestFindText { spec }` → `FoundText { hits,
+//   error? }`. Additive: twelve property paths (Word's character and
+//   paragraph additions, `documentShowHiddenText`) and
+//   `NumberingListSpec.levels`.
+// v77 — named undo steps (engine ADR 1030): `LabelStep { appliedSeq, label
+//   }` → `StepLabeled`; `RequestUndoLog { limit }` → `UndoLog
+//   { undo, redo, undoLen, redoLen, depth }`; `UndoTo { appliedSeq }` /
+//   `RedoTo { appliedSeq }` step the history several steps in one round trip
+//   (reply `UndoApplied` / `RedoApplied` with `steps`); `RestoreTo {
+//   appliedSeq, label }` goes back to a step as ONE new undo step (reply
+//   `MutationApplied`); `SetHistoryDepth {
+//   depth }` → `HistoryDepthApplied { depth }`. Additive on the same bump:
+//   `AmendMutation.label`, `CommitGesture.label`. New message kinds an older
+//   worker cannot answer, hence the bump.
+// v77 (rider) — SVG in and out of the engine (engine ADR 1031, `paged-svg`):
+//   `RequestSvgImport { pageId, bytes, options }` → `SvgImportPlanned`
+//   (the one batch to apply, one undo step, and the report of what was
+//   approximated or left out); `ExportSvg { pageId, elementIds, options }`
+//   → `SvgExported { svg, report }` / `ExportSvgFailed { error }`. The
+//   additive PropertyPath `frameGradientFillStart` rides it. New message
+//   kinds an older worker cannot answer, hence the bump.
+// v77 (rider) — view modes and snapping v2 (editor ADR 287):
+//   - `SetViewSettings { settings }` → `ViewSettingsApplied { settings }`:
+//     the screen's mode (Preview, Outline, Overprint Preview, Pixel
+//     Preview). Preview draws overprints as knockouts on both lanes (the
+//     GPU screen always did; the CPU tiles simulated them), Overprint
+//     Preview simulates them. A raster-time rewrite: no build depends on
+//     it.
+//   - `SnapSettings` gains `pixel`, `gridEvery` / `gridSubdivisions`,
+//     `angleGuides` / `customAngle`, `spacing`, `rotate` and
+//     `intersections` (serde-default fields); `SnapSource` gains `pixel`,
+//     `angle`, `intersection` and `spacing`; `SnapLine` gains the optional
+//     `kind`, `from`, `to`, `angle` and `distance`; `SnapPointResult` gains
+//     `angleTarget`; `CameraSabLayout` gains `offsetRotation`.
+//   - Gestures: translate snaps rotated members through their oriented
+//     box, equal spacing and pixels; scale snaps the dragged handle;
+//     rotate snaps to 0/45/90 and the neighbours' angles.
+//   - The camera SAB's spare slot (offset 12) carries the view rotation.
+//   A new message kind an older worker cannot answer, hence the bump.
+// v77 (rider) — Word document structure (engine ADR 1022): the mutations
+//   updateFields, insertTextAnchor, deleteTextAnchor, insertCrossReference,
+//   insertTableOfContents and insertIndexMarker; `FieldKind::Word` on
+//   insertField; `setFlowGrowRule` gains master / firstMaster / evenMaster
+//   / sectionStart (additive); `StorySummary.growRule` and
+//   `PageSummary.appliedMaster` (additive); the PropertyPath
+//   `documentShowFieldCodes`. New mutations an older worker refuses.
+// v77 (rider) — free page placement (engine ADR 1011): the `placePage { page,
+//   originPt? }` mutation puts a page (an artboard) on the canvas. With it,
+//   additive: `DocumentHandle.pageOriginsPt`, `pageOriginsPt` beside every
+//   `pageSizesPt` (mutationApplied, undoApplied, redoApplied, fontRegistered,
+//   fontRegistryCleared), `PageSummary.canvasOriginPt` / `canvasPlaced` /
+//   `boundsPt`, the `pageInfo` tuple's `[x, y]`, and
+//   the viewer session's `PageRect.xPt`. A new Mutation kind an older worker
+//   cannot apply, hence the bump; it rides the unpublished v77 (added
+//   before first consumer sync, governance rule 4).
+// v78 — symbols (engine ADR 1039): the mutations createSymbol,
+//   redefineSymbol, placeSymbolInstance, breakSymbolLink and deleteSymbol;
+//   `FrameRef::Instance` page items. Additive with them: `ElementId::Instance`
+//   (`instance:<id>`), the element paths `symbolInstanceTint` /
+//   `symbolInstanceNineSlice`, the `symbols` collection. New Mutation kinds
+//   an older worker cannot apply, hence the bump.
+// v78 (rider) — Word's review (engine ADRs 1040 and 1020): the mutations
+//   recordChange, acceptChange, rejectChange, insertComment, replyComment,
+//   resolveComment, deleteComment and editComment; the PropertyPaths
+//   documentTrackChanges, documentTrackChangesAuthor and documentMarkupView;
+//   the `comments` collection; additive fields on TrackedChangeSummary
+//   (id, kind, end, paragraph), RunContent (change, formatChange, comments),
+//   ParagraphContent (markChange, propsChange) and StoryContent (comments).
+//   While documentTrackChanges is on, insertText / deleteRange and range
+//   formatting record changes. New mutations an older worker refuses.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(78);
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -864,6 +947,34 @@ pub struct MintedElement {
     pub element: crate::element_selection::ElementId,
     /// The story minted with it, for the kinds that carry one.
     pub story_id: Option<String>,
+}
+
+/// v77 (engine ADR 1030) — one named undo step on the wire.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoLogEntryWire {
+    /// What `UndoTo` / `RedoTo` name.
+    pub applied_seq: u64,
+    /// The step's name: the caller's words, or the engine's English
+    /// default.
+    pub label: String,
+    /// The derivation key of an engine default (`moveFrame`,
+    /// `set:fillColor`, `gesture:rotate`, `batch`, `script`), for a host
+    /// that translates the defaults it knows; `None` when a caller named
+    /// the step.
+    #[serde(default)]
+    pub key: Option<String>,
+}
+
+impl From<crate::model::UndoLogEntry> for UndoLogEntryWire {
+    fn from(e: crate::model::UndoLogEntry) -> Self {
+        Self {
+            applied_seq: e.applied_seq,
+            label: e.label.text,
+            key: e.label.key,
+        }
+    }
 }
 
 /// Concept 3 — PDF export options as the dialog sends them. Every
@@ -1156,7 +1267,58 @@ pub enum MainToWorkerKind {
     AmendMutation {
         applied_seq: u64,
         mutation: Mutation,
+        /// v77 (engine ADR 1030) — rename the amended step. Absent keeps
+        /// the name it had.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
     },
+    /// v77 (engine ADR 1030) — name the undo step `applied_seq` `label`
+    /// (the caller's words, shown by the History panel and the Edit menu,
+    /// instead of the engine's default), when it is still the top of the
+    /// undo log: the step the caller's write just made (the `appliedSeq` of
+    /// its `MutationApplied` / `GestureCommitted` reply). A separate message
+    /// rather than a labelled `Mutate`, so a write's own message stays the
+    /// one every recorder and lane already knows. A blank label keeps the
+    /// default. Reply: `StepLabeled` (`labeled: false` when the step is no
+    /// longer the top, or the write logged none).
+    LabelStep { applied_seq: u64, label: String },
+    /// v77 (engine ADR 1030) — read the named undo timeline: the newest
+    /// `limit` undo steps (oldest first) and redo steps (next redo first);
+    /// absent = all of them. Reply: `UndoLog`.
+    RequestUndoLog {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        limit: Option<u32>,
+    },
+    /// v77 (engine ADR 1030) — undo every step down to and including the
+    /// step `applied_seq` (an `UndoLog.undo` entry), in one round trip.
+    /// Reply: `UndoApplied` (its `undoneSeq` is `applied_seq`, `steps` how
+    /// many were undone, `pageIds` every page they touched), or
+    /// `MutationFailed` when that step is not on the undo log.
+    UndoTo { applied_seq: u64 },
+    /// v77 (engine ADR 1030) — redo every step up to and including the
+    /// step `applied_seq` (an `UndoLog.redo` entry). Reply: `RedoApplied`
+    /// or `MutationFailed`, as for `UndoTo`.
+    RedoTo { applied_seq: u64 },
+    /// v77 (engine ADR 1030) — make the document what it was right after
+    /// the step `applied_seq` (`0`: before the oldest step on the undo
+    /// log), as ONE new undo step named `label` (default "Restore"): the
+    /// History panel's snapshot restore. The steps it walked over stay
+    /// recoverable — undoing the restore brings them back. Reply:
+    /// `MutationApplied` (its `appliedSeq` names the new step), or
+    /// `MutationFailed` when the step is on neither log or is current.
+    RestoreTo {
+        applied_seq: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
+    },
+    /// v77 (engine ADR 1030) — keep at most `depth` undo steps (clamped to
+    /// 1..=10,000, the cap of ADR 110); a shallower depth evicts the oldest
+    /// steps now. Held by the worker across document loads. Reply:
+    /// `HistoryDepthApplied` with the depth in force.
+    SetHistoryDepth { depth: u32 },
     /// Request the per-page display list. Worker replies with
     /// `DisplayListReady` carrying a small descriptor (page id +
     /// command count + generation counters). Phase 1 does not stream
@@ -1207,7 +1369,9 @@ pub enum MainToWorkerKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         clip: Option<crate::snapshot::SnapshotClip>,
         /// Extensions ADR 338 — `"png"` (the default) or `"rgba"`: raw
-        /// straight-alpha RGBA8 in `SnapshotPng.rgba`.
+        /// straight-alpha RGBA8 in `SnapshotPng.rgba`. Editor ADR 288 adds
+        /// `"jpeg"`, `"webp"` and `"tiff"`: the file in `SnapshotPng.bytes`,
+        /// encoded by `paged-raster`, drawn on the CPU rasterizer.
         #[serde(
             default,
             skip_serializing_if = "crate::snapshot::SnapshotFormat::is_png"
@@ -1223,6 +1387,16 @@ pub enum MainToWorkerKind {
         /// Nothing drawn answers `SnapshotError::NothingDrawn`.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         trim: bool,
+        /// Editor ADR 288 (asset export) — `format: "jpeg"`: the quality,
+        /// 1 to 100 (absent: 90). Other formats ignore it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quality: Option<u8>,
+        /// Engine ADR 1035 — draw this story alone, laid out by the
+        /// engine in a frame at its bounds on `page_id`, in a copy of the
+        /// document (which is not changed). `only` is then ignored; an
+        /// absent `clip` draws the frame's box.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        story: Option<crate::snapshot::SnapshotStory>,
     },
     /// Replace the worker's current selection. Phase 3 Item 1 — the
     /// worker mirrors the main thread's `ContentSelection` so the
@@ -1357,6 +1531,11 @@ pub enum MainToWorkerKind {
     SetSnapSettings {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v77 (editor ADR 287) — how the screen draws the document: Preview,
+    /// Outline, Overprint Preview or Pixel Preview. Survives document
+    /// loads; not saved, not undoable, no rebuild; exports, snapshots and
+    /// separations never see it. Reply: `ViewSettingsApplied`.
+    SetViewSettings { settings: crate::view::ViewSettings },
     /// v75 — the session's role and the host's overrides, against which
     /// the document's template policy is applied (editor
     /// `docs/composable-editor.md` §7). Survives document loads; not saved,
@@ -1379,6 +1558,10 @@ pub enum MainToWorkerKind {
         #[serde(default)]
         options: paged_template::DeriveOptions,
     },
+    /// Engine ADR 1021 — the hits of `spec` (story, caret and character
+    /// ranges, context), for a results list. Reads only. Reply:
+    /// `FoundText`. // rides v76 (added before first consumer sync).
+    RequestFindText { spec: paged_wire::FindSpec },
     /// v76 — "Open as template": the derived fields (those named in
     /// `only`, when given) written as the template's policy, and each
     /// tagged range made a placeholder run, as ONE batch mutation (one undo
@@ -1463,6 +1646,31 @@ pub enum MainToWorkerKind {
     /// different spreads).
     ExportElements {
         element_ids: Vec<crate::element_selection::ElementId>,
+    },
+    /// v77 (engine ADR 1031) — plan the import of an SVG (or SVGZ) file
+    /// onto `page_id`: `paged-svg` reads it with usvg (`<use>`, `<defs>`,
+    /// CSS, units and transforms resolved) and lowers it to ONE batch of
+    /// native page items. Pure READ: the reply `SvgImportPlanned` carries
+    /// the batch for the caller to apply with `Mutate` (one undo step,
+    /// the ordinary mutation lane) and the report of what was
+    /// approximated or left out.
+    RequestSvgImport {
+        page_id: PageId,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+        #[serde(default)]
+        options: paged_svg::SvgImportOptions,
+    },
+    /// v77 (engine ADR 1031) — write the page `page_id` as an SVG
+    /// document; with `element_ids`, nothing but those items, the view
+    /// box fitted to what they draw. Pure READ. Reply: `SvgExported`, or
+    /// `ExportSvgFailed`.
+    ExportSvg {
+        page_id: PageId,
+        #[serde(default)]
+        element_ids: Vec<crate::element_selection::ElementId>,
+        #[serde(default)]
+        options: paged_svg::SvgExportOptions,
     },
     /// v65 — read one style definition's settable properties: every path
     /// `Mutation::SetStyleProperty` accepts for that collection, with the
@@ -1806,6 +2014,11 @@ pub enum MainToWorkerKind {
     /// committed mutation lands on the unified undo log.
     CommitGesture {
         handle: crate::gesture::GestureHandle,
+        /// v77 (engine ADR 1030) — the committed step's name. Absent names
+        /// it after the gesture ("Move", "Resize", "Rotate", …).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
     },
     /// Phase B — discard the active gesture. Reply
     /// `GestureCancelled { handle, page_ids }`; scene reverts to the
@@ -1989,6 +2202,17 @@ pub enum WorkerToMainKind {
     /// atlas. Carries the source page's generation counters so the
     /// main thread can detect staleness before drawing.
     SnapshotReady(crate::snapshot::SnapshotPng),
+    /// v77 — `RequestSvgImport` reply: `mutation` is the batch to apply
+    /// (absent when the file draws nothing or could not be read, `error`
+    /// then says why), `report` what was approximated or left out.
+    SvgImportPlanned(paged_svg::SvgImportPlan),
+    /// v77 — `ExportSvg` reply: the document and its report.
+    SvgExported {
+        svg: String,
+        report: paged_svg::SvgReport,
+    },
+    /// v77 — `ExportSvg` refused (no document, an unknown page).
+    ExportSvgFailed { error: String },
     /// `RequestSnapshot` failed (e.g. unknown page id).
     SnapshotFailed {
         error: crate::snapshot::SnapshotError,
@@ -2045,6 +2269,12 @@ pub enum WorkerToMainKind {
         /// `page_ids`).
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
         /// v38 (Wave 2, C-2 / S-05) — content-box reflow, populated ONLY
         /// when the applied mutation was a `Mutation::ResizeFrame` (a
         /// content-box change). `None` for every other mutation kind —
@@ -2120,6 +2350,11 @@ pub enum WorkerToMainKind {
         applied_seq: u64,
         page_ids: Vec<PageId>,
         cache_stats: LayoutCacheStats,
+        /// v77 (engine ADR 1030) — how many steps an `UndoTo` undid
+        /// (`undoneSeq` is the last, `pageIds` the union). Absent for `Undo`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        steps: Option<u32>,
         /// Editor-ops — same page-grid refresh contract as
         /// `MutationApplied`: undoing a page mutation changes the
         /// page list and the editor must not need a reload to see
@@ -2129,17 +2364,54 @@ pub enum WorkerToMainKind {
         page_structure_changed: bool,
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
     },
+    /// v77 (engine ADR 1030) — `RequestUndoLog` reply: the named undo
+    /// timeline. `undo` is oldest first (its last entry is what an undo
+    /// reverts), `redo` next-redo first; `undoLen` / `redoLen` are the
+    /// whole logs' lengths (the lists may be cut to the limit), `depth` the
+    /// history depth in force.
+    UndoLog {
+        undo: Vec<UndoLogEntryWire>,
+        redo: Vec<UndoLogEntryWire>,
+        undo_len: u32,
+        redo_len: u32,
+        depth: u32,
+        /// Steps the depth evicted since the document opened: while `0`,
+        /// `RestoreTo { appliedSeq: 0 }` reaches the opened document.
+        evicted: u32,
+    },
+    /// v77 (engine ADR 1030) — `SetHistoryDepth` reply.
+    HistoryDepthApplied { depth: u32 },
+    /// v77 (engine ADR 1030) — `LabelStep` reply: whether the step took
+    /// the name.
+    StepLabeled { applied_seq: u64, labeled: bool },
     /// Phase 3 Item 7 — redo applied.
     RedoApplied {
         redone_seq: u64,
         applied_seq: u64,
         page_ids: Vec<PageId>,
         cache_stats: LayoutCacheStats,
+        /// v77 (engine ADR 1030) — how many steps a `RedoTo` redid. Absent
+        /// for `Redo`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        steps: Option<u32>,
         #[serde(default)]
         page_structure_changed: bool,
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
     },
     /// `RegisterFont` reply: the font is now part of the worker's
     /// asset resolver.
@@ -2159,6 +2431,12 @@ pub enum WorkerToMainKind {
         page_structure_changed: bool,
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
     },
     /// `ClearFontRegistry` reply. v65 — the same page report as
     /// `FontRegistered`, for the stories that lost a face.
@@ -2169,6 +2447,12 @@ pub enum WorkerToMainKind {
         page_structure_changed: bool,
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v77 (engine ADR 1011) — each page's top-left on the canvas,
+        /// pt, ordered like `page_sizes_pt` and present exactly when it
+        /// is: the editor places its page grid here instead of stacking.
+        /// Additive; an older worker omits it (the default stack).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_origins_pt: Option<Vec<(f32, f32)>>,
     },
     /// Concept 2 — `RegisterColorProfile` reply.
     ColorProfileRegistered { name: String },
@@ -2209,6 +2493,8 @@ pub enum WorkerToMainKind {
     SnapSettingsApplied {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v77 — `SetViewSettings` reply: the settings now in force.
+    ViewSettingsApplied { settings: crate::view::ViewSettings },
     /// v75 — `SetSessionPolicy` reply: the policy now in force.
     SessionPolicyApplied {
         policy: paged_template::SessionPolicy,
@@ -2216,6 +2502,13 @@ pub enum WorkerToMainKind {
     /// v75 — `SetTemplateFields` refused before anything applied.
     TemplateFieldsRefused {
         problems: Vec<crate::template::TemplateFieldProblem>,
+    },
+    /// Engine ADR 1021 — `RequestFindText` reply: the hits in story order,
+    /// or `error` (a bad pattern; no document) with none.
+    FoundText {
+        hits: Vec<paged_wire::FindHit>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
     /// v76 — `RequestDerivedTemplateFields` reply. Empty with no document.
     DerivedTemplateFields {
@@ -2975,9 +3268,13 @@ pub enum CollectionName {
     XmlElements,
     /// D-01 — the document's tracked changes, one row per change in story
     /// order: its story, the story offset of its place, its kind, author,
-    /// date and text. Deletions today; tracked insertions read as the
-    /// story's text and are not listed yet.
+    /// date and text. Engine ADR 1040: Word's changes too (insertions,
+    /// deletions, formatting and paragraph changes, paragraph marks), one
+    /// row per story and change id with its range.
     TrackedChanges,
+    /// Engine ADR 1020 — the document's comments, threads in story order
+    /// (each root followed by its replies).
+    Comments,
     /// Concept 2 — the Ink Manager's ink list (one row per spot
     /// swatch, carrying its output-time settings).
     Inks,
@@ -3008,6 +3305,9 @@ pub enum CollectionName {
     /// a caller should still treat it as an on-demand analysis rather
     /// than something to poll.
     InkCoverage,
+    /// Engine ADR 1039 — the document's symbol definitions
+    /// ([`SymbolSummary`]), in creation order. Additive (rides v78).
+    Symbols,
 }
 
 impl CollectionName {
@@ -3044,12 +3344,14 @@ impl CollectionName {
             Self::TemplateFindings => "templateFindings",
             Self::XmlElements => "xmlElements",
             Self::TrackedChanges => "trackedChanges",
+            Self::Comments => "comments",
             Self::Endnotes => "endnotes",
             Self::Inks => "inks",
             Self::Sections => "sections",
             Self::Stories => "stories",
             Self::NumberingLists => "numberingLists",
             Self::InkCoverage => "inkCoverage",
+            Self::Symbols => "symbols",
         }
     }
 
@@ -3086,12 +3388,14 @@ impl CollectionName {
             "templateFindings" => Self::TemplateFindings,
             "xmlElements" => Self::XmlElements,
             "trackedChanges" => Self::TrackedChanges,
+            "comments" => Self::Comments,
             "endnotes" => Self::Endnotes,
             "inks" => Self::Inks,
             "sections" => Self::Sections,
             "stories" => Self::Stories,
             "numberingLists" => Self::NumberingLists,
             "inkCoverage" => Self::InkCoverage,
+            "symbols" => Self::Symbols,
             _ => return None,
         })
     }
@@ -3532,6 +3836,34 @@ pub struct PageSummary {
     pub margin_inside_pt: f32,
     #[serde(default)]
     pub margin_outside_pt: f32,
+    /// Engine ADR 1022 — the master the page shows (`Page@AppliedMaster`), as
+    /// the build applied it: a generated page's, and a Word section's
+    /// first / odd / even choice. Where a header or footer on the page is
+    /// edited: in that master's frames. `None`: no master. Older workers
+    /// omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_master: Option<String>,
+    /// v77 (engine ADR 1011) — the page's top-left on the canvas (its
+    /// artboard position), `[x, y]` pt: where it was placed, else its
+    /// slot in the default vertical stack. `DocumentHandle.pageOriginsPt`
+    /// carries the same values. Older workers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas_origin_pt: Option<[f32; 2]>,
+    /// v77 (engine ADR 1011) — whether the page was placed on the canvas
+    /// (`placePage`); `false` when it sits in its default slot. Additive.
+    #[serde(default)]
+    pub canvas_placed: bool,
+    /// v77 (engine ADR 1011) — the page's `GeometricBounds` in its own
+    /// coordinates, `[top, left, bottom, right]` pt: what `resizePage`
+    /// writes, so a host resizing an artboard from any edge moves the
+    /// edges it means. Absent for a generated page and from older workers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bounds_pt: Option<[f32; 4]>,
+    /// v78 rider (engine ADR 1026) — the master items the page hides
+    /// (`Page@OverrideList`): those it holds its own copies of, or does not
+    /// show. Empty when none; older workers omit it.
+    #[serde(default)]
+    pub override_list: Vec<String>,
 }
 
 /// panels.md gaps 9/10/19 — one `<Section>` definition. Backs
@@ -3575,6 +3907,36 @@ pub struct MasterPageSummary {
     pub self_id: String,
     pub label: String,
     pub page_count: u32,
+    /// v78 rider (engine ADR 1026) — the master's pages: each page's id,
+    /// size, the master it is based on (its `AppliedMaster`), its override
+    /// list and its plugin metadata. Older workers omit it.
+    #[serde(default)]
+    pub pages: Vec<MasterPageEntry>,
+    /// v78 rider (engine ADR 1026) — the master's items as scene-tree rows,
+    /// in stacking order, with their plugin metadata: what `tree` gives
+    /// for a page. Older workers omit it.
+    #[serde(default)]
+    pub items: Vec<SceneTreeNode>,
+}
+
+/// v78 rider (engine ADR 1026) — one page of a master spread.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MasterPageEntry {
+    pub self_id: String,
+    /// `[width, height]` in points.
+    pub size_pt: [f32; 2],
+    /// The master this master is based on (the page's `AppliedMaster`).
+    #[serde(default)]
+    pub applied_master: Option<String>,
+    /// The items of the masters below it that this master hides.
+    #[serde(default)]
+    pub override_list: Vec<String>,
+    /// The page's `x-paged:` plugin metadata (a layout's name, type and
+    /// preserve flag in a deck).
+    #[serde(default)]
+    pub plugin_metadata: Vec<PluginMetadataEntry>,
 }
 
 /// SDK Phase 5 (v1 sweep) — one cell-style summary. Backs
@@ -3763,6 +4125,10 @@ pub struct HyperlinkSummary {
     pub destination_url: Option<String>,
     #[serde(default)]
     pub destination_page: Option<String>,
+    /// v78 rider (engine ADR 1026) — the page item the link starts from,
+    /// when its source is an item (`insertItemHyperlink`) rather than text.
+    #[serde(default)]
+    pub source_item: Option<String>,
 }
 
 /// SDK Phase 5 (v1 sweep) — one `<Bookmark>` summary. Backs
@@ -3902,6 +4268,85 @@ pub struct TrackedChangeSummary {
     pub date: Option<String>,
     /// The text it inserted or deleted, paragraphs separated by U+000D.
     pub text: String,
+    /// Engine ADR 1040 — the change's id (absent for an InDesign deletion,
+    /// which is addressed by its offset). Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Engine ADR 1040 — `insert`, `delete`, `format`, `paraProps`,
+    /// `insertMark` or `deleteMark`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Engine ADR 1040 — the story char offset past the change's last
+    /// character (`offset` is its first).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<u32>,
+    /// Engine ADR 1040 — the paragraph a paragraph or mark change is on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paragraph: Option<u32>,
+}
+
+/// Engine ADR 1020 — one comment. Backs `documentCollection:comments`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentSummary {
+    pub id: String,
+    pub story_id: String,
+    /// The thread's root, for a reply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// The story char range the thread covers (a root's; a reply reports
+    /// its root's). Absent when the commented text is gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<u32>,
+    /// The commented text.
+    pub anchor_text: String,
+    /// The comment's text, paragraphs separated by `\n`.
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initials: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    pub resolved: bool,
+}
+
+/// Engine ADR 1040 — a tracked change as the content read names it.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeContent {
+    pub id: String,
+    /// `insert`, `delete`, `format` or `paraProps`.
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+}
+
+/// Engine ADR 1040 — a run's tracked formatting change: the change and the
+/// run's formatting before it (`before.text` is empty).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FormatChangeContent {
+    pub change: ChangeContent,
+    pub before: Box<RunContent>,
+}
+
+/// Engine ADR 1040 — a paragraph's tracked formatting change: the change
+/// and the paragraph style it had before.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PropsChangeContent {
+    pub change: ChangeContent,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_paragraph_style: Option<String>,
 }
 
 /// SDK Phase 5 (v1 sweep) — one `<ConditionSet>` definition. Backs
@@ -3954,6 +4399,29 @@ pub struct ConditionSummary {
 /// `documentCollection:numberingLists`. The editor's list-definitions
 /// surface renders this; `continue_across_stories` is the flag that
 /// drives cross-story numbering continuity in the renderer.
+/// Engine ADR 1039 — one symbol definition, as the `symbols` collection
+/// lists it.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolSummary {
+    /// The id the symbol ops take (`Symbol/u1`).
+    pub id: String,
+    pub name: String,
+    /// Bumped by every redefinition of its artwork.
+    pub revision: u64,
+    /// The artwork's box in symbol space, `[top, left, bottom, right]`
+    /// pt (the registration point is the origin).
+    pub bounds: [f32; 4],
+    /// Its 9-slice guides, `[left, top, right, bottom]`, when set.
+    #[serde(default)]
+    pub nine_slice: Option<[f32; 4]>,
+    /// How many page items the artwork holds (roots).
+    pub item_count: u32,
+    /// The instances on the document's spreads, as `instance:<id>`.
+    pub instances: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
@@ -4096,11 +4564,27 @@ pub struct StorySummary {
     /// older client that ignores it still reads the `overset` flag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overset_at: Option<OversetAt>,
+    /// The table cells in this story whose text does not fit their row, each
+    /// by its table and template row and column (data ADR 564). Empty when
+    /// none does. Additive on 77 (governance rule 1).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overset_cells: Vec<OversetCellAt>,
     /// v65 (thoughts ADR 026) — the story's grow rule, in the shape
     /// `Mutation::SetFlowGrowRule` takes (`grow` is always `true` here:
     /// a cleared rule reads as `None`). `None` = a fixed chain.
     #[serde(default)]
     pub grow_rule: Option<StoryGrowRule>,
+}
+
+/// One table cell whose text does not fit its row ([`StorySummary::overset_cells`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct OversetCellAt {
+    /// The table's `Self`.
+    pub table: String,
+    pub row: u32,
+    pub column: u32,
 }
 
 /// v65 — a story's grow rule on the read side ([`StorySummary::grow_rule`]).
@@ -4116,6 +4600,24 @@ pub struct StoryGrowRule {
     pub max_pages: Option<u32>,
     /// Generated frames copy the chain's last frame's text-frame options.
     pub copy_frame_options: bool,
+    /// Engine ADR 1022 — the chain's pages' master (the odd pages' when
+    /// `evenMaster` is set); absent when the rule names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+    /// Engine ADR 1022 — the first page's master.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_master: Option<String>,
+    /// Engine ADR 1022 — the even pages' master.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub even_master: Option<String>,
+    /// Engine ADR 1022 — where the chain's first page must fall; absent for
+    /// any page (`newPage`).
+    #[serde(default, skip_serializing_if = "is_new_page_start")]
+    pub section_start: paged_wire::SectionStartSpec,
+}
+
+fn is_new_page_start(s: &paged_wire::SectionStartSpec) -> bool {
+    *s == paged_wire::SectionStartSpec::NewPage
 }
 
 /// DOC-03 (v54) — a story's full CONTENT: its paragraphs, each with its runs'
@@ -4132,6 +4634,30 @@ pub struct StoryContent {
     pub self_id: String,
     /// Paragraphs in body order.
     pub paragraphs: Vec<ParagraphContent>,
+    /// Engine ADR 1022 — the story's named text anchors (Word's
+    /// bookmarks), each at its paragraph and character offset in it. A
+    /// content plugin writes them back as its own format's bookmarks.
+    /// Additive on 77.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub text_anchors: Vec<TextAnchorContent>,
+    /// Engine ADR 1020 — the story's comments (`storyId` is this story).
+    /// Additive on 77.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<CommentSummary>,
+}
+
+/// Engine ADR 1022 — one named text anchor of a story (a
+/// `HyperlinkTextDestination` in its text).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct TextAnchorContent {
+    pub self_id: String,
+    pub name: String,
+    /// Index of the paragraph it stands in.
+    pub paragraph: u32,
+    /// Its character offset in that paragraph.
+    pub offset: u32,
 }
 
 /// DOC-03 — one paragraph's applied style + its runs.
@@ -4143,6 +4669,17 @@ pub struct ParagraphContent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paragraph_style: Option<String>,
     pub runs: Vec<RunContent>,
+    /// Engine ADR 1022 — the table of contents style this paragraph is an
+    /// entry of (`Paragraph.toc`), when it is one. Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toc: Option<String>,
+    /// Engine ADR 1040 — the paragraph mark's tracked insertion or
+    /// deletion. Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark_change: Option<ChangeContent>,
+    /// Engine ADR 1040 — the paragraph's tracked formatting change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub props_change: Option<PropsChangeContent>,
 }
 
 /// DOC-03 — one run's text + its applied character style + its DIRECT character
@@ -4176,6 +4713,27 @@ pub struct RunContent {
     pub position: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tracking: Option<f32>,
+    /// The text variable this run is an instance of (`TextVariable/<id>`),
+    /// when it is one; the run's `text` is the variable's current value.
+    /// Additive on 76 (governance rule 1): data ADR 564 finds every story a
+    /// data field's text variable is in, a copy pasted by hand included.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_variable: Option<String>,
+    /// Engine ADR 1022 — the Word field this run is the result of (its
+    /// instruction, `PAGEREF _Ref1 \h`), when it is one; the run's `text`
+    /// is the field's result. Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_code: Option<String>,
+    /// Engine ADR 1040 — the tracked insertion or deletion this run is.
+    /// Additive on 77.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<ChangeContent>,
+    /// Engine ADR 1040 — the run's tracked formatting change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_change: Option<FormatChangeContent>,
+    /// Engine ADR 1020 — the comment threads whose range covers the run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<String>,
 }
 
 /// Inspector P1 — one node in the scene tree. Children are nested
@@ -4567,6 +5125,7 @@ mod tests {
             page_count: 2,
             page_ids: vec![PageId("p1".into()), PageId("p2".into())],
             page_sizes_pt: vec![(612.0, 792.0), (612.0, 792.0)],
+            page_origins_pt: vec![(0.0, 0.0), (0.0, 816.0)],
             stats: crate::model::DocumentStats {
                 spreads: 1,
                 pages: 2,
@@ -4615,10 +5174,13 @@ mod tests {
                 format: Default::default(),
                 background: Default::default(),
                 trim: false,
+                quality: None,
+                story: None,
             },
         };
         let json = serde_json::to_string(&msg).unwrap();
         // A v1 request serializes as it did before ADR 338.
+        assert!(!json.contains("\"story\""), "{json}");
         assert!(!json.contains("\"only\""), "{json}");
         assert!(!json.contains("\"format\""), "{json}");
         assert!(!json.contains("\"background\""), "{json}");
@@ -4792,6 +5354,10 @@ mod tests {
                 grow: true,
                 max_pages: Some(12),
                 copy_frame_options: Some(true),
+                master: Some("ud1".into()),
+                first_master: Some("uf1".into()),
+                even_master: Some("ue1".into()),
+                section_start: Some(paged_wire::SectionStartSpec::OddPage),
             },
             Mutation::ActivateConditionSet {
                 set: "ConditionSet/Print".into(),
@@ -4833,6 +5399,97 @@ mod tests {
                 other => panic!("unexpected: {other:?}"),
             }
         }
+    }
+
+    /// Engine ADR 1022 — the Word document-structure mutations survive the
+    /// mutate envelope, field for field.
+    #[test]
+    fn word_structure_mutations_round_trip_through_the_mutate_envelope() {
+        let muts = vec![
+            Mutation::UpdateFields {
+                story_id: Some("u1".into()),
+                offset: Some(3),
+                now: Some("2026-10-25T09:30:00".into()),
+            },
+            Mutation::InsertTextAnchor {
+                story_id: "u1".into(),
+                offset: 4,
+                content_offset: Some(5),
+                name: "Here".into(),
+            },
+            Mutation::DeleteTextAnchor {
+                anchor_id: "HyperlinkTextDestination/u9".into(),
+            },
+            Mutation::InsertCrossReference {
+                story_id: "u1".into(),
+                offset: 0,
+                content_offset: None,
+                target: paged_wire::CrossReferenceTarget {
+                    bookmark: None,
+                    story_id: Some("u2".into()),
+                    paragraph: Some(3),
+                },
+                refer_to: paged_wire::CrossReferenceKind::AboveBelow,
+                hyperlink: Some(false),
+            },
+            Mutation::InsertTableOfContents {
+                story_id: "u1".into(),
+                offset: 0,
+                content_offset: Some(0),
+                levels: vec![paged_wire::TocLevelSpec {
+                    style: "ParagraphStyle/Heading 1".into(),
+                    level: 1,
+                }],
+                title: Some("Contents".into()),
+                toc_style_name: None,
+                page_numbers: Some(true),
+                leader: Some(".".into()),
+                tab_position: Some(450.0),
+            },
+            Mutation::InsertIndexMarker {
+                story_id: "u1".into(),
+                offset: 7,
+                content_offset: None,
+                topic: vec!["Fruit".into(), "Pears".into()],
+                sort_order: None,
+            },
+            Mutation::InsertField {
+                story_id: "u1".into(),
+                offset: 0,
+                field: paged_mutate::operation::FieldKind::Word {
+                    code: r"PAGEREF _Ref1 \h".into(),
+                    result: Some("4".into()),
+                },
+                content_offset: None,
+            },
+        ];
+        for m in muts {
+            let env = MainToWorker {
+                seq: 1,
+                protocol: PROTOCOL_VERSION,
+                kind: MainToWorkerKind::Mutate(m.clone()),
+            };
+            let json = serde_json::to_string(&env).unwrap();
+            let back: MainToWorker = serde_json::from_str(&json).unwrap();
+            match back.kind {
+                MainToWorkerKind::Mutate(m2) => assert_eq!(
+                    serde_json::to_string(&m2).unwrap(),
+                    serde_json::to_string(&m).unwrap(),
+                    "{json}"
+                ),
+                other => panic!("unexpected: {other:?}"),
+            }
+        }
+        // The camelCase spelling a host writes.
+        let json = r#"{"op":"insertCrossReference","args":{"storyId":"u1","offset":0,"target":{"bookmark":"Here"},"referTo":"pageNumber"}}"#;
+        let m: Mutation = serde_json::from_str(json).expect("reads");
+        assert!(matches!(
+            m,
+            Mutation::InsertCrossReference {
+                refer_to: paged_wire::CrossReferenceKind::PageNumber,
+                ..
+            }
+        ));
     }
 
     /// W1.2 — `MoveFrame` survives the mutate envelope with its fields
@@ -4892,8 +5549,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v76() {
-        assert_eq!(PROTOCOL_VERSION.0, 76);
+    fn protocol_version_is_v78() {
+        assert_eq!(PROTOCOL_VERSION.0, 78);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the
@@ -4956,6 +5613,7 @@ mod tests {
             mask_id: ElementId::Polygon("p1".into()),
             mask_type: Some("alpha".into()),
             invert: Some(true),
+            clip: None,
         };
         let json = serde_json::to_string(&apply_mask).unwrap();
         assert!(

@@ -529,6 +529,14 @@ export async function pickBrushColour(
 
 export async function armTool(ctx: PageContext, toolId: string): Promise<void> {
   await ctx.doc.runCommand(`paged.tool.activate.${toolId}`).catch(() => {});
+  // A gesture sent before the rail shows the tool pressed can reach the
+  // previous tool: on a loaded runner the first stroke after arming landed
+  // nothing (a marquee with no selection, a brush stroke of one dab).
+  await ctx.page
+    .locator(`[data-tool="${toolId}"][aria-pressed="true"]`)
+    .first()
+    .waitFor({ timeout: 5_000 })
+    .catch(() => {});
 }
 
 /** The Selection readout, as the ENGINE reports it (coverage %), null

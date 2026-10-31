@@ -12,3 +12,7 @@ workspace = true
 
 [dependencies]
 serde.workspace = true
+# The shared OOXML foundation without its typed DOM: the DrawingML reader's
+# authored IR a picture keeps (serde derives on), and the HSL arithmetic of
+# Word's theme tint and shade (doc ADR 618).
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }

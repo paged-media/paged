@@ -152,6 +152,7 @@ fn offset_path_answers_clockwise_whichever_way_the_input_ran() {
                             delta,
                             join: join.to_string(),
                             miter_limit: 4.0,
+                            side: None,
                             prev_anchors: None,
                             prev_subpath_starts: None,
                             prev_subpath_open: None,

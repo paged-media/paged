@@ -1,0 +1,135 @@
+{
+  "fixture": "filters-distort",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/filters-distort.jsx",
+    "script_sha256": "7d3bf193cc00202feb3d714137eeaf91c7d54acf5b565891a435eb4a262074c0",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-25T06:56:45.049Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "identity",
+      "params": {},
+      "output": "filters-distort/identity.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "polar-rect-to-polar",
+      "params": {
+        "conversion": "rect-to-polar"
+      },
+      "output": "filters-distort/polar-rect-to-polar.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "polar-polar-to-rect",
+      "params": {
+        "conversion": "polar-to-rect"
+      },
+      "output": "filters-distort/polar-polar-to-rect.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "ripple-100-medium",
+      "params": {
+        "amount": 100,
+        "size": "medium"
+      },
+      "output": "filters-distort/ripple-100-medium.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "ripple-300-large",
+      "params": {
+        "amount": 300,
+        "size": "large"
+      },
+      "output": "filters-distort/ripple-300-large.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "zigzag-30-5-around",
+      "params": {
+        "amount": 30,
+        "ridges": 5,
+        "style": "around-centre"
+      },
+      "output": "filters-distort/zigzag-30-5-around.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "zigzag-30-5-out",
+      "params": {
+        "amount": 30,
+        "ridges": 5,
+        "style": "out-from-centre"
+      },
+      "output": "filters-distort/zigzag-30-5-out.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "zigzag-30-5-pond",
+      "params": {
+        "amount": 30,
+        "ridges": 5,
+        "style": "pond-ripples"
+      },
+      "output": "filters-distort/zigzag-30-5-pond.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "shear-bow-wrap",
+      "params": {
+        "curve": [
+          [
+            0,
+            0
+          ],
+          [
+            32,
+            128
+          ],
+          [
+            0,
+            255
+          ]
+        ],
+        "undefined_areas": "wrap"
+      },
+      "output": "filters-distort/shear-bow-wrap.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "displace-10-10-stretch-repeat",
+      "params": {
+        "horizontal": 10,
+        "vertical": 10,
+        "map": "colour-sweep (self)",
+        "fit": "stretch",
+        "undefined_areas": "repeat"
+      },
+      "output": "filters-distort/displace-10-10-stretch-repeat.png",
+      "profile": "none",
+      "bits": 16,
+      "files": [
+        "filters-distort/displace-map.psd"
+      ]
+    }
+  ]
+}

@@ -862,6 +862,8 @@ function validateManifest(manifest, manifestDir) {
             "objectTypes",
             "importers",
             "exporters",
+            "presentations",
+            "views",
             "partTypes",
             "objectModel",
           ].includes(key)
@@ -870,7 +872,14 @@ function validateManifest(manifest, manifestDir) {
         }
       }
       const ns = typeof manifest.id === "string" ? `${manifest.id}.` : null;
-      for (const kind of ["tools", "commands", "importers", "exporters"]) {
+      for (const kind of [
+        "tools",
+        "commands",
+        "importers",
+        "exporters",
+        "presentations",
+        "views",
+      ]) {
         const ids = contributes[kind];
         if (ids === undefined) continue;
         if (!isStringArray(ids)) {

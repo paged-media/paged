@@ -1,0 +1,7 @@
+{
+ "oracle": "Microsoft PowerPoint 16.113.3",
+ "recorded": "2026-10-25",
+ "authored_by": "scripts/fixtures/comments.seed.py on placeholders.pptx, re-saved by scripts/fixtures/resave.applescript",
+ "slides": 10,
+ "comments": "slide 1: modern, positioned, one reply; slide 2: modern, resolved, anchored to shape 4; slide 3: a legacy comment PowerPoint converted to a modern one on save"
+}

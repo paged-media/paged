@@ -158,13 +158,10 @@ pub fn apply_tint(rgb: u32, tint: f64) -> u32 {
     if tint == 0.0 {
         return rgb & 0xFF_FFFF;
     }
-    let (h, s, l) = rgb_to_hsl(rgb);
-    let l = if tint < 0.0 {
-        l * (1.0 + tint)
-    } else {
-        l * (1.0 - tint) + tint
-    };
-    hsl_to_rgb(h, s, l.clamp(0.0, 1.0))
+    let c = |sh: u32| ((rgb >> sh) & 0xFF) as f64 / 255.0;
+    let (r, g, b) = paged_ooxml::colour::excel_tint(c(16), c(8), c(0), tint);
+    let q = |v: f64| (v * 255.0).round().clamp(0.0, 255.0) as u32;
+    (q(r) << 16) | (q(g) << 8) | q(b)
 }
 
 /// DrawingML `lumMod` / `lumOff` (fractions) as an Excel tint.
@@ -174,61 +171,6 @@ pub fn tint_of(lum_mod: Option<f64>, lum_off: Option<f64>) -> f64 {
         (Some(m), _) => m - 1.0,
         _ => 0.0,
     }
-}
-
-fn rgb_to_hsl(rgb: u32) -> (f64, f64, f64) {
-    let r = ((rgb >> 16) & 0xFF) as f64 / 255.0;
-    let g = ((rgb >> 8) & 0xFF) as f64 / 255.0;
-    let b = (rgb & 0xFF) as f64 / 255.0;
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let l = (max + min) / 2.0;
-    if max == min {
-        return (0.0, 0.0, l);
-    }
-    let d = max - min;
-    let s = if l > 0.5 {
-        d / (2.0 - max - min)
-    } else {
-        d / (max + min)
-    };
-    let h = if max == r {
-        ((g - b) / d).rem_euclid(6.0)
-    } else if max == g {
-        (b - r) / d + 2.0
-    } else {
-        (r - g) / d + 4.0
-    } / 6.0;
-    (h, s, l)
-}
-
-fn hsl_to_rgb(h: f64, s: f64, l: f64) -> u32 {
-    let q = if l < 0.5 {
-        l * (1.0 + s)
-    } else {
-        l + s - l * s
-    };
-    let p = 2.0 * l - q;
-    let ch = |t: f64| {
-        let t = t.rem_euclid(1.0);
-        let v = if t < 1.0 / 6.0 {
-            p + (q - p) * 6.0 * t
-        } else if t < 0.5 {
-            q
-        } else if t < 2.0 / 3.0 {
-            p + (q - p) * (2.0 / 3.0 - t) * 6.0
-        } else {
-            p
-        };
-        (v * 255.0).round().clamp(0.0, 255.0) as u32
-    };
-    let (r, g, b) = if s == 0.0 {
-        let v = (l * 255.0).round() as u32;
-        (v, v, v)
-    } else {
-        (ch(h + 1.0 / 3.0), ch(h), ch(h - 1.0 / 3.0))
-    };
-    (r << 16) | (g << 8) | b
 }
 
 /// The legacy indexed palette (Excel's default 64 colours; 64 = system
@@ -261,7 +203,10 @@ mod tests {
         assert_eq!(apply_tint(0x4472C4, 0.0), 0x4472C4);
         let dark = apply_tint(0x4472C4, -0.4);
         let light = apply_tint(0x4472C4, 0.4);
-        let lum = |c: u32| rgb_to_hsl(c).2;
+        let lum = |c: u32| {
+            let f = |sh: u32| ((c >> sh) & 0xFF) as f64 / 255.0;
+            paged_ooxml::colour::rgb_to_hsl(f(16), f(8), f(0)).2
+        };
         assert!(lum(dark) < lum(0x4472C4) && lum(light) > lum(0x4472C4));
         assert_eq!(apply_tint(0x808080, -1.0), 0x000000);
         assert_eq!(apply_tint(0x808080, 1.0), 0xFFFFFF);

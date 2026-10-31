@@ -1026,6 +1026,31 @@ fn a_range_after_a_bare_word_keeps_its_space__feat__sheet_parser_dialect() {
     }
 }
 
+/// `word:Sheet!A1` is a sheet span (`Sheet1:Sheet2!A1`), so the range of a
+/// name with a sheet-qualified reference keeps a space before its `:` even
+/// where the name is no column: `Dtaa\r:Data!2:2` printed as
+/// `Dtaa:Data!2:2`, which reads back as an unknown sheet span (found by the
+/// parse_formula fuzz target; the input is
+/// `fuzz/regressions/parse_formula-name-range-prints-as-sheet-span.txt`).
+#[test]
+fn a_range_of_a_name_and_a_sheet_reference_keeps_its_space__feat__sheet_parser_dialect() {
+    let fuzz =
+        include_str!("../../fuzz/regressions/parse_formula-name-range-prints-as-sheet-span.txt");
+    let f = p(fuzz);
+    let printed = pr(&f);
+    assert_eq!(pr(&p(&printed)), printed, "{printed}");
+    for (input, canonical) in [
+        ("Dtaa :Data!A1", "Dtaa :Data!A1"),
+        ("Dtaa:\rData!2:2", "Dtaa :Data!2:2"),
+        ("Brutto :'Sheet 2'!B2", "Brutto :'Sheet 2'!B2"),
+        // A sheet span itself prints as it was.
+        ("SUM(Sheet1:Data!A1)", "SUM(Sheet1:Data!A1)"),
+    ] {
+        assert_eq!(roundtrip(input), canonical, "{input}");
+        assert_eq!(p(canonical).root, p(input).root, "{input}");
+    }
+}
+
 #[test]
 fn whole_bands_rewrite_on_structural_edits__feat__sheet_parser_dialect() {
     let ins_rows = Edit::InsertRows {
@@ -1471,4 +1496,30 @@ fn eta_reduced_function_names_round_trip__feat__sheet_fn_lookup_array() {
     assert_eq!(back.root, f.root);
     // An unknown name that is no function keeps its spelling.
     assert_eq!(print_ooxml(&p("Bogus+1"), 0, &Ctx::new()), "Bogus+1");
+}
+
+/// An unknown function keeps its spelling (W1.0), and a `(args)` suffix
+/// after it is a call of its result: `NOSUCH(x,x)(1,2)`. The printer
+/// parenthesized that callee, `(NOSUCH(x,x))(1,2)`, which the parser does
+/// not read, so print/parse was not a fixpoint (found by the parse_formula
+/// fuzz target; the input is
+/// `fuzz/regressions/parse_formula-unknown-func-call-print-not-reparsable.txt`).
+#[test]
+fn a_call_of_an_unknown_function_prints_bare__feat__sheet_parser_dialect() {
+    let fuzz = "LAMBDZA(x,x)(1,2)\n";
+    let f = p(fuzz);
+    assert_eq!(pr(&f), "LAMBDZA(x,x)(1,2)");
+    assert_eq!(p(&pr(&f)).root, f.root);
+    for (input, canonical) in [
+        (
+            "LOGICHISQ.DIST(0,2,FALSENV)(1,\n0,1)\n",
+            "LOGICHISQ.DIST(0,2,FALSENV)(1,0,1)",
+        ),
+        ("LAMB(a,ISOMIMITTED(a))(0)\n", "LAMB(a,ISOMIMITTED(a))(0)"),
+        ("NOSUCH(1)(2)(3)", "NOSUCH(1)(2)(3)"),
+        ("LAMBDA(x,x+1)(2)", "LAMBDA(x,x+1)(2)"),
+    ] {
+        assert_eq!(roundtrip(input), canonical, "{input}");
+        assert_eq!(p(canonical).root, p(input).root, "{input}");
+    }
 }

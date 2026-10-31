@@ -1,0 +1,9 @@
+{
+  "kind": "struct",
+  "fields": {
+    "bytes": {
+      "kind": "bytes",
+      "mime": ["application/pdf", "application/illustrator"]
+    }
+  }
+}

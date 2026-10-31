@@ -29,7 +29,7 @@
 //!
 //! ```text
 //! +-----+-----+-----+-----+
-//! | 0   | 4   | 8   | 12  |   scale  tx  ty  unused
+//! | 0   | 4   | 8   | 12  |   scale  tx  ty  rotation (v77)
 //! +-----+-----+-----+-----+
 //! | 16  | 20  | 24  | 28  |   generation_lo  generation_hi  unused  unused
 //! +-----+-----+-----+-----+
@@ -68,6 +68,10 @@ pub const CAMERA_SAB_BYTES: usize = 32;
 pub const OFFSET_SCALE: usize = 0;
 pub const OFFSET_TX: usize = 4;
 pub const OFFSET_TY: usize = 8;
+/// v77 (editor ADR 287) — the view rotation (Rotate View), radians,
+/// clockwise on screen, about the document origin:
+/// `viewport = scale · R(rotation) · doc + (tx, ty)`.
+pub const OFFSET_ROTATION: usize = 12;
 pub const OFFSET_GEN_LO: usize = 16;
 pub const OFFSET_GEN_HI: usize = 20;
 
@@ -83,6 +87,9 @@ pub struct CameraSabLayout {
     pub offset_scale: u32,
     pub offset_tx: u32,
     pub offset_ty: u32,
+    /// v77 — additive; a reader that predates it never reads the slot.
+    #[serde(default)]
+    pub offset_rotation: u32,
     pub offset_gen_lo: u32,
     pub offset_gen_hi: u32,
 }
@@ -97,6 +104,7 @@ impl CameraSabLayout {
             offset_scale: OFFSET_SCALE as u32,
             offset_tx: OFFSET_TX as u32,
             offset_ty: OFFSET_TY as u32,
+            offset_rotation: OFFSET_ROTATION as u32,
             offset_gen_lo: OFFSET_GEN_LO as u32,
             offset_gen_hi: OFFSET_GEN_HI as u32,
         }
@@ -111,6 +119,8 @@ pub struct Camera {
     pub scale: f32,
     pub tx: f32,
     pub ty: f32,
+    /// v77 — Rotate View, radians (0 = upright).
+    pub rotation: f32,
 }
 
 impl Camera {
@@ -118,11 +128,16 @@ impl Camera {
         scale: 1.0,
         tx: 0.0,
         ty: 0.0,
+        rotation: 0.0,
     };
 
     /// Transform a document-space point into viewport coordinates.
     pub fn to_viewport(&self, doc: (f32, f32)) -> (f32, f32) {
-        (doc.0 * self.scale + self.tx, doc.1 * self.scale + self.ty)
+        let (s, c) = self.rotation.sin_cos();
+        (
+            self.scale * (c * doc.0 - s * doc.1) + self.tx,
+            self.scale * (s * doc.0 + c * doc.1) + self.ty,
+        )
     }
 
     /// Inverse transform: viewport pixel → document point. The
@@ -130,7 +145,9 @@ impl Camera {
     /// event so it must be branch-free + allocation-free.
     pub fn to_document(&self, view: (f32, f32)) -> (f32, f32) {
         let inv = 1.0 / self.scale;
-        ((view.0 - self.tx) * inv, (view.1 - self.ty) * inv)
+        let (u, v) = ((view.0 - self.tx) * inv, (view.1 - self.ty) * inv);
+        let (s, c) = self.rotation.sin_cos();
+        (c * u + s * v, -s * u + c * v)
     }
 }
 
@@ -171,6 +188,7 @@ impl CameraLayout {
             scale: f32::from_le_bytes(slice4(&self.bytes, OFFSET_SCALE)),
             tx: f32::from_le_bytes(slice4(&self.bytes, OFFSET_TX)),
             ty: f32::from_le_bytes(slice4(&self.bytes, OFFSET_TY)),
+            rotation: f32::from_le_bytes(slice4(&self.bytes, OFFSET_ROTATION)),
         }
     }
 
@@ -182,6 +200,7 @@ impl CameraLayout {
         write_f32(&mut self.bytes, OFFSET_SCALE, cam.scale);
         write_f32(&mut self.bytes, OFFSET_TX, cam.tx);
         write_f32(&mut self.bytes, OFFSET_TY, cam.ty);
+        write_f32(&mut self.bytes, OFFSET_ROTATION, cam.rotation);
         // Bump only after the field writes — matches the SAB
         // protocol the worker reads.
         self.set_generation(cur.wrapping_add(1));
@@ -229,6 +248,7 @@ mod tests {
         assert_eq!(OFFSET_SCALE, 0);
         assert_eq!(OFFSET_TX, 4);
         assert_eq!(OFFSET_TY, 8);
+        assert_eq!(OFFSET_ROTATION, 12);
         assert_eq!(OFFSET_GEN_LO, 16);
         assert_eq!(OFFSET_GEN_HI, 20);
         assert_eq!(CAMERA_SAB_BYTES, 32);
@@ -241,6 +261,7 @@ mod tests {
         assert_eq!(lo.offset_scale, OFFSET_SCALE as u32);
         assert_eq!(lo.offset_tx, OFFSET_TX as u32);
         assert_eq!(lo.offset_ty, OFFSET_TY as u32);
+        assert_eq!(lo.offset_rotation, OFFSET_ROTATION as u32);
         assert_eq!(lo.offset_gen_lo, OFFSET_GEN_LO as u32);
         assert_eq!(lo.offset_gen_hi, OFFSET_GEN_HI as u32);
     }
@@ -252,12 +273,14 @@ mod tests {
             scale: 1.5,
             tx: 100.0,
             ty: -50.25,
+            rotation: 0.5,
         };
         layout.write(cam);
         let back = layout.read();
         assert_eq!(back.scale, 1.5);
         assert_eq!(back.tx, 100.0);
         assert_eq!(back.ty, -50.25);
+        assert_eq!(back.rotation, 0.5);
     }
 
     #[test]
@@ -276,12 +299,31 @@ mod tests {
             scale: 2.0,
             tx: 10.0,
             ty: 20.0,
+            rotation: 0.0,
         };
         let doc = (5.0, 7.0);
         let view = cam.to_viewport(doc);
         let back = cam.to_document(view);
         assert!((back.0 - doc.0).abs() < 1e-6);
         assert!((back.1 - doc.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_rotated_view_maps_round_trip_and_turns_clockwise() {
+        let cam = Camera {
+            scale: 2.0,
+            tx: 10.0,
+            ty: 20.0,
+            rotation: std::f32::consts::FRAC_PI_2,
+        };
+        // +x in the document points down the screen after a quarter turn.
+        let v = cam.to_viewport((1.0, 0.0));
+        assert!(
+            (v.0 - 10.0).abs() < 1e-5 && (v.1 - 22.0).abs() < 1e-5,
+            "{v:?}"
+        );
+        let back = cam.to_document(cam.to_viewport((5.0, 7.0)));
+        assert!((back.0 - 5.0).abs() < 1e-4 && (back.1 - 7.0).abs() < 1e-4);
     }
 
     #[test]

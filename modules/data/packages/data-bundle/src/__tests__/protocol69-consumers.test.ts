@@ -21,9 +21,11 @@ import {
   labelRider,
   labelledVersion,
   sessionVersionPath,
+  splitBase,
 } from "../doc-label";
 import type { DataEngineLike } from "../engine";
 import { commitLoweredVariable } from "../lower";
+import { contentHash } from "../persist";
 import {
   measureWords,
   mergeRecords,
@@ -390,6 +392,43 @@ describe("the session version is named in the document label (protocol 69) [data
     await s.restore();
     // The part does not extend that label (no base): the labelled version.
     expect(h.reads).toEqual(["session.json", sessionVersionPath(hash)]);
+  });
+
+  it("the write the data was applied by names the version holding its applied snapshot [data.plugin.persistence]", async () => {
+    // The payload's `applied` (editor ADR 291) changes when the document is
+    // written from the results. The label that write carries must name the
+    // version with the new snapshot: else the session moves past its label
+    // right after the write, and the next document write (or a reopen)
+    // labels another version than the one the write left.
+    const h = labelHost({ v69: true });
+    let applied = 0;
+    const s = await sessionWith(
+      h.host,
+      fakeEngine({
+        resolve_lowered: () => variable("new"),
+        payload: () => ({
+          bindings: [{ id: "v" }],
+          queries: [],
+          ...(applied > 0 ? { applied: { q: { n: applied } } } : {}),
+        }),
+        mark_rows_applied: () => void applied++,
+      } as never),
+    );
+    s.addVariableBinding("v", "anchor", "q", "a");
+    expect(await s.refreshFields()).toBe(1);
+    expect(applied).toBeGreaterThan(0);
+    const labelled = h.label()!;
+    const writes = h.mutations.length;
+    await h.save();
+    expect(h.mutations.length).toBe(writes);
+    expect(h.label()).toBe(labelled);
+    // The part on save IS the labelled version, snapshot included.
+    const { base, version } = splitBase(h.parts.get("session.json")!);
+    expect(base).toBe(labelled);
+    expect(await contentHash(version)).toBe(labelled);
+    expect(
+      new TextDecoder().decode(h.parts.get(sessionVersionPath(labelled))!),
+    ).toContain('"applied"');
   });
 
   it("an undo that takes the label back reloads the version it names, keeping the engines [data.plugin.persistence]", async () => {

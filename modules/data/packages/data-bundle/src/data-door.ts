@@ -21,6 +21,7 @@ import type {
   DataIssue,
   DataPipelineStep,
   DataPlacement,
+  DataRecordStatus,
   DataRowEdit,
   DataService,
   DataTableInfo,
@@ -68,8 +69,20 @@ export interface DataDoorDeps {
   ): Promise<DataEvaluation>;
   /** A binding's sync state as the engine names it, or null. */
   syncStatusOf(id: string): string | null;
-  /** The page items each binding is placed in, by ADR 131 address. */
-  placements(): Promise<readonly { binding: string; address: string }[]>;
+  /** The page items each binding is placed in, by ADR 131 address, with
+   *  the record a per-record placement shows (editor ADR 291). */
+  placements(): Promise<
+    readonly {
+      binding: string;
+      address: string;
+      record?: number;
+      /** Said when the placement is not a binding's (a merged record). */
+      status?: DataPlacement["status"];
+    }[]
+  >;
+  /** A query's per-record status (editor ADR 291; the engine's
+   *  `record_status`). */
+  recordStatus?(query: string): Promise<DataRecordStatus>;
   /** What may be wrong with the placed content (data ADR 564), read now and
    *  published to the Problems panel. */
   issues(): Promise<readonly DataIssue[]>;
@@ -147,6 +160,16 @@ export function fieldsRead(b: Record<string, unknown>): string[] {
   return [...out];
 }
 
+/** Whether `sql` names `table` as a word (bare or double-quoted). */
+function namesTable(sql: string, table: string): boolean {
+  const quoted = `"${table.replace(/"/g, '""')}"`;
+  if (sql.includes(quoted)) return true;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) return false;
+  return new RegExp(`(^|[^A-Za-z0-9_"])${table}(?![A-Za-z0-9_"])`, "i").test(
+    sql,
+  );
+}
+
 const NO_RECORDS =
   "the data engine has no records door — rebuild it (`bash scripts/build-wasm.sh`)";
 
@@ -205,6 +228,23 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     return trimSql(sql);
   };
   const queryOf = (name: string) => deps.queries().find((q) => q.id === name);
+  // A query is a table to a reader (the Data panel's grid reads
+  // `SELECT … FROM "q"`), but the store holds only the sources and the
+  // transforms: each query the SQL names rides along as a CTE.
+  const withQueries = (sql: string) => {
+    const sources = new Set([...deps.sourceNames(), ...deps.transforms()]);
+    const named = deps
+      .queries()
+      .filter((q) => !sources.has(q.id) && namesTable(sql, q.id));
+    if (named.length === 0) return sql;
+    const ctes = named
+      .map((q) => `"${q.id.replace(/"/g, '""')}" AS (${trimSql(q.sql)})`)
+      .join(", ");
+    const w = /^\s*WITH\s+(RECURSIVE\s+)?/i.exec(sql);
+    return w
+      ? `WITH ${w[1] ?? ""}${ctes}, ${sql.slice(w[0].length)}`
+      : `WITH ${ctes} ${sql}`;
+  };
 
   const statusOf = (id: string): DataBindingStatus["status"] => {
     const raw = deps.syncStatusOf(id);
@@ -278,7 +318,7 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
       return d.records(table, range?.offset ?? 0, range?.limit ?? 0);
     },
     async query(sql) {
-      return (await store()).queryRecords(guarded(sql));
+      return (await store()).queryRecords(guarded(withQueries(guarded(sql))));
     },
     async write(table, edits: readonly DataRowEdit[]) {
       if (queryOf(table) || deps.transforms().includes(table))
@@ -445,14 +485,25 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     async placements() {
       const out: DataPlacement[] = [];
       for (const p of await deps.placements()) {
-        const record = deps.recordOf?.(p.binding);
+        // A binding resolved at a chosen record (a record dropped on a
+        // design) says it when the engine did not.
+        const record = p.record ?? deps.recordOf?.(p.binding);
         out.push({
           ...p,
-          status: statusOf(p.binding),
+          status: p.status ?? statusOf(p.binding),
           ...(record !== undefined ? { record } : {}),
         });
       }
       return out;
+    },
+    async recordStatus(query) {
+      if (!queryOf(query))
+        throw new Error(
+          `no query "${query}" (a record's status is a query's record)`,
+        );
+      if (!deps.recordStatus)
+        return { query, added: [], changed: [], removed: 0, placed: [] };
+      return deps.recordStatus(query);
     },
     async issues() {
       return deps.issues();

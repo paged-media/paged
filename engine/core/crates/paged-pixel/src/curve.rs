@@ -83,6 +83,14 @@ pub fn curve_lut(points: &[(f32, f32)]) -> [u8; 256] {
 /// second derivatives (e.g. Burden & Faires, Numerical Analysis, §3.5);
 /// no reference reading. Degenerate input as [`curve_lut`].
 pub fn curve_lut_natural(points: &[(f32, f32)]) -> [u8; 256] {
+    curve_natural_f32(points).map(quantize)
+}
+
+/// [`curve_lut_natural`] before it is quantized: the curve at each of the
+/// 256 codes as a float in `[0, 1]` — for a consumer that interpolates
+/// between the codes (a layer style's CONTOUR) and must not step at
+/// 8 bits. Degenerate input as [`curve_lut`].
+pub fn curve_natural_f32(points: &[(f32, f32)]) -> [f32; 256] {
     let mut pts: Vec<(f64, f64)> = points
         .iter()
         .map(|&(i, o)| (f64::from(i.clamp(0.0, 1.0)), f64::from(o.clamp(0.0, 1.0))))
@@ -90,10 +98,10 @@ pub fn curve_lut_natural(points: &[(f32, f32)]) -> [u8; 256] {
     pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(core::cmp::Ordering::Equal));
     pts.dedup_by(|a, b| (a.0 - b.0).abs() < f64::from(f32::EPSILON));
     if pts.is_empty() {
-        return identity_lut();
+        return core::array::from_fn(|k| k as f32 / 255.0);
     }
     if pts.len() == 1 {
-        return [quantize(pts[0].1 as f32); 256];
+        return [pts[0].1.clamp(0.0, 1.0) as f32; 256];
     }
     let n = pts.len() - 1;
     let h: Vec<f64> = (0..n).map(|i| pts[i + 1].0 - pts[i].0).collect();
@@ -122,7 +130,7 @@ pub fn curve_lut_natural(points: &[(f32, f32)]) -> [u8; 256] {
             c[i] = (rhs[k] - next) / diag[k];
         }
     }
-    let mut lut = [0u8; 256];
+    let mut lut = [0f32; 256];
     for (code, slot) in lut.iter_mut().enumerate() {
         let x = code as f64 / 255.0;
         let y = if x <= pts[0].0 {
@@ -136,7 +144,7 @@ pub fn curve_lut_natural(points: &[(f32, f32)]) -> [u8; 256] {
             let d = (c[i + 1] - c[i]) / (3.0 * h[i]);
             pts[i].1 + b * dx + c[i] * dx * dx + d * dx * dx * dx
         };
-        *slot = quantize(y as f32);
+        *slot = (y as f32).clamp(0.0, 1.0);
     }
     lut
 }

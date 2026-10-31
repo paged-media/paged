@@ -37,6 +37,7 @@ import {
   dataMarkersContribution,
   elementOfPlacement,
   markersOf,
+  recordLabel,
 } from "../../src/overlays/data-markers";
 import { CanvasClientProvider } from "../../src/state/canvas-client-context";
 import { setDataDoorSource } from "../../src/state/data-door";
@@ -71,7 +72,7 @@ function fakeClient() {
   return { client: client as unknown as CanvasClient, asked };
 }
 
-function mount(initial: DataPlacement[]) {
+function mount(initial: DataPlacement[], scale = 1) {
   let placements = initial;
   let reads = 0;
   const service: DataService = {
@@ -100,7 +101,7 @@ function mount(initial: DataPlacement[]) {
         <svg>
           <Render
             paged={null as never}
-            camera={{ scale: 1, tx: 0, ty: 0 }}
+            camera={{ scale, tx: 0, ty: 0 }}
             pageRects={pageRects}
           />
         </svg>
@@ -157,6 +158,53 @@ describe("data field markers [editor-shell.data-panel]", () => {
       ["textFrame:u2", "error"],
       ["oval:u3", "ok"],
     ]);
+  });
+
+  test("the records a frame shows, counted from 1, each once", () => {
+    const m = markersOf([
+      { binding: "m", address: "textFrame:u1", status: "linked", record: 2 },
+      { binding: "m", address: "textFrame:u1", status: "linked", record: 2 },
+      { binding: "f", address: "textFrame:u2", status: "linked", record: 4 },
+      { binding: "f", address: "textFrame:u2", status: "stale", record: 1 },
+      { binding: "v", address: "rectangle:u3", status: "linked" },
+    ]);
+    expect([...m].map(([k, v]) => [k, recordLabel(v.records)])).toEqual([
+      ["textFrame:u1", "#3"],
+      ["textFrame:u2", "#2 #5"],
+      ["rectangle:u3", null],
+    ]);
+  });
+
+  test("a placement naming its record labels the bracket, scaled with the camera", async () => {
+    const h = mount(
+      [
+        { binding: "m", address: "textFrame:u1", status: "linked", record: 2 },
+        { binding: "v", address: "rectangle:u2", status: "stale" },
+      ],
+      2,
+    );
+    await act(async () => setViewToggle(h.scope, "dataMarkers", true));
+    await settle();
+    const labels = [
+      ...h.view.container.querySelectorAll("[data-data-marker-record]"),
+    ];
+    // Only the placement that names a record is labelled.
+    expect(
+      labels.map((l) => [
+        l.getAttribute("data-data-marker-record"),
+        l.textContent,
+        l.getAttribute("fill"),
+      ]),
+    ).toEqual([["textFrame:u1", "#3", "var(--status-approved)"]]);
+    // At the frame's top-left corner (page at y 1000), a constant 10 px on
+    // screen at any zoom: the group undoes the camera's scale.
+    expect(labels[0]!.parentElement!.getAttribute("transform")).toBe(
+      "translate(50, 1100) scale(0.5)",
+    );
+    expect(labels[0]!.getAttribute("font-size")).toBe("10");
+    expect(labels[0]!.parentElement!.getAttribute("pointer-events")).toBe(
+      "none",
+    );
   });
 
   test("off: nothing drawn, nothing read; on: brackets in the status colours", async () => {

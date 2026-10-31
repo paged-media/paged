@@ -56,7 +56,25 @@
       "media.paged.draw.tool.pathEraser",
       "media.paged.draw.tool.join",
       "media.paged.draw.tool.star",
-      "media.paged.draw.tool.flare"
+      "media.paged.draw.tool.flare",
+      "media.paged.draw.tool.warp",
+      "media.paged.draw.tool.twirl",
+      "media.paged.draw.tool.pucker",
+      "media.paged.draw.tool.bloat",
+      "media.paged.draw.tool.scallop",
+      "media.paged.draw.tool.crystallize",
+      "media.paged.draw.tool.wrinkle",
+      "media.paged.draw.tool.puppetWarp",
+      "media.paged.draw.tool.perspectiveGrid",
+      "media.paged.draw.tool.perspectiveSelect",
+      "media.paged.draw.tool.symbolSprayer",
+      "media.paged.draw.tool.symbolShifter",
+      "media.paged.draw.tool.symbolScruncher",
+      "media.paged.draw.tool.symbolSizer",
+      "media.paged.draw.tool.symbolSpinner",
+      "media.paged.draw.tool.symbolStainer",
+      "media.paged.draw.tool.symbolScreener",
+      "media.paged.draw.tool.symbolNineSlice"
     ],
     "panels": [
       "media.paged.draw.panel.appearance",
@@ -155,6 +173,8 @@
       "media.paged.draw.command.resetSymbolTransform",
       "media.paged.draw.command.renameSymbol",
       "media.paged.draw.command.deleteSymbol",
+      "media.paged.draw.command.replaceSymbol",
+      "media.paged.draw.command.symbolOptions",
       "media.paged.draw.command.makeLivePaintGroup",
       "media.paged.draw.command.fillLivePaintFace",
       "media.paged.draw.command.regenerateLivePaint",
@@ -174,6 +194,21 @@
       "media.paged.draw.command.shaperStroke",
       "media.paged.draw.command.insertStar",
       "media.paged.draw.command.insertFlare",
+      "media.paged.draw.command.liquifyStroke",
+      "media.paged.draw.command.puppetWarp",
+      "media.paged.draw.command.puppetWarpTool",
+      "media.paged.draw.command.perspectiveShowGrid",
+      "media.paged.draw.command.perspectiveHideGrid",
+      "media.paged.draw.command.perspectiveLockGrid",
+      "media.paged.draw.command.perspectiveUnlockGrid",
+      "media.paged.draw.command.perspectiveOnePoint",
+      "media.paged.draw.command.perspectiveTwoPoint",
+      "media.paged.draw.command.perspectiveThreePoint",
+      "media.paged.draw.command.perspectiveSetPlane",
+      "media.paged.draw.command.attachToPerspective",
+      "media.paged.draw.command.releaseFromPerspective",
+      "media.paged.draw.command.moveOnPerspective",
+      "media.paged.draw.command.drawOnPerspective",
       "media.paged.draw.command.widthProfile",
       "media.paged.draw.command.updateLinkedRecipes",
       "media.paged.draw.command.selectSameFill",
@@ -210,8 +245,16 @@
       "media.paged.draw.command.recolorArtworkOptions",
       "media.paged.draw.command.applyGuideColor"
     ],
-    "importers": ["media.paged.draw.importer.svg"],
-    "exporters": ["media.paged.draw.exporter.svg"],
+    "importers": [
+      "media.paged.draw.importer.svg",
+      "media.paged.draw.importer.dxf",
+      "media.paged.draw.importer.ai",
+      "media.paged.draw.importer.eps"
+    ],
+    "exporters": [
+      "media.paged.draw.exporter.svg",
+      "media.paged.draw.exporter.dxf"
+    ],
     "partTypes": [
       {
         "type": "graphicStyleLibrary",
@@ -251,6 +294,12 @@
       },
       {
         "type": "objectsOnPathRecipe",
+        "role": "spec",
+        "format": "json",
+        "linkable": false
+      },
+      {
+        "type": "perspectiveGrid",
         "role": "spec",
         "format": "json",
         "linkable": false
@@ -2394,6 +2443,46 @@
           }
         },
         {
+          "id": "media.paged.draw.command.replaceSymbol",
+          "title": "Replace symbol",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "symbol": {
+                "kind": "text"
+              },
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.symbolOptions",
+          "title": "Symbol options",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "symbol": {
+                "kind": "text"
+              },
+              "name": {
+                "kind": "text"
+              },
+              "nineSlice": {
+                "kind": "list",
+                "of": {
+                  "kind": "length"
+                }
+              }
+            }
+          }
+        },
+        {
           "id": "media.paged.draw.command.renameSymbol",
           "title": "Rename symbol",
           "args": {
@@ -4022,6 +4111,306 @@
               },
               "stroke": {
                 "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.liquifyStroke",
+          "title": "Liquify stroke",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "page": {
+                "kind": "text"
+              },
+              "kind": {
+                "kind": "enum",
+                "members": [
+                  "warp",
+                  "twirl",
+                  "pucker",
+                  "bloat",
+                  "scallop",
+                  "crystallize",
+                  "wrinkle"
+                ]
+              },
+              "path": {
+                "kind": "list",
+                "of": {
+                  "kind": "point"
+                }
+              },
+              "width": {
+                "kind": "length"
+              },
+              "height": {
+                "kind": "length"
+              },
+              "angle": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "intensity": {
+                "kind": "number"
+              },
+              "detail": {
+                "kind": "number",
+                "integer": true
+              },
+              "simplify": {
+                "kind": "number"
+              },
+              "twirlRate": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "complexity": {
+                "kind": "number",
+                "integer": true
+              },
+              "horizontal": {
+                "kind": "number"
+              },
+              "vertical": {
+                "kind": "number"
+              },
+              "affectAnchors": {
+                "kind": "bool"
+              },
+              "affectIn": {
+                "kind": "bool"
+              },
+              "affectOut": {
+                "kind": "bool"
+              },
+              "seed": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.puppetWarp",
+          "title": "Puppet warp",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "holds": {
+                "kind": "list",
+                "of": {
+                  "kind": "point"
+                }
+              },
+              "from": {
+                "kind": "point"
+              },
+              "to": {
+                "kind": "point"
+              },
+              "autoPins": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.puppetWarpTool",
+          "title": "Puppet warp tool",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.draw.command.perspectiveShowGrid",
+          "title": "Perspective show grid",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.perspectiveHideGrid",
+          "title": "Perspective hide grid",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.perspectiveLockGrid",
+          "title": "Perspective lock grid",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.perspectiveUnlockGrid",
+          "title": "Perspective unlock grid",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.perspectiveOnePoint",
+          "title": "Perspective one point",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.perspectiveTwoPoint",
+          "title": "Perspective two point",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.perspectiveThreePoint",
+          "title": "Perspective three point",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.perspectiveSetPlane",
+          "title": "Perspective set plane",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              },
+              "plane": {
+                "kind": "enum",
+                "members": ["left", "right", "floor", "none"]
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.attachToPerspective",
+          "title": "Attach to perspective",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.releaseFromPerspective",
+          "title": "Release from perspective",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.moveOnPerspective",
+          "title": "Move on perspective",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "from": {
+                "kind": "point"
+              },
+              "to": {
+                "kind": "point"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.drawOnPerspective",
+          "title": "Draw on perspective",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "page": {
+                "kind": "text"
+              },
+              "shape": {
+                "kind": "enum",
+                "members": ["rectangle", "ellipse"]
+              },
+              "from": {
+                "kind": "point"
+              },
+              "to": {
+                "kind": "point"
               }
             }
           }

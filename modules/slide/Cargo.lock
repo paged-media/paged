@@ -9,16 +9,61 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "aho-corasick"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
+name = "autocfg"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
 name = "base64"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
+name = "bit-set"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+dependencies = [
+ "bit-vec 0.8.0",
+]
+
+[[package]]
+name = "bit-set"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
+dependencies = [
+ "bit-vec 0.9.1",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
+
+[[package]]
+name = "bit-vec"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b71798fca2c1fe1086445a7258a4bc81e6e49dcd24c8d0dd9a1e57395b603f51"
 
 [[package]]
 name = "bitflags"
@@ -97,6 +142,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
+name = "codespan-reporting"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
+dependencies = [
+ "unicode-width",
+]
+
+[[package]]
 name = "compact_str"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,9 +189,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "crunchy"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
+
+[[package]]
 name = "dml-chart"
 version = "0.0.0"
 dependencies = [
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
+name = "dml-geom"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
+name = "dml-native"
+version = "0.0.0"
+dependencies = [
+ "paged-model",
  "paged-ooxml",
  "serde",
 ]
@@ -147,6 +224,17 @@ name = "equivalent"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
+
+[[package]]
+name = "fancy-regex"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72cf461f865c862bb7dc573f643dd6a2b6842f7c30b07882b56bd148cc2761b8"
+dependencies = [
+ "bit-set 0.8.0",
+ "regex-automata",
+ "regex-syntax",
+]
 
 [[package]]
 name = "find-msvc-tools"
@@ -180,10 +268,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-core"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
+
+[[package]]
+name = "futures-task"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
+
+[[package]]
+name = "futures-util"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
+dependencies = [
+ "futures-core",
+ "futures-task",
+ "pin-project-lite",
+ "slab",
+]
+
+[[package]]
+name = "half"
+version = "2.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
+dependencies = [
+ "cfg-if",
+ "crunchy",
+ "num-traits",
+ "zerocopy",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+dependencies = [
+ "foldhash",
+]
 
 [[package]]
 name = "indexmap"
@@ -202,10 +329,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "js-sys"
+version = "0.3.106"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7883d941dae510fb2d978fc3fe018c71c9e2892fd38854de3e8b92c2e5ad9cc5"
+dependencies = [
+ "cfg-if",
+ "futures-util",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
+name = "log"
+version = "0.4.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "memchr"
@@ -224,6 +374,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "naga"
+version = "30.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
+dependencies = [
+ "arrayvec",
+ "bit-set 0.10.0",
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "codespan-reporting",
+ "half",
+ "hashbrown",
+ "indexmap",
+ "libm",
+ "log",
+ "naga-types",
+ "num-traits",
+ "once_cell",
+ "rustc-hash 1.1.0",
+ "thiserror",
+ "unicode-ident",
+]
+
+[[package]]
+name = "naga-types"
+version = "30.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "590afbf58a6f4f62873cd5cff4468061844bafa1cdf399cc954537c22d768d49"
+dependencies = [
+ "hashbrown",
+ "indexmap",
+ "rustc-hash 1.1.0",
+ "thiserror",
+]
+
+[[package]]
 name = "nix"
 version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -233,6 +420,16 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
+dependencies = [
+ "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -266,6 +463,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -274,6 +472,7 @@ version = "0.0.0"
 dependencies = [
  "flate2",
  "quick-xml",
+ "serde",
  "thiserror",
  "zip",
 ]
@@ -315,11 +514,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "plotters"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aeb6f403d7a4911efb1e33402027fc44f29b5bf6def3effcc22d7bb75f2b747"
+dependencies = [
+ "num-traits",
+ "plotters-backend",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "plotters-backend"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df42e13c12958a16b3f7f4386b9ab1f3e7933914ecea48da7139435263a4172a"
+
+[[package]]
 name = "pptx-core"
 version = "0.0.0"
 dependencies = [
  "dml-chart",
+ "dml-geom",
+ "paged-ooxml",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -327,6 +547,8 @@ name = "pptx-export"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "dml-geom",
+ "dml-native",
  "paged-model",
  "paged-ooxml",
  "paged-scene",
@@ -338,7 +560,9 @@ dependencies = [
  "serde",
  "serde_json",
  "slide-native",
+ "slide-output",
  "slide-resolve",
+ "slide-sheet",
 ]
 
 [[package]]
@@ -356,6 +580,7 @@ name = "pptx-import"
 version = "0.0.0"
 dependencies = [
  "dml-chart",
+ "dml-geom",
  "flate2",
  "paged-ooxml",
  "paged-test-resources",
@@ -406,6 +631,29 @@ dependencies = [
  "once_cell",
  "yoke",
 ]
+
+[[package]]
+name = "regex-automata"
+version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "rustc-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustc-hash"
@@ -482,6 +730,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "sheet-calc"
+version = "0.0.0"
+dependencies = [
+ "rustc-hash 2.1.3",
+ "sheet-core",
+ "sheet-fn",
+ "sheet-format",
+ "sheet-parser",
+ "smallvec",
+]
+
+[[package]]
+name = "sheet-chart"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "dml-native",
+ "paged-ooxml",
+ "plotters",
+ "plotters-backend",
+ "serde",
+ "sheet-core",
+ "sheet-fn",
+ "sheet-format",
+]
+
+[[package]]
 name = "sheet-core"
 version = "0.0.0"
 dependencies = [
@@ -493,15 +768,68 @@ dependencies = [
 ]
 
 [[package]]
+name = "sheet-fn"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "fancy-regex",
+ "paged-fmt",
+ "regex-automata",
+ "regex-syntax",
+ "serde",
+ "serde_norway",
+ "sheet-core",
+ "sheet-format",
+]
+
+[[package]]
 name = "sheet-format"
 version = "0.0.0"
 dependencies = [
  "compact_str",
  "paged-fmt",
- "rustc-hash",
+ "paged-ooxml",
+ "rustc-hash 2.1.3",
  "ryu",
  "sheet-core",
  "thiserror",
+]
+
+[[package]]
+name = "sheet-lower"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "sheet-core",
+ "sheet-format",
+]
+
+[[package]]
+name = "sheet-parser"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "sheet-core",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "sheet-xlsx"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "dml-chart",
+ "flate2",
+ "paged-ooxml",
+ "quick-xml",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-format",
+ "sheet-lower",
+ "sheet-parser",
+ "thiserror",
+ "zip",
 ]
 
 [[package]]
@@ -527,6 +855,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "slab"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "slide-anim"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "slide-chart"
 version = "0.0.0"
 dependencies = [
@@ -537,26 +882,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "slide-geom"
-version = "0.0.0"
-dependencies = [
- "pptx-core",
- "pptx-import",
- "serde",
-]
-
-[[package]]
 name = "slide-js"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "paged-ooxml",
  "pptx-core",
  "pptx-export",
  "pptx-import",
  "serde",
  "serde_json",
+ "slide-anim",
+ "slide-chart",
  "slide-native",
+ "slide-output",
  "slide-resolve",
+ "slide-sheet",
  "wasm-bindgen",
 ]
 
@@ -564,6 +905,8 @@ dependencies = [
 name = "slide-native"
 version = "0.0.0"
 dependencies = [
+ "dml-geom",
+ "dml-native",
  "flate2",
  "paged-model",
  "paged-ooxml",
@@ -571,16 +914,25 @@ dependencies = [
  "paged-store",
  "pptx-core",
  "pptx-import",
+ "serde",
  "serde_json",
- "slide-geom",
  "slide-resolve",
  "zip",
+]
+
+[[package]]
+name = "slide-output"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "serde",
 ]
 
 [[package]]
 name = "slide-resolve"
 version = "0.0.0"
 dependencies = [
+ "dml-geom",
  "paged-ooxml",
  "paged-test-resources",
  "pptx-core",
@@ -588,7 +940,37 @@ dependencies = [
  "serde",
  "serde_json",
  "slide-chart",
- "slide-geom",
+]
+
+[[package]]
+name = "slide-shaders"
+version = "0.0.0"
+dependencies = [
+ "naga",
+ "paged-ooxml",
+ "pptx-core",
+ "serde_json",
+]
+
+[[package]]
+name = "slide-sheet"
+version = "0.0.0"
+dependencies = [
+ "dml-chart",
+ "paged-ooxml",
+ "paged-test-resources",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+ "sheet-calc",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-format",
+ "sheet-parser",
+ "sheet-xlsx",
+ "slide-chart",
+ "slide-resolve",
 ]
 
 [[package]]
@@ -706,6 +1088,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
+name = "unicode-width"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
+
+[[package]]
 name = "unsafe-libyaml-norway"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -757,6 +1145,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-sys"
+version = "0.3.106"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88261b9deccee56594c11a3460c462c41f58d148598fe70ad77070126a68aba4"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "yoke"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -777,6 +1175,26 @@ dependencies = [
  "quote",
  "syn 3.0.9",
  "synstructure",
+]
+
+[[package]]
+name = "zerocopy"
+version = "0.8.63"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5fe1f8f1b06191a00962174c61aa5005e0bb391a6d80d07e24d115c01a92ed8"
+dependencies = [
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.8.63"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "863ad3ac83293fb4d740aedbfdc9240dd8d1a50c1099acd76ce80ce7c7230c7f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

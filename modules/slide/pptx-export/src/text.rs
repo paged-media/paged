@@ -59,6 +59,26 @@ impl Colors<'_> {
             .filter(|a| *a < 0.999)
             .map(|a| format!(r#"<a:alpha val="{}"/>"#, (a * 100_000.0).round() as i64))
             .unwrap_or_default();
+        // A theme colour's swatch (slide ADR 713) is the theme colour,
+        // whatever the theme now is: its slot as the slide names it, with
+        // its transforms.
+        if let Some(k) = slide_resolve::theme::Key::of_swatch(swatch) {
+            let slot = self.logical.get(&k.slot).cloned().unwrap_or(k.slot.clone());
+            let mut kids: String = k
+                .transforms
+                .iter()
+                .map(|(op, v)| match op.as_str() {
+                    "comp" | "inv" | "gray" | "gamma" | "invGamma" => format!("<a:{op}/>"),
+                    _ => format!(r#"<a:{op} val="{v}"/>"#),
+                })
+                .collect();
+            kids.push_str(&alpha);
+            return Some(if kids.is_empty() {
+                format!(r#"<a:schemeClr val="{slot}"/>"#)
+            } else {
+                format!(r#"<a:schemeClr val="{slot}">{kids}</a:schemeClr>"#)
+            });
+        }
         let name = swatch.strip_prefix("Color/").unwrap_or("");
         let theme = self
             .theme
@@ -77,6 +97,27 @@ impl Colors<'_> {
                 rgb[0], rgb[1], rgb[2]
             ),
         })
+    }
+
+    /// A colour element for `rgb` and `alpha`: `a:schemeClr` when it is a
+    /// theme colour, else `a:srgbClr`.
+    pub fn rgb_color(&self, rgb: [u8; 3], alpha: f64) -> String {
+        let alpha_xml = if alpha < 0.999 {
+            format!(r#"<a:alpha val="{}"/>"#, (alpha * 100_000.0).round() as i64)
+        } else {
+            String::new()
+        };
+        match self.theme.iter().find(|(_, c)| *c == rgb) {
+            Some((n, _)) => {
+                let slot = self.logical.get(n).cloned().unwrap_or_else(|| n.clone());
+                if alpha_xml.is_empty() {
+                    format!(r#"<a:schemeClr val="{slot}"/>"#)
+                } else {
+                    format!(r#"<a:schemeClr val="{slot}">{alpha_xml}</a:schemeClr>"#)
+                }
+            }
+            None => paged_ooxml::drawingml::write::srgb(rgb, alpha),
+        }
     }
 
     /// A fill for `swatch`: `a:noFill` for None, `a:solidFill`, or
@@ -481,6 +522,24 @@ fn run_props(
     if let Some(f) = r.font.as_deref().filter(|f| !f.is_empty()) {
         if f != dr.font {
             kids.push_str(&format!(r#"<a:latin typeface="{}"/>"#, esc(f)));
+        }
+    } else {
+        // A run in a theme font by its character style (slide ADR 713)
+        // writes the theme font's token where its level's font is another.
+        let token = match r.character_style.as_deref() {
+            Some(slide_native::HEADINGS_FONT_STYLE) => Some("+mj-lt"),
+            Some(slide_native::BODY_FONT_STYLE) => Some("+mn-lt"),
+            _ => None,
+        };
+        if let Some(token) = token {
+            let face = r
+                .character_style
+                .as_deref()
+                .and_then(|id| ctx.colors.doc.styles.character_styles.get(id))
+                .and_then(|c| c.font.clone());
+            if face.as_deref() != Some(dr.font.as_str()) {
+                kids.push_str(&format!(r#"<a:latin typeface="{token}"/>"#));
+            }
         }
     }
     if let Some(src) = &r.hyperlink_source {

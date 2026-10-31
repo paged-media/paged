@@ -28,6 +28,20 @@
 // the layers go into the document's parts and their composite replaces
 // the frame's placed image, as one document undo step.
 
+import {
+  builtInPresets,
+  cloneStyle,
+  effectEnabled,
+  emptyStyle,
+  setEffectEnabled,
+  styleOptionsBits,
+  type EffectKind,
+  type GlobalLight,
+  type LayerStyle,
+  type PatternRef,
+  type StyleOptions,
+  type StylePreset,
+} from "./layer-style";
 import type {
   BundleHost,
   ColorPickerProps,
@@ -39,13 +53,32 @@ import { defineMessages, t } from "@paged-media/strings";
 import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
+import type {
+  ChannelBits,
+  ColorModeName,
+  IndexedPalette,
+  ProofTarget,
+} from "./mode-engine";
+import {
+  initialRetouch,
+  makeRetouch,
+  type RetouchApi,
+  type RetouchState,
+} from "./retouch";
 import {
   filterDef,
   filterDefaults,
   scaledForProxy,
+  type FilterContext,
   type FilterId,
   type FilterValue,
 } from "./filters";
+import { blurPreset, type BlurKind } from "./filters-blur-gallery";
+import {
+  blurGalleryHit,
+  blurGalleryShapes,
+  type BlurDrag,
+} from "./blur-gallery-pins";
 import { parseCube, toKernelCube } from "./cube";
 import {
   readSession,
@@ -99,6 +132,11 @@ import {
   type EditTarget,
   type PsdLayerInfo,
   type RasterFormat,
+  type SaveBackFormat,
+  type ExportOptions,
+  type ExportNote,
+  EXPORT_FORMATS,
+  exportSpec,
   type ResampleFilter,
   type CanvasOpKind,
   type TrimBy,
@@ -112,9 +150,36 @@ import {
   type SelectionStats,
   type StrokeTool,
 } from "./engine";
-import { imageToPage, pageToImage, resolveFrameFit } from "./frame-fit";
+import {
+  imageToPage,
+  pageToImage,
+  resolveFrameFit,
+  type FitTransform,
+} from "./frame-fit";
+import {
+  emptyRender,
+  fitRuns,
+  newTypeSource,
+  renderTypeSource,
+  type TypeFrame,
+  type TypeSource,
+  type TypeWarp,
+} from "./type-layer";
 import { claimImageTiles } from "./tile-provider";
 import { gradientKindLabel, warpKindLabel } from "./words";
+import {
+  CANVAS_WARPS,
+  puppetOptions,
+  puppetPins,
+  warpMesh,
+  warpPreset,
+} from "./filters-warp";
+import {
+  warpCanvasHit,
+  warpCanvasShapes,
+  type WarpCanvasEnv,
+  type WarpDrag,
+} from "./warp-canvas";
 import { readPgil } from "./object-model/pgil";
 import { coverageAt } from "./object-model/image-objects";
 import {
@@ -132,10 +197,74 @@ import {
   type WandOptions,
 } from "./selection-machine";
 import {
+  createMaskingController,
+  type MaskingController,
+} from "./masking-session";
+import {
+  createVectorController,
+  type VectorController,
+} from "./vector-session";
+import {
+  createSmartController,
+  SO,
+  type SmartController,
+} from "./smart-session";
+import type { SmartInfo } from "./smart-engine";
+import {
   createBrushMachine,
   type BrushMachine,
   type BrushSample,
 } from "./brush-machine";
+import {
+  DEFAULT_BRUSH_DYNAMICS,
+  DEFAULT_PAINT_TOOL_OPTIONS,
+  cloneDynamics,
+  dynamicsActive,
+  packDynamics,
+  patchDynamics,
+  type BrushDynamics,
+  type DynamicsPatch,
+  type PaintToolOptions,
+} from "./brush-dynamics";
+import {
+  abrToBrush,
+  decodeTipBitmap,
+  packExportValues,
+  type AbrPresetInfo,
+} from "./abr-preset";
+import {
+  addPreset,
+  applyPreset,
+  defaultPresets,
+  deletePreset,
+  deserializePresets,
+  movePreset,
+  nextPresetId,
+  renamePreset,
+  serializePresets,
+  untitledName,
+  type UserBrushPreset,
+} from "./brush-presets";
+import {
+  builtInGradients,
+  freshId,
+  type AdjustmentPreset,
+  type GradientPreset,
+  type PatternPreset,
+  type PresetKind,
+  type ToolPreset,
+} from "./preset-library";
+import type { HistoryPrefs } from "./preset-store";
+import {
+  createHistoryOps,
+  createPresetOps,
+  type HistoryOps,
+  type PresetOps,
+} from "./session-presets";
+import {
+  createWorkspaceController,
+  type WorkspaceController,
+} from "./workspace";
 
 /** The fixed v0 feather sigma (px) the `featherSelection` command uses
  *  when the caller passes none (a slider is a follow-up). */
@@ -239,15 +368,38 @@ export interface FilterDialogState {
    *  filter while the dialog stays open. */
   before: boolean;
   applied: boolean;
+  /** The file each `image` parameter resolved to (its name), when one
+   *  was chosen (`chooseFilterImage`). */
+  files: Record<string, string>;
 }
+
+/** The filters that apply at once (Photoshop gives them no dialog). */
+export type OneShotFilter = "solarize" | "facet" | "desaturate" | "equalize";
 
 /** Which dialog the panel shows on top (one at a time, as a modal). */
 export type ImageDialog =
+  | { kind: "contentAwareFill" }
   | { kind: "filter"; filter: FilterDialogState }
   | { kind: "imageSize" }
   | { kind: "trim" }
   | { kind: "rotate" }
-  | { kind: "blendingOptions"; index: number };
+  /** Image ▸ Mode ▸ Indexed Color… (image ADR 484). */
+  | { kind: "indexedColor" }
+  | { kind: "exportAs" }
+  | { kind: "newGuide" }
+  | { kind: "blendingOptions"; index: number }
+  | { kind: "layerStyle"; index: number; pane: LayerStylePane }
+  | { kind: "globalLight" }
+  | { kind: "scaleEffects"; index: number }
+  /** Edit ▸ Presets ▸ Preset Manager (image ADR 477), on a kind's tab. */
+  | { kind: "presetManager"; tab: PresetKind }
+  /** History Options (image ADR 477). */
+  | { kind: "historyOptions" }
+  /** Layer ▸ Smart objects ▸ Transform… (image ADR 482). */
+  | { kind: "smartTransform" };
+
+/** The pane the Layer Style dialog shows: an effect, or Blending Options. */
+export type LayerStylePane = EffectKind | "blending";
 
 /** The Layers list's search and filter (Photoshop's filter bar): rows
  *  whose name contains `query`, of `kind`, with colour label `color`. */
@@ -270,6 +422,16 @@ export type CurvesPick = "black" | "grey" | "white";
 export type ChannelCurves = Record<"r" | "g" | "b", Array<[number, number]>>;
 
 export interface ImageSessionState {
+  /** WP5.10 — the type layer being edited on the canvas, and the
+   *  session its writes merge into (one undo step), or null. */
+  typeEdit: {
+    index: number;
+    session: string;
+    text: string;
+    /** The image frame's fit on its page, for the overlay (null until
+     *  read). */
+    fit: FitTransform | null;
+  } | null;
   engine: EngineStatus;
   /** The honest boot/GPU detail when something is off. */
   engineDetail: string | null;
@@ -321,6 +483,11 @@ export interface ImageSessionState {
   /** The last revision committed to the document for this frame (the
    *  marker's `rev`), or null before the first commit. */
   committedRev: number | null;
+  /** Edit Contents (image ADR 482): the smart object whose contents the
+   *  session shows now, innermost, or null for the document itself. */
+  smartNested: string | null;
+  /** The active layer's smart-object state (ADR 482), or null. */
+  smartInfo: SmartInfo | null;
   /** Pixel edits since ingest, reopen or the last commit — what a
    *  commit would write. */
   uncommitted: boolean;
@@ -419,6 +586,10 @@ export interface ImageSessionState {
    *  set. Session state rather than stroke state: the anchor SURVIVES a
    *  stroke, which is what makes repeated retouching strokes usable. */
   cloneSource: { x: number; y: number; aligned: boolean } | null;
+  /** WP5.8 — the Content-Aware Fill workspace, the Clone Source panel's
+   *  five sources and overlay, the healing and Content-Aware Move options
+   *  (retouch.ts). */
+  retouch: RetouchState;
   /** The dodge / burn / sponge options, frozen into each such stroke. */
   tone: ToneOptions;
   /** The per-channel readout for the ingested source (R/G/B/A + luma),
@@ -436,8 +607,38 @@ export interface ImageSessionState {
    *  preset once it is edited, and pretending otherwise would mislabel
    *  a stroke's provenance. */
   brushPreset: number | null;
+  /** BRUSH SETTINGS — every dynamics pane, frozen into each stroke with
+   *  `brush` (`brush-dynamics.ts`). */
+  dynamics: BrushDynamics;
+  /** The options of the smudge, mixer, history, art history,
+   *  background eraser, colour replacement and magic eraser tools. */
+  paintTools: PaintToolOptions;
+  /** The Brush Presets library (stock, defined, imported), in order. */
+  brushPresets: readonly UserBrushPreset[];
+  /** The applied preset's id; cleared the moment a setting moves. */
+  brushPresetActive: string | null;
   /** The dialog on top of the panel, or null. */
   dialog: ImageDialog | null;
+  /** Copy Layer Style's clipboard (null: nothing copied). */
+  styleClipboard: LayerStyle | null;
+  /** The Styles panel's presets (built-in, then saved). */
+  stylePresets: StylePreset[];
+  /** The Preset Manager's other libraries (image ADR 477): tool presets,
+   *  adjustment presets, gradients and patterns. Kept across sessions in
+   *  the bundle's storage (`preset-store.ts`), as are the brushes and
+   *  the styles. */
+  toolPresets: readonly ToolPreset[];
+  adjustmentPresets: readonly AdjustmentPreset[];
+  gradientPresets: readonly GradientPreset[];
+  patternPresets: readonly PatternPreset[];
+  /** History Options: the journal's depth and memory, the automatic
+   *  snapshot (image ADR 477). */
+  historyPrefs: HistoryPrefs;
+  /** The document's Global Light. */
+  globalLight: GlobalLight;
+  /** The style of the layer the Layer Style dialog edits (else the active
+   *  layer's), read with the layers — what the panel renders. */
+  layerStyle: LayerStyle | null;
   /** The Layers list's search and filter. */
   layerFilter: LayerFilter;
   /** The resolution the image declares, in pixels per inch (read from a
@@ -445,15 +646,56 @@ export interface ImageSessionState {
    *  null when it declares none (Image Size then shows 72). The PNG and
    *  JPEG exporters write it. */
   ppi: number | null;
+  /** What the opened file carries besides its pixels (byte lengths; 0 =
+   *  absent): the Export As dialog's metadata row. Null before an open. */
+  sourceMetadata: {
+    icc: number;
+    exif: number;
+    xmp: number;
+    iptc: number;
+  } | null;
+  /** The CMYK output profile Export As converts through (picked with
+   *  `pickExportProfile`), by name; null = the source's own CMYK profile
+   *  or, without one, the naive formula. */
+  exportProfile: string | null;
+  /** IMAGE ▸ MODE (image ADR 479): the document's depth and colour mode,
+   *  read from the engine after every stack change, and the Proof Colors
+   *  / Gamut Warning display setup (View, never the document). */
+  mode: {
+    bits: ChannelBits;
+    color: ColorModeName;
+    proof: { target: ProofTarget; colors: boolean; gamut: boolean };
+  };
   /** The Curves eyedropper waiting for a click on the image, or null. */
   curvesPicker: CurvesPick | null;
   /** The per-channel curves the Curves tools (Auto, the eyedroppers)
    *  last set — a new object each time, so the panel's curve editor can
    *  follow it. Null until they are used on this image. */
   channelCurves: ChannelCurves | null;
+  /** Curves' TARGETED ADJUSTMENT (I-55): armed on one curve, the image
+   *  click-drag moves the point for the tone under the pointer. A new
+   *  object after each move, so the curve editor follows `points`. */
+  curvesTarget: {
+    channel: CurveChannel;
+    points: Array<[number, number]>;
+  } | null;
 }
 
-export interface ImageSession {
+/** WP5.8 — the retouching verbs are `RetouchApi` (retouch.ts). */
+export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
+  /** Selection and masking: Color Range, Grow / Similar, Focus Area,
+   *  Select and Mask, Quick Mask, channels, paths, the display view
+   *  (image ADR 470). */
+  masking(): MaskingController;
+  /** Vectors inside the image: the paths the Pen and the shape tools
+   *  draw, vector masks and shape layers (image ADR 476). */
+  vectors(): VectorController;
+  /** WP5.12 — guides, count, notes, slices, the Ruler, the snapping and
+   *  the Info rows (image ADR 475, `workspace.ts`). */
+  workspace(): WorkspaceController;
+  /** Smart objects in full (image ADR 482): transform, smart filters,
+   *  Edit Contents, links, vector smart objects. */
+  smart(): SmartController;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -518,11 +760,31 @@ export interface ImageSession {
    *  composite). Null when no PSD is loaded, and null (with the reason
    *  as the status) when the save-back declines an edited file. */
   psdExportBytes(): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+  /** The PSD export's document as a layered TIFF (engine ADR 1038): the
+   *  composite as the TIFF's image and the layers in its ImageSourceData
+   *  tag, which Photoshop reopens with its layers. Null, with the reason
+   *  as the status, for a session not opened from a PSD or a document
+   *  the writer refuses (16/32-bit, PSB, no layers). */
+  layeredTiffExportBytes(): Promise<{
+    bytes: Uint8Array;
+    fileName: string;
+  } | null>;
   /** What the PNG / JPEG exporters hand out: the adjusted result
    *  re-encoded in the REQUESTED format (whatever the source was). */
   rasterExportBytes(
     format: RasterFormat,
   ): Promise<{ bytes: Uint8Array; fileName: string } | null>;
+  /** FILE ▸ EXPORT AS (ADR 468): the adjusted image written as `options`
+   *  say — format, quality, size, colour mode, depth, metadata, profile,
+   *  resolution — and handed to the host's saver when it has one (else
+   *  staged on `saveBack` for the exporters). A 16-bit session at
+   *  identity exports its own 16-bit samples. Null, with the reason as
+   *  the status, when it cannot. */
+  exportAs(options: ExportOptions): Promise<SaveBackResult | null>;
+  /** Pick the CMYK output profile (.icc/.icm) Export As converts to. */
+  pickExportProfile(): Promise<boolean>;
+  /** Forget the picked CMYK profile. */
+  clearExportProfile(): void;
   /** FILL the current selection (the whole image when none) with a
    *  generator, composited through the coverage mask. DESTRUCTIVE: it
    *  swaps the engine-held source like a crop commit (the document and
@@ -537,6 +799,13 @@ export interface ImageSession {
   applyGradientMap(
     shadow: readonly [number, number, number],
     highlight: readonly [number, number, number],
+  ): Promise<boolean>;
+  /** FREE TRANSFORM (Edit ▸ Free Transform): resample the active layer —
+   *  or the selection's pixels — through the forward image-px `matrix`
+   *  (`geom.warp_projective`). One undo step. */
+  transformLayer(
+    matrix: readonly number[],
+    interp?: "bilinear" | "bicubic",
   ): Promise<boolean>;
   /** A parametric distortion (geom.warp_backward). */
   applyWarp(
@@ -626,7 +895,44 @@ export interface ImageSession {
    *  defaults the first time) and, with preview on, show the result on
    *  the canvas. Refuses without an image. Replaces an open dialog
    *  (cancelling an open filter first). */
-  openFilterDialog(id: FilterId): Promise<boolean>;
+  openFilterDialog(
+    id: FilterId,
+    preset?: Record<string, FilterValue>,
+  ): Promise<boolean>;
+  /** FILTER ▸ BLUR GALLERY ▸ Field / Iris / Tilt-Shift / Path / Spin: the
+   *  Blur Gallery workspace with that blur switched on (its last settings
+   *  kept), the geometry on the canvas. */
+  openBlurGallery(kind: BlurKind): Promise<boolean>;
+  /** WP5.6 — Edit ▸ Transform ▸ Warp…, Edit ▸ Puppet warp…, Image ▸
+   *  Filter ▸ Liquify… and Edit ▸ Content-aware scale…: the dialog opens
+   *  over what it works on (Warp: the selection's bounds, else what the
+   *  active layer covers) with no pins, strokes or custom mesh yet. */
+  openWarpDialog(
+    id: "warp" | "puppetWarp" | "liquify" | "contentAwareScale",
+  ): Promise<boolean>;
+  /** WP5.6 — the Perspective Crop tool's commit: the quadrilateral `quad`
+   *  (NW, NE, SE, SW, image px) drawn upright onto `width`×`height`, over
+   *  every layer, as ONE undo step. */
+  commitPerspectiveCrop(
+    quad: ReadonlyArray<readonly [number, number]>,
+    width: number,
+    height: number,
+  ): Promise<boolean>;
+  /** An `image` parameter's source: 0 this image's composite, 1 a file
+   *  the host's picker returns (decoded engine-side; refused when the
+   *  host has no picker or the user cancels). The preview follows. */
+  chooseFilterImage(key: string, choice: 0 | 1): Promise<boolean>;
+  /** The filters with no dialog (Solarize, Facet, Desaturate, Equalize):
+   *  one undo step in the active layer, inside the selection. */
+  applyOneShot(kind: OneShotFilter): Promise<boolean>;
+  /** A pointer on the canvas while the open dialog draws there (the Blur
+   *  Gallery's pins, Curves' targeted adjustment). True when it took the
+   *  event, so the active tool leaves it alone. `at` in image px. */
+  canvasPointer(
+    phase: "down" | "move" | "up",
+    at: [number, number],
+    modifiers?: { alt?: boolean; shift?: boolean },
+  ): boolean;
   /** Change the open filter dialog's values; the preview follows (on a
    *  resampled proxy at once where it can, at full resolution when the
    *  values rest). */
@@ -649,10 +955,59 @@ export interface ImageSession {
   applyAverage(): Promise<boolean>;
   /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
    *  rotation) on top of the panel. */
-  openDialog(kind: "imageSize" | "trim" | "rotate"): boolean;
+  openDialog(
+    kind:
+      | "imageSize"
+      | "trim"
+      | "rotate"
+      | "indexedColor"
+      | "exportAs"
+      | "newGuide"
+      | "smartTransform",
+  ): boolean;
   /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
    *  active one by default): fill opacity, knockout and Blend If. */
   openBlendingOptions(index?: number): boolean;
+  /** Layer ▸ Layer Style ▸ <effect>… / Blending Options: the Layer Style
+   *  dialog on `pane` for layer `index` (the active one). Opening it on an
+   *  effect the layer does not have adds it with Photoshop's defaults
+   *  (one undo step), as Photoshop's menu does. */
+  openLayerStyle(pane?: LayerStylePane, index?: number): Promise<boolean>;
+  /** Show another pane of the open Layer Style dialog. */
+  setLayerStylePane(pane: LayerStylePane): void;
+  /** Layer ▸ Layer Style ▸ Global Light… / Scale Effects… (the active
+   *  layer's): their small dialogs. */
+  openStyleDialog(kind: "globalLight" | "scaleEffects"): boolean;
+  /** The layer's style (null: none). */
+  layerStyle(index: number): LayerStyle | null;
+  /** Set (null: clear) a layer's style; a dialog's edits to one layer are
+   *  one undo step. */
+  setLayerStyle(index: number, style: LayerStyle | null): Promise<boolean>;
+  /** Blending Options' style switches. */
+  setLayerStyleOptions(index: number, opts: StyleOptions): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Copy Layer Style (the active layer's). */
+  copyLayerStyle(): boolean;
+  /** Layer ▸ Layer Style ▸ Paste Layer Style onto the active layer and the
+   *  layers linked with it (one undo step). */
+  pasteLayerStyle(): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Clear Layer Style (the active layer's). */
+  clearLayerStyle(): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Global Light. */
+  setGlobalLight(angle: number, altitude: number): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Scale Effects (percent) on the active layer. */
+  scaleEffects(percent: number): Promise<boolean>;
+  /** Layer ▸ Layer Style ▸ Hide / Show All Effects (toggles when `on` is
+   *  not given). */
+  setEffectsVisible(on?: boolean): Promise<boolean>;
+  /** Styles panel: apply the preset `name` to the active layer. */
+  applyStylePreset(name: string): Promise<boolean>;
+  /** Styles panel: New Style… — the active layer's style saved as `name`. */
+  saveStylePreset(name: string): boolean;
+  /** Styles panel: delete a saved preset (a built-in one stays). */
+  deleteStylePreset(name: string): boolean;
+  /** The defined pattern (Edit ▸ Define Pattern) made available to the
+   *  styles, returned as the reference an effect stores; null without one. */
+  stylePattern(): PatternRef | null;
   /** Close the Image dialog (a filter dialog is cancelled). */
   closeDialog(): Promise<void>;
   /** IMAGE ▸ Trim away `by` (transparent pixels, or the top-left or
@@ -681,6 +1036,15 @@ export interface ImageSession {
   /** Called by the image tools on pointer-down: when a Curves eyedropper
    *  is armed, it takes the click (and is disarmed). */
   takeCurvesPick(at: [number, number]): boolean;
+  /** Arm (or, with null, disarm) Curves' targeted adjustment on
+   *  `channel`'s curve, starting from the editor's `points`. While armed,
+   *  a drag on the image (any image tool) moves the curve point for the
+   *  tone under the pointer up or down — one curve change per drag, like
+   *  a drag of the point itself. */
+  armCurvesTarget(
+    channel: CurveChannel | null,
+    points?: Array<[number, number]>,
+  ): void;
   /** ADJUST ▸ Color Lookup from a .cube file's text. */
   applyColorLookup(cubeText: string, name?: string): Promise<boolean>;
   /** The GRADIENT TOOL: foreground → background along the dragged line
@@ -699,6 +1063,24 @@ export interface ImageSession {
   canvasOp(
     op: CanvasOpKind,
     size?: { width: number; height: number; anchorX: number; anchorY: number },
+  ): Promise<boolean>;
+  /** Image ▸ Mode ▸ 8 / 16 / 32 Bits/Channel (every layer; one undo
+   *  step; 32 bits hold linear light, image ADR 484). */
+  setBits(bits: ChannelBits): Promise<boolean>;
+  /** Image ▸ Mode ▸ Indexed Color… — the image flattened and every pixel
+   *  the nearest colour of `palette` (`colours` of them for Adaptive), at
+   *  8 bits, one undo step (image ADR 484). */
+  setIndexedColor(palette: IndexedPalette, colours?: number): Promise<boolean>;
+  /** Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color (every
+   *  layer; one undo step). CMYK converts through the chosen CMYK profile
+   *  (`pickExportProfile`); without one the plain ink formula changes no
+   *  colour, and the status says so. */
+  setColorMode(mode: ColorModeName): Promise<boolean>;
+  /** View ▸ Proof Colors / Gamut Warning on the image preview: `target`
+   *  is the output simulated (Gray Gamma 2.2, or CMYK through the chosen
+   *  profile or the document's own). A display transform only. */
+  setProof(
+    p: Partial<{ target: ProofTarget; colors: boolean; gamut: boolean }>,
   ): Promise<boolean>;
   /** Select ▸ Modify by `radius` px. */
   modifySelection(op: SelectionModifyOp, radius: number): boolean;
@@ -1020,11 +1402,37 @@ export interface ImageSession {
   applyBrushPreset(index: number): boolean;
   /** Forget the loaded library (the panel's Close). */
   closeBrushLibrary(): void;
+  /** Merge into Brush Settings (each pane, each jitter, field by field). */
+  setBrushDynamics(patch: DynamicsPatch): void;
+  /** Merge into one paint tool's options. */
+  setPaintToolOptions<K extends keyof PaintToolOptions>(
+    tool: K,
+    patch: Partial<PaintToolOptions[K]>,
+  ): void;
+  /** DEFINE BRUSH PRESET: the selection's pixels (the whole image without
+   *  one) become a sampled tip, added to the library and applied. */
+  defineBrushPreset(name?: string): Promise<boolean>;
+  /** Apply a library preset (Protect Texture keeps the current texture). */
+  applyUserPreset(id: string): boolean;
+  renameBrushPreset(id: string, name: string): void;
+  deleteBrushPreset(id: string): void;
+  moveBrushPreset(from: number, to: number): void;
+  /** Import an `.abr` library or a paged preset file (`.json`) into the
+   *  library. */
+  importBrushPresets(): Promise<boolean>;
+  /** Export the library: `abr` (Photoshop's format, what it can carry) or
+   *  `json` (the session's own format, every setting). */
+  exportBrushPresets(format: "abr" | "json"): Promise<boolean>;
+  /** MAGIC ERASER at an image-px point (one undo step). */
+  magicErase(point: [number, number]): Promise<boolean>;
   /** OPEN a stroke on the engine-held source with the current brush
    *  params + the bound selection (both frozen for its duration).
    *  GPU-only: false with an honest status when there is no device,
    *  nothing ingested, or the engine refuses. */
-  brushBegin(tool: StrokeTool): Promise<boolean>;
+  brushBegin(
+    tool: StrokeTool,
+    opts?: { smoothingRadiusPx?: number },
+  ): Promise<boolean>;
   /** Feed one pointer sample and re-submit the in-frame preview from the
    *  painted pixels. False when no stroke is open. */
   brushExtend(sample: BrushSample): Promise<boolean>;
@@ -1124,6 +1532,38 @@ export interface ImageSession {
   /** Layer ▸ Rasterize: a fill layer's or smart object's render becomes
    *  pixels. */
   rasterizeLayer(index: number): Promise<boolean>;
+  /** WP5.10 — a new TYPE layer at `frame` (image px): a point (a click)
+   *  or a box (a drag), its text `text` (the Type section's when
+   *  omitted, else a placeholder), styled from the Type section and the
+   *  foreground colour, laid out and drawn by the engine. Opens the
+   *  on-canvas editing session on it. Resolves the new layer's index, or
+   *  null when nothing was added (no image, no story door). */
+  addTypeLayer(frame: TypeFrame, text?: string): Promise<number | null>;
+  /** A type layer's source, or null for another layer. */
+  typeLayerSource(index: number): TypeSource | null;
+  /** Change a type layer's source (`edit` returns the new one) and
+   *  re-render it through the engine. `session` names an editing
+   *  session: its writes are one undo step. */
+  editTypeLayer(
+    index: number,
+    edit: (src: TypeSource) => TypeSource,
+    session?: string,
+  ): Promise<boolean>;
+  /** Start editing a type layer's text on the canvas (the overlay). */
+  beginTypeEdit(index: number): boolean;
+  /** The text being typed in the overlay: re-rendered as it changes,
+   *  every write of the session one undo step. */
+  setTypeEditText(text: string): Promise<boolean>;
+  /** End the editing session. */
+  endTypeEdit(): void;
+  /** Type ▸ Warp Text: the active type layer's warp. */
+  setTypeWarp(warp: TypeWarp, index?: number): Promise<boolean>;
+  /** Re-render every type layer whose pixels are stale (after a move or
+   *  Image Size). */
+  refreshTypeLayers(): Promise<number>;
+  /** Type ▸ Paint text into layer: the raster type of before, at the
+   *  last type-tool point (the image centre before any). */
+  paintTextIntoLayer(): Promise<boolean>;
   setLayerFillOpacity(index: number, fill: number): Promise<boolean>;
   /** Blend If's 32 sliders, or null to clear. */
   setLayerBlendIf(
@@ -1218,6 +1658,11 @@ export function elementIdOf(value: unknown): string | null {
  *  and refusal a session action reports, in the editor's language when
  *  the action runs. */
 const S = defineMessages("image.status", {
+  noLayerStyleToCopy: "The active layer has no layer style",
+  layerStyleCopied: "Layer style copied",
+  noLayerStyleToPaste: "No layer style copied yet: use Copy layer style",
+  noLayerStyleToClear: "The active layer has no layer style to clear",
+  noSuchStylePreset: 'No style called "{name}"',
   nothingIngestedIngestAPlacedImage:
     "Nothing ingested — ingest a placed image first.",
   frameDeselectedInFramePreviewCleared:
@@ -1384,10 +1829,53 @@ const S = defineMessages("image.status", {
     "{name} — {width}×{height} decoded into the selected frame. Apply to composite, or paint on it.",
   canvasSized: "Canvas size → {width}×{height}. One undo step.",
   canvasChanged: "Canvas → {width}×{height}. One undo step.",
+  modeBitsSet: "Mode → {bits} bits per channel. One undo step.",
+  modeBitsAlready: "The image already has {bits} bits per channel.",
+  modeColorSet: "Mode → {mode}. One undo step.",
+  modeColorAlready: "The image is already in {mode}.",
+  modeCmykNoProfile:
+    "CMYK Color without a CMYK profile: the plain ink formula changes no colour. Choose a CMYK profile in Export as… to convert through a press.",
+  proofOn: "Proof view on (the document is unchanged).",
+  proofOff: "Proof view off.",
+  proofFailed: "Proof view failed: {error}",
+  modeNameGray: "Greyscale",
+  modeNameRgb: "RGB colour",
+  modeNameCmyk: "CMYK colour",
+  modeNameLab: "Lab colour",
+  modeNameIndexed: "Indexed colour",
+  modeNameMultichannel: "Multichannel",
+  modeNameDuotone: "Duotone",
+  modeIndexedSet:
+    "Mode → Indexed colour, {count} colours. The image was flattened. One undo step.",
   psdSaveBack: "PSD save-back — {shape}.",
   jpegSaveBack:
     "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG).",
   pngSaveBack: "PNG save-back — lossless re-encode of the adjusted pixels.",
+  tiffSaveBack:
+    "TIFF save-back — LZW re-encode of the adjusted pixels, metadata kept.",
+  webpSaveBack:
+    "WebP save-back — lossless re-encode of the adjusted pixels, metadata kept.",
+  exported: "Exported {file}, {bytes} bytes.",
+  exportStaged: "{file}, {bytes} bytes — ready for the exporters.",
+  exportNoteWebpLossless: "WebP is written lossless (no lossy encoder).",
+  exportNoteCmykProfile: "Converted to CMYK through the profile.",
+  exportNoteCmykNaive:
+    "Converted to CMYK without a profile (naive formula); no profile embedded.",
+  exportNoteWidened: "8-bit pixels written as 16 bits (no added precision).",
+  exportNoteNarrowed: "This format holds 8 bits; the pixels were narrowed.",
+  exportNoteAlphaDropped: "JPEG has no transparency; it was dropped.",
+  exportNoteGrayUntagged: "Grayscale is written without a profile.",
+  exportNoteGifPalette:
+    "GIF holds 256 colours and one bit of transparency: the colours were reduced.",
+  exportNoteJxlLossless: "JPEG XL is written lossless.",
+  exportNoteNoMetadata:
+    "This format carries no metadata or colour profile; none was written.",
+  layeredTiffNeedsPsd:
+    "A TIFF with layers is written from a PSD: open the image from a PSD first.",
+  layeredTiffExported:
+    "{file} — a TIFF with the PSD's layers (Photoshop reopens them).",
+  exportProfileSet: "CMYK profile: {name}.",
+  noProfileChosen: "No profile chosen.",
   saveBackReady: "{note} {file}, {bytes} bytes — ready.",
   saveFromPanel:
     "Save it from the panel, or deliver it from the Export Center.",
@@ -1512,9 +2000,48 @@ const S = defineMessages("image.status", {
   autoCurvesFlat: "Auto found no contrast to stretch.",
   curvesPickArmed: "Click the image to set the {kind} point.",
   curvesPicked: "Curves {kind} point set from {colour} at {x}, {y}.",
+  curvesTargetArmed:
+    "Drag up or down on the image to move the curve for the tone under the pointer.",
+  curvesTargeted: "Curve point {input} moved to {output}.",
+  noFilterImageChosen: "No image was chosen; the filter keeps its source.",
+});
+
+/** The filters with no dialog, as the status line and the undo step
+ *  name them. */
+const ONE_SHOT = defineMessages("image.effect", {
+  solarize: "Solarize",
+  facet: "Facet",
+  desaturate: "Desaturate",
+  equalize: "Equalize",
 });
 
 /** The Curves eyedroppers' names, as the status line says them. */
+const BS = defineMessages("image.brushEngine", {
+  defineNeedsImage: "Define Brush Preset needs an image — open one first.",
+  defineFailed: "Define Brush Preset: {error}",
+  defined: "Brush preset “{name}” defined — {w}×{h} px tip.",
+  applied: "Brush: {name}",
+  noSuchPreset: "No such brush preset.",
+  importChosenNothing: "No brush file chosen.",
+  importedJson:
+    "{count, plural, one {# brush preset} other {# brush presets}} imported from {name}.",
+  importedAbr:
+    "{count, plural, one {# brush preset} other {# brush presets}} imported from {name}.",
+  importFailed: "{name}: {error}",
+  exportedJson: "Brush presets exported ({name}).",
+  exportedAbr: "Brush presets exported as .abr ({name}).",
+  exportNoSaver: "This host wires no file saver (shell.saveFile@1).",
+  exportDeclined: "The brush presets were not saved.",
+  exportFailed: "Export failed: {error}",
+  textureNoPattern:
+    "Texture is on but no pattern is defined — define a pattern first; the stroke paints untextured.",
+  unknownDynamicsKeys: "The engine has settings this panel cannot set: {keys}.",
+  historyFailed: "History brush: {error}",
+  magicEraseFailed: "Magic eraser: {error}",
+  magicErased: "Erased the colour region at {x},{y}.",
+  noEngine: "The image engine could not start.",
+});
+
 const PICK = defineMessages("image.curvesPick", {
   black: "black",
   grey: "grey",
@@ -1525,6 +2052,7 @@ const PICK = defineMessages("image.curvesPick", {
  *  status line reports them (message keys; `applyEffect` and `layerOp`
  *  read them through `t`). */
 const E = defineMessages("image.effect", {
+  freeTransform: "Free transform",
   redEye: "Red eye",
   patch: "Patch",
   median: "Median",
@@ -1577,7 +2105,25 @@ const E = defineMessages("image.effect", {
 
 /** The Photoshop-parity layer verbs (WP5.3): their names, as the
  *  status line reports them, and their outcomes. */
+/** The name the defined pattern goes by in a style. */
+const STYLE_PATTERN_NAME = "Pattern";
+
 const L = defineMessages("image.layerOps", {
+  layerStyle: "Layer style",
+  clearLayerStyle: "Clear layer style",
+  pasteLayerStyle: "Paste layer style",
+  blendingOptions: "Blending options",
+  globalLight: "Global light",
+  scaleEffects: "Scale effects",
+  showEffects: "Show all effects",
+  hideEffects: "Hide all effects",
+  newTypeLayer: "New type layer",
+  editType: "Edit type",
+  typeAdded: "Type layer “{name}” added — type to edit it, Esc to finish.",
+  typePlaceholder: "Lorem ipsum",
+  notATypeLayer: "The layer is not a type layer.",
+  noStoryDoor:
+    "This host cannot lay out type layers (it has no render.story door).",
   newAdjustmentLayer: "New adjustment layer",
   adjustment: "Adjustment",
   newFillLayer: "New fill layer",
@@ -1614,6 +2160,18 @@ const L = defineMessages("image.layerOps", {
   noPatternForFill: "No pattern defined — use Define pattern first.",
   compApplied: "Layer comp “{name}” applied.",
 });
+
+/** Each colour mode's name, as the status line says it. */
+const MODE_NAME: Record<ColorModeName, string> = {
+  gray: S.modeNameGray,
+  rgb: S.modeNameRgb,
+  cmyk: S.modeNameCmyk,
+  lab: S.modeNameLab,
+  indexed: S.modeNameIndexed,
+  multichannel: S.modeNameMultichannel,
+  duotone: S.modeNameDuotone,
+};
+const modeLabel = (m: ColorModeName): string => t(MODE_NAME[m]);
 
 /** Each selection modification's outcome. */
 const MODIFIED: Record<SelectionModifyOp, string> = {
@@ -1669,6 +2227,11 @@ export function createImageSession(host: BundleHost): ImageSession {
   // The selection interaction machine (rebuilt alongside the crop
   // machine; the selection itself is ENGINE state keyed to the handle).
   let selectionMachineRef: SelectionMachine | null = null;
+  // Selection and masking (created below, once `api` helpers exist).
+  let maskingRef: MaskingController | null = null;
+  let vectorsRef: VectorController | null = null;
+  let workspaceRef: WorkspaceController | null = null;
+  let smartRef: SmartController | null = null;
   // The paint interaction machine (pointer sampling only — the stroke's
   // base snapshot + coverage live engine-side).
   let brushMachineRef: BrushMachine | null = null;
@@ -1684,6 +2247,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     engineDetail: null,
     gpu: false,
     source: null,
+    typeEdit: null,
     params: freshIdentityParams(),
     histogram: null,
     compositedFrame: null,
@@ -1703,8 +2267,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     editingAdjustment: null,
     gradientKind: "linear",
     committedRev: null,
+    smartNested: null,
+    smartInfo: null,
     uncommitted: false,
     saveBack: null,
+    sourceMetadata: null,
+    exportProfile: null,
+    mode: {
+      bits: 8,
+      color: "rgb",
+      proof: { target: "off", colors: false, gamut: false },
+    },
     brush: { ...DEFAULT_BRUSH_PARAMS, color: [...DEFAULT_BRUSH_PARAMS.color] },
     blendModes: [],
     strokeActive: false,
@@ -1731,23 +2304,43 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
     ptPerPx: null,
     cloneSource: null,
+    retouch: initialRetouch(),
     tone: { ...DEFAULT_TONE },
     channels: null,
     brushLibrary: null,
     brushLibraryName: null,
     brushPreset: null,
+    dynamics: cloneDynamics(DEFAULT_BRUSH_DYNAMICS),
+    paintTools: structuredClone(DEFAULT_PAINT_TOOL_OPTIONS),
+    brushPresets: defaultPresets(),
+    brushPresetActive: null,
     dialog: null,
+    styleClipboard: null,
+    stylePresets: builtInPresets(),
+    toolPresets: [],
+    adjustmentPresets: [],
+    gradientPresets: builtInGradients(),
+    patternPresets: [],
+    historyPrefs: { depth: 32, memoryMb: 256, autoSnapshot: true },
+    globalLight: { angle: 120, altitude: 30 },
+    layerStyle: null,
     layerFilter: NO_LAYER_FILTER,
     ppi: null,
     curvesPicker: null,
     channelCurves: null,
+    curvesTarget: null,
   };
   /** The retained PSD parse handle (wasm-side), when state.psd is set. */
   let psdHandle: number | null = null;
   /** The ingested source's container, for the PNG/JPEG save-back lane
    *  ("jpeg" only when the ORIGINAL bytes were a JPEG — a re-encode
    *  never invents a lossy format). */
-  let sourceFormat: RasterFormat | "psd" | null = null;
+  let sourceFormat: SaveBackFormat | "psd" | null = null;
+  /** The bytes the session opened: Export As and the save-back carry
+   *  their EXIF, XMP and IPTC (and a CMYK source's profile). */
+  let sourceBytes: Uint8Array | null = null;
+  /** The picked CMYK output profile (`state.exportProfile` names it). */
+  let exportProfileBytes: Uint8Array | null = null;
   /** Pixel edits since the last ingest (layer ops, strokes, fills,
    *  filters, crop, resize, undo/redo). The PSD exporter reads it: the
    *  byte-identical re-emit is only correct while it is 0, because the
@@ -1830,6 +2423,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.layersNote = t(S.storedUnrestorable, { error: errText(err) });
       return;
     }
+    historyOps.resetAutoSnapshot();
     state.uncommitted = false;
     // A revision written through the OBJECT MODEL in a realm without a
     // GPU (object-model/image-objects.ts): smart objects whose source was
@@ -1939,6 +2533,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           engine = e;
           state.engine = "ready";
           state.gpu = gpu;
+          historyOps.applyHistoryPrefs(e);
           try {
             // The blend picker's options come from the kernel registry,
             // never from a list this side could let drift.
@@ -1994,11 +2589,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       // bytes survive (the importer may reuse them).
       const copy = bytes.slice();
       const decoded = await pool.decode(copy);
-      const info = engine.ingestRgba8(
-        decoded.width,
-        decoded.height,
-        decoded.rgba,
-      );
+      // A 16-bit source crosses as its samples, so the document keeps the
+      // depth the main-thread decode would have (image ADR 479).
+      const info = decoded.samples16
+        ? engine.ingestRgba16(decoded.width, decoded.height, decoded.samples16)
+        : engine.ingestRgba8(decoded.width, decoded.height, decoded.rgba);
       // The worker already ran the display transform inside its own
       // `decode_image`; `ingestRgba8` takes raw pixels and so reports
       // "sRGB assumed". Restore the treatment the worker measured, or the
@@ -2040,11 +2635,30 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       state.layers = engine.layers();
       state.history = engine.layersHistory();
+      const act = state.layers.layers.find(
+        (l) => l.index === state.layers.active,
+      );
+      state.smartInfo =
+        act?.kind === "smart" ? engine.smartInfo(act.index) : null;
+      historyOps.afterLayersRead();
+      state.globalLight = engine.globalLight();
+      const styled =
+        state.dialog?.kind === "layerStyle"
+          ? state.dialog.index
+          : state.layers.active;
+      state.layerStyle = engine.layerStyle(styled);
+      state.mode = {
+        ...state.mode,
+        bits: engine.imageBits(state.source.handle),
+        color: engine.imageMode(),
+      };
     } catch (err) {
       host.log.debug("layer readout failed", err);
       state.layers = EMPTY_LAYER_STACK;
       state.history = null;
     }
+    // The workspace rides the stack (undo, redo, open all move it).
+    workspaceRef?.sync();
   };
 
   /** Fold the stack into the bound engine-held image, re-read the
@@ -2057,6 +2671,11 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  slider steps costs at most two folds, each of the CURRENT stack. */
   const recompositeNow = async (): Promise<boolean> => {
     if (!engine || !state.source) return false;
+    // Smart filters an undo, a canvas op or a reopen left to run (ADR
+    // 482) land first, so the fold shows them.
+    if (state.gpu && engine.smartPending().length > 0) {
+      await smartRef?.passPending();
+    }
     try {
       await engine.layersComposite();
     } catch (err) {
@@ -2254,6 +2873,16 @@ export function createImageSession(host: BundleHost): ImageSession {
       emit();
       return false;
     }
+    await followHistoryMove();
+    const ok = await recomposite();
+    if (ok) setStatus(t(undo ? S.undid : S.redid, { label }));
+    return ok;
+  };
+
+  /** After the stack moved through its history (an undo, a redo, a
+   *  snapshot restore): follow the extent and the restored selection. */
+  const followHistoryMove = async (): Promise<void> => {
+    if (!engine || !state.source) return;
     // Finding IMG-1: a step across a canvas operation changes the extent
     // (the engine re-sized the bound image); follow it here, as
     // `canvasOp` does, so readouts and Commit see the restored canvas.
@@ -2268,14 +2897,131 @@ export function createImageSession(host: BundleHost): ImageSession {
       src.height = extent.height;
       refreshSourceReadout();
     }
-    const ok = await recomposite();
-    if (ok) setStatus(t(undo ? S.undid : S.redid, { label }));
-    return ok;
+    // The step may have restored a selection, a channel or a path.
+    api.refreshSelection();
+    maskingRef?.refresh();
   };
 
   /** Drop an in-flight stroke engine-side (the base pixels were never
    *  mutated, so this is a true restore). Shared by the explicit cancel
    *  and by every path that pulls the source out from under a stroke. */
+  /** IMPORT an `.abr` into the preset library: every preset mapped onto
+   *  the brush (`abr-preset.ts` — what cannot apply is reported), sampled
+   *  tips fetched by their index. */
+  const importAbrPresets = async (
+    name: string,
+    bytes: Uint8Array,
+  ): Promise<boolean> => {
+    const eng = await ensureEngine();
+    if (!eng) {
+      setStatus(t(BS.noEngine));
+      return false;
+    }
+    try {
+      const lib = eng.abrPresets(bytes);
+      let list = state.brushPresets;
+      for (const info of lib.presets as readonly AbrPresetInfo[]) {
+        const id = nextPresetId(list);
+        const tip =
+          info.sampleIndex !== undefined && info.sampleIndex !== null
+            ? decodeTipBitmap(eng.abrTip(bytes, info.sampleIndex), id)
+            : null;
+        const m = abrToBrush(info, tip);
+        const dynamics = patchDynamics(
+          cloneDynamics(DEFAULT_BRUSH_DYNAMICS),
+          m.dynamics,
+        );
+        list = addPreset(list, {
+          id,
+          name: info.name,
+          source: "abr",
+          params: {
+            size: m.params.size ?? state.brush.size,
+            hardness: m.params.hardness ?? state.brush.hardness,
+            spacing: m.params.spacing ?? state.brush.spacing,
+            opacity: m.params.opacity ?? 1,
+            flow: m.params.flow ?? 1,
+          },
+          dynamics,
+        });
+      }
+      const count = list.length - state.brushPresets.length;
+      state.brushPresets = list;
+      setStatus(t(BS.importedAbr, { count, name }));
+      return true;
+    } catch (err) {
+      setStatus(t(BS.importFailed, { name, error: errText(err) }));
+      return false;
+    }
+  };
+
+  /** EXPORT the library as an `.abr` — Photoshop's own format, carrying
+   *  what it can (the session's `.json` keeps every setting). */
+  const exportAbr = (
+    eng: ImageEngine,
+    list: readonly UserBrushPreset[],
+  ): Uint8Array => {
+    const keys = eng.abrExportKeys();
+    return eng.abrExport(
+      list.map((p) => ({
+        name: p.name,
+        values: packExportValues(keys, p).values,
+        bitmap: p.dynamics.bitmap,
+      })),
+    );
+  };
+
+  /** The stroke's seed: a deterministic sequence from the session's
+   *  start, so a recorded session replays its jitter too. */
+  let strokeSeed = 1;
+  /** Keys the engine reads that this glue cannot fill — reported once. */
+  let reportedUnknownKeys = false;
+
+  /** Freeze Brush Settings and the tool's options into the stroke the
+   *  engine just opened (`brush-dynamics.ts`). Skipped for a plain brush
+   *  with a computed tip, so that stroke stays the pre-engine one. */
+  const configureStroke = (
+    eng: ImageEngine,
+    tool: StrokeTool,
+    smoothingRadiusPx: number,
+  ) => {
+    const d = state.dynamics;
+    const engineTool =
+      tool === "smudge" ||
+      tool === "mixer" ||
+      tool === "history" ||
+      tool === "art-history" ||
+      tool === "background-eraser" ||
+      tool === "color-replace";
+    if (!engineTool && !dynamicsActive(d)) return;
+    strokeSeed = (Math.imul(strokeSeed, 1103515245) + 12345) & 0xffffff;
+    const tools = state.paintTools;
+    const mixer = tools.mixer.loadAfter
+      ? tools.mixer
+      : { ...tools.mixer, load: 0 };
+    const { values, unknown } = packDynamics(eng.brushDynamicsKeys(), {
+      dynamics: d,
+      tools: { ...tools, mixer },
+      seed: strokeSeed,
+      background: state.colors.bg,
+      smoothingRadiusPx: d.smoothing.amount > 0 ? smoothingRadiusPx : 0,
+    });
+    if (unknown.length > 0 && !reportedUnknownKeys) {
+      reportedUnknownKeys = true;
+      host.log.warn(t(BS.unknownDynamicsKeys, { keys: unknown.join(", ") }));
+    }
+    eng.brushSetDynamics(values);
+    if (d.bitmap) eng.brushSetTipBitmap(d.bitmap);
+    if (d.dual.enabled && d.dual.bitmap) eng.brushSetDualBitmap(d.dual.bitmap);
+    if (d.texture.enabled) {
+      if (patternHandle !== null) eng.brushSetTextureImage(patternHandle);
+      else setStatus(t(BS.textureNoPattern));
+    }
+    if (tool === "history" || tool === "art-history") {
+      eng.brushSetHistorySource(tools.history.source);
+    }
+  };
+
   const discardStroke = () => {
     if (engine && state.strokeActive) {
       try {
@@ -2419,6 +3165,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     psdHandle = null;
     state.psd = null;
     sourceFormat = null;
+    sourceBytes = null;
+    state.sourceMetadata = null;
     state.saveBack = null;
     pixelEdits = 0;
     sourceRef = null;
@@ -2458,19 +3206,82 @@ export function createImageSession(host: BundleHost): ImageSession {
     bytes[3] === 0x53;
 
   /** Sniff the ORIGINAL container so the save-back lane re-encodes into
-   *  the format the file already was (never inventing a lossy one).
-   *  Unknown containers fall to PNG — the lossless default. */
-  const sniffFormat = (bytes: Uint8Array): RasterFormat | "psd" => {
+   *  the format the file already was (never inventing a lossy one): JPEG,
+   *  TIFF and WebP go back as themselves. Every other container (GIF,
+   *  BMP, AVIF, HDR, ...) falls to PNG — the lossless default. */
+  const sniffFormat = (bytes: Uint8Array): SaveBackFormat | "psd" => {
     if (isPsd(bytes)) return "psd";
-    if (
-      bytes.length >= 3 &&
-      bytes[0] === 0xff &&
-      bytes[1] === 0xd8 &&
-      bytes[2] === 0xff
-    )
-      return "jpeg";
+    const b = (i: number) => bytes[i] ?? -1;
+    if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return "jpeg";
+    const tiff =
+      (b(0) === 0x49 && b(1) === 0x49 && b(2) === 42 && b(3) === 0) ||
+      (b(0) === 0x4d && b(1) === 0x4d && b(2) === 0 && b(3) === 42);
+    if (tiff) return "tiff";
+    const riff =
+      b(0) === 0x52 && b(1) === 0x49 && b(2) === 0x46 && b(3) === 0x46;
+    const webp =
+      b(8) === 0x57 && b(9) === 0x45 && b(10) === 0x42 && b(11) === 0x50;
+    if (riff && webp) return "webp";
     return "png";
   };
+
+  const NOTE_TEXT: Record<ExportNote, (typeof S)[keyof typeof S]> = {
+    "webp-lossless": S.exportNoteWebpLossless,
+    "cmyk-profile": S.exportNoteCmykProfile,
+    "cmyk-naive": S.exportNoteCmykNaive,
+    widened: S.exportNoteWidened,
+    narrowed: S.exportNoteNarrowed,
+    "alpha-dropped": S.exportNoteAlphaDropped,
+    "gray-untagged": S.exportNoteGrayUntagged,
+    "gif-palette": S.exportNoteGifPalette,
+    "jxl-lossless": S.exportNoteJxlLossless,
+    "no-metadata": S.exportNoteNoMetadata,
+  };
+  /** The engine's notes for the last export, as sentences. */
+  const exportNoteText = (): string =>
+    engine
+      ? engine
+          .exportNotes()
+          .map((n) => t(NOTE_TEXT[n]))
+          .join(" ")
+      : "";
+
+  /** Encode the session's (adjusted) pixels with `options`. At identity
+   *  the engine reads its own image, so a 16-bit session keeps 16 bits. */
+  const encodeExport = async (
+    src: NonNullable<ImageSessionState["source"]>,
+    options: ExportOptions,
+  ): Promise<Uint8Array> => {
+    if (!engine) throw new Error("engine unavailable");
+    const spec = exportSpec(options);
+    const source = sourceBytes ?? new Uint8Array(0);
+    const profile = exportProfileBytes ?? new Uint8Array(0);
+    if (isIdentity(state.params))
+      return engine.exportImageHandle(src.handle, spec, source, profile);
+    const rgba = await engine.adjust(src.handle, state.params);
+    return engine.exportImage(
+      rgba,
+      src.width,
+      src.height,
+      spec,
+      source,
+      profile,
+    );
+  };
+
+  /** The save-back's options: the format at its default quality, the
+   *  source's metadata kept, sRGB embedded, the image's resolution. */
+  const saveBackOptions = (format: RasterFormat): ExportOptions => ({
+    format,
+    quality: 90,
+    ppi: state.ppi,
+    keepMetadata: true,
+    embedProfile: true,
+    mode: "rgb",
+    bits: 8,
+    compression: "lzw",
+    intent: "relativeColorimetric",
+  });
 
   /** Strip the extension off a display name (a link URI or file name) so
    *  the save-back can stamp its own. */
@@ -2508,6 +3319,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     if (!engine || !state.source || psdHandle === null) return;
     try {
       const n = await engine.layersOpenFromPsd(state.source.handle, psdHandle);
+      // The document's paths come with it (ADR 476).
+      vectorsRef?.importPsdPaths(psdHandle);
+      historyOps.resetAutoSnapshot();
       // Our composite of the layer tree, not the file's merged one.
       await engine.layersComposite();
       state.layersNote = t(S.psdLayersOpened, { count: n });
@@ -2624,6 +3438,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       () => state.wand,
     );
     state.selection = engine.selectionStats();
+    maskingRef?.refresh();
     // The paint machine is pure pointer bookkeeping, but it is rebuilt
     // with the source so a stale sample queue can never leak across a
     // crop / resize / fill / paint handle swap.
@@ -2676,6 +3491,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     const rect = engine?.brushDirtyRect();
     if (
       !surface ||
+      // A display view re-derives the whole frame from the stroke.
+      engine?.viewActive() ||
       !rect ||
       !submitted ||
       submitted.target !== target ||
@@ -2712,6 +3529,15 @@ export function createImageSession(host: BundleHost): ImageSession {
   ): Promise<boolean> => {
     const surface = scene();
     if (!surface) return false;
+    // The display VIEW (a channel as grey, Quick Mask's overlay, a matte
+    // preview) transforms what the frame shows, never the document.
+    if (engine?.viewActive()) {
+      try {
+        rgba = engine.viewApply(rgba, width, height);
+      } catch (err) {
+        host.log.debug("display view failed", err);
+      }
+    }
     const scale = Math.min(box.w / layoutWidth, box.h / layoutHeight);
     // The SAME number the layout uses — see `state.ptPerPx`. Recorded
     // here so a panel converting image px to points cannot disagree
@@ -2880,6 +3706,13 @@ export function createImageSession(host: BundleHost): ImageSession {
       const keptAll = elementId ? keptSelections.get(elementId) : undefined;
       if (elementId) keptSelections.delete(elementId);
       sourceFormat = sniffFormat(bytes);
+      sourceBytes = bytes;
+      try {
+        state.sourceMetadata = engine.imageMetadata(bytes);
+      } catch (err) {
+        host.log.debug("metadata read failed", err);
+        state.sourceMetadata = null;
+      }
       state.saveBack = null;
       // Metadata only: Image Size shows it and the exporters write it.
       try {
@@ -2900,6 +3733,16 @@ export function createImageSession(host: BundleHost): ImageSession {
       // Compute the levels/curves histogram, bind the stack + selection,
       // and build the crop machine.
       refreshSourceReadout();
+      // The file's ruler guides (resource 1032) are where the image's
+      // workspace starts — not an undo step (image ADR 475).
+      if (psdHandle !== null && engine) {
+        try {
+          engine.adoptPsdGuides(psdHandle);
+          refreshLayers();
+        } catch (err) {
+          host.log.debug("PSD guides not adopted", err);
+        }
+      }
       // The selection kept for the revision the frame shows now; one kept
       // for another revision lay over pixels that have moved since.
       if (ref) openRecord = await frameRecordOf(ref, bytes).catch(() => null);
@@ -2945,10 +3788,6 @@ export function createImageSession(host: BundleHost): ImageSession {
     }
   });
 
-  /** Encoded PNG / JPEG bytes carrying the image's resolution. */
-  const withPpi = (bytes: Uint8Array): Uint8Array =>
-    engine && state.ppi !== null ? engine.stampPpi(bytes, state.ppi) : bytes;
-
   // ── FILTER DIALOG (WP5.2) ───────────────────────────────────────────
   //
   // The dialog previews by APPLYING: the filter lands in the active layer
@@ -2967,6 +3806,28 @@ export function createImageSession(host: BundleHost): ImageSession {
 
   /** The last values each filter's dialog was closed with. */
   const lastFilterValues = new Map<FilterId, Record<string, FilterValue>>();
+  /** The files the open dialog's `image` parameters decoded (owned:
+   *  freed with the dialog). */
+  const filterFiles = new Map<string, number>();
+  const freeFilterFiles = () => {
+    for (const h of filterFiles.values()) engine?.freeImage(h);
+    filterFiles.clear();
+  };
+  /** What a filter's run needs beyond its values (filters-schema.ts). */
+  const filterCtx = (
+    width: number,
+    height: number,
+    values: Readonly<Record<string, FilterValue>>,
+  ): FilterContext => ({
+    width,
+    height,
+    fg: [state.colors.fg[0], state.colors.fg[1], state.colors.fg[2]],
+    bg: [state.colors.bg[0], state.colors.bg[1], state.colors.bg[2]],
+    resource: (key) =>
+      values[key] === 1
+        ? (filterFiles.get(key) ?? null)
+        : (state.source?.handle ?? null),
+  });
   /** The image the dialog's proxy preview runs on (taken at open). */
   let filterProxy: {
     handle: number;
@@ -2993,7 +3854,87 @@ export function createImageSession(host: BundleHost): ImageSession {
     if (filterSettle) clearTimeout(filterSettle);
     filterSettle = null;
     freeFilterProxy();
+    freeFilterFiles();
+    blurDrag = null;
+    warpDrag = null;
+    warpBrushAt = null;
+    drawBlurGallery(null);
     appliedKey = null;
+  };
+
+  // ── the Blur Gallery's geometry on the canvas ───────────────────────
+  let blurDrag: BlurDrag | null = null;
+  let blurLayer: ReturnType<typeof host.overlay.layer> | null = null;
+  /** Draw (or clear) the open Blur Gallery's pins over the image. */
+  const drawBlurGallery = (d: FilterDialogState | null) => {
+    const src = state.source;
+    drawWarpCanvas(d);
+    if (!d || d.id !== "blurGallery" || !src?.elementId) {
+      blurLayer?.clear();
+      return;
+    }
+    void resolveFrameFit(host, src, "blur gallery").then((fit) => {
+      if (openFilter() !== d) return;
+      blurLayer ??= host.overlay.layer("blur-gallery");
+      if (!fit) blurLayer.clear();
+      else
+        blurLayer.set(blurGalleryShapes(d.values, src.width, src.height, fit));
+    });
+  };
+
+  // ── the pixel warps' geometry on the canvas (WP5.6) ───────────────
+  let warpDrag: WarpDrag | null = null;
+  let warpBrushAt: [number, number] | null = null;
+  let warpLayer: ReturnType<typeof host.overlay.layer> | null = null;
+  /** What the warp canvas reads from the engine for the open dialog. */
+  const warpEnv = (d: FilterDialogState): WarpCanvasEnv | null => {
+    const src = state.source;
+    const eng = engine;
+    if (!src || !eng) return null;
+    const ctx = filterCtx(src.width, src.height, d.values);
+    const opts = puppetOptions(d.values);
+    const pins = () => puppetPins(d.values, src.width, src.height);
+    return {
+      width: src.width,
+      height: src.height,
+      mesh: () => {
+        try {
+          return warpMesh(eng, d.values, ctx);
+        } catch {
+          return [];
+        }
+      },
+      edges: () => {
+        try {
+          return eng.puppetMeshEdges(src.handle, pins(), opts);
+        } catch {
+          return [];
+        }
+      },
+      restPoint: (at) => {
+        try {
+          return eng.puppetRestPoint(src.handle, pins(), opts, at);
+        } catch {
+          return at;
+        }
+      },
+      brushAt: warpBrushAt,
+    };
+  };
+  /** Draw (or clear) the open warp dialog's geometry over the image. */
+  const drawWarpCanvas = (d: FilterDialogState | null) => {
+    const src = state.source;
+    if (!d || !CANVAS_WARPS.has(d.id) || !src?.elementId) {
+      warpLayer?.clear();
+      return;
+    }
+    void resolveFrameFit(host, src, "warp").then((fit) => {
+      if (openFilter() !== d) return;
+      warpLayer ??= host.overlay.layer("warp");
+      const env = warpEnv(d);
+      if (!fit || !env) warpLayer.clear();
+      else warpLayer.set(warpCanvasShapes(d.id, d.values, env, fit));
+    });
   };
 
   /** Take the preview step back off the image (it is the newest step:
@@ -3017,7 +3958,11 @@ export function createImageSession(host: BundleHost): ImageSession {
     const def = filterDef(d.id);
     const values = { ...d.values };
     const eng = engine;
-    const ok = await api.applyEffect(def.label, (h) => def.run(eng, h, values));
+    const ctx = filterCtx(state.source.width, state.source.height, values);
+    const ok =
+      smart.isSmart() && !def.transform
+        ? await smart.addFilter(state.layers.active, d.id, values)
+        : await api.applyEffect(def.label, (h) => def.run(eng, h, values, ctx));
     // The dialog may have closed (or moved on) while the pass ran.
     if (openFilter() !== d) {
       if (ok) await historyStep(true);
@@ -3043,7 +3988,12 @@ export function createImageSession(host: BundleHost): ImageSession {
     const def = filterDef(d.id);
     const values = scaledForProxy(def, d.values, filterProxy.factor);
     try {
-      const out = await def.run(engine, filterProxy.handle, values);
+      const out = await def.run(
+        engine,
+        filterProxy.handle,
+        values,
+        filterCtx(filterProxy.width, filterProxy.height, d.values),
+      );
       let rgba: Uint8Array;
       try {
         rgba = await engine.adjust(out.handle, state.params);
@@ -3171,7 +4121,287 @@ export function createImageSession(host: BundleHost): ImageSession {
     state.channelCurves = curves;
   };
 
+  // WP5.8 — retouching (retouch.ts), over the session's own plumbing.
+  const retouch = makeRetouch({
+    host,
+    state: () => state,
+    setDialog: (dlg) => {
+      state.dialog = dlg;
+      emit();
+    },
+    engine: () => engine,
+    emit,
+    setStatus,
+    adopt: async (out) => {
+      const src = state.source;
+      if (!src || !engine) return false;
+      const layered = out.handle === src.handle;
+      swapSource(src, out);
+      state.saveBack = null;
+      if (!layered) {
+        try {
+          engine.selectionTransfer(out.handle);
+        } catch (err) {
+          host.log.debug("selection transfer failed", err);
+        }
+      }
+      return recomposite();
+    },
+    showPixels: async (rgba, width, height) => {
+      const target = state.source?.elementId;
+      if (!target || !scene()) return false;
+      return submitLayer(target, rgba, width, height, await frameBox(target));
+    },
+    restoreFrame: async () => {
+      if (state.source?.elementId) await api.apply();
+    },
+    discardStroke: () => discardStroke(),
+    composite: async () => {
+      const src = state.source;
+      if (!src || !engine) return new Uint8Array(0);
+      return engine.tile(src.handle, 0, 0, src.width, src.height);
+    },
+  });
+
+  maskingRef = createMaskingController({
+    engine: () => engine,
+    source: () => state.source,
+    setStatus,
+    emit,
+    refreshSelection: () => api.refreshSelection(),
+    recomposite: () => recomposite(),
+    redisplay: () =>
+      state.source?.elementId ? api.apply() : Promise.resolve(false),
+    markEdited: () => {
+      state.uncommitted = true;
+      refreshLayers();
+    },
+    wand: () => state.wand,
+  });
+  const masking = maskingRef;
+  // ── CURVES ▸ TARGETED ADJUSTMENT (I-55) ─────────────────────────────
+  const curvesTarget: {
+    armed: boolean;
+    /** The drag: the point index it moves, where it started, its output. */
+    drag: { index: number; y0: number; out0: number } | null;
+  } = { armed: false, drag: null };
+  /** The tone (0..1) of the image under `at` on `channel`'s curve: the
+   *  channel's value, or Rec. 709 luminance for the composite. */
+  const toneAt = (
+    at: [number, number],
+    channel: CurveChannel,
+  ): number | null => {
+    const src = state.source;
+    if (!src || !engine) return null;
+    const [x, y] = [Math.floor(at[0]), Math.floor(at[1])];
+    if (x < 0 || y < 0 || x >= src.width || y >= src.height) return null;
+    let c: Rgba01 | null;
+    try {
+      c = averageRgba8(engine.tile(src.handle, x, y, 1, 1));
+    } catch (err) {
+      host.log.debug("targeted adjustment sample failed", err);
+      return null;
+    }
+    if (!c) return null;
+    if (channel === "r") return c[0];
+    if (channel === "g") return c[1];
+    if (channel === "b") return c[2];
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  /** The curve through `pts` at `x`, as the engine's LUT draws it. */
+  const curveAt = (pts: Array<[number, number]>, x: number): number => {
+    if (!engine) return x;
+    const lut = engine.curveLut(pts);
+    return (lut[Math.round(Math.min(1, Math.max(0, x)) * 255)] ?? 0) / 255;
+  };
+  const curvesTargetPointer = (
+    phase: "down" | "move" | "up",
+    at: [number, number],
+  ): boolean => {
+    const target = state.curvesTarget;
+    if (!target) return false;
+    if (phase === "down") {
+      const tone = toneAt(at, target.channel);
+      if (tone === null) return false;
+      const pts = target.points.map((q) => [q[0], q[1]] as [number, number]);
+      // The point within 4 levels of the tone moves; otherwise a new one
+      // is placed ON the curve there, so the press alone changes nothing.
+      let index = pts.findIndex((q) => Math.abs(q[0] - tone) <= 4 / 255);
+      if (index < 0) {
+        pts.push([tone, curveAt(pts, tone)]);
+        pts.sort((a, b) => a[0] - b[0]);
+        index = pts.findIndex((q) => q[0] === tone);
+      }
+      curvesTarget.drag = { index, y0: at[1], out0: pts[index]![1] };
+      state.curvesTarget = { channel: target.channel, points: pts };
+      emit();
+      return true;
+    }
+    const drag = curvesTarget.drag;
+    if (!drag) return false;
+    // Up the image raises the output; a full image height is the range.
+    const span = Math.max(64, state.source?.height ?? 256);
+    const out = Math.min(1, Math.max(0, drag.out0 + (drag.y0 - at[1]) / span));
+    const pts = target.points.map((q, i) =>
+      i === drag.index ? ([q[0], out] as [number, number]) : q,
+    );
+    state.curvesTarget = { channel: target.channel, points: pts };
+    api.setCurvePoints(pts, target.channel);
+    if (phase === "up") {
+      curvesTarget.drag = null;
+      setStatus(
+        t(S.curvesTargeted, {
+          input: Math.round(pts[drag.index]![0] * 255),
+          output: Math.round(out * 255),
+        }),
+      );
+    }
+    return true;
+  };
+  const vectors = (vectorsRef = createVectorController({
+    engine: () => engine,
+    source: () => state.source,
+    layers: () => state.layers,
+    foreground: () => state.colors.fg,
+    gpu: () => state.gpu,
+    setStatus,
+    emit,
+    markEdited: () => {
+      state.uncommitted = true;
+    },
+    refreshLayers,
+    refreshPaths: () => masking.refresh(),
+    recomposite: () => recomposite(),
+    applyEffect: (label, run) => api.applyEffect(label, run),
+    stroke: {
+      begin: (tool) => api.brushBegin(tool),
+      extend: (x, y) => api.brushExtend({ x, y, pressure: 1 }),
+      commit: () => api.brushCommit(),
+      cancel: () => api.brushCancel(),
+    },
+  }));
+
+  const smart = (smartRef = createSmartController({
+    host,
+    engine: () => engine,
+    source: () => state.source,
+    adoptSource(info, nestedName) {
+      // Edit Contents: the session now addresses the open contents (or,
+      // closing them, the parent again). Neither handle is freed here —
+      // the engine owns both (the parent is parked, the contents are
+      // freed when they close).
+      const src = state.source;
+      if (!src) return;
+      releaseTiles();
+      src.handle = info.handle;
+      src.width = info.width;
+      src.height = info.height;
+      bumpTiles();
+      state.selection = null;
+      state.smartNested = nestedName;
+    },
+    layers: () => state.layers,
+    gpu: () => state.gpu,
+    setStatus,
+    emit,
+    refreshLayers,
+    recomposite: () => recomposite(),
+    filterContext: (w, h, values) => filterCtx(w, h, values),
+  }));
+
+  const presetCtx = {
+    host,
+    state,
+    emit,
+    setStatus,
+    engine: () => engine,
+    ensureEngine,
+    api: () => api,
+    usePattern(width: number, height: number, rgba: Uint8Array) {
+      if (!engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      try {
+        const info = engine.ingestRgba8(width, height, rgba);
+        if (patternHandle !== null) engine.freeImage(patternHandle);
+        patternHandle = info.handle;
+        state.pattern = { width, height };
+        emit();
+        return true;
+      } catch (err) {
+        setStatus(t(S.definePatternFailed, { error: errText(err) }));
+        return false;
+      }
+    },
+    definedPattern() {
+      if (!engine || patternHandle === null || !state.pattern) return null;
+      const { width, height } = state.pattern;
+      try {
+        const rgba = engine.tile(patternHandle, 0, 0, width, height);
+        return { width, height, rgba: new Uint8Array(rgba) };
+      } catch {
+        return null;
+      }
+    },
+    importAbr: (name: string, bytes: Uint8Array) =>
+      importAbrPresets(name, bytes),
+    exportAbr,
+    refresh: refreshLayers,
+    async afterHistoryMove() {
+      discardStroke();
+      await followHistoryMove();
+      await recomposite();
+    },
+  };
+  const historyOps = createHistoryOps(presetCtx);
+  const presetOps = createPresetOps(presetCtx);
+
+  workspaceRef = createWorkspaceController({
+    host,
+    engine: () => engine,
+    source: () => state.source,
+    ppi: () => state.ppi,
+    selection: () => state.selection,
+    emit,
+    setStatus,
+    markEdited: () => {
+      state.uncommitted = true;
+      state.saveBack = null;
+      refreshLayers();
+    },
+    rotateCanvas: (degrees) => api.rotateCanvas(degrees),
+  });
+  const workspace = workspaceRef;
+  // ── type layer plumbing (WP5.10) ──
+  let typeSessionCounter = 0;
+  let lastTypePoint: [number, number] | null = null;
+  /** The page the engine draws type stories on: the image frame's (any
+   *  page would do — the story is drawn alone). */
+  const storyPage = async (): Promise<string | null> => {
+    const fit = await resolveFrameFit(host, state.source, "type layer");
+    return fit?.pageId ?? host.viewport.activePage() ?? null;
+  };
+  /** The overlay's writes, latest-wins: typing faster than the engine
+   *  renders drops the intermediate texts, never the last one. */
+  const typeTextWrites = latestWins((): Promise<boolean> => {
+    const e = state.typeEdit;
+    if (!e) return Promise.resolve(false);
+    return api.editTypeLayer(
+      e.index,
+      (src) => ({ ...src, text: e.text }),
+      e.session,
+    );
+  });
+
   const api: ImageSession = {
+    ...historyOps,
+    ...presetOps,
+    ...retouch,
+    masking: () => masking,
+    vectors: () => vectors,
+    workspace: () => workspace,
+    smart: () => smart,
     state: () => state,
 
     onDidChange(listener) {
@@ -3383,7 +4613,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
 
-    async openFilterDialog(id) {
+    async openFilterDialog(id, preset) {
       const def = filterDef(id);
       if (openFilter()) await cancelFilter();
       if (!state.source || !engine) {
@@ -3393,13 +4623,19 @@ export function createImageSession(host: BundleHost): ImageSession {
       discardStroke();
       const filter: FilterDialogState = {
         id,
-        values: { ...filterDefaults(def), ...lastFilterValues.get(id) },
+        values: {
+          ...filterDefaults(def),
+          ...lastFilterValues.get(id),
+          ...preset,
+        },
         preview: true,
         before: false,
         applied: false,
+        files: {},
       };
       state.dialog = { kind: "filter", filter };
       emit();
+      drawBlurGallery(filter);
       await takeFilterProxy();
       if (openFilter() !== filter) {
         freeFilterProxy();
@@ -3417,7 +4653,176 @@ export function createImageSession(host: BundleHost): ImageSession {
       // A new dialog record, so a render memoised on it sees the change.
       state.dialog = { kind: "filter", filter: d };
       emit();
+      drawBlurGallery(d);
       scheduleFilterPreview();
+    },
+
+    async openWarpDialog(id) {
+      const src = state.source;
+      const eng = engine;
+      if (!src || !eng) {
+        setStatus(t(S.filterNeedsAnImage, { label: t(filterDef(id).label) }));
+        return false;
+      }
+      let preset: Record<string, FilterValue> = {};
+      if (id === "warp") {
+        let bounds = { x: 0, y: 0, w: src.width, h: src.height };
+        try {
+          bounds = eng.warpBounds(src.handle);
+        } catch (err) {
+          host.log.debug("warp bounds failed", err);
+        }
+        preset = warpPreset(bounds, src.width, src.height);
+      } else if (id === "puppetWarp") preset = { pins: [] };
+      else if (id === "liquify") preset = { strokes: [] };
+      return api.openFilterDialog(id, preset);
+    },
+
+    async commitPerspectiveCrop(quad, width, height) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingToCropIngestAPlaced));
+        return false;
+      }
+      discardStroke();
+      const w = Math.round(width);
+      const h = Math.round(height);
+      let wh: { width: number; height: number };
+      try {
+        engine.layersOpen(src.handle);
+        wh = await engine.layersPerspectiveCrop(quad, w, h);
+      } catch (err) {
+        setStatus(t(S.cropFailed, { error: errText(err) }));
+        emit();
+        return false;
+      }
+      adoptCanvasExtent(src, wh);
+      if (src.elementId) await api.apply();
+      setStatus(t(S.cropped, { width: wh.width, height: wh.height }));
+      emit();
+      return true;
+    },
+
+    openBlurGallery(kind) {
+      const last = lastFilterValues.get("blurGallery") ?? {};
+      return api.openFilterDialog(
+        "blurGallery",
+        blurPreset(last, kind) as Record<string, FilterValue>,
+      );
+    },
+
+    async chooseFilterImage(key, choice) {
+      const d = openFilter();
+      if (!d || !engine) return false;
+      if (choice === 0) {
+        const own = filterFiles.get(key);
+        if (own !== undefined) engine.freeImage(own);
+        filterFiles.delete(key);
+        const { [key]: _gone, ...files } = d.files;
+        d.files = files;
+        api.setFilterValues({ [key]: 0 });
+        return true;
+      }
+      if (!host.supports("shell.pickFile@1")) {
+        setStatus(t(S.thisHostWiresNoFilePicker));
+        return false;
+      }
+      const picked = await host.shell.pickFile({
+        accept: [".png", ".jpg", ".jpeg", ".webp", ".psd", ".tif", ".tiff"],
+      });
+      const file = picked[0];
+      if (!file || openFilter() !== d) {
+        setStatus(t(S.noFilterImageChosen));
+        return false;
+      }
+      let h: number;
+      try {
+        h = engine.decode(file.bytes).handle;
+      } catch (err) {
+        setStatus(t(S.whatFailed, { what: file.name, error: errText(err) }));
+        return false;
+      }
+      const own = filterFiles.get(key);
+      if (own !== undefined) engine.freeImage(own);
+      filterFiles.set(key, h);
+      d.files = { ...d.files, [key]: file.name };
+      api.setFilterValues({ [key]: 1 });
+      return true;
+    },
+
+    async applyOneShot(kind) {
+      const eng = engine;
+      if (!eng || !state.source) {
+        setStatus(t(S.filterNeedsAnImage, { label: t(ONE_SHOT[kind]) }));
+        return false;
+      }
+      return api.applyEffect(ONE_SHOT[kind], (h) => {
+        switch (kind) {
+          case "solarize":
+            return eng.applySolarize(h);
+          case "facet":
+            // Facet clumps similar neighbours into flat facets: the
+            // gallery's Kuwahara regions at their smallest radius.
+            return eng.galleryKuwahara(h, 2, 1);
+          case "desaturate":
+            return eng.applyDesaturate(h);
+          case "equalize":
+            return eng.applyEqualize(h, state.selection !== null);
+        }
+      });
+    },
+
+    canvasPointer(phase, at, modifiers = {}) {
+      // A drag cut off (the tool deactivated, the pointer left the frame)
+      // ends where it last was.
+      if (!Number.isFinite(at[0]) || !Number.isFinite(at[1])) {
+        const had =
+          blurDrag !== null || curvesTarget.drag !== null || warpDrag !== null;
+        blurDrag = null;
+        warpDrag = null;
+        warpBrushAt = null;
+        curvesTarget.drag = null;
+        return had;
+      }
+      const d = openFilter();
+      const src = state.source;
+      if (curvesTarget.armed && src) return curvesTargetPointer(phase, at);
+      if (d && src && CANVAS_WARPS.has(d.id)) {
+        if (phase === "down") {
+          const env = warpEnv(d);
+          warpDrag = env
+            ? warpCanvasHit(d.id, d.values, env, at, modifiers.alt === true)
+            : null;
+          if (!warpDrag) return false;
+        }
+        if (!warpDrag) return false;
+        if (d.id === "liquify") warpBrushAt = phase === "up" ? null : at;
+        const patch = warpDrag.move(at);
+        if (patch) api.setFilterValues(patch);
+        else drawWarpCanvas(d);
+        if (phase === "up") {
+          warpDrag = null;
+          warpBrushAt = null;
+          drawWarpCanvas(openFilter());
+        }
+        return true;
+      }
+      if (!d || d.id !== "blurGallery" || !src) return false;
+      if (phase === "down") {
+        blurDrag = blurGalleryHit(
+          d.values,
+          src.width,
+          src.height,
+          at,
+          modifiers.alt === true,
+        );
+        if (!blurDrag) return false;
+      }
+      if (!blurDrag) return false;
+      const patch = blurDrag.move(at, src.width, src.height);
+      if (patch) api.setFilterValues(patch);
+      if (phase === "up") blurDrag = null;
+      return true;
     },
 
     async setFilterPreview(on) {
@@ -3473,7 +4878,11 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.filterNeedsAnImage, { label: t(def.label) }));
         return false;
       }
-      return api.applyEffect(def.label, (h) => def.run(eng, h, v));
+      // On a smart object a filter is a SMART FILTER (ADR 482).
+      if (smart.isSmart()) return smart.addFilter(state.layers.active, id, v);
+      const src = state.source;
+      const ctx = filterCtx(src?.width ?? 1, src?.height ?? 1, v);
+      return api.applyEffect(def.label, (h) => def.run(eng, h, v, ctx));
     },
 
     async applyAverage() {
@@ -3485,6 +4894,11 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
+      if (kind === "smartTransform" && !smart.isSmart()) {
+        setStatus(t(SO.notSmart));
+        emit();
+        return false;
+      }
       if (openFilter()) void cancelFilter();
       state.dialog = { kind };
       emit();
@@ -3492,6 +4906,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     async closeDialog() {
+      if (state.dialog?.kind === "contentAwareFill") {
+        await retouch.cancelContentAwareFill();
+        return;
+      }
       if (openFilter()) {
         await cancelFilter();
         return;
@@ -3635,6 +5053,24 @@ export function createImageSession(host: BundleHost): ImageSession {
       return curves;
     },
 
+    armCurvesTarget(channel, points) {
+      curvesTarget.armed = channel !== null;
+      curvesTarget.drag = null;
+      state.curvesTarget = channel
+        ? {
+            channel,
+            points: points
+              ? [...points]
+              : [
+                  [0, 0],
+                  [1, 1],
+                ],
+          }
+        : null;
+      if (channel) setStatus(t(S.curvesTargetArmed));
+      else emit();
+    },
+
     takeCurvesPick(at) {
       const kind = state.curvesPicker;
       if (!kind) return false;
@@ -3724,6 +5160,137 @@ export function createImageSession(host: BundleHost): ImageSession {
       return true;
     },
 
+    async setBits(bits) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      discardStroke();
+      let changed: boolean;
+      try {
+        engine.layersOpen(src.handle);
+        changed = await engine.imageSetBits(src.handle, bits);
+      } catch (err) {
+        setStatus(
+          t(S.whatFailed, { what: `${bits} bits`, error: errText(err) }),
+        );
+        emit();
+        return false;
+      }
+      refreshLayers();
+      if (changed) {
+        markPixelsEdited();
+        bumpTiles();
+        if (src.elementId) await api.apply();
+      }
+      setStatus(t(changed ? S.modeBitsSet : S.modeBitsAlready, { bits }));
+      emit();
+      return changed;
+    },
+
+    async setIndexedColor(palette, colours = 256) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      discardStroke();
+      let changed: boolean;
+      try {
+        engine.layersOpen(src.handle);
+        changed = await engine.imageSetIndexed(src.handle, palette, colours);
+      } catch (err) {
+        setStatus(
+          t(S.whatFailed, {
+            what: modeLabel("indexed"),
+            error: errText(err),
+          }),
+        );
+        emit();
+        return false;
+      }
+      refreshLayers();
+      if (changed) {
+        markPixelsEdited();
+        bumpTiles();
+        if (src.elementId) await api.apply();
+      }
+      if (state.dialog?.kind === "indexedColor") state.dialog = null;
+      const count =
+        palette === "web" ? 216 : palette === "adaptive" ? colours : null;
+      setStatus(
+        changed
+          ? t(S.modeIndexedSet, { count: count ?? "≤ 256" })
+          : t(S.modeColorAlready, { mode: modeLabel("indexed") }),
+      );
+      emit();
+      return changed;
+    },
+
+    async setColorMode(mode) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      discardStroke();
+      const profile = mode === "cmyk" ? exportProfileBytes : null;
+      let changed: boolean;
+      try {
+        engine.layersOpen(src.handle);
+        changed = await engine.imageSetMode(src.handle, mode, profile);
+      } catch (err) {
+        setStatus(
+          t(S.whatFailed, { what: modeLabel(mode), error: errText(err) }),
+        );
+        emit();
+        return false;
+      }
+      refreshLayers();
+      if (changed) {
+        markPixelsEdited();
+        bumpTiles();
+        if (src.elementId) await api.apply();
+      }
+      setStatus(
+        mode === "cmyk" && !profile
+          ? t(S.modeCmykNoProfile)
+          : t(changed ? S.modeColorSet : S.modeColorAlready, {
+              mode: modeLabel(mode),
+            }),
+      );
+      emit();
+      return changed;
+    },
+
+    async setProof(p) {
+      if (!engine || !state.source) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      const next = { ...state.mode.proof, ...p };
+      const on = next.target !== "off" && (next.colors || next.gamut);
+      try {
+        engine.viewSetProof(
+          on ? next.target : "off",
+          next.colors,
+          next.gamut,
+          next.target === "cmyk" ? exportProfileBytes : null,
+        );
+      } catch (err) {
+        setStatus(t(S.proofFailed, { error: errText(err) }));
+        emit();
+        return false;
+      }
+      state.mode = { ...state.mode, proof: next };
+      // The frame re-derives from the composite through the view.
+      if (state.source.elementId) await api.apply();
+      setStatus(on ? t(S.proofOn) : t(S.proofOff));
+      emit();
+      return true;
+    },
+
     modifySelection(op, radius) {
       if (!engine || !state.source) {
         setStatus(t(S.nothingIngestedIngestAPlacedImage));
@@ -3790,6 +5357,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     psdExport() {
       if (psdHandle === null || !engine || !state.psd) return null;
       try {
+        // The image's guides as the file's resource 1032 (unchanged
+        // guides leave the bytes alone: the preservation rule).
+        engine.psdWriteGuides(psdHandle);
         return { bytes: engine.psdSave(psdHandle), fileName: state.psd.name };
       } catch (err) {
         setStatus(t(S.psdSaveFailed, { error: errText(err) }));
@@ -3825,6 +5395,7 @@ export function createImageSession(host: BundleHost): ImageSession {
             rgba,
           );
           refreshPsdLayers();
+          engine.psdWriteGuides(psdHandle);
           result = {
             bytes: engine.psdSave(psdHandle),
             fileName: `${stem}.psd`,
@@ -3837,12 +5408,28 @@ export function createImageSession(host: BundleHost): ImageSession {
           setStatus(t(S.psdSaveBackUnavailableTheStructural));
           return null;
         } else {
-          const fmt: RasterFormat = sourceFormat === "jpeg" ? "jpeg" : "png";
+          const fmt: SaveBackFormat = sourceFormat ?? "png";
+          // The source's EXIF, XMP and IPTC ride along, the pixels are
+          // tagged sRGB, the resolution is written (ADR 468).
           result = {
-            bytes: withPpi(engine.encode(rgba, src.width, src.height, fmt)),
-            fileName: `${stem}${fmt === "jpeg" ? ".jpg" : ".png"}`,
-            mimeType: fmt === "jpeg" ? "image/jpeg" : "image/png",
-            note: fmt === "jpeg" ? t(S.jpegSaveBack) : t(S.pngSaveBack),
+            bytes: engine.exportImage(
+              rgba,
+              src.width,
+              src.height,
+              exportSpec(saveBackOptions(fmt)),
+              sourceBytes ?? new Uint8Array(0),
+              new Uint8Array(0),
+            ),
+            fileName: `${stem}${EXPORT_FORMATS[fmt].extension}`,
+            mimeType: EXPORT_FORMATS[fmt].mimeType,
+            note: t(
+              {
+                jpeg: S.jpegSaveBack,
+                png: S.pngSaveBack,
+                tiff: S.tiffSaveBack,
+                webp: S.webpSaveBack,
+              }[fmt],
+            ),
           };
         }
         state.saveBack = result;
@@ -3889,8 +5476,81 @@ export function createImageSession(host: BundleHost): ImageSession {
       return accepted;
     },
 
+    async exportAs(options) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return null;
+      }
+      if (!state.gpu && !isIdentity(state.params)) {
+        setStatus(t(S.webgpuUnavailableTheAdjustedExportNeeds));
+        return null;
+      }
+      state.busy = true;
+      emit();
+      try {
+        const fmt = EXPORT_FORMATS[options.format];
+        const result: SaveBackResult = {
+          bytes: await encodeExport(src, options),
+          fileName: `${baseName(src.name)}${fmt.extension}`,
+          mimeType: fmt.mimeType,
+          note: exportNoteText(),
+        };
+        const size = { file: result.fileName, bytes: result.bytes.length };
+        if (host.supports("shell.saveFile@1")) {
+          const accepted = await host.shell.saveFile({
+            suggestedName: result.fileName,
+            bytes: result.bytes,
+            mimeType: result.mimeType,
+          });
+          setStatus(
+            `${t(accepted ? S.exported : S.saveDeclined, size)} ${result.note}`.trim(),
+          );
+        } else {
+          state.saveBack = result;
+          setStatus(`${t(S.exportStaged, size)} ${result.note}`.trim());
+        }
+        state.dialog = null;
+        return result;
+      } catch (err) {
+        setStatus(t(S.exportFailed, { error: errText(err) }));
+        return null;
+      } finally {
+        state.busy = false;
+        emit();
+      }
+    },
+
+    async pickExportProfile() {
+      if (!host.supports("shell.pickFile@1")) {
+        setStatus(t(S.thisHostWiresNoFilePicker));
+        return false;
+      }
+      const picked = await host.shell.pickFile({ accept: [".icc", ".icm"] });
+      const file = picked[0];
+      if (!file) {
+        setStatus(t(S.noProfileChosen));
+        return false;
+      }
+      exportProfileBytes = file.bytes;
+      state.exportProfile = file.name;
+      setStatus(t(S.exportProfileSet, { name: file.name }));
+      emit();
+      return true;
+    },
+
+    clearExportProfile() {
+      exportProfileBytes = null;
+      state.exportProfile = null;
+      emit();
+    },
+
     async psdExportBytes() {
       if (psdHandle === null || !engine || !state.psd) return null;
+      // The retained PSD is the parent's: open contents close first.
+      if (state.smartNested !== null && !(await smart.closeAll(true))) {
+        return null;
+      }
       // PRESERVATION FIRST: an unedited export must stay byte-identical,
       // so the save-back only runs when the panel is off identity OR the
       // pixels changed since ingest. Identity alone is not enough: a
@@ -3929,6 +5589,27 @@ export function createImageSession(host: BundleHost): ImageSession {
       return null;
     },
 
+    async layeredTiffExportBytes() {
+      if (psdHandle === null || !engine || !state.psd) {
+        setStatus(t(S.layeredTiffNeedsPsd));
+        emit();
+        return null;
+      }
+      const psd = await api.psdExportBytes();
+      if (!psd) return null;
+      try {
+        const bytes = engine.psdToLayeredTiff(psd.bytes, "lzw");
+        const fileName = `${baseName(psd.fileName)}.tif`;
+        setStatus(t(S.layeredTiffExported, { file: fileName }));
+        emit();
+        return { bytes, fileName };
+      } catch (err) {
+        setStatus(t(S.exportFailed, { error: errText(err) }));
+        emit();
+        return null;
+      }
+    },
+
     async rasterExportBytes(format) {
       const src = state.source;
       if (!src || !engine) return null;
@@ -3937,13 +5618,10 @@ export function createImageSession(host: BundleHost): ImageSession {
         return null;
       }
       try {
-        const rgba = await engine.adjust(src.handle, state.params);
-        const bytes = withPpi(
-          engine.encode(rgba, src.width, src.height, format),
-        );
+        const bytes = await encodeExport(src, saveBackOptions(format));
         return {
           bytes,
-          fileName: `${baseName(src.name)}${format === "jpeg" ? ".jpg" : ".png"}`,
+          fileName: `${baseName(src.name)}${EXPORT_FORMATS[format].extension}`,
         };
       } catch (err) {
         setStatus(t(S.exportFailed, { error: errText(err) }));
@@ -4002,6 +5680,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
 
+    async transformLayer(matrix, interp = "bicubic") {
+      return this.applyEffect(E.freeTransform, (h) =>
+        engine!.applyProjective(h, matrix, interp),
+      );
+    },
     async applyWarp(kind, amount, frequency = 1) {
       return this.applyEffect(
         t(E.distort, { kind: warpKindLabel(kind) }),
@@ -4189,6 +5872,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       host.supports("widgets.colorPicker@1") ? host.widgets.ColorPicker : null,
 
     async commitToDocument() {
+      // Open contents are saved into their smart objects first: the
+      // document holds the parent (ADR 482).
+      if (state.smartNested !== null && !(await smart.closeAll(true))) {
+        return false;
+      }
       const src = state.source;
       if (!src || !engine || !src.elementId || !sourceRef) {
         setStatus(t(S.commitNeedsAnImageIngestedFrom));
@@ -4585,6 +6273,10 @@ export function createImageSession(host: BundleHost): ImageSession {
         rgb[{ r: 0, g: 1, b: 2 }[channel]] = table;
         state.params = { ...state.params, curveLutRgb: rgb };
       }
+      // An armed targeted adjustment moves THIS curve next time.
+      const target = state.curvesTarget;
+      if (target && target.channel === channel && target.points !== points)
+        state.curvesTarget = { channel, points: [...points] };
       emit();
       schedulePreview();
     },
@@ -4628,6 +6320,12 @@ export function createImageSession(host: BundleHost): ImageSession {
     refreshSelection() {
       if (!engine || !state.source) return;
       state.selection = engine.selectionStats();
+      // A selection change is an undo step (ADR 470): the readout follows.
+      try {
+        state.history = engine.layersHistory();
+      } catch (err) {
+        host.log.debug("history readout failed", err);
+      }
       emit();
     },
 
@@ -4945,6 +6643,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     setType(p) {
       state.type = { ...state.type, ...p };
       emit();
+      // The Character and Paragraph panels act on the active TYPE layer
+      // too (WP5.10): the whole layer takes the new setting.
+      const active = state.layers.layers[state.layers.active];
+      if (active?.kind === "type" && engine) {
+        const session = state.typeEdit?.session;
+        void api.editTypeLayer(
+          active.index,
+          (src) => applyTypeSettings(src, p),
+          session,
+        );
+      }
     },
 
     async paintText([x, y], text, family, sizePx) {
@@ -5049,6 +6758,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     setCloneSource([x, y]) {
       const aligned = state.cloneSource?.aligned ?? true;
       state.cloneSource = { x, y, aligned };
+      // The anchor belongs to the Clone Source panel's active source.
+      retouch.onAnchor(x, y);
       setStatus(t(S.cloneSourceSet, { x: Math.round(x), y: Math.round(y) }));
     },
 
@@ -5181,7 +6892,199 @@ export function createImageSession(host: BundleHost): ImageSession {
       emit();
     },
 
-    async brushBegin(tool) {
+    setBrushDynamics(patch) {
+      state.dynamics = patchDynamics(state.dynamics, patch);
+      state.brushPresetActive = null;
+      emit();
+    },
+
+    setPaintToolOptions(tool, patch) {
+      state.paintTools = {
+        ...state.paintTools,
+        [tool]: { ...state.paintTools[tool], ...patch },
+      };
+      emit();
+    },
+
+    async defineBrushPreset(name) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(BS.defineNeedsImage));
+        return false;
+      }
+      let tip;
+      try {
+        tip = engine.brushTipFromSelection(src.handle);
+      } catch (err) {
+        setStatus(t(BS.defineFailed, { error: errText(err) }));
+        return false;
+      }
+      const id = nextPresetId(state.brushPresets);
+      const n = state.brushPresets.filter((p) => p.source === "defined").length;
+      const presetName = name?.trim() || untitledName(n + 1);
+      const dynamics = cloneDynamics(state.dynamics);
+      dynamics.bitmap = { id, ...tip };
+      const preset: UserBrushPreset = {
+        id,
+        name: presetName,
+        source: "defined",
+        params: {
+          size: Math.max(tip.width, tip.height),
+          hardness: state.brush.hardness,
+          spacing: 0.25,
+          opacity: state.brush.opacity,
+          flow: state.brush.flow,
+        },
+        dynamics,
+      };
+      state.brushPresets = addPreset(state.brushPresets, preset);
+      api.applyUserPreset(id);
+      setStatus(
+        t(BS.defined, { name: presetName, w: tip.width, h: tip.height }),
+      );
+      return true;
+    },
+
+    applyUserPreset(id) {
+      const p = state.brushPresets.find((x) => x.id === id);
+      if (!p) {
+        setStatus(t(BS.noSuchPreset));
+        return false;
+      }
+      const { params, dynamics } = applyPreset(p, state.dynamics);
+      state.brush = { ...state.brush, ...params };
+      state.dynamics = dynamics;
+      state.brushPresetActive = id;
+      state.brushPreset = null;
+      setStatus(t(BS.applied, { name: p.name }));
+      return true;
+    },
+
+    renameBrushPreset(id, name) {
+      state.brushPresets = renamePreset(state.brushPresets, id, name);
+      emit();
+    },
+
+    deleteBrushPreset(id) {
+      state.brushPresets = deletePreset(state.brushPresets, id);
+      if (state.brushPresetActive === id) state.brushPresetActive = null;
+      emit();
+    },
+
+    moveBrushPreset(from, to) {
+      state.brushPresets = movePreset(state.brushPresets, from, to);
+      emit();
+    },
+
+    async importBrushPresets() {
+      if (!host.supports("shell.pickFile@1")) {
+        setStatus(t(S.thisHostWiresNoFilePicker));
+        return false;
+      }
+      const picked = await host.shell.pickFile({ accept: [".abr", ".json"] });
+      const file = picked[0];
+      if (!file) {
+        setStatus(t(BS.importChosenNothing));
+        return false;
+      }
+      if (file.name.toLowerCase().endsWith(".json")) {
+        try {
+          const text = new TextDecoder().decode(file.bytes);
+          let list = state.brushPresets;
+          for (const p of deserializePresets(text)) {
+            const id = nextPresetId(list);
+            list = addPreset(list, {
+              ...p,
+              id,
+              source: "imported",
+              dynamics: p.dynamics.bitmap
+                ? { ...p.dynamics, bitmap: { ...p.dynamics.bitmap, id } }
+                : p.dynamics,
+            });
+          }
+          const count = list.length - state.brushPresets.length;
+          state.brushPresets = list;
+          setStatus(t(BS.importedJson, { count, name: file.name }));
+          return true;
+        } catch (err) {
+          setStatus(
+            t(BS.importFailed, { name: file.name, error: errText(err) }),
+          );
+          return false;
+        }
+      }
+      return await importAbrPresets(file.name, file.bytes);
+    },
+
+    async exportBrushPresets(format) {
+      if (!host.supports("shell.saveFile@1")) {
+        setStatus(t(BS.exportNoSaver));
+        return false;
+      }
+      let bytes: Uint8Array;
+      let name: string;
+      try {
+        if (format === "json") {
+          bytes = new TextEncoder().encode(
+            serializePresets(state.brushPresets),
+          );
+          name = "brush-presets.json";
+        } else {
+          const eng = await ensureEngine();
+          if (!eng) {
+            setStatus(t(BS.noEngine));
+            return false;
+          }
+          bytes = exportAbr(eng, state.brushPresets);
+          name = "brush-presets.abr";
+        }
+      } catch (err) {
+        setStatus(t(BS.exportFailed, { error: errText(err) }));
+        return false;
+      }
+      const ok = await host.shell.saveFile({
+        suggestedName: name,
+        bytes,
+        mimeType:
+          format === "json" ? "application/json" : "application/octet-stream",
+      });
+      setStatus(
+        ok
+          ? t(format === "json" ? BS.exportedJson : BS.exportedAbr, { name })
+          : t(BS.exportDeclined),
+      );
+      return ok;
+    },
+
+    async magicErase(point) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingToPaintOnIngestA));
+        return false;
+      }
+      if (!state.gpu) {
+        setStatus(t(S.webgpuUnavailablePaintingIsGpuOnly));
+        return false;
+      }
+      const o = state.paintTools.magicEraser;
+      const x = Math.floor(point[0]);
+      const y = Math.floor(point[1]);
+      let painted;
+      try {
+        painted = await engine.magicErase(src.handle, x, y, o);
+      } catch (err) {
+        setStatus(t(BS.magicEraseFailed, { error: errText(err) }));
+        return false;
+      }
+      swapSource(src, painted);
+      state.saveBack = null;
+      refreshSourceReadout();
+      if (src.elementId) await api.apply();
+      setStatus(t(BS.magicErased, { x, y }));
+      return true;
+    },
+
+    async brushBegin(tool, opts) {
       const src = state.source;
       if (!src || !engine) {
         setStatus(t(S.nothingToPaintOnIngestA));
@@ -5202,7 +7105,15 @@ export function createImageSession(host: BundleHost): ImageSession {
         return false;
       }
       try {
-        engine.brushBegin(src.handle, tool, state.brush);
+        // The colour replacement tool paints through its MODE (hue,
+        // saturation, colour or luminosity) instead of the brush's blend.
+        engine.brushBegin(
+          src.handle,
+          tool,
+          tool === "color-replace"
+            ? { ...state.brush, blend: state.paintTools.colorReplace.mode }
+            : state.brush,
+        );
         if (SAMPLING_TOOLS.includes(tool) && state.cloneSource) {
           // BEFORE the first extend: the offset is fixed at the first
           // dab, and an anchor arriving later would be ignored silently.
@@ -5213,6 +7124,14 @@ export function createImageSession(host: BundleHost): ImageSession {
           );
         }
         if (TONE_TOOLS.includes(tool)) engine.brushSetTone(state.tone);
+        configureStroke(engine, tool, opts?.smoothingRadiusPx ?? 0);
+        // WP5.8 — the Clone Source panel / healing options: sample mode,
+        // transform, offset, diffusion, spot type.
+        const sampling = retouch.strokeSampling(
+          tool,
+          state.cloneSource?.aligned ?? true,
+        );
+        if (sampling) await engine.brushSetSampling(sampling);
       } catch (err) {
         setStatus(t(S.paintFailed, { error: errText(err) }));
         return false;
@@ -5242,7 +7161,18 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (!src || !engine || !state.strokeActive) return false;
       let rgba: Uint8Array;
       try {
-        rgba = await engine.brushExtend(sample.x, sample.y, sample.pressure);
+        rgba =
+          sample.tiltX !== undefined || sample.tiltY !== undefined
+            ? await engine.brushExtendPen({
+                x: sample.x,
+                y: sample.y,
+                pressure: sample.pressure,
+                tiltX: sample.tiltX ?? 0,
+                tiltY: sample.tiltY ?? 0,
+                rotation: sample.rotation ?? 0,
+                wheel: sample.wheel ?? 1,
+              })
+            : await engine.brushExtend(sample.x, sample.y, sample.pressure);
       } catch (err) {
         setStatus(t(S.paintFailed, { error: errText(err) }));
         discardStroke();
@@ -5283,6 +7213,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       const layerName = state.layers.layers[state.layers.active]?.name ?? null;
       let painted: { handle: number; width: number; height: number };
       try {
+        // An Aligned clone carries this stroke's offset to the next one.
+        if (state.cloneSource?.aligned)
+          retouch.afterStroke(engine.brushSourceOffset());
         painted = await engine.brushCommit();
       } catch (err) {
         setStatus(t(S.paintCommitFailed, { error: errText(err) }));
@@ -5684,7 +7617,154 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     rasterizeLayer(index) {
+      if (state.typeEdit?.index === index) api.endTypeEdit();
       return layerOp(L.rasterize, () => engine!.layerRasterize(index));
+    },
+
+    // ── TYPE LAYERS (WP5.10) ──
+    async addTypeLayer(frame, text) {
+      if (!engine || !state.source) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return null;
+      }
+      if (!host.supports("render.story@1")) {
+        setStatus(t(L.noStoryDoor));
+        return null;
+      }
+      lastTypePoint = [frame.x, frame.y];
+      const body = text ?? (state.type.text || t(L.typePlaceholder));
+      const src = sourceFromTypeState(
+        state.type,
+        state.brush.color,
+        frame,
+        body,
+      );
+      const pageId = await storyPage();
+      if (!pageId) {
+        setStatus(t(L.noStoryDoor));
+        return null;
+      }
+      state.busy = true;
+      emit();
+      let index: number;
+      try {
+        const render =
+          (await renderTypeSource(host, pageId, src)) ?? emptyRender(src);
+        index = await engine.layerAddType(JSON.stringify(src), render, "");
+        refreshLayers();
+      } catch (err) {
+        state.busy = false;
+        setStatus(
+          t(S.whatFailed, { what: t(L.newTypeLayer), error: errText(err) }),
+        );
+        refreshLayers();
+        emit();
+        return null;
+      }
+      state.busy = false;
+      await recomposite();
+      setStatus(t(L.typeAdded, { name: activeLayerName() }));
+      api.beginTypeEdit(index);
+      return index;
+    },
+
+    typeLayerSource(index) {
+      if (!engine) return null;
+      try {
+        return (engine.layerTypeSource(index)?.source as TypeSource) ?? null;
+      } catch {
+        return null;
+      }
+    },
+
+    async editTypeLayer(index, edit, session) {
+      const current = api.typeLayerSource(index);
+      if (!engine || !current) {
+        setStatus(t(L.notATypeLayer));
+        return false;
+      }
+      const next = edit(structuredClone(current));
+      next.runs = fitRuns(next.runs, next.text);
+      const pageId = await storyPage();
+      if (!pageId || !host.supports("render.story@1")) {
+        setStatus(t(L.noStoryDoor));
+        return false;
+      }
+      return layerOpAsync(L.editType, async () => {
+        const render =
+          (await renderTypeSource(host, pageId, next)) ?? emptyRender(next);
+        await engine!.layerSetType(
+          index,
+          JSON.stringify(next),
+          render,
+          session ?? "",
+        );
+        // The rows now (the composite that follows may decline without a
+        // GPU; the layer changed either way).
+        refreshLayers();
+      });
+    },
+
+    beginTypeEdit(index) {
+      const src = api.typeLayerSource(index);
+      if (!src) {
+        setStatus(t(L.notATypeLayer));
+        return false;
+      }
+      typeSessionCounter += 1;
+      const sessionId = `edit-${typeSessionCounter}`;
+      state.typeEdit = { index, session: sessionId, text: src.text, fit: null };
+      emit();
+      void resolveFrameFit(host, state.source, "type overlay").then((fit) => {
+        if (state.typeEdit?.session !== sessionId) return;
+        state.typeEdit = { ...state.typeEdit, fit };
+        emit();
+      });
+      return true;
+    },
+
+    async setTypeEditText(text) {
+      const edit = state.typeEdit;
+      if (!edit) return false;
+      state.typeEdit = { ...edit, text };
+      emit();
+      return typeTextWrites();
+    },
+
+    endTypeEdit() {
+      if (!state.typeEdit) return;
+      state.typeEdit = null;
+      emit();
+    },
+
+    async setTypeWarp(warp, index) {
+      const i = index ?? state.layers.active;
+      return api.editTypeLayer(i, (src) => ({ ...src, warp: { ...warp } }));
+    },
+
+    async refreshTypeLayers() {
+      if (!engine) return 0;
+      let n = 0;
+      for (const row of state.layers.layers) {
+        if (row.kind !== "type" || !row.typeStale) continue;
+        if (await api.editTypeLayer(row.index, (src) => src)) n++;
+      }
+      return n;
+    },
+
+    async paintTextIntoLayer() {
+      const src = state.source;
+      if (!src) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      const at = lastTypePoint ?? [src.width / 2, src.height / 2];
+      return api.paintText(
+        at,
+        state.type.text || t(L.typePlaceholder),
+        state.type.family,
+        state.type.sizePx,
+      );
     },
 
     setLayerFillOpacity(index, fill) {
@@ -5807,6 +7887,204 @@ export function createImageSession(host: BundleHost): ImageSession {
     setLayerFilter(patch) {
       state.layerFilter = { ...state.layerFilter, ...patch };
       emit();
+    },
+
+    async openLayerStyle(pane = "blending", index) {
+      if (!engine || !state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      const at = index ?? state.layers.active;
+      if (pane !== "blending") {
+        const style = api.layerStyle(at) ?? emptyStyle();
+        if (!effectEnabled(style, pane)) {
+          const pattern =
+            pane === "patternOverlay"
+              ? (api.stylePattern() ?? undefined)
+              : undefined;
+          // The effect is added whether or not the composite can be
+          // redrawn here (a realm without WebGPU still edits the style).
+          try {
+            engine.layerSetStyle(
+              at,
+              setEffectEnabled(style, pane, true, pattern),
+            );
+          } catch (err) {
+            setStatus(
+              t(S.whatFailed, { what: t(L.layerStyle), error: errText(err) }),
+            );
+            refreshLayers();
+            emit();
+            return false;
+          }
+          await recomposite();
+        }
+      }
+      state.dialog = { kind: "layerStyle", index: at, pane };
+      refreshLayers();
+      emit();
+      return true;
+    },
+
+    setLayerStylePane(pane) {
+      if (state.dialog?.kind !== "layerStyle") return;
+      state.dialog = { ...state.dialog, pane };
+      emit();
+    },
+
+    openStyleDialog(kind) {
+      if (!engine || !state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      state.dialog =
+        kind === "globalLight"
+          ? { kind }
+          : { kind, index: state.layers.active };
+      emit();
+      return true;
+    },
+
+    layerStyle(index) {
+      if (!engine || !state.source) return null;
+      try {
+        return engine.layerStyle(index);
+      } catch {
+        return null;
+      }
+    },
+
+    setLayerStyle(index, style) {
+      return layerOp(style ? L.layerStyle : L.clearLayerStyle, () =>
+        engine!.layerSetStyle(index, style),
+      );
+    },
+
+    setLayerStyleOptions(index, opts) {
+      return layerOp(L.blendingOptions, () =>
+        engine!.layerSetStyleOptions(index, styleOptionsBits(opts)),
+      );
+    },
+
+    copyLayerStyle() {
+      const style = api.layerStyle(state.layers.active);
+      if (!style) {
+        setStatus(t(S.noLayerStyleToCopy));
+        emit();
+        return false;
+      }
+      state.styleClipboard = style;
+      setStatus(t(S.layerStyleCopied));
+      emit();
+      return true;
+    },
+
+    pasteLayerStyle() {
+      const style = state.styleClipboard;
+      if (!style) {
+        setStatus(t(S.noLayerStyleToPaste));
+        emit();
+        return Promise.resolve(false);
+      }
+      const active = state.layers.active;
+      const link = state.layers.layers[active]?.link ?? null;
+      const targets = state.layers.layers
+        .map((l, i) =>
+          i === active || (link !== null && l.link === link) ? i : -1,
+        )
+        .filter((i) => i >= 0);
+      return layerOp(L.pasteLayerStyle, () =>
+        engine!.layersPasteStyle(targets, style),
+      );
+    },
+
+    clearLayerStyle() {
+      const at = state.layers.active;
+      if (!api.layerStyle(at)) {
+        setStatus(t(S.noLayerStyleToClear));
+        emit();
+        return Promise.resolve(false);
+      }
+      return api.setLayerStyle(at, null);
+    },
+
+    setGlobalLight(angle, altitude) {
+      return layerOp(L.globalLight, () =>
+        engine!.setGlobalLight(angle, altitude),
+      );
+    },
+
+    scaleEffects(percent) {
+      const at = state.layers.active;
+      return layerOp(L.scaleEffects, () =>
+        engine!.layerScaleEffects(at, percent),
+      );
+    },
+
+    setEffectsVisible(on) {
+      const at = state.layers.active;
+      const row = state.layers.layers[at];
+      const next = on ?? !(row?.styleOn ?? false);
+      return layerOp(next ? L.showEffects : L.hideEffects, () =>
+        engine!.layerSetEffectsVisible(at, next),
+      );
+    },
+
+    applyStylePreset(name) {
+      const preset = state.stylePresets.find((p) => p.name === name);
+      if (!preset) {
+        setStatus(t(S.noSuchStylePreset, { name }));
+        emit();
+        return Promise.resolve(false);
+      }
+      return api.setLayerStyle(state.layers.active, cloneStyle(preset.style));
+    },
+
+    saveStylePreset(name) {
+      const style = api.layerStyle(state.layers.active);
+      const trimmed = name.trim();
+      if (!style || trimmed === "") {
+        setStatus(t(S.noLayerStyleToCopy));
+        emit();
+        return false;
+      }
+      const kept = state.stylePresets.filter(
+        (p) => p.name !== trimmed || p.builtIn,
+      );
+      state.stylePresets = [
+        ...kept,
+        {
+          id: freshId("style", kept),
+          name: trimmed,
+          style: cloneStyle(style),
+        },
+      ];
+      emit();
+      return true;
+    },
+
+    deleteStylePreset(name) {
+      const before = state.stylePresets.length;
+      state.stylePresets = state.stylePresets.filter(
+        (p) => p.builtIn || p.name !== name,
+      );
+      emit();
+      return state.stylePresets.length !== before;
+    },
+
+    stylePattern() {
+      if (!engine || patternHandle === null || !state.pattern) return null;
+      const { width, height } = state.pattern;
+      try {
+        const rgba = engine.tile(patternHandle, 0, 0, width, height);
+        engine.defineStylePattern(STYLE_PATTERN_NAME, rgba, width, height);
+        return { name: STYLE_PATTERN_NAME, id: STYLE_PATTERN_NAME };
+      } catch (err) {
+        host.log.debug("style pattern failed", err);
+        return null;
+      }
     },
 
     openBlendingOptions(index) {
@@ -6059,4 +8337,84 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
   };
   return api;
+}
+
+// ── type layers (WP5.10) ──
+
+/** A new type layer's source from the Type section's settings and the
+ *  foreground colour. */
+export function sourceFromTypeState(
+  type: ImageSessionState["type"],
+  color: readonly number[],
+  frame: TypeFrame,
+  text: string,
+): TypeSource {
+  const c = (v: number | undefined) =>
+    Math.max(0, Math.min(255, Math.round((v ?? 0) * 255)));
+  return newTypeSource(
+    text,
+    frame,
+    {
+      font: type.family,
+      style: type.style,
+      size: type.sizePx,
+      color: [c(color[0]), c(color[1]), c(color[2])],
+      tracking: type.trackingPerMille,
+      leading: type.leadingPx,
+      baselineShift: type.baselineShiftPx,
+      horizontalScale: type.hScalePct / 100,
+      verticalScale: type.vScalePct / 100,
+      underline: type.underline,
+      strikethrough: type.strikethrough,
+      ligatures: type.ligatures,
+      caps: type.textCase === "upper" ? "allCaps" : "normal",
+    },
+    type.align,
+  );
+}
+
+/** The Character / Paragraph panel's settings (a `setType` patch) applied
+ *  to every run and paragraph of a type layer. */
+export function applyTypeSettings(
+  src: TypeSource,
+  p: Partial<ImageSessionState["type"]>,
+): TypeSource {
+  const runs = src.runs.map((r) => ({
+    ...r,
+    ...(p.family !== undefined ? { font: p.family, postscript: null } : {}),
+    ...(p.style !== undefined ? { style: p.style, postscript: null } : {}),
+    ...(p.sizePx !== undefined ? { size: p.sizePx } : {}),
+    ...(p.trackingPerMille !== undefined
+      ? { tracking: p.trackingPerMille }
+      : {}),
+    ...(p.leadingPx !== undefined ? { leading: p.leadingPx } : {}),
+    ...(p.baselineShiftPx !== undefined
+      ? { baselineShift: p.baselineShiftPx }
+      : {}),
+    ...(p.hScalePct !== undefined
+      ? { horizontalScale: p.hScalePct / 100 }
+      : {}),
+    ...(p.vScalePct !== undefined ? { verticalScale: p.vScalePct / 100 } : {}),
+    ...(p.underline !== undefined ? { underline: p.underline } : {}),
+    ...(p.strikethrough !== undefined
+      ? { strikethrough: p.strikethrough }
+      : {}),
+    ...(p.ligatures !== undefined ? { ligatures: p.ligatures } : {}),
+    ...(p.textCase !== undefined
+      ? {
+          caps:
+            p.textCase === "upper" ? ("allCaps" as const) : ("normal" as const),
+        }
+      : {}),
+  }));
+  const paragraphs =
+    p.align !== undefined
+      ? src.paragraphs.map((q) => ({ ...q, align: p.align! }))
+      : src.paragraphs;
+  return {
+    ...src,
+    ...(p.text !== undefined && p.text !== "" ? { text: p.text } : {}),
+    runs,
+    paragraphs,
+  };
 }

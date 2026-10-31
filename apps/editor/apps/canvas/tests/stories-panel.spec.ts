@@ -28,7 +28,11 @@ import { test, expect, type Page } from "@playwright/test";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { openCanvas, loadIdml } from "./fidelity/canvas-driver";
+import {
+  openCanvas,
+  loadIdml,
+  loadViaFileInput,
+} from "./fidelity/canvas-driver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,16 +45,7 @@ const OVERSET_FIXTURE = `${REPO_ROOT}/corpus/idml/generated/text-overset.idml`;
  *  fidelity driver's direct `client.loadDocument` bypasses that React
  *  state). Same idiom as navigator-panel.spec. */
 async function loadViaInput(page: Page, fixture: string): Promise<void> {
-  await page.setInputFiles('input[type="file"]', fixture);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
-            .ready,
-      ),
-    )
-    .toBe(true);
+  await loadViaFileInput(page, fixture);
 }
 
 // The Stories panel mounts in Content mode (cockpit panelSet) — drive

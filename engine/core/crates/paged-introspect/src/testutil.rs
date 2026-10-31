@@ -76,6 +76,8 @@ pub fn empty_text_frame(self_id: &str, bounds: Bounds) -> TextFrame {
         fill_mesh: None,
         pattern_transform: None,
         effects: None,
+        effect_stack: Vec::new(),
+        appearance: Vec::new(),
         gradient_fill_angle: None,
         gradient_fill_length: None,
         gradient_fill_start: None,
@@ -120,6 +122,7 @@ pub fn document_with_one_textframe(self_id: &str) -> Document {
         master_page_transform: None,
         override_list: Vec::new(),
         show_master_items: None,
+        canvas_origin: None,
     });
     Document {
         designmap: DesignMap::default(),
@@ -134,5 +137,6 @@ pub fn document_with_one_textframe(self_id: &str) -> Document {
         text_frame_index: HashMap::new(),
         styles: StyleSheet::default(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }

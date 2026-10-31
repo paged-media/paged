@@ -30,36 +30,18 @@ use pdf_writer::{Finish, Name, Ref};
 use crate::writer::DocState;
 use crate::ExportDiagnostic;
 
+// The JPEG facts a DCT passthrough needs come from paged-raster, the
+// engine's one reader of image bytes (ADR 1005, C5).
+
 fn is_jpeg(bytes: &[u8]) -> bool {
-    bytes.len() > 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF
+    paged_raster::sniff(bytes) == Some(paged_raster::Format::Jpeg)
 }
 
 /// Component count from the JPEG SOF header (1 = gray, 3 = YCbCr/RGB,
 /// 4 = CMYK/YCCK). Determines the /ColorSpace a DCT passthrough must
 /// carry — tagging a CMYK JPEG as RGB renders garbage.
 fn jpeg_components(bytes: &[u8]) -> Option<u8> {
-    let mut i = 2usize;
-    while i + 4 <= bytes.len() {
-        if bytes[i] != 0xFF {
-            return None;
-        }
-        let marker = bytes[i + 1];
-        if (0xD0..=0xD9).contains(&marker) || marker == 0x01 {
-            i += 2;
-            continue;
-        }
-        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        if len < 2 || i + 2 + len > bytes.len() {
-            return None;
-        }
-        // SOF0..SOF15 minus DHT/JPG/DAC (C4, C8, CC).
-        if (0xC0..=0xCF).contains(&marker) && marker != 0xC4 && marker != 0xC8 && marker != 0xCC {
-            // SOF payload: precision(1) h(2) w(2) components(1).
-            return bytes.get(i + 9).copied();
-        }
-        i += 2 + len;
-    }
-    None
+    paged_raster::jpeg_header(bytes).map(|h| h.components)
 }
 
 /// True when the JPEG carries Adobe's APP14 segment: Photoshop and
@@ -70,29 +52,7 @@ fn jpeg_components(bytes: &[u8]) -> Option<u8> {
 /// annual's page 73, where the CMYK apples came out as a dark slab
 /// while InDesign's own export showed the fruit.
 fn jpeg_has_adobe_marker(bytes: &[u8]) -> bool {
-    let mut i = 2usize;
-    while i + 4 <= bytes.len() {
-        if bytes[i] != 0xFF {
-            return false;
-        }
-        let marker = bytes[i + 1];
-        if (0xD0..=0xD9).contains(&marker) || marker == 0x01 {
-            i += 2;
-            continue;
-        }
-        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        if len < 2 || i + 2 + len > bytes.len() {
-            return false;
-        }
-        if marker == 0xEE && bytes.get(i + 4..i + 9) == Some(b"Adobe") {
-            return true;
-        }
-        if marker == 0xDA {
-            return false;
-        }
-        i += 2 + len;
-    }
-    false
+    paged_raster::jpeg_header(bytes).is_some_and(|h| h.adobe_transform.is_some())
 }
 
 /// /N for an ICC stream, from the profile header's data colour

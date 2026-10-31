@@ -82,6 +82,7 @@ defineMessages("menu", {
   "Save As IDML…": "Save As IDML…",
   Undo: "Undo",
   Redo: "Redo",
+  History: "History",
   "Zoom in": "Zoom in",
   "Zoom out": "Zoom out",
   "Zoom to 100%": "Zoom to 100%",
@@ -458,6 +459,15 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     when: (state) => undoOwnerAllows(state, "redo"),
     labelFor: (state) => undoOwnerLabel(state, "redo"),
     accelerator: "cmd+shift+z",
+  },
+  // Editor ADR 285 — the History panel: every step by name, click to go
+  // back to one. The registry derives `paged.panel.show.<id>` for every
+  // panel, which is also the palette's entry.
+  {
+    path: "Edit/History",
+    command: "paged.panel.show.paged.history",
+    order: -5,
+    group: "undo",
   },
   // View menu
   {

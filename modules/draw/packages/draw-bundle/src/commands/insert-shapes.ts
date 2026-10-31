@@ -59,7 +59,7 @@ import {
   type AnchorTable,
 } from "@paged-media/draw-geometry";
 
-import { insertPathMutationsForShape, resolveTargetPage } from "../io/svg";
+import { insertPathMutationsForShape, resolveTargetPage } from "../target-page";
 
 import { registerCommand } from "../command-registry";
 import { defineMessages } from "@paged-media/strings";

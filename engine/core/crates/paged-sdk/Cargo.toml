@@ -29,6 +29,7 @@ idml-import = { path = "../idml-import" }
 # the legacy CPU rasterizer is excluded.
 paged-renderer = { path = "../paged-renderer", default-features = false }
 paged-compose = { path = "../paged-compose" }
+paged-model = { path = "../paged-model" }
 paged-gpu = { path = "../paged-gpu", optional = true, default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

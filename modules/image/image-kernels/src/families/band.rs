@@ -98,6 +98,21 @@ kernel_family! {
 }
 
 kernel_family! {
+    /// out = rgb of a with the ALPHA of b — Lock Transparent Pixels: a
+    /// paint result keeps the layer's own transparency (in0 = the
+    /// painted window, in1 = the untouched base).
+    static BAND_KEEP_ALPHA, params BandKeepAlphaParams, ref band_keep_alpha {
+        id: "band.keep_alpha",
+        class: KernelClass::Point,
+        inputs: 2,
+        params: {},
+        eval: |a, b, p| pack4(a[0], a[1], a[2], b[3]),
+        mip_exact: true,
+        tolerance: Tolerance::Exact,
+    }
+}
+
+kernel_family! {
     /// Fade a PREMULTIPLIED colour toward a neutral grey by `fill`:
     /// `rgb·fill + neutral·α·(1 − fill)`, alpha through. Photoshop's fill
     /// opacity on the special blend modes (Color Dodge, Linear Burn, …),
@@ -160,4 +175,5 @@ pub static FAMILY: &[&KernelDef] = &[
     &BAND_TAKE,
     &BAND_FADE_NEUTRAL,
     &BAND_BLEND_IF,
+    &BAND_KEEP_ALPHA,
 ];

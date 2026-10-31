@@ -48,11 +48,16 @@ import type {
   StyleProperties,
   PropertyPath,
   Value,
+  SvgExportOptions,
+  SvgImportOptions,
+  SvgReport,
 } from "./wire.js";
 import type {
   CommandContribution,
   ControlBarGroupContribution,
   StatusItemContribution,
+  MarginBandContribution,
+  CursorSpec,
   ExporterContribution,
   FrameSurfaceContribution,
   ImporterContribution,
@@ -60,8 +65,16 @@ import type {
   OverlayContribution,
   PagedEditor,
   PanelContribution,
+  PresentationContribution,
+  PresentationState,
+  PresentRequest,
+  PresentResult,
+  SubContextProviderContribution,
+  SubContextSpec,
+  SubContextState,
   ToolContribution,
   ToolPreviewShape,
+  ViewContribution,
 } from "./editor.js";
 import type { SceneLayer } from "./wire.js";
 
@@ -262,11 +275,36 @@ export interface EditContextContribution {
    *  label. Read when the menu renders, so return the current step. */
   undoLabel?(): string | null;
   redoLabel?(): string | null;
+  /** Editor ADR 285 — this context's OWN step list, for the host's History
+   *  panel while the context is active (its pixel steps, say, where the
+   *  document's would not change). `null` or absent ⇒ the panel lists the
+   *  document's steps. Read when the panel renders and again after every
+   *  {@link onDidChangeHistory} notification. Probe
+   *  `supports("editContext.historySteps@1")`: true when the host's
+   *  History panel reads it. */
+  historySteps?(): EditContextHistory | null;
+  /** Editor ADR 285 — notify the host whenever {@link historySteps} would
+   *  answer differently. Returns the unsubscribe. Absent ⇒ the panel reads
+   *  the list again only when the document changes. */
+  onDidChangeHistory?(listener: () => void): () => void;
   /** HOST-STAMPED, not author-supplied: the `x-paged:<manifest id>`
    *  metadata key the host resolves the candidate's `metadata` from
    *  before calling `matches`. The SDK adapter fills this from the
    *  bundle's manifest at registration; authors leave it undefined. */
   metadataKey?: string;
+}
+
+/** Editor ADR 285 — an edit context's own history ({@link
+ *  EditContextContribution.historySteps}). */
+export interface EditContextHistory {
+  /** Undo steps, OLDEST first: the last one is what an undo reverts. */
+  undo: readonly string[];
+  /** Redo steps, the next redo first. */
+  redo: readonly string[];
+  /** Walk the history `delta` steps: negative undoes `-delta` steps,
+   *  positive redoes `delta`. The History panel calls it with the distance
+   *  from the current position to the row clicked. */
+  step(delta: number): void | Promise<unknown>;
 }
 
 /** The live handle a context's `onEnter` / `onExit` receives — the
@@ -490,6 +528,34 @@ export interface ContributionSurface {
    */
   frameSurface(contribution: FrameSurfaceContribution): Disposable;
   /**
+   * Register a PRESENTATION (extensions ADR 345, C1): a full-screen
+   * surface the host shows on `host.shell.present({ id })`, on the
+   * editor's screen, in a window of its own, or as a console with an
+   * audience window. See {@link PresentationContribution}. The id must be
+   * listed in `contributes.presentations[]`. Probe
+   * `supports("shell.present@1")` for a host that can show it (the door
+   * warns and registers nothing on one that cannot).
+   */
+  presentation(contribution: PresentationContribution): Disposable;
+  /**
+   * Register a module VIEW (extensions ADR 345, C5): a work surface that
+   * replaces the canvas while `host.shell.showView(id)` shows it (a slide
+   * sorter). See {@link ViewContribution}. The id must be listed in
+   * `contributes.views[]`. Probe `supports("shell.views@1")`.
+   */
+  view(contribution: ViewContribution): Disposable;
+  /**
+   * Register a SUB-CONTEXT PROVIDER (extensions ADR 349, C6): while the
+   * edit context `editContext` is active, or is the document context, a
+   * double-click on a page is offered to `resolve` before the host's own
+   * handling; a {@link SubContextSpec} answer enters that header, footer
+   * or note in place (editor ADR 301). The context must be registered by
+   * this bundle (the provider borrows its declaration). Probe
+   * `supports("shell.subContext@1")` (without the host's registry the door
+   * warns and registers nothing).
+   */
+  subContextProvider(contribution: SubContextProviderContribution): Disposable;
+  /**
    * Register a CONTROL-BAR GROUP (extensions ADR 348, C1): a segment of
    * the host's control bar shown while the edit context `scope` names is
    * active. See {@link ControlBarGroupContribution}. The id is
@@ -507,6 +573,18 @@ export interface ContributionSurface {
    * and `supports("statusBar.items@1")`.
    */
   statusItem(contribution: StatusItemContribution): Disposable;
+  /**
+   * Register a MARKUP MARGIN BAND (extensions ADR 349 amendment 1, C5): a
+   * column of balloons beside each page, each anchored to a range of a
+   * story's text (tracked changes, comment threads), shown while the edit
+   * context `scope` names is active (editor ADR 300). The host places the
+   * balloons level with their anchors and keeps them there; the bundle
+   * renders each one. Same gates as {@link controlBarGroup}; probe
+   * `supports("contribute.marginBand@1")` for the door and
+   * `supports("shell.marginBand@1")` for a host that shows it (without
+   * one the door warns and registers nothing).
+   */
+  marginBand(contribution: MarginBandContribution): Disposable;
   /**
    * Register an OBJECT TYPE (W3.2, closes W-03): a plugin-defined object
    * (a webFrame is a rectangle with attached source metadata). A
@@ -1012,6 +1090,45 @@ export interface MutateOptions {
    * of its own.
    */
   amend?: number;
+  /**
+   * Engine ADR 1030 — the undo step's name, in the caller's words ("Add
+   * caption"), shown by the History panel and the Edit menu instead of
+   * the engine's default for the mutation ("Insert text frame"). With
+   * `amend` it renames the amended step. Blank keeps the default. The host
+   * names the step right after the write lands (the engine's `labelStep`),
+   * so a write that loses a race to another one keeps the default name.
+   * Probe `supports("document.undoLog@1")`: an older host ignores it.
+   */
+  label?: string;
+}
+
+/** Engine ADR 1030 — one named step of the undo timeline. */
+export interface UndoLogStep {
+  /** The step's number — what {@link DocumentSurface.undoTo} /
+   *  {@link DocumentSurface.redoTo} take, and the `appliedSeq` of the
+   *  change that made it. */
+  appliedSeq: number;
+  /** The step's name: the caller's label, or the engine's English default
+   *  ("Move", "Change fill", "Insert path"). */
+  label: string;
+  /** The key the engine derived a default from (`moveFrame`,
+   *  `set:fillColor`, `gesture:rotate`, `batch`, `script`) — a host
+   *  translates the defaults it knows by it. `null` when a caller named the
+   *  step. */
+  key: string | null;
+}
+
+/** Engine ADR 1030 — the named undo timeline ({@link DocumentSurface.undoLog}). */
+export interface UndoLog {
+  /** OLDEST first: the last step is what an undo reverts. */
+  undo: readonly UndoLogStep[];
+  /** The next redo first. */
+  redo: readonly UndoLogStep[];
+  /** The whole logs' lengths (the lists may be cut to the limit). */
+  undoLen: number;
+  redoLen: number;
+  /** How many undo steps the engine keeps (oldest evicted first). */
+  depth: number;
 }
 
 /** Options of {@link DocumentSurface.mutateWithBytes}. */
@@ -1026,6 +1143,9 @@ export interface MutateWithBytesOptions {
    *  then on. Probe `supports("document.mutate.amend@2")`: an older host
    *  ignores the option and would apply the write as a step of its own. */
   amend?: number;
+  /** Engine ADR 1030 — the undo step's name, as {@link MutateOptions.label}
+   *  (without `amend`). Probe `supports("document.undoLog@1")`. */
+  label?: string;
 }
 
 /** What {@link DocumentSurface.onWillSave} listeners receive. */
@@ -1164,6 +1284,9 @@ export interface RunContent {
   baselineShift?: number | null;
   position?: string | null;
   tracking?: number | null;
+  /** The text variable this run is an instance of (its id), when it is one;
+   *  `text` is the variable's current value. */
+  textVariable?: string | null;
 }
 
 /**
@@ -1243,6 +1366,42 @@ export interface SwatchDisplay {
   outOfGamut: boolean;
 }
 
+/** `document.importSvg` options (engine ADR 1031). */
+export interface SvgImportRequest extends SvgImportOptions {
+  /** The page to import onto; the active page when absent. */
+  pageId?: PageId;
+}
+
+/** `document.importSvg`'s answer. */
+export interface SvgImportResult {
+  /** Whether the import's batch applied (one undo step). */
+  applied: boolean;
+  /** The batch's outcome: its `minted` items, the last one the
+   *  import's top item. Absent when nothing applied. */
+  outcome?: MutationOutcome;
+  /** What was approximated or left out. */
+  report: SvgReport;
+  /** Why nothing applied: an unreadable file, an empty drawing, a
+   *  refused batch, a host without the door. */
+  error?: string;
+}
+
+/** `document.exportSvg`'s request (engine ADR 1031). */
+export interface SvgExportRequest extends SvgExportOptions {
+  /** The page; the active page when absent. */
+  pageId?: PageId;
+  /** Nothing but these items, the view box fitted to them. */
+  elementIds?: readonly ElementId[];
+}
+
+/** `document.exportSvg`'s answer. */
+export interface SvgExportResult {
+  /** The SVG document, or `null` with `error`. */
+  svg: string | null;
+  report: SvgReport;
+  error?: string;
+}
+
 export interface DocumentSurface {
   /** The single write door. Accepts `MutationInput` — the vendored
    *  `Mutation` union PLUS the protocol-ahead ops the vendored wire
@@ -1290,6 +1449,25 @@ export interface DocumentSurface {
   ): Promise<MutationOutcome>;
   undo(): Promise<void>;
   redo(): Promise<void>;
+  /**
+   * Engine ADR 1030 — the named undo timeline: the newest `limit` undo
+   * steps (oldest first) and redo steps (next redo first); all of them
+   * without a limit. A read: `capabilities.document.read`. Probe
+   * `supports("document.undoLog@1")`; an older host rejects.
+   */
+  undoLog(options?: { limit?: number }): Promise<UndoLog>;
+  /**
+   * Engine ADR 1030 — undo every step down to and including the step
+   * `appliedSeq` names (an {@link UndoLog.undo} entry), in one engine round
+   * trip; the document is then as it was before that step. `false` when
+   * that step is not on the undo log (nothing moved). A write door:
+   * `capabilities.document.write`. Probe `supports("document.undoLog@1")`.
+   */
+  undoTo(appliedSeq: number): Promise<boolean>;
+  /** Engine ADR 1030 — redo every step up to and including the step
+   *  `appliedSeq` names (an {@link UndoLog.redo} entry), in one round
+   *  trip. `false` when it is not on the redo log. */
+  redoTo(appliedSeq: number): Promise<boolean>;
   collection<T>(name: CollectionName): Promise<readonly T[]>;
   meta(): Promise<DocumentMeta>;
   pathAnchors(id: ElementId): Promise<PathAnchorsResult | null>;
@@ -1430,6 +1608,37 @@ export interface DocumentSurface {
    *  throws `PluginApiNotImplemented` (a visible seam, never a fake value). */
   storyContent(storyId: string): Promise<StoryContent | null>;
   /**
+   * Engine ADR 1031 (protocol v77) — import an SVG (or SVGZ) file as
+   * native page items, as ONE undo step. The engine reads it with usvg
+   * (`<use>`, `<defs>`, `<symbol>`, CSS, units and transforms resolved)
+   * and lowers it to paths and compound paths, swatches, gradients,
+   * groups, clips, opacity masks, placed pictures and text frames; the
+   * batch is applied through `mutate` (gated on
+   * `capabilities.document.write`). `report` names every construct that
+   * was approximated or left out (a filter, an external image, text in a
+   * font the document lacks, …).
+   *
+   * Lands on `options.pageId` (else the active page); `options.origin`
+   * is where the drawing's top-left lands (page-local pt; else centred).
+   * Never throws: a host or engine without the door answers
+   * `{ applied: false, error }`. Probe `supports("document.importSvg@1")`.
+   */
+  importSvg(
+    bytes: Uint8Array,
+    options?: SvgImportRequest,
+  ): Promise<SvgImportResult>;
+  /**
+   * Engine ADR 1031 (protocol v77) — a page, or some of its items, as an
+   * SVG document: paths with their fills and strokes, linear and radial
+   * gradients, opacity and blend modes, clips and masks, pictures as data
+   * URIs, and text as outlines or (`options.text: "text"`) as `<text>`
+   * naming its font. With `elementIds` the view box fits what they draw.
+   * Pure READ, gated on `capabilities.document.read`. Never throws: an
+   * engine without the door answers `{ svg: null, error }`. Probe
+   * `supports("document.exportSvg@1")`.
+   */
+  exportSvg(request?: SvgExportRequest): Promise<SvgExportResult>;
+  /**
    * Every committed change to the document, whatever committed it: a
    * mutation, an undo or redo, a canvas gesture's commit, a script run
    * (see {@link DocumentChangeEvent} for the kinds). A gesture still in
@@ -1556,8 +1765,10 @@ export interface SelectionSurface {
 }
 
 export interface ViewportSurface {
-  /** Camera snapshot — scale + translation in CSS px. */
-  camera(): { scale: number; tx: number; ty: number };
+  /** Camera snapshot — scale + translation in CSS px, and since v77 the
+   *  view rotation (radians, clockwise on screen; absent = 0): the screen
+   *  shows `scale · R(rotation) · doc + (tx, ty)`. */
+  camera(): { scale: number; tx: number; ty: number; rotation?: number };
   /** Screen px → document pt at the current zoom (the constant-
    *  screen-tolerance idiom every tool needs). */
   pxToPt(px: number): number;
@@ -1718,6 +1929,164 @@ export interface RenderSurface {
     id: ElementId,
     options?: RenderElementOptions,
   ): Promise<RenderedElement | null>;
+  /** Extensions ADR 346 (C2) — a page as LAYERS: the background (the page
+   *  without `items` and `hideItems`) and each of `items` alone on a
+   *  transparent ground, cropped to what it draws, all at one scale — the
+   *  frames a slide show composites and animates. `null` for an unknown
+   *  page. `supports("render.layers@1")`. */
+  layers(
+    pageId: PageId,
+    options?: RenderLayersOptions,
+  ): Promise<RenderedLayers | null>;
+  /** Extensions ADR 342 — a story the DOCUMENT DOES NOT HOLD, laid out by
+   *  the engine (its composer, justification, hyphenation and the
+   *  document's fonts) in a frame at `story.bounds` on `pageId`, and drawn
+   *  alone on a transparent ground, cropped to what it draws within
+   *  `marginPt` of the frame. The document is not changed: no undo step,
+   *  no item, no id. What paged.image's type layers are made of: their
+   *  text lives in the image, the engine draws it. `null` for an unknown
+   *  page, a story that draws nothing, or an engine without the door:
+   *  `supports("render.story@1")`. */
+  story(
+    pageId: PageId,
+    story: RenderStory,
+    options?: RenderStoryOptions,
+  ): Promise<RenderedElement | null>;
+}
+
+/** Extensions ADR 342 — a story for {@link RenderSurface.story}. Every
+ *  absent value is the document's default paragraph style's. */
+export interface RenderStory {
+  /** The frame, page pt: `[top, left, bottom, right]`. Lines wrap at its
+   *  width; text past its bottom is overset and not drawn. */
+  bounds: [number, number, number, number];
+  paragraphs: RenderStoryParagraph[];
+  verticalJustification?: "top" | "center" | "bottom" | "justify";
+  /** The first line's baseline this far (pt) below the frame's top: what
+   *  places point type exactly on its anchor. Absent: one ascent. */
+  firstBaseline?: number;
+}
+
+/** Extensions ADR 342 — one paragraph of a {@link RenderStory}. */
+export interface RenderStoryParagraph {
+  runs: RenderStoryRun[];
+  /** IDML's names: `LeftAlign`, `CenterAlign`, `RightAlign`,
+   *  `LeftJustified`, `CenterJustified`, `RightJustified`,
+   *  `FullyJustified`. */
+  justification?: string;
+  firstLineIndent?: number;
+  leftIndent?: number;
+  rightIndent?: number;
+  spaceBefore?: number;
+  spaceAfter?: number;
+  hyphenation?: boolean;
+  composer?: "paragraph" | "single";
+}
+
+/** Extensions ADR 342 — one run of a {@link RenderStoryParagraph}: text in
+ *  one set of character attributes. A `\n` in `text` is a forced line
+ *  break. Lengths are pt. */
+export interface RenderStoryRun {
+  text: string;
+  font?: string;
+  fontStyle?: string;
+  pointSize?: number;
+  /** Absent is auto leading. */
+  leading?: number;
+  /** sRGB, 0 to 255 per channel. Absent is the style's (black). */
+  fillRgb?: [number, number, number];
+  /** 1/1000 em. */
+  tracking?: number;
+  baselineShift?: number;
+  /** Percent (100 = none). */
+  horizontalScale?: number;
+  verticalScale?: number;
+  /** Degrees. */
+  skew?: number;
+  underline?: boolean;
+  strikethru?: boolean;
+  ligatures?: boolean;
+  /** IDML's `Normal`, `AllCaps`, `SmallCaps`, `CapToSmallCap`. */
+  capitalization?: string;
+  /** IDML's `Normal`, `Superscript`, `Subscript`. */
+  position?: string;
+}
+
+/** Extensions ADR 342 — how {@link RenderSurface.story} draws. */
+export interface RenderStoryOptions {
+  /** Pixels per inch, 1 to 2400 (default 72: one pixel per pt). */
+  dpi?: number;
+  /** `"rgba"` (the default) or `"png"`. */
+  format?: "png" | "rgba";
+  /** How far past the frame, in pt, the pixels may reach (an italic's
+   *  overhang, a descender below the last line); default 0. */
+  marginPt?: number;
+  /** Crop the image to the pixels drawn (default `true`); `false` keeps
+   *  the frame's box grown by `marginPt`. */
+  trim?: boolean;
+}
+
+/** Extensions ADR 346 — what `host.render.layers` renders. */
+export interface RenderLayersOptions {
+  /** Items drawn as layers of their own (and left out of the
+   *  background). A group is one layer with its members. */
+  items?: ElementId[];
+  /** Items left out of every layer (a hidden build step). */
+  hideItems?: ElementId[];
+  /** Pixels per pt, 1/72 to 2400/72 (default 1: 72 dpi). */
+  scale?: number;
+  /** `"bitmap"` (the default where `createImageBitmap` exists, else
+   *  `"png"`): decoded `ImageBitmap`s ready to upload as textures;
+   *  `"png"` PNG bytes; `"rgba"` straight-alpha pixels. */
+  format?: "bitmap" | "png" | "rgba";
+  /** How far past an item's geometric bounds, in pt, its layer may reach
+   *  for stroke and effects (default 72). */
+  marginPt?: number;
+  /** Extensions ADR 346, amendment C4 (slide ADR 714) — text frames whose
+   *  PARAGRAPHS come back as layers of their own (`RenderedLayers.paragraphs`):
+   *  each paragraph the frame shows, the frame's pixels within the band of
+   *  that paragraph's lines, so a build can bring a list in paragraph by
+   *  paragraph. A frame here is also left out of the background. An empty
+   *  paragraph, or one the frame does not show, has no layer.
+   *  `supports("render.layers.paragraphs@1")`. */
+  paragraphs?: ElementId[];
+}
+
+/** One layer of {@link RenderedLayers}. */
+export interface RenderedLayer {
+  /** The item, or null for the background. */
+  id: ElementId | null;
+  widthPx: number;
+  heightPx: number;
+  /** The page region the image covers, in page pt (the whole page for
+   *  the background). */
+  region: RenderRect;
+  /** `format: "bitmap"`. The caller owns it (`close()` when done). */
+  bitmap?: ImageBitmap;
+  /** `format: "png"`. */
+  png?: Uint8Array;
+  /** `format: "rgba"`: straight alpha, rows top to bottom. */
+  rgba?: Uint8Array;
+  /** C4 — a paragraph layer: the paragraph's index in its story
+   *  (0-based); `id` is its text frame. */
+  paragraph?: number;
+}
+
+/** What `host.render.layers` answers. */
+export interface RenderedLayers {
+  pageId: PageId;
+  /** Pixels per pt the layers were drawn at. */
+  scale: number;
+  /** The engine's layout generation the background shows. */
+  layoutGeneration: number;
+  background: RenderedLayer;
+  /** One per requested item that draws something, in request order. An
+   *  item on another page, one that draws nothing, or every item on an
+   *  engine without `render.snapshot@2` is left out. */
+  items: RenderedLayer[];
+  /** C4 — the paragraph layers `paragraphs` asked for: per frame, in story
+   *  order. Absent on a host without `render.layers.paragraphs@1`. */
+  paragraphs?: RenderedLayer[];
 }
 
 // ----------------------------------------------------------------- text
@@ -1850,6 +2219,110 @@ export interface TextSurface {
     scope: "paragraph" | "character",
     styleId: string,
   ): Promise<TextFormatResult>;
+  /**
+   * Extensions ADR 348 amendment 1 — the selection in story CHARACTERS
+   * (the offsets the story-range paths and the engine's paragraph
+   * operations — `setListLevel`, `restartNumbering` — take), converted from
+   * the content offsets {@link selection} carries. `null` without a
+   * selection or when the story is not readable. Gated on
+   * `capabilities.document.read`.
+   */
+  characterRange(): Promise<TextSelection | null>;
+  /**
+   * Extensions ADR 349 amendment 1 — the other way round: a range of
+   * story CHARACTERS (what the engine's `trackedChanges` and `comments`
+   * collections, `storyRange` addresses and find hits' `charStart` count)
+   * as CONTENT offsets (what `viewport.revealText`, `selection` and a
+   * margin-band anchor take). `null` when the story is not readable.
+   * Gated on `capabilities.document.read`; probe
+   * `supports("text.contentRange@1")`.
+   */
+  contentRange(range: TextSelection): Promise<TextSelection | null>;
+  /**
+   * Extensions ADR 348 amendment 1 (engine ADR 1021) — find text: every
+   * hit of `spec` in story order (document story order across stories),
+   * each in caret offsets (`start` / `end`, what {@link selection} and
+   * `viewport.revealText` take) and in characters. Word's specials (`^p`
+   * `^t` `^l` `^m` `^?` `^#` `^$` `^^`) work in every mode. A bad pattern
+   * answers `error` and no hits. Gated on `capabilities.document.read`;
+   * probe `supports("text.find@1")`.
+   */
+  find(spec: TextFindSpec): Promise<TextFindResult>;
+  /**
+   * Replace the first hit of `spec` (or every hit with `all: true`) with
+   * `replace` (`^p` `^t` `^l` `^&` `^^`, `$1`… in regex mode, `\1`… with
+   * wildcards), optionally styled: ONE undo step however many hits (the
+   * engine's `findReplace`). `replaced` counts the hits replaced. Nothing
+   * matching answers `{ applied: false }`. Gated on
+   * `capabilities.document.write`.
+   */
+  replace(spec: TextReplaceSpec): Promise<TextReplaceResult>;
+}
+
+/** Amendment 1 — how a find pattern reads (engine ADR 1021). */
+export type TextFindMode = "literal" | "wildcards" | "regex";
+
+/** Amendment 1 — what {@link TextSurface.find} looks for. */
+export interface TextFindSpec {
+  find: string;
+  /** One story; every story when absent. */
+  storyId?: string;
+  /** Default `"literal"`. */
+  mode?: TextFindMode;
+  /** Default false (Word's case-insensitive find). */
+  matchCase?: boolean;
+  wholeWord?: boolean;
+  /** Only hits in paragraphs of this paragraph style (its `Self` id). */
+  paragraphStyle?: string;
+  /** Only hits whose runs all carry this character style. */
+  characterStyle?: string;
+  /** At most this many hits. */
+  limit?: number;
+}
+
+/** Amendment 1 — one find hit. */
+export interface TextFindHit {
+  storyId: string;
+  /** `[start, end)` in caret (content) offsets. */
+  start: number;
+  end: number;
+  /** The same hit in story characters. */
+  charStart: number;
+  charEnd: number;
+  /** The paragraph the hit starts in. */
+  paragraph: number;
+  /** The matched text. */
+  text: string;
+  /** Up to 30 characters either side, within the paragraph. */
+  context: string;
+  /** Where the hit starts in `context`, in UTF-8 bytes. */
+  contextOffset: number;
+}
+
+/** Amendment 1 — what a find answered. */
+export interface TextFindResult {
+  hits: TextFindHit[];
+  /** A pattern the engine could not read. */
+  error?: string;
+}
+
+/** Amendment 1 — what {@link TextSurface.replace} does. */
+export interface TextReplaceSpec extends TextFindSpec {
+  replace: string;
+  /** Every hit (Replace All); the first only when absent. */
+  all?: boolean;
+  /** Apply this paragraph style to the replacement's paragraphs. */
+  replaceParagraphStyle?: string;
+  /** Apply this character style to the replacement. */
+  replaceCharacterStyle?: string;
+}
+
+/** Amendment 1 — what a replace did. */
+export interface TextReplaceResult {
+  applied: boolean;
+  /** The hits replaced (0 when not applied). */
+  replaced: number;
+  error?: string;
 }
 
 /** C4 — the text selection {@link TextSurface.selection} reads. */
@@ -1942,6 +2415,203 @@ export interface OverlaySurface {
    * draws nothing.
    */
   layer(id?: string): OverlayLayer;
+  /**
+   * Extensions ADR 339 — a RETAINED HANDLE SET of this bundle's own:
+   * handles the HOST draws (at a constant screen size, like its selection
+   * handles) and HIT-TESTS, so a bundle's crop box, gradient endpoints or
+   * transform box behave like the host's own chrome without each bundle
+   * re-deriving the pixel metrics from the camera.
+   *
+   * Hit answers come two ways: every pointer event of this bundle's own
+   * tools carries `hitHandle` (`{ set, id }`) when the pointer is over a
+   * handle of a live set, and `set.hitTest` answers a point directly. A
+   * handle's `cursor` becomes the tool's cursor over it, unless the tool's
+   * own `cursorAt` answers first.
+   *
+   * Sets draw on the overlay-layer channel (they stack with the bundle's
+   * layers in creation order, below the tool-preview slot) and are
+   * disposed with the bundle. `id` names the set (generated when
+   * omitted); an id already live throws.
+   *
+   * Same `capabilities.rendering` ∋ `"overlay"` gate as the other overlay
+   * doors. Probe `supports("overlay.handles@1")`: true only when the host
+   * renders the handle primitive (`ToolPreviewHandle`) and retained
+   * layers. Without it the set still answers `hitTest` and stamps
+   * `hitHandle` (that is pure geometry), but draws nothing.
+   */
+  handles(id?: string): OverlayHandleSet;
+}
+
+/** Extensions ADR 339 — the space a handle set's positions are in. */
+export type OverlayHandleSpace =
+  /** Page-local pt of `pageId` (the tool-preview space). */
+  | { pageId: PageId }
+  /** The frame-content space of `element`: origin at the frame's
+   *  geometric box top-left, x right, y down, through the frame's item
+   *  transform (so the handles follow a moved, scaled or turned frame).
+   *  The host resolves the frame's geometry when the set is `set`. */
+  | { element: ElementId };
+
+/** Extensions ADR 339 — one handle of a set. */
+export interface OverlayHandleSpec {
+  /** The handle's id within the set (echoed in `hitHandle`). */
+  id: string;
+  /** Centre, in the set's space. */
+  at: [number, number];
+  /** What it looks like and how it hits: `square` / `round` / `centre`
+   *  draw as `ToolPreviewHandle`; `rotateZone` draws nothing and hits a
+   *  larger round area (a rotate band outside a corner). */
+  kind: "square" | "round" | "centre" | "rotateZone";
+  /** The cursor over it (a `rotateZone` defaults to the host's rotate
+   *  cursor). */
+  cursor?: CursorSpec;
+  /** Hit radius in screen px. Defaults: 6 (square/round/centre), 28
+   *  (rotateZone). Handles listed EARLIER win an overlap. */
+  hitPx?: number;
+  /** Draw it as the handle being dragged. */
+  active?: boolean;
+}
+
+/** Extensions ADR 339 — a retained handle set (`host.overlay.handles`). */
+export interface OverlayHandleSet extends Disposable {
+  /** The set's id within the bundle (the `set` of `hitHandle`). */
+  readonly id: string;
+  /** REPLACE the set's handles. An empty list clears it. */
+  set(space: OverlayHandleSpace, handles: readonly OverlayHandleSpec[]): void;
+  /** Remove every handle; the set keeps its place in the stack. */
+  clear(): void;
+  /** The handle under a PAGE-LOCAL point of `pageId` (the space of
+   *  `CanvasPointerEvent.pagePoint`), or null. Uses the camera's current
+   *  scale for the screen-px radii. */
+  hitTest(pageId: string, pagePoint: [number, number]): string | null;
+}
+
+// --------------------------------------------------------- transformBox
+
+/** Extensions ADR 339 — a 3×3 projective matrix, ROW-MAJOR on column
+ *  vectors: (x, y) ↦ ((m0·x + m1·y + m2)/w, (m3·x + m4·y + m5)/w) with
+ *  w = m6·x + m7·y + m8. Affine when the last row is [0, 0, 1]. */
+export type ProjectiveMatrix = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+];
+
+/** Extensions ADR 339 — a quad's corners: NW, NE, SE, SW. */
+export type TransformQuad = [
+  [number, number],
+  [number, number],
+  [number, number],
+  [number, number],
+];
+
+/** The box's mode (Illustrator's touch widget). `freeTransform` reads
+ *  the modifiers: a handle scales (Shift proportional, Alt from the
+ *  centre), outside a corner rotates (Shift 15°), Cmd/Ctrl on a side
+ *  shears, Cmd/Ctrl on a corner distorts, Cmd/Ctrl+Alt+Shift on a corner
+ *  is perspective. `constrain` scales proportionally without Shift;
+ *  `freeDistort` and `perspective` make a corner drag that. */
+export type TransformBoxMode =
+  "freeTransform" | "constrain" | "freeDistort" | "perspective";
+
+/** What a drag did. `reference` moved the reference point. */
+export type TransformBoxOperation =
+  | "move"
+  | "scale"
+  | "rotate"
+  | "shear"
+  | "distort"
+  | "perspective"
+  | "reference";
+
+/** One report of a transform box. */
+export interface TransformBoxUpdate {
+  /** The map from the box as OPENED to the box now (page-local pt on
+   *  both sides). Projective after a distort or perspective drag, affine
+   *  otherwise. Apply it to what the box stands for. */
+  matrix: ProjectiveMatrix;
+  /** The box's corners now (NW, NE, SE, SW), page-local pt. */
+  quad: TransformQuad;
+  /** The reference point now (the rotation pivot), page-local pt. */
+  reference: [number, number];
+  mode: TransformBoxMode;
+  /** The drag this report comes from; null for a commit or a mode change
+   *  with no drag. */
+  operation: TransformBoxOperation | null;
+}
+
+/** Options of `host.transformBox.open`. */
+export interface TransformBoxOptions {
+  /** The page the box is on; `quad` is in its page-local pt. */
+  pageId: PageId;
+  /** The box's corners (NW, NE, SE, SW) — the bounds of what the bundle
+   *  transforms (a layer, a selection, a placed item). */
+  quad: TransformQuad;
+  /** Starting mode (default `freeTransform`). */
+  mode?: TransformBoxMode;
+  /** Starting reference point (default the box's centre). */
+  reference?: [number, number];
+  /** One of this bundle's tools to make the active tool while the box is
+   *  open, so a command can open a box whatever tool is in hand (the box
+   *  hears only the bundle's own tools). */
+  toolId?: string;
+  /** Every drag step (live preview). */
+  onChange?(update: TransformBoxUpdate): void;
+  /** The box was committed (Enter, `commit()`, or a double-click
+   *  inside it): apply `update.matrix` — once, as ONE undo step. The box
+   *  closes. */
+  onCommit(update: TransformBoxUpdate): void;
+  /** The box was cancelled (Escape, `cancel()`, the bundle disposed):
+   *  drop the preview. The box closes. */
+  onCancel?(): void;
+}
+
+/** A live transform box (`host.transformBox.open`). */
+export interface TransformBoxSession extends Disposable {
+  /** The current mode. */
+  readonly mode: TransformBoxMode;
+  /** Switch mode (the widget); reports through `onChange`. */
+  setMode(mode: TransformBoxMode): void;
+  /** The current report. */
+  current(): TransformBoxUpdate;
+  /** Commit now (as Enter does). */
+  commit(): void;
+  /** Cancel now (as Escape does). */
+  cancel(): void;
+  /** True until commit, cancel or dispose. */
+  readonly open: boolean;
+}
+
+/**
+ * Extensions ADR 339 — a HOST-DRAWN TRANSFORM BOX over a quad the bundle
+ * owns. The host draws the box (its eight handles, the rotate zones
+ * outside the corners and the reference point), routes the pointer to it,
+ * does the gesture math — the same as the host's own Free Transform tool —
+ * and reports a 3×3 projective matrix with the mode on every move and on
+ * commit. The bundle applies the matrix to its own content (an image
+ * layer's pixels, a selection) — the host never touches it.
+ *
+ * Pointer routing: while a box is open, the pointer events and keys of
+ * this bundle's own tools go to the box first (Enter commits, Escape
+ * cancels); a press OUTSIDE the box, beyond the rotate zones, reaches the
+ * tool as usual. One box per bundle at a time: opening a second cancels
+ * the first.
+ *
+ * Gated on `capabilities.rendering` ∋ `"overlay"` (the box draws on the
+ * overlay). Probe `supports("host.transformBox@1")`: true when the host
+ * renders the handle primitive; without it the box still routes and
+ * reports (the geometry is the SDK's) but nothing is drawn.
+ */
+export interface TransformBoxSurface {
+  open(options: TransformBoxOptions): TransformBoxSession;
+  /** The open box, or null. */
+  active(): TransformBoxSession | null;
 }
 
 /** W-20 — one retained overlay layer (`host.overlay.layer`). */
@@ -1958,6 +2628,13 @@ export interface OverlayLayer extends Disposable {
 
 // ---------------------------------------------------------------- shell
 
+/** Extensions ADR 348 amendment 1 — how {@link ShellSurface.openPanel}
+ *  opens a panel. */
+export interface OpenPanelOptions {
+  /** The object the panel should edit (an ADR 131 address). */
+  target?: string;
+}
+
 /**
  * Shell actions the HOST APP injects at `loadBundle` time (the
  * cockpit owns panel placement; the SDK's adapter stays a pure
@@ -1972,8 +2649,12 @@ export interface OverlayLayer extends Disposable {
  */
 export interface ShellSurface {
   /** Open a REGISTERED panel as the active dock tab (the
-   *  Window-menu / panel-rail path). */
-  openPanel(panelId: string): void;
+   *  Window-menu / panel-rail path). Extensions ADR 348 amendment 1:
+   *  `options.target` first points a panel that edits one object at it —
+   *  an ADR 131 address, e.g. `style:paragraph/ParagraphStyle/Heading 1`
+   *  for the host's Style Options (`paged.style-options`); a panel that
+   *  takes no target ignores it. */
+  openPanel(panelId: string, options?: OpenPanelOptions): void;
   closePanel(panelId: string): void;
   /** Open the host's file picker and resolve to the chosen files' bytes
    *  (read at the host boundary — the contract never leaks a DOM `File`,
@@ -2038,6 +2719,54 @@ export interface ShellSurface {
    * whether the host took it: probe `supports("shell.documentContext@1")`.
    */
   setDocumentContext(type: string | null): boolean;
+  /**
+   * Extensions ADR 345 (C1) — show one of THIS bundle's presentations
+   * (throws for an id it did not register). The host hides its chrome
+   * and calls the presentation's `render` per surface. Answers whether it
+   * is shown and where: a `"secondary"` request whose audience window
+   * cannot open falls back to `"screen"` with the console alone. Call it
+   * from a user gesture (a key, a click): a browser opens a window and
+   * enters full screen only then. `{ presented: false }` on a host
+   * without presentations (`supports("shell.present@1")`).
+   */
+  present(request: PresentRequest): Promise<PresentResult>;
+  /** End the presentation shown, if it is one of this bundle's. */
+  exitPresent(): Promise<void>;
+  /** The presentation shown (any bundle's), or null. */
+  presentation(): PresentationState | null;
+  /** Fires when a presentation starts or ends (null: ended). */
+  onDidChangePresentation(
+    handler: (state: PresentationState | null) => void,
+  ): Disposable;
+  /**
+   * Extensions ADR 345 (C5) — show one of THIS bundle's module views in
+   * place of the canvas, or give the canvas back (`null`, which also
+   * closes another bundle's view). Answers whether it changed; false
+   * without views (`supports("shell.views@1")`) or for an unknown id.
+   */
+  showView(id: string | null): boolean;
+  /** The module view shown, or null while the canvas is. */
+  activeView(): string | null;
+  /** Fires when a view is shown or closed (null: the canvas is back). */
+  onDidChangeView(handler: (id: string | null) => void): Disposable;
+  /**
+   * Extensions ADR 349 (C6) — edit a header, footer or note IN PLACE on a
+   * page (editor ADR 301): the host puts the caret into `spec.storyId`,
+   * shows it on `spec.pageId`, dims the rest of the page and shows a bar
+   * with `spec.commands`; Esc, a click on the body or
+   * {@link exitSubContext} leaves. Replaces a sub-context already shown.
+   * Answers false without the host's sub-contexts
+   * (`supports("shell.subContext@1")`).
+   */
+  enterSubContext(spec: SubContextSpec): boolean;
+  /** Leave the sub-context shown, if it is this bundle's. */
+  exitSubContext(): boolean;
+  /** The sub-context shown (any bundle's), or null. */
+  subContext(): SubContextState | null;
+  /** Fires when a sub-context is entered or left (null: left). */
+  onDidChangeSubContext(
+    handler: (state: SubContextState | null) => void,
+  ): Disposable;
 }
 
 /** What `ShellSurface.saveFile` delivers (K-10) — the inverse of
@@ -2954,6 +3683,9 @@ export interface BundleHost {
    *  no measurement backend — the headless harness returns an estimate). */
   readonly text: TextSurface;
   readonly overlay: OverlaySurface;
+  /** Extensions ADR 339 — the host-drawn transform box over a quad the
+   *  bundle owns (`supports("host.transformBox@1")`). */
+  readonly transformBox: TransformBoxSurface;
   readonly shell: ShellSurface;
   readonly storage: StorageSurface;
   /** The capability-gated BINARY blob store (K-4 / S-08): OPFS-backed,
@@ -3075,13 +3807,14 @@ export interface BundleHost {
    *  `capabilities.secrets`. */
   readonly secrets: SecretsSurface;
   /** The capability-gated CLIPBOARD door (K-6 / S-14): read/write the
-   *  SYSTEM clipboard with a rich `{ text?, tabular? }` payload (the
-   *  sheets grid's range copy/paste interchange). Always present — when
-   *  the host app injects no clipboard backend, `read` answers `null`,
-   *  `write` is a no-op, and `supports("clipboard@1")` is false (the
-   *  honest no-clipboard door). Capability-gated on
-   *  `capabilities.clipboard`: `"full"` grants text + tabular, `"vector"`
-   *  grants text only, `"none"`/absent denies. */
+   *  SYSTEM clipboard with a rich `{ text?, tabular?, svg? }` payload
+   *  (the sheets grid's range copy/paste interchange; the vector
+   *  interchange, `image/svg+xml`, behind `clipboard.svg@1`). Always
+   *  present — when the host app injects no clipboard backend, `read`
+   *  answers `null`, `write` is a no-op, and `supports("clipboard@1")` is
+   *  false (the honest no-clipboard door). Capability-gated on
+   *  `capabilities.clipboard`: `"full"` grants text + tabular + svg,
+   *  `"vector"` grants text + svg, `"none"`/absent denies. */
   readonly clipboard: ClipboardSurface;
   /** The tool-settings READ door: the option values the host's
    *  tool-options UI holds for this bundle's tools, plus a change

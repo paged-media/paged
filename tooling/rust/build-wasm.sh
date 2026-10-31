@@ -31,6 +31,14 @@
 #   --ensure-target       rustup target add wasm32-unknown-unknown when missing
 #   --brotli              also print the brotli transfer size
 #
+# Local, opt-in: PAGED_WASM_PROFILE=dev builds with the `wasm-dev` Cargo
+# profile (root .cargo/config.toml: parallel codegen, no LTO) instead of
+# --profile, and skips wasm-opt and the size gates, which hold the shipped
+# artifact and mean nothing for a dev build. It is refused under CI and inside
+# a moon task (whose cache would keep the dev build as the release one): run
+# the module's scripts/build-wasm.sh directly. docs/development/rust-builds.md,
+# "Fast local wasm builds".
+#
 # Environment: WASM_BINDGEN names the wasm-bindgen binary (default: the one on
 # PATH). It must equal the wasm-bindgen version in Cargo.lock, or the glue
 # does not match the module; the check runs before the build.
@@ -81,6 +89,17 @@ while [ $# -gt 0 ]; do
     *) die "unknown option $1" ;;
   esac
 done
+case "${PAGED_WASM_PROFILE:-release}" in
+  release | wasm-release) ;;
+  dev | wasm-dev)
+    [ -z "${CI:-}" ] || die "PAGED_WASM_PROFILE=dev is local only; CI builds the shipped profile"
+    [ -z "${MOON_TARGET:-}" ] \
+      || die "PAGED_WASM_PROFILE=dev inside $MOON_TARGET would cache a dev build as the shipped one; run scripts/build-wasm.sh directly"
+    echo "build-wasm: dev build (wasm-dev profile, no wasm-opt, no size gates); not for shipping" >&2
+    PROFILE=wasm-dev OPT=0 GATE=0
+    ;;
+  *) die "PAGED_WASM_PROFILE must be release or dev, not '$PAGED_WASM_PROFILE'" ;;
+esac
 [ -n "$ARTIFACT" ] || die "--artifact is required"
 [ -n "$OUT" ] || die "--out is required"
 if [ -n "$HASH_MODULE" ] && [ -z "$HASH_ENV" ]; then

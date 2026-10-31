@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "typecheck": "bun check",
+    "gen:shaders": "bun scripts/gen-shaders.ts",
     "test": "bun test --timeout 30000 --parallel --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
     "test:dom": "bun test --timeout 30000 --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test."
   },

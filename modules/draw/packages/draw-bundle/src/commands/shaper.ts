@@ -62,7 +62,7 @@ import { readEditablePath, tableOfRead } from "./path-rewrite";
 import { applyShapeBuild } from "../handlers/shape-builder";
 import { graphicPaintFor, withGraphicPaint } from "../handlers/graphic-default";
 import { insertPathMutationFor } from "../handlers/insert-path";
-import { resolveTargetPage } from "../io/svg";
+import { resolveTargetPage } from "../target-page";
 import { registerCommand } from "../command-registry";
 import { defineMessages } from "@paged-media/strings";
 

@@ -203,6 +203,7 @@ fn node_json(doc: &Document, id: &str) -> Json {
         FrameRef::GraphicLine(i) => serde_json::to_value(&s.graphic_lines[i]),
         FrameRef::Polygon(i) => serde_json::to_value(&s.polygons[i]),
         FrameRef::Group(i) => serde_json::to_value(&s.groups[i]),
+        FrameRef::Instance(i) => serde_json::to_value(&s.instances[i]),
     }
     .expect("a model node serialises")
 }
@@ -415,6 +416,7 @@ fn subtree(doc: &Document, id: &str) -> Vec<String> {
             FrameRef::GraphicLine(i) => spread.graphic_lines[i].self_id.clone(),
             FrameRef::Polygon(i) => spread.polygons[i].self_id.clone(),
             FrameRef::Group(i) => spread.groups[i].self_id.clone(),
+            FrameRef::Instance(i) => spread.instances[i].self_id.clone(),
         }
         .expect("a member with an id")
     };
@@ -809,6 +811,7 @@ fn a_mask_and_a_masked_item_are_refused_by_name() {
             mask: mask.clone(),
             mask_type: OpacityMaskMode::default(),
             invert: false,
+            clip: true,
         },
     )
     .expect("apply mask");

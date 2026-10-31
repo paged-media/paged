@@ -51,6 +51,7 @@
 // they stay reachable by passing a raw wire `Value` (`{ type, value }`).
 
 import type {
+  EffectKindDescriptor,
   PropertyPath,
   PropertySchema,
   ValueType,
@@ -58,6 +59,8 @@ import type {
 
 // Named imports, so the bundler keeps only these keys of the catalog.
 import {
+  effectCategories,
+  effectKinds,
   objectSchemas,
   propertySchemas,
 } from "../../plugin-api/src/catalog.json";
@@ -210,6 +213,12 @@ export const CORE_PATHS: Record<
   closePath: OP,
   frameGradientFeather: { scope: "frame", wire: "gradientFeather" },
   pageBounds: { scope: "page", wire: "bounds", type: { kind: "bounds" } },
+  // Engine ADR 1011 — a page's place on the canvas, `[x, y]` pt.
+  pageCanvasOrigin: {
+    scope: "page",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "length" } },
+  },
   frameDropShadowMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameDropShadowXOffset: {
     scope: "frame",
@@ -776,11 +785,27 @@ export const CORE_PATHS: Record<
   frameBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   // The fill rule is protocol 76 (engine ADR 1006); a pre-71 engine has none.
   frameFillRule: V71,
-  // Engine ADR 1007 (protocol 76): "Within" / "Along" / "Across", and the
-  // gradient's start as [x, y] in the frame's inner coordinates.
-  frameGradientStrokeMode: V71,
+  // The gradient fill's start is protocol 77 (engine ADR 1031).
   frameGradientFillStart: V71,
-  // Engine ADR 1040 (protocol 76): the frame's gradient mesh or freeform
+  // The effect stacks are protocol 76 (engine ADR 1008).
+  frameEffectStack: V71,
+  frameFillEffectStack: V71,
+  frameStrokeEffectStack: V71,
+  frameContentEffectStack: V71,
+  // The appearance is protocol 78 (engine ADR 1043): the layer list, and
+  // the per-layer edit, an operation.
+  frameAppearance: V71,
+  frameAppearanceLayer: OP,
+  // An image frame's filter stack is protocol 77 (engine ADR 1037).
+  frameImageAdjustments: V71,
+  // The live shapes are protocol 78 (engine ADR 1047).
+  frameShapeSides: V71,
+  frameShapeStarInset: V71,
+  frameShapePieStart: V71,
+  frameShapePieEnd: V71,
+  // Engine ADR 1007: "Within" / "Along" / "Across".
+  frameGradientStrokeMode: V71,
+  // Engine ADR 1048: the frame's gradient mesh or freeform
   // gradient, whole (`{ type: "fillMesh", value: MeshFillSpec | null }`).
   frameFillMesh: V71,
   // Engine ADR 1041 (protocol 76): the frame's own placement of a pattern
@@ -954,6 +979,45 @@ export const CORE_PATHS: Record<
   groupKnockout: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   // A clip group is protocol 76 (engine ADR 1010); a pre-71 engine has none.
   groupClip: V71,
+  // Engine ADR 1042 — a group's vector effects (a Pathfinder compound shape).
+  groupEffectStack: V71,
+  // Engine ADR 1039 (protocol 78) — a symbol instance's tint
+  // `[r, g, b, amount]` and 9-slice guides `[left, top, right, bottom]`.
+  symbolInstanceTint: {
+    scope: "frame",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "number" } },
+  },
+  symbolInstanceNineSlice: {
+    scope: "frame",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "length" } },
+  },
+  // Draw ADR 365 — the symbol an instance draws (Replace Symbol).
+  symbolInstanceSymbol: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  // Word's character and paragraph additions are protocol 76 (engine ADR
+  // 1018); a pre-71 engine has none.
+  characterHighlightColor: V71,
+  characterHidden: V71,
+  characterUnderlineType: V71,
+  characterUnderlineColor: V71,
+  characterDoubleStrikethrough: V71,
+  paragraphShadingOn: V71,
+  paragraphShadingColor: V71,
+  paragraphShadingTint: V71,
+  paragraphBorderOn: V71,
+  paragraphBorderColor: V71,
+  paragraphBorderWeight: V71,
+  documentShowHiddenText: V71,
+  documentShowFieldCodes: V71,
+  // Engine ADR 1040 — Track Changes and the markup view.
+  documentTrackChanges: V71,
+  documentTrackChangesAuthor: V71,
+  documentMarkupView: V71,
   frameDropShadowBlendMode: {
     scope: "frame",
     wire: "text",
@@ -1188,6 +1252,15 @@ export const CORE_OBJECT_SCHEMAS: Readonly<
   string,
   readonly (PropertySchema & { wire: string })[]
 >;
+
+/** Editor ADR 309 / plan C16 — the effect kinds of the ordered stack, as
+ *  core's catalog describes them (menu group, targets, parameter form), in
+ *  the wire's order. A kind core adds is listed here by the catalog sync. */
+export const CORE_EFFECT_KINDS: readonly EffectKindDescriptor[] =
+  effectKinds as unknown as EffectKindDescriptor[];
+
+/** The Effect menu's groups, in menu order. */
+export const CORE_EFFECT_CATEGORIES: readonly string[] = effectCategories;
 
 const STYLE_FAMILIES = [
   "paragraph",

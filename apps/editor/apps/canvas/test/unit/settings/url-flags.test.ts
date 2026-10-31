@@ -115,6 +115,7 @@ describe("setting url.solo", () => {
       "paged.draw",
       "paged.image",
       "paged.sheet",
+      "paged.slide",
       "paged.web",
     ]);
     for (const name of names) {

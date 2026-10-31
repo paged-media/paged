@@ -1,0 +1,7 @@
+# Pinned as every Cargo workspace in this repository pins it; the modules
+# that take this crate build it for wasm32 as well.
+[toolchain]
+channel = "1.99.1"
+targets = ["wasm32-unknown-unknown"]
+components = ["rustfmt", "clippy"]
+profile = "minimal"

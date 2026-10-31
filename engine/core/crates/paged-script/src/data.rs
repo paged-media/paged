@@ -32,9 +32,10 @@
 //!   value at a record of a query (`{ display, value, error? }`).
 //!
 //! Record sets are the provider shape `{ schema: { fields: [{ name, ty }] },
-//! columns, rowCount }`. With no door installed (the editor's worker today)
-//! every call throws a TypeError that says so: never an empty answer that
-//! looks like data.
+//! columns, rowCount }`. With no door installed every call throws a
+//! TypeError that says so: never an empty answer that looks like data. (The
+//! editor's worker installs one over shared memory: `paged-canvas-wasm`'s
+//! `script_data`, ADR 1014 amendment 2.)
 
 use std::cell::RefCell;
 

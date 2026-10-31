@@ -1,0 +1,9 @@
+{
+  "kind": "struct",
+  "fields": {
+    "format": {
+      "kind": "enum",
+      "members": ["rtf", "txt"]
+    }
+  }
+}

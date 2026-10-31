@@ -1100,3 +1100,126 @@ describe("invalidation + teardown", () => {
     expect(registry.activeProviders()).toHaveLength(0);
   });
 });
+
+// ════════════════════════ workspace + readout lanes (extensions ADR 340)
+
+describe("the workspace and readout lanes", () => {
+  const workspace = {
+    pageId: "p1",
+    origin: [10, 20] as [number, number],
+    ptPerBase: 0.5,
+    size: [200, 100] as [number, number],
+    unit: { label: "px", basePerUnit: 1 },
+    basePerPoint: 1,
+    guides: [{ id: "g0", orientation: "vertical" as const, position: 40 }],
+    guidesVisible: true,
+    guidesLocked: false,
+  };
+
+  it("routes the workspace, guide edits and the view to the active context only", async () => {
+    const { host, registry, enter, exit } = setup();
+    const edits: unknown[] = [];
+    const views: unknown[] = [];
+    const provider: BindingProvider = {
+      provides: { workspace: true, readouts: ["info"] },
+      readWorkspace: () => ({ kind: "workspace", workspace }),
+      editGuide: (edit) => {
+        edits.push(edit);
+        return { kind: "applied", outcome: applied };
+      },
+      workspaceView: (v) => views.push(v),
+      readReadouts: () => ({
+        kind: "readouts",
+        sections: [
+          {
+            id: "image",
+            title: "Image",
+            rows: [{ id: "x", label: "X", value: "4 px" }],
+          },
+        ],
+      }),
+    };
+    contributeBindingProvider(host, "rasterImage", provider);
+    expect(host.supports("bindings.workspace@1")).toBe(true);
+    expect(host.supports("bindings.readouts@1")).toBe(true);
+    expect(HOST_FEATURES).not.toContain("bindings.workspace@1");
+
+    // Inactive: nobody claims, nothing is edited.
+    expect((await registry.readWorkspace()).resolved).toBe(false);
+    const view = {
+      showGrid: true,
+      snapToGrid: true,
+      gridEveryPt: 72,
+      gridSubdivisions: 4,
+      snapTolerancePx: 4,
+    };
+    registry.setWorkspaceView(view);
+    expect(views).toEqual([]);
+    expect(
+      (await registry.editGuide({ kind: "delete", id: "g0" })).handled,
+    ).toBe(false);
+
+    // Entering hands the provider the remembered view.
+    enter();
+    expect(views).toEqual([view]);
+    const read = await registry.readWorkspace();
+    expect(read.resolved && read.workspace).toEqual(workspace);
+    expect(read.resolved && read.elementId).toBe("u1");
+    const w = await registry.editGuide({
+      kind: "create",
+      orientation: "horizontal",
+      position: 12,
+    });
+    expect(w.handled).toBe(true);
+    expect(edits).toEqual([
+      { kind: "create", orientation: "horizontal", position: 12 },
+    ]);
+    const rows = await registry.readReadouts({ surface: "info" });
+    expect(rows.resolved && rows.sections[0]!.rows[0]!.value).toBe("4 px");
+
+    exit();
+    expect((await registry.readReadouts({ surface: "info" })).resolved).toBe(
+      false,
+    );
+  });
+
+  it("a declining workspace keeps the page rulers and takes no guide edit", async () => {
+    const { host, registry, enter } = setup();
+    let edited = false;
+    contributeBindingProvider(host, "rasterImage", {
+      provides: { workspace: true },
+      readWorkspace: () => ({ kind: "decline", reason: "rotated frame" }),
+      editGuide: () => {
+        edited = true;
+        return { kind: "applied", outcome: applied };
+      },
+    });
+    enter();
+    expect((await registry.readWorkspace()).resolved).toBe(false);
+    expect(
+      (await registry.editGuide({ kind: "delete", id: "g" })).handled,
+    ).toBe(false);
+    expect(edited).toBe(false);
+  });
+
+  it("a declared workspace or readout lane without its callbacks is refused", () => {
+    const { host } = setup();
+    expect(() =>
+      contributeBindingProvider(host, "rasterImage", {
+        provides: { workspace: true },
+        readWorkspace: () => ({ kind: "decline" }),
+      }),
+    ).toThrow(/without editGuide/);
+    expect(() =>
+      contributeBindingProvider(host, "rasterImage", {
+        provides: { readouts: ["info"] },
+      }),
+    ).toThrow(/without readReadouts/);
+    expect(() =>
+      contributeBindingProvider(host, "rasterImage", {
+        provides: { readouts: ["info", "info"] },
+        readReadouts: () => ({ kind: "decline" }),
+      }),
+    ).toThrow(/twice/);
+  });
+});

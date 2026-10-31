@@ -65,9 +65,15 @@ export function CameraProvider({ children }: PropsWithChildren) {
   }, []);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  // v77 (editor ADR 287) — a camera written without a rotation keeps the
+  // view's: a pan or a zoom about a point is the same formula at any
+  // rotation, so the writers that never heard of Rotate View stay right.
+  const rotationRef = useRef(0);
   const setCamera = useCallback(
     (requested: Camera) => {
-      const cam = clampCamera(requested, sizeRef.current);
+      const rotation = requested.rotation ?? rotationRef.current;
+      rotationRef.current = rotation;
+      const cam = { ...clampCamera(requested, sizeRef.current), rotation };
       setCameraState(cam);
       client.setCamera(cam);
     },

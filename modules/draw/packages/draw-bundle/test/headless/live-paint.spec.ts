@@ -128,7 +128,7 @@ import {
   type LivePaintRecipe,
   type PlanarRegionsWire,
 } from "../../src";
-import { F4_OVERLAP, F5_THIRTEEN, F6_RING_PAIR } from "../fixtures/corpus";
+import { F4_OVERLAP, F5_OVER_CAP, F6_RING_PAIR } from "../fixtures/corpus";
 import { openHost } from "./host";
 import { runThrough, type LaneName } from "./one-batch";
 
@@ -573,7 +573,9 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
       );
       expect(t(LIVE_PAINT_NOTE)).toContain("gaps are not closed for you");
       expect(t(LIVE_PAINT_NOTE)).toContain("edges cannot be painted");
-      expect(t(LIVE_PAINT_NOTE)).toContain("at most 12 paths and 256 areas");
+      expect(t(LIVE_PAINT_NOTE)).toContain(
+        "at most 1000 paths and 100 000 areas",
+      );
       expect(t(LIVE_PAINT_NOTE)).toContain(
         "placed on top of the other objects",
       );
@@ -599,8 +601,9 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
     });
 
     it("the caps mirrored for callers match the engine's own constants", () => {
-      expect(MAX_PLANAR_INPUTS).toBe(12);
-      expect(MAX_PLANAR_FACES).toBe(256);
+      // engine ADR 1019 (`paged_mutate::planar`).
+      expect(MAX_PLANAR_INPUTS).toBe(1000);
+      expect(MAX_PLANAR_FACES).toBe(100_000);
     });
   });
 });
@@ -1171,17 +1174,17 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
 // =====================================================================
 // THE CAPS — the engine refuses, it never truncates.
 
-describe("draw conformance — LIVE PAINT v0 (the 12-input cap, F5)", () => {
+describe("draw conformance — LIVE PAINT v0 (the 1000-input cap, F5)", () => {
   let h: HeadlessHost;
   let ids: ElementId[];
 
   beforeAll(async () => {
     h = await openHost();
-    await h.load(F5_THIRTEEN.bytes());
+    await h.load(F5_OVER_CAP.bytes());
     h.loadBundle(drawBundle);
     ids = Array.from(
-      { length: F5_THIRTEEN.count },
-      (_, i) => ({ kind: "polygon", id: F5_THIRTEEN.idAt(i) }) as ElementId,
+      { length: F5_OVER_CAP.count },
+      (_, i) => ({ kind: "polygon", id: F5_OVER_CAP.idAt(i) }) as ElementId,
     );
   });
   afterAll(() => h?.dispose());
@@ -1193,15 +1196,15 @@ describe("draw conformance — LIVE PAINT v0 (the 12-input cap, F5)", () => {
     );
   });
 
-  it("MAKE GROUP over 13 members is REFUSED with the engine's own sentence, and writes NOTHING", async () => {
+  it("MAKE GROUP over 1001 members is REFUSED with the engine's own sentence, and writes NOTHING", async () => {
     await h.host.selection.set(ids);
     expect(await applyMakeLivePaintGroup(h.host)).toBeNull();
     // The user sees the engine's words, not "no regions".
     const status = String(
       h.host.bindings.get("media.paged.draw.pathfinderStatus"),
     );
-    expect(status).toContain("planar arrangement takes at most 12");
-    expect(status).toContain("13");
+    expect(status).toContain("planar arrangement takes at most 1000");
+    expect(status).toContain("1001");
     // And no half-made group is left behind to paint with.
     expect(
       parseLivePaintLibrary(await h.host.parts.read(LIVE_PAINT_PART)).groups,
@@ -1210,18 +1213,18 @@ describe("draw conformance — LIVE PAINT v0 (the 12-input cap, F5)", () => {
     expect(await h.host.document.getMetadata(ids[0]!)).toBeNull();
   });
 
-  it("TWELVE members — the cap itself — are accepted", async () => {
-    await h.host.selection.set(ids.slice(0, 12));
+  it("FORTY members — past the old cap of 12 — are accepted", async () => {
+    await h.host.selection.set(ids.slice(0, 40));
     const group = await applyMakeLivePaintGroup(h.host);
     expect(group).not.toBeNull();
-    expect(group!.inputs).toHaveLength(12);
+    expect(group!.inputs).toHaveLength(40);
     await h.host.document.undo();
   });
 
   it("the FACE cap is a refusal too, and the read door reports it the same way", async () => {
-    // 256 faces is out of reach for a fixture, so the shape of the
+    // 100 000 faces is out of reach for a fixture, so the shape of the
     // refusal is what is pinned: a `found:false` with a reason, which is
-    // exactly what the 13-input case above proves the pipeline surfaces.
+    // exactly what the 1001-input case above proves the pipeline surfaces.
     const refused: PlanarRegionsWire | null = await readPlanarRegions(
       h.host,
       ids,
@@ -1229,7 +1232,7 @@ describe("draw conformance — LIVE PAINT v0 (the 12-input cap, F5)", () => {
     expect(refused).not.toBeNull();
     expect(refused!.found).toBe(false);
     expect(refused!.faces).toEqual([]);
-    expect(refused!.reason).toContain("at most 12");
+    expect(refused!.reason).toContain("at most 1000");
   });
 });
 

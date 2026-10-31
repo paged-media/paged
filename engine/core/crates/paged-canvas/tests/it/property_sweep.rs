@@ -187,6 +187,7 @@ fn node_of(id: &ElementId) -> NodeId {
         ElementId::Polygon(s) => NodeId::Polygon(s.clone()),
         ElementId::GraphicLine(s) => NodeId::GraphicLine(s.clone()),
         ElementId::Group(s) => NodeId::Group(s.clone()),
+        ElementId::Instance(s) => NodeId::Instance(s.clone()),
         ElementId::StoryRange {
             story_id,
             start,
@@ -309,6 +310,7 @@ fn is_action(path: PropertyPath) -> bool {
             | Wire::SimplifyPath
             | Wire::ClosePath
             | Wire::PluginMetadata
+            | Wire::AppearanceLayer
     )
 }
 

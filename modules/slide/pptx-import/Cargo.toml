@@ -11,6 +11,7 @@ description = "paged.slide: read a .pptx (OPC + PresentationML + DrawingML) into
 workspace = true
 
 [dependencies]
+slide-geom.workspace = true
 # The chart reader, with this crate's shape and run properties.
 dml-chart.workspace = true
 pptx-core.workspace = true

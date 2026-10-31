@@ -31,6 +31,7 @@ import {
   runWordCommand,
   WORD_COMMAND,
   WORD_CONTEXT,
+  WORD_HOST_KEYS,
   WORD_KEYS,
   type WordCommandName,
   type WordCommandState,
@@ -41,7 +42,21 @@ import {
   makeWordsStatus,
   makeZoomStatus,
 } from "./status-items.js";
+import { makeReferencesPanel } from "../panels/references-panel.js";
+import { referencesActions } from "./references.js";
+import {
+  HEADER_BAR_COMMANDS,
+  REFERENCES_PANEL,
+  resolveHeaderFooter,
+  type WordStructure,
+} from "./structure.js";
 import { createWordStore, type WordStore } from "./word-state.js";
+import {
+  contributeReview,
+  type ReviewArgs,
+  type ReviewContribution,
+  type ReviewResult,
+} from "./review.js";
 
 export interface WordDeps {
   /** The stories that are the open Word document(s), for the word count. */
@@ -49,6 +64,9 @@ export interface WordDeps {
   /** Is the open document a Word document opened as the document (its
    *  standalone label)? Asked on every document open. */
   isWordDocument(): Promise<boolean>;
+  /** Doc ADR 611 — the sections and masters of the Word document opened in
+   *  this session, for the header and footer editing; `null` otherwise. */
+  structure?(): WordStructure | null;
 }
 
 /** The command titles, by command name. */
@@ -84,6 +102,49 @@ const TITLES: Record<WordCommandName, () => string> = {
   lineSpacing1: () => `${t(WORD.lineSpacing)}: ${t(WORD.single)}`,
   lineSpacing15: () => `${t(WORD.lineSpacing)}: ${t(WORD.oneAndHalf)}`,
   lineSpacing2: () => `${t(WORD.lineSpacing)}: ${t(WORD.double)}`,
+  doubleUnderline: () => t(WORD.doubleUnderline),
+  hidden: () => t(WORD.hidden),
+  highlight: () => t(WORD.highlight),
+  shading: () => t(WORD.shading),
+  borderBottom: () => t(WORD.borderBottom),
+  borderBox: () => t(WORD.borderBox),
+  borderNone: () => t(WORD.borderNone),
+  showHidden: () => t(WORD.showHidden),
+  clearParagraph: () => t(WORD.clearParagraph),
+  restartNumbering: () => t(WORD.restartNumbering),
+  continueNumbering: () => t(WORD.continueNumbering),
+  listOutline: () => `${t(WORD.multilevelList)}: 1. a. i.`,
+  listLegal: () => `${t(WORD.multilevelList)}: 1. 1.1. 1.1.1.`,
+  listBullets: () => `${t(WORD.multilevelList)}: • ◦ ▪`,
+  styleUpdate: () => t(WORD.styleUpdate),
+  styleModify: () => t(WORD.styleModify),
+  styleNew: () => t(WORD.styleNew),
+  applyStyles: () => t(WORD.applyStyles),
+  pageBreak: () => t(WORD.pageBreak),
+  sectionNextPage: () => t(WORD.sectionNextPage),
+  sectionOddPage: () => t(WORD.sectionOddPage),
+  sectionEvenPage: () => t(WORD.sectionEvenPage),
+  sectionContinuous: () => t(WORD.sectionContinuous),
+  footnote: () => t(WORD.footnote),
+  endnote: () => t(WORD.endnote),
+  updateFields: () => t(WORD.updateFields),
+  toggleFieldCodes: () => t(WORD.toggleFieldCodes),
+  insertToc: () => t(WORD.insertToc),
+  updateToc: () => t(WORD.updateToc),
+  insertPageNumber: () => t(WORD.insertPageNumber),
+  insertPageCount: () => t(WORD.insertPageCount),
+  insertDate: () => t(WORD.insertDate),
+  editHeader: () => t(WORD.editHeader),
+  editFooter: () => t(WORD.editFooter),
+  closeHeaderFooter: () => t(WORD.closeHeaderFooter),
+  differentFirstPage: () => t(WORD.differentFirstPage),
+  differentOddEven: () => t(WORD.differentOddEven),
+  linkToPrevious: () => t(WORD.linkToPrevious),
+  crossReference: () => t(WORD.crossReference),
+  field: () => t(WORD.field),
+  bookmark: () => t(WORD.bookmark),
+  indexEntry: () => t(WORD.indexEntry),
+  pageSetup: () => t(WORD.pageSetup),
 };
 
 /** What `contributeWord` hands back: its teardown, the store (tests read
@@ -96,6 +157,11 @@ export interface WordContribution {
   /** Run a Word command by id (the typed twins of ADR 323 call this);
    *  false for an id that is not a Word command. */
   run(id: string): Promise<boolean>;
+  /** Doc ADR 613 — the review chrome (Track Changes, comments). */
+  review: ReviewContribution;
+  /** Run a review command by id with its typed arguments; false for an id
+   *  that is not one. */
+  runReview(id: string, args?: ReviewArgs): Promise<ReviewResult | false>;
 }
 
 /**
@@ -109,7 +175,13 @@ export function contributeWord(
 ): WordContribution {
   const disposers: Array<() => void> = [];
   const store = createWordStore(host, deps.docStories);
-  const state: WordCommandState = { copied: null };
+  const state: WordCommandState = {
+    copied: null,
+    highlight: null,
+    shading: null,
+    focusStyleBox: () => store.requestStyleBoxFocus(),
+    structure: () => deps.structure?.() ?? null,
+  };
   const hasText = () => host.text?.selection() != null;
   const run = (name: WordCommandName) =>
     runWordCommand(host, name, state).catch((err: unknown) =>
@@ -135,8 +207,23 @@ export function contributeWord(
           command: k.command,
           scope: { editContext: WORD_CONTEXT },
           // A shortcut acts on text: with no text selected the key stays
-          // the host's. Tab and Shift+Tab act only in a list paragraph.
-          when: k.list ? () => hasText() && isList(store) : () => hasText(),
+          // the host's. Tab and Shift+Tab are a list level only in a list
+          // paragraph, at its start or over a range (Word); elsewhere they
+          // stay a tab and focus.
+          when: k.list
+            ? () => hasText() && isList(store) && store.get().tabIsListLevel
+            : () => hasText(),
+        }).dispose,
+      );
+    }
+    // Find, Replace and Go To are the host's (editor ADR 303); inside a
+    // Word document Word's keys reach them.
+    for (const k of WORD_HOST_KEYS) {
+      disposers.push(
+        host.contribute.keybinding({
+          key: k.key,
+          command: k.command,
+          scope: { editContext: WORD_CONTEXT },
         }).dispose,
       );
     }
@@ -144,7 +231,11 @@ export function contributeWord(
 
   if (host.supports("contribute.controlBarGroup@1")) {
     const write = (
-      path: "characterFontFamily" | "characterFontSize" | "characterFillColor",
+      path:
+        | "characterFontFamily"
+        | "characterFontSize"
+        | "characterFillColor"
+        | "characterHighlightColor",
       value:
         | { type: "text"; value: string }
         | { type: "length"; value: number }
@@ -170,6 +261,32 @@ export function contributeWord(
             write("characterFontSize", { type: "length", value: size }),
           setTextColor: (swatch) =>
             write("characterFillColor", { type: "colorRef", value: swatch }),
+          setHighlight: (swatch) => {
+            if (swatch !== "Swatch/None") state.highlight = swatch;
+            write("characterHighlightColor", {
+              type: "colorRef",
+              value: swatch,
+            });
+          },
+          setShading: (swatch) => {
+            state.shading = swatch;
+            void host.text
+              .format([
+                {
+                  path: "paragraphShadingOn",
+                  value: { type: "bool", value: true },
+                },
+                {
+                  path: "paragraphShadingColor",
+                  value: { type: "colorRef", value: swatch },
+                },
+                {
+                  path: "paragraphShadingTint",
+                  value: { type: "length", value: 100 },
+                },
+              ])
+              .then(() => store.refreshFormat());
+          },
         }),
       }).dispose,
     );
@@ -193,6 +310,39 @@ export function contributeWord(
       );
     }
   }
+
+  // Doc ADR 612 — Word's References and Insert dialogs, as a panel.
+  disposers.push(
+    host.contribute.panel({
+      id: REFERENCES_PANEL,
+      ...makeReferencesPanel(referencesActions(host, deps.docStories)),
+    }).dispose,
+  );
+
+  // Editor ADR 301 / contract C6 — a double-click in a page's header or
+  // footer band edits its master's story in place.
+  if (host.supports("contribute.subContextProvider@1")) {
+    disposers.push(
+      host.contribute.subContextProvider({
+        editContext: WORD_CONTEXT,
+        resolve: (hit) =>
+          resolveHeaderFooter(
+            host,
+            deps.structure?.() ?? null,
+            hit,
+            HEADER_BAR_COMMANDS.map((n) => WORD_COMMAND[n]),
+          ),
+      }).dispose,
+    );
+  }
+
+  // Doc ADR 613 — Word's Review: Track Changes, the markup views, the
+  // changes and the comment threads (margin band, panel, status item).
+  const review = contributeReview(host, {
+    docStories: deps.docStories,
+    editContext: WORD_CONTEXT,
+  });
+  disposers.push(() => review.dispose());
 
   // Keep the store current: the selection's format on every selection
   // change, the styles and counts on every document change (the counts a
@@ -219,6 +369,7 @@ export function contributeWord(
         void store.refreshFormat();
         void store.refreshDocument();
         void store.refreshPage();
+        void store.refreshShowHidden();
         refreshWordsSoon();
       }).dispose,
     );
@@ -243,6 +394,8 @@ export function contributeWord(
       void store.refreshDocument();
       void store.refreshPage();
       void store.refreshWords();
+      void store.refreshShowHidden();
+      void review.store.refresh();
     }
   };
   if (host.supports("document.onDidOpen@1")) {
@@ -265,9 +418,14 @@ export function contributeWord(
   return {
     store,
     setDocumentContext,
+    review,
+    runReview: (id, args) => review.runId(id, args),
     async run(id) {
       const name = byId.get(id);
-      if (!name) return false;
+      if (!name) {
+        const out = await review.runId(id);
+        return out !== false;
+      }
       await runWordCommand(host, name, state);
       return true;
     },

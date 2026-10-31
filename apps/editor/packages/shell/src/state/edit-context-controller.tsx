@@ -42,10 +42,15 @@ import { useEditorScope } from "./editor-scope";
 import { useCockpitActions } from "../cockpit/cockpit-state-context";
 import { useEditContextStack } from "./edit-context-stack";
 import { useSelection } from "./selection-context";
-import { SELECT_TOOL_ID, VIEW_TOOL_IDS, useOptionalTool } from "./tool-context";
+import {
+  SELECT_TOOL_ID,
+  toolStaysInContext,
+  useOptionalTool,
+} from "./tool-context";
 import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
 import { useEditorKeys } from "./editor-root";
+import { useOptionalRegistries } from "./registries-context";
 
 const MODIFIER_KEYS = new Set([
   "Shift",
@@ -65,6 +70,10 @@ export function EditContextController() {
     useEditContextStack();
   const { elementSelection } = useSelection();
   const tool = useOptionalTool();
+  // Editor ADR 301 — a header or footer edited in place inside this
+  // context: Escape leaves the header (the caret leaves its story), not
+  // the context.
+  const subContexts = useOptionalRegistries()?.subContexts ?? null;
   // ADR 023 follow-up — held in a ref because the enter effect below is
   // keyed on the frame identity and must NOT re-run because the registry
   // emitted (entering a context emits, by construction).
@@ -139,7 +148,17 @@ export function EditContextController() {
         return;
       }
 
+      // A sub-edit of a context that takes no keys of its own (a bundle's
+      // open transform box, extensions ADR 339): Esc and Enter end the
+      // SUB-EDIT through the tool in hand, not the context.
+      if (
+        !onContentKey &&
+        isDirtyRef.current() &&
+        (e.key === "Escape" || e.key === "Enter")
+      )
+        return;
       if (e.key === "Escape") {
+        if (subContexts?.current()) return;
         e.preventDefault();
         e.stopPropagation();
         cancel();
@@ -178,7 +197,7 @@ export function EditContextController() {
     // Capture so we win these keys while a context is active (this
     // editor's keys only).
     return keys.listen("keydown", onKey, true);
-  }, [commit, cancel, keys]);
+  }, [commit, cancel, keys, subContexts]);
 
   // On the active frame ENTER → emphasize panels + focus the first tool.
   // Keyed by the frame identity (type + scope root) so re-running only
@@ -327,11 +346,12 @@ export function EditContextController() {
     }
     // Unchanged since entry — the user has not reached for anything.
     if (activeTool === toolAtEntryRef.current) return;
-    if (active.toolIds.includes(activeTool)) return;
-    // Hand and Zoom are how you LOOK at what you are editing; picking
-    // one is not reaching for another editing tool. Leaving here sent
-    // the user out of the raster frame for zooming into its pixels.
-    if (VIEW_TOOL_IDS.includes(activeTool)) return;
+    // The context's own tools stay, and so do Hand and Zoom: they are
+    // how you LOOK at what you are editing, and picking one is not
+    // reaching for another editing tool (leaving here sent the user out
+    // of the raster frame for zooming into its pixels). Free Transform
+    // works on the frame being edited (ADR 311).
+    if (toolStaysInContext(activeTool, active.toolIds)) return;
     // COMMIT, not cancel: the user reached for another tool, they did
     // not press Esc. Discarding their in-flight edit because they
     // clicked the wrong thing would be its own defect.

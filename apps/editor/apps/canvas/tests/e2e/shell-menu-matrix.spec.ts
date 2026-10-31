@@ -36,6 +36,9 @@
 // UX F-14 (object commands enabled with nothing selected) is SH-8, fixed
 // (ADR 249); the View toggles' checked state is SH-4, fixed.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { expect, test, type Page } from "@playwright/test";
 
 import { covers } from "@paged-media/test-kit";
@@ -58,6 +61,7 @@ import {
   setMode,
   type MenuRow,
 } from "./harness/shell-surface";
+import { REPO_ROOT } from "./harness/fixtures";
 
 const HOST_MENU = [
   "Help/Documentation",
@@ -69,6 +73,7 @@ const HOST_MENU = [
   "File/Save As IDML…",
   "Edit/Undo",
   "Edit/Redo",
+  "Edit/History",
   "Edit/Cut",
   "Edit/Copy",
   "Edit/Paste",
@@ -89,7 +94,25 @@ const HOST_MENU = [
   "View/Snap to points",
   "View/Show heading anchors",
   "View/Show data markers",
+  // Editor ADR 287.
+  "View/Outline view",
+  "View/Overprint Preview",
+  "View/Pixel Preview",
+  "View/Rotate view/15° clockwise",
+  "View/Rotate view/15° counterclockwise",
+  "View/Rotate view/Reset rotation",
+  "View/Smart guides",
+  "View/Show grid",
+  "View/Snap to grid",
+  "View/Show pixel grid",
+  "View/Snap to pixel",
+  "View/Guides & grid preferences…",
   "Edit/Select all",
+  "Edit/Find…",
+  "Edit/Find and replace…",
+  "Edit/Find next",
+  "Edit/Find previous",
+  "Edit/Go to page…",
   "Object/Bring to front",
   "Object/Bring forward",
   "Object/Send backward",
@@ -145,6 +168,7 @@ const HOST_MENU = [
   "File/Open recent",
   "File/Close",
   "File/Automate/Batch…",
+  "File/Import/PDF or AI as Vectors…",
   "File/Package…",
   "File/Print…",
   "Layout/Margins and columns…",
@@ -161,13 +185,56 @@ const HOST_MENU = [
   "Type/Text variables",
   "Object/Transform/Transform each…",
   "Object/Effects/Effects…",
+  "Object/Effects/Picture adjustments…",
   "File/Open…",
   "File/Export PDF…",
+  "File/Import/SVG…",
+  "File/Export/SVG (page)…",
+  "File/Export/SVG (selection)…",
+  "File/Export/Asset Export…",
+  "Object/Collect for Export/As Single Asset",
+  "Object/Collect for Export/As Multiple Assets",
   "Help/Search commands…",
   "Data/Data sources…",
   "Data/Bindings…",
   "Data/Dataset preview…",
+  // Editor ADR 309 — the Transparency and Appearance panels beside Effects….
+  "Object/Effects/Transparency…",
+  "Object/Effects/Appearance…",
+  // …and Object ▸ Effects ▸ <group> ▸ <effect>, one row per kind core's
+  // catalog describes (EFFECT_ROWS below).
 ] as const;
+
+/** The Effect menu's rows: one per core effect kind (effect-menu.ts). */
+const EFFECT_ROWS: readonly string[] = (
+  JSON.parse(
+    readFileSync(
+      join(
+        REPO_ROOT,
+        "../../platform/extensions/packages/plugin-api/src/catalog.json",
+      ),
+      "utf8",
+    ),
+  ) as { effectKinds: Array<{ title: string; category: string }> }
+).effectKinds.map(
+  (k) =>
+    `Object/Effects/${
+      (
+        {
+          stylize: "Stylize",
+          blur: "Blur",
+          noise: "Noise",
+          color: "Color",
+          distortAndTransform: "Distort & Transform",
+          path: "Path",
+          pathfinder: "Pathfinder",
+          warp: "Warp",
+          convertToShape: "Convert to Shape",
+          rasterize: "Rasterize",
+        } as Record<string, string>
+      )[k.category] ?? k.category
+    }/${k.title}`,
+);
 
 const HOST_TOPS = [
   "File",
@@ -269,7 +336,7 @@ test.describe("the host menu bar", () => {
   }) => {
     await openShell(page, { doc: true });
     const live = hostRows(await liveMenu(page)).map((r) => r.path);
-    expect([...live].sort()).toEqual([...HOST_MENU].sort());
+    expect([...live].sort()).toEqual([...HOST_MENU, ...EFFECT_ROWS].sort());
   });
 
   for (const ctx of CONTEXTS) {
@@ -301,6 +368,11 @@ test.describe("the host menu bar", () => {
         "menu:View/Snap to points",
         "menu:View/Show heading anchors",
         "menu:Edit/Select all",
+        "menu:Edit/Find…",
+        "menu:Edit/Find and replace…",
+        "menu:Edit/Find next",
+        "menu:Edit/Find previous",
+        "menu:Edit/Go to page…",
         "menu:Object/Bring to front",
         "menu:Object/Bring forward",
         "menu:Object/Send backward",

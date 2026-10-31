@@ -64,6 +64,10 @@ export interface FrameSurfaceHostProps {
   hostRef: RefObject<HTMLDivElement | null>;
   /** The canvas host's size, CSS px (the full-screen work area). */
   hostSize: { width: number; height: number };
+  /** Editor ADR 311 — the tool in hand works on the frame itself (Free
+   *  Transform): the surface stays on screen but lets presses through to
+   *  the canvas, so the tool reaches the frame under it. */
+  passThrough?: boolean;
 }
 
 const stop = (e: SyntheticEvent) => e.stopPropagation();
@@ -179,7 +183,7 @@ export function FrameSurfaceHost(props: FrameSurfaceHostProps) {
     transformOrigin: "0 0",
     transform: `matrix(${m.join(",")})`,
     overflow: "hidden",
-    pointerEvents: "auto",
+    pointerEvents: props.passThrough && !fullscreen ? "none" : "auto",
     // Above the canvas and the overlay SVG, below the HUD.
     zIndex: fullscreen ? 4 : 2,
     background: fullscreen ? "var(--pg-bg, #ffffff)" : undefined,

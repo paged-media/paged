@@ -788,7 +788,190 @@ pub(crate) fn paragraph_attrs(p: &idml_import::Paragraph) -> Vec<(&'static str, 
     }
     paragraph_rule_attrs(&mut out, &RULE_ABOVE, &p.rule_above);
     paragraph_rule_attrs(&mut out, &RULE_BELOW, &p.rule_below);
+    shading_border_attrs(&mut out, &p.shading, &p.border);
     out
+}
+
+/// Engine ADR 1018 — the IDML spelling of Word's character additions, on a
+/// range or a style: the underline's look as InDesign's stroke style
+/// (`UnderlineType`; thick as a doubled `UnderlineWeight`), its colour,
+/// and double strikethrough as `StrikeThroughType="…ThinThin"`. A
+/// highlight has no IDML attribute; it is drawn the way InDesign users
+/// draw one — an underline as tall as the text, raised behind it — on a
+/// level with no underline of its own. Hidden text has no spelling.
+pub(crate) fn decoration_attrs(
+    out: &mut Vec<(&'static str, String)>,
+    d: &paged_model::CharacterDecorations,
+    underline: Option<bool>,
+    strikethru: Option<bool>,
+    point_size: Option<f32>,
+) {
+    use paged_model::UnderlineKind as K;
+    let size = point_size.unwrap_or(12.0);
+    if let Some(k) = d.underline_kind {
+        if k != K::None {
+            out.push((
+                "UnderlineType",
+                k.idml_stroke_type()
+                    .unwrap_or("StrokeStyle/$ID/Solid")
+                    .to_string(),
+            ));
+        }
+        if k == K::Thick {
+            out.push(("UnderlineWeight", rewrite::format_f32(size * 0.1)));
+        }
+    }
+    if let Some(c) = &d.underline_color {
+        out.push(("UnderlineColor", c.clone()));
+    }
+    if d.double_strikethrough == Some(true) {
+        out.push(("StrikeThroughType", "StrokeStyle/$ID/ThinThin".to_string()));
+        if strikethru.is_none() {
+            out.push(("StrikeThru", "true".to_string()));
+        }
+    }
+    if let Some(h) = highlight_as_underline(d, underline) {
+        out.push(("Underline", "true".to_string()));
+        out.push(("UnderlineColor", h.to_string()));
+        out.push(("UnderlineWeight", rewrite::format_f32(size)));
+        out.push(("UnderlineOffset", rewrite::format_f32(-size * 0.3)));
+    }
+}
+
+/// The highlight written as InDesign's highlight underline: only where the
+/// level has no underline, kind or underline colour of its own.
+pub(crate) fn highlight_as_underline(
+    d: &paged_model::CharacterDecorations,
+    underline: Option<bool>,
+) -> Option<&str> {
+    (underline.is_none() && d.underline_kind.is_none() && d.underline_color.is_none())
+        .then(|| d.effective_highlight())
+        .flatten()
+}
+
+/// Engine ADR 1018 — the patch of one decoration attribute against the
+/// model. A source spelling that reads as the model's value keeps its
+/// bytes; a stroke style with no Word counterpart is kept when the model
+/// says nothing.
+pub(crate) fn decoration_patch(
+    key: &[u8],
+    raw: Option<&str>,
+    d: &paged_model::CharacterDecorations,
+    underline: Option<bool>,
+) -> Option<rewrite::Patch> {
+    use rewrite::Patch;
+    Some(match key {
+        b"UnderlineType" => match d.underline_kind {
+            Some(k)
+                if raw.and_then(paged_model::UnderlineKind::from_idml_stroke_type) == Some(k) =>
+            {
+                Patch::Keep
+            }
+            Some(paged_model::UnderlineKind::None) => Patch::Remove,
+            Some(k) => Patch::Set(
+                k.idml_stroke_type()
+                    .unwrap_or("StrokeStyle/$ID/Solid")
+                    .to_string(),
+            ),
+            None if raw
+                .and_then(paged_model::UnderlineKind::from_idml_stroke_type)
+                .is_none() =>
+            {
+                Patch::Keep
+            }
+            None => Patch::Remove,
+        },
+        b"UnderlineColor" => match (&d.underline_color, highlight_as_underline(d, underline)) {
+            (Some(c), _) if raw == Some(c.as_str()) => Patch::Keep,
+            (Some(c), _) => Patch::Set(c.clone()),
+            (None, Some(h)) => Patch::Set(h.to_string()),
+            (None, None) => Patch::Remove,
+        },
+        b"StrikeThroughType" => {
+            let raw_double = raw.is_some_and(|r| r.ends_with("/ThinThin"));
+            match d.double_strikethrough {
+                Some(true) if raw_double => Patch::Keep,
+                Some(true) => Patch::Set("StrokeStyle/$ID/ThinThin".to_string()),
+                _ if raw_double => Patch::Remove,
+                _ => Patch::Keep,
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// The `ParagraphShading*` / `ParagraphBorder*` attributes of a range's own
+/// shading and border (engine ADR 1018).
+pub(crate) fn shading_border_attrs(
+    out: &mut Vec<(&'static str, String)>,
+    s: &paged_model::ParagraphShading,
+    b: &paged_model::ParagraphBorder,
+) {
+    let bools = [("ParagraphShadingOn", s.on), ("ParagraphBorderOn", b.on)];
+    for (k, v) in bools {
+        if let Some(v) = v {
+            out.push((k, v.to_string()));
+        }
+    }
+    let strs = [
+        ("ParagraphShadingColor", &s.color),
+        ("ParagraphShadingWidth", &s.width),
+        ("ParagraphBorderColor", &b.color),
+        ("ParagraphBorderWidth", &b.width),
+    ];
+    for (k, v) in strs {
+        if let Some(v) = v {
+            out.push((k, v.clone()));
+        }
+    }
+    let nums = [
+        ("ParagraphShadingTint", s.tint),
+        ("ParagraphShadingTopOffset", s.offset_top),
+        ("ParagraphShadingLeftOffset", s.offset_left),
+        ("ParagraphShadingBottomOffset", s.offset_bottom),
+        ("ParagraphShadingRightOffset", s.offset_right),
+        ("ParagraphBorderTint", b.tint),
+        ("ParagraphBorderWeight", b.weight),
+        ("ParagraphBorderTopOffset", b.offset_top),
+        ("ParagraphBorderLeftOffset", b.offset_left),
+        ("ParagraphBorderBottomOffset", b.offset_bottom),
+        ("ParagraphBorderRightOffset", b.offset_right),
+    ];
+    for (k, v) in nums {
+        if let Some(v) = v {
+            out.push((k, rewrite::format_f32(v)));
+        }
+    }
+}
+
+/// The patch of one of [`shading_border_attrs`]' keys on a range.
+pub(crate) fn shading_border_patch(
+    key: &[u8],
+    raw: Option<&str>,
+    s: &paged_model::ParagraphShading,
+    b: &paged_model::ParagraphBorder,
+) -> Option<rewrite::Patch> {
+    use rewrite::{opt_bool_patch, opt_string_patch, preserving_f32_patch};
+    Some(match key {
+        b"ParagraphShadingOn" => opt_bool_patch(s.on),
+        b"ParagraphBorderOn" => opt_bool_patch(b.on),
+        b"ParagraphShadingColor" => opt_string_patch(&s.color),
+        b"ParagraphShadingWidth" => opt_string_patch(&s.width),
+        b"ParagraphBorderColor" => opt_string_patch(&b.color),
+        b"ParagraphBorderWidth" => opt_string_patch(&b.width),
+        b"ParagraphShadingTint" => preserving_f32_patch(raw, s.tint),
+        b"ParagraphShadingTopOffset" => preserving_f32_patch(raw, s.offset_top),
+        b"ParagraphShadingLeftOffset" => preserving_f32_patch(raw, s.offset_left),
+        b"ParagraphShadingBottomOffset" => preserving_f32_patch(raw, s.offset_bottom),
+        b"ParagraphShadingRightOffset" => preserving_f32_patch(raw, s.offset_right),
+        b"ParagraphBorderTint" => preserving_f32_patch(raw, b.tint),
+        b"ParagraphBorderWeight" => preserving_f32_patch(raw, b.weight),
+        b"ParagraphBorderTopOffset" => preserving_f32_patch(raw, b.offset_top),
+        b"ParagraphBorderLeftOffset" => preserving_f32_patch(raw, b.offset_left),
+        b"ParagraphBorderBottomOffset" => preserving_f32_patch(raw, b.offset_bottom),
+        b"ParagraphBorderRightOffset" => preserving_f32_patch(raw, b.offset_right),
+        _ => return None,
+    })
 }
 
 /// Align to baseline grid, on a range or a paragraph style: InDesign
@@ -1153,6 +1336,13 @@ pub(crate) fn character_run_attrs(r: &CharacterRun) -> Vec<(&'static str, String
             out.push((k, v.to_string()));
         }
     }
+    decoration_attrs(
+        &mut out,
+        &r.decorations,
+        r.underline,
+        r.strikethru,
+        r.point_size,
+    );
     // A text variable instance sits in a range of its own marked
     // `PageNumberType="TextVariable"` — InDesign's own spelling.
     if r.text_variable.is_some() {

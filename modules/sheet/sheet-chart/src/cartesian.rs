@@ -39,8 +39,8 @@ use crate::geometry::{
     AXIS_STROKE, AXIS_STROKE_W, GRID_STROKE, LABEL_PT, SERIES_STROKE_W,
 };
 use crate::model::{
-    Axis, AxisKind, Blanks, ChartKind, ChartModel, Grouping, LabelPosition, MarkerSymbol, Plot,
-    Series, TickLabels, TimeUnit, TrendKind,
+    Axis, AxisKind, Blanks, ChartKind, ChartModel, DmlFx, Grouping, LabelPosition, MarkerSymbol,
+    Plot, Series, TickLabels, TimeUnit, TrendKind,
 };
 use crate::scale::Scale;
 
@@ -190,6 +190,17 @@ pub(crate) fn point_color(
         return pen.theme.auto_color(i, n, model.style);
     }
     s.color.clone()
+}
+
+/// A point's gradient and effects: its `c:dPt` override, else the series'
+/// (sheet ADR 527).
+pub(crate) fn point_fx<'a>(s: &S<'a>, i: usize) -> Option<&'a DmlFx> {
+    s.series
+        .point_fx
+        .iter()
+        .find(|(p, _)| *p as usize == i)
+        .map(|(_, fx)| fx)
+        .or(s.series.fx.as_deref())
 }
 
 /// Whether a line-ish series draws its line.
@@ -649,7 +660,9 @@ pub(crate) fn cartesian(pen: &Pen, model: &ChartModel, data: &PlotData) {
     let pa = &model.plot_area;
     if let Some(f) = pa.fill.as_ref().filter(|_| !pa.no_fill) {
         let fill = pen.theme.paint(f, "#FFFFFF");
-        pen.bar(plot.x, plot.y, plot.w, plot.h, &fill);
+        pen.with_fx(pa.fx.as_deref(), || {
+            pen.bar(plot.x, plot.y, plot.w, plot.h, &fill)
+        });
     }
     gridlines(pen, model, &geo);
     axes(
@@ -1060,7 +1073,9 @@ fn bars(pen: &Pen, model: &ChartModel, data: &PlotData, g: &Geo, p: &Plot, ms: &
             };
             let (x0, y0) = g.xy(lo_c, from);
             let (x1, y1) = g.xy(lo_c + dir * bw, to);
-            pen.rect(x0, y0, x1 - x0, y1 - y0, Some(&fill), stroke.as_ref(), 0.75);
+            pen.with_fx(point_fx(s, i), || {
+                pen.rect(x0, y0, x1 - x0, y1 - y0, Some(&fill), stroke.as_ref(), 0.75)
+            });
             // Data label.
             if let Some(dl) = s
                 .series
@@ -1221,7 +1236,9 @@ fn lines(pen: &Pen, model: &ChartModel, data: &PlotData, g: &Geo, p: &Plot, ms: 
                     .rev()
                     .map(|i| g.xy(cpos(i), scale.px_clamped(bottom[i]))),
             );
-            pen.poly(poly, Some(&s.color), None, 0.0);
+            pen.with_fx(s.series.fx.as_deref(), || {
+                pen.poly(poly, Some(&s.color), None, 0.0)
+            });
             labels_along(pen, model, data, g, p, s, scale, &tops[k], cpos);
             series_extras(pen, model, data, g, p, s, scale, cpos);
         }
@@ -1239,7 +1256,9 @@ fn lines(pen: &Pen, model: &ChartModel, data: &PlotData, g: &Geo, p: &Plot, ms: 
                     } else {
                         run.clone()
                     };
-                    pen.line(pts, &s.color, line_width(s), dash);
+                    pen.with_fx(s.series.fx.as_deref(), || {
+                        pen.line(pts, &s.color, line_width(s), dash)
+                    });
                 }
                 run.clear();
             };
@@ -1681,18 +1700,22 @@ fn scatter(pen: &Pen, model: &ChartModel, data: &PlotData, g: &Geo, p: &Plot, ms
                     max_r * (sz / max_size).sqrt()
                 };
                 let fill = point_color(pen, model, s, i, data);
-                pen.wedge(x, y, r, 0.0, 0.0, 360.0, &fill, None);
+                pen.with_fx(point_fx(s, i), || {
+                    pen.wedge(x, y, r, 0.0, 0.0, 360.0, &fill, None)
+                });
             }
         } else {
             if line_visible(s) && pts.len() >= 2 {
                 let line: Vec<(f64, f64)> = pts.iter().map(|p| (p.0, p.1)).collect();
                 let line = if s.series.smooth { smooth(&line) } else { line };
-                pen.line(
-                    line,
-                    &s.color,
-                    line_width(s),
-                    s.series.line.as_ref().and_then(|l| l.dash.as_deref()),
-                );
+                pen.with_fx(s.series.fx.as_deref(), || {
+                    pen.line(
+                        line,
+                        &s.color,
+                        line_width(s),
+                        s.series.line.as_ref().and_then(|l| l.dash.as_deref()),
+                    )
+                });
             }
             if let Some((sym, size)) = marker_of(s) {
                 let fill = s

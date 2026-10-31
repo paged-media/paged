@@ -108,6 +108,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dml-native"
+version = "0.0.0"
+dependencies = [
+ "paged-model",
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
 name = "docx-conformance"
 version = "0.0.0"
 dependencies = [
@@ -116,6 +125,7 @@ dependencies = [
  "docx-import",
  "docx-js",
  "docx-lower",
+ "docx-skeleton",
  "flate2",
  "paged-ooxml",
  "paged-test-resources",
@@ -127,6 +137,7 @@ dependencies = [
 name = "docx-core"
 version = "0.0.0"
 dependencies = [
+ "paged-ooxml",
  "serde",
 ]
 
@@ -136,9 +147,11 @@ version = "0.0.0"
 dependencies = [
  "docx-core",
  "docx-lower",
+ "flate2",
  "paged-ooxml",
  "quick-xml",
  "serde",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -158,6 +171,8 @@ dependencies = [
  "docx-export",
  "docx-import",
  "docx-lower",
+ "docx-odt",
+ "docx-rtf",
  "docx-skeleton",
  "paged-ooxml",
  "serde",
@@ -171,8 +186,28 @@ name = "docx-lower"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "dml-native",
  "docx-core",
+ "paged-ooxml",
  "serde",
+]
+
+[[package]]
+name = "docx-odt"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
+ "flate2",
+ "paged-ooxml",
+ "quick-xml",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "docx-rtf"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
 ]
 
 [[package]]
@@ -383,6 +418,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -392,6 +428,7 @@ dependencies = [
  "flate2",
  "ooxmlsdk",
  "quick-xml",
+ "serde",
  "thiserror",
  "zip 9.0.5",
 ]

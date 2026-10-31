@@ -268,7 +268,10 @@ export interface TraceEngine {
 export const TRACE_ENGINE_NOT_BUILT =
   "paged.draw trace engine wasm not built — run scripts/build-wasm.sh";
 
-interface TraceWasmModule {
+/** The draw wasm's exports. Since draw ADR 364 the same artifact also
+ *  carries the DXF interchange and the SVG paint reader
+ *  (`interchange-wasm.ts` is their facade): one artifact, one boot. */
+export interface TraceWasmModule {
   default: (init?: unknown) => Promise<unknown>;
   initSync: (init: unknown) => unknown;
   traceInit: () => void;
@@ -279,6 +282,10 @@ interface TraceWasmModule {
     height: number,
     optionsJson: string,
   ) => string;
+  dxfToSvg: (bytes: Uint8Array) => string;
+  svgToDxf: (svg: string) => string;
+  svgColors: (svg: string) => string;
+  svgRecolor: (svg: string, mapJson: string) => string;
 }
 
 /** Load + instantiate the trace wasm, browser vs Node (wasm-boot), and run
@@ -303,6 +310,11 @@ function loadModule(): Promise<TraceWasmModule> {
     ready: (mod) => mod.traceInit(),
   });
 }
+
+/** Boot (once per realm) and return the draw wasm's raw exports: the
+ *  trace engine below and `interchange-wasm.ts` share the instance. */
+export const bootDrawWasm: () => Promise<TraceWasmModule> =
+  singleFlight(loadModule);
 
 /** Wrap a loaded module in the typed facade. Exported for the
  *  conformance spec, which asserts the JSON boundary shape directly. */
@@ -340,7 +352,7 @@ export function wrapTraceEngine(mod: TraceWasmModule): TraceEngine {
  *  the lifetime of the bundle — instantiating the module per trace would
  *  dominate the cost of a small one. */
 export const bootTraceEngine: () => Promise<TraceEngine> = singleFlight(
-  async () => wrapTraceEngine(await loadModule()),
+  async () => wrapTraceEngine(await bootDrawWasm()),
 );
 
 // =====================================================================

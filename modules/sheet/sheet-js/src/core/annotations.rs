@@ -87,6 +87,13 @@ pub struct PictureInfo {
     /// The picture's top-left inside that cell (pt).
     pub dx: f64,
     pub dy: f64,
+    /// A drawing picture's opacity and effects as the shared DrawingML
+    /// mapper lowers them (sheet ADR 527).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fx: Option<sheet_chart::native::NativeFx>,
+    /// What the page cannot hold of its look, one line per kind.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub losses: Vec<String>,
 }
 
 /// The sheet x of a column's left edge (hidden columns take no room).
@@ -134,6 +141,11 @@ pub struct PagePicture {
     pub h_pt: f64,
     pub in_cell: bool,
     pub uri: String,
+    /// Opacity and effects (sheet ADR 527).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fx: Option<sheet_chart::native::NativeFx>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub losses: Vec<String>,
 }
 
 /// Lowered page content with the pictures anchored in its cells.
@@ -376,7 +388,20 @@ impl SheetSession {
                         (x0, y0, w, h, row, col, true)
                     }
                 };
+                let (fx, losses) = match p.dml.as_deref() {
+                    Some(d) => sheet_chart::native::picture_fx(
+                        &self
+                            .doc
+                            .chart_theme
+                            .unwrap_or(sheet_chart::colors::OFFICE_THEME),
+                        &d.blip,
+                        &d.effects,
+                    ),
+                    None => (None, Vec::new()),
+                };
                 PictureInfo {
+                    fx,
+                    losses,
                     id: p.id,
                     sheet,
                     name: p.name,
@@ -430,6 +455,8 @@ impl SheetSession {
                     w_pt: p.w,
                     h_pt: p.h,
                     in_cell: p.in_cell,
+                    fx: p.fx,
+                    losses: p.losses,
                 })
             })
             .collect()

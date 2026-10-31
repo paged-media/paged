@@ -493,38 +493,33 @@ pub(super) fn apply_path_kernel_op(
                 delta,
                 join,
                 miter_limit,
+                side,
                 ..
             } => {
                 let join_k =
                     parse_join(join).ok_or_else(|| invalid(format!("unknown join \"{join}\"")))?;
-                let is_open = subpath_open.iter().any(|o| *o) || subpath_starts.len() > 1;
-                if is_open {
-                    // B-21: an OPEN path has no inside/outside, so its
-                    // offset is the both-sides band of width 2·|δ|
-                    // (Illustrator's Offset Path closes an open path into
-                    // an outline). Delegate to the stroke-outline kernel
-                    // with a butt cap (the band ends square at the path
-                    // endpoints). Closed single contours keep the
-                    // single-contour offset below.
-                    kurbo_kernel::outline_stroke(
-                        anchors,
-                        subpath_starts,
-                        subpath_open,
-                        2.0 * delta.abs(),
-                        StrokeCap::Butt,
-                        join_k,
-                        *miter_limit,
-                    )
-                } else {
-                    kurbo_kernel::offset_closed_path(
-                        anchors,
-                        subpath_starts,
-                        subpath_open,
-                        *delta,
-                        join_k,
-                        *miter_limit,
-                    )
-                }
+                let side_k =
+                    crate::stroke_kernel::OffsetSide::parse(side.as_deref()).ok_or_else(|| {
+                        invalid(format!(
+                            "unknown side \"{}\" (both | left | right)",
+                            side.as_deref().unwrap_or_default()
+                        ))
+                    })?;
+                // Engine ADR 1019: one closed contour is the single-contour
+                // offset; a compound path is offset per contour by its
+                // nesting (holes move the other way); an OPEN contour is the
+                // two-sided band of width 2·|δ| (B-21, Illustrator's own
+                // answer for an open path) or, with `side`, one open
+                // parallel path on that side.
+                crate::stroke_kernel::offset_path(
+                    anchors,
+                    subpath_starts,
+                    subpath_open,
+                    *delta,
+                    join_k,
+                    *miter_limit,
+                    side_k,
+                )
             }
             Value::SimplifyPath { tolerance, .. } => {
                 kurbo_kernel::simplify_path(anchors, subpath_starts, subpath_open, *tolerance)
@@ -580,11 +575,13 @@ pub(super) fn apply_path_kernel_op(
                 delta,
                 join,
                 miter_limit,
+                side,
                 ..
             } => Value::OffsetPath {
                 delta,
                 join,
                 miter_limit,
+                side,
                 prev_anchors: Some(snap_anchors.clone()),
                 prev_subpath_starts: Some(snap_starts.clone()),
                 prev_subpath_open: Some(snap_open.clone()),
@@ -1488,6 +1485,8 @@ pub(crate) fn new_text_frame(
         fill_mesh: None,
         pattern_transform: None,
         effects: None,
+        effect_stack: Vec::new(),
+        appearance: Vec::new(),
         fill_transparency: None,
         stroke_transparency: None,
         content_transparency: None,
@@ -1613,6 +1612,8 @@ pub(crate) fn new_rectangle(
         opacity: None,
         blend_mode: None,
         effects: None,
+        effect_stack: Vec::new(),
+        appearance: Vec::new(),
         fill_transparency: None,
         stroke_transparency: None,
         content_transparency: None,
@@ -1633,6 +1634,7 @@ pub(crate) fn new_rectangle(
         subpath_starts: Vec::new(),
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
+        image_adjustments: Vec::new(),
         gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         fill_mesh: None,
         pattern_transform: None,
@@ -3565,7 +3567,7 @@ pub(super) fn apply_insert_field(
     // text + identity), not a single marker char; separate lane.
     if matches!(
         field,
-        FieldKind::Placeholder { .. } | FieldKind::TextVariable { .. }
+        FieldKind::Placeholder { .. } | FieldKind::TextVariable { .. } | FieldKind::Word { .. }
     ) {
         return insert_tagged_run(doc, story_idx, story_id, offset, field);
     }
@@ -3680,6 +3682,7 @@ fn insert_tagged_run(
     offset: u32,
     field: &FieldKind,
 ) -> Result<AppliedOperation, OperationError> {
+    let mut word: Option<paged_model::WordField> = None;
     let (display, tag, variable) = match field {
         FieldKind::Placeholder { plugin, key, value } => {
             let tag = paged_model::PlaceholderField {
@@ -3688,6 +3691,14 @@ fn insert_tagged_run(
                 value: value.clone(),
             };
             (tag.display_text(), Some(tag), None)
+        }
+        // Engine ADR 1022 — a Word field shows its result; without one,
+        // its code in braces (what Word shows before a first update).
+        FieldKind::Word { code, result } => {
+            let parsed = paged_model::WordField::parse(code);
+            let display = result.clone().unwrap_or_else(|| parsed.code_display());
+            word = Some(parsed);
+            (display, None, None)
         }
         FieldKind::TextVariable { variable_id } => {
             let var = doc
@@ -3747,6 +3758,7 @@ fn insert_tagged_run(
             ph_run.text = display;
             ph_run.text_variable = variable;
             ph_run.placeholder = tag;
+            ph_run.field = word;
             let host_len = runs[ri].text.chars().count();
             if local == 0 {
                 runs.insert(ri, ph_run);
@@ -3778,6 +3790,7 @@ fn insert_tagged_run(
                 text: display,
                 placeholder: tag,
                 text_variable: variable,
+                field: word,
                 ..Default::default()
             });
         }
@@ -3824,6 +3837,9 @@ pub(super) fn apply_delete_field(
     }
     if let FieldKind::TextVariable { variable_id } = field {
         return delete_variable_run(doc, story_idx, story_id, offset, variable_id);
+    }
+    if let FieldKind::Word { code, .. } = field {
+        return delete_word_field_run(doc, story_idx, story_id, offset, code);
     }
     let marker = field
         .marker_char()
@@ -4017,6 +4033,68 @@ fn delete_variable_run(
             story_id: story_id.to_string(),
             offset,
             field,
+            content_offset: None,
+        },
+        invalidation,
+    })
+}
+
+/// Engine ADR 1022 — remove the Word field run whose code is `code` that
+/// starts at story char `offset`. The inverse inserts it again with the
+/// result it showed.
+fn delete_word_field_run(
+    doc: &mut Document,
+    story_idx: usize,
+    story_id: &str,
+    offset: u32,
+    code: &str,
+) -> Result<AppliedOperation, OperationError> {
+    let story = &mut doc.stories[story_idx].story;
+    let mut char_cursor: u32 = 0;
+    let mut removed: Option<paged_model::CharacterRun> = None;
+    'outer: for para in story.paragraphs.iter_mut() {
+        let mut ri = 0;
+        while ri < para.runs.len() {
+            let run = &para.runs[ri];
+            if char_cursor == offset && run.field.as_ref().is_some_and(|f| f.code == code.trim()) {
+                removed = Some(para.runs.remove(ri));
+                break 'outer;
+            }
+            if char_cursor > offset {
+                break 'outer;
+            }
+            char_cursor += run.text.chars().count() as u32;
+            ri += 1;
+        }
+    }
+    let Some(run) = removed else {
+        return Err(OperationError::InvalidValue {
+            node: NodeId::StoryRange {
+                story_id: story_id.to_string(),
+                start: offset,
+                end: offset,
+            },
+            path: PropertyPath::AppliedCharacterStyle,
+            reason: format!("no Word field {code:?} at offset {offset}"),
+        });
+    };
+    let invalidation = reflow_hint_for_story(doc, story_id);
+    Ok(AppliedOperation {
+        op: Operation::DeleteField {
+            story_id: story_id.to_string(),
+            offset,
+            field: FieldKind::Word {
+                code: code.to_string(),
+                result: None,
+            },
+        },
+        inverse: Operation::InsertField {
+            story_id: story_id.to_string(),
+            offset,
+            field: FieldKind::Word {
+                code: code.to_string(),
+                result: Some(run.text),
+            },
             content_offset: None,
         },
         invalidation,

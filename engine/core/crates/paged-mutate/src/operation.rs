@@ -75,6 +75,8 @@ pub enum NodeId {
     Polygon(String),
     GraphicLine(String),
     Group(String),
+    /// Engine ADR 1039 — a symbol instance (`Spread::instances`).
+    Instance(String),
     // Structural parents — addressable so InsertNode / MoveNode can
     // name where a node lands.
     Spread(String),
@@ -149,6 +151,7 @@ impl NodeId {
             | NodeId::Polygon(s)
             | NodeId::GraphicLine(s)
             | NodeId::Group(s)
+            | NodeId::Instance(s)
             | NodeId::Spread(s)
             | NodeId::Page(s)
             | NodeId::Story(s)
@@ -170,6 +173,7 @@ impl NodeId {
             NodeId::Polygon(_) => "Polygon",
             NodeId::GraphicLine(_) => "GraphicLine",
             NodeId::Group(_) => "Group",
+            NodeId::Instance(_) => "Instance",
             NodeId::Spread(_) => "Spread",
             NodeId::Page(_) => "Page",
             NodeId::Story(_) => "Story",
@@ -408,12 +412,47 @@ pub enum PropertyPath {
     /// for the whole struct — kind + axis + the stop LIST edit
     /// together, and per-field shapes can't carry a list.
     FrameGradientFeather,
+    /// Engine ADR 1008 — the object target's ordered effect stack
+    /// (`Value::EffectStack`), whole-list replacement: add, remove,
+    /// reorder, enable and the stack-only effects' parameters are one
+    /// write each. The InDesign effects' parameters stay on their own
+    /// per-field paths. Reads the canonical stack (the effects that are
+    /// on, in InDesign's order) for an item that stores none. The inverse
+    /// carries a snapshot (`prev`), so undo restores the model exactly.
+    /// Text frames, rectangles, ovals and polygons. Paint-only.
+    FrameEffectStack,
+    /// ADR 1008 — the fill target's stack (InDesign effects only).
+    FrameFillEffectStack,
+    /// ADR 1008 — the stroke target's stack (InDesign effects only).
+    FrameStrokeEffectStack,
+    /// ADR 1008 — the content target's stack (InDesign effects only).
+    FrameContentEffectStack,
+    /// Engine ADR 1043 — the item's appearance (`Value::Appearance`):
+    /// its extra fills and strokes, bottom to top, with the `frameFill` /
+    /// `frameStroke` placeholders putting them in order with its own fill
+    /// and stroke. Whole-list replacement: add, remove, reorder and any
+    /// layer field are one write each. The empty list is the item as it
+    /// always was. The inverse carries a snapshot (`prev`), so undo
+    /// restores the model exactly. Text frames, rectangles, ovals and
+    /// polygons. Paint-only.
+    FrameAppearance,
+    /// ADR 1043 — one layer of the appearance, by index
+    /// (`Value::AppearanceLayer`): the per-layer edit (a colour, an
+    /// opacity, a blend mode, a stroke weight, its effects). An index one
+    /// past the last layer appends. Undoes through `FrameAppearance`.
+    FrameAppearanceLayer,
     /// Editor-ops (Page tool) — a page's `GeometricBounds`
     /// `[top, left, bottom, right]` in the page's INNER coordinate
     /// system (`Value::Bounds`). Only `NodeId::Page` carries it.
     /// Items keep their coordinates (InDesign's layout-adjust off);
     /// `spread_origin` re-derives on rebuild.
     PageBounds,
+    /// Engine ADR 1011 — a page's place on the canvas (its artboard
+    /// position): `Value::Lengths([x, y])`, the page's top-left in
+    /// document points; the empty list returns the page to its default
+    /// slot (`paged_model::canvas_layout`). Only `NodeId::Page` carries
+    /// it. Content keeps its page coordinates, so it moves with the page.
+    PageCanvasOrigin,
     /// SDK Phase 5 (v1 sweep) — drop-shadow per-field editors.
     /// All five operate on the frame's `drop_shadow:
     /// Option<DropShadowSetting>`. Writing to any of them
@@ -1529,6 +1568,27 @@ pub enum PropertyPath {
     /// Rectangle, Oval or Polygon, or hosts pasted-in content. No IDML
     /// attribute: the writer lowers a clip group to paste-into.
     GroupClip,
+    /// Engine ADR 1042 — the group's live vector effects
+    /// (`Value::EffectStack`, vector kinds only): a `pathfinder` entry
+    /// draws the members as one outline (a compound shape) and the other
+    /// vector entries act on it. Whole-list replacement; the inverse
+    /// carries the previous stack (`prev`). Native: IDML export bakes the
+    /// outline and keeps the stack in a label.
+    GroupEffectStack,
+    /// Engine ADR 1039 — a symbol instance's colour tint:
+    /// `Value::Lengths([r, g, b, amount])` (sRGB and amount `0..=1`); the
+    /// empty list removes it. Only `NodeId::Instance` carries it. Native.
+    SymbolInstanceTint,
+    /// Engine ADR 1039 — a symbol instance's 9-slice guides:
+    /// `Value::Lengths([left, top, right, bottom])` insets in definition
+    /// space; the empty list falls back to the definition's. Only
+    /// `NodeId::Instance` carries it. Native.
+    SymbolInstanceNineSlice,
+    /// Engine ADR 1039 (draw ADR 365) — the symbol a symbol instance draws,
+    /// `Value::Text(symbol id)`: Illustrator's Replace Symbol. The
+    /// instance keeps its id, transform and overrides; a symbol id the
+    /// store does not hold is refused. Only `NodeId::Instance`. Native.
+    SymbolInstanceSymbol,
 
     // ---- R-11 — drop-shadow attributes and the global light -------
     /// `<DropShadowSetting BlendMode>`; `""` is InDesign's `Multiply`.
@@ -1599,6 +1659,101 @@ pub enum PropertyPath {
     /// rest as lost. Paint-only (`frame_style`).
     FrameFillRule,
 
+    // ---- engine ADR 1037 — the image filter stack ----------------------
+    /// The placed picture's filter stack, in order: `Value::ImageAdjustments`
+    /// (the whole list; the empty list clears it). On a Rectangle, Oval or
+    /// Polygon (the kinds that place a picture). IDML has no such construct:
+    /// the export keeps the stack in a label and reports it as lost.
+    /// Paint-only (`frame_style`).
+    FrameImageAdjustments,
+
+    // ---- engine ADR 1018 — Word's character and paragraph additions --
+    /// A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a
+    /// swatch. `ColorRef(None)` clears the run's own value (inherit);
+    /// `ColorRef(Some("Swatch/None"))` says "no highlight" over a style
+    /// that sets one. On a `StoryRange`, or a character / paragraph style
+    /// through `SetStyleProperty`. Paint-only.
+    CharacterHighlightColor,
+    /// Hidden text (`w:vanish`): `Value::Bool`. A hidden run takes no room
+    /// unless `documentShowHiddenText` is on. Reflows.
+    CharacterHidden,
+    /// The underline's kind: `Value::Text` of `none`, `single`, `words`,
+    /// `double`, `thick`, `dotted`, `dashed`, `dotDash`, `dotDotDash`,
+    /// `wave` or `doubleWave` (Word's `w:u` names; its heavy and long
+    /// variants are accepted as their plain kind). Setting a kind turns
+    /// the underline on (`none` turns it off); `""` clears the kind and
+    /// leaves the switch. A suffix `@on`, `@off` or `@inherit` sets the
+    /// switch explicitly instead — the form an undo carries.
+    CharacterUnderlineType,
+    /// The underline's colour: `Value::ColorRef`; `None` draws in the
+    /// text's colour. Paint-only.
+    CharacterUnderlineColor,
+    /// Double strikethrough (`w:dstrike`): `Value::Bool`. Paint-only.
+    CharacterDoubleStrikethrough,
+    /// Paragraph shading on or off, set on the paragraph itself (Word's
+    /// direct `w:shd`) or on a paragraph style: `Value::Bool`.
+    ParagraphShadingOn,
+    /// The shading's swatch: `Value::ColorRef` (`None` inherits).
+    ParagraphShadingColor,
+    /// The shading's tint in percent: `Value::Length` (`None` inherits).
+    ParagraphShadingTint,
+    /// Paragraph border on or off (Word's direct `w:pBdr`): `Value::Bool`.
+    ParagraphBorderOn,
+    /// The border's swatch: `Value::ColorRef` (`None` inherits).
+    ParagraphBorderColor,
+    /// The border's stroke weight in pt: `Value::Length` (`None` inherits).
+    ParagraphBorderWeight,
+    /// Word's "show hidden text", on `NodeId::Document`: `Value::Bool`,
+    /// default false. A whole-document reflow.
+    DocumentShowHiddenText,
+    // ---- engine ADR 1031 — the gradient's start ---------------------
+    /// `GradientFillStart`: where a frame's gradient fill starts, in the
+    /// item's own (inner) coordinates — a linear axis begins there, a
+    /// radial gradient is centred there with `FrameGradientFillLength` as
+    /// its radius. `Value::Lengths` `[x, y]`; `[]` clears it to InDesign's
+    /// default (the inner box's bottom-left corner). On a TextFrame,
+    /// Rectangle, Oval or Polygon. The IDML adapter reads and writes it.
+    /// Paint-only (`frame_style`).
+    FrameGradientFillStart,
+    /// Word's "show field codes" (Alt+F9), on `NodeId::Document`:
+    /// `Value::Bool`, default false. Every Word field sets its code in
+    /// braces instead of its result (engine ADR 1022). A whole-document
+    /// reflow.
+    DocumentShowFieldCodes,
+    /// Word's Track Changes (engine ADR 1040), on `NodeId::Document`:
+    /// `Value::Bool`, default false. While on, text and formatting edits on
+    /// story ranges are recorded as tracked changes.
+    DocumentTrackChanges,
+    /// The author tracked changes are recorded under: `Value::Text`.
+    DocumentTrackChangesAuthor,
+    /// How tracked changes and comments show (engine ADR 1040):
+    /// `Value::Text` `simple` / `all` / `none` / `original`, default `all`.
+    /// A whole-document reflow.
+    DocumentMarkupView,
+    // ---- engine ADR 1047 — live shapes ------------------------------
+    /// A live polygon's side count (a star's points): `Value::Length` of a
+    /// whole number in 3..=100, on a Polygon that is one closed contour.
+    /// Setting it makes the polygon live and redraws its anchors in their
+    /// own bounding box, keeping a live star's inset;
+    /// `Length(None)` ends the live shape and keeps the path. Reads `None`
+    /// for a path that is not a live polygon. Reshapes
+    /// (`frame_geometry`); the inverse restores the parameters and the
+    /// anchors exactly. No IDML attribute: the anchors are written, the
+    /// parameters ride the item's label (`paged:liveShape`).
+    FrameShapeSides,
+    /// A live polygon's star inset, percent: `Value::Length` in 0..=99, 0
+    /// (or `None`) the plain polygon. Only on a LIVE polygon; any other
+    /// path refuses it (set `FrameShapeSides` first). Redraws the anchors.
+    FrameShapeStarInset,
+    /// An oval's pie start angle, degrees counter-clockwise from three
+    /// o'clock (Illustrator's Pie Start Angle): `Value::Length`, `None`
+    /// is 0. The oval draws the wedge from the start counter-clockwise to
+    /// the end; a whole turn between them is the whole ellipse. Reshapes
+    /// (`frame_geometry`).
+    FrameShapePieStart,
+    /// An oval's pie end angle (Illustrator's Pie End Angle):
+    /// `Value::Length`, `None` is 360.
+    FrameShapePieEnd,
     // ---- engine ADR 1007 — paint model v2 ---------------------------
     /// How the frame's gradient stroke maps onto the stroke:
     /// `Value::Text` `"Within"` (IDML's mode, the default), `"Along"`
@@ -1608,14 +1763,7 @@ pub enum PropertyPath {
     /// it: the IDML export writes the stroke `Within` and reports the
     /// loss. Paint-only (`frame_style`).
     FrameGradientStrokeMode,
-    /// The frame's `GradientFillStart` in its inner coordinates:
-    /// `Value::Lengths` `[x, y]`, or `[]` to clear to InDesign's default
-    /// (the box's bottom-left corner). A linear axis starts there, a
-    /// radial or conic gradient is centred there. On a TextFrame,
-    /// Rectangle, Oval or Polygon. Paint-only (`frame_style`).
-    FrameGradientFillStart,
-
-    // ---- engine ADR 1040 — gradient mesh and freeform gradient -------
+    // ---- engine ADR 1048 — gradient mesh and freeform gradient -------
     /// The frame's native mesh fill, a gradient mesh or a freeform
     /// gradient (`Value::FillMesh`), shown instead of its fill swatch;
     /// `Value::FillMesh(None)` clears it back to the swatch. Points are in
@@ -1722,7 +1870,14 @@ impl PropertyPath {
             PropertyPath::SimplifyPath => "path.simplify",
             PropertyPath::ClosePath => "path.close",
             PropertyPath::FrameGradientFeather => "frame.gradientFeather",
+            PropertyPath::FrameEffectStack => "frame.effectStack",
+            PropertyPath::FrameFillEffectStack => "frame.fillEffectStack",
+            PropertyPath::FrameStrokeEffectStack => "frame.strokeEffectStack",
+            PropertyPath::FrameContentEffectStack => "frame.contentEffectStack",
+            PropertyPath::FrameAppearance => "frame.appearance",
+            PropertyPath::FrameAppearanceLayer => "frame.appearanceLayer",
             PropertyPath::PageBounds => "page.bounds",
+            PropertyPath::PageCanvasOrigin => "page.canvasOrigin",
             PropertyPath::FrameNonprinting => "frame.nonprinting",
             PropertyPath::FrameDropShadowMode => "frame.dropShadowMode",
             PropertyPath::FrameDropShadowXOffset => "frame.dropShadowXOffset",
@@ -1993,6 +2148,10 @@ impl PropertyPath {
             PropertyPath::GroupIsolateBlending => "group.isolateBlending",
             PropertyPath::GroupKnockout => "group.knockout",
             PropertyPath::GroupClip => "group.clip",
+            PropertyPath::GroupEffectStack => "group.effectStack",
+            PropertyPath::SymbolInstanceTint => "symbolInstance.tint",
+            PropertyPath::SymbolInstanceNineSlice => "symbolInstance.nineSlice",
+            PropertyPath::SymbolInstanceSymbol => "symbolInstance.symbol",
             PropertyPath::FrameDropShadowBlendMode => "frame.dropShadowBlendMode",
             PropertyPath::FrameDropShadowSpread => "frame.dropShadowSpread",
             PropertyPath::FrameDropShadowNoise => "frame.dropShadowNoise",
@@ -2014,8 +2173,29 @@ impl PropertyPath {
             PropertyPath::DocumentFootnoteContinuingRuleOn => "document.footnoteContinuingRuleOn",
             PropertyPath::FramePdfPage => "frame.pdfPage",
             PropertyPath::FrameFillRule => "frame.fillRule",
-            PropertyPath::FrameGradientStrokeMode => "frame.gradientStrokeMode",
+            PropertyPath::FrameImageAdjustments => "frame.imageAdjustments",
+            PropertyPath::CharacterHighlightColor => "character.highlightColor",
+            PropertyPath::CharacterHidden => "character.hidden",
+            PropertyPath::CharacterUnderlineType => "character.underlineType",
+            PropertyPath::CharacterUnderlineColor => "character.underlineColor",
+            PropertyPath::CharacterDoubleStrikethrough => "character.doubleStrikethrough",
+            PropertyPath::ParagraphShadingOn => "paragraph.shadingOn",
+            PropertyPath::ParagraphShadingColor => "paragraph.shadingColor",
+            PropertyPath::ParagraphShadingTint => "paragraph.shadingTint",
+            PropertyPath::ParagraphBorderOn => "paragraph.borderOn",
+            PropertyPath::ParagraphBorderColor => "paragraph.borderColor",
+            PropertyPath::ParagraphBorderWeight => "paragraph.borderWeight",
+            PropertyPath::DocumentShowHiddenText => "document.showHiddenText",
             PropertyPath::FrameGradientFillStart => "frame.gradientFillStart",
+            PropertyPath::DocumentShowFieldCodes => "document.showFieldCodes",
+            PropertyPath::DocumentTrackChanges => "document.trackChanges",
+            PropertyPath::DocumentTrackChangesAuthor => "document.trackChangesAuthor",
+            PropertyPath::DocumentMarkupView => "document.markupView",
+            PropertyPath::FrameShapeSides => "frame.shapeSides",
+            PropertyPath::FrameShapeStarInset => "frame.shapeStarInset",
+            PropertyPath::FrameShapePieStart => "frame.shapePieStart",
+            PropertyPath::FrameShapePieEnd => "frame.shapePieEnd",
+            PropertyPath::FrameGradientStrokeMode => "frame.gradientStrokeMode",
             PropertyPath::FrameFillMesh => "frame.fillMesh",
             PropertyPath::FramePatternTransform => "frame.patternTransform",
         }
@@ -2135,6 +2315,570 @@ impl GradientFeatherSpec {
     }
 }
 
+/// Engine ADR 1008 — an effect kind on the stack: InDesign's nine, then
+/// the stack-only ones, then (engine ADR 1042) the live vector effects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum EffectKind {
+    DropShadow,
+    InnerShadow,
+    OuterGlow,
+    InnerGlow,
+    BevelEmboss,
+    Satin,
+    Feather,
+    DirectionalFeather,
+    GradientFeather,
+    GaussianBlur,
+    OutlineStroke,
+    ColorOverlay,
+    GradientOverlay,
+    Reflection,
+    SoftEdge,
+    Noise,
+    ColorAdjust,
+    // Engine ADR 1042 — the live vector effects.
+    Roughen,
+    ZigZag,
+    PuckerBloat,
+    Twist,
+    Tweak,
+    TransformCopies,
+    FreeDistort,
+    Warp,
+    OffsetPath,
+    OutlinePath,
+    RoundCorners,
+    Scribble,
+    ConvertToShape,
+    Pathfinder,
+}
+
+impl EffectKind {
+    pub const ALL: [EffectKind; 31] = [
+        EffectKind::DropShadow,
+        EffectKind::InnerShadow,
+        EffectKind::OuterGlow,
+        EffectKind::InnerGlow,
+        EffectKind::BevelEmboss,
+        EffectKind::Satin,
+        EffectKind::Feather,
+        EffectKind::DirectionalFeather,
+        EffectKind::GradientFeather,
+        EffectKind::GaussianBlur,
+        EffectKind::OutlineStroke,
+        EffectKind::ColorOverlay,
+        EffectKind::GradientOverlay,
+        EffectKind::Reflection,
+        EffectKind::SoftEdge,
+        EffectKind::Noise,
+        EffectKind::ColorAdjust,
+        EffectKind::Roughen,
+        EffectKind::ZigZag,
+        EffectKind::PuckerBloat,
+        EffectKind::Twist,
+        EffectKind::Tweak,
+        EffectKind::TransformCopies,
+        EffectKind::FreeDistort,
+        EffectKind::Warp,
+        EffectKind::OffsetPath,
+        EffectKind::OutlinePath,
+        EffectKind::RoundCorners,
+        EffectKind::Scribble,
+        EffectKind::ConvertToShape,
+        EffectKind::Pathfinder,
+    ];
+
+    fn indesign(self) -> Option<paged_model::effect_stack::IndesignEffect> {
+        use paged_model::effect_stack::IndesignEffect as I;
+        Some(match self {
+            EffectKind::DropShadow => I::DropShadow,
+            EffectKind::InnerShadow => I::InnerShadow,
+            EffectKind::OuterGlow => I::OuterGlow,
+            EffectKind::InnerGlow => I::InnerGlow,
+            EffectKind::BevelEmboss => I::BevelEmboss,
+            EffectKind::Satin => I::Satin,
+            EffectKind::Feather => I::Feather,
+            EffectKind::DirectionalFeather => I::DirectionalFeather,
+            EffectKind::GradientFeather => I::GradientFeather,
+            _ => return None,
+        })
+    }
+
+    /// The kind's serialised (camelCase) name.
+    pub fn name(self) -> &'static str {
+        match self {
+            EffectKind::DropShadow => "dropShadow",
+            EffectKind::InnerShadow => "innerShadow",
+            EffectKind::OuterGlow => "outerGlow",
+            EffectKind::InnerGlow => "innerGlow",
+            EffectKind::BevelEmboss => "bevelEmboss",
+            EffectKind::Satin => "satin",
+            EffectKind::Feather => "feather",
+            EffectKind::DirectionalFeather => "directionalFeather",
+            EffectKind::GradientFeather => "gradientFeather",
+            EffectKind::GaussianBlur => "gaussianBlur",
+            EffectKind::OutlineStroke => "outlineStroke",
+            EffectKind::ColorOverlay => "colorOverlay",
+            EffectKind::GradientOverlay => "gradientOverlay",
+            EffectKind::Reflection => "reflection",
+            EffectKind::SoftEdge => "softEdge",
+            EffectKind::Noise => "noise",
+            EffectKind::ColorAdjust => "colorAdjust",
+            EffectKind::Roughen => "roughen",
+            EffectKind::ZigZag => "zigZag",
+            EffectKind::PuckerBloat => "puckerBloat",
+            EffectKind::Twist => "twist",
+            EffectKind::Tweak => "tweak",
+            EffectKind::TransformCopies => "transformCopies",
+            EffectKind::FreeDistort => "freeDistort",
+            EffectKind::Warp => "warp",
+            EffectKind::OffsetPath => "offsetPath",
+            EffectKind::OutlinePath => "outlinePath",
+            EffectKind::RoundCorners => "roundCorners",
+            EffectKind::Scribble => "scribble",
+            EffectKind::ConvertToShape => "convertToShape",
+            EffectKind::Pathfinder => "pathfinder",
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.name() == name)
+    }
+}
+
+/// Engine ADR 1008 — one entry of an effect stack on the wire. Every
+/// entry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`
+/// and `opacityPct`. The parameter fields are flat and optional; each
+/// kind reads its own and an absent one takes the kind's default:
+///
+/// | kind | fields |
+/// | --- | --- |
+/// | `gaussianBlur` | `radiusPt` (σ, pt) |
+/// | `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |
+/// | `colorOverlay` | `color` |
+/// | `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |
+/// | `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |
+/// | `softEdge` | `sizePt` |
+/// | `noise` | `amountPct`, `monochromatic` |
+/// | `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |
+///
+/// The live vector effects (engine ADR 1042) and their fields:
+///
+/// | kind | fields |
+/// | --- | --- |
+/// | `roughen` | `size`, `relative`, `detailPerInch`, `smooth`, `seed` |
+/// | `zigZag` | `size`, `relative`, `ridges`, `smooth` |
+/// | `puckerBloat` | `amountPct` (−200..200; positive bloats) |
+/// | `twist` | `angleDeg` |
+/// | `tweak` | `amountH`, `amountV`, `relative`, `anchors`, `inHandles`, `outHandles`, `seed` |
+/// | `transformCopies` | `scaleHPct`, `scaleVPct`, `moveH`, `moveV`, `rotateDeg`, `reflectX`, `reflectY`, `copies`, `origin` |
+/// | `freeDistort` | `corners` (four `[x, y]` in the box's unit square) |
+/// | `warp` | `style`, `horizontal`, `bendPct`, `distortHPct`, `distortVPct` |
+/// | `offsetPath` | `offset`, `join`, `miterLimit` |
+/// | `outlinePath` | — (the item's own stroke) |
+/// | `roundCorners` | `radius` |
+/// | `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |
+/// | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
+/// | `pathfinder` | `op` (on a group's stack only) |
+///
+/// InDesign's kinds carry no parameters here: theirs are the per-field
+/// paths (`frameInnerShadowSize`, …), and the stack keeps them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectEntrySpec {
+    pub kind: EffectKind,
+    #[serde(default = "spec_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub blend_mode: Option<String>,
+    #[serde(default)]
+    pub opacity_pct: Option<f32>,
+    #[serde(default)]
+    pub radius_pt: Option<f32>,
+    #[serde(default)]
+    pub size_pt: Option<f32>,
+    #[serde(default)]
+    pub position: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub gradient: Option<String>,
+    #[serde(default)]
+    pub angle_deg: Option<f32>,
+    #[serde(default)]
+    pub reverse: Option<bool>,
+    #[serde(default)]
+    pub distance_pt: Option<f32>,
+    #[serde(default)]
+    pub size_pct: Option<f32>,
+    #[serde(default)]
+    pub start_opacity_pct: Option<f32>,
+    #[serde(default)]
+    pub end_opacity_pct: Option<f32>,
+    #[serde(default)]
+    pub blur_pt: Option<f32>,
+    #[serde(default)]
+    pub amount_pct: Option<f32>,
+    #[serde(default)]
+    pub monochromatic: Option<bool>,
+    #[serde(default)]
+    pub brightness: Option<f32>,
+    #[serde(default)]
+    pub contrast: Option<f32>,
+    #[serde(default)]
+    pub saturation: Option<f32>,
+    #[serde(default)]
+    pub hue_deg: Option<f32>,
+    // Engine ADR 1042 — the vector effects' parameters (see
+    // `vector_effect_spec` for which kind reads which).
+    #[serde(default)]
+    pub size: Option<f32>,
+    #[serde(default)]
+    pub relative: Option<bool>,
+    #[serde(default)]
+    pub detail_per_inch: Option<f32>,
+    #[serde(default)]
+    pub smooth: Option<bool>,
+    #[serde(default)]
+    pub seed: Option<u32>,
+    #[serde(default)]
+    pub ridges: Option<u32>,
+    #[serde(default)]
+    pub amount_h: Option<f32>,
+    #[serde(default)]
+    pub amount_v: Option<f32>,
+    #[serde(default)]
+    pub anchors: Option<bool>,
+    #[serde(default)]
+    pub in_handles: Option<bool>,
+    #[serde(default)]
+    pub out_handles: Option<bool>,
+    #[serde(default)]
+    pub scale_h_pct: Option<f32>,
+    #[serde(default)]
+    pub scale_v_pct: Option<f32>,
+    #[serde(default)]
+    pub move_h: Option<f32>,
+    #[serde(default)]
+    pub move_v: Option<f32>,
+    #[serde(default)]
+    pub rotate_deg: Option<f32>,
+    #[serde(default)]
+    pub reflect_x: Option<bool>,
+    #[serde(default)]
+    pub reflect_y: Option<bool>,
+    #[serde(default)]
+    pub copies: Option<u32>,
+    #[serde(default)]
+    pub origin: Option<String>,
+    #[serde(default)]
+    pub corners: Option<Vec<[f32; 2]>>,
+    #[serde(default)]
+    pub style: Option<String>,
+    #[serde(default)]
+    pub horizontal: Option<bool>,
+    #[serde(default)]
+    pub bend_pct: Option<f32>,
+    #[serde(default)]
+    pub distort_h_pct: Option<f32>,
+    #[serde(default)]
+    pub distort_v_pct: Option<f32>,
+    #[serde(default)]
+    pub offset: Option<f32>,
+    #[serde(default)]
+    pub join: Option<String>,
+    #[serde(default)]
+    pub miter_limit: Option<f32>,
+    #[serde(default)]
+    pub radius: Option<f32>,
+    #[serde(default)]
+    pub path_overlap: Option<f32>,
+    #[serde(default)]
+    pub path_overlap_variation: Option<f32>,
+    #[serde(default)]
+    pub stroke_width: Option<f32>,
+    #[serde(default)]
+    pub curviness_pct: Option<f32>,
+    #[serde(default)]
+    pub curviness_variation_pct: Option<f32>,
+    #[serde(default)]
+    pub spacing: Option<f32>,
+    #[serde(default)]
+    pub spacing_variation: Option<f32>,
+    #[serde(default)]
+    pub shape: Option<String>,
+    #[serde(default)]
+    pub extra_width: Option<f32>,
+    #[serde(default)]
+    pub extra_height: Option<f32>,
+    #[serde(default)]
+    pub width: Option<f32>,
+    #[serde(default)]
+    pub height: Option<f32>,
+    #[serde(default)]
+    pub corner_radius: Option<f32>,
+    #[serde(default)]
+    pub op: Option<String>,
+}
+
+/// Engine ADR 1008 — the wire value of a target's effect stack as the
+/// user sees it: the stored stack, or the canonical one its slots say.
+pub fn effect_stack_value(
+    item: &dyn paged_model::effect_stack::EffectBearing,
+    target: paged_model::effect_stack::EffectTarget,
+) -> Value {
+    Value::EffectStack {
+        entries: item
+            .effect_slots(target)
+            .resolved()
+            .iter()
+            .map(EffectEntrySpec::from_model)
+            .collect(),
+        prev: None,
+    }
+}
+
+fn spec_true() -> bool {
+    true
+}
+
+impl EffectEntrySpec {
+    /// A bare entry of `kind`, enabled, every parameter at its default.
+    pub fn new(kind: EffectKind) -> Self {
+        Self {
+            kind,
+            enabled: true,
+            blend_mode: None,
+            opacity_pct: None,
+            radius_pt: None,
+            size_pt: None,
+            position: None,
+            color: None,
+            gradient: None,
+            angle_deg: None,
+            reverse: None,
+            distance_pt: None,
+            size_pct: None,
+            start_opacity_pct: None,
+            end_opacity_pct: None,
+            blur_pt: None,
+            amount_pct: None,
+            monochromatic: None,
+            brightness: None,
+            contrast: None,
+            saturation: None,
+            hue_deg: None,
+            size: None,
+            relative: None,
+            detail_per_inch: None,
+            smooth: None,
+            seed: None,
+            ridges: None,
+            amount_h: None,
+            amount_v: None,
+            anchors: None,
+            in_handles: None,
+            out_handles: None,
+            scale_h_pct: None,
+            scale_v_pct: None,
+            move_h: None,
+            move_v: None,
+            rotate_deg: None,
+            reflect_x: None,
+            reflect_y: None,
+            copies: None,
+            origin: None,
+            corners: None,
+            style: None,
+            horizontal: None,
+            bend_pct: None,
+            distort_h_pct: None,
+            distort_v_pct: None,
+            offset: None,
+            join: None,
+            miter_limit: None,
+            radius: None,
+            path_overlap: None,
+            path_overlap_variation: None,
+            stroke_width: None,
+            curviness_pct: None,
+            curviness_variation_pct: None,
+            spacing: None,
+            spacing_variation: None,
+            shape: None,
+            extra_width: None,
+            extra_height: None,
+            width: None,
+            height: None,
+            corner_radius: None,
+            op: None,
+        }
+    }
+
+    /// The wire form of a model entry. Every parameter of a stack-only
+    /// kind is written out, so a reader sees the values in effect.
+    pub fn from_model(e: &paged_model::effect_stack::EffectEntry) -> Self {
+        use paged_model::effect_stack::{Effect, StrokePosition};
+        let kind = EffectKind::from_name(e.effect.kind_name()).unwrap_or(EffectKind::GaussianBlur);
+        let mut s = Self::new(kind);
+        s.enabled = e.enabled;
+        s.blend_mode = e.blend_mode.clone();
+        s.opacity_pct = e.opacity_pct;
+        match &e.effect {
+            Effect::GaussianBlur(p) => s.radius_pt = Some(p.radius_pt),
+            Effect::OutlineStroke(p) => {
+                s.size_pt = Some(p.size_pt);
+                s.position = Some(
+                    match p.position {
+                        StrokePosition::Outside => "Outside",
+                        StrokePosition::Inside => "Inside",
+                        StrokePosition::Center => "Center",
+                    }
+                    .to_string(),
+                );
+                s.color = p.color.clone();
+            }
+            Effect::ColorOverlay(p) => s.color = p.color.clone(),
+            Effect::GradientOverlay(p) => {
+                s.gradient = p.gradient.clone();
+                s.angle_deg = p.angle_deg;
+                s.reverse = Some(p.reverse);
+            }
+            Effect::Reflection(p) => {
+                s.distance_pt = Some(p.distance_pt);
+                s.size_pct = Some(p.size_pct);
+                s.start_opacity_pct = Some(p.start_opacity_pct);
+                s.end_opacity_pct = Some(p.end_opacity_pct);
+                s.blur_pt = Some(p.blur_pt);
+            }
+            Effect::SoftEdge(p) => s.size_pt = Some(p.size_pt),
+            Effect::Noise(p) => {
+                s.amount_pct = Some(p.amount_pct);
+                s.monochromatic = Some(p.monochromatic);
+            }
+            Effect::ColorAdjust(p) => {
+                s.brightness = Some(p.brightness);
+                s.contrast = Some(p.contrast);
+                s.saturation = Some(p.saturation);
+                s.hue_deg = Some(p.hue_deg);
+            }
+            other => s.vector_from_model(other),
+        }
+        s
+    }
+
+    /// The model entry, or why the spec is not one.
+    pub fn to_model(&self) -> Result<paged_model::effect_stack::EffectEntry, String> {
+        use paged_model::effect_stack::*;
+        let finite = |name: &str, v: Option<f32>| -> Result<Option<f32>, String> {
+            match v {
+                Some(x) if !x.is_finite() => Err(format!("`{name}` must be a finite number")),
+                _ => Ok(v),
+            }
+        };
+        let pct = |name: &str, v: Option<f32>| -> Result<Option<f32>, String> {
+            Ok(finite(name, v)?.map(|x| x.clamp(0.0, 100.0)))
+        };
+        let signed = |name: &str, v: Option<f32>| -> Result<Option<f32>, String> {
+            Ok(finite(name, v)?.map(|x| x.clamp(-100.0, 100.0)))
+        };
+        let len = |name: &str, v: Option<f32>| -> Result<Option<f32>, String> {
+            Ok(finite(name, v)?.map(|x| x.max(0.0)))
+        };
+        let effect = match self.kind.indesign() {
+            Some(k) => Effect::slot(k),
+            None => match self.kind {
+                EffectKind::GaussianBlur => {
+                    let d = GaussianBlurParams::default();
+                    Effect::GaussianBlur(GaussianBlurParams {
+                        radius_pt: len("radiusPt", self.radius_pt)?.unwrap_or(d.radius_pt),
+                    })
+                }
+                EffectKind::OutlineStroke => {
+                    let d = OutlineStrokeParams::default();
+                    let position = match self.position.as_deref() {
+                        None | Some("") | Some("Outside") => StrokePosition::Outside,
+                        Some("Inside") => StrokePosition::Inside,
+                        Some("Center") => StrokePosition::Center,
+                        Some(other) => {
+                            return Err(format!(
+                                "`position` is `Outside`, `Inside` or `Center`, not `{other}`"
+                            ))
+                        }
+                    };
+                    Effect::OutlineStroke(OutlineStrokeParams {
+                        size_pt: len("sizePt", self.size_pt)?.unwrap_or(d.size_pt),
+                        position,
+                        color: self.color.clone().filter(|c| !c.is_empty()),
+                    })
+                }
+                EffectKind::ColorOverlay => Effect::ColorOverlay(ColorOverlayParams {
+                    color: self.color.clone().filter(|c| !c.is_empty()),
+                }),
+                EffectKind::GradientOverlay => Effect::GradientOverlay(GradientOverlayParams {
+                    gradient: self.gradient.clone().filter(|c| !c.is_empty()),
+                    angle_deg: finite("angleDeg", self.angle_deg)?,
+                    reverse: self.reverse.unwrap_or(false),
+                }),
+                EffectKind::Reflection => {
+                    let d = ReflectionParams::default();
+                    Effect::Reflection(ReflectionParams {
+                        distance_pt: len("distancePt", self.distance_pt)?.unwrap_or(d.distance_pt),
+                        size_pct: pct("sizePct", self.size_pct)?.unwrap_or(d.size_pct),
+                        start_opacity_pct: pct("startOpacityPct", self.start_opacity_pct)?
+                            .unwrap_or(d.start_opacity_pct),
+                        end_opacity_pct: pct("endOpacityPct", self.end_opacity_pct)?
+                            .unwrap_or(d.end_opacity_pct),
+                        blur_pt: len("blurPt", self.blur_pt)?.unwrap_or(d.blur_pt),
+                    })
+                }
+                EffectKind::SoftEdge => {
+                    let d = SoftEdgeParams::default();
+                    Effect::SoftEdge(SoftEdgeParams {
+                        size_pt: len("sizePt", self.size_pt)?.unwrap_or(d.size_pt),
+                    })
+                }
+                EffectKind::Noise => {
+                    let d = NoiseParams::default();
+                    Effect::Noise(NoiseParams {
+                        amount_pct: pct("amountPct", self.amount_pct)?.unwrap_or(d.amount_pct),
+                        monochromatic: self.monochromatic.unwrap_or(d.monochromatic),
+                    })
+                }
+                EffectKind::ColorAdjust => Effect::ColorAdjust(ColorAdjustParams {
+                    brightness: signed("brightness", self.brightness)?.unwrap_or(0.0),
+                    contrast: signed("contrast", self.contrast)?.unwrap_or(0.0),
+                    saturation: signed("saturation", self.saturation)?.unwrap_or(0.0),
+                    hue_deg: finite("hueDeg", self.hue_deg)?
+                        .map(|h| h.clamp(-180.0, 180.0))
+                        .unwrap_or(0.0),
+                }),
+                vector => self.vector_to_model(vector)?,
+            },
+        };
+        let stack_only = self.kind.indesign().is_none();
+        Ok(EffectEntry {
+            enabled: self.enabled,
+            blend_mode: if stack_only {
+                self.blend_mode.clone().filter(|b| !b.is_empty())
+            } else {
+                None
+            },
+            opacity_pct: if stack_only {
+                pct("opacityPct", self.opacity_pct)?
+            } else {
+                None
+            },
+            effect,
+        })
+    }
+}
+
 /// W0.2 — wire mirror of `paged_model::ParagraphRule` (the
 /// AST type predates `Tsify`; the mirror keeps the op wire-shaped,
 /// the `GradientFeatherSpec` precedent). Carries every field the
@@ -2250,6 +2994,10 @@ export type TableLineRestoreJson = string;
 export interface FlowGrowRule {
     max_pages?: number | null;
     copy_frame_options?: boolean;
+    master?: string | null;
+    first_master?: string | null;
+    even_master?: string | null;
+    section_start?: "newPage" | "oddPage" | "evenPage";
 }
 "#;
 
@@ -2620,6 +3368,12 @@ pub enum Value {
         delta: f32,
         join: String,
         miter_limit: f32,
+        /// Engine ADR 1019 — which side an OPEN contour is offset to:
+        /// `"both"` (absent: the two-sided band), `"left"` or `"right"`
+        /// of its direction on the page (one open parallel path).
+        /// Closed contours ignore it.
+        #[serde(default)]
+        side: Option<String>,
         #[serde(default)]
         prev_anchors: Option<Vec<PathAnchorSpec>>,
         #[serde(default)]
@@ -2666,9 +3420,32 @@ pub enum Value {
     /// effect). The inverse carries the prior `Option<spec>` so undo
     /// round-trips bytewise.
     GradientFeather(Option<GradientFeatherSpec>),
-    /// Engine ADR 1040 — a frame's gradient mesh or freeform gradient
+    /// Engine ADR 1008 — a target's whole effect stack. `prev` is the
+    /// apply layer's snapshot of the target's effect state (JSON); an
+    /// inverse carries it so undo restores exactly. Wire callers leave
+    /// it `None`.
+    EffectStack {
+        entries: Vec<EffectEntrySpec>,
+        #[serde(default)]
+        prev: Option<String>,
+    },
+    /// Engine ADR 1048 — a frame's gradient mesh or freeform gradient
     /// (`PropertyPath::FrameFillMesh`); `None` clears it.
     FillMesh(Option<MeshFillSpec>),
+    /// Engine ADR 1043 — an item's whole appearance. `prev` is the apply
+    /// layer's snapshot of the stored layers (JSON); an inverse carries it
+    /// so undo restores exactly. Wire callers leave it `None`.
+    Appearance {
+        layers: Vec<crate::appearance_wire::PaintLayerSpec>,
+        #[serde(default)]
+        prev: Option<String>,
+    },
+    /// Engine ADR 1043 — one layer of an item's appearance, at `index`
+    /// (one past the last appends).
+    AppearanceLayer {
+        index: u32,
+        layer: crate::appearance_wire::PaintLayerSpec,
+    },
     /// W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).
     /// `None` clears the rule back to the all-`None` default. The
     /// inverse carries the prior `Option<spec>` so undo round-trips
@@ -2717,6 +3494,12 @@ pub enum Value {
     /// half-written colour behind), with the colour model and tint kept
     /// unless given.
     SwatchColor(SwatchColorSpec),
+    /// Engine ADR 1037 — an image frame's whole filter stack, the value of
+    /// `frame.imageAdjustments`. Serialises as `{ type:
+    /// "imageAdjustments", value: [{ op: "exposure", ev: 0.5 }, …] }`. The
+    /// inverse carries the prior stack, so undo restores it exactly.
+    /// Additive new variant (the `TabStops` / `Lengths` precedent).
+    ImageAdjustments(Vec<paged_model::RasterOp>),
 }
 
 /// v71 polish — a `text` / `enum` / `ref` payload of `null` is the empty
@@ -3462,7 +4245,7 @@ impl PatternSpec {
     }
 }
 
-/// Engine ADR 1040 — a frame's native mesh fill on the wire: the
+/// Engine ADR 1048 — a frame's native mesh fill on the wire: the
 /// mirror of `paged_model::MeshFill` (points in the frame's inner
 /// coordinates; colours inline, `space` as a swatch's).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
@@ -3919,6 +4702,117 @@ pub struct NumberingListSpec {
     /// `ContinueNumbersAcrossDocuments` (round-trip only). `None` ⇒ false.
     #[serde(default)]
     pub continue_across_documents: Option<bool>,
+    /// Engine ADR 1018 — Word's per-level definitions, level 1 first.
+    /// Additive: absent reads as none (an InDesign list).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub levels: Vec<NumberingLevelSpec>,
+}
+
+/// Engine ADR 1018 — one level of a Word list on the wire, mirroring
+/// `paged_model::NumberingLevelDef`. Every field but `level` optional.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct NumberingLevelSpec {
+    /// 1 to 9.
+    pub level: u32,
+    /// `NumberedList`, `BulletList` or `NoList`.
+    #[serde(default)]
+    pub list_type: Option<String>,
+    /// An InDesign sample string (`"1, 2, 3, 4..."`) or Word's numFmt name
+    /// (`decimal`, `lowerRoman`, `upperLetter`, …).
+    #[serde(default)]
+    pub format: Option<String>,
+    /// The marker: `^1.^2.` (InDesign) or `%1.%2.` (Word).
+    #[serde(default)]
+    pub expression: Option<String>,
+    /// `tab`, `space` or `nothing`: what follows the marker.
+    #[serde(default)]
+    pub suffix: Option<String>,
+    #[serde(default)]
+    pub start_at: Option<i32>,
+    /// Word's lvlRestart: restart after a paragraph at level `1..=k`; 0 never.
+    #[serde(default)]
+    pub restart_after: Option<u32>,
+    #[serde(default)]
+    pub left_indent: Option<f32>,
+    #[serde(default)]
+    pub first_line_indent: Option<f32>,
+    #[serde(default)]
+    pub tab_position: Option<f32>,
+    /// The bullet as a one-character string.
+    #[serde(default)]
+    pub bullet_character: Option<String>,
+    #[serde(default)]
+    pub bullet_font: Option<String>,
+    #[serde(default)]
+    pub marker_character_style: Option<String>,
+}
+
+impl NumberingLevelSpec {
+    pub fn to_def(&self) -> paged_model::NumberingLevelDef {
+        paged_model::NumberingLevelDef {
+            level: self.level,
+            list_type: self.list_type.clone(),
+            format: self.format.clone(),
+            expression: self.expression.clone(),
+            suffix: self
+                .suffix
+                .as_deref()
+                .and_then(paged_model::ListSuffix::from_name),
+            start_at: self.start_at,
+            restart_after: self.restart_after,
+            left_indent: self.left_indent,
+            first_line_indent: self.first_line_indent,
+            tab_position: self.tab_position,
+            bullet_character: self
+                .bullet_character
+                .as_deref()
+                .and_then(|s| s.chars().next())
+                .map(|c| c as u32),
+            bullet_font: self.bullet_font.clone(),
+            marker_character_style: self.marker_character_style.clone(),
+        }
+    }
+
+    pub fn from_def(d: &paged_model::NumberingLevelDef) -> Self {
+        Self {
+            level: d.level,
+            list_type: d.list_type.clone(),
+            format: d.format.clone(),
+            expression: d.expression.clone(),
+            suffix: d.suffix.map(|s| s.as_name().to_string()),
+            start_at: d.start_at,
+            restart_after: d.restart_after,
+            left_indent: d.left_indent,
+            first_line_indent: d.first_line_indent,
+            tab_position: d.tab_position,
+            bullet_character: d
+                .bullet_character
+                .and_then(char::from_u32)
+                .map(|c| c.to_string()),
+            bullet_font: d.bullet_font.clone(),
+            marker_character_style: d.marker_character_style.clone(),
+        }
+    }
+}
+
+/// Engine ADR 1018 — one paragraph's list state, exactly as the model
+/// holds it (`None` is "inherit"), for `SetParagraphListState`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ParagraphListState {
+    /// The paragraph's index in the story.
+    pub paragraph: u32,
+    #[serde(default)]
+    pub level: Option<u32>,
+    #[serde(default)]
+    pub numbering_continue: Option<bool>,
+    #[serde(default)]
+    pub numbering_start_at: Option<i32>,
 }
 
 /// Wire description of a colour group, mirroring `ColorGroupEntry`.
@@ -4400,6 +5294,96 @@ pub enum Operation {
         #[serde(default)]
         added: Vec<String>,
     },
+    /// Engine ADR 1042 — Expand Appearance: the item becomes the item its
+    /// live vector effects describe, for good — its path the effected
+    /// outline, the vector entries gone from its stack, the paint moved
+    /// where the effect says. An oval becomes a polygon; a group with a
+    /// Pathfinder effect becomes one polygon in its place (its id). The
+    /// other effects stay live. `restore` is inverse-only: the item's
+    /// previous state, put back as it was.
+    ExpandAppearance {
+        node: NodeId,
+        #[serde(default)]
+        restore: Option<String>,
+    },
+    /// Engine ADR 1039 — make a symbol definition `symbol_id` named `name`
+    /// from the page items `sources` (copied whole, as a snippet copies
+    /// them, into definition space: the centre of their union box becomes
+    /// the registration point). With `replace` the sources leave the page
+    /// and an instance `instance_id` takes their place, drawn exactly where
+    /// they were (Illustrator's New Symbol). `instance_id: None` ⇒ the
+    /// applier mints one; the applied op carries it.
+    /// Inverse: `RestoreSymbolState`.
+    CreateSymbol {
+        symbol_id: String,
+        name: String,
+        sources: Vec<NodeId>,
+        #[serde(default)]
+        replace: bool,
+        #[serde(default)]
+        instance_id: Option<String>,
+        #[serde(default)]
+        nine_slice: Option<[f32; 4]>,
+    },
+    /// Engine ADR 1039 — edit the definition `symbol_id`: new artwork from
+    /// `sources` (when non-empty; the revision moves on and every instance
+    /// draws the new artwork, its registration point where the old one
+    /// was), a new `name`, new 9-slice guides (`Some([])` clears them). With
+    /// `replace` the sources become an instance, as for `CreateSymbol`.
+    /// Inverse: `RestoreSymbolState`.
+    RedefineSymbol {
+        symbol_id: String,
+        #[serde(default)]
+        sources: Vec<NodeId>,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        nine_slice: Option<Vec<f32>>,
+        #[serde(default)]
+        replace: bool,
+        #[serde(default)]
+        instance_id: Option<String>,
+    },
+    /// Engine ADR 1039 — place an instance `instance_id` of `symbol_id` on
+    /// the spread `spread` (its `Self`), on top of its z-order:
+    /// `transform` maps definition space to spread space.
+    /// Inverse: `RestoreSymbolState`.
+    PlaceSymbolInstance {
+        symbol_id: String,
+        spread: String,
+        transform: [f32; 6],
+        #[serde(default)]
+        instance_id: Option<String>,
+        #[serde(default)]
+        nine_slice: Option<[f32; 4]>,
+    },
+    /// Engine ADR 1039 — Break Link to Symbol: the instance `instance`
+    /// becomes the definition's artwork as native page items at the
+    /// instance's place in the z-order (one group when there is more than
+    /// one root or the instance overrides opacity or blending), under the
+    /// ids `ids` / `story_ids` (pre-order: the wrapping group first, then
+    /// each root's subtree; empty ⇒ minted).
+    /// Inverse: `RestoreSymbolState`.
+    BreakSymbolLink {
+        instance: String,
+        #[serde(default)]
+        ids: Vec<String>,
+        #[serde(default)]
+        story_ids: Vec<String>,
+    },
+    /// Engine ADR 1039 — remove the definition `symbol_id`; every instance
+    /// of it is broken into native items first (so nothing disappears).
+    /// Inverse: `RestoreSymbolState`.
+    DeleteSymbol {
+        symbol_id: String,
+    },
+    /// Engine ADR 1039, inverse-only — put back the symbol store, the
+    /// spreads and the stories a symbol op changed. `state` is the JSON of
+    /// the captured state (`apply/symbol.rs`); its inverse is the state it
+    /// replaced.
+    RestoreSymbolState {
+        state: String,
+    },
     /// W1.20 (groups v2) — move/scale/rotate a group AS A UNIT. Unlike
     /// the v1 `SetProperty(Group, FrameTransform)` arm (which stores
     /// only the group's own `ItemTransform` and relies on the editor to
@@ -4494,6 +5478,111 @@ pub enum Operation {
         style_id: String,
         path: PropertyPath,
         value: Value,
+    },
+    /// Engine ADR 1018 — re-parent a style: `based_on` is the new parent's
+    /// self id in the same collection, `None` the collection's root (no
+    /// parent). Refused when the parent is missing, is the style itself,
+    /// or inherits from it (a cycle). Inverse: the same op with the prior
+    /// parent. // rides v76 (added before first consumer sync).
+    SetStyleBasedOn {
+        collection: StyleCollection,
+        style_id: String,
+        #[serde(default)]
+        based_on: Option<String>,
+    },
+    /// Engine ADR 1018 — move the paragraphs touching story chars
+    /// `[start, end)` (the caret's paragraph when `start == end`) to list
+    /// level `level`, or by `delta` levels from where each stands (Word's
+    /// Tab / Shift+Tab in a list), clamped to 1..=9. Inverse:
+    /// `SetParagraphListState`. // rides v76.
+    SetListLevel {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        level: Option<u32>,
+        #[serde(default)]
+        delta: Option<i32>,
+    },
+    /// Engine ADR 1018 — Word's Restart Numbering on the paragraphs
+    /// touching `[start, end)`: their count starts again
+    /// (`NumberingContinue` false), at `start_at` when given. With
+    /// `continue_numbering`, the reverse (Continue Numbering: the count
+    /// goes on). Inverse: `SetParagraphListState`. // rides v76.
+    RestartNumbering {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        start_at: Option<i32>,
+        #[serde(default)]
+        continue_numbering: bool,
+    },
+    /// Engine ADR 1018 — inverse-only: put each listed paragraph's list
+    /// level, `NumberingContinue` and `NumberingStartAt` back exactly.
+    /// Inverse: the same op with the values it replaced.
+    SetParagraphListState {
+        story_id: String,
+        entries: Vec<ParagraphListState>,
+    },
+    /// Engine ADR 1022 — a Word bookmark: text destination `self_id`
+    /// (`HyperlinkTextDestination/<id>`) named `name`, standing at char
+    /// `offset` of paragraph `paragraph` of story `story_id`, at position
+    /// `index` of the story's destinations (the end when absent). `REF` and
+    /// `PAGEREF` fields and cross-references find it by name. Inverse:
+    /// `DeleteTextAnchor`. // rides v77.
+    InsertTextAnchor {
+        story_id: String,
+        paragraph: u32,
+        offset: u32,
+        self_id: String,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        index: Option<u32>,
+    },
+    /// Engine ADR 1022 — delete the text destination `anchor_id` from the
+    /// story that holds it, and the bookmarks going to it. Inverse:
+    /// `InsertTextAnchor` at its old position (restoring the bookmarks
+    /// through a batch). // rides v77.
+    DeleteTextAnchor {
+        anchor_id: String,
+    },
+    /// Engine ADR 1022 — inverse-only: story `story_id`'s destinations,
+    /// whole (a JSON `Vec<StoryDestination>`), as an edit that moved
+    /// paragraphs left them. Inverse: itself with the prior list.
+    SetStoryDestinations {
+        story_id: String,
+        destinations_json: String,
+    },
+    /// Engine ADR 1022 — an index marker in paragraph `paragraph` of story
+    /// `story_id` for the topic path `topic` (level 1 first, up to four
+    /// levels), sorted by `sort_order` when given. Topics the document
+    /// lacks are created, nested under their parents, as InDesign's New
+    /// Page Reference makes them. Inverse: `RestoreIndexMarkers`. // rides v77.
+    InsertIndexMarker {
+        story_id: String,
+        paragraph: u32,
+        topic: Vec<String>,
+        #[serde(default)]
+        sort_order: Option<String>,
+    },
+    /// Engine ADR 1022 — inverse-only: the index markers of one paragraph
+    /// and the document's topics and their nesting, whole, as they were.
+    RestoreIndexMarkers {
+        story_id: String,
+        paragraph: u32,
+        markers_json: String,
+        topics_json: String,
+        parents_json: String,
+    },
+    /// Engine ADR 1022 — create, replace (`def_json`: a JSON `TOCStyleDef`)
+    /// or delete (`None`) TOC style `toc_style_id`. Inverse: the same op
+    /// with the prior definition. // rides v77.
+    SetTocStyle {
+        toc_style_id: String,
+        #[serde(default)]
+        def_json: Option<String>,
     },
     /// SDK Phase 5 (v1 sweep) — multi-target Bezier boolean op.
     /// `kept` is the survivor (its path is replaced with the
@@ -4634,6 +5723,10 @@ pub enum Operation {
         mask_type: OpacityMaskMode,
         #[serde(default)]
         invert: bool,
+        /// Illustrator's Clip (`paged_model::OpacityMask::clip`); on by
+        /// default.
+        #[serde(default = "crate::operation::default_true")]
+        clip: bool,
     },
     /// C-28 — the inverse gesture: drop the mask relation and pop the
     /// artwork back to top level, world transform preserved (the
@@ -4796,6 +5889,12 @@ pub enum Operation {
         /// picture alone on its line) has no offset of its own otherwise.
         #[serde(default)]
         paragraph: Option<u32>,
+        /// Engine ADR 1045 — the frame whole, as JSON, when this insert is
+        /// a `RemoveAnchoredFrame`'s inverse: undo puts back the frame that
+        /// was removed (its look, its setting, its children), not a bare
+        /// picture box. A forward insert carries none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restore: Option<String>,
     },
     /// v52 — inverse-only companion to `InsertAnchoredFrame`: remove the
     /// anchored frame `self_id` from whichever paragraph of `story_id` holds
@@ -4908,6 +6007,85 @@ pub enum Operation {
         remove: u32,
         change: String,
     },
+    /// Engine ADR 1040 — record tracked change `change` over story chars
+    /// `[start, end)` (of `cell`'s stream when set), or on paragraph
+    /// `paragraph` for the paragraph kinds. What an importer writes for
+    /// Word's `w:ins` / `w:del` / `w:rPrChange` / `w:pPrChange`, and what a
+    /// tracked edit lowers to. Inverse: `RestoreParagraphs`.
+    RecordChange {
+        story_id: String,
+        #[serde(default)]
+        cell: Option<CellAddr>,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        paragraph: Option<u32>,
+        change: ChangeSpec,
+    },
+    /// Engine ADR 1040 — accept tracked change `id` (all its runs and
+    /// marks), every change by `author`, or every change; in story
+    /// `story_id` only when set. An insertion's text stays, a deletion's
+    /// goes, a formatting change keeps the new formatting. Inverse: the
+    /// stories restored (`RestoreStoryReview`).
+    AcceptChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1040 — reject: an insertion's text goes, a deletion's
+    /// stays, a formatting change puts the formatting before it back.
+    /// Scoped as `AcceptChange`.
+    RejectChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1020 — a comment on story chars `[start, end)`; with
+    /// `comment.parentId` a reply (the range is the thread's). The id is
+    /// `comment.id` (the canvas mints one when absent). Inverse:
+    /// `RestoreStoryReview`.
+    InsertComment {
+        story_id: String,
+        #[serde(default)]
+        cell: Option<CellAddr>,
+        start: u32,
+        end: u32,
+        comment: CommentSpec,
+    },
+    /// Engine ADR 1020 — Resolve (or reopen) comment `comment_id`'s
+    /// thread. Inverse: `RestoreStoryReview`.
+    ResolveComment {
+        comment_id: String,
+        resolved: bool,
+    },
+    /// Engine ADR 1020 — delete comment `comment_id`: a root takes its
+    /// replies and its range. Inverse: `RestoreStoryReview`.
+    DeleteComment {
+        comment_id: String,
+    },
+    /// Engine ADR 1020 — rewrite comment `comment_id`'s text (and date).
+    /// Inverse: `RestoreStoryReview`.
+    EditComment {
+        comment_id: String,
+        text: String,
+        #[serde(default)]
+        date: Option<String>,
+    },
+    /// Inverse-only (engines ADR 1040 / 1020) — set story `story_id`'s
+    /// paragraphs (when `paragraphs_json` is set) and comment threads to
+    /// what they were. Its inverse carries what it replaced.
+    RestoreStoryReview {
+        story_id: String,
+        #[serde(default)]
+        paragraphs_json: Option<String>,
+        comments_json: String,
+    },
     /// v72 — create bookmark `bookmark_id` named `name` (ADR 173) under
     /// `parent` (the top level when `None`) at `index` among its children
     /// (the end when `None`), going to destination `destination` or else
@@ -5004,6 +6182,21 @@ pub enum Operation {
         /// v70 — the page the link went to, so the inverse recreates it.
         #[serde(default)]
         page: Option<String>,
+    },
+    /// Engine ADR 1026 — make page item `item_id` the source of a new
+    /// hyperlink (a `HyperlinkPageItemSource`) to `url`, or to page `page`
+    /// when given: a clickable shape, a PowerPoint shape's click action.
+    /// Inverse: `DeleteHyperlink`, which removes the source with the link.
+    InsertItemHyperlink {
+        item_id: String,
+        url: String,
+        #[serde(default)]
+        page: Option<String>,
+        #[serde(default)]
+        name: Option<String>,
+        source_id: String,
+        dest_id: String,
+        hyperlink_id: String,
     },
     /// v0.71.13 — delete hyperlink `hyperlink_id` of any origin (ADR 164):
     /// every run its source tags stops linking, the record goes, and so
@@ -5190,6 +6383,34 @@ pub enum Operation {
         master_id: String,
         #[serde(default)]
         name: Option<String>,
+    },
+    /// Engine ADR 1026 — set page `page`'s `OverrideList` (a body page's or
+    /// a master page's): the master items it hides, because the page holds
+    /// its own copies of them or does not show them. Duplicates are
+    /// dropped. Inverse: the previous list.
+    SetPageOverrides {
+        page: String,
+        overrides: Vec<String>,
+    },
+    /// Engine ADR 1026 — override master items on body page `page`
+    /// (InDesign's Override; a PowerPoint slide's placeholder): copy
+    /// `items`, all on one master the page shows, onto the page's spread
+    /// where the master draws them, with their stories, labels and styles,
+    /// and add them to the page's `OverrideList`. `ids` / `story_ids` are
+    /// the copies' ids as `InsertSnippet` takes them (both empty: minted).
+    /// `empty_text` empties the copies' stories, keeping the first
+    /// paragraph's and first run's formatting (a new slide's placeholders,
+    /// whose master text is a prompt). Inverse: the paste's
+    /// `RemoveSnippet` and the previous list.
+    OverrideMasterItems {
+        page: String,
+        items: Vec<String>,
+        #[serde(default)]
+        ids: Vec<String>,
+        #[serde(default)]
+        story_ids: Vec<String>,
+        #[serde(default)]
+        empty_text: bool,
     },
     /// v70 — apply `op` to the items of master spread `master_id` (its
     /// `Self` id): the master is the only spread `op` sees, so every item,
@@ -5529,6 +6750,75 @@ pub struct CellAddr {
     pub col: u32,
 }
 
+/// Engine ADR 1040 — what [`Operation::RecordChange`] records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum ChangeSpecKind {
+    /// The range's text was inserted (`w:ins`).
+    Insert,
+    /// The range's text was deleted (`w:del`); it stays in the story.
+    Delete,
+    /// The range's character formatting changed (`w:rPrChange`).
+    Format,
+    /// The paragraph's formatting changed (`w:pPrChange`).
+    ParaProps,
+    /// The paragraph's mark was inserted (`w:pPr/w:rPr/w:ins`).
+    InsertMark,
+    /// The paragraph's mark was deleted (`w:pPr/w:rPr/w:del`).
+    DeleteMark,
+}
+
+/// Engine ADR 1040 — one tracked change to record over a range or on a
+/// paragraph. `id` absent: the change joins an adjacent change of the same
+/// kind and author, else the engine mints one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeSpec {
+    pub kind: ChangeSpecKind,
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
+    /// ISO 8601, as Word's `w:date`.
+    #[serde(default)]
+    pub date: Option<String>,
+    /// `format`: the run's applied character style before the change (its
+    /// other properties are taken as they are now).
+    #[serde(default)]
+    pub before_character_style: Option<String>,
+    /// `paraProps`: the paragraph's applied style before the change.
+    #[serde(default)]
+    pub before_paragraph_style: Option<String>,
+}
+
+/// Engine ADR 1020 — one comment of a thread on the wire. `parentId` makes
+/// it a reply; `id` absent: the engine mints one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentSpec {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub initials: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    /// Paragraphs separated by `\n`.
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub resolved: bool,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+}
+
 /// W0.5 — character- vs paragraph-level style application for
 /// [`Operation::ApplyStyle`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
@@ -5613,6 +6903,15 @@ pub enum FieldKind {
     TextVariable {
         variable_id: String,
     },
+    /// Engine ADR 1022 — a Word field: its own run, tagged with the field
+    /// read out of `code` (Word's instruction, `PAGEREF _Ref1 \h`), whose
+    /// text is `result`. Without a result the canvas computes one before
+    /// it inserts (a bare model shows the code in braces). // rides v77.
+    Word {
+        code: String,
+        #[serde(default)]
+        result: Option<String>,
+    },
 }
 
 impl FieldKind {
@@ -5627,7 +6926,9 @@ impl FieldKind {
             FieldKind::PageNumber => Some('\u{E018}'),
             // U+E019 — IDML `<?ACE 19?>` next-page-number marker.
             FieldKind::NextPageNumber => Some('\u{E019}'),
-            FieldKind::Placeholder { .. } | FieldKind::TextVariable { .. } => None,
+            FieldKind::Placeholder { .. }
+            | FieldKind::TextVariable { .. }
+            | FieldKind::Word { .. } => None,
         }
     }
 }
@@ -5893,6 +7194,11 @@ pub fn recompose_transform(t: &TransformDecomp) -> [f32; 6] {
     let c = cos * pre_cx - sin * sy;
     let d = sin * pre_cx + cos * sy;
     [a, b, c, d, t.translate[0], t.translate[1]]
+}
+
+/// Serde default for a switch that is on unless a payload says otherwise.
+pub(crate) fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]

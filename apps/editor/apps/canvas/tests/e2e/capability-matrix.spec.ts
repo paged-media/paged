@@ -1364,6 +1364,184 @@ const TEXT_PROBES: Probe[] = [
     },
     setupUndo: 1,
   },
+  // ── the Word model (engine ADRs 1018, 1021): a style's parent, list
+  //    levels and numbering restarts on a story range, find and replace ──
+  {
+    op: "setStyleBasedOn",
+    // Re-parents a scratch paragraph style onto no parent.
+    build: async ({ page }) => {
+      const id = await newStyle(page, "Paragraph");
+      return id
+        ? {
+            op: "setStyleBasedOn",
+            args: { collection: "paragraph", styleId: id, basedOn: null },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "setListLevel",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "setListLevel",
+            args: { storyId: fx.firstStory.selfId, start: 0, end: 1, level: 2 },
+          }
+        : null,
+  },
+  {
+    op: "restartNumbering",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "restartNumbering",
+            args: {
+              storyId: fx.firstStory.selfId,
+              start: 0,
+              end: 1,
+              startAt: 3,
+            },
+          }
+        : null,
+  },
+  {
+    op: "findReplace",
+    // Replaces a word the probe types into the first story first.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const storyId = fx.firstStory.selfId;
+      const typed = await tryMutate(page, {
+        op: "insertText",
+        args: { storyId, offset: 0, text: "Probeword " },
+      });
+      return typed.ok
+        ? {
+            op: "findReplace",
+            args: { spec: { find: "Probeword", storyId }, replace: "X" },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  // ── Word's document structure (engine ADR 1022): bookmarks, index
+  //    markers, cross-references, a table of contents, field updates ──
+  {
+    op: "insertTextAnchor",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertTextAnchor",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              name: "ProbeMark",
+            },
+          }
+        : null,
+  },
+  {
+    op: "deleteTextAnchor",
+    // No collection lists text destinations, and the engine mints ids
+    // in sequence: a scratch bookmark shows the next id, its undo frees
+    // it, and the anchor inserted next takes it.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const before = await collectionIds(page, "bookmarks");
+      const made = await tryMutate(page, {
+        op: "createBookmark",
+        args: { name: "Probe id", page: fx.pages[0].pageId },
+      });
+      if (!made.ok) return null;
+      const fresh = [...(await collectionIds(page, "bookmarks"))].find(
+        (id) => !before.has(id),
+      );
+      await undoN(page, 1);
+      if (!fresh) return null;
+      const placed = await tryMutate(page, {
+        op: "insertTextAnchor",
+        args: { storyId: fx.firstStory.selfId, offset: 0, name: "ProbeMark" },
+      });
+      return placed.ok
+        ? {
+            op: "deleteTextAnchor",
+            args: {
+              anchorId: `HyperlinkTextDestination/${fresh.split("/").pop()}`,
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "insertIndexMarker",
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertIndexMarker",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              topic: ["Probe"],
+            },
+          }
+        : null,
+  },
+  {
+    op: "insertCrossReference",
+    // A reference to the story's own first paragraph.
+    build: async ({ fx }) =>
+      fx.firstStory
+        ? {
+            op: "insertCrossReference",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              target: { storyId: fx.firstStory.selfId, paragraph: 0 },
+              referTo: "text",
+            },
+          }
+        : null,
+  },
+  {
+    op: "insertTableOfContents",
+    // One level, on a scratch paragraph style.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const style = await newStyle(page, "Paragraph");
+      return style
+        ? {
+            op: "insertTableOfContents",
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 0,
+              levels: [{ style, level: 1 }],
+              title: "Contents",
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "updateFields",
+    // Updates a DATE field the probe inserts first.
+    build: async ({ page, fx }) => {
+      if (!fx.firstStory) return null;
+      const storyId = fx.firstStory.selfId;
+      const seeded = await tryMutate(page, {
+        op: "insertField",
+        args: { storyId, offset: 0, field: { word: { code: "DATE" } } },
+      });
+      return seeded.ok
+        ? {
+            op: "updateFields",
+            args: { storyId, now: "2026-10-25T09:30:00" },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
   // ── the v62 re-capture: story-addressed doors the table had never
   //    heard of (the 94→117 drift; args from the generated .d.ts +
   //    the real consumers — showcase 11-tables, plugin-doc, D-01) ────
@@ -1715,6 +1893,140 @@ const TEXT_PROBES: Probe[] = [
 // Path-point ops target a scratch path created per probe (setupUndo
 // undoes the insert on both paths) so the classification is the
 // engine's, never the fixture's shape inventory.
+/** Engine ADR 1039 — symbols (protocol 78). Each probe makes a scratch
+ *  frame and a symbol of it (`Symbol/probe`, the source left on the page),
+ *  so each counts two setup undos, three where it places an instance. */
+async function scratchSymbol(page: Page, pageId: string): Promise<boolean> {
+  const frames = await newFrames(page, pageId, [[10, 10, 40, 40]]);
+  if (!frames) return false;
+  const made = await tryMutate(page, {
+    op: "createSymbol",
+    args: {
+      name: "Probe",
+      elementIds: frames,
+      symbolId: "Symbol/probe",
+      replace: false,
+    },
+  });
+  return made.ok;
+}
+
+/** An instance of `Symbol/probe` on the page; its ElementId. */
+async function scratchInstance(
+  page: Page,
+  pageId: string,
+): Promise<{ kind: string; id: string } | null> {
+  return page.evaluate(async (pid) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            mutate: (m: unknown) => Promise<{
+              kind: string;
+              payload?: { createdId?: { kind: string; id: string } | null };
+            }>;
+          };
+        };
+      }
+    ).__canvas;
+    const reply = await c.client.mutate({
+      op: "placeSymbolInstance",
+      args: { symbolId: "Symbol/probe", pageId: pid, at: [200, 200] },
+    });
+    return reply.kind === "mutationApplied"
+      ? (reply.payload?.createdId ?? null)
+      : null;
+  }, pageId);
+}
+
+const SYMBOL_PROBES: Probe[] = [
+  {
+    op: "createSymbol",
+    build: async ({ page, fx }) => {
+      const frames = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 40, 40],
+      ]);
+      return frames
+        ? {
+            op: "createSymbol",
+            args: { name: "Probe", elementIds: frames, replace: false },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "redefineSymbol",
+    build: async ({ page, fx }) => {
+      if (!(await scratchSymbol(page, fx.pages[0].pageId))) return null;
+      return {
+        op: "redefineSymbol",
+        args: { symbolId: "Symbol/probe", elementIds: [], name: "Probe 2" },
+      };
+    },
+    setupUndo: 2,
+  },
+  {
+    op: "placeSymbolInstance",
+    build: async ({ page, fx }) =>
+      (await scratchSymbol(page, fx.pages[0].pageId))
+        ? {
+            op: "placeSymbolInstance",
+            args: {
+              symbolId: "Symbol/probe",
+              pageId: fx.pages[0].pageId,
+              at: [200, 200],
+            },
+          }
+        : null,
+    setupUndo: 2,
+  },
+  {
+    op: "breakSymbolLink",
+    build: async ({ page, fx }) => {
+      if (!(await scratchSymbol(page, fx.pages[0].pageId))) return null;
+      const instance = await scratchInstance(page, fx.pages[0].pageId);
+      return instance
+        ? { op: "breakSymbolLink", args: { elementId: instance } }
+        : null;
+    },
+    setupUndo: 3,
+  },
+  {
+    op: "deleteSymbol",
+    build: async ({ page, fx }) =>
+      (await scratchSymbol(page, fx.pages[0].pageId))
+        ? { op: "deleteSymbol", args: { symbolId: "Symbol/probe" } }
+        : null,
+    setupUndo: 2,
+  },
+  // Engine ADR 1042 — a frame with a zig zag, expanded for good.
+  {
+    op: "expandAppearance",
+    build: async ({ page, fx }) => {
+      const frames = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 40, 40],
+      ]);
+      if (!frames) return null;
+      const set = await tryMutate(page, {
+        op: "setElementProperty",
+        args: {
+          elementId: frames[0],
+          path: "frameEffectStack",
+          value: {
+            type: "effectStack",
+            value: { entries: [{ kind: "zigZag", enabled: true, size: 4 }] },
+          },
+        },
+      });
+      return set.ok
+        ? { op: "expandAppearance", args: { elementId: frames[0] } }
+        : null;
+    },
+    setupUndo: 2,
+  },
+];
+
 const GEOMETRY_PROBES: Probe[] = [
   {
     op: "pathPointInsert",
@@ -2148,6 +2460,15 @@ const GEOMETRY_PROBES: Probe[] = [
             args: { page: fx.pages[fx.pageCount - 1].pageId, after: null },
           }
         : null,
+  },
+  {
+    op: "placePage",
+    // Engine ADR 1011 — the first page placed off the stack; the inverse
+    // returns it to its default slot.
+    build: async ({ fx }) => ({
+      op: "placePage",
+      args: { page: fx.pages[0].pageId, originPt: [900, 40] },
+    }),
   },
   {
     op: "setPageMetadata",
@@ -3081,6 +3402,7 @@ test("AC-E2E-CAPS — every wire op's engine support matches the table", async (
 
   const geoFx = await loadFixture(page, "geometry");
   await runProbes(page, GEOMETRY_PROBES, geoFx, results);
+  await runProbes(page, SYMBOL_PROBES, geoFx, results);
 
   const condFx = await loadFixture(page, "conditions");
   await runProbes(page, CONDITION_PROBES, condFx, results);

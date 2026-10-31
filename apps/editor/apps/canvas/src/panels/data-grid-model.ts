@@ -64,15 +64,24 @@ function condition(f: FilterRow): string {
   }
 }
 
-/** The query the grid shows: the table, filtered (all or any), sorted. */
+/** The column `gridSql` numbers each record in (with `withRecord`). */
+export const RECORD_FIELD = "__record";
+
+/** The query the grid shows: the table, filtered (all or any), sorted.
+ *  `withRecord` numbers every row as delivered first (`RECORD_FIELD`, from
+ *  0), so a sorted or filtered row still names its record (editor ADR 291's
+ *  per-record status). */
 export function gridSql(
   table: string,
   filters: readonly FilterRow[],
   match: "all" | "any",
   sort: readonly SortKey[],
+  withRecord = false,
 ): string {
   const where = filters.filter((f) => f.field !== "");
-  let sql = `SELECT * FROM ${ident(table)}`;
+  let sql = withRecord
+    ? `SELECT * FROM (SELECT row_number() OVER () - 1 AS ${ident(RECORD_FIELD)}, * FROM ${ident(table)})`
+    : `SELECT * FROM ${ident(table)}`;
   if (where.length > 0)
     sql += ` WHERE ${where.map(condition).join(match === "all" ? " AND " : " OR ")}`;
   if (sort.length > 0)

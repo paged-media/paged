@@ -16,8 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The wasm-bindgen surface over [`draw_trace`] — three functions, JSON
-//! in and JSON out.
+//! The wasm-bindgen surface of paged.draw — JSON in and JSON out: the
+//! image trace over [`draw_trace`], and since draw ADR 364 the DXF
+//! interchange over [`draw_dxf`] and the SVG paint reader of the engine's
+//! `paged-svg` (a recolour that rewrites colours in place).
 //!
 //! **Why JSON and not a typed binding.** The boundary is crossed ONCE per
 //! trace with a result of a few hundred KB, so a `serde_json` string is
@@ -84,9 +86,71 @@ pub fn trace_rgba_json(
     serde_json::to_string(&result).map_err(|e| format!("image trace: unserialisable result ({e})"))
 }
 
+/// A DXF file read into an SVG document (draw ADR 364): the
+/// [`draw_dxf::DxfImport`] as JSON (`svg`, `report`, `layers`, `scale`).
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = dxfToSvg))]
+pub fn dxf_to_svg_json(bytes: &[u8]) -> Result<String, String> {
+    let out = draw_dxf::dxf_to_svg(bytes)?;
+    serde_json::to_string(&out).map_err(|e| format!("dxf: unserialisable result ({e})"))
+}
+
+/// An SVG document (the engine's export) written as DXF: the
+/// [`draw_dxf::DxfExport`] as JSON (`dxf`, `report`).
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = svgToDxf))]
+pub fn svg_to_dxf_json(svg: &str) -> Result<String, String> {
+    let out = draw_dxf::svg_to_dxf(svg)?;
+    serde_json::to_string(&out).map_err(|e| format!("dxf: unserialisable result ({e})"))
+}
+
+/// The distinct colours an SVG declares, each with how many places
+/// declare it: `[[r, g, b, count], …]` in order of first appearance.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = svgColors))]
+pub fn svg_colors_json(svg: &str) -> Result<String, String> {
+    let counts = paged_svg::paint::color_counts(svg)?;
+    let rows: Vec<[u32; 4]> = counts
+        .iter()
+        .map(|([r, g, b], n)| [u32::from(*r), u32::from(*g), u32::from(*b), *n])
+        .collect();
+    serde_json::to_string(&rows).map_err(|e| format!("svg: unserialisable result ({e})"))
+}
+
+/// `svg` with its declared colours replaced by `map_json`
+/// (`[[[r, g, b], [r, g, b]], …]`, from → to), every other byte kept.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = svgRecolor))]
+pub fn svg_recolor(svg: &str, map_json: &str) -> Result<String, String> {
+    let pairs: Vec<([u8; 3], [u8; 3])> =
+        serde_json::from_str(map_json).map_err(|e| format!("svg: unreadable colour map ({e})"))?;
+    paged_svg::paint::recolor(svg, &|c| {
+        pairs.iter().find(|(from, _)| *from == c).map(|(_, to)| *to)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_recolour_crosses_as_a_map_and_the_colours_as_rows() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#ff0000"/><rect fill="red" stroke="#00f"/></svg>"##;
+        assert_eq!(svg_colors_json(svg).unwrap(), "[[255,0,0,2],[0,0,255,1]]");
+        let out = svg_recolor(svg, "[[[255,0,0],[0,128,0]]]").unwrap();
+        assert_eq!(out.matches("#008000").count(), 2, "{out}");
+        assert!(svg_recolor(svg, "nope").is_err());
+        assert!(svg_colors_json("<html/>").is_err());
+    }
+
+    #[test]
+    fn dxf_crosses_both_ways_as_json() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><path d="M0 0 L10 10" stroke="#000"/></svg>"##;
+        let out: serde_json::Value = serde_json::from_str(&svg_to_dxf_json(svg).unwrap()).unwrap();
+        assert_eq!(out["report"]["items"], 1);
+        let dxf = out["dxf"].as_str().unwrap();
+        let back: serde_json::Value =
+            serde_json::from_str(&dxf_to_svg_json(dxf.as_bytes()).unwrap()).unwrap();
+        assert_eq!(back["report"]["items"], 1);
+        assert!(back["svg"].as_str().unwrap().contains("<path"));
+        assert!(svg_to_dxf_json("not svg").is_err());
+    }
 
     #[test]
     fn limits_report_the_kernel_constants() {

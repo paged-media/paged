@@ -11,6 +11,13 @@ description = "paged.slide: the format-level IR of a .pptx deck (PresentationML 
 workspace = true
 
 [dependencies]
+slide-geom.workspace = true
+# The DrawingML paint IR (colours, fills, lines, effects), read once for
+# doc, slide and sheet (slide ADR 722).
+paged-ooxml.workspace = true
 # The chart model (`chart`), with this crate's paints and text properties.
 dml-chart.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

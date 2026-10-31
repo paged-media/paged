@@ -342,6 +342,24 @@ fn with_deletion(m: &mut CanvasModel) -> String {
 // fails loudly in one place instead of silently turning a case into a
 // no-op against an element that is not there.
 
+/// The first rectangle of the master the first page applies.
+fn first_page_master_rect(m: &CanvasModel) -> String {
+    let page = first_page(m);
+    let master = m
+        .scene()
+        .spreads
+        .iter()
+        .flat_map(|s| s.spread.pages.iter())
+        .find(|p| p.self_id.as_deref() == Some(page.as_str()))
+        .and_then(|p| p.applied_master.clone())
+        .expect("the first page applies a master");
+    m.scene()
+        .master_spread(&master)
+        .and_then(|ms| ms.spread.rectangles.first())
+        .and_then(|r| r.self_id.clone())
+        .expect("its master has a rectangle")
+}
+
 fn first_page(m: &CanvasModel) -> PageId {
     page_at(m, 0)
 }
@@ -1168,6 +1186,7 @@ fn cases() -> Vec<Case> {
     page_cases(&mut c);
     path_cases(&mut c);
     pathfinder_cases(&mut c);
+    symbol_cases(&mut c);
     structure_cases(&mut c);
     layer_cases(&mut c);
     palette_cases(&mut c);
@@ -2081,6 +2100,7 @@ fn frame_cases(c: &mut Vec<Case>) {
             mask_id: ElementId::Rectangle(mask),
             mask_type: Some("luminosity".into()),
             invert: None,
+            clip: None,
         }
     }));
     c.push(paints("ReleaseOpacityMask", "geometry", |m| {
@@ -2091,6 +2111,7 @@ fn frame_cases(c: &mut Vec<Case>) {
             mask_id: ElementId::Rectangle(mask),
             mask_type: Some("luminosity".into()),
             invert: None,
+            clip: None,
         })
         .expect("apply mask");
         Mutation::ReleaseOpacityMask {
@@ -2442,12 +2463,48 @@ fn page_cases(c: &mut Vec<Case>) {
             }
         },
     ));
+    // Engine ADR 1026 — the first page hides its master's first rectangle.
+    c.push(paints("SetPageOverrides", "masters", |m| {
+        Mutation::SetPageOverrides {
+            page: first_page(m),
+            overrides: vec![first_page_master_rect(m)],
+        }
+    }));
+    // The page's copy draws where the master's did, but as a page item: above
+    // the page's own items, where the master's drew below them.
+    c.push(paints("OverrideMasterItems", "masters", |m| {
+        Mutation::OverrideMasterItems {
+            page: first_page(m),
+            items: vec![first_page_master_rect(m)],
+            empty_text: false,
+        }
+    }));
+    c.push(inert(
+        "InsertItemHyperlink",
+        "masters",
+        "a link is where a click goes; the renderer draws no link areas",
+        |m| Mutation::InsertItemHyperlink {
+            item: first_page_master_rect(m),
+            url: "https://paged.media".into(),
+            page: None,
+            name: None,
+        },
+    ));
     c.push(paints("MovePage", "layout", |m| Mutation::MovePage {
         // The second page moves to the front: the first page shows what
         // the second did.
         page: page_at(m, 1),
         after: None,
     }));
+    c.push(inert(
+        "PlacePage",
+        "layout",
+        "a page's place on the canvas is where presenters put it; its display list stays page-relative",
+        |m| Mutation::PlacePage {
+            page: page_at(m, 1),
+            origin_pt: Some((900.0, 0.0)),
+        },
+    ));
     c.push(paints("DuplicatePage", "layout", |m| {
         Mutation::DuplicatePage {
             page: first_page(m),
@@ -2623,6 +2680,7 @@ fn path_cases(c: &mut Vec<Case>) {
             delta: 24.0,
             join: "miter".into(),
             miter_limit: 4.0,
+            side: None,
         }
     }));
     c.push(paints("SimplifyPath", "geometry", |m| {
@@ -2652,6 +2710,123 @@ fn path_cases(c: &mut Vec<Case>) {
             tolerance: 40.0,
         }
     }));
+}
+
+// ── symbols (engine ADR 1039) ───────────────────────────────────────
+
+/// A quad made a symbol `Symbol/sweep`; with `replace` the quad becomes its
+/// instance (answered), else it stays and no instance exists.
+fn quad_symbol(m: &mut CanvasModel, replace: bool) -> Option<String> {
+    let id = add_quad(m, 120.0, 120.0, 160.0, 120.0);
+    let out = m
+        .apply_mutation(&Mutation::CreateSymbol {
+            name: "Sweep".into(),
+            element_ids: vec![ElementId::Polygon(id)],
+            symbol_id: Some("Symbol/sweep".into()),
+            replace: Some(replace),
+            nine_slice: None,
+        })
+        .expect("createSymbol");
+    match out.created_id {
+        Some(ElementId::Instance(i)) => Some(i),
+        _ => None,
+    }
+}
+
+fn place_sweep(m: &mut CanvasModel) -> Mutation {
+    Mutation::PlaceSymbolInstance {
+        symbol_id: "Symbol/sweep".into(),
+        page_id: first_page(m),
+        at: Some((400.0, 500.0)),
+        linear: None,
+        nine_slice: None,
+    }
+}
+
+fn symbol_cases(c: &mut Vec<Case>) {
+    c.push(when_used(
+        "CreateSymbol",
+        "geometry",
+        "a symbol made without replacing its items is a definition: nothing on the page draws it yet",
+        |m| {
+            let id = add_quad(m, 120.0, 120.0, 160.0, 120.0);
+            Mutation::CreateSymbol {
+                name: "Sweep".into(),
+                element_ids: vec![ElementId::Polygon(id)],
+                symbol_id: Some("Symbol/sweep".into()),
+                replace: Some(false),
+                nine_slice: None,
+            }
+        },
+        |m| {
+            let place = place_sweep(m);
+            m.apply_mutation(&place).expect("place");
+        },
+    ));
+    c.push(paints("PlaceSymbolInstance", "geometry", |m| {
+        quad_symbol(m, false);
+        place_sweep(m)
+    }));
+    c.push(paints("RedefineSymbol", "geometry", |m| {
+        quad_symbol(m, false);
+        let place = place_sweep(m);
+        m.apply_mutation(&place).expect("place");
+        let other = add_quad(m, 60.0, 60.0, 40.0, 200.0);
+        Mutation::RedefineSymbol {
+            symbol_id: "Symbol/sweep".into(),
+            element_ids: vec![ElementId::Polygon(other)],
+            name: None,
+            nine_slice: None,
+            replace: Some(false),
+        }
+    }));
+    // Break Link and Delete Symbol draw the same pixels (it::symbols
+    // asserts that) but the digest moves: the replay bracket
+    // (`BeginSymbol` / `EndSymbol`) becomes loose page items.
+    c.push(paints("BreakSymbolLink", "geometry", |m| {
+        let instance = quad_symbol(m, true).expect("an instance");
+        Mutation::BreakSymbolLink {
+            element_id: ElementId::Instance(instance),
+        }
+    }));
+    c.push(paints("DeleteSymbol", "geometry", |m| {
+        quad_symbol(m, true);
+        Mutation::DeleteSymbol {
+            symbol_id: "Symbol/sweep".into(),
+        }
+    }));
+    // Engine ADR 1042 — Expand Appearance keeps what the item drew: the
+    // renderer already drew the effected outline, now the path is it.
+    c.push(inert(
+        "ExpandAppearance",
+        "geometry",
+        "expanding draws the outline the live effect already drew; only the model changes",
+        |m| {
+            let id = add_quad(m, 120.0, 120.0, 160.0, 120.0);
+            let zig = paged_mutate::operation::EffectEntrySpec {
+                size: Some(8.0),
+                ridges: Some(3),
+                ..paged_mutate::operation::EffectEntrySpec::new(
+                    paged_mutate::operation::EffectKind::ZigZag,
+                )
+            };
+            m.apply_mutation(&Mutation::Set {
+                address: paged_wire::VirtualTarget::Element {
+                    element_id: ElementId::Polygon(id.clone()),
+                }
+                .into(),
+                path: "frameEffectStack".into(),
+                value: Value::EffectStack {
+                    entries: vec![zig],
+                    prev: None,
+                },
+            })
+            .expect("a zig zag");
+            Mutation::ExpandAppearance {
+                element_id: ElementId::Polygon(id),
+            }
+        },
+    ));
 }
 
 // ── pathfinder ──────────────────────────────────────────────────────
@@ -2879,6 +3054,10 @@ fn structure_cases(c: &mut Vec<Case>) {
             grow: true,
             max_pages: None,
             copy_frame_options: None,
+            master: None,
+            first_master: None,
+            even_master: None,
+            section_start: None,
         }
     }));
     c.push(paints("ActivateConditionSet", "conditions", |m| {
@@ -3474,6 +3653,299 @@ fn style_cases(c: &mut Vec<Case>) {
             value: Value::Length(Some(31.0)),
         }
     }));
+    // Engine ADR 1018 — re-parenting a style nothing applies, and the
+    // list level / restart of a paragraph in no list, change no pixel.
+    c.push(inert(
+        "SetStyleBasedOn",
+        "styles-cascade",
+        "re-parenting a style no paragraph applies leaves every paragraph \
+         resolving as before",
+        |m| {
+            for id in ["ParagraphStyle/sweepA", "ParagraphStyle/sweepB"] {
+                m.apply_mutation(&Mutation::CreateParagraphStyle {
+                    self_id: Some(id.into()),
+                    name: Some(id.into()),
+                    based_on: None,
+                })
+                .expect("seed a style");
+            }
+            Mutation::SetStyleBasedOn {
+                collection: StyleCollection::Paragraph,
+                style_id: "ParagraphStyle/sweepA".into(),
+                based_on: Some("ParagraphStyle/sweepB".into()),
+            }
+        },
+    ));
+    c.push(inert(
+        "SetListLevel",
+        "styles-cascade",
+        "a paragraph in no list prints no marker at any level",
+        |m| Mutation::SetListLevel {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 0,
+            level: Some(2),
+            delta: None,
+        },
+    ));
+    c.push(inert(
+        "RestartNumbering",
+        "styles-cascade",
+        "a paragraph in no list has no count to restart",
+        |m| Mutation::RestartNumbering {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 0,
+            start_at: Some(3),
+            continue_numbering: false,
+        },
+    ));
+    // Engine ADR 1022 — a bookmark and an index marker print nothing; a
+    // cross-reference, a table of contents and F9 write text.
+    c.push(inert(
+        "InsertTextAnchor",
+        "styles-cascade",
+        "a text destination is a place in the text, not a character",
+        |m| Mutation::InsertTextAnchor {
+            story_id: m.scene().stories[0].self_id.clone(),
+            offset: 0,
+            content_offset: None,
+            name: "SweepMark".into(),
+        },
+    ));
+    c.push(inert(
+        "DeleteTextAnchor",
+        "styles-cascade",
+        "removing a text destination removes no character",
+        |m| {
+            let story_id = m.scene().stories[0].self_id.clone();
+            m.apply_mutation(&Mutation::InsertTextAnchor {
+                story_id: story_id.clone(),
+                offset: 0,
+                content_offset: None,
+                name: "SweepMark".into(),
+            })
+            .expect("seed a bookmark");
+            let id = m.scene().stories[0].story.destinations[0].self_id.clone();
+            Mutation::DeleteTextAnchor { anchor_id: id }
+        },
+    ));
+    c.push(inert(
+        "InsertIndexMarker",
+        "styles-cascade",
+        "an index marker is read by Generate Index, not printed",
+        |m| Mutation::InsertIndexMarker {
+            story_id: m.scene().stories[0].self_id.clone(),
+            offset: 0,
+            content_offset: None,
+            topic: vec!["Sweep".into()],
+            sort_order: None,
+        },
+    ));
+    c.push(paints("InsertCrossReference", "styles-cascade", |m| {
+        let story_id = m.scene().stories[0].self_id.clone();
+        Mutation::InsertCrossReference {
+            story_id: story_id.clone(),
+            offset: 0,
+            content_offset: None,
+            target: paged_wire::CrossReferenceTarget {
+                bookmark: None,
+                story_id: Some(story_id),
+                paragraph: Some(0),
+            },
+            refer_to: paged_wire::CrossReferenceKind::Text,
+            hyperlink: None,
+        }
+    }));
+    c.push(paints("InsertTableOfContents", "styles-cascade", |m| {
+        let scene = m.scene();
+        let story = &scene.stories[0];
+        let style = story
+            .story
+            .paragraphs
+            .iter()
+            .filter_map(|p| p.paragraph_style.clone())
+            .find(|s| scene.styles.paragraph_styles.contains_key(s))
+            .expect("fixture has a styled paragraph");
+        Mutation::InsertTableOfContents {
+            story_id: story.self_id.clone(),
+            offset: 0,
+            content_offset: None,
+            levels: vec![paged_wire::TocLevelSpec { style, level: 1 }],
+            title: Some("Contents".into()),
+            toc_style_name: None,
+            page_numbers: None,
+            leader: None,
+            tab_position: None,
+        }
+    }));
+    // Engine ADRs 1040 / 1020 — All Markup draws a change in its author's
+    // colour and shades commented text; a thread's replies and its
+    // resolved state print nothing.
+    fn sweep_change(kind: paged_mutate::ChangeSpecKind, id: &str) -> paged_mutate::ChangeSpec {
+        paged_mutate::ChangeSpec {
+            kind,
+            id: Some(id.into()),
+            author: Some("Author A".into()),
+            date: None,
+            before_character_style: None,
+            before_paragraph_style: None,
+        }
+    }
+    fn sweep_comment(id: &str) -> paged_mutate::CommentSpec {
+        paged_mutate::CommentSpec {
+            id: Some(id.into()),
+            author: Some("Author A".into()),
+            text: "Sweep".into(),
+            ..Default::default()
+        }
+    }
+    c.push(paints("RecordChange", "styles-cascade", |m| {
+        Mutation::RecordChange {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            paragraph: None,
+            change: sweep_change(paged_mutate::ChangeSpecKind::Insert, "1"),
+        }
+    }));
+    c.push(paints("AcceptChange", "styles-cascade", |m| {
+        m.apply_mutation(&Mutation::RecordChange {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            paragraph: None,
+            change: sweep_change(paged_mutate::ChangeSpecKind::Delete, "1"),
+        })
+        .expect("seed a deletion");
+        Mutation::AcceptChange {
+            story_id: None,
+            id: Some("1".into()),
+            author: None,
+        }
+    }));
+    c.push(paints("RejectChange", "styles-cascade", |m| {
+        m.apply_mutation(&Mutation::RecordChange {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            paragraph: None,
+            change: sweep_change(paged_mutate::ChangeSpecKind::Insert, "1"),
+        })
+        .expect("seed an insertion");
+        Mutation::RejectChange {
+            story_id: None,
+            id: None,
+            author: Some("Author A".into()),
+        }
+    }));
+    c.push(paints("InsertComment", "styles-cascade", |m| {
+        Mutation::InsertComment {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            comment: sweep_comment("1"),
+        }
+    }));
+    fn seed_comment(m: &mut CanvasModel) {
+        m.apply_mutation(&Mutation::InsertComment {
+            story_id: m.scene().stories[0].self_id.clone(),
+            start: 0,
+            end: 4,
+            cell: None,
+            comment: sweep_comment("1"),
+        })
+        .expect("seed a comment");
+    }
+    c.push(paints("DeleteComment", "styles-cascade", |m| {
+        seed_comment(m);
+        Mutation::DeleteComment {
+            comment_id: "1".into(),
+        }
+    }));
+    c.push(inert(
+        "ReplyComment",
+        "styles-cascade",
+        "a reply has no range of its own: it joins the thread whose range is already shaded",
+        |m| {
+            seed_comment(m);
+            Mutation::ReplyComment {
+                parent_id: "1".into(),
+                comment: sweep_comment("2"),
+            }
+        },
+    ));
+    c.push(inert(
+        "ResolveComment",
+        "styles-cascade",
+        "resolving a thread changes its state in the margin band, not a character of the page",
+        |m| {
+            seed_comment(m);
+            Mutation::ResolveComment {
+                comment_id: "1".into(),
+                resolved: true,
+            }
+        },
+    ));
+    c.push(inert(
+        "EditComment",
+        "styles-cascade",
+        "a comment's text is shown in the margin band, not on the page",
+        |m| {
+            seed_comment(m);
+            Mutation::EditComment {
+                comment_id: "1".into(),
+                text: "Edited".into(),
+                date: None,
+            }
+        },
+    ));
+    c.push(paints("UpdateFields", "styles-cascade", |m| {
+        let story_id = m.scene().stories[0].self_id.clone();
+        m.apply_mutation(&Mutation::InsertField {
+            story_id: story_id.clone(),
+            offset: 0,
+            field: paged_mutate::operation::FieldKind::Word {
+                code: "DATE".into(),
+                result: None,
+            },
+            content_offset: None,
+        })
+        .expect("seed a date field");
+        Mutation::UpdateFields {
+            story_id: Some(story_id),
+            offset: None,
+            now: Some("2026-10-25T09:30:00".into()),
+        }
+    }));
+    // Engine ADR 1021 — the story's first word replaced by a wider one.
+    c.push(paints("FindReplace", "styles-cascade", |m| {
+        let word: String = m
+            .scene()
+            .stories
+            .iter()
+            .flat_map(|s| s.story.paragraphs.iter())
+            .flat_map(|p| p.runs.iter())
+            .flat_map(|r| r.text.split_whitespace())
+            .find(|w| w.chars().all(char::is_alphanumeric))
+            .expect("fixture has a word")
+            .to_string();
+        Mutation::FindReplace {
+            spec: paged_wire::FindSpec {
+                find: word,
+                match_case: true,
+                ..Default::default()
+            },
+            replace: "WWWWWWWW".into(),
+            replace_all: false,
+            paragraph_style: None,
+            character_style: None,
+        }
+    }));
     c.push(inert(
         "CreateNumberingList",
         "numbering",
@@ -3482,6 +3954,7 @@ fn style_cases(c: &mut Vec<Case>) {
          bullet renders",
         |_| Mutation::CreateNumberingList {
             spec: NumberingListSpec {
+                levels: Default::default(),
                 self_id: Some("NumberingList/sweep".into()),
                 name: Some("Sweep list".into()),
                 continue_across_stories: Some(true),
@@ -3497,6 +3970,7 @@ fn style_cases(c: &mut Vec<Case>) {
         |m| {
             m.apply_mutation(&Mutation::CreateNumberingList {
                 spec: NumberingListSpec {
+                    levels: Default::default(),
                     self_id: Some("NumberingList/sweep".into()),
                     name: Some("Sweep list".into()),
                     continue_across_stories: Some(false),
@@ -3507,6 +3981,7 @@ fn style_cases(c: &mut Vec<Case>) {
             Mutation::EditNumberingList {
                 list_id: "NumberingList/sweep".into(),
                 spec: NumberingListSpec {
+                    levels: Default::default(),
                     self_id: Some("NumberingList/sweep".into()),
                     name: Some("Sweep list, edited".into()),
                     continue_across_stories: Some(true),
@@ -3523,6 +3998,7 @@ fn style_cases(c: &mut Vec<Case>) {
         |m| {
             m.apply_mutation(&Mutation::CreateNumberingList {
                 spec: NumberingListSpec {
+                    levels: Default::default(),
                     self_id: Some("NumberingList/sweep".into()),
                     name: Some("Sweep list".into()),
                     continue_across_stories: Some(true),

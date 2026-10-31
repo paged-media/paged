@@ -28,10 +28,7 @@
 
 use docx_conformance::{content_controls_docx, hidden_text_docx, tracked_changes_docx};
 use docx_core::{Block, DocxDocument, RunSource};
-use docx_export::{
-    CellRunEdit, EditSet, ParaEdit, ParagraphContentIn, RunContentIn, RunEdit, StoryContentIn,
-    StructuralEdit,
-};
+use docx_export::{CellRunEdit, EditSet, ParaEdit, RunEdit, StoryContentIn, StructuralEdit};
 use docx_import::import_docx;
 use docx_js::DocSession;
 use docx_lower::ir::{LoweredBlock, LoweredDoc};
@@ -71,21 +68,11 @@ fn identity_content(base: &LoweredDoc) -> StoryContentIn {
             .blocks
             .iter()
             .filter_map(|b| match b {
-                LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
-                    paragraph_style: p.para_style_id.clone(),
-                    runs: p
-                        .runs
-                        .iter()
-                        .map(|r| RunContentIn {
-                            text: r.text.clone(),
-                            character_style: r.char_style_id.clone(),
-                            ..Default::default()
-                        })
-                        .collect(),
-                }),
+                LoweredBlock::Paragraph(p) => Some(docx_export::review::content_of(p)),
                 _ => None,
             })
             .collect(),
+        comments: Vec::new(),
     }
 }
 
@@ -109,21 +96,22 @@ fn diagnostics(bytes: &[u8]) -> Vec<String> {
 // Tracked changes
 
 #[test]
-fn tracked_changes_show_as_accepted__feat__plugin_doc_read_path() {
+fn tracked_changes_keep_their_runs_addressable__feat__plugin_doc_read_path() {
+    // Doc ADR 613 replaced W0's "shown as accepted": every tracked run is
+    // shown with its change (tests/it/review.rs); the run sources stay.
     let doc = import_docx(&tracked_changes_docx()).unwrap();
     assert_eq!(
         block_texts(&doc),
         [
             "Plain paragraph.",
-            "Before inserted after.",
-            "Stay moved",
+            "Before inserteddeleted after.",
+            "moved Stay moved",
             "Link new end",
-            // p4, deleted whole, is not shown.
+            "Gone paragraph",
             "Bold now",
         ]
     );
     assert_eq!(doc.held.tracked_changes, 9);
-    assert_eq!(doc.held.deleted_marks_kept, 0);
     let Block::Paragraph(p1) = &doc.body[1] else {
         panic!("a paragraph")
     };
@@ -133,10 +121,11 @@ fn tracked_changes_show_as_accepted__feat__plugin_doc_read_path() {
         [
             Some(RunSource::DirectRun(0)),
             Some(RunSource::Tracked),
+            Some(RunSource::Tracked),
             Some(RunSource::DirectRun(1)),
         ]
     );
-    assert_eq!(p1.held.unshown_runs, 1, "the deletion is held, not shown");
+    assert_eq!(p1.held.unshown_runs, 0, "the deletion is shown");
     let Block::Paragraph(p3) = &doc.body[3] else {
         panic!("a paragraph")
     };
@@ -156,19 +145,11 @@ fn tracked_changes_show_as_accepted__feat__plugin_doc_read_path() {
         ],
         "the insertion inside the hyperlink takes no wrapper ordinal"
     );
-    let Block::Paragraph(p5) = &doc.body[4] else {
+    let Block::Paragraph(p5) = &doc.body[5] else {
         panic!("a paragraph")
     };
     assert!(p5.held.tracked_ppr);
     assert_eq!(p5.runs[0].props.bold, Some(true), "the new formatting");
-
-    let diags = diagnostics(&tracked_changes_docx());
-    assert!(
-        diags
-            .iter()
-            .any(|m| m.starts_with("9 tracked change(s) shown as accepted; review them in Word")),
-        "{diags:?}"
-    );
 }
 
 #[test]
@@ -207,9 +188,10 @@ fn an_unrelated_edit_keeps_the_tracked_changes__feat__plugin_doc_save_back() {
 fn an_edit_beside_an_insertion_lands_on_its_own_run__feat__plugin_doc_save_back() {
     let original = tracked_changes_docx();
     let session = DocSession::load(&original).unwrap();
-    // Block 1 runs: "Before " (direct 0), "inserted" (tracked), " after." (direct 1).
+    // Block 1 runs: "Before " (direct 0), "inserted" and "deleted" (tracked),
+    // " after." (direct 1).
     let edits = EditSet {
-        runs: vec![RunEdit::text(1, 2, " later.")],
+        runs: vec![RunEdit::text(1, 3, " later.")],
         ..Default::default()
     };
     let (saved, skips) = session.save_edited(&edits).unwrap();
@@ -225,7 +207,7 @@ fn an_edit_beside_an_insertion_lands_on_its_own_run__feat__plugin_doc_save_back(
         "the deletion is kept"
     );
     let re = import_docx(&saved).unwrap();
-    assert_eq!(block_texts(&re)[1], "Before inserted later.");
+    assert_eq!(block_texts(&re)[1], "Before inserteddeleted later.");
 
     // Inside the hyperlink: " end" is the wrapper's SECOND `<w:r>` child —
     // the run inside the insertion must not shift it.
@@ -258,33 +240,28 @@ fn an_edit_reaching_a_tracked_change_is_refused_whole__feat__plugin_doc_save_bac
         "{skips:?}"
     );
 
-    // A canvas edit across "Before " and "inserted": its runs are refused
-    // together, so Word's paragraph never holds half of it.
+    // A canvas edit across "Before " and "inserted" (doc ADR 613): the
+    // paragraph holds review markup, so the review writer writes it whole,
+    // the deletion kept.
     let mut content = identity_content(&session.lowered());
     content.paragraphs[1].runs[0].text = "Now ".into();
     content.paragraphs[1].runs[1].text = String::new();
     let (saved, skips) = session.save_edited_from_content(&content).unwrap();
-    assert_eq!(doc_xml(&saved), doc_xml(&original), "nothing written");
-    assert!(
-        skips.iter().any(|s| s.contains("is kept as it was")),
-        "{skips:?}"
-    );
+    assert!(skips.is_empty(), "{skips:?}");
+    let re = import_docx(&saved).unwrap();
+    assert_eq!(block_texts(&re)[1], "Now deleted after.");
+    assert!(doc_xml(&saved).contains("deleted</w:delText>"));
 }
 
 #[test]
 fn paragraph_ops_keep_what_the_canvas_does_not_show__feat__plugin_doc_save_back() {
     let original = tracked_changes_docx();
     let session = DocSession::load(&original).unwrap();
-    // Deleting block 1 would take its tracked deletion with it; block 0
-    // holds nothing unseen.
     let edits = EditSet {
-        structural: vec![
-            StructuralEdit::DeleteParagraph { block: 1 },
-            StructuralEdit::DeleteParagraph { block: 0 },
-        ],
-        // Block 4's `w:pPr` records a tracked change a rewrite would drop.
+        structural: vec![StructuralEdit::DeleteParagraph { block: 0 }],
+        // Block 5's `w:pPr` records a tracked change a rewrite would drop.
         paragraphs: vec![ParaEdit {
-            block: 4,
+            block: 5,
             new_props: Default::default(),
             pstyle: Some(None),
         }],
@@ -294,14 +271,8 @@ fn paragraph_ops_keep_what_the_canvas_does_not_show__feat__plugin_doc_save_back(
     assert!(
         skips
             .iter()
-            .any(|s| s.starts_with("delete-paragraph skipped: block 1 holds tracked deletions")),
-        "{skips:?}"
-    );
-    assert!(
-        skips
-            .iter()
             .any(|s| s
-                .starts_with("paragraph-format edit skipped: block 4 records a tracked change")),
+                .starts_with("paragraph-format edit skipped: block 5 records a tracked change")),
         "{skips:?}"
     );
     let xml = doc_xml(&saved);

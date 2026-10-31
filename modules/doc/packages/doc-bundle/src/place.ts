@@ -25,6 +25,7 @@
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
 import { buildStory, buildStyleMutations } from "@paged-media/doc-host-model";
+import { embeddedItemOps } from "./page-items.js";
 import { applyStyleOps, pourBatchOps, pourSteps } from "./pour.js";
 import type {
   BundleHost,
@@ -247,6 +248,8 @@ async function placeInOneBatch(
     ...frameColumnOps(frameRef, ir.section),
     ...(await newStyleOps(host, buildStyleMutations(ir))),
     ...pourBatchOps(buildStory(ir, FRAME)),
+    // Doc ADR 614: the first page's floats and text boxes.
+    ...embeddedItemOps(ir, pageId, pourBatchOps),
     {
       op: "setPluginMetadata",
       args: {
@@ -286,6 +289,7 @@ async function newStyleOps(
     "paragraphStyles",
     "characterStyles",
     "swatches",
+    "gradients",
     "colorGroups",
   ] as const) {
     try {
@@ -303,7 +307,9 @@ async function newStyleOps(
       spec?: { selfId?: string | null };
     };
     const id =
-      op.op === "createSwatch" || op.op === "createColorGroup"
+      op.op === "createSwatch" ||
+      op.op === "createGradient" ||
+      op.op === "createColorGroup"
         ? args.spec?.selfId
         : op.op === "createParagraphStyle" || op.op === "createCharacterStyle"
           ? args.selfId

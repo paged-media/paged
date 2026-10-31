@@ -3,8 +3,10 @@ concurrency:
   # A newer push to a pull request cancels the older run. Main pushes share
   # one group per event type: a running main run always finishes, and a newer
   # push replaces the one still waiting, so direct pushes queue at most one.
+  # A re-dispatch on the same wip/* branch cancels its older dispatched run,
+  # running or not: only a work branch's newest commit needs checking.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/wip/')) }}
 
 # The shared Rust crates of the built-in modules, each a Cargo workspace of
 # its own (platform/shared/<crate>, PM-0005): fmt, clippy for the host and
@@ -17,6 +19,10 @@ on:
     paths:
       - "platform/shared/ooxml/**"
       - "platform/shared/dml-chart/**"
+      - "platform/shared/dml-geom/**"
+      - "platform/shared/dml-native/**"
+      # dml-native builds on the engine model crate.
+      - "engine/core/crates/paged-model/**"
       - ".github/workflows/shared-rust.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -26,6 +32,9 @@ on:
     paths:
       - "platform/shared/ooxml/**"
       - "platform/shared/dml-chart/**"
+      - "platform/shared/dml-geom/**"
+      - "platform/shared/dml-native/**"
+      - "engine/core/crates/paged-model/**"
       - ".github/workflows/shared-rust.yml"
       - ".cargo/config.toml"
       - "tooling/rust/**"
@@ -41,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [ooxml, dml-chart]
+        crate: [ooxml, dml-chart, dml-geom, dml-native]
     defaults:
       run:
         working-directory: platform/shared/${{ matrix.crate }}

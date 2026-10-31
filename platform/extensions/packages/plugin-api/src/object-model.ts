@@ -72,9 +72,16 @@ export type Selector = string;
  *  object's content (its `ContentSchema`). */
 export type PropertyPathName = string;
 
-/** The page-item kinds (core's `ElementId` string-id kinds). */
+/** The page-item kinds (core's `ElementId` string-id kinds; `instance`,
+ *  a symbol instance, since protocol 78 — engine ADR 1039). */
 export type PageItemKind =
-  "textFrame" | "rectangle" | "oval" | "polygon" | "graphicLine" | "group";
+  | "textFrame"
+  | "rectangle"
+  | "oval"
+  | "polygon"
+  | "graphicLine"
+  | "group"
+  | "instance";
 
 /** Style families a `style:` address names (= core's `StyleCollection`). */
 export type StyleFamily =
@@ -221,6 +228,45 @@ export interface PropertySchema {
    *  skips it unless asked (`getAll(address, { content: true })`). The
    *  `content` row is always heavy. */
   heavy?: boolean;
+}
+
+/** Editor ADR 309 / plan C16 — one effect kind of the ordered stack
+ *  (engine ADR 1008), as core's catalog describes it (`effectKinds`). The
+ *  Effects and Appearance panels and the Effect menu list from these rows,
+ *  so a kind core adds appears without a change to a host or plugin. */
+export interface EffectKindDescriptor {
+  /** The wire kind of an `EffectEntrySpec` (`gaussianBlur`). */
+  kind: string;
+  /** An English name; a host translates it by `kind`. */
+  title: string;
+  /** The Effect menu group, one of `effectCategories`. */
+  category: string;
+  /** One of InDesign's nine: its parameters are the per-field paths in
+   *  `fieldPaths`, not entry fields. */
+  indesign: boolean;
+  /** The transparency targets whose stack takes it. */
+  targets: readonly ("object" | "fill" | "stroke" | "content")[];
+  /** How often one stack may hold it; absent = without limit. */
+  maxPerStack?: number;
+  /** The entry carries its own `blendMode` and `opacityPct`. */
+  blend: boolean;
+  /** The entry's own parameters (`EffectEntrySpec` fields), in form order. */
+  params: readonly EffectParamDescriptor[];
+  /** InDesign kinds: the path that switches it on the object target. */
+  enablePath?: string;
+  /** InDesign kinds: its per-field paths on the object target. */
+  fieldPaths?: readonly string[];
+}
+
+/** One parameter of a stack-only effect kind. */
+export interface EffectParamDescriptor {
+  /** The `EffectEntrySpec` field (`radiusPt`). */
+  field: string;
+  /** An English label; a host translates it by `field`. */
+  title: string;
+  type: ValueType;
+  range?: { min?: number; max?: number };
+  default?: unknown;
 }
 
 /** One IDML spelling of a core property: `attribute` on `element` (an XML
@@ -642,6 +688,8 @@ export interface ObjectsSurface {
     address: Address,
     opts?: { content?: boolean },
   ): Promise<Record<string, ObjectValue>>;
+  /** `opts.label` names the undo step (engine ADR 1030; probe
+   *  `supports("document.undoLog@1")`, an older host ignores it). */
   set(
     address: Address,
     path: PropertyPathName,
@@ -649,7 +697,8 @@ export interface ObjectsSurface {
     opts?: { label?: string },
   ): Promise<ObjectWriteResult>;
   /** All-or-nothing: validated and planned before anything applies; core
-   *  ops and plugin plans land as ONE engine batch = one undo step. */
+   *  ops and plugin plans land as ONE engine batch = one undo step, named
+   *  `opts.label` when given (engine ADR 1030). */
   batch(
     ops: readonly ObjectOp[],
     opts?: { label?: string },

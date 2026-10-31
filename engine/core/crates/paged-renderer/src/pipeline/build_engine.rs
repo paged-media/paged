@@ -197,6 +197,7 @@ pub(super) fn frame_ref_self_id(
         F::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.as_deref(),
         F::Polygon(i) => spread.polygons.get(i)?.self_id.as_deref(),
         F::Group(i) => spread.groups.get(i)?.self_id.as_deref(),
+        F::Instance(i) => spread.instances.get(i)?.self_id.as_deref(),
     }
 }
 
@@ -267,6 +268,8 @@ pub(super) fn frame_ref_local_pages(
             .polygons
             .get(i)
             .map(|f| transform_bounds(f.bounds, f.item_transform)),
+        // Engine ADR 1039 — its definition's bounds, mapped.
+        F::Instance(i) => spread.instances.get(i).map(|inst| inst.spread_box()),
         // Engine ADR 1010: a group is on every page one of its members
         // is on (a clip group brackets its members on each of them).
         F::Group(gi) => {
@@ -869,6 +872,9 @@ pub(super) fn build_document_inner(
     // English hyphenator did every paragraph of every document. Holding
     // the whole set costs nothing, because a hyphenator parses its
     // pattern file on first use.
+    // Engine ADR 1039 — the symbol definitions this document's instances
+    // draw, each built once (or served from the caller's cache).
+    let symbol_lists = super::symbols::prepare(document, options, font_table);
     let hyphenators = paged_text::Hyphenators::new();
     let hyphenator = paged_text::Hyphenator::for_language(paged_text::Language::EnglishUS);
 
@@ -988,6 +994,8 @@ pub(super) fn build_document_inner(
                 height_pt: bounds_in_spread.height(),
                 spread_origin: (bounds_in_spread.left, bounds_in_spread.top),
                 spread_transform,
+                // Resolved for every page once the loop has sized them all.
+                canvas_origin: (0.0, 0.0),
                 list: page_list,
                 layout_generation: 0,
                 numbering_generation: 0,
@@ -1001,6 +1009,22 @@ pub(super) fn build_document_inner(
             });
         }
         spread_page_ranges.push(start..pages.len());
+    }
+    // Engine ADR 1011 — each page's place on the canvas: its own
+    // `canvas_origin`, else its slot in the default vertical stack.
+    let origins = paged_model::canvas_layout(
+        pages
+            .iter()
+            .zip(
+                document
+                    .spreads
+                    .iter()
+                    .flat_map(|parsed| parsed.spread.pages.iter()),
+            )
+            .map(|(built, page)| ((built.width_pt, built.height_pt), page.canvas_origin)),
+    );
+    for (built, origin) in pages.iter_mut().zip(origins) {
+        built.canvas_origin = origin;
     }
     total_stats.pages = pages.len();
     // Surface that one or more page labels were computed rather than
@@ -1026,6 +1050,7 @@ pub(super) fn build_document_inner(
             height_pt: 792.0,
             spread_origin: (0.0, 0.0),
             spread_transform: Transform::IDENTITY,
+            canvas_origin: (0.0, 0.0),
             list: DisplayList::new(),
             layout_generation: 0,
             numbering_generation: 0,
@@ -1167,13 +1192,7 @@ pub(super) fn build_document_inner(
     // sides so the math composes cleanly with our existing Page
     // ItemTransform plumbing.
     for (i, geom) in page_geometries.iter().enumerate() {
-        let Some(master_ref) = geom.applied_master.as_deref() else {
-            continue;
-        };
-        let Some(master) = document.master_spread(master_ref) else {
-            continue;
-        };
-        if master.spread.pages.is_empty() {
+        if geom.applied_master.is_none() {
             continue;
         }
         let body_page = document.spreads[geom.host_spread_idx]
@@ -1183,404 +1202,457 @@ pub(super) fn build_document_inner(
         // `ShowMasterItems="false"` hides every master overlay item for
         // this page (InDesign's per-page "Hide Master Items"). Skipping
         // the whole loop body suppresses master frames, lines, and the
-        // master-story page-number text (all stamped below) at once.
+        // master-story page-number text (all stamped below) at once —
+        // of every master the page's own master is based on too.
         if body_page.and_then(|p| p.show_master_items) == Some(false) {
             continue;
         }
-        // Body-page OverrideList enumerates master items the body has
-        // replaced with its own copies — skip them here so we don't
-        // stamp the placeholder under the body's override.
-        let override_set: std::collections::HashSet<&str> = body_page
-            .map(|p| p.override_list.iter().map(String::as_str).collect())
-            .unwrap_or_default();
-
-        // Each master page in spread coords. Master items get routed
-        // to one of these by their own spread-coord centroid; the
-        // matching live page consumes only the items belonging to
-        // its same-ordinal master page. This is what InDesign's
-        // "Master Page Overlay" feature actually does — without
-        // routing, a master with both white-LEFT-page and navy-RIGHT-
-        // page rectangles would stamp both onto every live page.
-        let master_page_bounds: Vec<paged_model::Bounds> = master
-            .spread
-            .pages
-            .iter()
-            .map(|p| transform_bounds(p.bounds, p.item_transform))
-            .collect();
         let body_page_bounds: Vec<paged_model::Bounds> = document.spreads[geom.host_spread_idx]
             .spread
             .pages
             .iter()
             .map(|p| transform_bounds(p.bounds, p.item_transform))
             .collect();
-        let local_master_page_idx =
-            master_page_index(&body_page_bounds, geom.local_page_idx, &master_page_bounds);
-        let master_page_origin = (
-            master_page_bounds[local_master_page_idx].left,
-            master_page_bounds[local_master_page_idx].top,
+        // Engine ADR 1026 — the masters this page shows, nearest first.
+        let levels = master_levels(
+            document,
+            geom.applied_master.as_deref(),
+            body_page,
+            &body_page_bounds,
+            geom.local_page_idx,
         );
-        let target_origin = pages[i].spread_origin;
-        // MasterPageTransform sits between master-spread coords and
-        // live-page coords (for sample.idml it is identity). Build the
-        // full outer transform once for this page — `translate(live
-        // origin) ∘ MPT ∘ translate(-master origin)` — so a MPT carrying
-        // rotation/scale (not just translation) is honoured. With an
-        // identity MPT this collapses to the plain origin shift the
-        // common case relies on. Each master item below is stamped as
-        // `mpt_outer ∘ item_transform`.
-        let mpt = document.spreads[geom.host_spread_idx]
-            .spread
-            .pages
-            .get(geom.local_page_idx)
-            .and_then(|p| p.master_page_transform);
-        // W1.9 — the MASTER spread's own `<MasterSpread ItemTransform>`
-        // rotation/scale (linear part). Inserted between the
-        // MasterPageTransform and the master-page-origin re-base so it
-        // rotates/scales the master overlay about the master page origin,
-        // mirroring how the body spread's `spread_transform` rotates the
-        // body page. IDENTITY for the common (untransformed master) case,
-        // collapsing the chain to the historical translation-only stamp.
-        // (The body spread's own transform separately rides the live
-        // page's `spread_transform` in `frame_outer_transform`.)
-        let master_spread_linear = spread_linear_transform(master.spread.item_transform);
-        let mpt_outer = Transform::translate(target_origin.0, target_origin.1)
-            .compose(&Transform(mpt.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])))
-            .compose(&master_spread_linear)
-            .compose(&Transform::translate(
-                -master_page_origin.0,
-                -master_page_origin.1,
-            ));
+        // The farthest master paints first: a master's items sit above the
+        // items of the master it is based on, as page items sit above
+        // master items.
+        for level in levels.into_iter().rev() {
+            let master = level.master;
+            let local_master_page_idx = level.page;
+            // Body-page OverrideList enumerates master items the body has
+            // replaced with its own copies — skip them here so we don't
+            // stamp the placeholder under the body's override. A master
+            // page's own OverrideList hides the items of the masters it is
+            // based on (on every page that shows it).
+            let override_set: &std::collections::HashSet<&str> = &level.overrides;
 
-        // Pick the master page index that contains the centroid of
-        // the given spread-coord bounds; falls back to the nearest
-        // page so items hugging the centre line don't get dropped.
-        let master_page_for = |b: paged_model::Bounds| -> usize {
-            let cx = (b.left + b.right) * 0.5;
-            let cy = (b.top + b.bottom) * 0.5;
-            for (idx, mb) in master_page_bounds.iter().enumerate() {
-                if cx >= mb.left && cx <= mb.right && cy >= mb.top && cy <= mb.bottom {
-                    return idx;
+            // Each master page in spread coords. Master items get routed
+            // to one of these by their own spread-coord centroid; the
+            // matching live page consumes only the items belonging to
+            // its same-ordinal master page. This is what InDesign's
+            // "Master Page Overlay" feature actually does — without
+            // routing, a master with both white-LEFT-page and navy-RIGHT-
+            // page rectangles would stamp both onto every live page.
+            let master_page_bounds = &level.page_bounds;
+            let master_page_origin = (
+                master_page_bounds[local_master_page_idx].left,
+                master_page_bounds[local_master_page_idx].top,
+            );
+            let target_origin = pages[i].spread_origin;
+            // MasterPageTransform sits between master-spread coords and
+            // live-page coords (for sample.idml it is identity). Build the
+            // full outer transform once for this page — `translate(live
+            // origin) ∘ MPT ∘ translate(-master origin)` — so a MPT carrying
+            // rotation/scale (not just translation) is honoured. With an
+            // identity MPT this collapses to the plain origin shift the
+            // common case relies on. Each master item below is stamped as
+            // `mpt_outer ∘ item_transform`.
+            let mpt = document.spreads[geom.host_spread_idx]
+                .spread
+                .pages
+                .get(geom.local_page_idx)
+                .and_then(|p| p.master_page_transform);
+            // W1.9 — the MASTER spread's own `<MasterSpread ItemTransform>`
+            // rotation/scale (linear part). Inserted between the
+            // MasterPageTransform and the master-page-origin re-base so it
+            // rotates/scales the master overlay about the master page origin,
+            // mirroring how the body spread's `spread_transform` rotates the
+            // body page. IDENTITY for the common (untransformed master) case,
+            // collapsing the chain to the historical translation-only stamp.
+            // (The body spread's own transform separately rides the live
+            // page's `spread_transform` in `frame_outer_transform`.)
+            let master_spread_linear = spread_linear_transform(master.spread.item_transform);
+            let mpt_outer = Transform::translate(target_origin.0, target_origin.1)
+                .compose(&Transform(mpt.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])))
+                .compose(&master_spread_linear)
+                .compose(&Transform::translate(
+                    -master_page_origin.0,
+                    -master_page_origin.1,
+                ));
+
+            // Pick the master page index that contains the centroid of
+            // the given spread-coord bounds; falls back to the nearest
+            // page so items hugging the centre line don't get dropped.
+            let master_page_for = |b: paged_model::Bounds| -> usize {
+                let cx = (b.left + b.right) * 0.5;
+                let cy = (b.top + b.bottom) * 0.5;
+                for (idx, mb) in master_page_bounds.iter().enumerate() {
+                    if cx >= mb.left && cx <= mb.right && cy >= mb.top && cy <= mb.bottom {
+                        return idx;
+                    }
                 }
-            }
-            // Outside any master page (rare): pick by horizontal proximity.
-            master_page_bounds
-                .iter()
-                .enumerate()
-                .min_by(|(_, a), (_, b)| {
-                    let da = ((a.left + a.right) * 0.5 - cx).abs();
-                    let db = ((b.left + b.right) * 0.5 - cx).abs();
-                    da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .map(|(idx, _)| idx)
-                .unwrap_or(0)
-        };
+                // Outside any master page (rare): pick by horizontal proximity.
+                master_page_bounds
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| {
+                        let da = ((a.left + a.right) * 0.5 - cx).abs();
+                        let db = ((b.left + b.right) * 0.5 - cx).abs();
+                        da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|(idx, _)| idx)
+                    .unwrap_or(0)
+            };
 
-        // Master items belong to the current live page when either
-        // (a) their centroid lands on the matching master page, or
-        // (b) they're "full-bleed-ish" — area ≥ 50% of a master page
-        //     AND the item's spread bounds intersect this master page.
-        // The second arm covers spread-spanning brand-colour
-        // backgrounds whose centroid lands across the page fold; the
-        // pure centroid test would route them to the wrong page or
-        // (for items straddling the gutter) to one page only.
-        let target_master = &master_page_bounds[local_master_page_idx];
-        let target_master_area = (target_master.right - target_master.left).max(0.0)
-            * (target_master.bottom - target_master.top).max(0.0);
-        let item_belongs = |b: paged_model::Bounds| -> bool {
-            if master_page_for(b) == local_master_page_idx {
-                return true;
-            }
-            let item_area = (b.right - b.left).max(0.0) * (b.bottom - b.top).max(0.0);
-            if target_master_area <= 0.0 || item_area < 0.5 * target_master_area {
-                return false;
-            }
-            // Intersection test against the target master page.
-            b.right > target_master.left
-                && b.left < target_master.right
-                && b.bottom > target_master.top
-                && b.top < target_master.bottom
-        };
+            // Master items belong to the current live page when either
+            // (a) their centroid lands on the matching master page, or
+            // (b) they're "full-bleed-ish" — area ≥ 50% of a master page
+            //     AND the item's spread bounds intersect this master page.
+            // The second arm covers spread-spanning brand-colour
+            // backgrounds whose centroid lands across the page fold; the
+            // pure centroid test would route them to the wrong page or
+            // (for items straddling the gutter) to one page only.
+            let target_master = &master_page_bounds[local_master_page_idx];
+            let target_master_area = (target_master.right - target_master.left).max(0.0)
+                * (target_master.bottom - target_master.top).max(0.0);
+            let item_belongs = |b: paged_model::Bounds| -> bool {
+                if master_page_for(b) == local_master_page_idx {
+                    return true;
+                }
+                let item_area = (b.right - b.left).max(0.0) * (b.bottom - b.top).max(0.0);
+                if target_master_area <= 0.0 || item_area < 0.5 * target_master_area {
+                    return false;
+                }
+                // Intersection test against the target master page.
+                b.right > target_master.left
+                    && b.left < target_master.right
+                    && b.bottom > target_master.top
+                    && b.top < target_master.bottom
+            };
 
-        // Master items paint in the master spread's own stacking order
-        // (`frames_in_order`, groups expanded to their members), exactly
-        // as body items do. Walking the backing vecs kind by kind put
-        // every polygon above every rectangle, so a full-page background
-        // polygon covered a master's placed picture. Items the walk does
-        // not reach (pasted-in children, mask sources) keep the legacy
-        // kind-by-kind order after it.
-        {
-            let verso = pages[i].binding_edge() == super::metrics::BindingEdge::Right;
-            let overridden = |id: Option<&str>| id.is_some_and(|id| override_set.contains(id));
-            let mut add = |src: WrapSource<'_>,
-                           wrap: Option<paged_model::TextWrap>,
-                           self_id: Option<&str>| {
-                let Some(wrap) = wrap else {
-                    return;
+            // Master items paint in the master spread's own stacking order
+            // (`frames_in_order`, groups expanded to their members), exactly
+            // as body items do. Walking the backing vecs kind by kind put
+            // every polygon above every rectangle, so a full-page background
+            // polygon covered a master's placed picture. Items the walk does
+            // not reach (pasted-in children, mask sources) keep the legacy
+            // kind-by-kind order after it.
+            {
+                let verso = pages[i].binding_edge() == super::metrics::BindingEdge::Right;
+                let overridden = |id: Option<&str>| id.is_some_and(|id| override_set.contains(id));
+                let mut add = |src: WrapSource<'_>,
+                               wrap: Option<paged_model::TextWrap>,
+                               self_id: Option<&str>| {
+                    let Some(wrap) = wrap else {
+                        return;
+                    };
+                    if wrap.apply_to_master_page_only == Some(true) || overridden(self_id) {
+                        return;
+                    }
+                    if !item_belongs(transform_bounds(src.bounds, src.item_transform)) {
+                        return;
+                    }
+                    let live = WrapSource {
+                        item_transform: Some(compose_outer_matrix(mpt_outer, src.item_transform)),
+                        ..src
+                    };
+                    if let Some(shape) = live.shape(wrap, verso) {
+                        master_wraps[i].push(shape);
+                    }
                 };
-                if wrap.apply_to_master_page_only == Some(true) || overridden(self_id) {
-                    return;
+                let styles = &document.styles;
+                let ms = &master.spread;
+                for f in &ms.text_frames {
+                    add(
+                        WrapSource {
+                            bounds: f.bounds,
+                            item_transform: f.item_transform,
+                            anchors: &f.anchors,
+                            subpath_starts: &f.subpath_starts,
+                            subpath_open: &f.subpath_open,
+                            oval: false,
+                            stroke_color: f.stroke_color.as_deref(),
+                            stroke_weight: f.stroke_weight,
+                        },
+                        styles.item_text_wrap(f.text_wrap, f.applied_object_style.as_deref()),
+                        f.self_id.as_deref(),
+                    );
                 }
-                if !item_belongs(transform_bounds(src.bounds, src.item_transform)) {
-                    return;
+                for r in &ms.rectangles {
+                    add(
+                        WrapSource {
+                            bounds: r.bounds,
+                            item_transform: r.item_transform,
+                            anchors: &r.anchors,
+                            subpath_starts: &r.subpath_starts,
+                            subpath_open: &r.subpath_open,
+                            oval: false,
+                            stroke_color: r.stroke_color.as_deref(),
+                            stroke_weight: r.stroke_weight,
+                        },
+                        styles.item_text_wrap(r.text_wrap, r.applied_object_style.as_deref()),
+                        r.self_id.as_deref(),
+                    );
                 }
-                let live = WrapSource {
-                    item_transform: Some(compose_outer_matrix(mpt_outer, src.item_transform)),
-                    ..src
+                for o in &ms.ovals {
+                    add(
+                        WrapSource {
+                            bounds: o.bounds,
+                            item_transform: o.item_transform,
+                            anchors: &[],
+                            subpath_starts: &[],
+                            subpath_open: &[],
+                            oval: true,
+                            stroke_color: o.stroke_color.as_deref(),
+                            stroke_weight: o.stroke_weight,
+                        },
+                        styles.item_text_wrap(o.text_wrap, o.applied_object_style.as_deref()),
+                        o.self_id.as_deref(),
+                    );
+                }
+                for p in &ms.polygons {
+                    add(
+                        WrapSource {
+                            bounds: p.bounds,
+                            item_transform: p.item_transform,
+                            anchors: &p.anchors,
+                            subpath_starts: &p.subpath_starts,
+                            subpath_open: &p.subpath_open,
+                            oval: false,
+                            stroke_color: p.stroke_color.as_deref(),
+                            stroke_weight: p.stroke_weight,
+                        },
+                        styles.item_text_wrap(p.text_wrap, p.applied_object_style.as_deref()),
+                        p.self_id.as_deref(),
+                    );
+                }
+            }
+            let master_order = master_paint_order(&master.spread);
+            let mut emit_master = |fr: paged_model::FrameRef| {
+                // A hidden master item draws nowhere, as a hidden body item
+                // does not (`Visible="false"`, and the items an export of
+                // some items alone hides: `build_page_filtered`).
+                let s = &master.spread;
+                let hidden = match fr {
+                    paged_model::FrameRef::TextFrame(i) => {
+                        s.text_frames.get(i).is_some_and(|f| !f.visible)
+                    }
+                    paged_model::FrameRef::Rectangle(i) => {
+                        s.rectangles.get(i).is_some_and(|f| !f.visible)
+                    }
+                    paged_model::FrameRef::Oval(i) => s.ovals.get(i).is_some_and(|f| !f.visible),
+                    paged_model::FrameRef::GraphicLine(i) => {
+                        s.graphic_lines.get(i).is_some_and(|f| !f.visible)
+                    }
+                    paged_model::FrameRef::Polygon(i) => {
+                        s.polygons.get(i).is_some_and(|f| !f.visible)
+                    }
+                    paged_model::FrameRef::Group(_) => false,
+                    paged_model::FrameRef::Instance(i) => {
+                        s.instances.get(i).is_some_and(|f| !f.visible)
+                    }
                 };
-                if let Some(shape) = live.shape(wrap, verso) {
-                    master_wraps[i].push(shape);
+                if hidden {
+                    return;
+                }
+                match fr {
+                    paged_model::FrameRef::TextFrame(idx) => {
+                        let Some(frame) = master.spread.text_frames.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(frame.bounds, frame.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if frame
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        // Master items live in master-spread coords. Compose an
+                        // outer translate(dx, dy) into the frame's existing
+                        // ItemTransform so the inner-coord rect ends up in the
+                        // *live* spread coords once frame_outer_transform applies.
+                        // Mutating bounds (inner coords) would be wrong now that
+                        // PathGeometry-derived shapes carry geometry in inner
+                        // space.
+                        let mut copy = frame.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        // A master frame's text is not moved into a slot, so
+                        // its own bracket stays in the glyph post-pass.
+                        let _ = emit_text_frame_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            None, // master items don't carry a drop shadow today.
+                            None, // master frames don't auto-size in our model.
+                        );
+                        // Stash a relocated copy so the master-story pass below
+                        // can flow this frame's hosted story (page-number footers,
+                        // running headers, etc.) onto this body page. Skipping it
+                        // when ParentStory is missing is fine — the rectangle was
+                        // still drawn above.
+                        if copy.parent_story.is_some() {
+                            let copy = text_area_frame(&copy, document).into_owned();
+                            master_text_emissions.push((i, copy));
+                        }
+                    }
+                    paged_model::FrameRef::Rectangle(idx) => {
+                        let Some(rect) = master.spread.rectangles.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(rect.bounds, rect.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if rect
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        let mut copy = rect.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        // A master's placed picture (a slide-master background
+                        // photo, a logo) paints on every page that applies it,
+                        // between the frame's fill and its stroke.
+                        let image_cache = &mut page_image_caches[i];
+                        emit_rectangle_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            None,
+                            &mut |page: &mut BuiltPage| {
+                                emit_rectangle_image(
+                                    page,
+                                    &copy,
+                                    options,
+                                    image_cache,
+                                    decoded_image_cache,
+                                    resolve_frame_shadow(
+                                        copy.content_drop_shadow.as_ref(),
+                                        None,
+                                        palette,
+                                        color_ctx,
+                                    ),
+                                    image_rendering(
+                                        options,
+                                        copy.self_id
+                                            .as_deref()
+                                            .and_then(|id| master.spread.image_metadata.get(id)),
+                                    ),
+                                )
+                            },
+                            &mut |_: &mut BuiltPage| {},
+                        );
+                    }
+                    paged_model::FrameRef::Polygon(idx) => {
+                        let Some(poly) = master.spread.polygons.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(poly.bounds, poly.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if poly
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        let mut copy = poly.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        emit_polygon_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            &mut |_: &mut BuiltPage| {},
+                            &mut |_: &mut BuiltPage| {},
+                        );
+                    }
+                    paged_model::FrameRef::Oval(idx) => {
+                        let Some(oval) = master.spread.ovals.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(oval.bounds, oval.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if oval
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        let mut copy = oval.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        emit_oval_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            &mut |_: &mut BuiltPage| {},
+                            &mut |_: &mut BuiltPage| {},
+                        );
+                    }
+                    paged_model::FrameRef::GraphicLine(idx) => {
+                        let Some(line) = master.spread.graphic_lines.get(idx) else {
+                            return;
+                        };
+                        let spread_b = transform_bounds(line.bounds, line.item_transform);
+                        if !item_belongs(spread_b) {
+                            return;
+                        }
+                        if line
+                            .self_id
+                            .as_deref()
+                            .is_some_and(|id| override_set.contains(id))
+                        {
+                            return;
+                        }
+                        total_stats.frames += 1;
+                        let mut copy = line.clone();
+                        copy.item_transform =
+                            Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                        emit_line_into(
+                            &mut pages[i],
+                            &copy,
+                            document,
+                            palette,
+                            color_ctx,
+                            &mut |_: &mut BuiltPage| {},
+                        );
+                    }
+                    // Engine ADR 1039 — instances are placed on body spreads
+                    // only (`placeSymbolInstance` names one); a master holds none.
+                    paged_model::FrameRef::Group(_) | paged_model::FrameRef::Instance(_) => {}
                 }
             };
-            let styles = &document.styles;
-            let ms = &master.spread;
-            for f in &ms.text_frames {
-                add(
-                    WrapSource {
-                        bounds: f.bounds,
-                        item_transform: f.item_transform,
-                        anchors: &f.anchors,
-                        subpath_starts: &f.subpath_starts,
-                        subpath_open: &f.subpath_open,
-                        oval: false,
-                        stroke_color: f.stroke_color.as_deref(),
-                        stroke_weight: f.stroke_weight,
-                    },
-                    styles.item_text_wrap(f.text_wrap, f.applied_object_style.as_deref()),
-                    f.self_id.as_deref(),
-                );
+            for &fr in &master_order {
+                emit_master(fr);
             }
-            for r in &ms.rectangles {
-                add(
-                    WrapSource {
-                        bounds: r.bounds,
-                        item_transform: r.item_transform,
-                        anchors: &r.anchors,
-                        subpath_starts: &r.subpath_starts,
-                        subpath_open: &r.subpath_open,
-                        oval: false,
-                        stroke_color: r.stroke_color.as_deref(),
-                        stroke_weight: r.stroke_weight,
-                    },
-                    styles.item_text_wrap(r.text_wrap, r.applied_object_style.as_deref()),
-                    r.self_id.as_deref(),
-                );
-            }
-            for o in &ms.ovals {
-                add(
-                    WrapSource {
-                        bounds: o.bounds,
-                        item_transform: o.item_transform,
-                        anchors: &[],
-                        subpath_starts: &[],
-                        subpath_open: &[],
-                        oval: true,
-                        stroke_color: o.stroke_color.as_deref(),
-                        stroke_weight: o.stroke_weight,
-                    },
-                    styles.item_text_wrap(o.text_wrap, o.applied_object_style.as_deref()),
-                    o.self_id.as_deref(),
-                );
-            }
-            for p in &ms.polygons {
-                add(
-                    WrapSource {
-                        bounds: p.bounds,
-                        item_transform: p.item_transform,
-                        anchors: &p.anchors,
-                        subpath_starts: &p.subpath_starts,
-                        subpath_open: &p.subpath_open,
-                        oval: false,
-                        stroke_color: p.stroke_color.as_deref(),
-                        stroke_weight: p.stroke_weight,
-                    },
-                    styles.item_text_wrap(p.text_wrap, p.applied_object_style.as_deref()),
-                    p.self_id.as_deref(),
-                );
-            }
-        }
-        let master_order = master_paint_order(&master.spread);
-        let mut emit_master = |fr: paged_model::FrameRef| {
-            match fr {
-                paged_model::FrameRef::TextFrame(idx) => {
-                    let Some(frame) = master.spread.text_frames.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(frame.bounds, frame.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if frame
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    // Master items live in master-spread coords. Compose an
-                    // outer translate(dx, dy) into the frame's existing
-                    // ItemTransform so the inner-coord rect ends up in the
-                    // *live* spread coords once frame_outer_transform applies.
-                    // Mutating bounds (inner coords) would be wrong now that
-                    // PathGeometry-derived shapes carry geometry in inner
-                    // space.
-                    let mut copy = frame.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    // A master frame's text is not moved into a slot, so
-                    // its own bracket stays in the glyph post-pass.
-                    let _ = emit_text_frame_into(
-                        &mut pages[i],
-                        &copy,
-                        document,
-                        palette,
-                        options.fallback_frame_fill,
-                        color_ctx,
-                        None, // master items don't carry a drop shadow today.
-                        None, // master frames don't auto-size in our model.
-                    );
-                    // Stash a relocated copy so the master-story pass below
-                    // can flow this frame's hosted story (page-number footers,
-                    // running headers, etc.) onto this body page. Skipping it
-                    // when ParentStory is missing is fine — the rectangle was
-                    // still drawn above.
-                    if copy.parent_story.is_some() {
-                        let copy = text_area_frame(&copy, document).into_owned();
-                        master_text_emissions.push((i, copy));
-                    }
-                }
-                paged_model::FrameRef::Rectangle(idx) => {
-                    let Some(rect) = master.spread.rectangles.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(rect.bounds, rect.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if rect
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    let mut copy = rect.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    // A master's placed picture (a slide-master background
-                    // photo, a logo) paints on every page that applies it,
-                    // between the frame's fill and its stroke.
-                    let image_cache = &mut page_image_caches[i];
-                    emit_rectangle_into(
-                        &mut pages[i],
-                        &copy,
-                        document,
-                        palette,
-                        options.fallback_frame_fill,
-                        color_ctx,
-                        None,
-                        &mut |page: &mut BuiltPage| {
-                            emit_rectangle_image(
-                                page,
-                                &copy,
-                                options,
-                                image_cache,
-                                decoded_image_cache,
-                                resolve_frame_shadow(
-                                    copy.content_drop_shadow.as_ref(),
-                                    None,
-                                    palette,
-                                    color_ctx,
-                                ),
-                            )
-                        },
-                    );
-                }
-                paged_model::FrameRef::Polygon(idx) => {
-                    let Some(poly) = master.spread.polygons.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(poly.bounds, poly.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if poly
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    let mut copy = poly.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    emit_polygon_into(
-                        &mut pages[i],
-                        &copy,
-                        document,
-                        palette,
-                        options.fallback_frame_fill,
-                        color_ctx,
-                        &mut |_: &mut BuiltPage| {},
-                    );
-                }
-                paged_model::FrameRef::Oval(idx) => {
-                    let Some(oval) = master.spread.ovals.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(oval.bounds, oval.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if oval
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    let mut copy = oval.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    emit_oval_into(
-                        &mut pages[i],
-                        &copy,
-                        document,
-                        palette,
-                        options.fallback_frame_fill,
-                        color_ctx,
-                        &mut |_: &mut BuiltPage| {},
-                    );
-                }
-                paged_model::FrameRef::GraphicLine(idx) => {
-                    let Some(line) = master.spread.graphic_lines.get(idx) else {
-                        return;
-                    };
-                    let spread_b = transform_bounds(line.bounds, line.item_transform);
-                    if !item_belongs(spread_b) {
-                        return;
-                    }
-                    if line
-                        .self_id
-                        .as_deref()
-                        .is_some_and(|id| override_set.contains(id))
-                    {
-                        return;
-                    }
-                    total_stats.frames += 1;
-                    let mut copy = line.clone();
-                    copy.item_transform =
-                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
-                    emit_line_into(&mut pages[i], &copy, document, palette, color_ctx);
-                }
-                paged_model::FrameRef::Group(_) => {}
-            }
-        };
-        for &fr in &master_order {
-            emit_master(fr);
         }
     }
 
@@ -1621,6 +1693,7 @@ pub(super) fn build_document_inner(
             ovals: vec![None; spread.ovals.len()],
             graphic_lines: vec![None; spread.graphic_lines.len()],
             polygons: vec![None; spread.polygons.len()],
+            instances: vec![None; spread.instances.len()],
             text_slots: vec![Vec::new(); spread.text_frames.len()],
             z_seq: 0,
         };
@@ -1654,6 +1727,10 @@ pub(super) fn build_document_inner(
                 // Group: derive layer from the first leaf member with
                 // an ItemLayer. If none, treat as "no layer" (MAX).
                 paged_model::FrameRef::Group(_) => None,
+                paged_model::FrameRef::Instance(i) => spread
+                    .instances
+                    .get(i)
+                    .and_then(|f| f.item_layer.as_deref()),
             };
             id.and_then(|s| layer_z_index.get(s).copied())
                 .unwrap_or(usize::MAX)
@@ -1726,6 +1803,7 @@ pub(super) fn build_document_inner(
             options: &PipelineOptions,
             color_ctx: ColorCtx<'_>,
             auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+            symbols: &super::symbols::SymbolLists,
         ) {
             match fr {
                 paged_model::FrameRef::TextFrame(idx) => {
@@ -1790,6 +1868,31 @@ pub(super) fn build_document_inner(
                             options.frame_drop_shadow,
                             grown,
                         );
+                        // C-6 tiles and the C-1 scene layer: the module's
+                        // own render of this frame, over the box. When the
+                        // body gave a slot (an object group, feathers or an
+                        // effect stack wrap the box), the module content
+                        // moves into it, so the frame's opacity, blend mode
+                        // and effects take it with the box (engine ADR
+                        // 1046), and the text slot moves past it: the story
+                        // stays frontmost, as it is without a slot.
+                        let body_end = pages[page_idx].list.commands.len();
+                        emit_frame_module_content(
+                            &mut pages[page_idx],
+                            frame.self_id.as_deref(),
+                            frame.bounds,
+                            frame.inset_spacing,
+                            frame.item_transform,
+                            options,
+                        );
+                        let added = pages[page_idx].list.commands.len() - body_end;
+                        let slot_in_group = slot_in_group.map(|mut s| {
+                            if added > 0 && s.slot <= body_end {
+                                pages[page_idx].list.move_tail_to(body_end, s.slot);
+                                s.slot += added;
+                            }
+                            s
+                        });
                         let after = pages[page_idx].list.commands.len();
                         if after > before && frame_spans.text_frames[idx].is_none() {
                             frame_spans.text_frames[idx] = Some(crate::module::FrameCmdSpan {
@@ -1798,35 +1901,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            frame.self_id.as_deref(),
-                            frame.bounds,
-                            frame.inset_spacing,
-                            frame.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            frame.self_id.as_deref(),
-                            frame.bounds,
-                            frame.inset_spacing,
-                            frame.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                         // W2 — the z-slot this frame's story text belongs
                         // at. Recorded AFTER the box, the C-6 tiles and the
                         // C-1 plugin layer, so relocating the glyphs keeps
@@ -1907,6 +1981,25 @@ pub(super) fn build_document_inner(
                                         palette,
                                         color_ctx,
                                     ),
+                                    image_rendering(
+                                        options,
+                                        rect.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
+                                )
+                            },
+                            // C-6 tiles and the C-1 scene layer: the module's own
+                            // render of this frame, frontmost in it, inside the
+                            // frame's group and effect stack (engine ADR 1046).
+                            &mut |page: &mut BuiltPage| {
+                                emit_frame_module_content(
+                                    page,
+                                    rect.self_id.as_deref(),
+                                    rect.bounds,
+                                    None,
+                                    rect.item_transform,
+                                    options,
                                 )
                             },
                         );
@@ -1918,35 +2011,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            rect.self_id.as_deref(),
-                            rect.bounds,
-                            None,
-                            rect.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            rect.self_id.as_deref(),
-                            rect.bounds,
-                            None,
-                            rect.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                     }
                     // B-18 paste-into: nested children paint inside
                     // the container, masked by its outline.
@@ -1967,6 +2031,7 @@ pub(super) fn build_document_inner(
                         options,
                         color_ctx,
                         auto_sized_bounds,
+                        symbols,
                     );
                 }
                 paged_model::FrameRef::Oval(idx) => {
@@ -2003,6 +2068,25 @@ pub(super) fn build_document_inner(
                                     options,
                                     image_cache,
                                     decoded_image_cache,
+                                    image_rendering(
+                                        options,
+                                        oval.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
+                                )
+                            },
+                            // C-6 tiles and the C-1 scene layer: the module's own
+                            // render of this frame, frontmost in it, inside the
+                            // frame's group and effect stack (engine ADR 1046).
+                            &mut |page: &mut BuiltPage| {
+                                emit_frame_module_content(
+                                    page,
+                                    oval.self_id.as_deref(),
+                                    oval.bounds,
+                                    None,
+                                    oval.item_transform,
+                                    options,
                                 )
                             },
                         );
@@ -2014,35 +2098,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            oval.self_id.as_deref(),
-                            oval.bounds,
-                            None,
-                            oval.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            oval.self_id.as_deref(),
-                            oval.bounds,
-                            None,
-                            oval.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                     }
                     // B-18 paste-into: nested children paint inside
                     // the container, masked by its outline.
@@ -2063,6 +2118,7 @@ pub(super) fn build_document_inner(
                         options,
                         color_ctx,
                         auto_sized_bounds,
+                        symbols,
                     );
                 }
                 paged_model::FrameRef::GraphicLine(idx) => {
@@ -2084,7 +2140,26 @@ pub(super) fn build_document_inner(
                     for &local_idx in &local_indices {
                         let page_idx = range.start + local_idx;
                         let before = pages[page_idx].list.commands.len();
-                        emit_line_into(&mut pages[page_idx], line, document, palette, color_ctx);
+                        emit_line_into(
+                            &mut pages[page_idx],
+                            line,
+                            document,
+                            palette,
+                            color_ctx,
+                            // C-6 tiles and the C-1 scene layer: the module's own
+                            // render of this frame, frontmost in it, inside the
+                            // frame's group and effect stack (engine ADR 1046).
+                            &mut |page: &mut BuiltPage| {
+                                emit_frame_module_content(
+                                    page,
+                                    line.self_id.as_deref(),
+                                    line.bounds,
+                                    None,
+                                    line.item_transform,
+                                    options,
+                                )
+                            },
+                        );
                         let after = pages[page_idx].list.commands.len();
                         if after > before && frame_spans.graphic_lines[idx].is_none() {
                             frame_spans.graphic_lines[idx] = Some(crate::module::FrameCmdSpan {
@@ -2093,35 +2168,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            line.self_id.as_deref(),
-                            line.bounds,
-                            None,
-                            line.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            line.self_id.as_deref(),
-                            line.bounds,
-                            None,
-                            line.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                     }
                 }
                 paged_model::FrameRef::Polygon(idx) => {
@@ -2165,6 +2211,25 @@ pub(super) fn build_document_inner(
                                     options,
                                     image_cache,
                                     decoded_image_cache,
+                                    image_rendering(
+                                        options,
+                                        poly.self_id
+                                            .as_deref()
+                                            .and_then(|id| spread.image_metadata.get(id)),
+                                    ),
+                                )
+                            },
+                            // C-6 tiles and the C-1 scene layer: the module's own
+                            // render of this frame, frontmost in it, inside the
+                            // frame's group and effect stack (engine ADR 1046).
+                            &mut |page: &mut BuiltPage| {
+                                emit_frame_module_content(
+                                    page,
+                                    poly.self_id.as_deref(),
+                                    poly.bounds,
+                                    None,
+                                    poly.item_transform,
+                                    options,
                                 )
                             },
                         );
@@ -2176,35 +2241,6 @@ pub(super) fn build_document_inner(
                                 end: after,
                             });
                         }
-                        // C-6: a claimed image provider assembles pyramid
-                        // tiles inside this frame. This is the frame's OWN
-                        // image content (the tiled form of the placed-image
-                        // lane a claim replaces), so it paints with the
-                        // native content — BEFORE the C-1 layer above.
-                        emit_frame_resource_tiles(
-                            &mut pages[page_idx],
-                            poly.self_id.as_deref(),
-                            poly.bounds,
-                            None,
-                            poly.item_transform,
-                            options.resource_providers,
-                            options.render_scale,
-                        );
-                        // C-1: the plugin's own render of this frame's
-                        // content, ON TOP of everything native — the frame
-                        // fill, the placed image, and the C-6 tiles emitted
-                        // immediately before it.
-                        emit_frame_scene_layer(
-                            &mut pages[page_idx],
-                            poly.self_id.as_deref(),
-                            poly.bounds,
-                            None,
-                            poly.item_transform,
-                            options.scene_layers,
-                            options.font,
-                            options.assets,
-                            options.scene_fonts,
-                        );
                     }
                     // B-18 paste-into: nested children paint inside
                     // the container, masked by its outline.
@@ -2225,10 +2261,84 @@ pub(super) fn build_document_inner(
                         options,
                         color_ctx,
                         auto_sized_bounds,
+                        symbols,
                     );
+                }
+                // Engine ADR 1039 — replay the definition's display list
+                // under the instance's transform, on every page it reaches.
+                paged_model::FrameRef::Instance(idx) => {
+                    let Some(inst) = spread.instances.get(idx) else {
+                        return;
+                    };
+                    if !is_layer_visible(document, inst.item_layer.as_deref()) || !inst.visible {
+                        return;
+                    }
+                    let sym = match inst.overrides.tint {
+                        Some(t) if t.amount > 0.0 => symbols.tinted(&inst.symbol, t),
+                        _ => symbols.get(&inst.symbol),
+                    };
+                    let Some(sym) = sym else {
+                        return;
+                    };
+                    total_stats.frames += 1;
+                    let nine = inst
+                        .nine_slice
+                        .or_else(|| document.symbol(&inst.symbol).and_then(|d| d.nine_slice));
+                    let spread_bounds = inst.spread_bounds(sym.bounds);
+                    let overlaps = pages_overlapping_frame(&spread_bounds, local_geoms);
+                    let local_indices: Vec<usize> = if overlaps.is_empty() {
+                        vec![page_for_frame(&spread_bounds, local_geoms).unwrap_or(0)]
+                    } else {
+                        overlaps
+                    };
+                    for &local_idx in &local_indices {
+                        let page_idx = range.start + local_idx;
+                        let before = pages[page_idx].list.commands.len();
+                        let outer =
+                            super::text_frame::frame_outer_transform(&pages[page_idx], None);
+                        super::symbols::emit_instance(
+                            &mut pages[page_idx],
+                            &sym,
+                            inst,
+                            nine,
+                            outer,
+                        );
+                        let after = pages[page_idx].list.commands.len();
+                        if after > before && frame_spans.instances[idx].is_none() {
+                            frame_spans.instances[idx] = Some(crate::module::FrameCmdSpan {
+                                page_idx,
+                                start: before,
+                                end: after,
+                            });
+                        }
+                    }
                 }
                 paged_model::FrameRef::Group(gi) => {
                     if let Some(g) = spread.groups.get(gi) {
+                        // Engine ADR 1042: a group with a Pathfinder
+                        // effect is one outline (a compound shape),
+                        // drawn in place of its members.
+                        if let Some(poly) = paged_vector_fx::bake::bake_group(spread, g) {
+                            let pages_hit = frame_ref_local_pages(
+                                spread,
+                                paged_model::FrameRef::Group(gi),
+                                local_geoms,
+                            );
+                            for local_idx in pages_hit {
+                                total_stats.frames += 1;
+                                emit_polygon_into(
+                                    &mut pages[range.start + local_idx],
+                                    &poly,
+                                    document,
+                                    palette,
+                                    options.fallback_frame_fill,
+                                    color_ctx,
+                                    &mut |_: &mut BuiltPage| {},
+                                    &mut |_: &mut BuiltPage| {},
+                                );
+                            }
+                            return;
+                        }
                         // Engine ADR 1010: a clip group paints its
                         // members inside the top-most one's outline and
                         // never paints that one itself. The clip goes on
@@ -2280,6 +2390,7 @@ pub(super) fn build_document_inner(
                                 options,
                                 color_ctx,
                                 auto_sized_bounds,
+                                symbols,
                             );
                         }
                         if clip.is_some() {
@@ -2327,6 +2438,7 @@ pub(super) fn build_document_inner(
             options: &PipelineOptions,
             color_ctx: ColorCtx<'_>,
             auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+            symbols: &super::symbols::SymbolLists,
         ) {
             let Some(host_id) = host_id else { return };
             let Some(children) = spread.nested_children.get(host_id) else {
@@ -2363,6 +2475,7 @@ pub(super) fn build_document_inner(
                     options,
                     color_ctx,
                     auto_sized_bounds,
+                    symbols,
                 );
             }
             for &local_idx in host_local_indices {
@@ -2402,6 +2515,7 @@ pub(super) fn build_document_inner(
             options: &PipelineOptions,
             color_ctx: ColorCtx<'_>,
             auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+            symbols: &super::symbols::SymbolLists,
         ) {
             let mask_entry = frame_ref_self_id(spread, fr)
                 .and_then(|id| spread.opacity_masks.get(id))
@@ -2423,6 +2537,7 @@ pub(super) fn build_document_inner(
                     options,
                     color_ctx,
                     auto_sized_bounds,
+                    symbols,
                 );
                 return;
             };
@@ -2437,13 +2552,37 @@ pub(super) fn build_document_inner(
                 paged_model::OpacityMaskType::Alpha => paged_compose::SoftMaskType::Alpha,
             };
             for &local_idx in &union {
-                pages[range.start + local_idx].list.push(
-                    paged_compose::DisplayCommand::BeginSoftMask {
+                let page = &mut pages[range.start + local_idx];
+                page.list
+                    .push(paged_compose::DisplayCommand::BeginSoftMask {
                         mask_type,
                         invert: mask.invert,
                         transform: Transform::IDENTITY,
-                    },
-                );
+                    });
+                // Illustrator's Clip off: the artwork is resolved over a
+                // white backdrop, so what it does not paint shows the
+                // target (PDF's `/BC [1 1 1]`). One opaque white fill
+                // under the artwork, past the page by a page's size on
+                // every side so bleed and pasteboard content are
+                // covered; every rasterizer and the PDF writer read it
+                // as ordinary mask artwork.
+                if !mask.clip {
+                    let (w, h) = (page.width_pt, page.height_pt);
+                    let m = w.max(h);
+                    use paged_compose::PathSegment as S;
+                    let path_id = page.list.paths.push_anon(paged_compose::PathData::new(vec![
+                        S::MoveTo { x: -m, y: -m },
+                        S::LineTo { x: w + m, y: -m },
+                        S::LineTo { x: w + m, y: h + m },
+                        S::LineTo { x: -m, y: h + m },
+                        S::Close,
+                    ]));
+                    page.list.push(paged_compose::DisplayCommand::FillPath {
+                        path_id,
+                        paint: paged_compose::Paint::Solid(paged_compose::Color::WHITE),
+                        transform: Transform::IDENTITY,
+                    });
+                }
             }
             emit_one(
                 artwork_ref,
@@ -2461,6 +2600,7 @@ pub(super) fn build_document_inner(
                 options,
                 color_ctx,
                 auto_sized_bounds,
+                symbols,
             );
             for &local_idx in &union {
                 pages[range.start + local_idx].list.push(
@@ -2483,6 +2623,7 @@ pub(super) fn build_document_inner(
                 options,
                 color_ctx,
                 auto_sized_bounds,
+                symbols,
             );
             for &local_idx in &union {
                 pages[range.start + local_idx].list.push(
@@ -2520,6 +2661,7 @@ pub(super) fn build_document_inner(
                 options,
                 color_ctx,
                 &auto_sized_bounds,
+                &symbol_lists,
             );
         }
         spread_frame_spans.push(frame_spans);
@@ -3324,7 +3466,7 @@ pub(super) fn build_document_inner(
             .story
             .paragraphs
             .iter()
-            .any(|p| p.runs.iter().any(|r| r.text_variable.is_some()));
+            .any(|p| p.runs.iter().any(paged_model::CharacterRun::reads_layout));
         let seed_sig = options
             .keep_seeds
             .map(|_| body_story_signature(&chain_for_post, &chain_pages_pre, &wrap_rects_per_page));
@@ -3907,6 +4049,11 @@ pub(super) fn build_document_inner(
             entry.width,
             entry.height,
             options,
+            AnchoredLook {
+                document,
+                palette,
+                color_ctx,
+            },
             &mut page_image_caches[entry.target_page],
             decoded_image_cache,
         );
@@ -3919,8 +4066,30 @@ pub(super) fn build_document_inner(
     let mut adopted = vec![false; pages.len()];
     if let (true, Some(previous)) = (adopt, options.previous_pages) {
         let mut previous = previous.borrow_mut();
+        // A previous page that holds lines of a story this build laid out
+        // afresh is stale: that story's text moved, and the page may now
+        // hold less of it, or none (a growing story shrinking after a
+        // delete kept its old last page otherwise).
+        let laid_out: std::collections::HashSet<&str> = pages
+            .iter()
+            .zip(fresh.iter())
+            .filter(|(_, f)| **f)
+            .flat_map(|(p, _)| p.story_layout.iter().map(|l| l.story_id.as_str()))
+            .collect();
+        let stale: Vec<bool> = previous
+            .iter()
+            .map(|p| {
+                p.story_layout
+                    .iter()
+                    .any(|l| laid_out.contains(l.story_id.as_str()))
+            })
+            .collect();
+        drop(laid_out);
         for (i, page) in pages.iter_mut().enumerate() {
-            if !fresh[i] && previous.get(i).is_some_and(|p| p.id == page.id) {
+            if !fresh[i]
+                && !stale.get(i).copied().unwrap_or(false)
+                && previous.get(i).is_some_and(|p| p.id == page.id)
+            {
                 std::mem::swap(page, &mut previous[i]);
                 adopted[i] = true;
             }
@@ -4717,6 +4886,10 @@ pub(super) struct StoryEmitter<'a> {
     /// (snapshot/restore around re-emits; cross-story lists disable
     /// the cache), so a given source always yields the same numbers.
     pub(super) cross_story_numbering: Option<&'a std::cell::RefCell<HashMap<String, u32>>>,
+    /// Engine ADR 1018 — hidden text (`CharacterDecorations::hidden`)
+    /// takes no room: true when the document does not show hidden text
+    /// and something in it (a style, or any run) can be hidden.
+    pub(super) hide_hidden_text: bool,
     /// `<StoryPreference OpticalMarginAlignment>` flag. When true,
     /// the per-line emit pass nudges the leftmost / rightmost glyph
     /// of each line outward per `paged_text::optical_margin_offset`.
@@ -5050,6 +5223,7 @@ impl<'a> StoryEmitter<'a> {
             prev_was_numbered: false,
             list_levels: Default::default(),
             cross_story_numbering: None,
+            hide_hidden_text: super::conditions::document_hides_text(document),
             optical_margin_alignment: false,
             vertical: false,
             optical_margin_size_pt: 0.0,
@@ -6473,11 +6647,34 @@ pub(super) fn emit_paragraph_into_chain(
     // counts placeholders or reads an anchor's offset (`conditions`).
     // Undeclared conditions hide nothing, so a document declaring none
     // skips the pass.
+    // Hidden text (engine ADR 1018) leaves the same way, through the
+    // same pass, when the document does not show it.
+    // Engine ADR 1040 — tracked changes and comments as the markup view
+    // shows them; the views that leave text out hide it in the pass below.
+    let view = em
+        .document
+        .designmap
+        .document_preference
+        .markup_view
+        .unwrap_or_default();
+    let marked = super::review::reviewed(paragraph, view);
+    let paragraph = marked.as_ref().unwrap_or(paragraph);
+    let review = (view != paged_model::MarkupView::All
+        && paragraph.runs.iter().any(|r| r.revision.is_some()))
+    .then_some(view);
     let declared = &em.document.styles.conditions;
-    let shown = if declared.is_empty() {
+    let hidden_text = em.hide_hidden_text.then_some(em.document);
+    let shown = if declared.is_empty() && hidden_text.is_none() && review.is_none() {
         None
     } else {
-        super::conditions::without_hidden_runs(paragraph, declared)
+        super::conditions::without_hidden_runs_by(
+            paragraph,
+            &super::conditions::HideRule {
+                declared,
+                hidden_text,
+                review,
+            },
+        )
     };
     let paragraph = shown.as_ref().unwrap_or(paragraph);
     // An anchored object takes the options it leaves out from its object
@@ -7014,7 +7211,12 @@ fn emit_paragraph_lines(
     // the resolved string flows through the same per-run text override
     // as `capitalized` / `page_substituted`.
     let total_pages = em.page_count;
-    let needs_var_subst = paragraph.runs.iter().any(|r| r.text_variable.is_some());
+    // Engine ADR 1022 — a Word field run is substituted like a variable's
+    // when it is live, or when the document shows field codes.
+    let show_codes = em.document.designmap.document_preference.show_field_codes == Some(true);
+    let needs_var_subst = paragraph.runs.iter().any(|r| {
+        r.text_variable.is_some() || r.field.as_ref().is_some_and(|f| show_codes || f.is_live())
+    });
     let variable_resolved: Vec<Option<String>> = if needs_var_subst {
         // W1.18 — the frame currently filling resolves variables FOR its
         // host page: date variables read the deterministic clock, the
@@ -7044,6 +7246,15 @@ fn emit_paragraph_lines(
             .runs
             .iter()
             .map(|r| {
+                if let Some(field) = &r.field {
+                    return super::word_fields::resolve_at_emit(
+                        field,
+                        em.document,
+                        &ctx,
+                        em.xref_pages,
+                        Some((em.current_story_id.as_str(), em.paragraph_idx)),
+                    );
+                }
                 let var_id = r.text_variable.as_deref()?;
                 // ADR 169 — a cross-reference's page number is its
                 // destination's page, live (InDesign prints it so before
@@ -7166,8 +7377,8 @@ fn emit_paragraph_lines(
                 point_size,
                 tracking: resolved_runs[i].tracking,
                 font_id: font_ids[i],
-                underline: resolved_runs[i].underline.unwrap_or(false),
-                strikethru: resolved_runs[i].strikethru.unwrap_or(false),
+                underline: resolved_runs[i].draws_underline(),
+                strikethru: resolved_runs[i].draws_strike(),
                 substituted: substituted_flags[i],
                 baseline_shift_pt,
                 horizontal_scale_pct: resolved_runs[i].horizontal_scale.unwrap_or(100.0)
@@ -7197,8 +7408,8 @@ fn emit_paragraph_lines(
                 point_size,
                 tracking: m.tracking,
                 font_id: font_ids[marker_slot],
-                underline: m.underline.unwrap_or(false),
-                strikethru: m.strikethru.unwrap_or(false),
+                underline: m.draws_underline(),
+                strikethru: m.draws_strike(),
                 substituted: substituted_flags[marker_slot],
                 baseline_shift_pt,
                 horizontal_scale_pct: m.horizontal_scale.unwrap_or(100.0) * glyph_scale,
@@ -8286,6 +8497,14 @@ fn emit_paragraph_lines(
     // by the cap's bytes — or a run starting right after the cap (a
     // nested style's) paints one character late.
     let cap_bytes = drop_cap_spec_emit.as_ref().map_or(0, |cap| cap.0 as u32);
+    let decor_picker = super::color_paint::build_run_decor_picker(
+        paragraph,
+        &resolved_runs,
+        em.palette,
+        em.color_ctx,
+        bullet_paint_override.map(|(len, _)| len).unwrap_or(0),
+    )
+    .without_leading(cap_bytes);
     let picker = picker.without_leading(cap_bytes);
     let stroke_picker = stroke_picker.without_leading(cap_bytes);
     let any_text_stroke = stroke_picker.any_visible();
@@ -8421,7 +8640,7 @@ fn emit_paragraph_lines(
                 paragraph
                     .runs
                     .get(i)
-                    .is_some_and(|r| r.text_variable.is_some())
+                    .is_some_and(|r| r.text_variable.is_some() || r.field.is_some())
             },
             &generated,
             placeholder_bytes.iter().map(|&p| p as usize + drop_split),
@@ -8478,6 +8697,15 @@ fn emit_paragraph_lines(
         }
     }
     let mut line_object_shifts_64: Vec<i32> = vec![0; line_objects.len()];
+    // Word's first-fit sets a picture's line by Word's rule (ADR 1016).
+    let word_line = lopts
+        .compose
+        .single_line
+        .is_some_and(|s| s.word)
+        .then(|| anchored::WordLine {
+            auto_leading: lopts.auto_leading,
+            ascent: head_font_metrics.map_or(0.8, |m| m.hhea_ascender),
+        });
     if let Some(objs) = em.inline_objects.as_ref() {
         let top_inset_64 = em.chain[em.frame_idx].inset_spacing.map_or(0, |i| {
             (i[0] * paged_text::shape::ADVANCE_PRECISION).round() as i32
@@ -8493,6 +8721,7 @@ fn emit_paragraph_lines(
                     lopts.leading_override.is_none(),
                     line_leading_64(&line.glyphs),
                     first,
+                    word_line,
                 );
                 line_object_shifts_64[k] = d;
                 shift_64 += d;
@@ -8667,6 +8896,7 @@ fn emit_paragraph_lines(
                     lopts.leading_override.is_none(),
                     line_h,
                     Some((new_baseline, top_64)),
+                    word_line,
                 );
             }
             // …and on the continuation frame's grid.
@@ -9084,6 +9314,22 @@ fn emit_paragraph_lines(
         // origin as `emit_glyph_slice`). Glyph font_ids mix the wght
         // bits in (`fnv ^ wght`); map back to the plain byte-hash key
         // `FontTable::metrics_for` uses.
+        // Engine ADR 1018 — a run's highlight, behind its glyphs.
+        if decor_picker.any_highlight() {
+            super::decorations::emit_highlight_for_line(
+                &line,
+                &decor_picker,
+                &|fid| {
+                    font_ids
+                        .iter()
+                        .position(|f| *f == fid)
+                        .and_then(|i| em.font_table.metrics_for(bytes_font_ids[i]))
+                        .copied()
+                },
+                text_origin_pt,
+                &mut pages[target_page].list,
+            );
+        }
         if em.options.degraded_asset_markers {
             emit_substituted_highlight_for_line(
                 &line,
@@ -9187,6 +9433,7 @@ fn emit_paragraph_lines(
         emit_line_decorations(
             &line,
             &picker,
+            &decor_picker,
             (sx - ox, sy - oy),
             &mut pages[target_page].list,
         );
@@ -9660,12 +9907,12 @@ fn emit_paragraph_lines(
 fn story_prints_page_context(story: &paged_model::Story) -> bool {
     fn paragraphs_print(paragraphs: &[paged_model::Paragraph]) -> bool {
         paragraphs.iter().any(|p| {
-            p.runs.iter().any(|r| {
-                r.text_variable.is_some() || r.text.chars().any(paged_model::is_page_marker)
-            }) || p
-                .table
-                .as_ref()
-                .is_some_and(|t| t.cells.iter().any(|c| paragraphs_print(&c.paragraphs)))
+            p.runs
+                .iter()
+                .any(|r| r.reads_layout() || r.text.chars().any(paged_model::is_page_marker))
+                || p.table
+                    .as_ref()
+                    .is_some_and(|t| t.cells.iter().any(|c| paragraphs_print(&c.paragraphs)))
         })
     }
     paragraphs_print(&story.paragraphs)

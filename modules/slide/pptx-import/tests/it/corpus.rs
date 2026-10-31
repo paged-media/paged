@@ -129,3 +129,39 @@ fn every_corpus_deck_reads() {
         decks.len()
     );
 }
+
+/// Every timing in the corpus writes back to what it read (slide ADR
+/// 714): read again, the written timing is the same tree. How many also
+/// write back byte for byte, and how many nodes the model kept as XML, is
+/// reported.
+#[test]
+#[ignore = "corpus: pptx"]
+fn every_corpus_timing_writes_back_as_read() {
+    let Some(decks) = decks() else {
+        return;
+    };
+    let (mut timings, mut identical, mut raw) = (0usize, 0usize, 0usize);
+    for path in &decks {
+        let bytes = std::fs::read(path).unwrap();
+        let deck = pptx_import::import_pptx(&bytes).unwrap();
+        for s in &deck.slides {
+            let (Some(xml), Some(t)) = (&s.timing_xml, &s.timing) else {
+                continue;
+            };
+            timings += 1;
+            let written = t.to_xml();
+            let again = pptx_import::anim::timing_from_xml(&written)
+                .unwrap_or_else(|| panic!("{}: {} does not read back", path.display(), s.part));
+            assert_eq!(&again, t, "{}: {}", path.display(), s.part);
+            if &written == xml {
+                identical += 1;
+            }
+            t.walk(&mut |n| {
+                if matches!(n, pptx_core::anim::TimeNode::Raw { .. }) {
+                    raw += 1;
+                }
+            });
+        }
+    }
+    eprintln!("{timings} timings, {identical} byte for byte, {raw} nodes kept as XML");
+}

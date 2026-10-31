@@ -36,8 +36,10 @@
 // What bakes is listed in bake-plan.ts: text in its own face (family +
 // style per run, sized to the engine's shaped advance), fills, strokes,
 // gradients, opacity, drop shadows and images (PNG-encoded here, inline in
-// the batch). Every other kind is reported (never faked) via the plan's
-// `deferred` counts. Vertical text placement is baseline-exact when
+// the batch), and the CSS effects the engine reports beside the render
+// (ADR 415: blend modes, element opacity, drop-shadow filters, inner
+// shadows, clip groups, opacity masks). Every other kind is reported (never
+// faked) via the plan's `deferred` counts. Vertical text placement is baseline-exact when
 // `host.text.measureString` is available, else estimated. A refused batch
 // bakes nothing and says why.
 
@@ -167,7 +169,9 @@ export async function bakeWebFrameToDocument(
 
   const missing = resourceDiagnostics(engine);
   const advances = engine.takeTextAdvances?.()[0] ?? [];
-  const plan = sceneLayerToBakePlan(layer, advances);
+  // The CSS effect groups of the render (ADR 415).
+  const effects = engine.takeEffects?.()[0];
+  const plan = sceneLayerToBakePlan(layer, advances, effects);
   // The faces the text names, in the document before the runs are measured.
   const faces = await provideDocumentFaces(host, engine, textFamilies([plan]));
   const placed = await placePlan(host, plan, pageId, top, left);
@@ -222,7 +226,19 @@ async function placePlan(
   for (const b of imageBytes)
     if (b === null)
       plan.deferred["image.encode"] = (plan.deferred["image.encode"] ?? 0) + 1;
-  return { plan, pageId, top, left, metrics, imageBytes };
+  // The image masks' pixels (ADR 415); a gradient mask needs none.
+  const maskBytes = await Promise.all(
+    (plan.masks ?? []).map(async (m) => {
+      if (m.kind !== "image") return null;
+      try {
+        return await encodePng(m.rgba, m.width, m.height);
+      } catch {
+        plan.deferred["mask.encode"] = (plan.deferred["mask.encode"] ?? 0) + 1;
+        return null;
+      }
+    }),
+  );
+  return { plan, pageId, top, left, metrics, imageBytes, maskBytes };
 }
 
 /** The swatch ids the document already holds (one read per bake). A failed
@@ -377,8 +393,10 @@ export async function bakeWebFlowToDocument(
   const flow = await bakeWebFlow(host, chain, engine, { submit: false });
   if (!flow.rendered)
     return fail(flow.diagnostics[0]?.message ?? t(M.noLayers));
-  // The shaped advance of every text item, one list per frame.
+  // The shaped advance of every text item, and the CSS effect groups (ADR
+  // 415), one entry per frame.
   const advances = engine.takeTextAdvances?.() ?? [];
+  const effects = engine.takeEffects?.() ?? [];
 
   // Each frame's page origin, chain order.
   const geos = await host.document.elementGeometry(chain);
@@ -394,7 +412,7 @@ export async function bakeWebFlowToDocument(
     const layer = flow.layers[i];
     const geo = geos[i];
     if (!layer || !geo?.bounds || !geo.pageId) continue;
-    const plan = sceneLayerToBakePlan(layer, advances[i] ?? []);
+    const plan = sceneLayerToBakePlan(layer, advances[i] ?? [], effects[i]);
     plans.push({
       plan,
       pageId: geo.pageId as PageId,

@@ -96,6 +96,8 @@ pub(crate) struct SpreadFrameSpans {
     pub ovals: Vec<Option<FrameCmdSpan>>,
     pub graphic_lines: Vec<Option<FrameCmdSpan>>,
     pub polygons: Vec<Option<FrameCmdSpan>>,
+    /// Engine ADR 1039 — indexed like `Spread::instances`.
+    pub instances: Vec<Option<FrameCmdSpan>>,
     /// Indexed like `text_frames`; one entry per page the frame reached.
     pub text_slots: Vec<Vec<TextSlot>>,
     /// Monotone walk counter, stamped into each `TextSlot`.
@@ -142,6 +144,11 @@ fn collect_member_spans(
                 for &m in &g.members {
                     collect_member_spans(m, spread, spans, out);
                 }
+            }
+        }
+        FrameRef::Instance(i) => {
+            if let Some(Some(s)) = spans.instances.get(i) {
+                out.push(*s);
             }
         }
     }

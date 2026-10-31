@@ -41,6 +41,7 @@ import {
   silentConsole,
   PSD_RGBA,
 } from "./helpers";
+import { png16 } from "./fixtures/png16";
 
 // A mock WorkerBackend whose every "worker" decodes via the REAL engine
 // wasm in-process (the worker module's logic, run on the main thread for
@@ -73,6 +74,11 @@ function makeDecodingBackend() {
                 info.width,
                 info.height,
               );
+              // A 16-bit source also hands over its samples (ADR 479).
+              const samples16 =
+                engine.imageBits(info.handle) === 16
+                  ? Uint16Array.from(engine.imageSamples16(info.handle))
+                  : undefined;
               engine.freeImage(info.handle);
               const out = new Uint8Array(rgba.length);
               out.set(rgba);
@@ -82,6 +88,7 @@ function makeDecodingBackend() {
                 width: info.width,
                 height: info.height,
                 rgba: out.buffer,
+                ...(samples16 ? { samples16: samples16.buffer } : {}),
               };
             } catch (err) {
               reply = {
@@ -141,6 +148,26 @@ describe("the paged.image decode pool (K-3 consumer)", () => {
     expect(decoded.height).toBe(1);
     expect(Array.from(decoded.rgba)).toEqual(PSD_RGBA);
 
+    pool!.dispose();
+  });
+
+  it("hands a 16-bit source over at 16 bits (image ADR 479) [image.io.depth-color-modes]", async () => {
+    const { host } = makeHost(true);
+    const pool = await createDecodePool(host);
+    const decoded = await pool!.decode(
+      png16(3, 2, [0x1234, 0x8001, 0xfffe, 0xffff]),
+    );
+    expect(decoded.samples16).toBeDefined();
+    expect(decoded.samples16!.length).toBe(3 * 2 * 4);
+    expect(Array.from(decoded.samples16!.slice(0, 4))).toEqual([
+      0x1234, 0x8001, 0xfffe, 0xffff,
+    ]);
+    // The 8-bit view rides along (the high byte).
+    expect(Array.from(decoded.rgba.slice(0, 4))).toEqual([
+      0x12, 0x80, 0xff, 0xff,
+    ]);
+    // An 8-bit source carries none.
+    expect((await pool!.decode(psdBytes())).samples16).toBeUndefined();
     pool!.dispose();
   });
 

@@ -607,7 +607,9 @@ pub fn brush_preset(name: &str, tip: BDesc) -> BDesc {
         .item(k4("Wtdg"), BValue::Bool(false))
         .item(k4("Nose"), BValue::Bool(false))
         // Two keys no published vocabulary had. They must survive.
-        .item(klong("Rpt"), BValue::Bool(true))
+        // `Rpt ` is four bytes with a trailing space in the corpus
+        // profile (`Rpt |bool`, 3,215), so it is a 4-character code.
+        .item(k4("Rpt "), BValue::Bool(true))
         .item(
             klong("brushGroup"),
             BValue::Obj(

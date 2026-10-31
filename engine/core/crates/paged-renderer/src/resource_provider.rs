@@ -230,6 +230,7 @@ pub fn assemble_resource_tiles(
             encoded: bytes::Bytes::new(),
             rgba: bytes::Bytes::from(tile.rgba.to_vec()),
             icc: None,
+            rendering: None,
         });
         list.push(DisplayCommand::Image {
             image_id: image_id_in_pool,

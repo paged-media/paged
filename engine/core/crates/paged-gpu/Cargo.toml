@@ -23,7 +23,7 @@ cpu = ["dep:vello_cpu", "dep:image", "dep:paged-raster"]
 # Placed SVGs: `usvg` parses, `vello_cpu` draws (`svg.rs`), so no build
 # links a second rasterizer for them. The renderer turns it on in every
 # build, the viewer's included.
-svg = ["dep:vello_cpu", "dep:usvg"]
+svg = ["dep:vello_cpu", "dep:usvg", "dep:paged-svg"]
 
 [dependencies]
 paged-compose = { path = "../paged-compose" }
@@ -50,6 +50,10 @@ image = { workspace = true, optional = true }
 # through the decoder the renderer's build-time decode uses.
 paged-raster = { path = "../paged-raster", optional = true }
 usvg = { version = "0.48", optional = true, default-features = false, features = ["svgz"] }
+# The one walk over a usvg tree (engine ADR 1031, plan C9), shared with the
+# placed-SVG vector lane and the SVG import. No default features: the walk
+# alone, without the import's mutation crates or usvg's text shaper.
+paged-svg = { path = "../paged-svg", optional = true, default-features = false }
 wgpu = { version = "30.0.1", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

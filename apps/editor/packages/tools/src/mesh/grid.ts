@@ -18,7 +18,7 @@
  */
 
 // The Mesh tool's maths over one grid of a gradient mesh (engine ADR
-// 1040). Pure: every edit returns a NEW grid, so a handler can preview a
+// 1048). Pure: every edit returns a NEW grid, so a handler can preview a
 // drag on a copy and commit the copy as one whole-value write.
 //
 // A patch (r, c) is the Coons patch of its four edge cubics: the top edge
@@ -144,7 +144,7 @@ export function boxGrid(box: InnerBox, color: MeshColorSpec): MeshGridSpec {
 }
 
 /** The four interior points of a Coons patch from its twelve edge points
- *  (the engine's formula, ADR 1040). */
+ *  (the engine's formula, ADR 1048). */
 export function coonsInterior(P: Net): void {
   const comb = (terms: Array<[number, Vec2]>): Vec2 => {
     let x = 0;

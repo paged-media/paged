@@ -38,6 +38,7 @@
 
 pub(crate) mod corner_path;
 pub(crate) mod drop_shadow;
+pub(crate) mod effect_stack;
 pub(crate) mod effects;
 pub(crate) mod fill_paint;
 pub(crate) mod frame;

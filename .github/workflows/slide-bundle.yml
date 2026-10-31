@@ -3,8 +3,10 @@ concurrency:
   # A newer push to a pull request cancels the older run. Main pushes share
   # one group per event type: a running main run always finishes, and a newer
   # push replaces the one still waiting, so direct pushes queue at most one.
+  # A re-dispatch on the same wip/* branch cancels its older dispatched run,
+  # running or not: only a work branch's newest commit needs checking.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/wip/')) }}
 
 # MONOREPO (step A3): ported from paged-media/plugin-slide
 # .github/workflows/bundle.yml; runs in modules/slide.
@@ -32,6 +34,9 @@ on:
       - "platform/shared/ooxml/**"
       # The shared DrawingML chart reader, a path dependency (slide ADR 709).
       - "platform/shared/dml-chart/**"
+      # The shared DrawingML geometry, a path dependency (slide ADR 717).
+      - "platform/shared/dml-geom/**"
+      - "platform/shared/dml-native/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -75,6 +80,9 @@ on:
       - "platform/shared/ooxml/**"
       # The shared DrawingML chart reader, a path dependency (slide ADR 709).
       - "platform/shared/dml-chart/**"
+      # The shared DrawingML geometry, a path dependency (slide ADR 717).
+      - "platform/shared/dml-geom/**"
+      - "platform/shared/dml-native/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"

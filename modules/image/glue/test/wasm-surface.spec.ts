@@ -31,6 +31,30 @@ const WASM_DTS = fileURLToPath(
   new URL("../../manifest/wasm/image_js.d.ts", import.meta.url),
 );
 const ENGINE_TS = fileURLToPath(new URL("../src/engine.ts", import.meta.url));
+const MASKING_TS = fileURLToPath(
+  new URL("../src/masking-engine.ts", import.meta.url),
+);
+const MODE_TS = fileURLToPath(
+  new URL("../src/mode-engine.ts", import.meta.url),
+);
+const RETOUCH_TS = fileURLToPath(
+  new URL("../src/retouch-engine.ts", import.meta.url),
+);
+const FILTERS_TS = fileURLToPath(
+  new URL("../src/engine-filters.ts", import.meta.url),
+);
+const VECTOR_TS = fileURLToPath(
+  new URL("../src/vector-engine.ts", import.meta.url),
+);
+const WORKSPACE_TS = fileURLToPath(
+  new URL("../src/workspace-engine.ts", import.meta.url),
+);
+const SMART_TS = fileURLToPath(
+  new URL("../src/smart-engine.ts", import.meta.url),
+);
+const WARP_TS = fileURLToPath(
+  new URL("../src/warp-engine.ts", import.meta.url),
+);
 
 /**
  * wasm-bindgen's `--target web` glue also exports its init machinery,
@@ -63,14 +87,34 @@ const UNMODELLED_ON_PURPOSE = new Map([
   ],
 ]);
 
-function declaredInTs(): string[] {
-  const src = readFileSync(ENGINE_TS, "utf8");
-  const block = /export interface ImageWasmModule \{(.*?)\n\}/s.exec(src);
-  if (!block)
-    throw new Error("ImageWasmModule interface not found in engine.ts");
+function declaredIn(file: string, name: string): string[] {
+  const src = readFileSync(file, "utf8");
+  const block = new RegExp(
+    `export interface ${name}(?:\\s+extends\\s+[A-Za-z<>,\\s]+?)?\\s*\\{(.*?)\\n\\}`,
+    "s",
+  ).exec(src);
+  if (!block) throw new Error(`${name} interface not found in ${file}`);
   return [...block[1].matchAll(/^ {2}([a-z_][A-Za-z0-9_]*)\(/gm)].map(
     (m) => m[1],
   );
+}
+
+/** The TS model of the module: `ImageWasmModule` and the doors it
+ *  extends — selection and masking (`MaskingWasm`, ADR 470) and
+ *  retouching (`RetouchWasm`, WP5.8) and the filters (`FilterWasm`,
+ *  engine-filters.ts, WP5.2). */
+function declaredInTs(): string[] {
+  return [
+    ...declaredIn(ENGINE_TS, "ImageWasmModule"),
+    ...declaredIn(MASKING_TS, "MaskingWasm"),
+    ...declaredIn(MODE_TS, "ModeWasm"),
+    ...declaredIn(RETOUCH_TS, "RetouchWasm"),
+    ...declaredIn(FILTERS_TS, "FilterWasm"),
+    ...declaredIn(VECTOR_TS, "VectorWasm"),
+    ...declaredIn(WORKSPACE_TS, "WorkspaceWasm"),
+    ...declaredIn(SMART_TS, "SmartWasm"),
+    ...declaredIn(WARP_TS, "WarpWasm"),
+  ];
 }
 
 function exportedByWasm(): string[] {

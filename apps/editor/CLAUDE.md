@@ -72,7 +72,10 @@ in the same checkout: `moon run core:wasm-pkg`, or
 `bash engine/core/scripts/build-wasm-packages.sh --workspace`
 (wasm-bindgen-cli at the Cargo.lock version and binaryen;
 `tooling/bootstrap.sh` checks both). CI restores them with
-`.github/actions/engine-wasm`.
+`.github/actions/engine-wasm`. Locally, `moon run core:wasm-dev` builds canvas + repo
+unoptimised in a fraction of the time, and `tooling/dev/shared-wasm.sh use`
+copies a stored build of the same engine sources
+(`docs/development/rust-builds.md`, "Fast local wasm builds").
 
 - **Version convention**: the packages are versioned
   `0.<protocol>.0-dev`, with the protocol taken from

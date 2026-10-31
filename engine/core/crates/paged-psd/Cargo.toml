@@ -16,8 +16,16 @@ thiserror = { workspace = true }
 # ZIP channel inflate (compression 2/3) — M1 `rendered` decode-on-demand.
 # Pure-Rust DEFLATE; verbatim `ChannelData.bytes` stays canonical.
 miniz_oxide = "0.9"
+# The layer-style model's wire form (the image module's Layer Style
+# dialog speaks JSON). Off by default: the engine needs none of it.
+serde = { workspace = true, optional = true }
+
+[features]
+serde = ["dep:serde"]
 
 [dev-dependencies]
+# The optional Photoshop-presets lane (tests/it/presets_photoshop.rs).
+paged-test-resources.workspace = true
 # Round-trip / model tests consume the INDEPENDENT fixture builder from
 # modules/image's image-conformance? No: the engine never depends on a
 # module, and conformance dev-depends on this crate. The fixtures are built

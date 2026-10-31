@@ -49,6 +49,12 @@
 //! an opaque texel divides by one and is the identity (asserted
 //! exhaustively over f16 by the same test file).
 
+mod cpu;
+mod ink;
+mod tiled;
+pub(super) use cpu::CPU_TILE_SIDE;
+pub(super) use tiled::TILE_SIDE;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -72,9 +78,9 @@ use image_kernels::families::compose::{
 };
 use image_kernels::KernelDef;
 
-use super::{alpha_of, effective_coverage, LayerMask, LayerStack, Plate};
-use crate::fill::{f16_to_rgba8, rgba8_to_f16};
+use super::{alpha_of_px, effective_coverage, LayerMask, LayerStack, Plate};
 use crate::ingest::{AdjustParams, IngestError};
+use crate::pixels::Pixels;
 use image_core::Region;
 
 /// Device bytes of plates the cache keeps between composites. Past it a
@@ -95,25 +101,22 @@ fn same_mask(a: &Option<LayerMask>, b: &Option<LayerMask>) -> bool {
     }
 }
 
-fn opt_ptr_eq<T: ?Sized>(a: &Option<Arc<T>>, b: &Option<Arc<T>>) -> bool {
-    match (a, b) {
-        (None, None) => true,
-        (Some(a), Some(b)) => Arc::ptr_eq(a, b),
-        _ => false,
-    }
-}
-
 /// What a step's coverage is built from: the layer's own live mask and
 /// the clip base's pixels (whose alpha is the clip).
 #[derive(Clone, Default)]
 pub(super) struct CovKey {
     pub own: Option<LayerMask>,
-    pub clip: Option<Arc<[u8]>>,
+    pub clip: Option<Pixels>,
 }
 
 impl CovKey {
     fn same(&self, o: &CovKey) -> bool {
-        same_mask(&self.own, &o.own) && opt_ptr_eq(&self.clip, &o.clip)
+        same_mask(&self.own, &o.own)
+            && match (&self.clip, &o.clip) {
+                (None, None) => true,
+                (Some(a), Some(b)) => a.same(b),
+                _ => false,
+            }
     }
 
     fn is_none(&self) -> bool {
@@ -122,7 +125,7 @@ impl CovKey {
 
     /// The combined coverage, exactly as the fold has always built it.
     pub(super) fn coverage(&self, w: u32, h: u32) -> Option<Arc<SelectionCoverage>> {
-        let clip = self.clip.as_ref().map(|px| alpha_of(px));
+        let clip = self.clip.as_ref().map(alpha_of_px);
         effective_coverage(self.own.as_ref(), clip.as_deref(), w, h)
     }
 
@@ -137,8 +140,7 @@ impl CovKey {
         Some(
             SelectionMask::from_fn(w, h, |x, y| {
                 let own = self.own.as_ref().map(|m| u32::from(m.at(x, y)));
-                let c =
-                    clip.map(|px| u32::from(px[(y as usize * w as usize + x as usize) * 4 + 3]));
+                let c = clip.map(|px| u32::from(px.alpha8(y as usize * w as usize + x as usize)));
                 let v = match (own, c) {
                     (Some(a), Some(b)) => (a * b + 127) / 255,
                     (Some(a), None) => a,
@@ -164,8 +166,54 @@ pub(super) struct KnockoutStep {
     pub opacity: f32,
 }
 
+/// Where the textures a fold runs on lie on the canvas: the whole canvas
+/// (origin 0, the canvas's size), or one tile of the tiled fold (ADR 480)
+/// — `w × h` texels whose first lies at `(ox, oy)` on a `cw × ch` canvas.
+/// Everything drawn in canvas coordinates (gradients, patterns, noise)
+/// reads it, so a tile shows what the whole fold shows there.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Frame {
+    pub w: u32,
+    pub h: u32,
+    pub ox: i32,
+    pub oy: i32,
+    pub cw: u32,
+    pub ch: u32,
+}
+
+impl Frame {
+    pub fn whole(w: u32, h: u32) -> Frame {
+        Frame {
+            w,
+            h,
+            ox: 0,
+            oy: 0,
+            cw: w,
+            ch: h,
+        }
+    }
+}
+
 /// The slot the Background layer's fold state is saved under.
 pub(super) const DEEP_SLOT: u32 = u32::MAX;
+
+/// A styled layer's backdrop is saved under `STYLE_SLOT | id`.
+pub(super) const STYLE_SLOT: u32 = 0x4000_0000;
+
+/// The mask cache keeps a layer's effect-hiding mask under `id | this`.
+pub(super) const HIDE_MASK_BIT: u32 = 0x2000_0000;
+
+/// An open clipping group in the plan: the base's blend and opacity,
+/// whether its close applies the base's shape, and the steps a styled
+/// base adds just before (interior effects blended as a group) and after
+/// its close (the rest of its style).
+struct OpenClip {
+    blend: &'static KernelDef,
+    opacity: f32,
+    shape: bool,
+    before: Vec<Step>,
+    after: Vec<Step>,
+}
 
 /// What a pixel step does beyond a plain blend (the blending options).
 #[derive(Clone, PartialEq, Default)]
@@ -187,7 +235,7 @@ pub(super) enum Step {
     /// through a window of the accumulator.
     Pixel {
         layer: u32,
-        px: Arc<[u8]>,
+        px: Pixels,
         rect: Option<Region>,
         blend: &'static KernelDef,
         /// Normal blending in this gamma space (a text layer).
@@ -223,17 +271,43 @@ pub(super) enum Step {
     /// clip base in alone — normal, full strength, through its own mask —
     /// and make it opaque, so the clipped layers blend onto the base and
     /// nothing else.
-    ClipOpen {
-        layer: u32,
-        px: Arc<[u8]>,
-        cov: CovKey,
-    },
+    ClipOpen { layer: u32, px: Pixels, cov: CovKey },
     /// End it: give the group the base's alpha back and blend it onto the
     /// parked accumulator with the BASE's blend mode and opacity — which
     /// is why a clip base at 50 % fades its clipped layers too.
     ClipClose {
         blend: &'static KernelDef,
         opacity: f32,
+        /// Apply the base's alpha (a clipping group). `false` closes a
+        /// styled layer's BODY: its shape is applied later, at
+        /// `BodyClose`, after the interior effects.
+        shape: bool,
+    },
+    /// Draw one effect of a layer's STYLE onto the accumulator
+    /// (`styles`). `px` is the layer's canvas-sized pixels, `cov` the
+    /// mask that shapes the effects (none when the mask hides them).
+    /// `interior` blends the effect through the layer's shape (an
+    /// interior effect of a clipped layer, which has no body).
+    Effect {
+        layer: u32,
+        px: Pixels,
+        cov: CovKey,
+        interior: bool,
+        fx: Arc<super::styles::EffectStep>,
+    },
+    /// Start a styled layer's BODY: keep the accumulator (with the
+    /// exterior effects) to mix the body into at `BodyClose`.
+    BodyOpen,
+    /// End it: `mix(kept, accumulator, shape)` — the layer's alpha times
+    /// `cov`.
+    BodyClose { layer: u32, px: Pixels, cov: CovKey },
+    /// End a styled layer: `mix(saved backdrop, accumulator, opacity ×
+    /// cov)` — its opacity, and a mask that hides its effects.
+    StyleClose {
+        layer: u32,
+        slot: u32,
+        opacity: f32,
+        cov: CovKey,
     },
     /// Blend the group's accumulator into the parked one (`None`: the
     /// group vanished, and the parked accumulator comes back unchanged).
@@ -274,7 +348,7 @@ impl Step {
                 layer == l2
                     && rect == r2
                     && gamma == g2
-                    && Arc::ptr_eq(px, p2)
+                    && px.same(p2)
                     && std::ptr::eq(*blend, *b2)
                     && opacity.to_bits() == o2.to_bits()
                     && cov.same(c2)
@@ -324,14 +398,64 @@ impl Step {
                     px: p2,
                     cov: c2,
                 },
-            ) => layer == l2 && Arc::ptr_eq(px, p2) && cov.same(c2),
+            ) => layer == l2 && px.same(p2) && cov.same(c2),
             (
-                Step::ClipClose { blend, opacity },
+                Step::ClipClose {
+                    blend,
+                    opacity,
+                    shape,
+                },
                 Step::ClipClose {
                     blend: b2,
                     opacity: o2,
+                    shape: s2,
                 },
-            ) => std::ptr::eq(*blend, *b2) && opacity.to_bits() == o2.to_bits(),
+            ) => std::ptr::eq(*blend, *b2) && opacity.to_bits() == o2.to_bits() && shape == s2,
+            (
+                Step::Effect {
+                    layer,
+                    px,
+                    cov,
+                    interior,
+                    fx,
+                },
+                Step::Effect {
+                    layer: l2,
+                    px: p2,
+                    cov: c2,
+                    interior: i2,
+                    fx: f2,
+                },
+            ) => {
+                layer == l2
+                    && px.same(p2)
+                    && cov.same(c2)
+                    && interior == i2
+                    && (Arc::ptr_eq(fx, f2) || fx == f2)
+            }
+            (Step::BodyOpen, Step::BodyOpen) => true,
+            (
+                Step::BodyClose { layer, px, cov },
+                Step::BodyClose {
+                    layer: l2,
+                    px: p2,
+                    cov: c2,
+                },
+            ) => layer == l2 && px.same(p2) && cov.same(c2),
+            (
+                Step::StyleClose {
+                    layer,
+                    slot,
+                    opacity,
+                    cov,
+                },
+                Step::StyleClose {
+                    layer: l2,
+                    slot: s2,
+                    opacity: o2,
+                    cov: c2,
+                },
+            ) => layer == l2 && slot == s2 && opacity.to_bits() == o2.to_bits() && cov.same(c2),
             (
                 Step::Close { group, blend, cov },
                 Step::Close {
@@ -365,7 +489,13 @@ impl Step {
     fn needs_whole_refold(&self) -> bool {
         matches!(
             self,
-            Step::Direct { .. } | Step::Save { .. } | Step::Pixel { extra: Some(_), .. }
+            Step::Direct { .. }
+                | Step::Save { .. }
+                | Step::Pixel { extra: Some(_), .. }
+                | Step::Effect { .. }
+                | Step::BodyOpen
+                | Step::BodyClose { .. }
+                | Step::StyleClose { .. }
         )
     }
 }
@@ -393,21 +523,36 @@ pub(super) struct FoldCache {
     /// The device these textures live on (its address).
     device: usize,
     /// Layer id → (the pixels the plate was made from, the plate).
-    plates: HashMap<u32, (Arc<[u8]>, Resident)>,
+    plates: HashMap<u32, (Pixels, Resident)>,
     /// Layer id → (what the mask was made from, the r16float mask).
     masks: HashMap<u32, (CovKey, Resident)>,
     /// The steps before the checkpoint, and the state after them.
     checkpoint: Option<(Vec<Step>, FoldState)>,
     /// The last composite's steps and result.
-    last: Option<(Vec<Step>, Arc<[u8]>)>,
+    last: Option<(Vec<Step>, Pixels)>,
+    /// Fold in tiles of this side whatever the canvas's size (ADR 480;
+    /// `None`: only past the device's limits).
+    tile: Option<u32>,
+    /// The ink planes derived for the last ink fold (ADR 481).
+    inks: ink::InkCache,
+    /// Plates to premultiply even where they are opaque: a tile's cut of a
+    /// plate that is not (the whole fold decides on the whole plate).
+    premultiply: Vec<Pixels>,
 }
 
 impl FoldCache {
     fn bind(&mut self, ctx: &GpuContext) {
-        let id = ctx as *const GpuContext as usize;
+        self.bind_to(Some(ctx));
+    }
+
+    /// Bind to a device, or (`None`) to the CPU fold: what one folded is
+    /// never handed to the other as its own.
+    fn bind_to(&mut self, ctx: Option<&GpuContext>) {
+        let id = ctx.map_or(0, |c| c as *const GpuContext as usize);
         if self.device != id {
             *self = FoldCache {
                 device: id,
+                tile: self.tile,
                 ..FoldCache::default()
             };
         }
@@ -421,27 +566,27 @@ impl FoldCache {
         &mut self,
         batch: &mut GpuBatch<'_>,
         layer: u32,
-        px: &Arc<[u8]>,
+        px: &Pixels,
         w: u32,
         h: u32,
     ) -> Result<Resident, IngestError> {
         if let Some((cached, tex)) = self.plates.get(&layer) {
-            if Arc::ptr_eq(cached, px) {
+            if cached.same(px) {
                 return Ok(tex.clone());
             }
         }
-        // At least a canvas of RGBA8. (A 16-bit plate is longer; the
-        // fold has always read its bytes as RGBA8 and the upload takes
-        // the first canvas' worth — kept byte-equal here, and recorded
-        // as a defect of the 16-bit stack, not changed in passing.)
-        if px.len() < (w as usize) * (h as usize) * 4 {
+        // A canvas (or the bounded window) at the plate's own depth: a
+        // 16-bit layer uploads its 16-bit samples, so the fold blends
+        // what the layer holds rather than its high bytes.
+        if px.len() < (w as usize) * (h as usize) * px.bytes_per_pixel() {
             return Err(IngestError::Decode(format!(
                 "layer plate is {} bytes for {w}×{h}",
                 px.len()
             )));
         }
-        let straight = rgba8_to_f16(px);
-        let tex = if window_is_opaque(&straight) {
+        let straight = px.to_f16();
+        let forced = self.premultiply.iter().any(|p| p.same(px));
+        let tex = if window_is_opaque(&straight) && !forced {
             batch.upload(w, h, TexFormat::Rgba16Float, &straight)
         } else {
             let src = batch.upload(w, h, TexFormat::Rgba16Float, &straight);
@@ -464,7 +609,7 @@ impl FoldCache {
             .map(|(_, (_, t))| t.bytes())
             .sum();
         if held + tex.bytes() <= PLATE_CACHE_BYTES {
-            self.plates.insert(layer, (Arc::clone(px), tex.clone()));
+            self.plates.insert(layer, (px.clone(), tex.clone()));
         } else {
             self.plates.remove(&layer);
         }
@@ -503,6 +648,7 @@ impl FoldCache {
                 | Step::ClipOpen { layer, .. }
                 | Step::Direct { layer, .. } => Some(*layer),
                 Step::Close { group, .. } => Some(*group),
+                Step::StyleClose { layer, .. } => Some(*layer | HIDE_MASK_BIT),
                 _ => None,
             })
             .collect();
@@ -525,17 +671,23 @@ impl LayerStack {
         // clipped layer needs them, so a bounded layer that clips nothing
         // is never expanded.
         let mut clip_base: Option<(usize, &Plate)> = None;
-        let canvas_of = |(i, p): (usize, &Plate)| -> Arc<[u8]> {
+        let canvas_of = |(i, p): (usize, &Plate)| -> Pixels {
             match p.rect {
-                Some(_) => self.layers[i].rgba.raw_arc(),
-                None => Arc::clone(&p.px),
+                Some(_) => self.layers[i].rgba.canvas().clone(),
+                None => p.px.clone(),
             }
         };
-        // The base's (blend, opacity) while a clipping group is open.
-        let mut clip_group: Option<(&'static KernelDef, f32)> = None;
-        let close_clip = |steps: &mut Vec<Step>, g: &mut Option<(&'static KernelDef, f32)>| {
-            if let Some((blend, opacity)) = g.take() {
-                steps.push(Step::ClipClose { blend, opacity });
+        // The open clipping group's base (blend, opacity, …).
+        let mut clip_group: Option<OpenClip> = None;
+        let close_clip = |steps: &mut Vec<Step>, g: &mut Option<OpenClip>| {
+            if let Some(g) = g.take() {
+                steps.extend(g.before);
+                steps.push(Step::ClipClose {
+                    blend: g.blend,
+                    opacity: g.opacity,
+                    shape: g.shape,
+                });
+                steps.extend(g.after);
             }
         };
         // KNOCKOUT needs the fold state at its backdrops: the Background
@@ -616,7 +768,13 @@ impl LayerStack {
                     }) = steps.last()
                     {
                         if *layer == self.layers[base.0].id {
-                            clip_group = Some((*blend, *opacity));
+                            clip_group = Some(OpenClip {
+                                blend,
+                                opacity: *opacity,
+                                shape: true,
+                                before: Vec::new(),
+                                after: Vec::new(),
+                            });
                             let open_step = Step::ClipOpen {
                                 layer: *layer,
                                 px: canvas_of(base),
@@ -631,7 +789,7 @@ impl LayerStack {
             }
             let cov = CovKey {
                 own: super::multiply_coverage(
-                    layer.live_mask().cloned(),
+                    layer.live_mask(),
                     self.pass_through_mask(layer.group),
                 ),
                 // Inside a clipping group the base's alpha is applied
@@ -663,6 +821,143 @@ impl LayerStack {
                 }
                 continue;
             }
+            // A LAYER STYLE: the layer's effects around its pixels
+            // (`styles`, which documents the order).
+            let style_plan = layer
+                .ext
+                .style
+                .as_ref()
+                .map(|s| (s, super::styles::StylePlan::of(s)))
+                .filter(|(_, p)| !p.is_empty());
+            if let Some((style, plan)) = style_plan {
+                let canvas_px = canvas_of((*index, plate));
+                let opts = layer.ext.style_options;
+                let hides = opts.hides() && cov.own.is_some();
+                let shape = CovKey {
+                    own: if hides { None } else { cov.own.clone() },
+                    clip: None,
+                };
+                let needs_bounds = plan
+                    .exterior
+                    .iter()
+                    .chain(&plan.interior)
+                    .chain(&plan.interior_top)
+                    .chain(&plan.top)
+                    .any(super::styles::Fx::needs_bounds);
+                let bounds = if needs_bounds {
+                    super::styles::alpha_bounds(&canvas_px.to_rgba8(), self.width, self.height)
+                } else {
+                    Region::new(0, 0, self.width, self.height)
+                };
+                let effect = |fx: super::styles::Fx, interior: bool| Step::Effect {
+                    layer: layer.id,
+                    px: canvas_px.clone(),
+                    cov: shape.clone(),
+                    interior,
+                    fx: Arc::new(super::styles::EffectStep {
+                        pattern: self.style_pattern(&fx),
+                        fx,
+                        scale: style.scale,
+                        light: self.styles.global_light,
+                        bounds,
+                        seed: layer.id,
+                        fill,
+                        stroke_reach: super::styles::stroke_reach(style),
+                    }),
+                };
+                let slot = STYLE_SLOT | layer.id;
+                let wrap = layer.opacity < 1.0 || hides;
+                if wrap {
+                    steps.push(Step::Save { slot });
+                }
+                for fx in plan.exterior {
+                    steps.push(effect(fx, false));
+                }
+                let mut tail: Vec<Step> =
+                    plan.top.into_iter().map(|fx| effect(fx, false)).collect();
+                if wrap {
+                    tail.push(Step::StyleClose {
+                        layer: layer.id,
+                        slot,
+                        opacity: layer.opacity,
+                        cov: CovKey {
+                            own: if hides { cov.own.clone() } else { None },
+                            clip: None,
+                        },
+                    });
+                }
+                let next_clipped = self.layers.get(*index + 1).is_some_and(|n| n.clipped);
+                let neutral = super::special_fill_neutral(layer.blend).filter(|_| fill < 1.0);
+                let has_interior = !plan.interior.is_empty() || !plan.interior_top.is_empty();
+                if !layer.clipped && (has_interior || next_clipped) {
+                    // THE BODY: a clipping group of the layer made opaque,
+                    // closed without its shape, then the interior effects,
+                    // then the shape.
+                    steps.push(Step::BodyOpen);
+                    steps.push(Step::ClipOpen {
+                        layer: layer.id,
+                        px: canvas_px.clone(),
+                        cov: CovKey::default(),
+                    });
+                    let interior: Vec<Step> = plan
+                        .interior
+                        .into_iter()
+                        .map(|fx| effect(fx, false))
+                        .collect();
+                    let (before, mut after) = if opts.blend_interior {
+                        (interior, Vec::new())
+                    } else {
+                        (Vec::new(), interior)
+                    };
+                    // Inner Shadow and the inner part of a stroke stay
+                    // outside the group (Photoshop's Blend Interior Effects
+                    // covers the overlays, satin and inner glow).
+                    after.extend(plan.interior_top.into_iter().map(|fx| effect(fx, false)));
+                    after.push(Step::BodyClose {
+                        layer: layer.id,
+                        px: canvas_px.clone(),
+                        cov: shape.clone(),
+                    });
+                    after.extend(tail);
+                    clip_group = Some(OpenClip {
+                        blend: layer.blend,
+                        opacity: fill,
+                        shape: false,
+                        before,
+                        after,
+                    });
+                } else {
+                    let blend_fill = if neutral.is_some() { 1.0 } else { fill };
+                    let extra = PixelExtra {
+                        blend_if: layer.live_blend_if().map(|b| b.kernel_params()),
+                        fade: neutral.map(|n| BandFadeNeutralParams::new(n, fill)),
+                        knockout: None,
+                    };
+                    steps.push(Step::Pixel {
+                        layer: layer.id,
+                        px: canvas_px.clone(),
+                        rect: None,
+                        blend: layer.blend,
+                        gamma: layer
+                            .blend_gamma
+                            .filter(|_| std::ptr::eq(layer.blend, &COMPOSE_NORMAL)),
+                        opacity: blend_fill,
+                        cov: CovKey {
+                            own: shape.own.clone(),
+                            clip: cov.clip.clone(),
+                        },
+                        extra: (extra != PixelExtra::default()).then(|| Box::new(extra)),
+                    });
+                    for fx in plan.interior.into_iter().chain(plan.interior_top) {
+                        steps.push(effect(fx, true));
+                    }
+                    steps.extend(tail);
+                }
+                if background && *index == 0 {
+                    steps.push(Step::Save { slot: DEEP_SLOT });
+                }
+                continue;
+            }
             // THE BLENDING OPTIONS. Fill opacity multiplies the opacity,
             // except on the eight special modes, where it fades the plate
             // toward the mode's neutral colour inside the blend instead.
@@ -687,7 +982,7 @@ impl LayerStack {
             let extra = (extra != PixelExtra::default()).then(|| Box::new(extra));
             let (px, rect) = match &extra {
                 Some(_) => (canvas_of((*index, plate)), None),
-                None => (Arc::clone(&plate.px), plate.rect),
+                None => (plate.px.clone(), plate.rect),
             };
             steps.push(Step::Pixel {
                 layer: layer.id,
@@ -768,10 +1063,14 @@ impl LayerStack {
         from: usize,
         mut st: FoldState,
         checkpoint: usize,
+        frame: Frame,
     ) -> Result<(FoldState, Option<FoldState>), IngestError> {
-        let (w, h) = (self.width, self.height);
+        let (w, h) = (frame.w, frame.h);
         let mut snap = None;
         let mut folded = 0u64;
+        // Each styled layer's source alpha (and distance field), shared by
+        // its effects within this composite.
+        let mut sources: Vec<(u32, Pixels, super::styles::Source)> = Vec::new();
         for (i, step) in steps.iter().enumerate().skip(from) {
             if i == checkpoint {
                 snap = Some(st.clone());
@@ -918,14 +1217,100 @@ impl LayerStack {
                     st.clip.push(base);
                     st.acc = Some(opaque);
                 }
-                Step::ClipClose { blend, opacity } => {
+                Step::ClipClose {
+                    blend,
+                    opacity,
+                    shape,
+                } => {
                     let base = st.clip.pop().expect("a clip group is open");
                     let inner = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
                     let outer = st.parked.pop().flatten();
                     let outer = outer.unwrap_or_else(|| ctx.zeros(w, h));
-                    st.acc = Some(clip_close(
-                        batch, &base, &inner, &outer, blend, *opacity, w, h,
-                    )?);
+                    st.acc = Some(if *shape {
+                        clip_close(batch, &base, &inner, &outer, blend, *opacity, w, h)?
+                    } else {
+                        let out = batch.target(w, h);
+                        batch
+                            .dispatch(
+                                blend,
+                                &[&outer, &inner],
+                                ComposeParams::new(*opacity).as_bytes(),
+                                None,
+                                &out,
+                            )
+                            .map_err(gpu_err)?;
+                        out
+                    });
+                }
+                Step::Effect {
+                    layer,
+                    px,
+                    cov,
+                    interior,
+                    fx,
+                } => {
+                    let plate = cache.plate(batch, *layer, px, w, h)?;
+                    let mask = cache.mask(batch, *layer, cov, w, h);
+                    let src = match sources
+                        .iter_mut()
+                        .position(|(id, p, _)| *id == *layer && p.same(px))
+                    {
+                        Some(i) => i,
+                        None => {
+                            let a = super::styles::source_alpha(
+                                ctx,
+                                batch,
+                                &plate,
+                                mask.as_ref(),
+                                w,
+                                h,
+                            )?;
+                            sources.push((*layer, px.clone(), super::styles::Source::new(a)));
+                            sources.len() - 1
+                        }
+                    };
+                    let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    let drawn =
+                        super::styles::draw(ctx, batch, &acc, &mut sources[src].2, fx, frame)?;
+                    st.acc = Some(if *interior {
+                        let shape = sources[src].2.alpha.clone();
+                        take_through(batch, &acc, &drawn, &shape, w, h)?
+                    } else {
+                        drawn
+                    });
+                }
+                Step::BodyOpen => {
+                    let keep = st.acc.clone();
+                    st.parked.push(keep);
+                }
+                Step::BodyClose { layer, px, cov } => {
+                    let plate = cache.plate(batch, *layer, px, w, h)?;
+                    let mask = cache.mask(batch, *layer, cov, w, h);
+                    let shape =
+                        super::styles::source_alpha(ctx, batch, &plate, mask.as_ref(), w, h)?;
+                    let body = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    let kept = st.parked.pop().flatten().unwrap_or_else(|| ctx.zeros(w, h));
+                    st.acc = Some(take_through(batch, &kept, &body, &shape, w, h)?);
+                }
+                Step::StyleClose {
+                    layer,
+                    slot,
+                    opacity,
+                    cov,
+                } => {
+                    let backdrop = st
+                        .saved
+                        .iter()
+                        .find(|(s, _)| s == slot)
+                        .and_then(|(_, r)| r.clone())
+                        .unwrap_or_else(|| ctx.zeros(w, h));
+                    st.saved.retain(|(s, _)| s != slot);
+                    let mask = cache.mask(batch, *layer | HIDE_MASK_BIT, cov, w, h);
+                    let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    st.acc = Some(match scaled_mask(ctx, batch, mask, *opacity, w, h)? {
+                        None => acc,
+                        Some(m) => take_through(batch, &backdrop, &acc, &m, w, h)?,
+                    });
                 }
                 Step::Close { group, blend, cov } => {
                     let inner = st.acc.take();
@@ -1060,7 +1445,8 @@ impl LayerStack {
         &self,
         ctx: &GpuContext,
         plates: &[(usize, Plate)],
-    ) -> Result<Arc<[u8]>, IngestError> {
+        depth: image_core::SampleDepth,
+    ) -> Result<Pixels, IngestError> {
         let (w, h) = (self.width, self.height);
         let (steps, checkpoint) = self.plan_fold(plates);
         // Taken out for the awaits (no lock is held across a suspension
@@ -1071,8 +1457,8 @@ impl LayerStack {
 
         // Nothing changed since the last composite: its result stands.
         if let Some((last_steps, out)) = &cache.last {
-            if same_steps(last_steps, &steps) {
-                let out = Arc::clone(out);
+            if same_steps(last_steps, &steps) && out.depth() == depth {
+                let out = out.clone();
                 *self.fold.lock().expect("fold cache lock") = cache;
                 return Ok(out);
             }
@@ -1080,7 +1466,7 @@ impl LayerStack {
 
         // One plate's pixels changed inside a rectangle (a brush sample):
         // fold just that rectangle and splice it into the last result.
-        if let Some(out) = self.refold_dirty(ctx, &mut cache, &steps).await? {
+        if let Some(out) = self.refold_dirty(ctx, &mut cache, &steps, depth).await? {
             *self.fold.lock().expect("fold cache lock") = cache;
             return Ok(out);
         }
@@ -1097,7 +1483,16 @@ impl LayerStack {
 
         let mut batch = GpuBatch::new(ctx);
         let (st, snap) = self
-            .run_steps(ctx, &mut cache, &mut batch, &steps, from, state, checkpoint)
+            .run_steps(
+                ctx,
+                &mut cache,
+                &mut batch,
+                &steps,
+                from,
+                state,
+                checkpoint,
+                Frame::whole(w, h),
+            )
             .await?;
         if let Some(snap) = snap {
             cache.checkpoint = Some((steps[..checkpoint].to_vec(), snap));
@@ -1117,10 +1512,12 @@ impl LayerStack {
             .map_err(gpu_err)?;
         let ticket = batch.read(&out);
         let reads = batch.finish_async().await.map_err(gpu_err)?;
-        let rgba: Arc<[u8]> = Arc::from(f16_to_rgba8(&reads[ticket.0]).into_boxed_slice());
+        // At the document's depth: a 16-bit document keeps what the
+        // rgba16float accumulator computed instead of cutting it to bytes.
+        let rgba = Pixels::from_f16(&reads[ticket.0], depth);
 
         cache.retain(&steps);
-        cache.last = Some((steps, Arc::clone(&rgba)));
+        cache.last = Some((steps, rgba.clone()));
         *self.fold.lock().expect("fold cache lock") = cache;
         Ok(rgba)
     }
@@ -1267,12 +1664,12 @@ fn scaled_mask(
 }
 
 /// The (old, new) pixels of the one plate a brush sample changed.
-type PlatePair = (Arc<[u8]>, Arc<[u8]>);
+type PlatePair = (Pixels, Pixels);
 
-/// The bounding box of the bytes that differ between two RGBA8 canvases
-/// of width `w`, or `None` when they are identical.
-fn diff_bbox(old: &[u8], new: &[u8], w: u32) -> Option<(u32, u32, u32, u32)> {
-    let row = w as usize * 4;
+/// The bounding box of the pixels that differ between two canvases of
+/// width `w` at `bpp` bytes per pixel, or `None` when they are identical.
+fn diff_bbox(old: &[u8], new: &[u8], w: u32, bpp: usize) -> Option<(u32, u32, u32, u32)> {
+    let row = w as usize * bpp;
     let rows_old = old.chunks_exact(row);
     let mut y0 = None;
     let mut y1 = 0;
@@ -1283,7 +1680,7 @@ fn diff_bbox(old: &[u8], new: &[u8], w: u32) -> Option<(u32, u32, u32, u32)> {
         }
         y0.get_or_insert(y);
         y1 = y;
-        let first = a.iter().zip(b).position(|(p, q)| p != q).unwrap_or(0) / 4;
+        let first = a.iter().zip(b).position(|(p, q)| p != q).unwrap_or(0) / bpp;
         let last = row
             - 1
             - a.iter()
@@ -1292,7 +1689,7 @@ fn diff_bbox(old: &[u8], new: &[u8], w: u32) -> Option<(u32, u32, u32, u32)> {
                 .position(|(p, q)| p != q)
                 .unwrap_or(0);
         x0 = x0.min(first);
-        x1 = x1.max(last / 4);
+        x1 = x1.max(last / bpp);
     }
     let y0 = y0?;
     Some((
@@ -1303,15 +1700,17 @@ fn diff_bbox(old: &[u8], new: &[u8], w: u32) -> Option<(u32, u32, u32, u32)> {
     ))
 }
 
-/// Straight RGBA8 window → rgba16float bytes.
-fn window_f16(px: &[u8], w: u32, r: (u32, u32, u32, u32)) -> Vec<u8> {
+/// A canvas plate's window → rgba16float bytes, at the plate's depth.
+fn window_f16(px: &Pixels, w: u32, r: (u32, u32, u32, u32)) -> Vec<u8> {
     let (x, y, rw, rh) = r;
-    let mut win = Vec::with_capacity(rw as usize * rh as usize * 4);
+    let bpp = px.bytes_per_pixel();
+    let raw = px.raw();
+    let mut win = Vec::with_capacity(rw as usize * rh as usize * bpp);
     for row in y..y + rh {
-        let start = (row as usize * w as usize + x as usize) * 4;
-        win.extend_from_slice(&px[start..start + rw as usize * 4]);
+        let start = (row as usize * w as usize + x as usize) * bpp;
+        win.extend_from_slice(&raw[start..start + rw as usize * bpp]);
     }
-    rgba8_to_f16(&win)
+    Pixels::from_raw(Arc::from(win.into_boxed_slice()), px.depth()).to_f16()
 }
 
 /// The kernel a pixel step blends with: its own, or Normal in a gamma
@@ -1333,9 +1732,11 @@ fn pixel_params(opacity: f32, gamma: Option<f32>) -> Vec<u8> {
 
 /// A BOUNDED plate's window `r` (canvas coordinates) as rgba16float:
 /// the plate's pixels where it covers the window, transparent elsewhere.
-fn window_f16_bounded(px: &[u8], b: Region, r: (u32, u32, u32, u32)) -> Vec<u8> {
+fn window_f16_bounded(px: &Pixels, b: Region, r: (u32, u32, u32, u32)) -> Vec<u8> {
     let (x, y, rw, rh) = r;
-    let mut win = vec![0u8; rw as usize * rh as usize * 4];
+    let bpp = px.bytes_per_pixel();
+    let raw = px.raw();
+    let mut win = vec![0u8; rw as usize * rh as usize * bpp];
     let (bx, by) = (b.x as i64, b.y as i64);
     for row in 0..rh as i64 {
         let cy = y as i64 + row - by;
@@ -1347,12 +1748,12 @@ fn window_f16_bounded(px: &[u8], b: Region, r: (u32, u32, u32, u32)) -> Vec<u8> 
             if cx < 0 || cx >= i64::from(b.w) {
                 continue;
             }
-            let s = ((cy * i64::from(b.w) + cx) * 4) as usize;
-            let d = ((row * i64::from(rw) + col) * 4) as usize;
-            win[d..d + 4].copy_from_slice(&px[s..s + 4]);
+            let s = (cy * i64::from(b.w) + cx) as usize * bpp;
+            let d = (row * i64::from(rw) + col) as usize * bpp;
+            win[d..d + bpp].copy_from_slice(&raw[s..s + bpp]);
         }
     }
-    rgba8_to_f16(&win)
+    Pixels::from_raw(Arc::from(win.into_boxed_slice()), px.depth()).to_f16()
 }
 
 /// A step's r16float mask over the window — the same per-texel values
@@ -1365,7 +1766,7 @@ fn mask_window(cov: &CovKey, w: u32, r: (u32, u32, u32, u32)) -> Vec<u8> {
         let clip = cov
             .clip
             .as_ref()
-            .map(|px| u32::from(px[(cy as usize * w as usize + cx as usize) * 4 + 3]));
+            .map(|px| u32::from(px.alpha8(cy as usize * w as usize + cx as usize)));
         let v = match (own, clip) {
             (Some(a), Some(b)) => (a * b + 127) / 255,
             (Some(a), None) => a,
@@ -1391,9 +1792,10 @@ impl LayerStack {
         ctx: &GpuContext,
         cache: &mut FoldCache,
         steps: &[Step],
-    ) -> Result<Option<Arc<[u8]>>, IngestError> {
+        depth: image_core::SampleDepth,
+    ) -> Result<Option<Pixels>, IngestError> {
         let w = self.width;
-        let canvas = (w as usize) * (self.height as usize) * 4;
+        let pixels = (w as usize) * (self.height as usize);
         let Some((last_steps, _)) = &cache.last else {
             return Ok(None);
         };
@@ -1417,16 +1819,16 @@ impl LayerStack {
         // Exactly one (old, new) plate pair may differ, at or above the
         // checkpoint; every other difference must be that same pair.
         let mut pair: Option<PlatePair> = None;
-        let mut note = |a: &Arc<[u8]>, b: &Arc<[u8]>| -> bool {
-            if Arc::ptr_eq(a, b) {
+        let mut note = |a: &Pixels, b: &Pixels| -> bool {
+            if a.same(b) {
                 return true;
             }
             match &pair {
                 None => {
-                    pair = Some((Arc::clone(a), Arc::clone(b)));
+                    pair = Some((a.clone(), b.clone()));
                     true
                 }
-                Some((o, n)) => Arc::ptr_eq(o, a) && Arc::ptr_eq(n, b),
+                Some((o, n)) => o.same(a) && n.same(b),
             }
         };
         for (old, new) in last_steps.iter().zip(steps) {
@@ -1481,22 +1883,24 @@ impl LayerStack {
         // from the checkpoint on may be an adjustment (not point-wise).
         let first_change = steps
             .iter()
-            .position(|s| matches!(s, Step::Pixel { px, .. } if Arc::ptr_eq(px, &new_px)))
+            .position(|s| matches!(s, Step::Pixel { px, .. } if px.same(&new_px)))
             .unwrap_or(0);
         if first_change < prefix.len()
             || steps[prefix.len()..]
                 .iter()
                 .any(|s| matches!(s, Step::Adjust { .. }))
-            || old_px.len() != canvas
-            || new_px.len() != canvas
+            || old_px.depth() != new_px.depth()
+            || old_px.len() != pixels * old_px.bytes_per_pixel()
+            || new_px.len() != pixels * new_px.bytes_per_pixel()
+            || cache.last.as_ref().is_some_and(|(_, o)| o.depth() != depth)
         {
             return Ok(None);
         }
-        let Some(r) = diff_bbox(&old_px, &new_px, w) else {
+        let Some(r) = diff_bbox(old_px.raw(), new_px.raw(), w, new_px.bytes_per_pixel()) else {
             // Byte-identical pixels in a new allocation: same composite.
-            let out = cache.last.as_ref().map(|(_, o)| Arc::clone(o));
+            let out = cache.last.as_ref().map(|(_, o)| o.clone());
             if let Some(out) = &out {
-                cache.last = Some((steps.to_vec(), Arc::clone(out)));
+                cache.last = Some((steps.to_vec(), out.clone()));
             }
             return Ok(out);
         };
@@ -1557,6 +1961,58 @@ impl LayerStack {
                     cov,
                     extra: _,
                 } => {
+                    // A BOUNDED plate blends only inside its rectangle, as
+                    // the whole fold blends it (ADR 464): the window's
+                    // texels outside it are left as they are, never blended
+                    // with a transparent texel — that blend is the identity
+                    // only up to f16 rounding, so the refold of a dirty
+                    // window landed a level off the whole fold there.
+                    if let Some(b) = rect {
+                        let win = Region::new(rx as i32, ry as i32, rw, rh);
+                        let Some(hit) = b.intersect(win) else {
+                            continue;
+                        };
+                        let hr = (hit.x as u32, hit.y as u32, hit.w, hit.h);
+                        let (hx, hy) = (hr.0 - rx, hr.1 - ry);
+                        let bytes = window_f16_bounded(px, *b, hr);
+                        let src = batch.upload(hit.w, hit.h, TexFormat::Rgba16Float, &bytes);
+                        let plate = batch.target(hit.w, hit.h);
+                        batch
+                            .dispatch(
+                                &CAST_PREMULTIPLY,
+                                &[&src],
+                                CastPremultiplyParams::new().as_bytes(),
+                                None,
+                                &plate,
+                            )
+                            .map_err(gpu_err)?;
+                        let mask = (!cov.is_none()).then(|| {
+                            batch.upload(
+                                hit.w,
+                                hit.h,
+                                TexFormat::R16Float,
+                                &mask_window(cov, w, hr),
+                            )
+                        });
+                        let a = acc.take().unwrap_or_else(|| ctx.zeros(rw, rh));
+                        let sub = batch.target(hit.w, hit.h);
+                        batch.copy(&a, (hx, hy), &sub, (0, 0), hit.w, hit.h);
+                        let blended = batch.target(hit.w, hit.h);
+                        batch
+                            .dispatch(
+                                pixel_kernel(blend, *gamma),
+                                &[&sub, &plate],
+                                &pixel_params(*opacity, *gamma),
+                                mask.as_ref(),
+                                &blended,
+                            )
+                            .map_err(gpu_err)?;
+                        let out = batch.target(rw, rh);
+                        batch.copy(&a, (0, 0), &out, (0, 0), rw, rh);
+                        batch.copy(&blended, (0, 0), &out, (hx, hy), hit.w, hit.h);
+                        acc = Some(out);
+                        continue;
+                    }
                     // The plate's window: copied from the cached plate,
                     // or uploaded and premultiplied (premultiplying an
                     // opaque texel is exactly the identity, so this does
@@ -1566,7 +2022,7 @@ impl LayerStack {
                     let cached = cache
                         .plates
                         .get(layer)
-                        .filter(|(p, _)| rect.is_none() && Arc::ptr_eq(p, px))
+                        .filter(|(p, _)| rect.is_none() && p.same(px))
                         .map(|(_, t)| t.clone());
                     let plate = match cached {
                         Some(t) => {
@@ -1613,7 +2069,11 @@ impl LayerStack {
                 | Step::ClipOpen { .. }
                 | Step::ClipClose { .. }
                 | Step::Direct { .. }
-                | Step::Save { .. } => {
+                | Step::Save { .. }
+                | Step::Effect { .. }
+                | Step::BodyOpen
+                | Step::BodyClose { .. }
+                | Step::StyleClose { .. } => {
                     unreachable!("excluded above")
                 }
             }
@@ -1631,25 +2091,22 @@ impl LayerStack {
             .map_err(gpu_err)?;
         let ticket = batch.read(&out);
         let reads = batch.finish_async().await.map_err(gpu_err)?;
-        let win = f16_to_rgba8(&reads[ticket.0]);
+        let win = Pixels::from_f16(&reads[ticket.0], depth);
 
         // Splice into the last result — in place when nobody else holds
         // it, else once into a copy.
-        let (_, last) = cache.last.take().expect("checked above");
-        let mut last = last;
-        if Arc::get_mut(&mut last).is_none() {
-            crate::counters::whole_copy(last.len());
-            last = Arc::from(&last[..]);
-        }
+        let (_, mut last) = cache.last.take().expect("checked above");
         {
-            let dst = Arc::get_mut(&mut last).expect("unique");
-            let row = rw as usize * 4;
+            let bpp = last.bytes_per_pixel();
+            let dst = last.make_mut();
+            let src = win.raw();
+            let row = rw as usize * bpp;
             for y in 0..rh as usize {
-                let d = ((ry as usize + y) * w as usize + rx as usize) * 4;
-                dst[d..d + row].copy_from_slice(&win[y * row..(y + 1) * row]);
+                let d = ((ry as usize + y) * w as usize + rx as usize) * bpp;
+                dst[d..d + row].copy_from_slice(&src[y * row..(y + 1) * row]);
             }
         }
-        cache.last = Some((steps.to_vec(), Arc::clone(&last)));
+        cache.last = Some((steps.to_vec(), last.clone()));
         Ok(Some(last))
     }
 }

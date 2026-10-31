@@ -108,3 +108,65 @@ fn the_converter_receives_the_embedded_profile_and_every_pixel() {
     };
     assert_eq!(&rgba.data[..4], &[1, 2, 3, src[4]], "alpha passes through");
 }
+
+/// A CMYK TIFF converts with the converter's rendering: relative
+/// colorimetric with BPC (the default) is the engine's transform, and it
+/// is not the same picture without BPC or under another intent.
+#[test]
+#[allow(non_snake_case)]
+fn a_cmyk_tiff_converts_with_relative_colorimetric_and_bpc__feat__color_swatches_cms_unified() {
+    use paged_raster::{decode_rgba8_with, Intent, PagedColour, Rendering};
+    let Some(profile) = paged_color::test_profiles::read_cmyk_profile(env!("CARGO_MANIFEST_DIR"))
+    else {
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
+    };
+    let mut img = image(31, 7, ColorModel::Cmyk, Alpha::None, false, 9);
+    img.info.icc = Some(profile.clone());
+    let bytes = encode_tiff(&img, TiffEncodeOptions::default()).unwrap();
+    let Samples::U8(cmyk) = &img.data else {
+        unreachable!()
+    };
+    let with = |r: Rendering| {
+        decode_rgba8_with(&bytes, None, &PagedColour::new(r))
+            .unwrap()
+            .data
+    };
+    for rendering in [
+        Rendering::new(Intent::RelativeColorimetric, true),
+        Rendering::new(Intent::RelativeColorimetric, false),
+        Rendering::new(Intent::Perceptual, false),
+        Rendering::new(Intent::AbsoluteColorimetric, false),
+    ] {
+        let t = paged_color::cms::Transform::new(
+            paged_color::cms::Backend::preferred(),
+            paged_color::cms::ProfileRef::Icc(&profile),
+            paged_color::cms::Layout::CMYK,
+            paged_color::cms::ProfileRef::Srgb,
+            paged_color::cms::Layout::RGBA,
+            rendering,
+        )
+        .unwrap();
+        let mut want = vec![0u8; cmyk.len()];
+        t.apply_u8(cmyk, &mut want);
+        assert_eq!(with(rendering), want, "{rendering:?}");
+    }
+    let default = decode_rgba8(&bytes, None).unwrap().data;
+    assert_eq!(
+        default,
+        with(Rendering::new(Intent::RelativeColorimetric, true))
+    );
+    assert_ne!(
+        default,
+        with(Rendering::new(Intent::RelativeColorimetric, false)),
+        "BPC matters"
+    );
+    assert_ne!(
+        default,
+        with(Rendering::new(Intent::AbsoluteColorimetric, false)),
+        "intent matters"
+    );
+}

@@ -38,6 +38,7 @@ const FIXTURES: &[&str] = &[
     "motion",
     "smartart",
     "tablestyles",
+    "effects",
 ];
 
 fn fixture(name: &str) -> Vec<u8> {
@@ -62,6 +63,7 @@ fn resolved(bytes: &[u8]) -> Deck {
 /// The plan the bundle sends: every page, in order, with its state.
 fn plan_of(doc: &Document) -> ExportPlan {
     ExportPlan {
+        charts: Vec::new(),
         slides: doc
             .spreads
             .iter()
@@ -76,9 +78,12 @@ fn plan_of(doc: &Document) -> ExportPlan {
                     content_edited: false,
                     page_id: Some(id),
                     layout: st["layout"].as_str().map(str::to_string),
+                    comments: None,
+                    timing: None,
                 })
             })
             .collect(),
+        ..ExportPlan::default()
     }
 }
 
@@ -645,6 +650,46 @@ fn a_slide_made_in_the_editor_is_exported_on_its_layout() {
     }
     let ct = part_text(&out.bytes, "[Content_Types].xml");
     assert!(ct.contains(&format!("PartName=\"/{}\"", last.part)));
+
+    // A comment on the new slide (slide ADR 711) is written with it: a
+    // modern comment part on the new slide part, naming its new slide id.
+    let mut plan = plan_of(&doc);
+    plan.slides.last_mut().unwrap().comments = Some(vec![pptx_core::Comment {
+        id: "{C0C0C0C0-0000-4000-8000-0000000000AA}".into(),
+        author: "Editor".into(),
+        initials: "E".into(),
+        created: Some("2026-10-25T13:00:00.000".into()),
+        text: "On a new slide".into(),
+        x: Some(12.0),
+        y: Some(24.0),
+        ..Default::default()
+    }]);
+    let paged = paged_store::package::wrap_document(&doc, "deck", 960.0, 540.0).unwrap();
+    let out = export_with(&bytes, &plan, Some(&paged)).unwrap();
+    keep(&out.bytes, "new-slide-comment");
+    assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
+    let ir = pptx_import::import_pptx(&out.bytes).unwrap();
+    let last = ir.slides.last().unwrap();
+    assert_eq!(last.comments.len(), 1);
+    let c = &last.comments[0];
+    assert_eq!(c.text, "On a new slide");
+    assert_eq!(c.author, "Editor");
+    assert_eq!((c.x, c.y), (Some(12.0), Some(24.0)));
+    let xml = part_text(&out.bytes, &last.part);
+    assert!(xml.contains("p188:commentRel"), "{xml}");
+    let cm = paged_ooxml::opc::OpcPackage::read(&out.bytes)
+        .unwrap()
+        .file_names()
+        .find(|n| n.contains("modernComment"))
+        .map(str::to_string)
+        .unwrap();
+    assert!(
+        part_text(&out.bytes, &cm).contains(&format!(r#"sldId="{}""#, last.slide_id)),
+        "names its slide"
+    );
+    assert!(ir.slides[..ir.slides.len() - 1]
+        .iter()
+        .all(|s| s.comments.is_empty()));
 }
 
 fn geom_close(a: &[f64; 6], b: &[f64; 6]) -> bool {
@@ -884,4 +929,81 @@ fn deleting_a_shapes_outline_keeps_its_text() {
     };
     assert!(matches!(fill, slide_resolve::model::Paint::None));
     assert!(stroke.is_none());
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn shadows_glow_soft_edge_and_dashes_set_in_the_editor_read_back__feat__plugin_slide_native_effects(
+) {
+    let bytes = fixture("geometry");
+    let base = imported(&bytes);
+    let before = resolved(&bytes);
+    let key = top_keys(&base, 0)
+        .into_iter()
+        .find(|k| {
+            elements(&base, 0, k)
+                .iter()
+                .any(|r| matches!(r, FrameRef::Polygon(_)))
+        })
+        .expect("a shape with an outline");
+    let mut doc = base.clone();
+    let sp = &mut doc.spreads[0].spread;
+    let FrameRef::Polygon(i) = elements(&base, 0, &key)
+        .into_iter()
+        .find(|r| matches!(r, FrameRef::Polygon(_)))
+        .unwrap()
+    else {
+        unreachable!()
+    };
+    let p = &mut sp.polygons[i];
+    let color = p
+        .stroke_color
+        .clone()
+        .filter(|c| c != "Swatch/None")
+        .or(p.fill_color.clone())
+        .unwrap();
+    p.stroke_weight = Some(2.0);
+    p.stroke_dash = vec![6.0, 2.0];
+    p.drop_shadow = Some(paged_model::DropShadowSetting {
+        mode: "Drop".into(),
+        x_offset: 3.0,
+        y_offset: 4.0,
+        size: 2.0,
+        opacity_pct: 40.0,
+        effect_color: Some(color.clone()),
+        ..Default::default()
+    });
+    p.effects = Some(paged_model::FrameEffects {
+        outer_glow: Some(paged_model::OuterGlowParams {
+            size: Some(8.0),
+            opacity_pct: Some(60.0),
+            effect_color: Some(color),
+            ..Default::default()
+        }),
+        feather: Some(paged_model::FeatherParams {
+            width: Some(2.5),
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+    let out = export_doc(&bytes, &doc);
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    let part = before.slides[0].part.clone();
+    assert_eq!(changed_parts(&bytes, &out.bytes), vec![part]);
+    let after = resolved(&out.bytes);
+    let it = item(&after, 0, shape_id(&key));
+    let s = it.effects.outer_shadow.as_ref().expect("outer shadow");
+    assert!(
+        (s.dx - 3.0).abs() < 0.01 && (s.dy - 4.0).abs() < 0.01,
+        "{s:?}"
+    );
+    assert!((s.blur - 4.0).abs() < 0.01 && (s.alpha - 0.4).abs() < 1e-3);
+    let g = it.effects.glow.as_ref().expect("glow");
+    assert!((g.radius - 8.0).abs() < 0.01 && (g.alpha - 0.6).abs() < 1e-3);
+    assert_eq!(it.effects.soft_edge, Some(2.5));
+    let ItemKind::Shape { stroke, .. } = &it.kind else {
+        panic!("not a shape")
+    };
+    assert_eq!(stroke.as_ref().unwrap().dash.as_deref(), Some("sysDash"));
+    keep(&out.bytes, "effects-edited");
 }

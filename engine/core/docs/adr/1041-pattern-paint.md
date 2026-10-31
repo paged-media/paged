@@ -22,7 +22,7 @@ engine: a swatch was a colour or a gradient, and paged.draw's pattern feature co
 tile into artwork (copies on a lattice, RFI C-31), never a fill another object could take. ADR 1007
 named the pattern among the paints it left open.
 
-A pattern is unlike ADR 1040's mesh in one way that decides its home: it belongs to no object.
+A pattern is unlike ADR 1048's mesh in one way that decides its home: it belongs to no object.
 The same pattern fills many frames, and a stroke as readily as a fill, as a gradient does. It is
 a swatch.
 

@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.99"
 license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
-description = "The shared ECMA-376 (OOXML) foundation of paged.doc, paged.slide and paged.sheet: the OPC container with its uncompressed-size budget, the _rels graph, content types, byte-splice editing, the XML helpers, DrawingML colour arithmetic, and (feature `dom`) the ooxmlsdk typed part DOM."
+description = "The shared ECMA-376 (OOXML) foundation of paged.doc, paged.slide and paged.sheet: the OPC container with its uncompressed-size budget, the _rels graph, content types, byte-splice editing, the XML helpers, DrawingML colour, paint and effects (read, resolved to a neutral IR, written back), the units, and (feature `dom`) the ooxmlsdk typed part DOM."
 
 # A workspace of its own (as platform/shared/test-resources): this directory
 # is not inside any module's Cargo workspace. doc, slide and sheet take it as
@@ -29,6 +29,9 @@ deflate-flate2 = ["zip/deflate-flate2", "dep:flate2"]
 # The test kit (`testing`): hostile packages and a peak-allocation counter.
 # Enabled only through dev-dependencies.
 testing = []
+# serde derives on the DrawingML paint IR (paged.slide serialises its deck
+# IR, which carries it).
+serde = ["dep:serde"]
 
 [dependencies]
 # Held at 0.12 for the app's wasm budget (docs/migration/rust-majors.md).
@@ -38,6 +41,7 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 # Held at 0.41 with ooxmlsdk, which requires it (docs/migration/rust-majors.md).
 quick-xml = { version = "0.41", default-features = false }
 thiserror = "2"
+serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
 zip = { version = "9", default-features = false, features = ["deflate"] }

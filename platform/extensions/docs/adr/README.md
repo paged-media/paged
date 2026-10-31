@@ -59,9 +59,17 @@ and each one names the plugins that follow it and those that do not.
 | [336](336-document-style-reads-for-bundles.md) | Document style reads for bundles | Accepted 2026-10-23 |
 | [337](337-a-follow-up-write-joins-the-edits-undo-step.md) | A follow-up write joins the undo step of the edit that provoked it | Accepted 2026-10-23 |
 | [338](338-items-render-to-pixels.md) | Items render to pixels: a region, the named items alone, raw RGBA, a transparent ground | Accepted 2026-10-24 |
+| [339](339-handle-sets-and-the-transform-box.md) | Handle sets and a host-drawn transform box | Accepted 2026-10-24 |
+| [340](340-the-workspace-and-readout-lanes.md) | The workspace and readout lanes: an edit context's rulers, guides, grid and Info rows | Accepted 2026-10-27 |
+| [341](341-the-clipboard-carries-svg.md) | The clipboard carries SVG: `ClipboardPayload.svg`, `clipboard.svg@1` | Accepted 2026-10-28 |
+| [342](342-a-story-the-document-does-not-hold.md) | A story the document does not hold, laid out and drawn by the engine | Accepted 2026-10-27 |
 | [343](343-the-data-door.md) | The data door: one bundle serves the document's data, any bundle reads, writes and binds it | Accepted 2026-10-24 |
 | [344](344-the-actions-door.md) | The actions door: named pure steps, registered by any bundle, run and cached by any | Accepted 2026-10-24 |
+| [345](345-presentations-and-module-views.md) | Presentations and module views: a bundle's surface on the screen, a second window, in place of the canvas | Accepted 2026-10-25 |
+| [346](346-page-layers.md) | A page as layers: the background and each item alone, at one scale | Accepted 2026-10-25; amended 2026-10-28 (paragraph layers) |
+| [347](347-the-lowering-kit-translates-a-look.md) | The lowering kit translates a look, once: `nativeFxOps`, gradient swatches, the one label escape | Accepted 2026-10-29 |
 | [348](348-editing-doors.md) | The editing doors: control-bar groups, scoped keys, status items, the text selection | Accepted 2026-10-24 |
+| [349](349-review-and-structure-doors.md) | The structure doors: headers, footers and notes edited in place (C6); amendment 1: the markup margin band (C5) and `text.contentRange` | Accepted 2026-10-28, amended 2026-10-29 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

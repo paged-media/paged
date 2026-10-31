@@ -195,6 +195,11 @@ pub(super) struct FontMetrics {
     /// The top of a CJK face's em box, fraction of em above the baseline
     /// (`ideographic_em_top`); `None`: centred on half the cap height.
     pub(super) em_top: Option<f32>,
+    /// `hhea.ascender`, fraction of em: the ascent Microsoft Word sets a
+    /// line by (its single line is the hhea ascender minus descender plus
+    /// line gap, measured on 25 faces, doc ADR 029), which a picture in a
+    /// Word first-fit line rises above (`anchored::line_object_shift`).
+    pub(super) hhea_ascender: f32,
 }
 
 impl FontTable {
@@ -269,15 +274,25 @@ impl FontTable {
                 harvest(document, inner, keys);
             }
         }
+        // Engine ADR 1039 — a symbol definition's text is drawn with this
+        // table too (its display list is built against it), so its faces
+        // are in it; keyed `symbol:<id>/<story>`.
+        let symbol_stories = document.symbols.iter().flat_map(|def| {
+            def.stories
+                .iter()
+                .map(move |s| (format!("symbol:{}/{}", def.id, s.self_id), &s.story))
+        });
         document
             .stories
             .iter()
-            .map(|parsed| {
+            .map(|parsed| (parsed.self_id.clone(), &parsed.story))
+            .chain(symbol_stories)
+            .map(|(id, story)| {
                 let mut keys = std::collections::BTreeSet::new();
-                for paragraph in &parsed.story.paragraphs {
+                for paragraph in &story.paragraphs {
                     harvest(document, paragraph, &mut keys);
                 }
-                (parsed.self_id.clone(), keys)
+                (id, keys)
             })
             .collect()
     }
@@ -369,8 +384,17 @@ impl FontTable {
                     id_to_bytes,
                 );
             };
-        for parsed in &document.stories {
-            for paragraph in &parsed.story.paragraphs {
+        let symbol_stories = document
+            .symbols
+            .iter()
+            .flat_map(|def| def.stories.iter().map(|s| &s.story));
+        for story in document
+            .stories
+            .iter()
+            .map(|p| &p.story)
+            .chain(symbol_stories)
+        {
+            for paragraph in &story.paragraphs {
                 harvest_face_keys(paragraph, &mut face_keys, &mut id_to_bytes);
             }
         }
@@ -515,6 +539,7 @@ impl FontTable {
                     ascender: ov.ascender,
                     descender: 0.0,
                     em_top: None,
+                    hhea_ascender: ov.ascender,
                 });
             family_metrics.insert(
                 family.clone(),
@@ -527,6 +552,7 @@ impl FontTable {
                     descender: substitute.descender,
                     // A pinned cap height places the em box itself.
                     em_top: substitute.em_top.filter(|_| ov.cap_height.is_none()),
+                    hhea_ascender: substitute.hhea_ascender,
                 },
             );
         }
@@ -812,6 +838,7 @@ pub(super) fn parse_font_metrics(bytes: &[u8]) -> Option<FontMetrics> {
         ascender,
         descender,
         em_top: ideographic_em_top(&face),
+        hhea_ascender: f32::from(face.tables().hhea.ascender) / upem,
     })
 }
 

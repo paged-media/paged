@@ -38,7 +38,8 @@
     },
     "storage": {
       "blob": true
-    }
+    },
+    "assets": ["images"]
   },
   "contributes": {
     "panels": [

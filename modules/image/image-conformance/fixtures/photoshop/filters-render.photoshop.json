@@ -1,0 +1,115 @@
+{
+  "fixture": "filters-render",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/filters-render.jsx",
+    "script_sha256": "282b7d0b1be41887a65e868db0ee86e2f9e200dfac9f7e76e9f4679d39f8160e",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-25T06:56:57.044Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "identity",
+      "params": {},
+      "output": "filters-render/identity.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "clouds",
+      "params": {
+        "seed": 1,
+        "fg": [
+          0,
+          0,
+          0
+        ],
+        "bg": [
+          255,
+          255,
+          255
+        ],
+        "compare": "stats"
+      },
+      "output": "filters-render/clouds.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "difference-clouds",
+      "params": {
+        "seed": 1,
+        "fg": [
+          0,
+          0,
+          0
+        ],
+        "bg": [
+          255,
+          255,
+          255
+        ],
+        "compare": "stats"
+      },
+      "output": "filters-render/difference-clouds.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "fibers-16-4",
+      "params": {
+        "variance": 16,
+        "strength": 4,
+        "seed": 1,
+        "fg": [
+          0,
+          0,
+          0
+        ],
+        "bg": [
+          255,
+          255,
+          255
+        ],
+        "compare": "stats"
+      },
+      "output": "filters-render/fibers-16-4.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "lens-flare-100-zoom",
+      "params": {
+        "brightness": 100,
+        "centre": [
+          64,
+          64
+        ],
+        "lens": "50-300mm zoom"
+      },
+      "output": "filters-render/lens-flare-100-zoom.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "lens-flare-150-movie",
+      "params": {
+        "brightness": 150,
+        "centre": [
+          40,
+          50
+        ],
+        "lens": "movie prime"
+      },
+      "output": "filters-render/lens-flare-150-movie.png",
+      "profile": "none",
+      "bits": 16
+    }
+  ]
+}

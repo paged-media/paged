@@ -445,6 +445,7 @@ impl<'a> Measurer<'a> {
             height_pt: UNBOUNDED_PT,
             spread_origin: (0.0, 0.0),
             spread_transform: Transform::IDENTITY,
+            canvas_origin: (0.0, 0.0),
             list: DisplayList::new(),
             layout_generation: 0,
             numbering_generation: 0,

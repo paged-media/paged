@@ -337,8 +337,9 @@ function nextFrame(cb: () => void): void {
 class Emitter {
   private listeners = new Set<(change: SessionChange) => void>();
   /** Runs before the listeners on every emit (the session drops its read
-   *  caches there, so no listener can read a stale answer). */
-  constructor(private readonly beforeEmit?: () => void) {}
+   *  caches and renews its state view there, so no listener can read a
+   *  stale answer). */
+  constructor(private readonly beforeEmit?: (change: SessionChange) => void) {}
   on(listener: (change: SessionChange) => void): { dispose(): void } {
     this.listeners.add(listener);
     return {
@@ -348,8 +349,7 @@ class Emitter {
     };
   }
   emit(change: SessionChange = OTHER_CHANGE): void {
-    // The cell-edit buffer is not engine state: no cached read goes stale.
-    if (change.kind !== "edit") this.beforeEmit?.();
+    this.beforeEmit?.(change);
     for (const l of [...this.listeners]) l(change);
   }
   clear(): void {
@@ -1326,7 +1326,11 @@ export function createWorkbookSession(
     readCache.set(key, v);
     return v;
   }
-  const emitter = new Emitter(() => readCache.clear());
+  const emitter = new Emitter((change) => {
+    // The cell-edit buffer is not engine state: no cached read goes stale.
+    if (change.kind !== "edit") readCache.clear();
+    stateView = new Proxy(state, {});
+  });
   const state: SessionState = {
     engine: null,
     fileName: null,
@@ -1337,6 +1341,12 @@ export function createWorkbookSession(
     dataSource: null,
     findRequest: 0,
   };
+  // What `state()` hands out: a view that reads through to `state`, renewed
+  // on every change. The state is mutated in place, so the object itself
+  // never changes identity, and a memo keyed on it (the React Compiler's,
+  // in every panel) kept what it first rendered: the workbook panel went
+  // on naming the previous workbook after an import.
+  let stateView: SessionState = new Proxy(state, {});
 
   // S-15 — the live `onDidChange` subscription for the currently-linked
   // dataset (disposed + replaced on each `sourceFromDataset`, and on
@@ -3475,7 +3485,58 @@ export function createWorkbookSession(
     }
     // A link, an unlink or a resize of a chain frame changes the window.
     scheduleChainRead();
+    // A band the host inserted, a style or a reflow may leave a window
+    // frame's table taller than its box: the windows check their fit.
+    scheduleWindowFit();
   });
+
+  let windowFitTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Check every window frame's fit, after the document settles. */
+  function scheduleWindowFit(): void {
+    if (![...loweredTables.values()].some((i) => i.sizing === "window")) return;
+    if (windowFitTimer !== null) clearTimeout(windowFitTimer);
+    windowFitTimer = setTimeout(() => {
+      windowFitTimer = null;
+      void (async () => {
+        for (const [frameId, info] of [...loweredTables]) {
+          if (info.content) await fitWindow(frameId, info, info.content);
+        }
+      })();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  /** A window frame whose laid-out table oversets its story gives up one
+   *  row of its box and refreshes again, until the engine's layout fits it:
+   *  the window counts the workbook's row heights, and the engine may lay
+   *  rows out taller (other faces) or add a band the host inserted above or
+   *  below them. Bounded by the box: a window keeps at least one row. */
+  async function fitWindow(
+    frameId: string,
+    info: LoweredTableInfo,
+    shown: LoweredContent,
+  ): Promise<void> {
+    if (info.sizing !== "window" || !info.boxPt) return;
+    let overset = false;
+    try {
+      overset = (await host.document.frameChain(info.storyId)).some(
+        (l) => l.overflow,
+      );
+    } catch {
+      return;
+    }
+    if (!overset) return;
+    const rows = shown.rows;
+    if (rows.length <= 1) return;
+    const step = rows[rows.length - 1]!.heightPt;
+    const trim = (info.windowTrimPt ?? 0) + step;
+    const capacity =
+      (info.chain?.boxes ?? [info.boxPt]).reduce((a, b) => a + b.heightPt, 0) -
+      rows[0]!.heightPt;
+    if (step <= 0 || trim >= capacity) return;
+    loweredTables.set(frameId, { ...info, windowTrimPt: trim });
+    viewMoved.add(frameId);
+    scheduleRefresh();
+  }
 
   /** Give window frame `frameId` a new box; refresh when it changed. */
   function rewindow(
@@ -3494,8 +3555,9 @@ export function createWorkbookSession(
       return;
     }
     // The first resize of a placed frame starts from its fitted box, which
-    // the window measured from its range did not use: still a new box.
-    loweredTables.set(frameId, { ...info, boxPt });
+    // the window measured from its range did not use: still a new box. A
+    // new box fits afresh (`fitWindow`).
+    loweredTables.set(frameId, { ...info, boxPt, windowTrimPt: undefined });
     if (lastFrameId === frameId && lastGridWindow && !surfaceArea) {
       lastGridWindow = {
         ...lastGridWindow,
@@ -4353,6 +4415,8 @@ export function createWorkbookSession(
   function forgetPlacements(): void {
     if (refreshTimer !== null) clearTimeout(refreshTimer);
     refreshTimer = null;
+    if (windowFitTimer !== null) clearTimeout(windowFitTimer);
+    windowFitTimer = null;
     lastLoweredTable = null;
     loweredTables.clear();
     placedCharts = [];
@@ -4787,7 +4851,7 @@ export function createWorkbookSession(
   const api: WorkbookSession = {
     ...data.api,
     objectBridge: () => bridge,
-    state: () => state,
+    state: () => stateView,
     onDidChange: (l) => emitter.on(l),
 
     async import(bytes, name) {
@@ -7569,6 +7633,7 @@ export function createWorkbookSession(
       historySub.dispose();
       foreignChangeSub.dispose();
       if (chainTimer !== null) clearTimeout(chainTimer);
+      if (windowFitTimer !== null) clearTimeout(windowFitTimer);
       if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
       willSaveSub?.dispose();
       // What the placed tables show, kept for a later session (taken before

@@ -121,6 +121,16 @@ const field = <T extends Element>(selector: string) => {
   return el as T;
 };
 const stored = () => JSON.parse(localStorage.getItem(KEY) ?? "null");
+/** The dialog is up AND seeded from the document's meta (page range, the
+ *  standard it can meet): the form starts from the saved options and the
+ *  meta lands a tick later, so reading the form before it races. */
+const seeded = async () => {
+  await waitFor(() => field("[data-export-dialog]"));
+  // The page count comes from the meta: "All (2)" once it landed.
+  await waitFor(() =>
+    expect(field("[data-export-dialog]").textContent).toContain("All (2)"),
+  );
+};
 
 beforeEach(() => localStorage.clear());
 afterEach(() => {
@@ -132,11 +142,14 @@ describe("setting paged.exportPdf.options.v1", () => {
   test("default: the form opens at the defaults and nothing is written", async () => {
     covers("setting:paged.exportPdf.options.v1");
     mount(fakeClient().client);
-    await waitFor(() => field("[data-export-dialog]"));
+    await seeded();
     // No output intent: the standard the document can meet (PN-305,
-    // ADR 238).
-    expect(field<HTMLSelectElement>("select[data-export-standard]").value).toBe(
-      "pdf17",
+    // ADR 238). It is chosen when the document's meta arrives, after the
+    // dialog shows.
+    await waitFor(() =>
+      expect(
+        field<HTMLSelectElement>("select[data-export-standard]").value,
+      ).toBe("pdf17"),
     );
     expect(field<HTMLSelectElement>("select[data-export-policy]").value).toBe(
       "preserveNumbers",
@@ -147,7 +160,7 @@ describe("setting paged.exportPdf.options.v1", () => {
   test("a change is written at once and the next dialog opens with it", async () => {
     covers("setting:paged.exportPdf.options.v1");
     const first = mount(fakeClient().client);
-    await waitFor(() => field("[data-export-dialog]"));
+    await seeded();
     fireEvent.change(field("select[data-export-standard]"), {
       target: { value: "pdf17" },
     });
@@ -177,6 +190,7 @@ describe("setting paged.exportPdf.options.v1", () => {
     );
     const { client, exports } = fakeClient();
     mount(client);
+    await seeded();
     const confirm = await waitFor(() => {
       const b = field<HTMLButtonElement>("[data-export-confirm]");
       if (b.disabled) throw new Error("export not ready");
@@ -203,7 +217,7 @@ describe("setting paged.exportPdf.options.v1", () => {
       JSON.stringify({ colorPolicy: "convertToDestination" }),
     );
     mount(fakeClient().client);
-    await waitFor(() => field("[data-export-dialog]"));
+    await seeded();
     expect(field<HTMLSelectElement>("select[data-export-policy]").value).toBe(
       "convertToDestination",
     );
@@ -216,7 +230,7 @@ describe("setting paged.exportPdf.options.v1", () => {
     covers("setting:paged.exportPdf.options.v1");
     localStorage.setItem(KEY, "{broken");
     mount(fakeClient().client);
-    await waitFor(() => field("[data-export-dialog]"));
+    await seeded();
     expect(field<HTMLSelectElement>("select[data-export-standard]").value).toBe(
       "pdf17",
     );

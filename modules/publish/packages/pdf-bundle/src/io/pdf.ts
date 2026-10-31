@@ -197,7 +197,9 @@ async function tryEditableImport(
   if (!mapper) return null;
   try {
     const ir = await extractPdf(bytes, maxPages ? { maxPages } : {});
-    const paged = mapper.mapIrToPaged(ir);
+    // The page reader's vectors (publish ADR 658) where it reads the
+    // file; the IR alone (PDFium's polylines) where it does not.
+    const paged = mapper.mapPdfToPaged(bytes, ir) ?? mapper.mapIrToPaged(ir);
     if (!paged) return null;
     return { paged, pageCount: ir.pages.length };
   } catch (err) {

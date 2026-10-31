@@ -1,0 +1,6 @@
+{
+  "kind": "struct",
+  "fields": {
+    "element": { "kind": "text", "optional": true }
+  }
+}

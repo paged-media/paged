@@ -8,6 +8,7 @@
 // [image.layers.photoshop-parity]
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
+import { developDefaults } from "../src/develop";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 
 import {
@@ -359,6 +360,7 @@ describe("the verbs row", () => {
 
 /** The Rust `Adjustment::default_for(kind).values()` blocks. */
 const DEFAULT_BLOCKS: Record<string, number[]> = {
+  develop: developDefaults(),
   brightnessContrast: [0, 0],
   levels: Array.from({ length: 4 }, () => [0, 255, 1, 0, 255]).flat(),
   curves: [0, 0, 0, 0],
@@ -413,6 +415,36 @@ describe("the Properties of a typed adjustment or fill layer", () => {
       else expect(controls.length).toBeGreaterThan(0);
       cleanup();
     }
+  });
+
+  it("the Develop panel draws Basic first, switches sections and sends all 61 values", () => {
+    const { view, onAdjust } = properties({
+      adjustment: "develop",
+      values: developDefaults(),
+    });
+    const c = view.container;
+    expect(c.querySelector("[data-image-develop]")).not.toBeNull();
+    // Basic: temperature … blacks (wire 0..7).
+    expect(c.querySelector('[data-image-prop-field="0"]')).not.toBeNull();
+    expect(c.querySelector('[data-image-prop-field="13"]')).toBeNull();
+    fireEvent.change(c.querySelector("[data-image-develop-section]")!, {
+      target: { value: "2" },
+    });
+    // HSL by range: red's hue/sat/lum are 13, 14, 15.
+    expect(c.querySelector('[data-image-prop-field="13"]')).not.toBeNull();
+    expect(c.querySelector('[data-image-prop-field="16"]')).toBeNull();
+    fireEvent.change(c.querySelector("[data-image-develop-group]")!, {
+      target: { value: "1" },
+    });
+    const orangeHue = c.querySelector(
+      '[data-image-prop-field="16"] input[type="number"]',
+    )!;
+    fireEvent.change(orangeHue, { target: { value: "25" } });
+    const sent = onAdjust.mock.calls.at(-1)![0] as number[];
+    expect(sent).toHaveLength(61);
+    expect(sent[16]).toBe(25);
+    fireEvent.click(c.querySelector("[data-image-develop-reset]")!);
+    expect(onAdjust.mock.calls.at(-1)![0]).toEqual(developDefaults());
   });
 
   it("an edit sends the whole block with the one value changed", () => {

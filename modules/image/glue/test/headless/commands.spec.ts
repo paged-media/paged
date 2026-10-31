@@ -150,6 +150,29 @@ describe("panel, ingest and readouts", () => {
     k.dispose();
   });
 
+  it("exportAs: the dialog opens, and without a saver the export is staged for the exporters", async () => {
+    covers("command:media.paged.image.command.exportAs");
+    const k = await ingested();
+    await k.run(`${C}.exportAs`);
+    expect(k.session.state().dialog).toEqual({ kind: "exportAs" });
+    const r = await k.session.exportAs({
+      format: "tiff",
+      quality: 90,
+      ppi: null,
+      keepMetadata: true,
+      embedProfile: true,
+      mode: "rgb",
+      bits: 8,
+      compression: "lzw",
+      intent: "relativeColorimetric",
+    });
+    expect(Array.from(r!.bytes.slice(0, 2))).toEqual([0x49, 0x49]);
+    expect(k.session.state().saveBack?.fileName).toMatch(/\.tif$/);
+    expect(k.session.state().status).toMatch(/ready for the exporters/);
+    sentNothing(k);
+    k.dispose();
+  });
+
   it("loadBrushLibrary: the headless host wires no picker, and the command says so", async () => {
     covers("command:media.paged.image.command.loadBrushLibrary");
     const k = await ingested();
@@ -488,9 +511,36 @@ describe("GPU-only verbs decline and leave the document alone", () => {
 
   it("contentAwareFill", async () => {
     covers("command:media.paged.image.command.contentAwareFill");
-    await declines(`${C}.contentAwareFill`, /GPU-only/, (k) =>
-      k.run(`${C}.selectAll`),
+    // A CPU search: with everything selected there is nothing to fill FROM.
+    await declines(
+      `${C}.contentAwareFill`,
+      /nothing to fill|needs a selection/,
+      (k) => k.run(`${C}.selectAll`),
     );
+  });
+
+  it("contentAwareFillWorkspace opens the workspace over the selection and sends the document nothing", async () => {
+    covers("command:media.paged.image.command.contentAwareFillWorkspace");
+    const k = await ingested();
+    await k.run(`${C}.selectAll`);
+    const before = imageShape(k.session);
+    await k.run(`${C}.contentAwareFillWorkspace`);
+    expect(k.session.state().dialog?.kind).toBe("contentAwareFill");
+    expect(k.session.state().retouch.caf).not.toBeNull();
+    await k.session.cancelContentAwareFill();
+    expect(imageShape(k.session)).toEqual(before);
+    sentNothing(k);
+    k.dispose();
+  });
+
+  it("openCloneSource changes neither the image nor the document", async () => {
+    covers("command:media.paged.image.command.openCloneSource");
+    const k = await ingested();
+    const before = imageShape(k.session);
+    await k.run(`${C}.openCloneSource`);
+    expect(imageShape(k.session)).toEqual(before);
+    sentNothing(k);
+    k.dispose();
   });
 
   it("median", async () => {

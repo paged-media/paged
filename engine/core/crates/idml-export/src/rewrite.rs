@@ -833,11 +833,22 @@ fn model_geometry(
         b"Oval" => ovals
             .iter()
             .find(|o| o.self_id.as_deref() == Some(self_id))
-            .map(|o| ModelGeometry {
-                oval: true,
-                anchors: Vec::new(),
-                subpath_starts: Vec::new(),
-                bounds: o.bounds,
+            .map(|o| match paged_model::live_shape::oval_outline(o) {
+                // Engine ADR 1047 — a pie's path IS its wedge (InDesign
+                // draws an `<Oval>` by its path); the angles ride the
+                // item's label.
+                Some(anchors) => ModelGeometry {
+                    oval: false,
+                    bounds: paged_model::live_shape::anchor_box(&anchors).unwrap_or(o.bounds),
+                    anchors,
+                    subpath_starts: Vec::new(),
+                },
+                None => ModelGeometry {
+                    oval: true,
+                    anchors: Vec::new(),
+                    subpath_starts: Vec::new(),
+                    bounds: o.bounds,
+                },
             }),
         b"TextFrame" => frames.get(self_id).map(|f| ModelGeometry {
             oval: false,
@@ -1824,6 +1835,7 @@ fn write_new_box_item(
     item_transform: Option<[f32; 6]>,
     paint: &NewItemPaint<'_>,
     bounds: Bounds,
+    outline: Option<Vec<PathAnchor>>,
     spread: &Spread,
 ) -> Result<(), quick_xml::Error> {
     let mut attrs: Vec<(&str, String)> = vec![("Self", self_id.to_string())];
@@ -1833,7 +1845,10 @@ fn write_new_box_item(
     emit_start_with_attrs(writer, kind, &attrs)?;
     writer.write_event(Event::Start(BytesStart::new("Properties")))?;
     write_item_label(writer, spread, self_id)?;
-    if kind == "Oval" {
+    if let Some(outline) = outline {
+        // Engine ADR 1047 — a pie oval's wedge.
+        write_closed_path_geometry(writer, &outline)?;
+    } else if kind == "Oval" {
         write_oval_path_geometry(writer, bounds)?;
     } else {
         write_box_path_geometry(writer, bounds)?;
@@ -1944,6 +1959,7 @@ pub(crate) fn nested_ref_self_id(spread: &Spread, r: idml_import::FrameRef) -> O
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.as_deref(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.as_deref(),
         FrameRef::Group(i) => spread.groups.get(i)?.self_id.as_deref(),
+        FrameRef::Instance(i) => spread.instances.get(i)?.self_id.as_deref(),
     }
 }
 
@@ -1958,6 +1974,7 @@ fn group_item_layer<'a>(spread: &'a Spread, group: &idml_import::Group) -> Optio
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.item_layer.as_deref(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.item_layer.as_deref(),
         FrameRef::Group(i) => group_item_layer(spread, spread.groups.get(i)?),
+        FrameRef::Instance(i) => spread.instances.get(i)?.item_layer.as_deref(),
     })
 }
 
@@ -2390,6 +2407,7 @@ fn write_new_item(
                         content_target: Default::default(),
                     },
                     rect.bounds,
+                    None,
                     spread,
                 )?;
             }
@@ -2434,6 +2452,7 @@ fn write_new_item(
                         content_target: Default::default(),
                     },
                     o.bounds,
+                    paged_model::live_shape::oval_outline(o),
                     spread,
                 )?;
             }
@@ -2550,6 +2569,11 @@ fn write_new_item(
                 write_new_group(writer, spread, g, parent_accum, None)?;
             }
         }
+        // Engine ADR 1039 — IDML has no symbol: the export expands every
+        // instance into native items before it writes
+        // (`paged_mutate::expand_symbols_for_interchange`), so none
+        // reaches the writer; a stray one writes nothing.
+        FrameRef::Instance(_) => {}
     }
     Ok(())
 }
@@ -3174,6 +3198,7 @@ fn collect_group_member_ids<'a>(
                     collect_group_member_ids(spread, sub, out);
                 }
             }
+            FrameRef::Instance(_) => {}
         }
     }
 }
@@ -8486,7 +8511,8 @@ pub(crate) fn paragraph_attr_patch(
                 grid_alignment_patch(key, raw, p.grid_alignment, p.grid_align_first_line_only)
             })
             .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_ABOVE, &p.rule_above))
-            .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_BELOW, &p.rule_below)),
+            .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_BELOW, &p.rule_below))
+            .or_else(|| crate::emit::shading_border_patch(key, raw, &p.shading, &p.border)),
     }
 }
 
@@ -8579,7 +8605,7 @@ fn character_attr_patch(key: &[u8], raw: &[u8], r: &CharacterRun) -> Option<Patc
         b"StrikeThru" => Some(opt_bool_patch(r.strikethru)),
         b"Ligatures" => Some(opt_bool_patch(r.ligatures_on)),
         b"NoBreak" => Some(opt_bool_patch(r.no_break)),
-        _ => None,
+        _ => crate::emit::decoration_patch(key, raw, &r.decorations, r.underline),
     }
 }
 
@@ -8606,6 +8632,14 @@ fn character_extras(r: &CharacterRun) -> Vec<(&'static str, String)> {
     if let Some(b) = r.no_break {
         out.push(("NoBreak", b.to_string()));
     }
+    // Engine ADR 1018 — appended only where the source has none.
+    crate::emit::decoration_attrs(
+        &mut out,
+        &r.decorations,
+        r.underline,
+        r.strikethru,
+        r.point_size,
+    );
     out
 }
 
@@ -9282,6 +9316,7 @@ mod tests {
             corner_option: None,
             corners: Default::default(),
             clip: false,
+            effect_stack: Vec::new(),
         }
     }
 

@@ -219,6 +219,7 @@ fn offset_path_round_trips_or_rejects_cleanly() {
             delta: 3.0,
             join: "miter".to_string(),
             miter_limit: 4.0,
+            side: None,
             prev_anchors: None,
             prev_subpath_starts: None,
             prev_subpath_open: None,
@@ -569,6 +570,7 @@ fn offset_path_synthesizes_rect_from_bounds_for_a_primitive_rectangle() {
             delta: 6.0,
             join: "miter".to_string(),
             miter_limit: 4.0,
+            side: None,
             prev_anchors: None,
             prev_subpath_starts: None,
             prev_subpath_open: None,
@@ -1097,6 +1099,7 @@ fn top_level_ids(doc: &Document) -> Vec<String> {
                 }
                 paged_model::FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.clone(),
                 paged_model::FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+                paged_model::FrameRef::Instance(i) => spread.instances.get(i)?.self_id.clone(),
             };
             id
         })
@@ -1124,6 +1127,7 @@ fn nested_ids_of(doc: &Document, host: &str) -> Vec<String> {
                     }
                     paged_model::FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.clone(),
                     paged_model::FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+                    paged_model::FrameRef::Instance(i) => spread.instances.get(i)?.self_id.clone(),
                 })
                 .collect()
         })
@@ -1342,7 +1346,7 @@ fn paste_into_rejections_leave_the_document_untouched() {
                 .self_id
                 .clone()
                 .map(NodeId::GraphicLine),
-            paged_model::FrameRef::Group(_) => None,
+            paged_model::FrameRef::Group(_) | paged_model::FrameRef::Instance(_) => None,
         }
     };
     if let Some(grouped_node) = grouped_node {
@@ -1561,6 +1565,7 @@ fn apply_opacity_mask_consumes_the_artwork_and_one_undo_restores_the_z_slot() {
             mask: NodeId::Rectangle("c23Mask".to_string()),
             mask_type: paged_mutate::OpacityMaskMode::Alpha,
             invert: true,
+            clip: true,
         },
     )
     .expect("apply opacity mask");
@@ -1608,6 +1613,7 @@ fn release_opacity_mask_pops_the_artwork_and_undo_reapplies_the_same_mode() {
             mask: NodeId::Rectangle("c23M".to_string()),
             mask_type: paged_mutate::OpacityMaskMode::Luminosity,
             invert: false,
+            clip: true,
         },
     )
     .expect("apply");
@@ -1661,6 +1667,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
                 mask: NodeId::Rectangle("c23A".to_string()),
                 mask_type: Default::default(),
                 invert: false,
+                clip: true,
             },
         )
         .is_err());
@@ -1671,6 +1678,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
                 mask: NodeId::TextFrame(tf),
                 mask_type: Default::default(),
                 invert: false,
+                clip: true,
             },
         )
         .is_err());
@@ -1684,6 +1692,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
             mask: NodeId::Rectangle("c23A".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .is_err());
@@ -1709,6 +1718,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
             mask: NodeId::Rectangle("c23B".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .expect("first mask");
@@ -1719,6 +1729,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
             mask: NodeId::Rectangle("c23C".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .is_err());
@@ -1730,6 +1741,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
             mask: NodeId::Rectangle("c23B".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .is_err());
@@ -1750,6 +1762,7 @@ fn remove_node_refuses_to_delete_a_live_mask_or_its_target() {
             mask: NodeId::Rectangle("c23DelM".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .expect("apply");
@@ -2146,6 +2159,7 @@ fn offset_of(pts: &[(f32, f32)], delta: f32, join: &str, miter_limit: f32) -> (f
                 delta,
                 join: join.to_string(),
                 miter_limit,
+                side: None,
                 prev_anchors: None,
                 prev_subpath_starts: None,
                 prev_subpath_open: None,
@@ -2414,6 +2428,7 @@ fn offset_path_on_a_curve_is_the_parallel_curve_in_every_join() {
                         delta,
                         join: join.to_string(),
                         miter_limit: 4.0,
+                        side: None,
                         prev_anchors: None,
                         prev_subpath_starts: None,
                         prev_subpath_open: None,

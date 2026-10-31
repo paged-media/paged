@@ -161,6 +161,41 @@ fn move_page() {
 }
 
 #[test]
+fn place_page() {
+    covers!("script:paged.placePage");
+    let (mut m, first, second) = two_pages();
+    refuses(&mut m, "paged.placePage('no-such-page', [0, 0])", "false");
+    throws(&mut m, "paged.placePage(Symbol('p'))", SYMBOL_TO_STRING);
+    refuses(
+        &mut m,
+        &format!("paged.placePage({second:?}, [1])"),
+        "false",
+    );
+    refuses(
+        &mut m,
+        &format!("paged.placePage({second:?}, 'x')"),
+        "false",
+    );
+    writes(
+        &mut m,
+        &format!("paged.placePage({second:?}, [700, -40])"),
+        "true",
+    );
+    let pages = json_of(&ok(&mut m, "paged.pages()"));
+    assert_eq!(
+        pages[1]["canvasOriginPt"],
+        serde_json::json!([700.0, -40.0])
+    );
+    assert_eq!(pages[1]["canvasPlaced"], serde_json::json!(true));
+    assert_eq!(pages[0]["canvasOriginPt"], serde_json::json!([0.0, 0.0]));
+    // The order is movePage's: placing reorders nothing.
+    assert_eq!(page_ids(&mut m), vec![first, second.clone()]);
+    writes(&mut m, &format!("paged.placePage({second:?})"), "true");
+    let pages = json_of(&ok(&mut m, "paged.pages()"));
+    assert_eq!(pages[1]["canvasPlaced"], serde_json::json!(false));
+}
+
+#[test]
 fn apply_master_to_page() {
     covers!("script:paged.applyMasterToPage");
     let mut m = sample("masters");
@@ -351,4 +386,109 @@ fn set_page_metadata() {
         "true",
     );
     assert!(!snapshot(&m).to_string().contains("x-paged:role"));
+}
+
+/// The first page and a rectangle of the master it applies (the `masters`
+/// sample).
+fn first_page_and_master_rect(m: &mut CanvasModel) -> (String, String) {
+    let pid = page_id(m);
+    let master = m
+        .scene()
+        .spreads
+        .iter()
+        .flat_map(|s| s.spread.pages.iter())
+        .find(|p| p.self_id.as_deref() == Some(pid.as_str()))
+        .and_then(|p| p.applied_master.clone())
+        .expect("the first page applies a master");
+    let rect = m
+        .scene()
+        .master_spread(&master)
+        .and_then(|ms| ms.spread.rectangles.first())
+        .and_then(|r| r.self_id.clone())
+        .expect("its master has a rectangle");
+    (pid, rect)
+}
+
+#[test]
+fn set_page_overrides() {
+    covers!("script:paged.setPageOverrides");
+    let mut m = sample("masters");
+    let (pid, rect) = first_page_and_master_rect(&mut m);
+    refuses(
+        &mut m,
+        &format!("paged.setPageOverrides('no-such-page', [{rect:?}])"),
+        "false",
+    );
+    throws(
+        &mut m,
+        &format!("paged.setPageOverrides(Symbol('p'), [{rect:?}])"),
+        SYMBOL_TO_STRING,
+    );
+    writes(
+        &mut m,
+        &format!("paged.setPageOverrides({pid:?}, [{rect:?}, {rect:?}])"),
+        "true",
+    );
+    let list = m
+        .pages()
+        .into_iter()
+        .find(|p| p.self_id == pid)
+        .map(|p| p.override_list)
+        .unwrap();
+    assert_eq!(list, vec![rect], "duplicates dropped");
+}
+
+#[test]
+fn override_master_items() {
+    covers!("script:paged.overrideMasterItems");
+    let mut m = sample("masters");
+    let (pid, rect) = first_page_and_master_rect(&mut m);
+    refuses(
+        &mut m,
+        &format!("paged.overrideMasterItems({pid:?}, ['no-such-item'])"),
+        "false",
+    );
+    throws(
+        &mut m,
+        &format!("paged.overrideMasterItems(Symbol('p'), [{rect:?}])"),
+        SYMBOL_TO_STRING,
+    );
+    let before = m.scene().spreads[0].spread.rectangles.len();
+    writes(
+        &mut m,
+        &format!("paged.overrideMasterItems({pid:?}, [{rect:?}])"),
+        "true",
+    );
+    assert_eq!(m.scene().spreads[0].spread.rectangles.len(), before + 1);
+    assert!(m.scene().spreads[0].spread.pages[0]
+        .override_list
+        .contains(&rect));
+}
+
+#[test]
+fn insert_item_hyperlink() {
+    covers!("script:paged.insertItemHyperlink");
+    let mut m = sample("masters");
+    let (pid, rect) = first_page_and_master_rect(&mut m);
+    refuses(
+        &mut m,
+        "paged.insertItemHyperlink('no-such-item', 'https://paged.media')",
+        "false",
+    );
+    throws(
+        &mut m,
+        "paged.insertItemHyperlink(Symbol('i'), 'https://paged.media')",
+        SYMBOL_TO_STRING,
+    );
+    writes(
+        &mut m,
+        &format!("paged.insertItemHyperlink({rect:?}, '', {pid:?})"),
+        "true",
+    );
+    let links = m.hyperlinks();
+    let link = links
+        .iter()
+        .find(|h| h.source_item.as_deref() == Some(rect.as_str()))
+        .expect("the item is a link's source");
+    assert_eq!(link.destination_page.as_deref(), Some(pid.as_str()));
 }

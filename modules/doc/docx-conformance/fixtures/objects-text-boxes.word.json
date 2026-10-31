@@ -1,0 +1,340 @@
+{
+ "pages": [
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [],
+   "lines": [
+    {
+     "top": 23.0,
+     "left": 404.0,
+     "width": 83.0,
+     "height": 13.0,
+     "text": "TBH header box "
+    },
+    {
+     "top": 37.0,
+     "left": 72.0,
+     "width": 59.0,
+     "height": 13.0,
+     "text": "Header text "
+    },
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "T1 P0. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 86.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 100.0,
+     "left": 72.0,
+     "width": 241.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a "
+    },
+    {
+     "top": 113.0,
+     "left": 332.0,
+     "width": 112.0,
+     "height": 13.0,
+     "text": "TB1 page box line one "
+    },
+    {
+     "top": 114.0,
+     "left": 72.0,
+     "width": 218.0,
+     "height": 13.0,
+     "text": "wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 126.0,
+     "left": 332.0,
+     "width": 66.0,
+     "height": 13.0,
+     "text": "TB1 line two "
+    },
+    {
+     "top": 128.0,
+     "left": 72.0,
+     "width": 236.0,
+     "height": 13.0,
+     "text": "T1 P1. The quick brown fox jumps over the lazy "
+    },
+    {
+     "top": 128.0,
+     "left": 513.0,
+     "width": 21.0,
+     "height": 13.0,
+     "text": "dog "
+    },
+    {
+     "top": 142.0,
+     "left": 72.0,
+     "width": 241.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a "
+    },
+    {
+     "top": 155.0,
+     "left": 72.0,
+     "width": 239.0,
+     "height": 13.0,
+     "text": "wizard's job is to vex chumps quickly in fog. The "
+    },
+    {
+     "top": 155.0,
+     "left": 513.0,
+     "width": 29.0,
+     "height": 13.0,
+     "text": "quick "
+    },
+    {
+     "top": 169.0,
+     "left": 72.0,
+     "width": 240.0,
+     "height": 13.0,
+     "text": "brown fox jumps over the lazy dog while the five "
+    },
+    {
+     "top": 183.0,
+     "left": 72.0,
+     "width": 243.0,
+     "height": 13.0,
+     "text": "boxing wizards jump quickly and a wizard's job is "
+    },
+    {
+     "top": 183.0,
+     "left": 513.0,
+     "width": 12.0,
+     "height": 13.0,
+     "text": "to "
+    },
+    {
+     "top": 197.0,
+     "left": 72.0,
+     "width": 134.0,
+     "height": 13.0,
+     "text": "vex chumps quickly in fog. "
+    },
+    {
+     "top": 211.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "T1 P2. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 224.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 238.0,
+     "left": 225.0,
+     "width": 313.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is "
+    },
+    {
+     "top": 252.0,
+     "left": 225.0,
+     "width": 146.0,
+     "height": 13.0,
+     "text": "to vex chumps quickly in fog. "
+    },
+    {
+     "top": 256.0,
+     "left": 80.0,
+     "width": 92.0,
+     "height": 13.0,
+     "text": "TB2 unplaced box "
+    },
+    {
+     "top": 266.0,
+     "left": 225.0,
+     "width": 304.0,
+     "height": 13.0,
+     "text": "T1 P3. The quick brown fox jumps over the lazy dog while the "
+    },
+    {
+     "top": 280.0,
+     "left": 225.0,
+     "width": 298.0,
+     "height": 13.0,
+     "text": "five boxing wizards jump quickly and a wizard's job is to vex "
+    },
+    {
+     "top": 293.0,
+     "left": 225.0,
+     "width": 315.0,
+     "height": 13.0,
+     "text": "chumps quickly in fog. The quick brown fox jumps over the lazy "
+    },
+    {
+     "top": 307.0,
+     "left": 225.0,
+     "width": 304.0,
+     "height": 13.0,
+     "text": "dog while the five boxing wizards jump quickly and a wizard's "
+    },
+    {
+     "top": 321.0,
+     "left": 72.0,
+     "width": 176.0,
+     "height": 13.0,
+     "text": "job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 335.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "T1 P4. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 349.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 362.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 376.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "T1 P5. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 390.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 404.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 418.0,
+     "left": 72.0,
+     "width": 36.0,
+     "height": 13.0,
+     "text": "T1 end."
+    }
+   ]
+  },
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [],
+   "lines": [
+    {
+     "top": 23.0,
+     "left": 404.0,
+     "width": 83.0,
+     "height": 13.0,
+     "text": "TBH header box "
+    },
+    {
+     "top": 37.0,
+     "left": 72.0,
+     "width": 59.0,
+     "height": 13.0,
+     "text": "Header text "
+    },
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "T2 P0. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 86.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 100.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 114.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "T2 P1. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 128.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 142.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 155.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "T2 P2. The quick brown fox jumps over the lazy dog while the five boxing wizards jump quickly "
+    },
+    {
+     "top": 169.0,
+     "left": 72.0,
+     "width": 469.0,
+     "height": 13.0,
+     "text": "and a wizard's job is to vex chumps quickly in fog. The quick brown fox jumps over the lazy dog "
+    },
+    {
+     "top": 183.0,
+     "left": 72.0,
+     "width": 459.0,
+     "height": 13.0,
+     "text": "while the five boxing wizards jump quickly and a wizard's job is to vex chumps quickly in fog. "
+    },
+    {
+     "top": 221.0,
+     "left": 296.0,
+     "width": 82.0,
+     "height": 13.0,
+     "text": "TBV legacy box "
+    }
+   ]
+  }
+ ]
+}

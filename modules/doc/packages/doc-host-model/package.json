@@ -13,7 +13,8 @@
     "test": "bun test --timeout 30000 --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
-    "@paged-media/plugin-api": "workspace:*"
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

@@ -34,9 +34,13 @@ import {
   createEditContextRegistry,
   createExporterRegistry,
   createFrameSurfaceRegistry,
+  createPresentationRegistry,
+  createViewRegistry,
+  createSubContextRegistry,
   createControlBarGroupRegistry,
   createDocumentContextStore,
   createStatusItemRegistry,
+  createMarginBandRegistry,
   createImporterRegistry,
   createKeybindingRegistry,
   createMenuRegistry,
@@ -50,9 +54,13 @@ import {
   type EditContextRegistry,
   type ExporterRegistry,
   type FrameSurfaceRegistry,
+  type PresentationRegistry,
+  type ViewRegistry,
+  type SubContextRegistry,
   type ControlBarGroupRegistry,
   type DocumentContextStore,
   type StatusItemRegistry,
+  type MarginBandRegistry,
   type ImporterRegistry,
   type KeybindingRegistry,
   type MenuRegistry,
@@ -102,9 +110,21 @@ export interface ShellRegistries {
   controlBarGroups: ControlBarGroupRegistry;
   /** Status-bar items (extensions ADR 348, editor ADR 298). */
   statusItems: StatusItemRegistry;
+  /** Markup margin bands (extensions ADR 349 amendment 1, editor ADR
+   *  300): balloons beside the pages while a bundle's context is active. */
+  marginBands: MarginBandRegistry;
   /** The document context (extensions ADR 348): the plugin content type
    *  the open document is. Dropped when a document loads. */
   documentContext: DocumentContextStore;
+  /** Presentations (extensions ADR 345, editor ADRs 304/305): a bundle's
+   *  full-screen surfaces and the host's presenter. */
+  presentations: PresentationRegistry;
+  /** Module views (extensions ADR 345, editor ADR 306): a bundle's work
+   *  surface shown in place of the canvas. */
+  views: ViewRegistry;
+  /** Sub-contexts (extensions ADR 349, editor ADR 301): a header, footer
+   *  or note edited in place on a page. */
+  subContexts: SubContextRegistry;
 }
 
 const Context = createContext<ShellRegistries | null>(null);
@@ -154,8 +174,12 @@ export function createShellRegistries(
     importers: createImporterRegistry(),
     exporters: createExporterRegistry(),
     frameSurfaces: createFrameSurfaceRegistry(),
+    presentations: createPresentationRegistry(),
+    views: createViewRegistry(),
+    subContexts: createSubContextRegistry(),
     controlBarGroups: createControlBarGroupRegistry(),
     statusItems: createStatusItemRegistry(),
+    marginBands: createMarginBandRegistry(),
     documentContext: createDocumentContextStore(),
   };
 }
@@ -207,4 +231,10 @@ export function useRegistries(): ShellRegistries {
     throw new Error("useRegistries called outside RegistriesProvider");
   }
   return ctx;
+}
+
+/** The registries, or null outside a RegistriesProvider (a controller
+ *  mounted standalone in a unit test). */
+export function useOptionalRegistries(): ShellRegistries | null {
+  return useContext(Context);
 }

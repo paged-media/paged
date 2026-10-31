@@ -22,21 +22,29 @@
 //! serve browser (memory / OPFS / ReadableStream) and native (file)
 //! builds. Codecs are inherently CPU work and remain so — "GPU-only"
 //! (spec §1) refers to kernel execution, not entropy coding.
+//!
+//! The traits stay here, frozen; the codecs themselves are the engine's
+//! (`paged-raster`, ADR 468): [`RasterSource`] and [`RasterTarget`] are
+//! thin adapters over it, and the per-format names ([`PngSource`],
+//! [`JpegTarget`], [`TiffTarget`], [`WebpTarget`], …) are those adapters
+//! fixed to one format. EXIF parsing is `paged_raster::exif`, re-exported.
 
 #![forbid(unsafe_code)]
 
 mod bytesource;
-pub mod exif;
-pub mod jpeg;
-pub mod png;
+pub mod raster;
 pub mod raw;
 mod source;
 mod target;
 
 pub use bytesource::{ByteSource, MemoryByteSource};
-pub use exif::{ColorSpaceTag, Exif, Orientation};
-pub use jpeg::{JpegSource, JpegTarget};
-pub use png::{PngSource, PngTarget};
+pub use paged_raster::exif;
+pub use paged_raster::exif::{ColorSpaceTag, Exif, Orientation};
+pub use paged_raster::{EncodeFormat, Format, Metadata, TiffCompression};
+pub use raster::{
+    JpegSource, JpegTarget, PngSource, PngTarget, RasterSource, RasterTarget, TiffSource,
+    TiffTarget, WebpSource, WebpTarget,
+};
 pub use source::{ImageSource, SourceInfo};
 pub use target::{EncodedStats, ImageTarget, TargetInfo};
 

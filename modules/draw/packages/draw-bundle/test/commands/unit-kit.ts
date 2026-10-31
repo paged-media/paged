@@ -78,6 +78,10 @@ export interface FakeElement {
   props?: Record<string, unknown>;
   /** This plugin's metadata envelope. */
   meta?: PluginMetadataEnvelope | null;
+  /** The geometry read's `itemTransform` (page space); absent = none. A
+   *  symbol instance (engine ADR 1039) has one: `bounds` is then its
+   *  definition's box. */
+  transform?: [number, number, number, number, number, number];
 }
 
 export interface UnitRig {
@@ -191,6 +195,10 @@ export function unitRig(
     zoom?: number;
     /** What `collection(name)` answers (`stories`, …). */
     collections?: Partial<Record<string, readonly unknown[]>>;
+    /** Leave `document.symbols@1` on (WP6.8): the rig's `instance`
+     *  elements and the `symbols` collection stand in for the engine's
+     *  store. Off by default — the re-emitted lane. */
+    engineSymbols?: boolean;
     /** Extra scripted replies (`requestPlanarRegions`, …). */
     reply?: (message: {
       kind: string;
@@ -514,7 +522,8 @@ export function unitRig(
             pageId: PAGE,
             spreadId: "spread-1",
             bounds: e.bounds,
-            itemTransform: null,
+            itemTransform: e.transform ?? null,
+            pageOrigin: [0, 0],
             hasImage: false,
           } as unknown as ElementGeometryItem)
         : null;
@@ -584,6 +593,14 @@ export function unitRig(
         }
       : {}),
   });
+  // The recording fake answers no engine symbol op: these specs run the
+  // re-emitted lane (draw ADR 356), as a host without the flag does.
+  if (!options.engineSymbols) {
+    const supports = host.supports.bind(host);
+    (host as { supports: (feature: string) => boolean }).supports = (
+      feature: string,
+    ) => feature !== "document.symbols@1" && supports(feature);
+  }
   // The automatic recipe update rebuilds in the background after a commit
   // (a timer, not the command's own promise), so in a rig that counts a
   // command's exact writes it is a race: off here. Its own spec runs it on

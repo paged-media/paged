@@ -184,12 +184,12 @@ describe("the panel's Channels section", () => {
     expect(render()).toContain("no threshold");
   });
 
-  it("says plainly that isolated channel VIEW is not offered", () => {
-    // A gap named in the UI beats a gap discovered by a designer looking
-    // for a feature that silently is not there.
+  it("points at where a channel is viewed on its own (WP5.5)", () => {
+    // The view is a display transform now (ADR 470): the note says where
+    // it lives and that the document is untouched.
     const text = render();
-    expect(text).toContain("Viewing one channel on its own is not offered");
-    expect(text).toContain("writing a greyscale image into the document");
+    expect(text).toContain("use the eye beside it");
+    expect(text).toContain("without changing the document");
   });
 
   it("before an ingest it asks for one, rather than showing zeros", () => {

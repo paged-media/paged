@@ -38,7 +38,9 @@
 //! `Clrs`, `Clrt`, `Lctn` on 0–4096, `Trns`, `Type`, `Angl`, `Scl `,
 //! `Rvrs`, `Ofst`) follow the specification's descriptor key list [PUB].
 
-use image_psd::descriptor::{read_versioned_descriptor, Descriptor, DescriptorValue, Key};
+use image_psd::descriptor::{
+    build, read_versioned_descriptor, versioned_descriptor_bytes, Descriptor, DescriptorValue,
+};
 use image_psd::model::{AdditionalLayerInfo, AddlBody, LayerRecord};
 use image_psd::reader::ByteReader;
 
@@ -124,7 +126,67 @@ pub fn record_ext(rec: &LayerRecord) -> LayerExt {
         },
         color,
         link: None,
+        style: style_of(rec).map(std::sync::Arc::new),
+        style_options: style_options(rec),
+        vector_mask: None,
+        source: None,
+        inks: Default::default(),
     }
+}
+
+/// The record's layer STYLE (`lmfx`, else `lfx2`), when it has one.
+pub fn style_of(rec: &LayerRecord) -> Option<image_psd::effects::LayerStyle> {
+    // The engine's reader (paged-psd), which the page items' effect
+    // mapping (paged-psd-fx, engine ADR 1044) reads the same blocks with.
+    image_psd::effects::layer_style(rec)
+}
+
+/// Blending Options ▸ Advanced Blending: `infx` (Blend Interior Effects
+/// as Group), `clbl` (Blend Clipped Layers as Group), `tsly`
+/// (Transparency Shapes Layer), `lmgm` / `vmgm` (Layer / Vector Mask
+/// Hides Effects) — each one flag byte [PUB].
+pub fn style_options(rec: &LayerRecord) -> crate::layers::StyleOptions {
+    let flag = |k: &[u8; 4], default: bool| {
+        block(rec, k)
+            .and_then(|b| b.first().copied())
+            .map_or(default, |b| b != 0)
+    };
+    crate::layers::StyleOptions {
+        blend_interior: flag(b"infx", false),
+        blend_clipped: flag(b"clbl", true),
+        transparency_shapes: flag(b"tsly", true),
+        mask_hides_effects: flag(b"lmgm", false),
+        vector_mask_hides_effects: flag(b"vmgm", false),
+    }
+}
+
+/// The blocks a layer's STYLE needs on save: the style (`lfx2`, or `lmfx`
+/// with several instances of an effect, written by `paged-psd`'s
+/// descriptor writer) and the blending options that differ from
+/// Photoshop's defaults.
+pub fn style_blocks(ext: &LayerExt) -> Vec<AdditionalLayerInfo> {
+    let mut out = Vec::new();
+    if let Some(style) = &ext.style {
+        out.push(raw_block(style.block_key(), &style.to_payload()));
+    }
+    let o = ext.style_options;
+    let d = crate::layers::StyleOptions::default();
+    for (key, on, default) in [
+        (*b"infx", o.blend_interior, d.blend_interior),
+        (*b"clbl", o.blend_clipped, d.blend_clipped),
+        (*b"tsly", o.transparency_shapes, d.transparency_shapes),
+        (*b"lmgm", o.mask_hides_effects, d.mask_hides_effects),
+        (
+            *b"vmgm",
+            o.vector_mask_hides_effects,
+            d.vector_mask_hides_effects,
+        ),
+    ] {
+        if on != default {
+            out.push(raw_block(key, &[u8::from(on), 0, 0, 0]));
+        }
+    }
+    out
 }
 
 fn protection(rec: &LayerRecord) -> u32 {
@@ -151,15 +213,42 @@ fn color_of(d: &Descriptor) -> Option<[u8; 3]> {
     Some([v, v, v])
 }
 
+/// Is the record a STROKED shape — stroke content (`vscg`), or a vector
+/// stroke (`vstk`) that is switched on or hides the fill? Its pixels
+/// carry a stroke this model does not draw, so it stays pixels.
+fn stroked(rec: &LayerRecord) -> bool {
+    if block(rec, b"vscg").is_some() {
+        return true;
+    }
+    let Some(p) = block(rec, b"vstk") else {
+        return false;
+    };
+    match read_versioned_descriptor(&mut ByteReader::new(p)) {
+        Ok((_, d)) => {
+            d.bool(b"strokeEnabled").unwrap_or(true) || !d.bool(b"fillEnabled").unwrap_or(true)
+        }
+        Err(_) => true,
+    }
+}
+
+/// A SHAPE layer's vector mask (`vmsk`, or `vsms`), parsed for a
+/// `width × height` document — the shape the fill is cut by (image ADR
+/// 476). `None` when the record has none or it cannot be drawn.
+pub fn shape_vector_mask(
+    rec: &LayerRecord,
+    width: u32,
+    height: u32,
+) -> Option<image_psd::vector_mask::VectorMask> {
+    let p = block(rec, b"vmsk").or_else(|| block(rec, b"vsms"))?;
+    image_psd::vector_mask::VectorMask::parse(p, width, height).ok()
+}
+
 /// The record's FILL content, when it is a fill layer this model renders:
-/// a solid colour or a gradient without transparency stops, on a layer
-/// that is not a shape (no vector mask or stroke content beside it).
+/// a solid colour or a gradient without transparency stops — on a plain
+/// fill layer, or on a SHAPE layer (a vector mask beside it, image ADR
+/// 476) that is not stroked.
 pub fn fill_source(rec: &LayerRecord) -> Option<FillSource> {
-    let shape = rec
-        .addl
-        .iter()
-        .any(|a| matches!(&a.key, b"vmsk" | b"vsms" | b"vscg" | b"vstk"));
-    if shape {
+    if stroked(rec) {
         return None;
     }
     if let Some(p) = block(rec, b"SoCo") {
@@ -256,124 +345,35 @@ pub fn raw_block(key: [u8; 4], data: &[u8]) -> AdditionalLayerInfo {
     }
 }
 
-/// A descriptor writer for the value kinds the fill blocks use.
-struct D(Vec<u8>);
-
-impl D {
-    fn key(&mut self, k: &[u8]) {
-        if k.len() == 4 {
-            self.0.extend_from_slice(&0u32.to_be_bytes());
-        } else {
-            self.0.extend_from_slice(&(k.len() as u32).to_be_bytes());
-        }
-        self.0.extend_from_slice(k);
-    }
-    fn unicode(&mut self, s: &str) {
-        let units: Vec<u16> = s.encode_utf16().chain(std::iter::once(0)).collect();
-        self.0
-            .extend_from_slice(&(units.len() as u32).to_be_bytes());
-        for u in units {
-            self.0.extend_from_slice(&u.to_be_bytes());
-        }
-    }
-    fn descriptor(&mut self, class_name: &str, class: &[u8], items: &[(&[u8], DescriptorValue)]) {
-        self.unicode(class_name);
-        self.key(class);
-        self.0
-            .extend_from_slice(&(items.len() as u32).to_be_bytes());
-        for (k, v) in items {
-            self.key(k);
-            self.value(v);
-        }
-    }
-    fn value(&mut self, v: &DescriptorValue) {
-        self.0.extend_from_slice(&v.ostype());
-        self.body(v);
-    }
-    fn body(&mut self, v: &DescriptorValue) {
-        match v {
-            DescriptorValue::Descriptor(d) => {
-                self.unicode(&d.class_name);
-                self.key(d.class_id.as_bytes());
-                self.0
-                    .extend_from_slice(&(d.items.len() as u32).to_be_bytes());
-                for (k, v) in &d.items {
-                    self.key(k.as_bytes());
-                    self.value(v);
-                }
-            }
-            DescriptorValue::List(items) => {
-                self.0
-                    .extend_from_slice(&(items.len() as u32).to_be_bytes());
-                for v in items {
-                    self.value(v);
-                }
-            }
-            DescriptorValue::Double(x) => self.0.extend_from_slice(&x.to_be_bytes()),
-            DescriptorValue::UnitFloat { unit, value } => {
-                self.0.extend_from_slice(unit);
-                self.0.extend_from_slice(&value.to_be_bytes());
-            }
-            DescriptorValue::Text(s) => self.unicode(s),
-            DescriptorValue::Enum { type_key, value } => {
-                self.key(type_key.as_bytes());
-                self.key(value.as_bytes());
-            }
-            DescriptorValue::Integer(i) => self.0.extend_from_slice(&i.to_be_bytes()),
-            DescriptorValue::Bool(b) => self.0.push(u8::from(*b)),
-            // Not used by the fill blocks.
-            _ => {}
-        }
-    }
-}
-
 fn obj(class: &[u8; 4], items: Vec<(&[u8], DescriptorValue)>) -> DescriptorValue {
-    DescriptorValue::Descriptor(Descriptor {
-        class_name: String::new(),
-        class_id: Key::four(class),
-        items: items.into_iter().map(|(k, v)| (key_of(k), v)).collect(),
-    })
-}
-
-fn key_of(k: &[u8]) -> Key {
-    match <[u8; 4]>::try_from(k) {
-        Ok(four) => Key::four(&four),
-        Err(_) => Key::long(&String::from_utf8_lossy(k)),
-    }
+    build::obj(class, items)
 }
 
 fn rgb_obj(c: [u8; 3]) -> DescriptorValue {
-    obj(
-        b"RGBC",
-        vec![
-            (b"Rd  ", DescriptorValue::Double(f64::from(c[0]))),
-            (b"Grn ", DescriptorValue::Double(f64::from(c[1]))),
-            (b"Bl  ", DescriptorValue::Double(f64::from(c[2]))),
-        ],
-    )
+    build::rgb(c)
 }
 
 fn en(t: &[u8; 4], v: &[u8; 4]) -> DescriptorValue {
-    DescriptorValue::Enum {
-        type_key: Key::four(t),
-        value: Key::four(v),
-    }
+    build::en(t, v)
 }
 
 fn unit(u: &[u8; 4], v: f64) -> DescriptorValue {
-    DescriptorValue::UnitFloat { unit: *u, value: v }
+    build::unit(u, v)
 }
 
 /// The fill block (`SoCo` or `GdFl`) for `src`, or `None` for a pattern
 /// (its pixels would have to go into the document's pattern block, which
 /// is not written: the layer is saved as its render).
 pub fn fill_block(src: &FillSource) -> Option<AdditionalLayerInfo> {
-    let mut d = D(16u32.to_be_bytes().to_vec());
+    // Written by paged-psd's one descriptor writer.
+    let block = |key: [u8; 4], items: Vec<(&[u8], DescriptorValue)>| {
+        raw_block(
+            key,
+            &versioned_descriptor_bytes(&build::desc(b"null", items)),
+        )
+    };
     match src {
-        FillSource::Solid { rgb } => {
-            d.descriptor("", b"null", &[(b"Clr ", rgb_obj(*rgb))]);
-            Some(raw_block(*b"SoCo", &d.0))
-        }
+        FillSource::Solid { rgb } => Some(block(*b"SoCo", vec![(b"Clr ", rgb_obj(*rgb))])),
         FillSource::Gradient(g) => {
             let colors = g
                 .stops
@@ -423,10 +423,9 @@ pub fn fill_block(src: &FillSource) -> Option<AdditionalLayerInfo> {
                 GradientKind::Reflected => b"Rflc",
                 GradientKind::Diamond => b"Dmnd",
             };
-            d.descriptor(
-                "",
-                b"null",
-                &[
+            Some(block(
+                *b"GdFl",
+                vec![
                     (b"Grad", grad),
                     (b"Type", en(b"GrdT", style)),
                     (b"Angl", unit(b"#Ang", f64::from(g.angle))),
@@ -444,8 +443,7 @@ pub fn fill_block(src: &FillSource) -> Option<AdditionalLayerInfo> {
                         ),
                     ),
                 ],
-            );
-            Some(raw_block(*b"GdFl", &d.0))
+            ))
         }
         FillSource::Pattern(_) => None,
     }
@@ -532,7 +530,9 @@ mod tests {
         });
         let rec = record(vec![fill_block(&grad).expect("GdFl")], Vec::new());
         assert_eq!(fill_source(&rec), Some(grad));
-        // A shape (vector mask beside the content) is not a fill layer.
+        // A SHAPE (a vector mask beside the content) is a fill layer cut by
+        // its path (ADR 476); its path is read by `shape_vector_mask`, which
+        // refuses one it cannot draw (here: version 0).
         let rec = record(
             vec![
                 fill_block(&FillSource::Solid { rgb: [1, 2, 3] }).expect("SoCo"),
@@ -540,7 +540,21 @@ mod tests {
             ],
             Vec::new(),
         );
-        assert_eq!(fill_source(&rec), None);
+        assert_eq!(
+            fill_source(&rec),
+            Some(FillSource::Solid { rgb: [1, 2, 3] })
+        );
+        assert!(shape_vector_mask(&rec, 4, 4).is_none());
+        // A STROKED shape stays pixels: stroke content, or a vector stroke
+        // that is switched on.
+        let stroked = record(
+            vec![
+                fill_block(&FillSource::Solid { rgb: [1, 2, 3] }).expect("SoCo"),
+                raw_block(*b"vscg", &[0; 8]),
+            ],
+            Vec::new(),
+        );
+        assert_eq!(fill_source(&stroked), None);
     }
 
     #[test]
@@ -564,6 +578,7 @@ mod tests {
             color: 5,
             blend_if: Some(Box::new(bi)),
             link: None,
+            ..LayerExt::default()
         };
         let rec = record(ext_blocks(&ext, true), blend_ranges_bytes(Some(&bi)));
         let back = record_ext(&rec);

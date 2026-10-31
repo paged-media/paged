@@ -80,6 +80,7 @@ fn document(items: &str) -> paged_scene::Document {
         text_frame_index: HashMap::new(),
         styles: paged_model::StyleSheet::default(),
         anchors: Vec::new(),
+        symbols: Vec::new(),
     }
 }
 

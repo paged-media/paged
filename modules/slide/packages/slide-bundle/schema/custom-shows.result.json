@@ -1,0 +1,27 @@
+{
+  "kind": "struct",
+  "fields": {
+    "shows": {
+      "kind": "list",
+      "of": {
+        "kind": "struct",
+        "fields": {
+          "id": {
+            "kind": "number",
+            "integer": true
+          },
+          "name": {
+            "kind": "text"
+          },
+          "slides": {
+            "kind": "list",
+            "of": {
+              "kind": "number",
+              "integer": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

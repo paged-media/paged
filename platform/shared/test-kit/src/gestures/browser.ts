@@ -88,7 +88,8 @@ export interface BrowserPage {
 export interface BrowserBackendOptions {
   /** CSS selector of the element the canvas listens on. */
   host?: string;
-  /** Gap between stacked pages, pt (the canvas's layoutPages default). */
+  /** Gap between stacked pages, pt (the canvas's layoutPages default),
+   *  used when the engine reports no page origins. */
   pageGapPt?: number;
   /** How long `settle()` and tool activation may take, ms. */
   timeoutMs?: number;
@@ -141,10 +142,15 @@ export function browserBackend(
         const handle = c.handle ?? {};
         const ids: string[] = handle.pageIds ?? [];
         const sizes: Array<[number, number]> = handle.pageSizesPt ?? [];
+        // Engine ADR 1011 — each page at its place on the canvas; without
+        // origins (an older engine) the pages stack.
+        const origins: Array<[number, number]> = handle.pageOriginsPt ?? [];
+        const placed = origins.length === ids.length;
         let y = 0;
         const pages = ids.map((id, i) => {
           const [w, h] = sizes[i] ?? [0, 0];
-          const p = { id, x: 0, y, w, h };
+          const [ox, oy] = placed ? origins[i] : [0, y];
+          const p = { id, x: ox, y: oy, w, h };
           y += h + gapPt;
           return p;
         });

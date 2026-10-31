@@ -12,11 +12,36 @@ project:
   description: "Vector drawing module: geometry, tools, image trace."
 
 # draw-rust validates the bundle manifest with the in-tree paged-plugin bin (plugin-sdk).
+# The Cargo workspace path-depends on the engine's paged-svg (draw ADR 364),
+# so it builds after the engine and an engine change runs this module's gates.
 dependsOn:
+  - id: "core"
+    scope: "production"
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
     scope: "development"
+
+# The engine crate the Cargo workspace path-depends on (paged-svg) is an
+# input too, so `moon ci` re-runs this project when it changes. (Project
+# file groups replace the workspace ones, so the defaults are restated.)
+fileGroups:
+  rust-sources:
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/paged-svg/**/*.rs"
+    - "/engine/core/crates/paged-svg/Cargo.toml"
+  rust-tests:
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/paged-svg/**/*"
 
 tasks:
   rust-lint:

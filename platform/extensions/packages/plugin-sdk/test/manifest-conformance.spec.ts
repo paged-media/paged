@@ -50,6 +50,8 @@ const nothing = (): RegisteredContributions => ({
   objectTypes: [],
   importers: [],
   exporters: [],
+  presentations: [],
+  views: [],
   objectModelKinds: [],
   objectModelCommands: [],
 });

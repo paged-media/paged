@@ -287,6 +287,7 @@ describe("SH-201 (UX audit F-28): Cut, Copy, Paste and Duplicate for page items"
     expect(editMenu()).toEqual([
       "Edit/Undo",
       "Edit/Redo",
+      "Edit/History",
       "Edit/Cut",
       "Edit/Copy",
       "Edit/Paste",

@@ -50,6 +50,7 @@ use image_kernels::families::geom::{
     WarpKind, GEOM_CROP, GEOM_FLIP_H, GEOM_FLIP_V, GEOM_ROTATE90_CCW, GEOM_ROTATE90_CW,
     GEOM_ROTATE_BILINEAR, GEOM_WARP_BACKWARD,
 };
+use image_kernels::families::geom::{WarpInterp, WarpProjectiveParams, GEOM_WARP_PROJECTIVE};
 
 /// A labeled source window: each texel encodes its own (x, y) source
 /// coordinate (x/256, y/256, (x+y)/512, 1.0) — finite, f16-exact for the
@@ -490,5 +491,264 @@ fn geom_rotate_bilinear_180_degrees_matches_the_corner_swap() {
                 want.0[ch]
             );
         }
+    }
+}
+
+// ─────────────────────── warp_projective ──────────────────────────
+//
+// The scalar twin of `geom.warp_projective`, term for term: the same
+// homogeneous divide, the same transparent-outside tap, the same fixed
+// `mix` order for bilinear and the same row-then-column Catmull-Rom sums.
+
+/// Transparent-outside tap (the module's `tap`, unmasked).
+fn tap_clear(win: &[Px], win_w: u32, win_h: u32, x: i32, y: i32) -> Px {
+    if x < 0 || y < 0 || x >= win_w as i32 || y >= win_h as i32 {
+        return Px([0.0; 4]);
+    }
+    at(win, win_w, x, y)
+}
+
+fn scale(p: Px, k: f32) -> Px {
+    Px(std::array::from_fn(|c| p.0[c] * k))
+}
+
+fn add(a: Px, b: Px) -> Px {
+    Px(std::array::from_fn(|c| a.0[c] + b.0[c]))
+}
+
+fn cr_weights(t: f32) -> [f32; 4] {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    [
+        -0.5 * t3 + t2 - 0.5 * t,
+        1.5 * t3 - 2.5 * t2 + 1.0,
+        -1.5 * t3 + 2.0 * t2 + 0.5 * t,
+        0.5 * t3 - 0.5 * t2,
+    ]
+}
+
+fn warp_projective_ref(
+    win: &[Px],
+    win_w: u32,
+    win_h: u32,
+    ox: u32,
+    oy: u32,
+    p: &WarpProjectiveParams,
+) -> Px {
+    let px = ox as f32 + 0.5;
+    let py = oy as f32 + 0.5;
+    let hw = p.h6 * px + p.h7 * py + p.h8;
+    if hw <= 0.0 {
+        return Px([0.0; 4]);
+    }
+    let sx = (p.h0 * px + p.h1 * py + p.h2) / hw - 0.5;
+    let sy = (p.h3 * px + p.h4 * py + p.h5) / hw - 0.5;
+    let x0 = sx.floor();
+    let y0 = sy.floor();
+    let fx = sx - x0;
+    let fy = sy - y0;
+    let (ix, iy) = (x0 as i32, y0 as i32);
+    let t = |x: i32, y: i32| tap_clear(win, win_w, win_h, x, y);
+    if p.interp == 1 {
+        let wx = cr_weights(fx);
+        let wy = cr_weights(fy);
+        let row = |dy: i32| {
+            let y = iy + dy;
+            let mut s = scale(t(ix - 1, y), wx[0]);
+            s = add(s, scale(t(ix, y), wx[1]));
+            s = add(s, scale(t(ix + 1, y), wx[2]));
+            add(s, scale(t(ix + 2, y), wx[3]))
+        };
+        let mut acc = scale(row(-1), wy[0]);
+        acc = add(acc, scale(row(0), wy[1]));
+        acc = add(acc, scale(row(1), wy[2]));
+        acc = add(acc, scale(row(2), wy[3]));
+        let a = acc.0[3].clamp(0.0, 1.0);
+        return Px([
+            acc.0[0].clamp(0.0, a),
+            acc.0[1].clamp(0.0, a),
+            acc.0[2].clamp(0.0, a),
+            a,
+        ]);
+    }
+    let p00 = t(ix, iy);
+    let p10 = t(ix + 1, iy);
+    let p01 = t(ix, iy + 1);
+    let p11 = t(ix + 1, iy + 1);
+    lerp(lerp(p00, p10, fx), lerp(p01, p11, fx), fy)
+}
+
+/// The forward map of a perspective quad: the unit square of a `w`×`h`
+/// image onto a trapezoid narrower at the top.
+fn perspective_forward(w: f64, h: f64) -> [f64; 9] {
+    // Corners (0,0)→(0.2w,0), (w,0)→(0.8w,0), (w,h)→(w,h), (0,h)→(0,h):
+    // solved once by hand from the four correspondences (the SDK solves
+    // the same system in general; here it pins the kernel, not the solve).
+    homography_unit_to(w, h, [(0.2 * w, 0.0), (0.8 * w, 0.0), (w, h), (0.0, h)])
+}
+
+/// The homography from the `w`×`h` image rectangle onto four corners
+/// (NW, NE, SE, SW) — Heckbert's square-to-quad closed form composed with
+/// the rectangle's scale.
+fn homography_unit_to(w: f64, h: f64, q: [(f64, f64); 4]) -> [f64; 9] {
+    let [(x0, y0), (x1, y1), (x2, y2), (x3, y3)] = q;
+    let dx1 = x1 - x2;
+    let dx2 = x3 - x2;
+    let dy1 = y1 - y2;
+    let dy2 = y3 - y2;
+    let sx = x0 - x1 + x2 - x3;
+    let sy = y0 - y1 + y2 - y3;
+    let den = dx1 * dy2 - dx2 * dy1;
+    let g = (sx * dy2 - dx2 * sy) / den;
+    let hh = (dx1 * sy - sx * dy1) / den;
+    let a = x1 - x0 + g * x1;
+    let b = x3 - x0 + hh * x3;
+    let c = x0;
+    let d = y1 - y0 + g * y1;
+    let e = y3 - y0 + hh * y3;
+    let f = y0;
+    // Unit square → quad, then the image rectangle → unit square.
+    [a / w, b / h, c, d / w, e / h, f, g / w, hh / h, 1.0]
+}
+
+fn apply(m: &[f64; 9], x: f64, y: f64) -> (f64, f64) {
+    let w = m[6] * x + m[7] * y + m[8];
+    (
+        (m[0] * x + m[1] * y + m[2]) / w,
+        (m[3] * x + m[4] * y + m[5]) / w,
+    )
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_projective_corners_land_where_the_forward_map_sends_them__feat__image_editor_transform_warp(
+) {
+    // Pure: the closed form above sends the image corners to the quad.
+    let m = perspective_forward(64.0, 48.0);
+    let near = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+    assert!(near(apply(&m, 0.0, 0.0), (12.8, 0.0)));
+    assert!(near(apply(&m, 64.0, 0.0), (51.2, 0.0)));
+    assert!(near(apply(&m, 64.0, 48.0), (64.0, 48.0)));
+    assert!(near(apply(&m, 0.0, 48.0), (0.0, 48.0)));
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_projective_identity_is_a_passthrough__feat__image_editor_transform_warp() {
+    let (w, h) = (8u32, 6u32);
+    let win = labeled(w, h);
+    let px = win.quantized_px();
+    for interp in [WarpInterp::Bilinear, WarpInterp::Bicubic] {
+        let p = WarpProjectiveParams::identity(interp);
+        for y in 0..h {
+            for x in 0..w {
+                let got = warp_projective_ref(&px, w, h, x, y, &p);
+                let want = at(&px, w, x as i32, y as i32);
+                for ch in 0..4 {
+                    // Bicubic at t = 0 weights (0, 1, 0, 0): exact.
+                    let want_c = want.0[ch];
+                    assert!(
+                        (got.0[ch] - want_c).abs() < 1e-6,
+                        "{interp:?} ({x},{y}) ch{ch}: {} vs {}",
+                        got.0[ch],
+                        want_c
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_projective_is_transparent_outside_the_source__feat__image_editor_transform_warp() {
+    // Scale by ½ about the origin: the right and bottom halves of the
+    // output read past the image and are empty.
+    let (w, h) = (16u32, 12u32);
+    let px = labeled(w, h).quantized_px();
+    let p = WarpProjectiveParams::from_forward(
+        [0.5, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 1.0],
+        WarpInterp::Bilinear,
+        false,
+    )
+    .expect("invertible");
+    let inside = warp_projective_ref(&px, w, h, 2, 2, &p);
+    assert!((inside.0[3] - 1.0).abs() < 1e-6, "inside stays opaque");
+    let outside = warp_projective_ref(&px, w, h, 12, 10, &p);
+    assert_eq!(outside.0, [0.0; 4], "past the moved image is transparent");
+}
+
+#[test]
+fn geom_warp_projective_refuses_a_singular_map() {
+    assert!(WarpProjectiveParams::from_forward(
+        [1.0, 2.0, 0.0, 2.0, 4.0, 0.0, 0.0, 0.0, 1.0],
+        WarpInterp::Bilinear,
+        false,
+    )
+    .is_none());
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_projective_parity_affine_bilinear__feat__image_editor_transform_warp() {
+    // A 20° rotation with a 1.2× scale about the centre (the scale /
+    // rotate / skew arms are affine homographies).
+    let (w, h) = (48u32, 40u32);
+    let win = labeled(w, h);
+    let (c, s) = (
+        20f64.to_radians().cos() * 1.2,
+        20f64.to_radians().sin() * 1.2,
+    );
+    let (cx, cy) = (w as f64 / 2.0, h as f64 / 2.0);
+    let fwd = [
+        c,
+        -s,
+        cx - c * cx + s * cy,
+        s,
+        c,
+        cy - s * cx - c * cy,
+        0.0,
+        0.0,
+        1.0,
+    ];
+    let p =
+        WarpProjectiveParams::from_forward(fwd, WarpInterp::Bilinear, false).expect("invertible");
+    match parity_windowed(&GEOM_WARP_PROJECTIVE, warp_projective_ref, &win, w, h, &p) {
+        Some(r) => assert_within(r, &GEOM_WARP_PROJECTIVE),
+        None => eprintln!("SKIP: no GPU adapter"),
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_projective_parity_perspective_bicubic__feat__image_editor_transform_warp() {
+    let (w, h) = (64u32, 48u32);
+    let win = labeled(w, h);
+    let p = WarpProjectiveParams::from_forward(
+        perspective_forward(w as f64, h as f64),
+        WarpInterp::Bicubic,
+        false,
+    )
+    .expect("invertible");
+    match parity_windowed(&GEOM_WARP_PROJECTIVE, warp_projective_ref, &win, w, h, &p) {
+        Some(r) => assert_within(r, &GEOM_WARP_PROJECTIVE),
+        None => eprintln!("SKIP: no GPU adapter"),
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn geom_warp_projective_parity_perspective_bilinear__feat__image_editor_transform_warp() {
+    let (w, h) = (64u32, 48u32);
+    let win = labeled(w, h);
+    let p = WarpProjectiveParams::from_forward(
+        perspective_forward(w as f64, h as f64),
+        WarpInterp::Bilinear,
+        false,
+    )
+    .expect("invertible");
+    match parity_windowed(&GEOM_WARP_PROJECTIVE, warp_projective_ref, &win, w, h, &p) {
+        Some(r) => assert_within(r, &GEOM_WARP_PROJECTIVE),
+        None => eprintln!("SKIP: no GPU adapter"),
     }
 }

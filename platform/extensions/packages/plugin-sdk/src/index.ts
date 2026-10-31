@@ -24,6 +24,7 @@
 // them.
 
 export {
+  charToContent,
   contentToChar,
   paragraphTexts,
   wordAroundCaret,
@@ -159,6 +160,22 @@ export {
   ROW_PATH,
 } from "./object-schema.js";
 export {
+  nativeFxOps,
+  nativeFxColors,
+  nativeGradientId,
+  nativeGradientMintOps,
+  type GradientMintOptions,
+  type NativeEffect,
+  type NativeFeather,
+  type NativeFx,
+  type NativeFxOptions,
+  type NativeGlow,
+  type NativeGradient,
+  type NativeInnerShadow,
+  type NativeShadow,
+  type NativeStroke,
+} from "./lowering.js";
+export {
   createObjectRegistry,
   escapeLabelValue,
   type ObjectRegistry,
@@ -198,6 +215,8 @@ export {
 } from "./core-commands.generated.js";
 export {
   CORE_CATALOG_ROWS,
+  CORE_EFFECT_CATEGORIES,
+  CORE_EFFECT_KINDS,
   CORE_OBJECT_SCHEMAS,
   CORE_PATHS,
   CORE_PATH_ALIASES,
@@ -246,6 +265,48 @@ export {
 // its own entry point, `@paged-media/plugin-sdk/gesture-kit`.
 export * from "./gesture-kit.js";
 export { contributeTool } from "./tools.js";
+// Extensions ADR 339 — the transform box's geometry (the host's Free
+// Transform tool and `host.transformBox` run on it): quads, projective
+// matrices, the handle layout, hit-testing and the drag arms.
+export {
+  BOX_HANDLES,
+  HANDLE_CURSOR,
+  HANDLE_UV,
+  OPPOSITE as BOX_OPPOSITE,
+  affineToMatrix3,
+  applyMatrix3,
+  bilinearPoint,
+  dragBox,
+  handleCursor,
+  handlePoint,
+  hitTestBox,
+  homographyFromQuads,
+  identity3,
+  invert3,
+  isAffine3,
+  isCorner,
+  isUsableQuad,
+  mapQuad,
+  matrix3ToAffine,
+  multiply3,
+  operationFor,
+  pointInQuad,
+  quadCentre,
+  quadMap,
+  rectQuad,
+  unitToQuad,
+  type BoxDragResult,
+  type BoxDragStart,
+  type BoxHandle,
+  type BoxHit,
+  type BoxMode,
+  type BoxModifiers,
+  type BoxOperation,
+  type Matrix3,
+  type Point as BoxPoint,
+  type Quad as BoxQuad,
+} from "./transform-box.js";
+export { ROTATE_CURSOR } from "./overlay-handles.js";
 export { contributePanel, contributeSchemaPanel } from "./panels.js";
 export {
   isPropertyRow,

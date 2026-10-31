@@ -601,6 +601,96 @@ pub struct AbrBrush {
     pub transfer: Option<Transfer>,
     pub brush_pose: Option<BrushPose>,
     pub tool_options: Option<ToolOptions>,
+    /// The brush-level options that are not a gated dynamics group —
+    /// Build-up, Smoothing, Protect Texture, the pressure overrides and
+    /// the three bookkeeping flags (spec §7.1).
+    pub options: BrushOptions,
+}
+
+/// Where a brush-level option was found.
+///
+/// `Rpt `, `interpretation` and the `brushGroup` descriptor sit on the
+/// brush descriptor itself (`Rpt ` and `brushGroup` on 3,215 of 3,215
+/// brushes, `interpretation` on 5). The smoothing group, `protectTexture`,
+/// the two pressure overrides and `useLegacy` each occurred exactly ONCE
+/// in the corpus — the same count as the one `toolOptions` descriptor —
+/// and the corpus profile records keys without their parent, so which
+/// descriptor carried them is not established by the published tables.
+/// The reader therefore looks on the brush descriptor first and falls
+/// back to the `toolOptions` sub-descriptor, and records which one
+/// answered, so a consumer (or a future analyst ledger) can tell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OptionSource {
+    /// Not present in either descriptor.
+    #[default]
+    Absent,
+    Brush,
+    ToolOptions,
+}
+
+/// Photoshop's stroke Smoothing options (spec §7.2 `[REF]` vocabulary;
+/// one corpus occurrence each).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Smoothing {
+    /// `smoothing` — smoothing on.
+    pub enabled: Option<bool>,
+    /// `smoothingValue` — a bare `doub`. The one observed value cannot
+    /// fix its scale; Photoshop's UI shows 0..100 %, and that is how the
+    /// projection reads it (raw ÷ 100), recorded here as RAW.
+    pub value_raw: Option<f64>,
+    /// `smoothingRadiusMode` — Pulled String Mode.
+    pub radius_mode: Option<bool>,
+    /// `smoothingCatchup` — Catch-Up While Pausing.
+    pub catch_up: Option<bool>,
+    /// `smoothingCatchupAtEnd` — Catch-Up On Stroke End.
+    pub catch_up_at_end: Option<bool>,
+    /// `smoothingZoomCompensation` — Adjust For Zoom.
+    pub zoom_compensation: Option<bool>,
+    /// `pressureSmoothing` — Stroke smoothing applied to pressure too.
+    pub pressure_smoothing: Option<bool>,
+    /// `Smoo` — a bare `long` whose meaning no source pins (one
+    /// occurrence). Retained, not interpreted.
+    pub smoo_raw: Option<i32>,
+    /// Which descriptor carried the group (the first key found decides).
+    pub source: OptionSource,
+}
+
+impl Smoothing {
+    /// The smoothing amount as a 0..1 fraction (raw ÷ 100, the scale
+    /// Photoshop's options bar shows), when a value is present.
+    pub fn amount(&self) -> Option<f64> {
+        self.value_raw.map(|v| v / 100.0)
+    }
+}
+
+/// Brush-level options outside the gated groups.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct BrushOptions {
+    /// `Rpt ` — **Build-up** (the airbrush toggle of the Brush Settings
+    /// panel). On 3,215 of 3,215 brushes; no published vocabulary named
+    /// it (spec §7.1). Its meaning is inferred from Photoshop's panel
+    /// having exactly one brush-level boolean left unaccounted for once
+    /// every other key is named — `[UNSURE]`, and recorded as such.
+    pub build_up: Option<bool>,
+    pub build_up_source: OptionSource,
+    pub smoothing: Option<Smoothing>,
+    /// `protectTexture`.
+    pub protect_texture: Option<bool>,
+    pub protect_texture_source: OptionSource,
+    /// `usePressureOverridesSize` / `usePressureOverridesOpacity` — the
+    /// options-bar pen-pressure overrides.
+    pub pressure_overrides_size: Option<bool>,
+    pub pressure_overrides_opacity: Option<bool>,
+    /// `useLegacy` — the legacy (pre-CC) brush engine flag.
+    pub use_legacy: Option<bool>,
+    /// `brushGroup` is present (3,215/3,215) — a descriptor whose only
+    /// observed member is `useBrushGroup`.
+    pub brush_group_present: bool,
+    /// `brushGroup/useBrushGroup`.
+    pub use_brush_group: Option<bool>,
+    /// `interpretation` (5 brushes) — semantics `[UNSURE]`; preserved,
+    /// not acted on.
+    pub interpretation: Option<bool>,
 }
 
 impl AbrBrush {
@@ -1112,7 +1202,82 @@ pub(crate) fn read_brush(d: &Descriptor, index: usize, w: &mut Vec<AbrWarning>) 
         color_dynamics,
         transfer,
         brush_pose,
+        options: read_options(d, tool_options.as_ref()),
         tool_options,
+    }
+}
+
+/// A boolean from the brush descriptor, else from `toolOptions`.
+fn located_bool(
+    d: &Descriptor,
+    tool: Option<&ToolOptions>,
+    key: &[u8],
+) -> (Option<bool>, OptionSource) {
+    if let Some(v) = d.bool(key) {
+        return (Some(v), OptionSource::Brush);
+    }
+    match tool.and_then(|t| t.descriptor.bool(key)) {
+        Some(v) => (Some(v), OptionSource::ToolOptions),
+        None => (None, OptionSource::Absent),
+    }
+}
+
+/// The smoothing group's vocabulary.
+const SMOOTHING_BOOL_KEYS: [&[u8]; 6] = [
+    b"smoothing",
+    b"smoothingRadiusMode",
+    b"smoothingCatchup",
+    b"smoothingCatchupAtEnd",
+    b"smoothingZoomCompensation",
+    b"pressureSmoothing",
+];
+
+fn read_smoothing(d: &Descriptor, tool: Option<&ToolOptions>) -> Option<Smoothing> {
+    // The group lives wholly in one descriptor: pick the first one that
+    // carries ANY of its keys, and read every key from that one.
+    let has = |x: &Descriptor| {
+        SMOOTHING_BOOL_KEYS.iter().any(|k| x.contains(k))
+            || x.contains(b"smoothingValue")
+            || x.contains(b"Smoo")
+    };
+    let (src, source) = if has(d) {
+        (d, OptionSource::Brush)
+    } else {
+        let t = &tool?.descriptor;
+        if !has(t) {
+            return None;
+        }
+        (t, OptionSource::ToolOptions)
+    };
+    Some(Smoothing {
+        enabled: src.bool(b"smoothing"),
+        value_raw: src.number(b"smoothingValue"),
+        radius_mode: src.bool(b"smoothingRadiusMode"),
+        catch_up: src.bool(b"smoothingCatchup"),
+        catch_up_at_end: src.bool(b"smoothingCatchupAtEnd"),
+        zoom_compensation: src.bool(b"smoothingZoomCompensation"),
+        pressure_smoothing: src.bool(b"pressureSmoothing"),
+        smoo_raw: src.i32(b"Smoo"),
+        source,
+    })
+}
+
+fn read_options(d: &Descriptor, tool: Option<&ToolOptions>) -> BrushOptions {
+    let (build_up, build_up_source) = located_bool(d, tool, b"Rpt ");
+    let (protect_texture, protect_texture_source) = located_bool(d, tool, b"protectTexture");
+    let group = d.descriptor(b"brushGroup");
+    BrushOptions {
+        build_up,
+        build_up_source,
+        smoothing: read_smoothing(d, tool),
+        protect_texture,
+        protect_texture_source,
+        pressure_overrides_size: located_bool(d, tool, b"usePressureOverridesSize").0,
+        pressure_overrides_opacity: located_bool(d, tool, b"usePressureOverridesOpacity").0,
+        use_legacy: located_bool(d, tool, b"useLegacy").0,
+        brush_group_present: group.is_some(),
+        use_brush_group: group.and_then(|g| g.bool(b"useBrushGroup")),
+        interpretation: d.bool(b"interpretation"),
     }
 }
 

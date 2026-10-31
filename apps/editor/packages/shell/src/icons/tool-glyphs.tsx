@@ -69,6 +69,19 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
     </>
   ),
 
+  // Artboard (engine ADR 1011) — a board with crop ticks past each corner,
+  // Illustrator's artboard glyph family.
+  "tool-artboard": (
+    <>
+      <rect x={7} y={7} width={10} height={10} {...LINE} strokeWidth={1.7} />
+      <path
+        d="M7 2.5 L7 5 M2.5 7 L5 7 M17 2.5 L17 5 M19 7 L21.5 7 M7 19 L7 21.5 M2.5 17 L5 17 M17 19 L17 21.5 M19 17 L21.5 17"
+        {...LINE}
+        strokeWidth={1.5}
+      />
+    </>
+  ),
+
   // Gap — two vertical bars with a double-headed arrow between them.
   "tool-gap": (
     <>

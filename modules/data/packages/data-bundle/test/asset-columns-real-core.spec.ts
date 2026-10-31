@@ -3,6 +3,9 @@
 // through the column's action chain (actions@1, registered by another
 // bundle on the harness's shared registry) and placed as a data: URI the
 // engine accepts (core ADR 208). A reference with no consent places nothing.
+// A save writes the fetched asset into the `.paged` (ADR 563 amended
+// 2026-10-28), and the document reopened by another host places it from
+// that part, with no consent and no network.
 //
 // Gate: skips without canvas-wasm or the built data-js wasm, EXCEPT under
 // REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1.
@@ -15,6 +18,7 @@ import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
+import { ASSET_INDEX_PART, decodeAssetIndex } from "../src/persist";
 import {
   bootRealEngine,
   DATA_JS_WASM,
@@ -123,5 +127,108 @@ describe.skipIf(!ready && !required)(
         ),
       ).toBe(false);
     });
+
+    it("a save carries a fetched asset in the .paged; reopened elsewhere it is placed from its part, not fetched", async () => {
+      expect(
+        ready,
+        "real core and the data-js wasm must both be available",
+      ).toBe(true);
+      mock.module("../src/engine", () => ({
+        ...actualEngine,
+        bootEngine: (today: number) => bootRealEngine(today),
+      }));
+      const mod = await import("../src/index");
+      const png = Uint8Array.from(atob(PNG_B64), (c) => c.charCodeAt(0));
+      const URL_A = "https://img.example/a.png";
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation((async () => new Response(png)) as never);
+      try {
+        const bind = async (h: HeadlessHost, consented: string[]) => {
+          let bh!: BundleHost;
+          h.loadBundle({
+            ...mod.dataBundle,
+            activate: (b: BundleHost) => {
+              bh = b;
+              return mod.dataBundle.activate(b);
+            },
+          } as typeof mod.dataBundle);
+          vi.spyOn(bh.network, "consentedOrigins").mockReturnValue(consented);
+          const s = mod.sessionFor(bh)!;
+          await s.whenRestored();
+          return { bh, s };
+        };
+        const placedUri = (calls: readonly (readonly unknown[])[]) =>
+          calls
+            .map(([m]) => m as { op: string; args?: { uri?: string } })
+            .find((m) => m.op === "placeImage")?.args?.uri;
+
+        // ── one host: fetch (consented), place, save ──────────────────────
+        const h1 = await openRealHost();
+        hosts.push(h1);
+        const one = await bind(h1, ["https://img.example"]);
+        await one.s.registerCsvSource(
+          "products",
+          `sku,photo\nA-1,${URL_A}\nA-2,${URL_A}\n`,
+        );
+        one.s.addQuery("q", "SELECT * FROM products", "recordStream");
+        await one.s.refreshData();
+        one.s.setAssetColumn("q", "photo", {});
+        one.s.addImageBinding("img", "urect", "q", "photo");
+        await one.s.lowerBinding("img");
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        await h1.willSave.fire();
+        const index = decodeAssetIndex(
+          await one.bh.parts.read(ASSET_INDEX_PART),
+        );
+        const hash = index?.refs[URL_A]?.hash;
+        expect(index?.refs).toEqual({
+          [URL_A]: { hash: hash!, columns: ["q.photo"] },
+        });
+        expect(index?.assets[hash!]).toEqual({
+          mediaType: "image/png",
+          bytes: png.length,
+        });
+        expect(await one.bh.parts.list("assets/")).toEqual([`assets/${hash}`]);
+        const saved = await exportPaged(one.bh);
+
+        // ── another host: no consent, no network ──────────────────────────
+        fetchSpy.mockClear();
+        const h2 = await openRealHost();
+        hosts.push(h2);
+        await h2.load(saved);
+        const two = await bind(h2, []);
+        await two.s.refreshData();
+        const reads = vi.spyOn(two.bh.parts, "read");
+        const mutate = vi.spyOn(two.bh.document, "mutate");
+        await two.s.lowerBinding("img");
+        expect(
+          placedUri(mutate.mock.calls)?.startsWith("data:image/png;base64,"),
+        ).toBe(true);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(reads.mock.calls.map(([p]) => p)).toContain(`assets/${hash}`);
+
+        // A save with the column gone drops the parts and the index.
+        two.s.setAssetColumn("q", "photo", null);
+        await h2.willSave.fire();
+        expect(await two.bh.parts.list("assets/")).toEqual([]);
+        expect(await two.bh.parts.read(ASSET_INDEX_PART)).toBeNull();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
   },
 );
+
+async function exportPaged(host: BundleHost): Promise<Uint8Array> {
+  const reply = (await host.editor.client.send({
+    kind: "exportPaged",
+    payload: {},
+  } as never)) as {
+    kind: string;
+    payload: { bytes?: number[]; error?: string };
+  };
+  if (reply.kind !== "pagedExported")
+    throw new Error(`exportPaged: ${reply.kind} ${reply.payload.error ?? ""}`);
+  return Uint8Array.from(reply.payload.bytes!);
+}

@@ -202,6 +202,7 @@ mod tests {
             height_pt: 100.0,
             spread_origin: (0.0, 0.0),
             spread_transform: paged_compose::Transform::IDENTITY,
+            canvas_origin: (0.0, 0.0),
             list,
             layout_generation: 0,
             numbering_generation: 0,

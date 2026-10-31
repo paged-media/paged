@@ -1,0 +1,19 @@
+{
+ "pages": [
+  {
+   "header": "Title page header",
+   "body": "Contents Introduction .................................................................................. 2 Background ............................................................................... 2 Results .......................................................................................... 1",
+   "footer": ""
+  },
+  {
+   "header": "Report header",
+   "body": "Introduction Body text with a note . 1 Background See Background on page 2. A closing remark . i First note text. 1",
+   "footer": "Page 2 of 3"
+  },
+  {
+   "header": "Section two header",
+   "body": "Results Second section . 2 Figure 1 An endnote. i Second note text. 2",
+   "footer": "Page 1 of 3"
+  }
+ ]
+}

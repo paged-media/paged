@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — gradient meshes and freeform gradients in the PDF:
+//! Engine ADR 1048 — gradient meshes and freeform gradients in the PDF:
 //! a mesh is a type-6 (Coons) or type-7 (tensor) patch shading, a
 //! freeform gradient the type-6 grid sampled from the canvas's field,
 //! translucent colours under a luminosity soft mask of the patches'
@@ -377,7 +377,7 @@ fn a_freeform_gradient_is_a_sampled_coons_grid__feat__color_swatches_mesh_freefo
     let pdf = export(&d);
     assert_eq!(shading_types(&pdf), vec![(6, b"DeviceRGB".to_vec())]);
     // The grid's bilinear cells against the exact field the rasterisers
-    // draw: the freeform type-6 approximation's tolerance (ADR 1040).
+    // draw: the freeform type-6 approximation's tolerance (ADR 1048).
     let fill = d.spreads[0].spread.rectangles[0].fill_mesh.clone().unwrap();
     let MeshFill::Freeform(ff) = *fill else {
         unreachable!()
@@ -423,7 +423,7 @@ fn a_frame_without_a_mesh_writes_no_patch_shading__feat__color_swatches_mesh_fre
 const WHITE: [i32; 3] = [255, 255, 255];
 
 // ---------------------------------------------------------------------------
-// The Illustrator oracle (engine ADR 1040).
+// The Illustrator oracle (engine ADR 1048).
 //
 // `write_illustrator_oracle_inputs` (ignored; run it before recording)
 // exports the cases below as PDFs into `tests/fixtures/mesh-oracle/`.
@@ -551,7 +551,7 @@ fn engine_pixel(fill: &MeshFill) -> impl Fn(u32, u32) -> Option<[i32; 4]> {
     }
 }
 
-/// Engine ADR 1040 — Illustrator's rendering of the engine's mesh PDFs
+/// Engine ADR 1048 — Illustrator's rendering of the engine's mesh PDFs
 /// against the engine's raster of the same meshes, and the shading type
 /// Illustrator's own PDF export writes for them. Skips (reported) until
 /// the probe has been recorded.

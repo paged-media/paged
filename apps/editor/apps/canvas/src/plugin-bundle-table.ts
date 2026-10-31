@@ -70,12 +70,15 @@ export const PLUGIN_BUNDLES: readonly BundleEntry<PluginBundle>[] = [
     lane: "boot",
     load: () => import("@paged-media/publish").then((m) => m.publishBundle),
   },
-  // paged.pdf: one importer (pdf.js reconstruction → nativeDocument.open) and
-  // nothing else — the File ▸ Open PDF… entry is the host's. The placeholder
-  // restates the importer the bundle registers in `contributePdfIo`.
+  // paged.pdf: the importer (PDFium reconstruction → nativeDocument.open),
+  // the typed commands File ▸ Import ▸ PDF or AI as Vectors… drives and
+  // Object ▸ Convert Placed PDF to Vectors (publish ADR 658). Boot, not on
+  // demand: the menu row and the dialog's commands must be there before a
+  // first PDF is opened; its wasm (PDFium, the mapper) still loads on first
+  // use. The placeholder restates the importer `contributePdfIo` registers.
   {
     id: "media.paged.pdf",
-    lane: "onDemand",
+    lane: "boot",
     load: () => import("@paged-media/pdf").then((m) => m.pdfBundle),
     importers: [
       {

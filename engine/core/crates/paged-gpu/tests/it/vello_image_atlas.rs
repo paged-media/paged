@@ -54,6 +54,7 @@ fn page_with_image() -> DisplayList {
         encoded: Vec::new().into(),
         rgba: rgba.into(),
         icc: None,
+        rendering: None,
     });
     list.commands.push(Cmd::Image {
         image_id,

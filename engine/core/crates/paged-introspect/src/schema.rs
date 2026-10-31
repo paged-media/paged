@@ -124,6 +124,8 @@ pub enum Wire {
     Transform,
     Lengths,
     TabStops,
+    /// Engine ADR 1037 — an image frame's filter stack.
+    ImageAdjustments,
     ParagraphRule,
     GradientFeather,
     FillMesh,
@@ -141,6 +143,12 @@ pub enum Wire {
     SimplifyPath,
     ClosePath,
     PluginMetadata,
+    /// Engine ADR 1008 — `Value::EffectStack`.
+    EffectStack,
+    /// Engine ADR 1043 — `Value::Appearance`.
+    Appearance,
+    /// Engine ADR 1043 — `Value::AppearanceLayer`.
+    AppearanceLayer,
 }
 
 /// A schema default. Untagged, so it serialises as the bare value.
@@ -675,6 +683,20 @@ pub const STROKE_TYPES: &[&str] = &[
 pub const STROKE_ALIGNMENT: &[&str] = &["CenterAlignment", "InsideAlignment", "OutsideAlignment"];
 /// Engine ADR 1006 — a frame's fill rule.
 pub const FILL_RULES: &[&str] = &["NonZero", "EvenOdd"];
+/// Engine ADR 1018 — Word's underline kinds (`UnderlineKind::as_name`).
+pub const UNDERLINE_KINDS: &[&str] = &[
+    "none",
+    "single",
+    "words",
+    "double",
+    "thick",
+    "dotted",
+    "dashed",
+    "dotDash",
+    "dotDotDash",
+    "wave",
+    "doubleWave",
+];
 /// Engine ADR 1007 — how a gradient stroke maps onto the stroke.
 pub const STROKE_GRADIENT_MODES: &[&str] = &["Within", "Along", "Across"];
 pub const TEXT_WRAP_MODES: &[&str] = &[
@@ -772,6 +794,9 @@ pub const FOOTNOTE_RESTARTS: &[&str] = &[
     "SpreadRestart",
     "SectionRestart",
 ];
+/// Engine ADR 1040 — `documentMarkupView`: Word's Display for Review.
+pub const MARKUP_VIEWS: &[&str] = &["simple", "all", "none", "original"];
+
 pub const FOOTNOTE_SHOW_PREFIX_SUFFIX: &[&str] = &[
     "NoPrefixSuffix",
     "PrefixSuffixReference",
@@ -839,9 +864,18 @@ pub fn coerce(schema: &PropertySchema, input: Input<'_>) -> Result<Value, String
                 Wire::Text => Value::Text(String::new()),
                 Wire::Lengths => Value::Lengths(Vec::new()),
                 Wire::TabStops => Value::TabStops(Vec::new()),
+                Wire::ImageAdjustments => Value::ImageAdjustments(Vec::new()),
                 Wire::ParagraphRule => Value::ParagraphRule(None),
                 Wire::GradientFeather => Value::GradientFeather(None),
+                Wire::EffectStack => Value::EffectStack {
+                    entries: Vec::new(),
+                    prev: None,
+                },
                 Wire::FillMesh => Value::FillMesh(None),
+                Wire::Appearance => Value::Appearance {
+                    layers: Vec::new(),
+                    prev: None,
+                },
                 // A tri-state bool clears with `Text("")`.
                 Wire::Bool => Value::Text(String::new()),
                 other => return Err(format!("null has no {other:?} form")),
@@ -971,6 +1005,17 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
                 Wire::TabStops => Value::TabStops(
                     serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
                 ),
+                Wire::EffectStack => Value::EffectStack {
+                    entries: serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
+                    prev: None,
+                },
+                Wire::Appearance => Value::Appearance {
+                    layers: serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
+                    prev: None,
+                },
+                Wire::ImageAdjustments => Value::ImageAdjustments(
+                    serde_json::from_value(json.clone()).map_err(|e| e.to_string())?,
+                ),
                 Wire::Text => Value::Text(
                     items
                         .iter()
@@ -988,13 +1033,29 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
                 .map_err(|e| format!("a colour is {{ space, value, model?, tint? }}: {e}"))?;
             validate(schema, &Value::SwatchColor(spec))
         }
-        // Engine ADR 1040 — a mesh fill as its own object.
+        // Engine ADR 1048 — a mesh fill as its own object.
         J::Object(_) if schema.wire == Wire::FillMesh => {
             let spec: paged_mutate::MeshFillSpec =
                 serde_json::from_value(json.clone()).map_err(|e| {
                     format!("a mesh fill is {{ kind: \"mesh\" | \"freeform\", … }}: {e}")
                 })?;
             validate(schema, &Value::FillMesh(Some(spec)))
+        }
+        J::Object(o) if schema.wire == Wire::AppearanceLayer && !o.contains_key("type") => {
+            #[derive(serde::Deserialize)]
+            struct At {
+                index: u32,
+                layer: paged_mutate::appearance_wire::PaintLayerSpec,
+            }
+            let at: At = serde_json::from_value(json.clone())
+                .map_err(|e| format!("an appearance layer is {{ index, layer }}: {e}"))?;
+            validate(
+                schema,
+                &Value::AppearanceLayer {
+                    index: at.index,
+                    layer: at.layer,
+                },
+            )
         }
         J::Object(_) => Err("an object must be a { type, value } wire value".to_string()),
     }
@@ -1050,9 +1111,13 @@ pub fn wire_of(value: &Value) -> Option<Wire> {
         Value::Transform(_) => Wire::Transform,
         Value::Lengths(_) => Wire::Lengths,
         Value::TabStops(_) => Wire::TabStops,
+        Value::ImageAdjustments(_) => Wire::ImageAdjustments,
         Value::ParagraphRule(_) => Wire::ParagraphRule,
         Value::GradientFeather(_) => Wire::GradientFeather,
+        Value::EffectStack { .. } => Wire::EffectStack,
         Value::FillMesh(_) => Wire::FillMesh,
+        Value::Appearance { .. } => Wire::Appearance,
+        Value::AppearanceLayer { .. } => Wire::AppearanceLayer,
         Value::GradientStops(_) => Wire::GradientStops,
         Value::SwatchColor(_) => Wire::SwatchColor,
         Value::FramePath { .. } => Wire::FramePath,

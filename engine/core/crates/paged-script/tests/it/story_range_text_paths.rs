@@ -224,11 +224,19 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 244: ADR 1003 added the page of a placed PDF.
         // 245: ADR 1006 added a frame's fill rule.
         // 246: ADR 1010 added a group's clip flag.
-        // 248: ADR 1007 added a frame's stroke gradient mode and its
-        // gradient's start point.
-        // 249: ADR 1040 added a frame's gradient mesh or freeform gradient.
-        // 250: ADR 1041 added a frame's own pattern transform.
-        250,
+        // 257: ADR 1018 added Word's character and paragraph additions.
+        // 258: ADR 1031 added the gradient fill's start.
+        // 262: ADR 1008 added the effect stack of each target.
+        // 264: ADR 1039 added a symbol instance's tint and 9-slice guides.
+        // 265: draw ADR 365 added the symbol an instance draws.
+        // 266: ADR 1037 added an image frame's filter stack.
+        // 268: ADR 1043 added an item's appearance and one layer of it.
+        // 272: ADR 1047 added the live shapes (sides, star inset, pie angles).
+        // 273: ADR 1042 added a group's vector effects.
+        // 274: ADR 1007 added a frame's stroke gradient mode.
+        // 275: ADR 1048 added a frame's gradient mesh or freeform gradient.
+        // 276: ADR 1041 added a frame's own pattern transform.
+        276,
         "the advertised roster changed; move the count with the decision"
     );
 }

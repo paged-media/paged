@@ -57,6 +57,33 @@
 //! opacity, f32 fill opacity, str blend, u8 knockout, u8 blend-if
 //! present, 32 u8}}.
 //!
+//! Version 5 (layer styles, WP5.4) appends, inside each layer's
+//! length-prefixed block, u8 style-option bits (`StyleOptions::bits`) and
+//! u32 n + n bytes of the layer's style as an `lfx2` payload (0: none —
+//! the same bytes a PSD carries, written and read by `paged-psd`); and
+//! after the comps the document's style state: f32 global angle, f32
+//! global altitude, u32 pattern count, per pattern {str name, u32 width,
+//! u32 height, f32 scale, f32 angle, u32 tile slot}.
+//!
+//! Version 6 (colour modes, image ADR 479) appends, after the style state,
+//! the document's colour mode: u8 mode (0 RGB, 1 Grayscale, 2 CMYK, 3 Lab)
+//! and i64 profile slot (−1: none) — the CMYK profile the mode converts
+//! through.
+//!
+//! Version 7 (type layers, image ADR 474) adds the layer kind code 5: the
+//! type source as JSON, i64 slot of the `TySh` block a PSD gave it (−1:
+//! none), u8 stale; an older reader takes a type layer as its pixels.
+//!
+//! Version 8 (smart objects in full, image ADR 482) appends, after a
+//! smart object's source slot, u32 n + n bytes: its placement, file,
+//! filters with their mask, vector source, flags and PSD record
+//! (`write_smart`). A file-backed source's pixel slot is then empty.
+//!
+//! After the masking block (ADR 470) comes the WORKSPACE block (image ADR
+//! 475, `"PGWS"`): guides, count marks, notes and slices
+//! (`workspace.rs` documents its layout). Both blocks are tagged and
+//! absent when empty, so an older manifest still reads.
+//!
 //! The history is not persisted: a reopened stack starts with none.
 
 use std::sync::Arc;
@@ -67,12 +94,13 @@ use image_graph::journal::TileJournal;
 
 use super::{
     Adjustment, BlendIf, CompAppearance, CompEntry, FillLayer, FillSource, Knockout, Layer,
-    LayerComp, LayerExt, LayerGroup, LayerKind, LayerLocks, LayerStack, SmartSource,
+    LayerComp, LayerExt, LayerGroup, LayerKind, LayerLocks, LayerStack, SmartSource, TypeLayer,
+    TypeSource,
 };
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 4;
+const VERSION: u32 = 9;
 
 struct W(Vec<u8>);
 
@@ -90,6 +118,9 @@ impl W {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
     fn f32(&mut self, v: f32) {
+        self.0.extend_from_slice(&v.to_le_bytes());
+    }
+    fn f64(&mut self, v: f64) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
     fn str(&mut self, s: &str) {
@@ -137,6 +168,11 @@ impl R<'_> {
             self.take(4)?.try_into().expect("4 bytes"),
         ))
     }
+    fn f64(&mut self) -> Result<f64, IngestError> {
+        Ok(f64::from_le_bytes(
+            self.take(8)?.try_into().expect("8 bytes"),
+        ))
+    }
     fn str(&mut self) -> Result<String, IngestError> {
         let n = self.u32()? as usize;
         String::from_utf8(self.take(n)?.to_vec())
@@ -177,6 +213,242 @@ fn block<'a>(r: &mut R<'a>) -> Result<R<'a>, IngestError> {
         b: &r.b[at..at + n],
         at: 0,
     })
+}
+
+/// A smart object's version-8 block (image ADR 482): u8 placement
+/// present + 8 f64 (the corners); i64 file slot (−1: none), str name, u32
+/// file type, str uuid, u8 linked, str link path; str filters (JSON,
+/// empty: none) and the filter mask — i64 slot (−1: none), i32 x, i32 y,
+/// u32 w, u32 h, u8 outside (x = −1: canvas-sized); str vector source
+/// (JSON, empty: none); u8 flags (1 warped, 2 filters pending); i64 slot
+/// of the PSD placed-layer record (−1: none).
+fn write_smart(w: &mut W, s: &SmartSource, slot: &mut impl FnMut(Arc<[u8]>) -> u32) {
+    match s.placement {
+        Some(q) => {
+            w.u8(1);
+            for v in q {
+                w.f64(v);
+            }
+        }
+        None => w.u8(0),
+    }
+    match &s.file {
+        Some(f) => {
+            w.i64(i64::from(slot(Arc::clone(&f.bytes))));
+            w.str(&f.name);
+            w.u32(u32::from_be_bytes(f.file_type));
+            w.str(&f.uuid);
+            w.u8(u8::from(f.link.is_some()));
+            w.str(f.link.as_deref().unwrap_or(""));
+        }
+        None => w.i64(-1),
+    }
+    match &s.filters {
+        Some(f) => {
+            w.str(&f.to_json().to_string());
+            match &f.mask {
+                Some(m) => {
+                    let (data, rect, outside) = match m {
+                        super::LayerMask::Canvas(c) => (c.data().to_vec(), None, 0),
+                        super::LayerMask::Bounded(b) => (b.data.clone(), Some(b.rect), b.outside),
+                    };
+                    w.i64(i64::from(slot(Arc::from(data.into_boxed_slice()))));
+                    match rect {
+                        Some(r) => {
+                            w.i32(r.x);
+                            w.i32(r.y);
+                            w.u32(r.w);
+                            w.u32(r.h);
+                        }
+                        None => {
+                            w.i32(-1);
+                            w.i32(-1);
+                            w.u32(0);
+                            w.u32(0);
+                        }
+                    }
+                    w.u8(outside);
+                }
+                None => w.i64(-1),
+            }
+        }
+        None => w.str(""),
+    }
+    match &s.vector {
+        Some(v) => w.str(
+            &serde_json::json!({
+                "items": v.items, "region": v.region.to_vec(), "pxPerPt": v.px_per_pt,
+            })
+            .to_string(),
+        ),
+        None => w.str(""),
+    }
+    w.u8(u8::from(s.warped) | u8::from(s.pending_filters) << 1);
+    match &s.record {
+        Some(r) => w.i64(i64::from(slot(Arc::from(
+            r.to_payload().into_boxed_slice(),
+        )))),
+        None => w.i64(-1),
+    }
+}
+
+fn read_smart(
+    r: &mut R,
+    s: &mut SmartSource,
+    buffer: &dyn Fn(u32) -> Result<Arc<[u8]>, IngestError>,
+    cw: u32,
+    ch: u32,
+) -> Result<(), IngestError> {
+    let slot = |v: i64| -> Result<Option<Arc<[u8]>>, IngestError> {
+        u32::try_from(v).ok().map(buffer).transpose()
+    };
+    if r.u8()? != 0 {
+        let mut q = [0.0; 8];
+        for v in &mut q {
+            *v = r.f64()?;
+        }
+        s.placement = Some(q);
+    }
+    if let Some(bytes) = slot(r.i64()?)? {
+        let name = r.str()?;
+        let file_type = r.u32()?.to_be_bytes();
+        let uuid = r.str()?;
+        let linked = r.u8()? != 0;
+        let path = r.str()?;
+        s.file = Some(Arc::new(crate::smart::SmartFile::new(
+            uuid,
+            name,
+            file_type,
+            bytes,
+            linked.then_some(path),
+        )));
+    }
+    let filters = r.str()?;
+    if !filters.is_empty() {
+        let mut stack = crate::smart::SmartFilterStack::from_json(&filters, None)
+            .map_err(IngestError::Decode)?;
+        if let Some(data) = slot(r.i64()?)? {
+            let (x, y, w, h, outside) = (r.i32()?, r.i32()?, r.u32()?, r.u32()?, r.u8()?);
+            stack.mask = if x < 0 {
+                image_gpu::SelectionCoverage::from_data(cw, ch, data.to_vec())
+                    .map(|c| super::LayerMask::Canvas(Arc::new(c)))
+            } else {
+                super::BoundedMask::new(
+                    image_core::Region::new(x, y, w, h),
+                    outside,
+                    data.to_vec(),
+                    cw,
+                    ch,
+                )
+                .map(|b| super::LayerMask::Bounded(Arc::new(b)))
+            };
+        }
+        s.filters = Some(Arc::new(stack));
+    }
+    let vector = r.str()?;
+    if !vector.is_empty() {
+        let v: serde_json::Value =
+            serde_json::from_str(&vector).map_err(|e| IngestError::Decode(e.to_string()))?;
+        let mut region = [0.0; 4];
+        if let Some(a) = v.get("region").and_then(|x| x.as_array()) {
+            for (o, x) in region.iter_mut().zip(a) {
+                *o = x.as_f64().unwrap_or(0.0);
+            }
+        }
+        s.vector = Some(Arc::new(crate::smart::VectorSource {
+            items: v
+                .get("items")
+                .and_then(|i| i.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            region,
+            px_per_pt: v.get("pxPerPt").and_then(|x| x.as_f64()).unwrap_or(1.0),
+        }));
+    }
+    let flags = r.u8()?;
+    s.warped = flags & 1 != 0;
+    s.pending_filters = flags & 2 != 0;
+    if let Some(rec) = slot(r.i64()?)? {
+        s.record = image_psd::smart_object::PlacedLayer::parse(b"SoLd", &rec)
+            .ok()
+            .map(Arc::new);
+    }
+    Ok(())
+}
+
+/// A layer's VECTOR MASK at the end of its parity block (image ADR 476):
+/// u8 present, then u8 flags (1 invert, 2 enabled, 4 not linked), u32
+/// subpaths and per subpath {u8 closed, u32 op, u32 rule, u32 anchors,
+/// 6 f32 each}.
+fn write_vector_mask(w: &mut W, v: Option<&crate::vectors::LayerVectorMask>) {
+    let Some(v) = v else {
+        w.u8(0);
+        return;
+    };
+    w.u8(1);
+    w.u8(u8::from(v.invert) | u8::from(v.enabled) << 1 | u8::from(v.not_linked) << 2);
+    w.u32(v.subpaths.len() as u32);
+    for sp in &v.subpaths {
+        w.u8(u8::from(sp.closed));
+        w.u32(u32::from(sp.op.op));
+        w.u32(u32::from(sp.op.rule));
+        w.u32(sp.anchors.len() as u32);
+        for a in &sp.anchors {
+            for p in [a.p, a.i, a.o] {
+                w.f32(p[0]);
+                w.f32(p[1]);
+            }
+        }
+    }
+}
+
+fn read_vector_mask(
+    r: &mut R<'_>,
+    width: u32,
+    height: u32,
+) -> Result<Option<Arc<crate::vectors::LayerVectorMask>>, IngestError> {
+    if r.at >= r.b.len() || r.u8()? == 0 {
+        return Ok(None);
+    }
+    let flags = r.u8()?;
+    let mut subpaths = Vec::new();
+    for _ in 0..r.u32()? {
+        let closed = r.u8()? != 0;
+        let op = crate::masking::SubOp {
+            op: u16::try_from(r.u32()?).unwrap_or(1),
+            rule: u16::try_from(r.u32()?).unwrap_or(1),
+        };
+        let mut anchors = Vec::new();
+        for _ in 0..r.u32()? {
+            let mut v = [0f32; 6];
+            for x in &mut v {
+                *x = r.f32()?;
+            }
+            anchors.push(crate::masking::PathAnchor {
+                p: [v[0], v[1]],
+                i: [v[2], v[3]],
+                o: [v[4], v[5]],
+            });
+        }
+        subpaths.push(crate::masking::SubPath {
+            closed,
+            anchors,
+            op,
+        });
+    }
+    let mut m = crate::vectors::LayerVectorMask::new(
+        subpaths,
+        flags & 1 != 0,
+        flags & 2 != 0,
+        width,
+        height,
+    );
+    m.not_linked = flags & 4 != 0;
+    Ok(Some(Arc::new(m)))
 }
 
 impl LayerStack {
@@ -245,8 +517,11 @@ impl LayerStack {
                 LayerKind::Fill(_) if version >= 4 => 3,
                 // An older reader takes a fill layer's render as pixels.
                 LayerKind::Fill(_) => 0,
+                LayerKind::Type(_) if version >= 7 => 5,
+                // An older reader takes a type layer's render as pixels.
+                LayerKind::Type(_) => 0,
             });
-            w.u8(if l.rgba.is_16bit() { 16 } else { 8 });
+            w.u8(depth_code(l.rgba.depth()));
             // A bounded layer is stored as it lives — expanding it here
             // would cost every untouched layer its canvas on each save.
             match l.rgba.bounded().filter(|_| version >= 3) {
@@ -306,6 +581,16 @@ impl LayerStack {
             match &l.kind {
                 LayerKind::Pixels => {}
                 LayerKind::Fill(_) if version < 4 => {}
+                LayerKind::Type(_) if version < 7 => {}
+                LayerKind::Type(t) => {
+                    w.str(&t.source.to_json());
+                    w.i64(
+                        t.psd
+                            .as_ref()
+                            .map_or(-1, |b| i64::from(slot(Arc::clone(b)))),
+                    );
+                    w.u8(u8::from(t.stale));
+                }
                 LayerKind::Adjustment(a) if version < 4 || matches!(**a, Adjustment::Chain(_)) => {
                     // An older reader takes a typed layer as the chain it
                     // evaluates to (a direct kind as the identity chain).
@@ -353,11 +638,23 @@ impl LayerStack {
                     w.u8(u8::from(f.stale));
                 }
                 LayerKind::Smart(src) => {
-                    w.u32(src.width);
-                    w.u32(src.height);
+                    // Before version 8 a file-backed source is stored as
+                    // its pixels (an older reader has no file).
+                    let (sw, sh, px) = match (version < 8, src.raster()) {
+                        (true, Ok(r)) => (r.width, r.height, Arc::clone(&r.rgba)),
+                        _ => (src.width, src.height, Arc::clone(&src.rgba)),
+                    };
+                    w.u32(sw);
+                    w.u32(sh);
                     w.f32(src.scale);
-                    let s = slot(Arc::clone(&src.rgba));
+                    let s = slot(px);
                     w.u32(s);
+                    if version >= 8 {
+                        let mut e = W(Vec::new());
+                        write_smart(&mut e, src, &mut slot);
+                        w.u32(e.0.len() as u32);
+                        w.0.extend_from_slice(&e.0);
+                    }
                 }
             }
             if version >= 4 {
@@ -368,6 +665,19 @@ impl LayerStack {
                 e.u8(l.ext.color);
                 e.i64(l.ext.link.map_or(-1, i64::from));
                 write_blend_if(&mut e, l.ext.blend_if.as_deref());
+                if version >= 5 {
+                    e.u8(l.ext.style_options.bits());
+                    let style = l
+                        .ext
+                        .style
+                        .as_ref()
+                        .map(|s| s.to_payload())
+                        .unwrap_or_default();
+                    e.u32(style.len() as u32);
+                    e.0.extend_from_slice(&style);
+                    // The vector mask (image ADR 476), after the style.
+                    write_vector_mask(&mut e, l.ext.vector_mask.as_deref());
+                }
                 w.u32(e.0.len() as u32);
                 w.0.extend_from_slice(&e.0);
             }
@@ -391,7 +701,7 @@ impl LayerStack {
                                 None => (px.raw_arc(), None),
                             };
                             w.i64(i64::from(slot(buf)));
-                            w.u8(if px.is_16bit() { 16 } else { 8 });
+                            w.u8(depth_code(px.depth()));
                             match rect {
                                 Some(r) => {
                                     w.i32(r.x);
@@ -429,6 +739,52 @@ impl LayerStack {
                     }
                 }
             }
+        }
+        // The document's layer styles (ADR 472): Global Light and the
+        // patterns, read before the masking block that ends the manifest.
+        if version >= 5 {
+            let g = self.styles.global_light;
+            w.f32(g.angle);
+            w.f32(g.altitude);
+            w.u32(self.styles.patterns.len() as u32);
+            for p in &self.styles.patterns {
+                w.str(&p.name);
+                w.u32(p.width);
+                w.u32(p.height);
+                w.f32(p.scale);
+                w.f32(p.angle);
+                let s = slot(Arc::clone(&p.tile));
+                w.u32(s);
+            }
+        }
+        // The colour mode (ADR 479).
+        if version >= 6 {
+            w.u8(self.mode.mode.code());
+            match &self.mode.cmyk_profile {
+                Some(p) => {
+                    let s = slot(Arc::clone(p));
+                    w.i64(i64::from(s));
+                }
+                None => w.i64(-1),
+            }
+            // The single-image modes' table (image ADR 484, version 9).
+            if version >= 9 {
+                match &self.mode.table {
+                    Some(t) => {
+                        let s = slot(Arc::from(encode_mode_table(t).into_boxed_slice()));
+                        w.i64(i64::from(s));
+                    }
+                    None => w.i64(-1),
+                }
+            }
+        }
+        // Channels and paths (ADR 470): a trailing block older readers
+        // skip; nothing at all without masking state.
+        if version >= 3 {
+            self.masking.doc.encode(&mut w.0, &mut slot);
+            // Guides, count marks, notes and slices (image ADR 475): a
+            // further trailing block, after the masking one.
+            self.workspace.encode(&mut w.0);
         }
         (w.0, buffers)
     }
@@ -521,10 +877,15 @@ impl LayerStack {
             let depth = match r.u8()? {
                 8 => SampleDepth::U8,
                 16 => SampleDepth::U16,
+                32 => SampleDepth::F32,
                 d => return Err(IngestError::Decode(format!("layer manifest: depth {d}"))),
             };
             let px = buffer(r.u32()?)?;
-            let bpp = if depth == SampleDepth::U16 { 8 } else { 4 };
+            let bpp = match depth {
+                SampleDepth::U16 => 8,
+                SampleDepth::F32 => 16,
+                _ => 4,
+            };
             let (rect, blend_gamma) = if version >= 3 {
                 let (x, y, rw, rh) = (r.i32()?, r.i32()?, r.u32()?, r.u32()?);
                 let g = r.f32()?;
@@ -620,20 +981,36 @@ impl LayerStack {
                         &kind, &values, &blob, &label,
                     )?))
                 }
+                5 if version >= 7 => {
+                    let source = TypeSource::from_json(&r.str()?).map_err(IngestError::Decode)?;
+                    let psd = match u32::try_from(r.i64()?).ok() {
+                        Some(slot) => Some(buffer(slot)?),
+                        None => None,
+                    };
+                    let stale = r.u8()? != 0;
+                    LayerKind::Type(Box::new(TypeLayer { source, stale, psd }))
+                }
                 2 => {
                     let (sw, sh, scale) = (r.u32()?, r.u32()?, r.f32()?);
                     let src = buffer(r.u32()?)?;
-                    if src.len() != sw as usize * sh as usize * 4 {
+                    let mut smart = SmartSource {
+                        scale,
+                        // A stack stored before ADR 482: the top-left
+                        // corner at `scale`.
+                        placement: None,
+                        ..SmartSource::from_pixels(src, sw, sh)
+                    };
+                    if version >= 8 {
+                        let mut e = block(&mut r)?;
+                        read_smart(&mut e, &mut smart, &buffer, width, height)?;
+                    }
+                    let file_backed = smart.rgba.is_empty() && smart.file.is_some();
+                    if !file_backed && smart.rgba.len() != sw as usize * sh as usize * 4 {
                         return Err(IngestError::Decode(format!(
                             "layer \"{name}\": smart source is mis-sized"
                         )));
                     }
-                    LayerKind::Smart(Box::new(SmartSource {
-                        rgba: src,
-                        width: sw,
-                        height: sh,
-                        scale,
-                    }))
+                    LayerKind::Smart(Box::new(smart))
                 }
                 k => {
                     return Err(IngestError::Decode(format!(
@@ -644,12 +1021,39 @@ impl LayerStack {
             let ext = if version >= 4 {
                 let mut e = block(&mut r)?;
                 LayerExt {
+                    // A session reopens without its PSD records: its
+                    // layers save as built ones (and without their inks).
+                    source: None,
+                    inks: Default::default(),
                     fill_opacity: e.f32()?.clamp(0.0, 1.0),
                     knockout: Knockout::from_code(e.u8()?),
                     locks: LayerLocks::from_bits(e.u8()?),
                     color: e.u8()?.min(7),
                     link: u32::try_from(e.i64()?).ok(),
                     blend_if: read_blend_if(&mut e)?,
+                    style_options: if e.at < e.b.len() {
+                        super::StyleOptions::from_bits(e.u8()?)
+                    } else {
+                        super::StyleOptions::default()
+                    },
+                    style: if e.at < e.b.len() {
+                        let n = e.u32()? as usize;
+                        let bytes = e.take(n)?;
+                        if n == 0 {
+                            None
+                        } else {
+                            Some(Arc::new(
+                                image_psd::effects::LayerStyle::parse(bytes).map_err(|err| {
+                                    IngestError::Decode(format!("layer \"{name}\": style: {err}"))
+                                })?,
+                            ))
+                        }
+                    } else {
+                        None
+                    },
+                    // Appended for image ADR 476; a block written before it
+                    // ends here.
+                    vector_mask: read_vector_mask(&mut e, width, height)?,
                 }
             } else {
                 LayerExt::default()
@@ -684,6 +1088,7 @@ impl LayerStack {
                     let px_slot = u32::try_from(r.i64()?).ok();
                     let depth = match r.u8()? {
                         16 => SampleDepth::U16,
+                        32 => SampleDepth::F32,
                         _ => SampleDepth::U8,
                     };
                     let (x, y, rw, rh) = (r.i32()?, r.i32()?, r.u32()?, r.u32()?);
@@ -742,19 +1147,69 @@ impl LayerStack {
                 });
             }
         }
+        let mut styles = super::StyleDoc::default();
+        if version >= 5 {
+            styles.global_light = image_psd::effects::GlobalLight {
+                angle: r.f32()?,
+                altitude: r.f32()?,
+            };
+            for _ in 0..r.u32()? {
+                let name = r.str()?;
+                let (pw, ph) = (r.u32()?, r.u32()?);
+                let (scale, angle) = (r.f32()?, r.f32()?);
+                let tile = buffer(r.u32()?)?;
+                if tile.len() != pw as usize * ph as usize * 4 {
+                    return Err(IngestError::Decode(format!(
+                        "layer manifest: style pattern \"{name}\" is mis-sized"
+                    )));
+                }
+                styles.patterns.push(Arc::new(super::PatternFill {
+                    name,
+                    tile,
+                    width: pw,
+                    height: ph,
+                    scale,
+                    angle,
+                }));
+            }
+        }
+        let mut mode = crate::color_mode::DocMode::default();
+        if version >= 6 {
+            let code = r.u8()?;
+            mode.mode = crate::color_mode::ColorMode::from_code(code).ok_or_else(|| {
+                IngestError::Decode(format!("layer manifest: colour mode {code}"))
+            })?;
+            let at = r.i64()?;
+            if at >= 0 {
+                mode.cmyk_profile = Some(buffer(at as u32)?);
+            }
+            if version >= 9 {
+                let at = r.i64()?;
+                if at >= 0 {
+                    mode.table = Some(Arc::new(decode_mode_table(&buffer(at as u32)?)?));
+                }
+            }
+        }
         if layers.is_empty() || active >= layers.len() {
             return Err(IngestError::Decode(
                 "layer manifest: no layers, or active out of range".into(),
             ));
         }
-        Ok(LayerStack {
+        let (masking, masking_len) =
+            crate::masking::MaskingDoc::decode_with_len(&manifest[r.at..], width, height, |i| {
+                buffer(i).map_err(|e| e.to_string())
+            })
+            .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
+        let workspace = crate::workspace::Workspace::decode(&manifest[r.at + masking_len..])
+            .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
+        let mut stack = LayerStack {
             width,
             height,
             layers,
             groups,
             active,
             next_id,
-            journal: TileJournal::new(),
+            journal: TileJournal::with_budget(super::history::default_budget()),
             steps: Vec::new(),
             undone: Vec::new(),
             dropped_steps: 0,
@@ -762,7 +1217,17 @@ impl LayerStack {
             edit_mask: false,
             fold: Default::default(),
             comps,
-        })
+            history_states: Default::default(),
+            masking: Default::default(),
+            styles,
+            snapshots: Vec::new(),
+            next_snapshot_id: 1,
+            next_step_id: 1,
+            mode,
+            workspace,
+        };
+        stack.masking.doc = masking;
+        Ok(stack)
     }
 }
 
@@ -772,6 +1237,89 @@ fn f32s(r: &mut R<'_>) -> Result<Vec<f32>, IngestError> {
         return Err(IngestError::Decode("layer manifest is truncated".into()));
     }
     (0..n).map(|_| r.f32()).collect()
+}
+
+/// A mode table as bytes: 1 = palette (u16 transparent index or 0xFFFF,
+/// u16 count, RGB triples), 2 = spots (u8 count; per channel RGB ink, u16
+/// name length, UTF-8 name), 3 = a Duotone specification verbatim.
+fn encode_mode_table(t: &crate::color_mode::ModeTable) -> Vec<u8> {
+    use crate::color_mode::ModeTable as T;
+    let mut out = Vec::new();
+    match t {
+        T::Palette {
+            colours,
+            transparent,
+        } => {
+            out.push(1);
+            out.extend_from_slice(&transparent.map_or(0xFFFF, u16::from).to_be_bytes());
+            out.extend_from_slice(&(colours.len() as u16).to_be_bytes());
+            for c in colours {
+                out.extend_from_slice(c);
+            }
+        }
+        T::Spots(spots) => {
+            out.push(2);
+            out.push(spots.len() as u8);
+            for sp in spots {
+                out.extend_from_slice(&sp.ink);
+                out.extend_from_slice(&(sp.name.len() as u16).to_be_bytes());
+                out.extend_from_slice(sp.name.as_bytes());
+            }
+        }
+        T::Duotone(raw) => {
+            out.push(3);
+            out.extend_from_slice(raw);
+        }
+    }
+    out
+}
+
+fn decode_mode_table(b: &[u8]) -> Result<crate::color_mode::ModeTable, IngestError> {
+    use crate::color_mode::{ModeTable as T, SpotChannel};
+    let bad = || IngestError::Decode("layer manifest: a malformed mode table".into());
+    let u16_at = |o: usize| -> Result<u16, IngestError> {
+        b.get(o..o + 2)
+            .map(|x| u16::from_be_bytes([x[0], x[1]]))
+            .ok_or_else(bad)
+    };
+    match b.first() {
+        Some(1) => {
+            let t = u16_at(1)?;
+            let n = usize::from(u16_at(3)?);
+            let body = b.get(5..5 + n * 3).ok_or_else(bad)?;
+            Ok(T::Palette {
+                colours: body.as_chunks::<3>().0.to_vec(),
+                transparent: u8::try_from(t).ok(),
+            })
+        }
+        Some(2) => {
+            let n = usize::from(*b.get(1).ok_or_else(bad)?);
+            let mut o = 2;
+            let mut spots = Vec::with_capacity(n);
+            for _ in 0..n {
+                let ink = b.get(o..o + 3).ok_or_else(bad)?;
+                let len = usize::from(u16_at(o + 3)?);
+                let name = b.get(o + 5..o + 5 + len).ok_or_else(bad)?;
+                spots.push(SpotChannel {
+                    name: String::from_utf8_lossy(name).into_owned(),
+                    ink: [ink[0], ink[1], ink[2]],
+                });
+                o += 5 + len;
+            }
+            Ok(T::Spots(spots))
+        }
+        Some(3) => Ok(T::Duotone(b[1..].to_vec())),
+        _ => Err(bad()),
+    }
+}
+
+/// The persisted code of a layer's depth (bits per sample; 32 is float).
+fn depth_code(d: SampleDepth) -> u8 {
+    match d {
+        SampleDepth::U16 => 16,
+        SampleDepth::F32 => 32,
+        _ => 8,
+    }
 }
 
 #[cfg(test)]
@@ -842,6 +1390,36 @@ mod tests {
             _ => panic!("layer 2 is the adjustment"),
         }
         assert!(back.layers[3].rgba.is_16bit(), "16-bit stays 16-bit");
+    }
+
+    /// A Develop adjustment layer (WP5.2) persists as a typed layer: its
+    /// 61 settings come back exactly.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_develop_layer_round_trips__feat__image_editor_filters() {
+        use crate::layers::Adjustment;
+        let mut s = LayerStack::from_image(4, 3, px(4, 3, 10)).expect("stack");
+        let mut v = image_kernels::families::develop::DevelopSettings::identity().0;
+        v[0] = 25.0;
+        v[9] = 40.0;
+        v[37] = 210.0;
+        v[55] = 60.0;
+        s.add_adjustment_layer(
+            "Develop",
+            Adjustment::from_wire("develop", &v, &[], "").expect("develop"),
+            None,
+        );
+        let (m, bufs) = s.export();
+        let back = LayerStack::import(&m, &bufs).expect("import");
+        let got = back
+            .layers
+            .last()
+            .and_then(|l| l.adjustment())
+            .expect("an adjustment");
+        assert_eq!(got.kind_name(), "develop");
+        assert_eq!(got.values(), v.to_vec());
+        let (m2, _) = back.export();
+        assert_eq!(m, m2, "byte-identical after a round trip");
     }
 
     /// A GROUP's mask (version 2) comes back with its switch; a version-1

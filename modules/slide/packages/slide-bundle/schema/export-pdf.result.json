@@ -1,0 +1,21 @@
+{
+  "kind": "struct",
+  "fields": {
+    "bytes": {
+      "kind": "bytes",
+      "mime": ["application/pdf"]
+    },
+    "fileName": {
+      "kind": "text"
+    },
+    "pages": {
+      "kind": "number",
+      "integer": true
+    },
+    "replaced": {
+      "kind": "number",
+      "integer": true,
+      "summary": "Characters of the notes the PDF's standard font could not draw (drawn as ?)."
+    }
+  }
+}

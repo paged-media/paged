@@ -33,7 +33,9 @@ use std::io::{self, Cursor, Read};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
+mod anchored_fx;
 pub mod designmap;
+mod effect_xml;
 pub mod graphic;
 pub mod spread;
 pub mod story;
@@ -335,6 +337,7 @@ pub fn import_idml_archive(archive: &SourceArchive) -> Result<paged_scene::Docum
         text_frame_index: HashMap::new(),
         styles,
         anchors: Vec::new(),
+        symbols: Vec::new(),
     };
     restore_patterns(&mut document);
     document.rebuild_indexes();

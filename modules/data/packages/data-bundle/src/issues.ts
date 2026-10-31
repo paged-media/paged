@@ -30,6 +30,13 @@ export const LOW_RESOLUTION_PPI = 150;
 /** The key the session publishes its issues under (`host.diagnostics`). */
 export const ISSUES_DIAGNOSTICS_KEY = "issues";
 
+/** A table cell whose text does not fit its row, as the host names it. */
+interface OversetCell {
+  table: string;
+  row: number;
+  column: number;
+}
+
 /** Text paged.data placed: a story it wrote into, or a frame whose story is
  *  read when needed. */
 export interface TextTarget {
@@ -37,6 +44,10 @@ export interface TextTarget {
   storyId?: string | null;
   frame?: string;
   record?: number;
+  /** A table paged.data lowered: the host's overflow of its story may be a
+   *  cell's text that does not fit its row (the engine reports a cell's
+   *  overset as its story's), so the message names both. */
+  table?: boolean;
 }
 
 /** The pixel size of a PNG, GIF or JPEG from its header, or null for any
@@ -91,15 +102,19 @@ export function effectivePpi(
 
 /** Overset text: every story `targets` names whose frame chain reports
  *  overflow, once per story, at the frame the text runs out of. `storyOf`
- *  finds a frame's story. A host that lays text out without fonts reports
- *  no overflow, so a one-frame story the host calls fitting is also
- *  `measure`d (the engine wraps its words at the host's advances, the rule
- *  Data Merge's overset uses). A read that fails reports nothing. */
+ *  finds a frame's story. The host's report is the composer's and is
+ *  authoritative (it includes text wrap, tables and every size in the
+ *  story). A host that lays text out without fonts reports no overflow,
+ *  so a story the host calls fitting is also `measure`d over its frames in
+ *  chain order (the engine wraps its runs at the host's advances through
+ *  each frame in turn, the rule Data Merge's overset uses), and an overset
+ *  one is named at the chain's last frame, its message saying it is an
+ *  estimate. A read that fails reports nothing. */
 export async function oversetIssues(
   host: BundleHost,
   targets: readonly TextTarget[],
   storyOf: (frame: string) => Promise<string | null>,
-  measure?: (story: string, frame: string) => Promise<boolean>,
+  measure?: (story: string, frames: readonly string[]) => Promise<boolean>,
 ): Promise<DataIssue[]> {
   const byStory = new Map<string, TextTarget>();
   for (const t of targets) {
@@ -114,6 +129,25 @@ export async function oversetIssues(
     if (story && !byStory.has(story)) byStory.set(story, t);
   }
   const out: DataIssue[] = [];
+  // The table cells each story's text overflows, as the host's layout names
+  // them (`StorySummary.oversetCells`, an engine that names none answers
+  // nothing): read once, for the tables among the targets.
+  let cellsOf = new Map<string, readonly OversetCell[]>();
+  if ([...byStory.values()].some((t) => t.table)) {
+    try {
+      const stories = await host.document.collection<{
+        selfId: string;
+        oversetCells?: readonly OversetCell[];
+      }>("stories");
+      cellsOf = new Map(
+        stories
+          .filter((s) => (s.oversetCells?.length ?? 0) > 0)
+          .map((s) => [s.selfId, s.oversetCells!]),
+      );
+    } catch {
+      // no story summaries: the table's frame is still checked
+    }
+  }
   for (const [story, t] of byStory) {
     let links: readonly { frameId: string; overflow: boolean }[];
     try {
@@ -121,10 +155,36 @@ export async function oversetIssues(
     } catch {
       continue;
     }
+    const cells = t.table ? (cellsOf.get(story) ?? []) : [];
+    if (cells.length > 0 && links.length > 0) {
+      // The composer named the cells: one notice each, at the table's frame.
+      for (const c of cells)
+        out.push({
+          kind: "overset",
+          severity: "warning",
+          message: tr(ISSUES.oversetCell, {
+            binding: t.binding,
+            row: c.row + 1,
+            column: c.column + 1,
+          }),
+          binding: t.binding,
+          address: `textFrame:${links[0]!.frameId}`,
+        });
+      continue;
+    }
     let over = links.find((l) => l.overflow);
-    if (!over && links.length === 1 && measure) {
+    let estimated = false;
+    if (!over && links.length > 0 && measure) {
       try {
-        if (await measure(story, links[0]!.frameId)) over = links[0];
+        if (
+          await measure(
+            story,
+            links.map((l) => l.frameId),
+          )
+        ) {
+          over = links[links.length - 1];
+          estimated = true;
+        }
       } catch {
         // Not measurable now: the host's answer stands.
       }
@@ -133,13 +193,7 @@ export async function oversetIssues(
     out.push({
       kind: "overset",
       severity: "warning",
-      message:
-        t.record === undefined
-          ? tr(ISSUES.overset, { binding: t.binding })
-          : tr(ISSUES.oversetRecord, {
-              binding: t.binding,
-              record: t.record + 1,
-            }),
+      message: oversetMessage(t, estimated),
       binding: t.binding,
       address: `textFrame:${over.frameId}`,
       ...(t.record === undefined ? {} : { record: t.record }),
@@ -148,25 +202,51 @@ export async function oversetIssues(
   return out;
 }
 
+/** The overset message: a table's names its cells too; a measured one
+ *  says it is an estimate, not the composer's word. */
+function oversetMessage(t: TextTarget, estimated: boolean): string {
+  if (t.table && !estimated)
+    return tr(ISSUES.oversetTable, { binding: t.binding });
+  if (t.record === undefined)
+    return tr(estimated ? ISSUES.oversetEstimated : ISSUES.overset, {
+      binding: t.binding,
+    });
+  return tr(estimated ? ISSUES.oversetRecordEstimated : ISSUES.oversetRecord, {
+    binding: t.binding,
+    record: t.record + 1,
+  });
+}
+
 /** What the session knows of an image binding since its last placement. */
 export interface ImageNote {
   /** The reason nothing was placed. */
   missing?: string;
   /** The placed picture's pixel size, when its bytes passed through. */
   pixels?: [number, number];
+  /** Placed from a plain link (no asset column): its bytes never passed
+   *  through, so its pixel size is asked of the host. */
+  linked?: boolean;
 }
 
 /** The picture issues: a missing one, or one coarser than
- *  {@link LOW_RESOLUTION_PPI} at its frame's size (`sizeOf` reads it). */
+ *  {@link LOW_RESOLUTION_PPI} at its frame's size (`sizeOf` reads it). A
+ *  picture placed from a plain link has its pixel size from `pixelsOf`
+ *  (the host's read of the placed image), or is not checked. */
 export async function imageIssues(
   notes: ReadonlyMap<string, ImageNote>,
   targetOf: (
     binding: string,
   ) => { element: ElementId; fit?: IdmlFit } | undefined,
   sizeOf: (elements: ElementId[]) => Promise<Map<string, [number, number]>>,
+  pixelsOf?: (element: ElementId) => Promise<[number, number] | null>,
 ): Promise<DataIssue[]> {
   const out: DataIssue[] = [];
-  const coarse: { binding: string; element: ElementId; fit?: IdmlFit }[] = [];
+  const coarse: {
+    binding: string;
+    element: ElementId;
+    fit?: IdmlFit;
+    pixels: [number, number];
+  }[] = [];
   for (const [binding, note] of notes) {
     const target = targetOf(binding);
     const address = target
@@ -180,7 +260,17 @@ export async function imageIssues(
         binding,
         ...(address ? { address } : {}),
       });
-    } else if (note.pixels && target) coarse.push({ binding, ...target });
+    } else if (note.pixels && target)
+      coarse.push({ binding, ...target, pixels: note.pixels });
+    else if (note.linked && target && pixelsOf) {
+      let pixels: [number, number] | null = null;
+      try {
+        pixels = await pixelsOf(target.element);
+      } catch {
+        pixels = null;
+      }
+      if (pixels) coarse.push({ binding, ...target, pixels });
+    }
   }
   if (coarse.length === 0) return out;
   let sizes: Map<string, [number, number]>;
@@ -191,8 +281,7 @@ export async function imageIssues(
   }
   for (const c of coarse) {
     const size = sizes.get(String(c.element.id));
-    const pixels = notes.get(c.binding)!.pixels!;
-    const ppi = size ? effectivePpi(pixels, size, c.fit) : null;
+    const ppi = size ? effectivePpi(c.pixels, size, c.fit) : null;
     if (ppi === null || ppi >= LOW_RESOLUTION_PPI) continue;
     out.push({
       kind: "lowResolution",

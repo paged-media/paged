@@ -104,17 +104,19 @@ export function pageDoorsOf(scope: EditorScope): PageDoors {
   return scope.get(PAGE_DOORS);
 }
 
-/** The camera that shows page `index` of `pageSizesPt`: the whole page,
- *  or its full width from its top edge. */
+/** The camera that shows page `index` of `pageSizesPt` (each page at its
+ *  `pageOriginsPt` place on the canvas): the whole page, or its full width
+ *  from its top edge. */
 export function cameraForPage(
   pageSizesPt: ReadonlyArray<readonly [number, number]>,
+  pageOriginsPt: ReadonlyArray<readonly [number, number]> | null | undefined,
   index: number,
   fit: "page" | "width",
   viewportWidthPx: number,
   viewportHeightPx: number,
   marginPx = 40,
 ): Camera | null {
-  const rect = layoutPages(pageSizesPt)[index];
+  const rect = layoutPages(pageSizesPt, pageOriginsPt)[index];
   if (!rect || viewportWidthPx <= 0 || viewportHeightPx <= 0) return null;
   if (fit === "page") {
     return fitCamera(viewportWidthPx, viewportHeightPx, rect, marginPx);
@@ -141,6 +143,7 @@ export interface TextRange {
  *  page `index` in the viewport. */
 export function cameraCentredOn(
   pageSizesPt: ReadonlyArray<readonly [number, number]>,
+  pageOriginsPt: ReadonlyArray<readonly [number, number]> | null | undefined,
   index: number,
   xPt: number,
   yPt: number,
@@ -148,7 +151,7 @@ export function cameraCentredOn(
   viewportWidthPx: number,
   viewportHeightPx: number,
 ): Camera | null {
-  const rect = layoutPages(pageSizesPt)[index];
+  const rect = layoutPages(pageSizesPt, pageOriginsPt)[index];
   if (!rect || viewportWidthPx <= 0 || viewportHeightPx <= 0 || !(scale > 0))
     return null;
   return {

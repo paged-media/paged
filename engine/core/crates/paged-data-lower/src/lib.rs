@@ -503,6 +503,10 @@ pub struct FlowGroup {
 pub struct FlowRecord {
     pub cells: Vec<String>,
     pub height_pt: f64,
+    /// The row of the result the instance shows (editor ADR 291's record
+    /// markers); `None` for a footer or a record built by hand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<usize>,
 }
 
 /// Pagination knobs (pt).
@@ -538,8 +542,13 @@ pub enum FlowBlock {
         level: usize,
         continued: bool,
     },
-    /// A record instance.
-    Record { cells: Vec<String>, height_pt: f64 },
+    /// A record instance, with the row of the result it shows.
+    Record {
+        cells: Vec<String>,
+        height_pt: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        record: Option<usize>,
+    },
     /// A section footer (a group subtotal/count row, §9.4).
     GroupFooter { cells: Vec<String>, height_pt: f64 },
 }
@@ -667,6 +676,7 @@ pub fn paginate_flow(
             frames[fi].blocks.push(FlowBlock::Record {
                 cells: rec.cells.clone(),
                 height_pt: h,
+                record: rec.record,
             });
             frames[fi].used_pt += h;
             placed += 1;

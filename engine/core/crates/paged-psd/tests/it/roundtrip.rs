@@ -29,7 +29,9 @@
 //!      structurally faithful even without the verbatim shortcut.
 
 use paged_psd::container::Container;
-use paged_psd::model::{AddlBody, ColorMode, GlobalLayerMask, PsdFile, ResourceBody, SectionKind};
+use paged_psd::model::{
+    AddlBody, ColorMode, GlobalLayerMask, PsdFile, PsdGuide, ResourceBody, SectionKind,
+};
 
 // ---------------------------------------------------------------------------
 // Byte-vector builders (big-endian, spec §10.4 layout)
@@ -457,5 +459,115 @@ fn image_psd_roundtrip_unknown_resource_opaque() {
     ));
     assert_eq!(file.resources.blocks[0].id, 2999);
     assert_eq!(file.resources.blocks[0].name.text_lossy(), "meta");
+    assert_eq!(file.write().unwrap(), bytes);
+}
+
+// ---------------------------------------------------------------------------
+// Grid and guides (id 1032)
+// ---------------------------------------------------------------------------
+
+/// The 1032 record as Photoshop lays it out: version, two grid cycles,
+/// the count, then 5 bytes per guide (i32 location in 1/32 px, u8
+/// direction: 0 vertical, 1 horizontal).
+fn guides_record(guides: &[(i32, u8)]) -> Vec<u8> {
+    let mut d = Vec::new();
+    d.extend_from_slice(&be32(1));
+    d.extend_from_slice(&be32(576));
+    d.extend_from_slice(&be32(576));
+    d.extend_from_slice(&be32(guides.len() as u32));
+    for (loc, dir) in guides {
+        d.extend_from_slice(&loc.to_be_bytes());
+        d.push(*dir);
+    }
+    d
+}
+
+fn flat_psd_with_guides(guides: &[(i32, u8)]) -> Vec<u8> {
+    let resources = resources_section(&[resource_block(1032, b"", &guides_record(guides))]);
+    let layer_mask = be32(0).to_vec();
+    let comp_payload: Vec<u8> = (0..12u8).collect();
+    let composite = channel_data(0, &comp_payload);
+    assemble(3, 2, 2, resources, layer_mask, composite)
+}
+
+#[test]
+fn grid_and_guides_are_read_typed_and_written_back_verbatim() {
+    let bytes = flat_psd_with_guides(&[(3200, 0), (16, 1)]);
+    let file = PsdFile::parse(&bytes).unwrap();
+    let g = file.resources.guides();
+    assert_eq!(g.len(), 2);
+    assert_eq!(g[0].pixels(), 100.0);
+    assert!(!g[0].horizontal);
+    assert_eq!(g[1].pixels(), 0.5);
+    assert!(g[1].horizontal);
+    // Untouched: byte for byte.
+    assert_eq!(file.write().unwrap(), bytes);
+}
+
+#[test]
+fn setting_the_same_guides_changes_nothing() {
+    let bytes = flat_psd_with_guides(&[(3200, 0)]);
+    let mut file = PsdFile::parse(&bytes).unwrap();
+    let same = file.resources.guides().to_vec();
+    assert!(!file.resources.set_guides(&same));
+    assert_eq!(file.write().unwrap(), bytes);
+    // A file without the record stays without it when there are none.
+    let mut flat = PsdFile::parse(&flat_psd()).unwrap();
+    assert!(!flat.resources.set_guides(&[]));
+    assert_eq!(flat.write().unwrap(), flat_psd());
+}
+
+#[test]
+fn edited_guides_re_encode_and_parse_back() {
+    let mut file = PsdFile::parse(&flat_psd_with_guides(&[(3200, 0)])).unwrap();
+    let want = [
+        PsdGuide::at_pixels(12.25, true),
+        PsdGuide::at_pixels(-3.0, false),
+    ];
+    assert!(file.resources.set_guides(&want));
+    let out = file.write().unwrap();
+    let back = PsdFile::parse(&out).unwrap();
+    assert_eq!(back.resources.guides(), want);
+    let rec = back.resources.grid_and_guides().unwrap();
+    assert_eq!(
+        (rec.version, rec.grid_cycle_h, rec.grid_cycle_v),
+        (1, 576, 576)
+    );
+}
+
+#[test]
+fn a_file_without_guides_gains_the_record_in_id_order() {
+    let mut file = PsdFile::parse(&flat_psd()).unwrap();
+    assert!(file
+        .resources
+        .set_guides(&[PsdGuide::at_pixels(1.0, false)]));
+    let ids: Vec<u16> = file.resources.blocks.iter().map(|b| b.id).collect();
+    assert_eq!(ids, vec![1005, 1032]);
+    let back = PsdFile::parse(&file.write().unwrap()).unwrap();
+    assert_eq!(back.resources.guides(), [PsdGuide::at_pixels(1.0, false)]);
+    // The other block still rides verbatim.
+    assert!(back.resources.resolution().is_some());
+}
+
+#[test]
+fn a_malformed_guides_record_stays_opaque() {
+    // Count says two, the record holds one.
+    let mut d = guides_record(&[(32, 0)]);
+    d[12..16].copy_from_slice(&be32(2));
+    let resources = resources_section(&[resource_block(1032, b"", &d)]);
+    let bytes = assemble(
+        3,
+        2,
+        2,
+        resources,
+        be32(0).to_vec(),
+        channel_data(0, &(0..12u8).collect::<Vec<_>>()),
+    );
+    let file = PsdFile::parse(&bytes).unwrap();
+    assert!(file.resources.guides().is_empty());
+    assert!(matches!(
+        file.resources.blocks[0].body,
+        ResourceBody::Opaque
+    ));
     assert_eq!(file.write().unwrap(), bytes);
 }

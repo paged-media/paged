@@ -23,10 +23,10 @@
 // a page + page-local coordinate, the same way the canvas viewport
 // does. The authoritative layout lives in `apps/canvas/src/ui/layout.ts`
 // (the app owns page geometry), but shell cannot import from apps, so
-// the ONE convention the controller needs — pages stacked vertically
-// at x=0 with a fixed 24 pt gap — is mirrored here. If the app's
-// stacking ever changes (spreads side-by-side, columns), both must
-// move together; this file names that coupling explicitly.
+// the ONE convention the controller needs is mirrored here: each page at
+// its canvas origin (engine ADR 1011, `DocumentHandle.pageOriginsPt`),
+// else stacked vertically at x=0 with a fixed 24 pt gap. Both must move
+// together; this file names that coupling explicitly.
 
 export interface ShellPageRect {
   x: number;
@@ -38,13 +38,17 @@ export interface ShellPageRect {
 /** Mirror of `apps/canvas/src/ui/layout.ts` `layoutPages`. */
 export function layoutPageRects(
   pageSizesPt: ReadonlyArray<readonly [number, number]>,
+  pageOriginsPt?: ReadonlyArray<readonly [number, number]> | null,
   gapPt = 24,
 ): ShellPageRect[] {
   const out: ShellPageRect[] = [];
+  const placed =
+    pageOriginsPt != null && pageOriginsPt.length === pageSizesPt.length;
   let y = 0;
-  for (const [w, h] of pageSizesPt) {
-    out.push({ x: 0, y, w, h });
+  pageSizesPt.forEach(([w, h], i) => {
+    const at = placed ? pageOriginsPt[i] : null;
+    out.push(at ? { x: at[0], y: at[1], w, h } : { x: 0, y, w, h });
     y += h + gapPt;
-  }
+  });
   return out;
 }

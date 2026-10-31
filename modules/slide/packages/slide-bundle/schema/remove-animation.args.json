@@ -1,0 +1,13 @@
+{
+  "kind": "struct",
+  "fields": {
+    "slide": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/slide",
+      "optional": true
+    },
+    "index": {
+      "kind": "number"
+    }
+  }
+}

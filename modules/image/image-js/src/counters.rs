@@ -44,6 +44,8 @@ pub struct EngineCounters {
     pub layers_folded: u64,
     /// Tile windows cut for the host.
     pub tiles_cut: u64,
+    /// Tiles the tiled fold folded (ADR 480).
+    pub fold_tiles: u64,
 }
 
 impl EngineCounters {
@@ -61,6 +63,7 @@ impl EngineCounters {
             composites: self.composites.saturating_sub(earlier.composites),
             layers_folded: self.layers_folded.saturating_sub(earlier.layers_folded),
             tiles_cut: self.tiles_cut.saturating_sub(earlier.tiles_cut),
+            fold_tiles: self.fold_tiles.saturating_sub(earlier.fold_tiles),
         }
     }
 }
@@ -75,6 +78,7 @@ thread_local! {
             composites: 0,
             layers_folded: 0,
             tiles_cut: 0,
+            fold_tiles: 0,
         })
     };
 }
@@ -124,7 +128,7 @@ pub fn to_json() -> String {
     let g = image_gpu::counters::snapshot();
     format!(
         "{{\"engine\":{{\"wholeImageCopies\":{},\"bytesCopied\":{},\"depthNarrowings\":{},\
-         \"narrowedBytes\":{},\"composites\":{},\"layersFolded\":{},\"tilesCut\":{}}},\
+         \"narrowedBytes\":{},\"composites\":{},\"layersFolded\":{},\"tilesCut\":{},\"foldTiles\":{}}},\
          \"gpu\":{{\"shaderModules\":{},\"pipelinesBuilt\":{},\"dispatches\":{},\
          \"dispatchedTexels\":{},\"submits\":{},\"texturesCreated\":{},\"bytesUploaded\":{},\
          \"readbacks\":{},\"bytesReadBack\":{}}}}}",
@@ -135,6 +139,7 @@ pub fn to_json() -> String {
         e.composites,
         e.layers_folded,
         e.tiles_cut,
+        e.fold_tiles,
         g.shader_modules,
         g.pipelines_built,
         g.dispatches,

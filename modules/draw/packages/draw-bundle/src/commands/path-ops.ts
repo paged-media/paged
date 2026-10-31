@@ -24,7 +24,13 @@
 // UNITS (documented here, asserted in conformance):
 //   · outlineStroke `width`      — pt (the stroke weight to outline)
 //   · offsetPath    `delta`      — pt (positive grows outward,
-//                                  negative shrinks)
+//                                  negative shrinks; a compound path's
+//                                  holes move the other way)
+//                   `side`       — an OPEN path's side: "both" (the
+//                                  band, the default), "left" or
+//                                  "right" of its direction on the page
+//                                  (one open parallel path; engine ADR
+//                                  1019)
 //   · simplifyPath  `tolerance`  — pt (max deviation a removed anchor
 //                                  may introduce — RDP semantics)
 //   · `miterLimit`               — the usual unitless ratio
@@ -97,11 +103,20 @@ export interface OutlineStrokeParams {
   miterLimit: number;
 }
 
+/** Which side of an OPEN path an offset goes to (engine ADR 1019).
+ *  Closed contours ignore it. */
+export type OffsetSideToken = "both" | "left" | "right";
+
 export interface OffsetPathParams {
   delta: number;
   join: StrokeJoinToken;
   miterLimit: number;
+  /** Absent = "both". */
+  side?: OffsetSideToken;
 }
+
+const sideToken = (v: unknown): OffsetSideToken | undefined =>
+  v === "both" || v === "left" || v === "right" ? v : undefined;
 
 /** The four path-bearing kinds the topology ops accept (the same set
  *  the anchor tools edit). Exported for the brush handlers (the blob
@@ -147,6 +162,8 @@ export function offsetPathMutationFor(
       delta: params.delta,
       join: params.join,
       miterLimit: params.miterLimit,
+      // Sent only when asked for, so the wire op stays what it was.
+      ...(params.side && params.side !== "both" ? { side: params.side } : {}),
     },
   };
 }
@@ -293,8 +310,8 @@ export async function applyOutlineStroke(
 }
 
 /** Offset Path: defaults `{ delta: 6 pt, join: "miter", miterLimit: 4 }`,
- *  payload overrides `{ delta?, join?, miterLimit? }` (negative delta
- *  shrinks). */
+ *  payload overrides `{ delta?, join?, miterLimit?, side? }` (negative
+ *  delta shrinks; `side` offsets an open path to one side only). */
 export async function applyOffsetPath(
   host: BundleHost,
   payload?: PathOpPayload,
@@ -303,6 +320,7 @@ export async function applyOffsetPath(
     delta: num(payload?.delta) ?? DEFAULT_OFFSET_DELTA_PT,
     join: joinToken(payload?.join) ?? "miter",
     miterLimit: num(payload?.miterLimit) ?? DEFAULT_MITER_LIMIT,
+    side: sideToken(payload?.side),
   };
   await commitEach(
     host,

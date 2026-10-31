@@ -48,3 +48,9 @@ and the parity test, not a prior written decision:
   ΔE gap.
 - ICC-on-wasm remains listed in the internal renderer gap list; the parity test
   is the guard that the wasm substitution stays inside the fidelity envelope.
+
+## Note — 2026-10-24 ([ADR 1032](1032-one-cms-with-intents-and-bpc.md))
+
+The paint path described here is unchanged. Beside it, `paged_color::cms` drives lcms2, qcms
+and moxcms through one API with explicit intents and black-point compensation; placed CMYK
+rasters on wasm32 now convert through moxcms with BPC rather than through qcms.

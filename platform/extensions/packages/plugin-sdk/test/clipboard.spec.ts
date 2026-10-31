@@ -205,3 +205,50 @@ describe("host.clipboard — the no-backend door (K-6)", () => {
     expect(warned).toBeGreaterThan(0);
   });
 });
+
+describe("host.clipboard — the svg half (extensions ADR 341) [editor-shell.vector-clipboard]", () => {
+  const SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>';
+
+  it("supports('clipboard.svg@1') tracks a backend that carries svg", () => {
+    expect(makeHost(VECTOR).host.supports("clipboard.svg@1")).toBe(false);
+    const textOnly: ClipboardBackend = {
+      async read() {
+        return null;
+      },
+      async write() {},
+    };
+    expect(makeHost(VECTOR, textOnly).host.supports("clipboard.svg@1")).toBe(
+      false,
+    );
+    expect(
+      makeHost(VECTOR, inMemoryClipboard()).host.supports("clipboard.svg@1"),
+    ).toBe(true);
+  });
+
+  it('"vector" and "full" round-trip an svg half beside the text', async () => {
+    for (const manifest of [VECTOR, FULL]) {
+      const { host } = makeHost(manifest, inMemoryClipboard());
+      await host.clipboard.write({ text: "a shape", svg: SVG });
+      const back = await host.clipboard.read();
+      expect(back?.svg).toBe(SVG);
+      expect(back?.text).toBe("a shape");
+    }
+  });
+
+  it("a backend without svg never receives nor surfaces the half", async () => {
+    let written: ClipboardPayload | null = null;
+    const textOnly: ClipboardBackend = {
+      async read() {
+        return { text: "t", svg: SVG };
+      },
+      async write(p) {
+        written = p;
+      },
+    };
+    const { host } = makeHost(VECTOR, textOnly);
+    await host.clipboard.write({ text: "t", svg: SVG });
+    expect(written).toEqual({ text: "t" });
+    expect(await host.clipboard.read()).toEqual({ text: "t" });
+  });
+});

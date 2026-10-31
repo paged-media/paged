@@ -132,32 +132,9 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 // for any p.radius ≤ 24 stay inside that fixed, centered window. The
 // shader and the reference both guard `p.radius <= 24`.
 
-/// Compile-time MAX Gaussian radius (the windowed ROI bound, §8.3).
-pub const GAUSSIAN_MAX_RADIUS: u16 = 24;
-
-/// Gaussian pass params: blur σ and the (clamped ≤ 24) integer radius.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
-pub struct ConvGaussianParams {
-    pub sigma: f32,
-    pub radius: u32,
-    pub _abi_pad: u32,
-}
-
-#[allow(clippy::new_without_default)]
-impl ConvGaussianParams {
-    pub fn new(sigma: f32, radius: u32) -> Self {
-        Self {
-            sigma,
-            radius,
-            _abi_pad: 0,
-        }
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        ::bytemuck::bytes_of(self)
-    }
-}
+// The param blocks and the radius bound live in `paged-kernels` (engine
+// ADR 1013's first step); re-exported so every path stays.
+pub use paged_kernels::params::{ConvGaussianParams, ConvUnsharpParams, GAUSSIAN_MAX_RADIUS};
 
 const GAUSSIAN_PARAM_FIELDS: &[ParamField] = &[
     ParamField {
@@ -309,30 +286,6 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 // so unsharp itself runs on the existing point lane (`execute_tile_once`
 // / `parity`). M0 tests use threshold 0.0 (every channel sharpened).
 // The module applies the ABI mask itself: `mix(a, result, m)`.
-
-/// Unsharp params: sharpening `amount` and per-channel `threshold`.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
-pub struct ConvUnsharpParams {
-    pub amount: f32,
-    pub threshold: f32,
-    pub _abi_pad: u32,
-}
-
-#[allow(clippy::new_without_default)]
-impl ConvUnsharpParams {
-    pub fn new(amount: f32, threshold: f32) -> Self {
-        Self {
-            amount,
-            threshold,
-            _abi_pad: 0,
-        }
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        ::bytemuck::bytes_of(self)
-    }
-}
 
 /// out = a + amount·(a − b) where |a − b| > threshold per channel, else
 /// a. Binary point kernel; mip_exact (a pure pointwise blend of two

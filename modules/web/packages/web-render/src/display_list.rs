@@ -35,6 +35,7 @@
 //! the document scale), so the lowering is a coordinate-preserving walk —
 //! it never needs a transform stack.
 
+use crate::effects::WebEffect;
 use crate::wire::{RectPt, ScenePaint, ScenePathSeg};
 
 /// A flattened bezier path in content points (the result of
@@ -183,6 +184,18 @@ pub enum WebDrawCmd {
     /// recover) — counted + skipped. Outset drop shadows lower via
     /// `DrawShadow`; inset shadows lower via `DrawInsetShadow`.
     BoxShadow,
+
+    /// Opens an element's effect group (ADR 415): every command up to the
+    /// matching [`WebDrawCmd::PopGroup`] is painted inside it. Draws nothing;
+    /// the lowering turns it into a [`crate::effects::SceneEffectGroup`].
+    PushGroup(Box<WebEffect>),
+
+    /// Closes the innermost open effect group.
+    PopGroup,
+
+    /// An element effect the capture could not attach to painted items (an
+    /// inline element's `opacity`, say), by loss key.
+    EffectLoss { key: String },
 }
 
 /// A compositing blend mode for [`WebDrawCmd::FillBlend`] — the captured

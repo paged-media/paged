@@ -77,16 +77,41 @@ import {
   type SelectionMode,
   type SelectionRect,
   type SnapLine,
+  type SnapSettings,
   type SnapshotPng,
+  type SvgExportOptions,
+  type SvgImportOptions,
+  type SvgImportPlan,
+  type SvgReport,
+  type ViewSettings,
   type TextCellAddr,
+  type UndoLogEntryWire,
   type WordBounds,
   type WorkerToMain,
 } from "./protocol";
 import { CameraBuffer, type Camera } from "./sab/camera";
 import { GestureBuffer } from "./sab/gesture";
+import {
+  allocateDataBridge,
+  DataBridgeHost,
+  type DataCallAnswerer,
+} from "./sab/data-bridge";
 import type { JournalEntry, UncapturedLedger } from "./journal";
 
 /** What {@link CanvasClient.snapshotBackendInfo} reports. */
+/** Engine ADR 1030 — the `undoLog` reply ({@link CanvasClient.undoLog}). */
+export interface UndoLog {
+  /** Oldest first; the last step is what an undo reverts. */
+  undo: UndoLogEntryWire[];
+  /** The next redo first. */
+  redo: UndoLogEntryWire[];
+  undoLen: number;
+  redoLen: number;
+  depth: number;
+  /** Steps the depth evicted since the document opened. */
+  evicted: number;
+}
+
 export interface SnapshotBackendInfo {
   /** The policy {@link CanvasClient.setSnapshotBackend} set. */
   requested: "auto" | "gpu" | "cpu";
@@ -94,6 +119,30 @@ export interface SnapshotBackendInfo {
   gpuReady: boolean;
   /** The rasterizer that drew the last snapshot; null before the first. */
   last: "gpu" | "cpu" | null;
+}
+
+/** What {@link CanvasClient.requestSnapshot} draws besides the page at a
+ *  size (extensions ADR 338; editor ADR 288 for the file formats). */
+export interface SnapshotOptions {
+  /** Draw the canvas's editor-only markers (ADR 205). */
+  markers?: boolean;
+  /** Draw nothing but these items, on an otherwise empty page. */
+  only?: readonly ElementId[];
+  /** Draw this page region (page pt) alone; the reply's `region` is the
+   *  region drawn, grown to whole pixels. */
+  clip?: { x: number; y: number; width: number; height: number };
+  /** `"png"` (the default, `pngBytes`), `"rgba"` (`rgba`), or a file
+   *  `paged-raster` writes into `bytes`: `"jpeg"`, `"webp"` (lossless),
+   *  `"tiff"`, `"gif"`, `"bmp"`, `"tga"`, `"jxl"` (lossless). */
+  format?:
+    "png" | "rgba" | "jpeg" | "webp" | "tiff" | "gif" | "bmp" | "tga" | "jxl";
+  /** `"paper"` (white, the default) or `"transparent"`. A JPEG has no
+   *  alpha: the engine flattens it onto white. */
+  background?: "paper" | "transparent";
+  /** On a transparent ground, crop to the pixels something was drawn on. */
+  trim?: boolean;
+  /** JPEG quality, 1 to 100 (the engine's default: 90). */
+  quality?: number;
 }
 
 /** ADR 025 — what one worker-journal drain hands back. */
@@ -370,6 +419,32 @@ class UndoGroupState {
   }
 }
 
+/**
+ * The largest SVG the client posts for an import, in bytes: the engine's
+ * own limit (`paged_svg::limits::MAX_SVG_BYTES`, 32 MiB). The file rides
+ * the JSON channel as a number array the worker buffers at about 20 bytes
+ * per input byte, so a much larger one would exhaust the worker before
+ * the engine could refuse it; the client answers for it instead, with the
+ * engine's own reply shape and wording.
+ */
+const SVG_IMPORT_MAX_BYTES = 32 * 1024 * 1024;
+
+function svgTooLarge(size: number): WorkerToMain {
+  return {
+    seq: null,
+    protocol: PROTOCOL_VERSION,
+    kind: "svgImportPlanned",
+    payload: {
+      mutation: null,
+      report: { items: 0, notes: [] },
+      width: 0,
+      height: 0,
+      error:
+        `the SVG is too large to read: ${size} bytes, over ` +
+        `${SVG_IMPORT_MAX_BYTES / (1024 * 1024)} MiB (the limit is ${SVG_IMPORT_MAX_BYTES} bytes)`,
+    },
+  };
+}
 export class CanvasClient {
   private readonly worker: Worker;
   /** The selection last posted (`setSelection`); `documentStats` posts it
@@ -410,6 +485,8 @@ export class CanvasClient {
   private fatal: Error | null = null;
   /** ADR 323 — answers a suspended script's `plugin:` calls. */
   private hostObjects: HostObjectsAnswerer | null = null;
+  /** Engine ADR 1014, amendment 2 — answers a script's `paged.data.*`. */
+  private dataBridge: DataBridgeHost | null = null;
   /** See {@link markSaved}: replies that may have changed the document,
    *  counted, and the count at the last save (`null`: never saved since
    *  the load). */
@@ -480,6 +557,12 @@ export class CanvasClient {
         () => this.post(kind),
         (reply) => reply.kind === "documentLoaded",
       );
+    }
+    if (
+      kind.kind === "requestSvgImport" &&
+      kind.payload.bytes.length > SVG_IMPORT_MAX_BYTES
+    ) {
+      return svgTooLarge(kind.payload.bytes.length);
     }
     const face = this.noteFontRegistry(kind);
     const reply = await this.post(kind);
@@ -705,12 +788,17 @@ export class CanvasClient {
    * substitute face, the cross over EPS/PDF content that cannot be drawn)
    * and without the soft proof. `{ markers: true }` draws the page as the
    * canvas shows it — for a view of the canvas, such as a page thumbnail.
+   *
+   * The other options are extensions ADR 338's (`only`, `clip`,
+   * `background`, `trim`, `format: "rgba"`) and editor ADR 288's file
+   * formats: `format: "jpeg" | "webp" | "tiff"` answers the file, encoded
+   * by the engine's `paged-raster`, in `bytes` (`quality` 1–100 for JPEG).
    */
   async requestSnapshot(
     pageId: PageId,
     targetWidthPx: number,
     dpi?: number,
-    options?: { markers?: boolean },
+    options?: SnapshotOptions,
   ): Promise<SnapshotPng> {
     const reply = await this.send({
       kind: "requestSnapshot",
@@ -719,6 +807,18 @@ export class CanvasClient {
         targetWidthPx,
         dpi: dpi ?? null,
         ...(options?.markers ? { markers: true } : {}),
+        ...(options?.only?.length ? { only: [...options.only] } : {}),
+        ...(options?.clip ? { clip: { ...options.clip } } : {}),
+        ...(options?.format && options.format !== "png"
+          ? { format: options.format }
+          : {}),
+        ...(options?.background === "transparent"
+          ? { background: "transparent" as const }
+          : {}),
+        ...(options?.trim ? { trim: true } : {}),
+        ...(options?.quality !== undefined
+          ? { quality: Math.round(Math.min(Math.max(options.quality, 1), 100)) }
+          : {}),
       },
     });
     if (reply.kind === "snapshotReady") {
@@ -749,6 +849,36 @@ export class CanvasClient {
    */
   async mutate(mutation: Mutation): Promise<WorkerToMain> {
     return this.send({ kind: "mutate", payload: mutation });
+  }
+
+  /**
+   * v77 (editor ADR 287) — how the screen draws the document: Preview,
+   * Outline, Overprint Preview or Pixel Preview. Session state the worker
+   * keeps across document loads; no build, export or undo step sees it.
+   * Resolves to the settings now in force.
+   */
+  async setViewSettings(settings: ViewSettings): Promise<ViewSettings> {
+    const reply = await this.send({
+      kind: "setViewSettings",
+      payload: { settings },
+    });
+    if (reply.kind === "viewSettingsApplied") return reply.payload.settings;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v67 — the session's snapping preferences (tolerance, targets, grid,
+   * and since v77 pixel, spacing, angle and rotate snapping). Every
+   * gesture and `requestSnapPoint` obeys them; they survive document
+   * loads. Resolves to the settings now in force.
+   */
+  async setSnapSettings(settings: SnapSettings): Promise<SnapSettings> {
+    const reply = await this.send({
+      kind: "setSnapSettings",
+      payload: { settings },
+    });
+    if (reply.kind === "snapSettingsApplied") return reply.payload.settings;
+    throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
   /**
@@ -1249,6 +1379,64 @@ export class CanvasClient {
     if (reply.kind === "exportIdmlFailed") {
       throw new Error(reply.payload.error);
     }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v77 (engine ADR 1031) — plan the import of an SVG (or SVGZ) file onto
+   * `pageId`: the engine reads it with usvg and lowers it to ONE batch of
+   * native page items (paths, swatches, gradients, groups, clips, masks,
+   * pictures, text frames). A pure read: apply `plan.mutation` with
+   * {@link mutate} (one undo step). `plan.report` names what was
+   * approximated or left out; `plan.error` says why nothing could be read.
+   */
+  async svgImportPlan(
+    pageId: PageId,
+    bytes: Uint8Array,
+    options: SvgImportOptions = {},
+  ): Promise<SvgImportPlan> {
+    const reply = await this.send({
+      kind: "requestSvgImport",
+      payload: { pageId, bytes: Array.from(bytes), options },
+    });
+    if (reply.kind === "svgImportPlanned") return reply.payload;
+    if (reply.kind === "mutationFailed") {
+      throw new Error(`svg import refused (${reply.payload.error.kind})`);
+    }
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v77 (engine ADR 1031) — plan and apply an SVG import as one undo step.
+   * Resolves to the plan and the mutation's reply (`null` when the file
+   * draws nothing or could not be read).
+   */
+  async importSvg(
+    pageId: PageId,
+    bytes: Uint8Array,
+    options: SvgImportOptions = {},
+  ): Promise<{ plan: SvgImportPlan; reply: WorkerToMain | null }> {
+    const plan = await this.svgImportPlan(pageId, bytes, options);
+    if (!plan.mutation) return { plan, reply: null };
+    return { plan, reply: await this.mutate(plan.mutation) };
+  }
+
+  /**
+   * v77 (engine ADR 1031) — the page `pageId` as an SVG document; with
+   * `elementIds`, nothing but those items, the view box fitted to what
+   * they draw. Text is outlines unless `options.text` is `"text"`.
+   */
+  async exportSvg(
+    pageId: PageId,
+    elementIds: readonly ElementId[] = [],
+    options: SvgExportOptions = {},
+  ): Promise<{ svg: string; report: SvgReport }> {
+    const reply = await this.send({
+      kind: "exportSvg",
+      payload: { pageId, elementIds: [...elementIds], options },
+    });
+    if (reply.kind === "svgExported") return reply.payload;
+    if (reply.kind === "exportSvgFailed") throw new Error(reply.payload.error);
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
@@ -1940,6 +2128,28 @@ export class CanvasClient {
   }
 
   /**
+   * Engine ADR 1014, amendment 2 — install the answerer for a script's
+   * `paged.data.tables / records / query / evaluate`: `answer(method, args)`
+   * is called with the interpreter's positional arguments and resolves to
+   * the value the script gets (a throw is the script's error). The worker
+   * blocks on shared memory while it waits, so this needs cross-origin
+   * isolation; without `SharedArrayBuffer` it is a no-op and
+   * `paged.data.*` keeps throwing "no data is attached". `null` removes
+   * it. Returns whether the door is installed.
+   */
+  setScriptData(answer: DataCallAnswerer | null): boolean {
+    if (!answer || typeof SharedArrayBuffer === "undefined") {
+      if (this.dataBridge) this.worker.postMessage({ kind: "dataBridge" });
+      this.dataBridge = null;
+      return false;
+    }
+    const buffer = allocateDataBridge();
+    this.dataBridge = new DataBridgeHost(buffer, answer);
+    this.worker.postMessage({ kind: "dataBridge", buffer });
+    return true;
+  }
+
+  /**
    * Phase B — begin a gesture against the listed elements. Resolves
    * to the worker's handle; pass it to subsequent
    * `updateGesture` / `commitGesture` / `cancelGesture` calls.
@@ -2500,6 +2710,64 @@ export class CanvasClient {
     return this.send({ kind: "redo" });
   }
 
+  /**
+   * Engine ADR 1030 — the named undo timeline: the newest `limit` undo
+   * steps oldest first and the redo steps next-redo first (all of them
+   * without a limit), with the logs' lengths and the history depth.
+   */
+  async undoLog(limit?: number): Promise<UndoLog> {
+    const reply = await this.send({
+      kind: "requestUndoLog",
+      payload: limit === undefined ? {} : { limit },
+    });
+    if (reply.kind === "undoLog") return reply.payload;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** Engine ADR 1030 — name the undo step `appliedSeq` (the step a write
+   *  just made) `label`. Resolves whether it took the name: a step that is
+   *  no longer the top of the undo log keeps its own. */
+  async labelStep(appliedSeq: number, label: string): Promise<boolean> {
+    const reply = await this.send({
+      kind: "labelStep",
+      payload: { appliedSeq, label },
+    });
+    return reply.kind === "stepLabeled" && reply.payload.labeled;
+  }
+
+  /** Engine ADR 1030 — undo down to and including the step `appliedSeq`,
+   *  in one round trip. Resolves with the reply (`undoApplied`, or
+   *  `mutationFailed` when the step is not on the undo log). */
+  async undoTo(appliedSeq: number): Promise<WorkerToMain> {
+    return this.send({ kind: "undoTo", payload: { appliedSeq } });
+  }
+
+  /** Engine ADR 1030 — redo up to and including the step `appliedSeq`. */
+  async redoTo(appliedSeq: number): Promise<WorkerToMain> {
+    return this.send({ kind: "redoTo", payload: { appliedSeq } });
+  }
+
+  /** Engine ADR 1030 — make the document what it was right after the step
+   *  `appliedSeq` (`0`: before the oldest step) as ONE new undo step named
+   *  `label` (a snapshot restore). Reply: `mutationApplied`. */
+  async restoreTo(appliedSeq: number, label?: string): Promise<WorkerToMain> {
+    return this.send({
+      kind: "restoreTo",
+      payload: label ? { appliedSeq, label } : { appliedSeq },
+    });
+  }
+
+  /** Engine ADR 1030 — keep at most `depth` undo steps (1..=10,000); the
+   *  worker keeps the depth across loads. Resolves with the depth in force. */
+  async setHistoryDepth(depth: number): Promise<number> {
+    const reply = await this.send({
+      kind: "setHistoryDepth",
+      payload: { depth },
+    });
+    if (reply.kind === "historyDepthApplied") return reply.payload.depth;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
   /** Write the camera transform. Worker reads it on the next frame. */
   setCamera(cam: Camera): void {
     this.camera.write(cam);
@@ -2639,6 +2907,8 @@ export class CanvasClient {
     // Side-channel: binary loadDocument reply (skip the JSON envelope
     // because the request payload was binary, see `loadDocument`).
     const raw = event.data as { kind?: string };
+    // A script's `paged.data` call, while the worker blocks on its answer.
+    if (this.dataBridge?.handle(raw)) return;
     if (raw && raw.kind === "loadDocumentBinaryReply") {
       const r = event.data as { seq: number; replyJson: string };
       const pending = this.loadDocPending.get(r.seq);

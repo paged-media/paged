@@ -39,6 +39,19 @@
 // caret the keys are the story's (`useTextEditing`): copy and cut a range,
 // paste text into the story.
 //
+// VECTORS (ADR 289). Copy also asks the engine for the selection as an
+// SVG document (`exportSvg`, `paged-svg`, text as outlines) and writes it
+// as `image/svg+xml` where the browser takes that type; with no frame text
+// to carry, the SVG is the `text/plain` form too, as Illustrator writes
+// it. Paste of an SVG — the `image/svg+xml` flavour, or plain text that IS
+// an SVG document (preferred: the browser sanitises the first and drops
+// its `<style>`) — imports through `paged-svg` as native page items, one
+// undo step, centred on the view (Paste) or at the page origin (Paste in
+// place: SVG user space is page space), the import's losses reported. No
+// browser lets a page write PDF to the clipboard (`ClipboardItem.supports
+// ("application/pdf")` is false), and none exposes Illustrator's PDF
+// flavour to a read; what it does expose is recorded in ADR 289.
+//
 // DUPLICATE (InDesign: Alt+Shift+Cmd+D) copies the selection in place,
 // offset by InDesign's default step of 1p0 (12 pt) right and down, directly
 // above each source, one undo step (`duplicateElements`).
@@ -68,6 +81,9 @@ const M = defineMessages("app.clipboardCommands", {
   nothingToCopy: "nothing to copy",
   needsDocument: "{verb} needs an open document.",
   clipboardEmpty: "{verb}: the clipboard holds nothing to paste.",
+  svgUnreadable: "{verb}: the clipboard's SVG could not be read: {error}",
+  svgNothing: "{verb}: the clipboard's SVG draws nothing.",
+  svgApproximated: "{verb} (SVG): {message} ({count}×)",
 });
 
 // The words of this file's menu rows; the shell's menu bar shows each
@@ -110,6 +126,9 @@ export interface PageItemClip {
   snippet: string;
   /** The copied frames' text: the plain-text form. */
   text: string;
+  /** The copy as an SVG document (`image/svg+xml`), when the engine
+   *  wrote one (ADR 289). */
+  svg?: string;
   /** How many items were copied (roots). */
   count: number;
   /** This copy's marker on the system clipboard. */
@@ -122,13 +141,22 @@ export type ClipboardReport = (
   message: string,
 ) => void;
 
+/** The forms a copy puts on, and a paste reads off, the system
+ *  clipboard. `svg` is the `image/svg+xml` flavour (ADR 289). */
+export interface ClipboardForms {
+  text: string;
+  html: string;
+  svg?: string;
+}
+
 /** The system clipboard, as far as the browser lets us reach it. Injected
  *  so tests (and a host without one) can stand in. */
 export interface SystemClipboard {
-  /** Write the plain-text and HTML forms; resolves false when refused. */
-  write(text: string, html: string): Promise<boolean>;
-  /** Read the plain-text and HTML forms; null when refused. */
-  read(): Promise<{ text: string; html: string } | null>;
+  /** Write the forms (an `svg` the platform will not take is left out);
+   *  resolves false when refused. */
+  write(forms: ClipboardForms): Promise<boolean>;
+  /** Read the forms; null when refused. */
+  read(): Promise<ClipboardForms | null>;
 }
 
 const SESSION = Math.random().toString(36).slice(2, 10);
@@ -179,6 +207,13 @@ function fromBase64(s: string): string | null {
   }
 }
 
+/** The plain-text form of a copy: its frames' text, else its SVG code
+ *  (as Illustrator writes it, so another application's text paste lands
+ *  the drawing). */
+export function plainTextOf(c: PageItemClip): string {
+  return c.text || c.svg || "";
+}
+
 /** The HTML form of a copy: its text, marked as this editor's. */
 export function clipHtml(c: PageItemClip): string {
   const carry =
@@ -192,15 +227,29 @@ export function clipHtml(c: PageItemClip): string {
 /** What a system clipboard's content is to this editor. */
 export type ClipboardContent =
   | { kind: "items"; snippet: string }
+  | { kind: "svg"; svg: string }
   | { kind: "text"; text: string }
   | { kind: "empty" };
+
+/** `text` when it is an SVG document (an XML declaration, comments and a
+ *  doctype may come first), else null. Illustrator's plain-text flavour
+ *  is its SVG code. */
+export function svgDocumentOf(text: string | undefined): string | null {
+  if (!text) return null;
+  const body = text.replace(/^\uFEFF/, "").trim();
+  return /^(?:<\?xml[^>]*\?>\s*)?(?:(?:<!--[\s\S]*?-->|<!DOCTYPE[^>]*>)\s*)*<svg[\s>]/i.test(
+    body,
+  ) && /<\/svg>\s*$/i.test(body)
+    ? body
+    : null;
+}
 
 /** Decide what a paste pastes. The system clipboard wins when it holds
  *  something newer than our copy (no marker, or another copy's); our copy
  *  (internal) when the clipboard still carries its marker, or when the
  *  browser will not let us read the clipboard at all. */
 export function resolvePaste(
-  system: { text: string; html: string } | null,
+  system: ClipboardForms | null,
   internal: PageItemClip | null,
 ): ClipboardContent {
   if (system) {
@@ -215,31 +264,74 @@ export function resolvePaste(
     if (system.text) {
       // Our own plain text with the marker lost on the way (a browser
       // that keeps text/plain only) is still our copy.
-      if (internal && !marker && system.text === internal.text && !system.html)
+      if (
+        internal &&
+        !marker &&
+        system.text === plainTextOf(internal) &&
+        !system.html
+      )
         return { kind: "items", snippet: internal.snippet };
-      return { kind: "text", text: system.text.replace(/\r\n?/g, "\n") };
     }
+    // Vectors (ADR 289): plain text that is an SVG document first (the
+    // source as written; the browser's `image/svg+xml` is sanitised, its
+    // `<style>` dropped), then the SVG flavour itself.
+    const svg = svgDocumentOf(system.text) ?? svgDocumentOf(system.svg);
+    if (svg) return { kind: "svg", svg };
+    if (system.text)
+      return { kind: "text", text: system.text.replace(/\r\n?/g, "\n") };
     if (marker && internal) return { kind: "items", snippet: internal.snippet };
   }
   if (internal) return { kind: "items", snippet: internal.snippet };
   return { kind: "empty" };
 }
 
+/** The SVG MIME type of the async clipboard (Chromium 124+ writes it as
+ *  the platform's SVG flavour, `public.svg-image` on macOS). */
+export const SVG_MIME = "image/svg+xml";
+
+/** Does the browser's clipboard take `type`? `ClipboardItem.supports`
+ *  where it exists; where it does not, only the two universal types. */
+export function clipboardTakes(type: string): boolean {
+  const CI = (
+    globalThis as { ClipboardItem?: { supports?: (t: string) => boolean } }
+  ).ClipboardItem;
+  if (typeof CI?.supports === "function") {
+    try {
+      return CI.supports(type);
+    } catch {
+      return false;
+    }
+  }
+  return type === "text/plain" || type === "text/html";
+}
+
 /** The browser's async clipboard (where it exists and the user allows). */
 export function browserClipboard(): SystemClipboard {
   return {
-    async write(text, html) {
+    async write({ text, html, svg }) {
       const nav = globalThis.navigator as Navigator | undefined;
       const cb = nav?.clipboard;
       if (!cb) return false;
       try {
         if (typeof ClipboardItem !== "undefined" && cb.write) {
-          await cb.write([
-            new ClipboardItem({
-              "text/plain": new Blob([text], { type: "text/plain" }),
-              "text/html": new Blob([html], { type: "text/html" }),
-            }),
-          ]);
+          const forms: Record<string, Blob> = {
+            "text/plain": new Blob([text], { type: "text/plain" }),
+            "text/html": new Blob([html], { type: "text/html" }),
+          };
+          if (svg && clipboardTakes(SVG_MIME)) {
+            try {
+              await cb.write([
+                new ClipboardItem({
+                  ...forms,
+                  [SVG_MIME]: new Blob([svg], { type: SVG_MIME }),
+                }),
+              ]);
+              return true;
+            } catch {
+              /* a browser that names the type but refuses it: without */
+            }
+          }
+          await cb.write([new ClipboardItem(forms)]);
           return true;
         }
         await cb.writeText(text);
@@ -256,13 +348,16 @@ export function browserClipboard(): SystemClipboard {
           const items = await cb.read();
           let text = "";
           let html = "";
+          let svg = "";
           for (const item of items) {
             if (!text && item.types.includes("text/plain"))
               text = await (await item.getType("text/plain")).text();
             if (!html && item.types.includes("text/html"))
               html = await (await item.getType("text/html")).text();
+            if (!svg && item.types.includes(SVG_MIME))
+              svg = await (await item.getType(SVG_MIME)).text();
           }
-          return { text, html };
+          return svg ? { text, html, svg } : { text, html };
         }
         return { text: await cb.readText(), html: "" };
       } catch {
@@ -338,17 +433,46 @@ export async function copySelection(
     deps.report("error", refusedText(verb, refused ?? t(M.nothingToCopy)));
     return null;
   }
+  const svg = await selectionSvg(paged, ids);
   const next: PageItemClip = {
     snippet,
     text,
     count,
     token: `${SESSION}:${++seq}`,
+    ...(svg ? { svg } : {}),
   };
   pageItemClipboard.set(next);
   // Best effort: the internal copy stands whether or not the browser lets
   // us write the system clipboard.
-  await deps.system.write(text, clipHtml(next));
+  await deps.system.write({
+    text: plainTextOf(next),
+    html: clipHtml(next),
+    ...(svg ? { svg } : {}),
+  });
   return next;
+}
+
+/** The copied items as one SVG document (ADR 289): the engine's
+ *  `paged-svg` export of the items on the first selected item's page,
+ *  text as outlines. Null when the engine cannot write one; the copy
+ *  stands without it. */
+async function selectionSvg(
+  paged: PagedEditor,
+  ids: readonly ElementId[],
+): Promise<string | null> {
+  try {
+    const geometry = await paged.client.elementGeometry([...ids]);
+    const pageId = geometry.find((g) => g.pageId)?.pageId;
+    if (!pageId) return null;
+    const onPage = ids.filter((_, i) => geometry[i]?.pageId === pageId);
+    const { svg } = await paged.client.exportSvg(
+      pageId,
+      onPage.length > 0 ? onPage : ids,
+    );
+    return svg || null;
+  } catch {
+    return null;
+  }
 }
 
 /** Cut: copy, then delete the selection (one undo step: the delete). */
@@ -385,12 +509,15 @@ function viewCentre(
 async function selectMinted(
   paged: PagedEditor,
   reply: WorkerToMain,
+  topOnly = false,
 ): Promise<void> {
   if (reply.kind !== "mutationApplied") return;
   const minted = (reply.payload.minted ?? []).map((m) => m.element);
+  // An SVG import mints its top item (its group) last.
+  const all = topOnly ? minted.slice(-1) : minted;
   const ids =
-    minted.length > 0
-      ? minted
+    all.length > 0
+      ? all
       : reply.payload.createdId
         ? [reply.payload.createdId]
         : [];
@@ -427,6 +554,10 @@ export async function pasteClipboard(
   );
   if (content.kind === "empty") {
     deps.report("info", t(M.clipboardEmpty, { verb: verbText(verb) }));
+    return;
+  }
+  if (content.kind === "svg") {
+    await pasteSvg(paged, deps, verb, content.svg, at, inPlace);
     return;
   }
   let mutation: Mutation;
@@ -474,6 +605,69 @@ export async function pasteClipboard(
     return;
   }
   await selectMinted(paged, reply);
+}
+
+/** Paste an SVG document (ADR 289): `paged-svg` plans ONE batch of native
+ *  page items, applied as one undo step. Paste centres the drawing on the
+ *  view (a first plan measures it); Paste in place puts its user space on
+ *  the page's (origin 0,0). What the import approximated or left out is
+ *  reported, never dropped. */
+export async function pasteSvg(
+  paged: PagedEditor,
+  deps: ClipboardDeps,
+  verb: string,
+  svg: string,
+  at: { pageId: string; center: [number, number] },
+  inPlace: boolean,
+): Promise<WorkerToMain | null> {
+  const bytes = new TextEncoder().encode(svg);
+  let plan;
+  try {
+    plan = await paged.client.svgImportPlan(at.pageId, bytes, {
+      origin: [0, 0],
+    });
+    if (!inPlace && plan.mutation) {
+      const [cx, cy] = at.center;
+      plan = await paged.client.svgImportPlan(at.pageId, bytes, {
+        origin: [cx - plan.width / 2, cy - plan.height / 2],
+      });
+    }
+  } catch (e) {
+    deps.report(
+      "error",
+      t(M.svgUnreadable, { verb: verbText(verb), error: String(e) }),
+    );
+    return null;
+  }
+  if (plan.error) {
+    deps.report(
+      "error",
+      t(M.svgUnreadable, { verb: verbText(verb), error: plan.error }),
+    );
+    return null;
+  }
+  if (!plan.mutation) {
+    deps.report("info", t(M.svgNothing, { verb: verbText(verb) }));
+    return null;
+  }
+  const reply = await paged.client.mutate(plan.mutation);
+  const refusal = refusalOf(reply);
+  if (refusal) {
+    deps.report("error", refusedText(verb, refusal));
+    return reply;
+  }
+  for (const n of plan.report.notes) {
+    deps.report(
+      "warning",
+      t(M.svgApproximated, {
+        verb: verbText(verb),
+        message: n.message,
+        count: n.count,
+      }),
+    );
+  }
+  await selectMinted(paged, reply, true);
+  return reply;
 }
 
 /** Duplicate: a copy of each selected item, InDesign's step right and

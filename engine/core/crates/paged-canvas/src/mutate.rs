@@ -204,7 +204,58 @@ pub fn apply(doc: &mut Document, op: &TextOp) -> Result<AppliedText, TextOpError
             }),
         _ => None,
     };
+    // Engine ADR 1022 — where the edit stands among the story's text
+    // destinations (Word's bookmarks), with the paragraphs it starts from.
+    let anchored = match op {
+        TextOp::InsertText {
+            story_id,
+            offset,
+            cell: None,
+            ..
+        }
+        | TextOp::DeleteRange {
+            story_id,
+            start: offset,
+            cell: None,
+            ..
+        } => doc
+            .stories
+            .iter()
+            .find(|s| &s.self_id == story_id && !s.story.destinations.is_empty())
+            .map(|s| {
+                (
+                    story_id.clone(),
+                    content_offset_to_char(&s.story.paragraphs, *offset),
+                    s.story.paragraphs.clone(),
+                    matches!(op, TextOp::DeleteRange { .. }),
+                )
+            }),
+        _ => None,
+    };
     let applied = apply_text_op(doc, op)?;
+    if let Some((story_id, at, before_paragraphs, deleted)) = anchored {
+        if let Some(s) = doc.stories.iter_mut().find(|s| s.self_id == story_id) {
+            let count = |ps: &[paged_model::Paragraph]| -> u32 {
+                ps.iter()
+                    .flat_map(|p| p.runs.iter())
+                    .map(|r| r.text.chars().count() as u32)
+                    .sum()
+            };
+            let (before, after) = (count(&before_paragraphs), count(&s.story.paragraphs));
+            let (removed, inserted) = if deleted {
+                (before.saturating_sub(after), 0)
+            } else {
+                (0, after.saturating_sub(before))
+            };
+            crate::model::word_structure::keep_destinations(
+                &mut s.story,
+                &before_paragraphs,
+                at,
+                removed,
+                inserted,
+            );
+        }
+    }
     if let Some((story_id, at, before, deleted)) = tagged {
         if let Some(s) = doc.stories.iter_mut().find(|s| s.self_id == story_id) {
             let after = s.story.flat_text().chars().count() as u32;
@@ -404,7 +455,25 @@ fn apply_insert_text(
     //
     // The implementation walks segments and splits as needed,
     // chaining the resulting locate() to the next insertion point.
+    // Engine ADR 1018 — Enter at a paragraph's end gives the new
+    // paragraph its style's Next Style, as InDesign and Word do. Only for
+    // a lone paragraph break (the Return key), never for pasted text.
+    let enter_at_end = (text == "\n")
+        .then(|| paragraph_end_at(paragraphs, offset))
+        .flatten();
+    let typed_at = content_offset_to_char(paragraphs, offset);
     insert_segments(paragraphs, offset, text);
+    // Engine ADR 1040 — typed text is nobody's insertion or deletion until
+    // the tracked lane records it as one: it does not inherit the change
+    // of the run it was typed into.
+    crate::review::clear_revisions(
+        paragraphs,
+        typed_at,
+        typed_at + text.chars().filter(|c| *c != '\n').count() as u32,
+    );
+    if let Some(pi) = enter_at_end {
+        apply_next_style(doc, story_id, cell, pi);
+    }
     Ok(AppliedText {
         story_id: story_id.into(),
         inverse: TextOp::DeleteRange {
@@ -421,6 +490,50 @@ fn apply_insert_text(
             keep_run,
         },
     })
+}
+
+/// The paragraph `offset` ends, when it stands at the end of one (past its
+/// last character; empty runs after it do not count).
+fn paragraph_end_at(paragraphs: &[paged_model::Paragraph], offset: u32) -> Option<usize> {
+    match locate(paragraphs, offset) {
+        Locate::InRun {
+            paragraph_idx,
+            run_idx,
+            byte_in_run,
+        } => {
+            let p = &paragraphs[paragraph_idx];
+            let rest_empty = p.runs[run_idx + 1..].iter().all(|r| r.text.is_empty());
+            (byte_in_run == p.runs[run_idx].text.len() && rest_empty).then_some(paragraph_idx)
+        }
+        Locate::EndOfStory { paragraph_idx } => Some(paragraph_idx),
+        Locate::AtParagraphBreak { .. } => None,
+    }
+}
+
+/// Give paragraph `pi + 1` (just made by Enter at the end of `pi`) the
+/// Next Style of `pi`'s paragraph style, when that names a style the
+/// document has. Undo needs nothing more: the inverse delete joins the
+/// two paragraphs and the joined one keeps `pi`'s attributes.
+fn apply_next_style(doc: &mut Document, story_id: &str, cell: &Option<TextCellAddr>, pi: usize) {
+    let Ok(paragraphs) = find_paragraphs_mut(doc, story_id, cell) else {
+        return;
+    };
+    let Some(current) = paragraphs.get(pi).and_then(|p| p.paragraph_style.clone()) else {
+        return;
+    };
+    let styles = &doc.styles.paragraph_styles;
+    let Some(next) = styles
+        .get(&current)
+        .and_then(|d| d.next_style.clone())
+        .filter(|n| *n != current && styles.contains_key(n))
+    else {
+        return;
+    };
+    if let Ok(paragraphs) = find_paragraphs_mut(doc, story_id, cell) {
+        if let Some(p) = paragraphs.get_mut(pi + 1) {
+            p.paragraph_style = Some(next);
+        }
+    }
 }
 
 /// `text` with every paragraph return spelled `\n`: `\r\n`, `\r` and
@@ -668,9 +781,12 @@ fn split_paragraph_at(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32)
         Locate::EndOfStory { paragraph_idx } => {
             // Split at the end of the paragraph — the new paragraph
             // is empty.
-            let para = &paragraphs[paragraph_idx];
+            let para = &mut paragraphs[paragraph_idx];
+            // Engine ADR 1040 — the paragraph's mark ends the new
+            // paragraph; the split paragraph ends with a new one.
             let new_para = paged_model::Paragraph {
                 paragraph_style: para.paragraph_style.clone(),
+                mark_revision: para.mark_revision.take(),
                 ..Default::default()
             };
             paragraphs.insert(paragraph_idx + 1, new_para);
@@ -716,6 +832,8 @@ fn split_paragraph_at(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32)
         tracked_deletions: moved_deletions,
         table,
         table_anchor,
+        // Engine ADR 1040 — the paragraph's mark ends the tail.
+        mark_revision: para.mark_revision.take(),
         ..Default::default()
     };
     paragraphs.insert(paragraph_idx + 1, new_para);

@@ -1413,6 +1413,9 @@ export function createImageObjects(
       height: img.height,
       scale: l.smart?.scale ?? 1,
       source: img.rgba,
+      // A new source drops the old file and placement: it is drawn at the
+      // origin at `scale` (the pre-ADR-482 meaning of no placement).
+      ext: null,
     };
     // The cached render is now older than the source; re-rendering is a
     // GPU resample, so it is recorded and done where a device exists.
@@ -1481,6 +1484,7 @@ export function createImageObjects(
           height: s.stack.height,
           scale: 1,
           source: canvas,
+          ext: null,
         };
         return;
       }

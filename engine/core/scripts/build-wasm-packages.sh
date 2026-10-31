@@ -30,6 +30,16 @@
 # @paged-media/viewer. The editor reads the protocol from the package
 # version's minor, so a local build carries the engine's real protocol.
 #
+# Local, opt-in (docs/development/rust-builds.md, "Fast local wasm builds";
+# `moon run core:wasm-dev`):
+#
+#   PAGED_WASM_PROFILE=dev     the `wasm-dev` Cargo profile (root .cargo/config.toml:
+#                              parallel codegen, no LTO) and no wasm-opt. Larger,
+#                              somewhat slower wasm; refused under CI and in any moon
+#                              task but core:wasm-dev, so it never reaches a
+#                              release or a moon cache entry of wasm/wasm-pkg.
+#   PAGED_WASM_PARTS=canvas,repo   the parts to build when none are named.
+#
 # wasm-bindgen-cli must match the wasm-bindgen version in Cargo.lock (checked
 # below; a mismatched CLI writes glue that does not fit the module). wasm-opt
 # (binaryen) is optional locally and required under CI.
@@ -62,6 +72,26 @@ if [ "$CLI" != "$LOCKED" ]; then
   echo "build-wasm-packages: wasm-bindgen-cli $CLI != Cargo.lock wasm-bindgen $LOCKED" >&2
   exit 1
 fi
+PROFILE=wasm-release
+case "${PAGED_WASM_PROFILE:-release}" in
+  release | wasm-release) ;;
+  dev | wasm-dev)
+    if [ -n "${CI:-}" ]; then
+      echo "build-wasm-packages: PAGED_WASM_PROFILE=dev is local only; CI builds wasm-release" >&2
+      exit 1
+    fi
+    if [ -n "${MOON_TARGET:-}" ] && [ "${PAGED_WASM_DEV_TASK:-}" != 1 ]; then
+      echo "build-wasm-packages: PAGED_WASM_PROFILE=dev inside $MOON_TARGET would cache a dev build as" >&2
+      echo "  a release one; use moon run core:wasm-dev" >&2
+      exit 1
+    fi
+    PROFILE=wasm-dev
+    ;;
+  *)
+    echo "build-wasm-packages: PAGED_WASM_PROFILE must be release or dev, not '$PAGED_WASM_PROFILE'" >&2
+    exit 1
+    ;;
+esac
 if ! command -v wasm-opt >/dev/null 2>&1 && [ -n "${CI:-}" ]; then
   echo "build-wasm-packages: wasm-opt not found; CI must not ship unoptimised wasm" >&2
   exit 1
@@ -115,18 +145,20 @@ build() {
     out="$distdir"
     case "$part" in canvas | introspect | repo) dist_canvas_shell ;; esac
   fi
-  echo "==> $part ($crate) -> $out"
+  echo "==> $part ($crate, $PROFILE) -> $out"
   if [ "$features" = "-" ]; then
-    cargo build --profile wasm-release --target "$TARGET" -p "$crate"
+    cargo build --profile "$PROFILE" --target "$TARGET" -p "$crate"
   else
-    cargo build --profile wasm-release --target "$TARGET" -p "$crate" --features "$features"
+    cargo build --profile "$PROFILE" --target "$TARGET" -p "$crate" --features "$features"
   fi
 
   # Generate into a scratch directory, then move the result into place, so a
   # failed step leaves the previous build (and the committed files) as they were.
   gen="$(mktemp -d)"
-  wasm-bindgen "$TARGET_DIR/$TARGET/wasm-release/$stem.wasm" --target web --out-dir "$gen"
-  if command -v wasm-opt >/dev/null 2>&1; then
+  wasm-bindgen "$TARGET_DIR/$TARGET/$PROFILE/$stem.wasm" --target web --out-dir "$gen"
+  if [ "$PROFILE" = wasm-dev ]; then
+    : # dev: wasm-opt -Oz costs minutes per part and only buys size
+  elif command -v wasm-opt >/dev/null 2>&1; then
     wasm-opt -Oz "$gen/${stem}_bg.wasm" -o "$gen/${stem}_bg.wasm.opt"
     mv "$gen/${stem}_bg.wasm.opt" "$gen/${stem}_bg.wasm"
   else
@@ -152,7 +184,12 @@ build() {
 }
 
 if [ "$#" -eq 0 ]; then
-  set -- canvas introspect repo session
+  if [ -n "${PAGED_WASM_PARTS:-}" ]; then
+    IFS=', ' read -r -a REQUESTED <<<"$PAGED_WASM_PARTS"
+    set -- "${REQUESTED[@]}"
+  else
+    set -- canvas introspect repo session
+  fi
 fi
 PARTS=()
 for arg in "$@"; do
@@ -162,7 +199,7 @@ for part in "${PARTS[@]}"; do
   build "$part"
 done
 if [ "$MODE" = workspace ]; then
-  echo "build-wasm-packages: ${PARTS[*]} in the workspace packages (versions as committed)"
+  echo "build-wasm-packages: ${PARTS[*]} ($PROFILE) in the workspace packages (versions as committed)"
 else
-  echo "build-wasm-packages: ${PARTS[*]} in dist/ (canvas-wasm at $VERSION)"
+  echo "build-wasm-packages: ${PARTS[*]} ($PROFILE) in dist/ (canvas-wasm at $VERSION)"
 fi

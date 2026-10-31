@@ -718,3 +718,99 @@ fn set_flow_grow_rule() {
         "true",
     );
 }
+
+// ---- engine ADRs 1018 and 1021 ----------------------------------------
+
+#[test]
+fn find() {
+    covers!("script:paged.find");
+    let (mut m, _, _, story) = with_story("The cat sat on the cat mat.");
+    let out = reads(&mut m, "paged.find('cat')");
+    let hits = json_of(last_line(&out));
+    assert_eq!(hits.as_array().map(Vec::len), Some(2));
+    has_keys(
+        &hits[0],
+        &[
+            "storyId",
+            "start",
+            "end",
+            "charStart",
+            "charEnd",
+            "paragraph",
+            "text",
+            "context",
+        ],
+    );
+    assert_eq!(hits[0]["storyId"], story.as_str());
+    let out = reads(&mut m, "paged.find('c.t', {mode: 'regex', limit: 1})");
+    assert_eq!(json_of(last_line(&out)).as_array().map(Vec::len), Some(1));
+    // A bad pattern answers no hits.
+    let out = reads(&mut m, "paged.find('(', {mode: 'regex'})");
+    assert_eq!(last_line(&out), "[]");
+    throws(&mut m, "paged.find(Symbol('x'))", SYMBOL_TO_STRING);
+}
+
+#[test]
+fn find_replace() {
+    covers!("script:paged.findReplace");
+    let (mut m, _, _, story) = with_story("The cat sat on the cat mat.");
+    refuses(&mut m, "paged.findReplace('zebra', 'x')", "false");
+    writes(
+        &mut m,
+        "paged.findReplace('cat', 'dog', {replaceAll: true})",
+        "true",
+    );
+    assert!(story_text(&mut m, &story).contains("The dog sat on the dog mat."));
+    throws(
+        &mut m,
+        "paged.findReplace(Symbol('x'), 'y')",
+        SYMBOL_TO_STRING,
+    );
+}
+
+#[test]
+fn set_list_level() {
+    covers!("script:paged.setListLevel");
+    let (mut m, _, _, story) = with_story("One\nTwo");
+    refuses(
+        &mut m,
+        &format!("paged.setListLevel({story:?}, 0, 0, {{level: 12}})"),
+        "false",
+    );
+    writes(
+        &mut m,
+        &format!("paged.setListLevel({story:?}, 0, 5, {{level: 2}})"),
+        "true",
+    );
+    writes(
+        &mut m,
+        &format!("paged.setListLevel({story:?}, 0, 0, {{delta: 1}})"),
+        "true",
+    );
+    throws(
+        &mut m,
+        "paged.setListLevel(Symbol('s'), 0, 0, {level: 1})",
+        SYMBOL_TO_STRING,
+    );
+}
+
+#[test]
+fn restart_numbering() {
+    covers!("script:paged.restartNumbering");
+    let (mut m, _, _, story) = with_story("One\nTwo");
+    refuses(
+        &mut m,
+        "paged.restartNumbering('no-such-story', 0, 0, {})",
+        "false",
+    );
+    writes(
+        &mut m,
+        &format!("paged.restartNumbering({story:?}, 4, 4, {{startAt: 5}})"),
+        "true",
+    );
+    throws(
+        &mut m,
+        "paged.restartNumbering(Symbol('s'), 0, 0, {})",
+        SYMBOL_TO_STRING,
+    );
+}

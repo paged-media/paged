@@ -165,8 +165,11 @@ fn the_footnote_diagnostic_says_what_is_carried_and_what_is_not__feat__plugin_do
         .expect("a footnote diagnostic");
     assert!(msg.contains("10 footnote(s)"), "{msg}");
     assert!(msg.contains("differing"), "{msg}");
-    assert!(msg.contains("NOT placed on the page"), "{msg}");
-    assert!(msg.contains("cannot be added to the page yet"), "{msg}");
+    assert!(msg.contains("placed as native notes"), "{msg}");
+    assert!(
+        msg.contains("inserted document keeps them unplaced"),
+        "{msg}"
+    );
     assert!(
         !msg.contains("no footnote construct"),
         "the stale claim is gone: {msg}"

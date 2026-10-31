@@ -1,0 +1,1179 @@
+{
+  "fixture": "smart-objects",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/smart-objects.jsx",
+    "script_sha256": "632a0ccc6f50a0a3ee6ad94ef53edca2079a38bd5cfa49cdcd6a05abbcd10eb4",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-29T10:43:47.385Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "so-plain",
+      "params": {
+        "what": "the smart object as made"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/so-plain.psd",
+        "smart-objects/so-plain.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 0
+        },
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "so-scale-rotate",
+      "params": {
+        "scale": [
+          75,
+          75
+        ],
+        "rotate": 30,
+        "move": [
+          10,
+          -5
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/so-scale-rotate.psd",
+        "smart-objects/so-scale-rotate.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 0
+        },
+        "transform": [
+          55.0192378864668,
+          10.0192378864668,
+          106.980762113533,
+          40.0192378864668,
+          76.9807621135332,
+          91.9807621135332,
+          25.0192378864668,
+          61.9807621135332
+        ],
+        "non_affine": [
+          55.0192378864668,
+          10.0192378864668,
+          106.980762113533,
+          40.0192378864668,
+          76.9807621135332,
+          91.9807621135332,
+          25.0192378864668,
+          61.9807621135332
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "so-skew",
+      "params": {
+        "scale": [
+          120,
+          80
+        ],
+        "skew": [
+          20,
+          0
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/so-skew.psd",
+        "smart-objects/so-skew.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 0
+        },
+        "transform": [
+          -3.64704749651847,
+          24,
+          92.3529525034815,
+          24,
+          115.647047496518,
+          88,
+          19.6470474965185,
+          88
+        ],
+        "non_affine": [
+          -3.64704749651847,
+          24,
+          92.3529525034815,
+          24,
+          115.647047496518,
+          88,
+          19.6470474965185,
+          88
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "so-flip",
+      "params": {
+        "scale": [
+          -100,
+          100
+        ],
+        "move": [
+          20,
+          30
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/so-flip.psd",
+        "smart-objects/so-flip.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 0
+        },
+        "transform": [
+          116,
+          46,
+          36,
+          46,
+          36,
+          126,
+          116,
+          126
+        ],
+        "non_affine": [
+          116,
+          46,
+          36,
+          46,
+          36,
+          126,
+          116,
+          126
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "so-upscale",
+      "params": {
+        "scale": [
+          180,
+          180
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/so-upscale.psd",
+        "smart-objects/so-upscale.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 0
+        },
+        "transform": [
+          -16,
+          -16,
+          128,
+          -16,
+          128,
+          128,
+          -16,
+          128
+        ],
+        "non_affine": [
+          -16,
+          -16,
+          128,
+          -16,
+          128,
+          128,
+          -16,
+          128
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "so-downscale-restore",
+      "params": {
+        "scale": [
+          25,
+          25
+        ],
+        "then": [
+          400,
+          400
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/so-downscale-restore.psd",
+        "smart-objects/so-downscale-restore.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 0
+        },
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-gaussian",
+      "params": {
+        "filters": [
+          [
+            "gaussianBlur",
+            3
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-gaussian.psd",
+        "smart-objects/sf-gaussian.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Gaußscher Weichzeichner...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 3
+            },
+            "filterID": 1198747202
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-stack",
+      "params": {
+        "filters": [
+          [
+            "gaussianBlur",
+            2
+          ],
+          [
+            "motionBlur",
+            30,
+            10,
+            "off"
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-stack.psd",
+        "smart-objects/sf-stack.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 2
+        },
+        "filter_fx": [
+          {
+            "name": "Gaußscher Weichzeichner...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 2
+            },
+            "filterID": 1198747202
+          },
+          {
+            "name": "Bewegungsunschärfe...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": false,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "angle": 30,
+              "distance": 10
+            },
+            "filterID": 1299476034
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-mask",
+      "params": {
+        "filters": [
+          [
+            "gaussianBlur",
+            4
+          ]
+        ],
+        "mask": "left half hidden"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-mask.psd",
+        "smart-objects/sf-mask.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Gaußscher Weichzeichner...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 4
+            },
+            "filterID": 1198747202
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-transformed",
+      "params": {
+        "scale": [
+          75,
+          75
+        ],
+        "rotate": 30,
+        "filters": [
+          [
+            "gaussianBlur",
+            2
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-transformed.psd",
+        "smart-objects/sf-transformed.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Gaußscher Weichzeichner...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 2
+            },
+            "filterID": 1198747202
+          }
+        ],
+        "transform": [
+          45.0192378864668,
+          15.0192378864668,
+          96.9807621135332,
+          45.0192378864668,
+          66.9807621135332,
+          96.9807621135332,
+          15.0192378864668,
+          66.9807621135332
+        ],
+        "non_affine": [
+          45.0192378864668,
+          15.0192378864668,
+          96.9807621135332,
+          45.0192378864668,
+          66.9807621135332,
+          96.9807621135332,
+          15.0192378864668,
+          66.9807621135332
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-box-blur",
+      "params": {
+        "filters": [
+          [
+            "boxBlur",
+            3
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-box-blur.psd",
+        "smart-objects/sf-box-blur.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Box-Weichzeichnung...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 3
+            },
+            "filterID": 840
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-high-pass",
+      "params": {
+        "filters": [
+          [
+            "highPass",
+            2
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-high-pass.psd",
+        "smart-objects/sf-high-pass.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Hochpass...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 2
+            },
+            "filterID": 1214736464
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-median",
+      "params": {
+        "filters": [
+          [
+            "median",
+            2
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-median.psd",
+        "smart-objects/sf-median.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Helligkeit interpolieren...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 2
+            },
+            "filterID": 1298427424
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-maximum",
+      "params": {
+        "filters": [
+          [
+            "maximum",
+            2
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-maximum.psd",
+        "smart-objects/sf-maximum.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Helle Bereiche vergrößern...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 2
+            },
+            "filterID": 1299737888
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-minimum",
+      "params": {
+        "filters": [
+          [
+            "minimum",
+            2
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-minimum.psd",
+        "smart-objects/sf-minimum.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Dunkle Bereiche vergrößern...",
+            "blendOptions": {
+              "opacity": 100,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 2
+            },
+            "filterID": 1299082528
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "sf-opacity",
+      "params": {
+        "filters": [
+          [
+            "gaussianBlur",
+            3,
+            "opacity 50"
+          ]
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/sf-opacity.psd",
+        "smart-objects/sf-opacity.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 1
+        },
+        "filter_fx": [
+          {
+            "name": "Gaußscher Weichzeichner...",
+            "blendOptions": {
+              "opacity": 50,
+              "mode": "normal"
+            },
+            "enabled": true,
+            "hasoptions": true,
+            "foregroundColor": {
+              "red": 0,
+              "grain": 0,
+              "blue": 0
+            },
+            "backgroundColor": {
+              "red": 255,
+              "grain": 255,
+              "blue": 255
+            },
+            "filter": {
+              "radius": 3
+            },
+            "filterID": 1198747202
+          }
+        ],
+        "transform": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "non_affine": [
+          16,
+          16,
+          96,
+          16,
+          96,
+          96,
+          16,
+          96
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2
+      }
+    },
+    {
+      "id": "so-edit-contents",
+      "params": {
+        "scale": [
+          75,
+          75
+        ],
+        "edit": "red square at (40, 40) 16x16 in the contents"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "smart-objects/so-edit-contents.psd",
+        "smart-objects/so-edit-contents.png"
+      ],
+      "values": {
+        "smart_object": {
+          "placed": "rasterizeContent",
+          "file_reference": "art.psb",
+          "link_changed": null,
+          "filters": 0
+        },
+        "transform": [
+          26,
+          26,
+          86,
+          26,
+          86,
+          86,
+          26,
+          86
+        ],
+        "non_affine": [
+          26,
+          26,
+          86,
+          26,
+          86,
+          86,
+          26,
+          86
+        ],
+        "size": {
+          "width": 80,
+          "height": 80
+        },
+        "resolution": 72,
+        "type": 2,
+        "extra": {
+          "name": "art.psb",
+          "width": 80,
+          "height": 80,
+          "layers": 1
+        }
+      }
+    }
+  ]
+}

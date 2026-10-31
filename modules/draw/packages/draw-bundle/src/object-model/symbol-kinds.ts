@@ -35,6 +35,7 @@
 
 import type {
   BundleHost,
+  ElementId,
   MutationInput,
   ObjectKindContribution,
   ObjectOp,
@@ -59,6 +60,13 @@ import {
   type SymbolInstance,
 } from "../commands/symbols";
 import { linkIndex } from "../link-index";
+import {
+  engineInstanceIds,
+  engineSymbols,
+  readEngineSymbols,
+  readInstanceStates,
+  type EngineSymbol,
+} from "../commands/symbols-engine";
 import {
   fromWrite,
   kindBatch,
@@ -163,12 +171,23 @@ export function makeSymbolKind(
     content: { kind: "vector" },
     hostOf: () => "doc",
     async list() {
+      if (engineSymbols(host))
+        return (await readEngineSymbols(host)).map((s) =>
+          addressOf(SYMBOL_KIND, s.id),
+        );
       return (await readSymbolLibrary(host)).symbols.map((s) =>
         addressOf(SYMBOL_KIND, s.id),
       );
     },
     async get(address, path): Promise<ObjectValue> {
       const id = idOf(address);
+      if (engineSymbols(host)) {
+        const row = id
+          ? (await readEngineSymbols(host)).find((s) => s.id === id)
+          : undefined;
+        if (!row) return refuse("unknownAddress", `no symbol ${address}`);
+        return engineSymbolValue(row, path);
+      }
       const def = id ? findSymbol(await readSymbolLibrary(host), id) : null;
       if (!def) return refuse("unknownAddress", `no symbol ${address}`);
       switch (path) {
@@ -193,6 +212,7 @@ export function makeSymbolKind(
     batch: (ops: readonly ObjectOp[]) =>
       kindBatch(host, (o) => symbolKind.plan(o))(ops),
     async plan(ops: readonly ObjectOp[]): Promise<Planned> {
+      if (engineSymbols(host)) return planEngineSymbols(host, ops, idOf);
       let library = await readSymbolLibrary(host);
       const mutations: MutationInput[] = [];
       for (const op of ops) {
@@ -233,6 +253,20 @@ export function makeSymbolInstanceKind(
   const find = async (address: string): Promise<SymbolInstance | null> => {
     const id = idOf(address);
     if (!id) return null;
+    if (engineSymbols(host)) {
+      const [state] = await readInstanceStates(host, [
+        { kind: "instance", id } as unknown as ElementId,
+      ]);
+      if (!state) return null;
+      // An engine instance is ONE page item: it is its own leaf, and its
+      // origin is where its registration point lands.
+      return {
+        symbol: state.symbol ?? "",
+        instance: id,
+        origin: [state.matrix[4], state.matrix[5]],
+        leaves: [state.id],
+      };
+    }
     return (await symbolInstances(host)).find((i) => i.instance === id) ?? null;
   };
   return {
@@ -248,6 +282,15 @@ export function makeSymbolInstanceKind(
       return leaf ? coreAddressOf(leaf) : null;
     },
     async list(query) {
+      if (engineSymbols(host)) {
+        let ids = await engineInstanceIds(host);
+        const within = query.within ? parseAddress(query.within) : null;
+        if (within?.kind === "item") {
+          const item = formatAddress(within);
+          ids = ids.filter((i) => coreAddressOf(i) === item);
+        }
+        return ids.map((i) => addressOf(SYMBOL_INSTANCE_KIND, String(i.id)));
+      }
       let all = await symbolInstances(host);
       // An item scope (`<item> > symbolInstance`, a panel's selection):
       // the instance that item is a leaf of.
@@ -295,8 +338,75 @@ export function makeSymbolInstanceKind(
       if (!inst)
         return { kind: "rejected", reason: `no symbol instance ${op.address}` };
       if (op.value === true) continue; // already linked (it is listed)
+      if (engineSymbols(host)) {
+        mutations.push({
+          op: "breakSymbolLink",
+          args: { elementId: inst.leaves[0]! },
+        } as MutationInput);
+        continue;
+      }
       mutations.push(...(await unlinkOps(host, inst)));
     }
     return { kind: "mutations", mutations };
   }
+}
+
+// ------------------------------------------------------------- WP6.8
+// Draw ADR 365 — on a host whose engine keeps symbols the `symbol` kind
+// reads the engine's store: name and delete are `redefineSymbol` /
+// `deleteSymbol` (one undo step each, the engine breaks every instance
+// first); registration is the engine's (the centre) and the piece count
+// is its item count.
+
+function engineSymbolValue(row: EngineSymbol, path: string): ObjectValue {
+  const [top, left, bottom, right] = row.bounds;
+  switch (path) {
+    case "name":
+      return val(row.name);
+    case "registration":
+      return val("center");
+    case "origin":
+      return val([0, 0]);
+    case "pieceCount":
+      return val(row.itemCount);
+    case "bounds":
+      return val([left, top, right, bottom]);
+    case "instanceCount":
+      return val(row.instances.length);
+    default:
+      return refuse("unknownPath", `symbol has no "${path}"`);
+  }
+}
+
+async function planEngineSymbols(
+  host: BundleHost,
+  ops: readonly ObjectOp[],
+  idOf: (address: string) => string | null,
+): Promise<Planned> {
+  const rows = await readEngineSymbols(host);
+  const mutations: MutationInput[] = [];
+  for (const op of ops) {
+    if (op.op === "create")
+      return rejected(
+        `a symbol is captured from artwork — invoke ${"media.paged.draw.command.defineSymbol"} with its targets`,
+      );
+    if (op.op === "invoke") return rejected("symbol cannot invoke");
+    const id = idOf(op.address);
+    if (!id || !rows.some((r) => r.id === id))
+      return rejected(`no symbol ${op.address}`);
+    if (op.op === "delete") {
+      mutations.push({
+        op: "deleteSymbol",
+        args: { symbolId: id },
+      } as MutationInput);
+    } else if (op.path === "name") {
+      mutations.push({
+        op: "redefineSymbol",
+        args: { symbolId: id, name: String(op.value) },
+      } as MutationInput);
+    } else {
+      return rejected(`symbol has no writable "${op.path}"`);
+    }
+  }
+  return plan({ mutations });
 }

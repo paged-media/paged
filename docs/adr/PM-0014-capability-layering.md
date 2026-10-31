@@ -90,6 +90,11 @@ starts.
 | image 466 | The isolation contract amended: the engine's raster crates are shared |
 | draw 361 | Visual live constructs move to the engine; recipes remain for generators |
 
+**Block reserved for this plan (added 2026-10-25).** Other work takes the engine numbers after the
+last one in use, so the plan's own engine records come from a reserved block: **1030–1059**.
+Assigned so far: 1030 the named undo timeline, 1031 SVG through `paged-svg`, 1032 one colour API,
+1033 PostScript/EPS through `paged-ps`, 1034 the 27 blend modes defined once.
+
 ## Consequences
 
 - A feature made engine-native appears in every module's output and export at once; the
@@ -101,3 +106,14 @@ starts.
   `moon.yml`), and an engine crate's change runs that module's gates.
 - An engine-native construct that IDML cannot carry is exported baked or reported as a loss,
   never dropped silently.
+
+## Amendment — 2026-10-25: DrawingML geometry is a shared crate
+
+The DrawingML preset geometry moves from paged.slide to `platform/shared/dml-geom` (slide
+ADR 717). Its consumers are modules (slide now, doc's shapes next), not the engine: the engine's
+model carries the outlines it draws, while the preset programs, adjust handles and connection
+sites are DrawingML's. So the lowest layer every consumer reaches is the shared platform code,
+not L2. It is its own Cargo workspace, a path dependency of the modules, and it keeps its old
+name in the slide workspace through a `package = "dml-geom"` alias, as this record asks of a
+moved crate. Adjust handles use `contribute.overlay` until the overlay-handles door (extensions
+340) lands.

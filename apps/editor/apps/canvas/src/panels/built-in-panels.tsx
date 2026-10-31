@@ -60,13 +60,16 @@ import { IndexPanel } from "./index-panel";
 import { InfoPanel } from "./info-panel";
 import { ZoomNavigatorPanel } from "./zoom-navigator-panel";
 import { LinksPanel } from "./links-panel";
+import { AppearancePanel } from "./appearance-panel";
 import { EffectsPanel } from "./effects-panel";
+import { TransparencyPanel } from "./transparency-panel";
 import { FrameFittingPanel } from "./frame-fitting-panel";
 import { GradientsPanel } from "./gradients-panel";
 import { ObjectStylesPanel } from "./object-styles-panel";
 import { ObjectTransformPanel } from "./object-transform-panel";
 import { AlignPanel } from "./align-panel";
 import { AttributesPanel } from "./attributes-panel";
+import { PictureAdjustmentsPanel } from "./picture-adjustments-panel";
 import { ControlPanel } from "./control-panel";
 import { PropertiesPanel } from "./properties-panel";
 import { PathfinderPanel } from "./pathfinder-panel";
@@ -79,9 +82,10 @@ import { TabsPanel } from "./concept/tabs-panel";
 import { GlyphsPanel } from "./concept/glyphs-panel";
 import { BulletsPanel } from "./concept/bullets-panel";
 import { AnchoredPanel } from "./concept/anchored-panel";
-import { ObjectExportPanel } from "./concept/object-export-panel";
+import { AssetExportPanel } from "./asset-export-panel";
 import { ExportTaggingPanel } from "./concept/export-tagging-panel";
 import { MasterPagesPanel } from "./master-pages-panel";
+import { ArtboardsPanel } from "./artboards-panel";
 import { PagesListPanel } from "./pages-list-panel";
 import { SpreadsPanel } from "./spreads-panel";
 import { TableStylesPanel } from "./table-styles-panel";
@@ -96,6 +100,7 @@ import { StrokePanel } from "./stroke-panel";
 import { InspectorPanel } from "./inspector-panel";
 import { LayersPanel } from "./layers-panel";
 import { NavigatorPanel } from "./navigator-panel";
+import { FIND_RESULTS_PANEL, FindResultsPanel } from "../find/find-ui";
 import { OutlinePanel } from "./outline-panel";
 import { ActionsPanel } from "./actions-panel";
 import { ReplPanel } from "./repl-panel";
@@ -104,6 +109,7 @@ import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
 import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
+import { HistoryPanel } from "./history-panel";
 import { LibraryPanel } from "./library-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
@@ -168,6 +174,7 @@ const M = defineMessages("app.builtInPanels", {
   crossReferences: "Cross References",
   index: "Index",
   pagesList: "Pages list",
+  artboards: "Artboards",
   spreads: "Spreads",
   masterPages: "Master Pages",
   cellStyles: "Cell Styles",
@@ -195,10 +202,14 @@ const M = defineMessages("app.builtInPanels", {
   textWrap: "Text Wrap",
   frameFitting: "Frame Fitting",
   effects: "Effects",
+  transparency: "Transparency",
+  appearance: "Appearance",
   layers: "Layers",
   info: "Info",
   navigator: "Navigator",
+  findResults: "Find results",
   attributes: "Attributes",
+  pictureAdjustments: "Picture adjustments",
   properties: "Properties",
   aiAssistant: "AI Assistant",
   control: "Control",
@@ -209,13 +220,14 @@ const M = defineMessages("app.builtInPanels", {
   problems: "Problems",
   journal: "Journal",
   data: "Data",
+  history: "History",
   library: "Library",
   table: "Table",
   tabs: "Tabs",
   glyphs: "Glyphs",
   bulletsNumbering: "Bullets & Numbering",
   anchored: "Anchored Object",
-  objectExport: "Object Export Options",
+  assetExport: "Asset Export",
   exportTagging: "Export Tagging",
 });
 
@@ -255,6 +267,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.pages);
     },
     component: NavigatorPanel,
+    defaultDock: "left",
+    defaultGroup: "structure",
+  },
+  {
+    // ADR 303 — the Navigation pane's Results tab: search the document's
+    // text, every hit with its context; a click goes to the hit.
+    id: FIND_RESULTS_PANEL,
+    get title() {
+      return t(M.findResults);
+    },
+    component: FindResultsPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
@@ -674,6 +697,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultDock: "left",
     defaultGroup: "structure",
   },
+  // Engine ADR 1011 — pages as artboards placed on the canvas: list,
+  // rename, reorder, options, rearrange, export per artboard.
+  {
+    id: "paged.artboards",
+    get title() {
+      return t(M.artboards);
+    },
+    component: ArtboardsPanel,
+    defaultDock: "left",
+    defaultGroup: "structure",
+    icon: "tool-artboard",
+  },
   {
     id: "paged.spreads",
     get title() {
@@ -1002,6 +1037,30 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultDock: "right",
     defaultGroup: "properties",
   },
+  // Editor ADR 309 — Illustrator's Transparency panel (blend, opacity, the
+  // opacity mask with Clip, Invert and Edit Mask) and Appearance panel
+  // (stroke, fill, the object's effect stack, opacity). Host panels: no
+  // edit context claims them, so they are offered in every one.
+  {
+    id: "paged.transparency",
+    get title() {
+      return t(M.transparency);
+    },
+    component: TransparencyPanel,
+    defaultDock: "right",
+    defaultGroup: "properties",
+    icon: "panel-transparency",
+  },
+  {
+    id: "paged.appearance",
+    get title() {
+      return t(M.appearance);
+    },
+    component: AppearancePanel,
+    defaultDock: "right",
+    defaultGroup: "properties",
+    icon: "panel-appearance",
+  },
   {
     id: "paged.layers",
     get title() {
@@ -1010,6 +1069,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: LayersPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
+  },
+  // Editor ADR 285 — every undo step by name (engine ADR 1030), click to
+  // go back to one; snapshots; the active edit context's own steps.
+  {
+    id: "paged.history",
+    get title() {
+      return t(M.history);
+    },
+    component: HistoryPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+    icon: "ui-history",
   },
   {
     // SDK Phase 5 (v1 sweep) — read-only document info. Expert
@@ -1044,6 +1115,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.attributes);
     },
     component: AttributesPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+  },
+  {
+    // Engine ADR 1037 — quick picture fixes on a placed image (the image
+    // frame's filter stack), in every module's context.
+    id: "paged.picture-adjustments",
+    get title() {
+      return t(M.pictureAdjustments);
+    },
+    component: PictureAdjustmentsPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
   },
@@ -1247,16 +1329,17 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     icon: "ui-pin",
   },
   {
-    // Per-object alt text / tagged-PDF role / EPUB conversion —
-    // the accessible-output surface (in scope per the parity doc).
+    // Editor ADR 288 — Asset Export: page items, artboards and pages
+    // at several scales as PNG, JPEG, WebP, TIFF, SVG and PDF. The id is
+    // the dock slot of the former Object Export Options concept.
     id: "paged.object-export",
     get title() {
-      return t(M.objectExport);
+      return t(M.assetExport);
     },
-    component: ObjectExportPanel,
+    component: AssetExportPanel,
     defaultDock: "right",
     defaultGroup: "output",
-    icon: "ui-accessibility",
+    icon: "ui-export",
   },
   {
     // Style → HTML tag/CSS class/PDF tag mapping for EPUB + tagged

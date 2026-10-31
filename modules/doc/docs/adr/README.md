@@ -23,7 +23,13 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [608](608-word-inside-paged-the-editing-model.md) | Word inside paged: the editing model (amends 603: no frame surface) | Accepted 2026-10-24 |
 | [609](609-styles-and-theme.md) | Styles and theme: theme colours as a "Word theme" swatch group, theme fonts resolved, references written back | Accepted 2026-10-24 |
 | [610](610-save-back-across-sessions-and-new-parts.md) | Save-back across sessions and new parts (amends 602): reopen-then-splice, paragraph styles, styles.xml | Accepted 2026-10-24 |
-| [617](617-pagination-policy.md) | Pagination policy: Word's rules, the engine's first-fit composer | Accepted 2026-10-24 |
+| [611](611-headers-footers-and-notes-placed.md) | Headers, footers and notes placed: section masters named by the grow rule, notes at their references, in-place header/footer editing | Accepted 2026-10-28 |
+| [612](612-fields-and-toc.md) | Fields and tables of contents: Word fields as engine fields, bookmarks as text anchors, Word's TOC entries live, F9 / Shift+F9 and the References panel | Accepted 2026-10-28 |
+| [613](613-tracked-changes-and-comments.md) | Tracked changes and comments: Word's revisions as engine changes, comment threads over runs, review markup saved back as Word's (paragraphs written whole, the comment parts made when missing) | Accepted 2026-10-29 |
+| [616](616-files.md) | Files: templates as new documents, macros carried, RTF and OpenDocument read onto docx-core, .doc refused, "Save as .docx" | Accepted 2026-10-25 |
+| [617](617-pagination-policy.md) | Pagination policy: Word's rules, the engine's first-fit composer | Accepted 2026-10-24, amended 2026-10-25 |
+| [618](618-picture-looks-through-the-shared-drawingml-mapper.md) | Pictures' DrawingML looks (fill, outline, alpha, effects) read and lowered through the shared reader and mapper; carried in the IR, reported until anchored frames hold them (amends 606) | Accepted 2026-10-28 |
+| [619](619-picture-looks-drawn-on-their-anchored-frames.md) | Pictures' looks drawn on their anchored frames: the pour binds each frame and writes its look through the lowering kit; colours and gradients as document swatches | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
@@ -39,9 +45,9 @@ by number; this is what each is about, as far as the code and
   a frame. The entry point as built is recorded in [ADR 603](603-two-entry-points.md); the
   measurements against the proposal's acceptance criterion are in
   [`../reference/acceptance-real-docx.md`](../reference/acceptance-real-docx.md).
-- **ADR 033**: headers and footers. Every section's header and footer references are read
-  and carried in the lowering; none is placed on a page yet.
-- **ADR 034**: footnotes and endnotes. The notes and their numbering are parsed; no note is
-  placed on a page yet.
+- **ADR 033**: headers and footers. Accepted as built in [ADR 611](611-headers-footers-and-notes-placed.md):
+  section masters in the skeleton, named by each story's grow rule.
+- **ADR 034**: footnotes and endnotes. Accepted as built in [ADR 611](611-headers-footers-and-notes-placed.md):
+  native notes at their references.
 - **ADR 035**: floating drawings. Position and wrap are carried in the lowering; the
   picture is placed inline, with a warning.

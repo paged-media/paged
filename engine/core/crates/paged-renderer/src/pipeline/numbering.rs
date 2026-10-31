@@ -216,7 +216,14 @@ pub(super) fn list_prefix_with_levels(
                             upper: 0,
                         })
                 });
-                let n = levels.number(level, start, restart);
+                // Restart Numbering (engine ADR 1018) writes
+                // `NumberingContinue="false"` on the paragraph: its level
+                // starts again whatever came before.
+                let n = if p.numbering_continue == Some(false) {
+                    start
+                } else {
+                    levels.number(level, start, restart)
+                };
                 levels.note(level, n, p.numbering_format.as_deref());
                 *prev_was_numbered = true;
                 let expr = p.numbering_expression.as_deref().unwrap_or("^#.^t");
@@ -301,8 +308,15 @@ pub(super) fn marker_run_attrs(
     p: &paged_scene::ResolvedParagraphAttrs,
     head: &paged_scene::ResolvedRunAttrs,
 ) -> Option<paged_scene::ResolvedRunAttrs> {
-    let id = bullet_marker_character_style(p)?;
-    let marker = head.under_character(&document.styles.resolve_character(id));
+    let mut marker = match bullet_marker_character_style(p) {
+        Some(id) => head.under_character(&document.styles.resolve_character(id)),
+        None => head.clone(),
+    };
+    // A Word list level's own marker face (engine ADR 1018).
+    if let Some(font) = &p.list_marker_font {
+        marker.font = Some(font.clone());
+        marker.font_style = None;
+    }
     (marker != *head).then_some(marker)
 }
 

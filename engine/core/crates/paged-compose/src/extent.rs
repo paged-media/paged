@@ -406,7 +406,7 @@ fn painted_extent(
             mapped.is_finite().then_some(mapped)
         }
 
-        // Engine ADR 1040: the shading's own box.
+        // Engine ADR 1048: the shading's own box.
         C::MeshShade {
             bounds, transform, ..
         } => {
@@ -507,6 +507,8 @@ fn painted_extent(
         | C::BeginSoftMask { .. }
         | C::BeginMaskedContent(_)
         | C::EndSoftMask(_)
+        | C::BeginSymbol { .. }
+        | C::EndSymbol(_)
         | C::BeginFeatheredObject { .. } => None,
     }
 }

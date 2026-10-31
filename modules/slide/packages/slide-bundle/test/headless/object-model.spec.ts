@@ -25,6 +25,12 @@
 // model claims (the report part is only a cache) — and a save-and-reopen
 // proves they travel in the document.
 
+import { ANIM_TYPED } from "../../src/anim/contribute";
+import { CONTENT_CMD, CONTENT_TYPED } from "../../src/content-commands";
+import { DESIGN_CMD, DESIGN_TYPED } from "../../src/design";
+import { MASTER_CMD, MASTER_TYPED } from "../../src/masters-commands";
+import { OUTPUT_CMD, OUTPUT_TYPED } from "../../src/output/commands";
+import { SHOW_CMD } from "../../src/show/contribute";
 import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -40,10 +46,17 @@ import type { ObjectValue, ValueType } from "@paged-media/plugin-api";
 import slideBundle from "../../src/index";
 import { slideEngine, type ImportReport } from "../../src/engine";
 import {
+  ADD_COMMENT_COMMAND,
   DECK_ADDRESS,
+  DELETE_COMMENT_COMMAND,
   DUPLICATE_SLIDE_COMMAND,
+  NEXT_SLIDE_COMMAND,
+  PREVIOUS_SLIDE_COMMAND,
+  REPLY_COMMENT_COMMAND,
+  RESOLVE_COMMENT_COMMAND,
   EXPORT_PPTX_COMMAND,
   IMPORT_PPTX_COMMAND,
+  INSERT_SHAPE_COMMAND,
   NEW_SLIDE_COMMAND,
   SLIDE_SCHEMA,
   PLACEHOLDER_SCHEMA,
@@ -93,7 +106,7 @@ beforeEach(async () => {
 afterEach(() => h.dispose());
 
 describe("[plugin-slide.object-model] slides, layouts, placeholders through host.objects", () => {
-  it("declares four kinds and four typed commands", async () => {
+  it("declares four kinds and its typed commands", async () => {
     const kinds = (await h.objects.kinds())
       .filter((k) => k.owner === "media.paged.slide")
       .map((k) => k.kind);
@@ -108,12 +121,37 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
       .filter((c) => c.owner === "media.paged.slide")
       .map((c) => c.id)
       .sort();
-    expect(commands).toEqual([
-      DUPLICATE_SLIDE_COMMAND,
-      EXPORT_PPTX_COMMAND,
-      IMPORT_PPTX_COMMAND,
-      NEW_SLIDE_COMMAND,
-    ]);
+    expect(commands).toEqual(
+      [
+        ADD_COMMENT_COMMAND,
+        DELETE_COMMENT_COMMAND,
+        NEXT_SLIDE_COMMAND,
+        PREVIOUS_SLIDE_COMMAND,
+        REPLY_COMMENT_COMMAND,
+        RESOLVE_COMMENT_COMMAND,
+        DUPLICATE_SLIDE_COMMAND,
+        EXPORT_PPTX_COMMAND,
+        IMPORT_PPTX_COMMAND,
+        INSERT_SHAPE_COMMAND,
+        NEW_SLIDE_COMMAND,
+        // The slide show's twins of its palette commands.
+        ...Object.values(SHOW_CMD),
+        // The animations' typed commands (slide ADR 714).
+        ...Object.values(ANIM_TYPED),
+        // File ▸ Export, custom shows and sections (slide ADR 720).
+        ...Object.values(OUTPUT_CMD),
+        ...Object.values(OUTPUT_TYPED),
+        // Pictures, the format painter, SmartArt text (slide W4).
+        ...Object.values(CONTENT_CMD),
+        ...Object.values(CONTENT_TYPED),
+        // Design ▸ Themes and the live theme (slide ADR 713).
+        ...Object.values(DESIGN_CMD),
+        ...Object.values(DESIGN_TYPED),
+        // Masters and layouts (slide ADR 712).
+        ...Object.values(MASTER_CMD),
+        ...Object.values(MASTER_TYPED),
+      ].sort(),
+    );
   });
 
   it("the import command opens a slide per page; the deck answers from its label", async () => {

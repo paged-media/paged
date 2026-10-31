@@ -1,0 +1,13 @@
+[package]
+name = "paged-sniff"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Raster format sniffing from the first bytes (the formats paged-raster reads), their file extensions and media types. Leaf crate without dependencies, so a crate that only names a file (idml-export) need not link the decoders."
+
+[lints]
+workspace = true
+
+[dependencies]

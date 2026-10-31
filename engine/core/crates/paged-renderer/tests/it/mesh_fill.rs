@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — a frame's gradient mesh and freeform gradient
+//! Engine ADR 1048 — a frame's gradient mesh and freeform gradient
 //! through the renderer: the clip, the patch colours, the freeform
 //! field, opacity over the page, and a frame without one unchanged.
 //!

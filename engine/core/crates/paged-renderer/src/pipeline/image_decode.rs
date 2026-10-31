@@ -50,7 +50,15 @@ pub(super) fn is_eps(bytes: &[u8]) -> bool {
 /// goes through `image::load_from_memory`. Returns `None` for any
 /// decode or buffer-shape failure — including an EPS without a TIFF or
 /// EPSI preview, which would need a PostScript interpreter.
-pub(super) fn decode_image_bytes(bytes: &[u8]) -> Option<paged_compose::DecodedImage> {
+///
+/// `rendering` is the intent and black-point compensation the picture's
+/// colours convert with (the frame's `ImageRenderingIntent` or the
+/// document's Color Settings, [`super::images::image_rendering`]); on
+/// wasm32 it rides on the lazy image to the raster-time decode.
+pub(super) fn decode_image_bytes(
+    bytes: &[u8],
+    rendering: paged_color::cms::Rendering,
+) -> Option<paged_compose::DecodedImage> {
     paged_compose::perf::count(|c| c.pipeline_image_decodes += 1);
     // wasm32 has a hard 4 GB address-space cap. Eagerly decoding
     // every embedded image to RGBA8 during `build_document` bloats
@@ -63,11 +71,11 @@ pub(super) fn decode_image_bytes(bytes: &[u8]) -> Option<paged_compose::DecodedI
     // re-renders.
     #[cfg(target_arch = "wasm32")]
     {
-        peek_image_lazy(bytes, DECODE_MAX_RASTER_PX)
+        peek_image_lazy(bytes, DECODE_MAX_RASTER_PX, rendering)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        decode_image_bytes_with_target_max(bytes, DECODE_MAX_RASTER_PX)
+        decode_image_bytes_with(bytes, DECODE_MAX_RASTER_PX, rendering)
     }
 }
 
@@ -78,7 +86,11 @@ pub(super) fn decode_image_bytes(bytes: &[u8]) -> Option<paged_compose::DecodedI
 /// SVG) so the display-list transform stays accurate without paying
 /// for the pixel decode. Only the wasm32 path defers decode this way.
 #[cfg(target_arch = "wasm32")]
-fn peek_image_lazy(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
+fn peek_image_lazy(
+    bytes: &[u8],
+    max_px: u32,
+    rendering: paged_color::cms::Rendering,
+) -> Option<paged_compose::DecodedImage> {
     // An EPS without a preview it can draw fails here, not at raster time.
     if is_eps(bytes) && paged_raster::probe(bytes).is_err() {
         return None;
@@ -97,6 +109,7 @@ fn peek_image_lazy(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedIm
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::new(),
         icc: extract_icc(bytes),
+        rendering: Some(rendering),
     })
 }
 
@@ -118,8 +131,9 @@ pub(super) fn is_svg_magic(bytes: &[u8]) -> bool {
 /// at most `max_px` (matching the DCT-scale cap for raster images),
 /// preserving aspect.
 fn decode_svg_bytes(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
-    let opt = usvg::Options::default();
-    let tree = usvg::Tree::from_data(bytes, &opt).ok()?;
+    // The guarded parse (`paged_svg::limits`): an SVG over the size and
+    // complexity limits decodes to nothing, as an unreadable one does.
+    let tree = paged_svg::limits::read_tree(bytes, usvg::Options::default()).ok()?;
     let svg_w: f32 = tree.size().width().ceil().max(1.0);
     let svg_h: f32 = tree.size().height().ceil().max(1.0);
     let longest = svg_w.max(svg_h);
@@ -137,6 +151,7 @@ fn decode_svg_bytes(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedI
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba),
         icc: None,
+        rendering: None,
     })
 }
 
@@ -150,8 +165,9 @@ pub(super) fn decode_svg_raster(bytes: &[u8]) -> Option<paged_compose::DecodedIm
 /// Read width / height from the image header without materialising
 /// the pixel buffer. For JPEGs we apply the same DCT-scale logic as
 /// the eager decoder so the displayed dimensions match what the
-/// rasterizer will actually produce. Only used by the wasm32 lazy path.
-#[cfg(target_arch = "wasm32")]
+/// rasterizer will actually produce. Only used by the wasm32 lazy path
+/// (built natively for its tests).
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 fn peek_image_dimensions(bytes: &[u8], max_px: u32) -> Option<(u32, u32)> {
     if is_jpeg_magic(bytes) {
         let (src_w, src_h) = peek_jpeg_dimensions(bytes)?;
@@ -188,8 +204,18 @@ fn peek_image_dimensions(bytes: &[u8], max_px: u32) -> Option<(u32, u32)> {
     // PNG / WebP / etc — header read via the image crate's lazy
     // dimension probe, which doesn't materialise pixels.
     let cursor = std::io::Cursor::new(bytes);
-    let reader = image::ImageReader::new(cursor).with_guessed_format().ok()?;
-    reader.into_dimensions().ok()
+    let guessed = image::ImageReader::new(cursor)
+        .with_guessed_format()
+        .ok()
+        .and_then(|r| r.into_dimensions().ok());
+    // A TGA has no magic the image crate guesses by; paged-raster sniffs
+    // its header and reads the size (the decode at raster time is its
+    // too). Without a size the lazy image was dropped and drew nothing.
+    guessed.or_else(|| {
+        paged_raster::probe(bytes)
+            .ok()
+            .map(|info| (info.width, info.height))
+    })
 }
 
 /// Same as [`decode_image_bytes`] but with a caller-supplied
@@ -201,10 +227,21 @@ fn peek_image_dimensions(bytes: &[u8], max_px: u32) -> Option<(u32, u32)> {
 // Native-only: the wasm32 build cfg's out the raster-decode path (the
 // engine receives pre-decoded images), so this and `decode_jpeg_scaled`
 // are dead there. The lint stays active on native.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[cfg(test)]
 pub(super) fn decode_image_bytes_with_target_max(
     bytes: &[u8],
     max_px: u32,
+) -> Option<paged_compose::DecodedImage> {
+    decode_image_bytes_with(bytes, max_px, paged_color::cms::Rendering::default())
+}
+
+/// Decode at a caller-supplied longest-edge cap, converting a CMYK raster
+/// with `rendering`.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(super) fn decode_image_bytes_with(
+    bytes: &[u8],
+    max_px: u32,
+    rendering: paged_color::cms::Rendering,
 ) -> Option<paged_compose::DecodedImage> {
     if is_svg_magic(bytes) {
         return decode_svg_bytes(bytes, max_px);
@@ -212,7 +249,7 @@ pub(super) fn decode_image_bytes_with_target_max(
     if is_jpeg_magic(bytes) {
         if let Some((src_w, src_h)) = peek_jpeg_dimensions(bytes) {
             if src_w.max(src_h) > max_px {
-                if let Some(d) = decode_jpeg_scaled(bytes, max_px) {
+                if let Some(d) = decode_jpeg_scaled(bytes, max_px, rendering) {
                     return Some(d);
                 }
                 tracing::debug!(
@@ -225,7 +262,7 @@ pub(super) fn decode_image_bytes_with_target_max(
         }
     }
     if reads_through_raster(bytes) {
-        if let Some(d) = decode_raster(bytes, max_px) {
+        if let Some(d) = decode_raster(bytes, max_px, rendering) {
             return Some(d);
         }
     }
@@ -238,6 +275,7 @@ pub(super) fn decode_image_bytes_with_target_max(
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba.into_raw()),
         icc: extract_icc(bytes),
+        rendering: None,
     })
 }
 
@@ -250,12 +288,16 @@ fn reads_through_raster(bytes: &[u8]) -> bool {
 }
 
 /// A raster `paged-raster` reads, shrunk to `max_px` and converted with
-/// paged-color. `None` lets the caller try the `image` crate, the decoder
+/// paged-color with `rendering`. `None` lets the caller try the `image` crate, the decoder
 /// TIFFs used before (it reads none of the others, so one this crate
 /// cannot decode stays undecoded: a PSD's Lab, indexed or ZIP composite,
 /// an EPS without a preview).
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-fn decode_raster(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
+fn decode_raster(
+    bytes: &[u8],
+    max_px: u32,
+    rendering: paged_color::cms::Rendering,
+) -> Option<paged_compose::DecodedImage> {
     let img = match paged_raster::decode(
         bytes,
         paged_raster::DecodeOptions {
@@ -269,13 +311,14 @@ fn decode_raster(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImag
             return None;
         }
     };
-    let rgba = paged_raster::to_rgba8(&img, &paged_raster::PagedColour).ok()?;
+    let rgba = paged_raster::to_rgba8(&img, &paged_raster::PagedColour::new(rendering)).ok()?;
     Some(paged_compose::DecodedImage {
         width: rgba.width,
         height: rgba.height,
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba.data),
         icc: raster_icc(&img.info),
+        rendering: None,
     })
 }
 
@@ -322,7 +365,11 @@ fn peek_jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 /// JPEG-native factors (1, 1/2, 1/4, 1/8); the decoder picks the
 /// smallest factor whose output is ≥ the requested target.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-fn decode_jpeg_scaled(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
+fn decode_jpeg_scaled(
+    bytes: &[u8],
+    max_px: u32,
+    rendering: paged_color::cms::Rendering,
+) -> Option<paged_compose::DecodedImage> {
     use jpeg_decoder::{Decoder, PixelFormat};
     let mut decoder = Decoder::new(bytes);
     decoder.read_info().ok()?;
@@ -364,7 +411,7 @@ fn decode_jpeg_scaled(bytes: &[u8], max_px: u32) -> Option<paged_compose::Decode
         PixelFormat::L8 => l8_to_rgba(&pixels, w, h)?,
         PixelFormat::L16 => l16_to_rgba(&pixels, w, h)?,
         PixelFormat::RGB24 => rgb24_to_rgba(&pixels, w, h)?,
-        PixelFormat::CMYK32 => cmyk32_to_rgba(&pixels, w, h, icc_profile.as_deref())?,
+        PixelFormat::CMYK32 => cmyk32_to_rgba(&pixels, w, h, icc_profile.as_deref(), rendering)?,
     };
     Some(paged_compose::DecodedImage {
         width: w,
@@ -372,5 +419,24 @@ fn decode_jpeg_scaled(bytes: &[u8], max_px: u32) -> Option<paged_compose::Decode
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba),
         icc: icc_profile.map(bytes::Bytes::from),
+        rendering: None,
     })
+}
+
+#[cfg(test)]
+mod peek_tests {
+    /// An uncompressed 24-bit TGA, `w` × `h`.
+    fn tga(w: u16, h: u16) -> Vec<u8> {
+        let mut b = vec![0u8; 18 + usize::from(w) * usize::from(h) * 3];
+        b[2] = 2;
+        b[12..14].copy_from_slice(&w.to_le_bytes());
+        b[14..16].copy_from_slice(&h.to_le_bytes());
+        b[16] = 24;
+        b
+    }
+
+    #[test]
+    fn the_lazy_path_sizes_a_tga_the_image_crate_cannot_guess() {
+        assert_eq!(super::peek_image_dimensions(&tga(8, 4), 4096), Some((8, 4)));
+    }
 }

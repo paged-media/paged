@@ -34,6 +34,7 @@ pub fn info(w: u32, h: u32) -> RasterInfo {
         icc: None,
         xmp: None,
         iptc: None,
+        exif: None,
         photoshop_irb: None,
         has_layers: false,
         layer_count: Some(0),

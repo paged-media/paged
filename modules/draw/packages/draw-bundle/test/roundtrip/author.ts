@@ -876,6 +876,7 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
         `<path d="M 40 260 C 120 160 200 360 280 260" fill="none" stroke="#2a9d8f" stroke-width="6"/>` +
         `<polygon points="300,180 380,280 220,280" fill="#264653" stroke="none"/>` +
         `</svg>`;
+      // Through the engine's paged-svg (draw ADR 364).
       const ids = await importSvg(ctx.h.host, {
         name: "roundtrip.svg",
         bytes: new TextEncoder().encode(svg),

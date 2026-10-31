@@ -35,8 +35,17 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod objects;
+pub mod review;
 pub mod symbols;
 pub mod theme;
+pub use objects::{
+    BorderEdge, Borders, CellLook, HeightRule, Language, NestedTable, PreferredWidth, TableLook,
+    TableStyleProps, TextBox, WidthKind,
+};
+pub use review::{
+    ChangeKind, Comment, FormatChange, ParaPropsChange, ParagraphReview, Revision, RunChange,
+};
 pub use symbols::symbol_char;
 pub use theme::{Shading, Theme, ThemeColorRef, ThemeFonts};
 
@@ -102,6 +111,15 @@ pub struct DocxDocument {
     /// "Word theme" swatch group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<Theme>,
+    /// Doc ADR 613 — the comments of `comments.xml`, threaded through
+    /// `commentsExtended.xml`, in part order. Their ranges are on the runs
+    /// ([`Run::comments`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<Comment>,
+    /// `settings.xml` `w:trackRevisions`: Word records changes in this
+    /// document (doc ADR 613).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub track_revisions: bool,
 }
 
 /// Counts of body constructs the import shows in a simplified form, for the
@@ -193,6 +211,15 @@ pub struct Paragraph {
     /// amendment).
     #[serde(default)]
     pub held: ParagraphHeld,
+    /// The instruction of a table of contents field (`TOC \o "1-3" \h`)
+    /// that begins in this paragraph: Word's TOC is one field whose result
+    /// is the entry paragraphs (doc ADR 612).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toc_field: Option<String>,
+    /// Doc ADR 613 — the paragraph mark's insertion or deletion and the
+    /// tracked change of its properties.
+    #[serde(default, skip_serializing_if = "ParagraphReview::is_empty")]
+    pub review: ParagraphReview,
 }
 
 /// A paragraph's held content: the facts save-back needs to refuse an edit
@@ -402,6 +429,14 @@ pub struct Run {
     /// [`DocxDocument::notes`].
     #[serde(default)]
     pub note_ref: Option<i64>,
+    /// [`Run::note_ref`] names an endnote (`w:endnoteReference`), not a
+    /// footnote: the two parts number their notes apart.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub note_is_endnote: bool,
+    /// Where in [`Run::text`] the note reference stands (a char offset):
+    /// Word can write text on both sides of it in one run.
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub note_at: usize,
     /// When this run is a FIELD's result, the field's name (the instruction's
     /// first token, upper-cased: `PAGE`, `DATE`, `NUMPAGES`, `REF`, …). The run's
     /// `text` is the value Word last computed — a frozen snapshot, since the
@@ -409,6 +444,17 @@ pub struct Run {
     /// are handled separately (see [`Run::hyperlink`]).
     #[serde(default)]
     pub field: Option<String>,
+    /// When this run is a field's result: the field's whole instruction
+    /// (the `w:instrText`s joined, or `w:fldSimple/@w:instr`), trimmed —
+    /// what the lowering hands the engine as a Word field's code (doc ADR
+    /// 612). For a run inside nested fields, the innermost field's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_code: Option<String>,
+    /// Which field of its paragraph this result run belongs to: the
+    /// fields are numbered in the order they begin (0-based), and the
+    /// result runs of one field share the number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_seq: Option<u32>,
     /// When this run is (part of) the RESULT of a Word `MERGEFIELD` (mail
     /// merge), the parsed field: its data-source column name and switches.
     /// The run's `text` is the field's current result (Word shows
@@ -416,6 +462,53 @@ pub struct Run {
     /// stamps the same [`MergeField`] (same `occurrence`) on each.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_field: Option<MergeField>,
+    /// Doc ADR 613 — the run sits in a tracked insertion or deletion
+    /// (`w:ins` / `w:del`, a move's `w:moveTo` / `w:moveFrom`). A deleted
+    /// run's text is its `w:delText`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<RunChange>,
+    /// Doc ADR 613 — the run's tracked formatting change (`w:rPrChange`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_change: Option<FormatChange>,
+    /// Doc ADR 613 — the comments (their `w:id`) whose range covers the
+    /// run: the threads' first comments, never a reply.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<i64>,
+    /// Text boxes drawn by this run (`w:drawing` holding a `wps:txbx`, or
+    /// `w:pict` holding a `v:textbox`), doc ADR 614.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub text_boxes: Vec<TextBox>,
+}
+
+fn is_zero_usize(n: &usize) -> bool {
+    *n == 0
+}
+
+impl Run {
+    /// The engine's marker character for a note reference
+    /// (`paged_model::FOOTNOTE_REFERENCE_MARKER` / `ENDNOTE_REFERENCE_MARKER`):
+    /// what a body run holding a note reference reads as on the canvas, so
+    /// the lowering and the read-back agree (doc ADR 611).
+    pub const FOOTNOTE_MARKER: char = '\u{E01C}';
+    pub const ENDNOTE_MARKER: char = '\u{E01D}';
+
+    /// The marker this run's note reference stands for, if it holds one.
+    pub fn note_marker(&self) -> Option<char> {
+        self.note_ref.map(|_| {
+            if self.note_is_endnote {
+                Self::ENDNOTE_MARKER
+            } else {
+                Self::FOOTNOTE_MARKER
+            }
+        })
+    }
+
+    /// Whether the lowering keeps this run of a body or header paragraph
+    /// (a cell's keeps only runs with text): it has text, or it holds a
+    /// note reference.
+    pub fn is_lowered(&self, in_cell: bool) -> bool {
+        !self.text.is_empty() || (!in_cell && self.note_ref.is_some())
+    }
 }
 
 /// A parsed Word `MERGEFIELD` instruction (ECMA-376 Part 1, 17.16.5.35):
@@ -702,6 +795,31 @@ pub struct Image {
     /// `w10:wrap type="topAndBottom"` says it as CSS `margin-top`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub band_offset_emu: Option<i64>,
+    /// What a DrawingML picture paints beyond its image, as authored (doc
+    /// ADR 618): `pic:spPr`'s fill, outline and effect list and the
+    /// `a:blip`'s alpha and picture effects. `None` for a picture with
+    /// none of them, and for a legacy VML picture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<Box<PictureLook>>,
+}
+
+/// A picture's DrawingML look, as authored: theme colours are still slot
+/// names; the lowering resolves them against the document theme.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PictureLook {
+    /// `pic:spPr` (geometry and transform aside).
+    #[serde(default)]
+    pub shape: paged_ooxml::drawingml::ShapeProperties,
+    /// `pic:blipFill/a:blip` (`alphaModFix`, the picture effects).
+    #[serde(default)]
+    pub blip: paged_ooxml::drawingml::Blip,
+}
+
+impl PictureLook {
+    /// Nothing beyond the image itself.
+    pub fn is_plain(&self) -> bool {
+        self.shape.is_empty() && self.blip.alpha.is_none() && self.blip.effects.is_empty()
+    }
 }
 
 /// A floating drawing's placement (`wp:anchor`, thoughts ADR 035). Lengths in
@@ -736,6 +854,10 @@ pub struct Float {
     /// `@simplePos="1"` with `wp:simplePos` (x, y) from the page's
     /// top-left: the position elements are ignored.
     pub simple_pos: Option<(i64, i64)>,
+    /// `wp:wrapPolygon` of a tight or through wrap: its start and line-to
+    /// points, in Word's 21600-unit square over the drawing's extent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wrap_polygon: Vec<(i64, i64)>,
 }
 
 /// One axis of a float's position (`wp:positionH` / `wp:positionV`).
@@ -879,6 +1001,10 @@ pub struct RunProps {
     /// no character shading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shading: Option<Shading>,
+    /// `w:lang` (doc ADR 614): the Latin language becomes the engine's
+    /// applied language; East Asian and complex script are read only.
+    #[serde(default, skip_serializing_if = "Language::is_empty")]
+    pub lang: Language,
 }
 
 /// Paragraph alignment (`w:jc`).
@@ -936,6 +1062,9 @@ pub struct Style {
     pub para: ParaProps,
     /// Character-level properties defined by the style (`w:rPr`).
     pub run: RunProps,
+    /// A table style's table-level properties (doc ADR 614).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table: Option<TableStyleProps>,
 }
 
 /// `w:style/@w:type`.
@@ -962,6 +1091,9 @@ pub struct Table {
     /// and column ordinals skip them, so row and column edits are refused.
     #[serde(default)]
     pub content_control_rows: bool,
+    /// Borders, shading, indent, alignment, layout and width (doc ADR 614).
+    #[serde(default)]
+    pub look: TableLook,
 }
 
 /// Cell margins in twips, each side as declared (`None` = not declared
@@ -995,6 +1127,12 @@ pub struct TableRow {
     /// (`w:hRule` `atLeast`, Word's default, or `exact`).
     #[serde(default)]
     pub height: Option<i32>,
+    /// `w:trHeight/@w:hRule` (doc ADR 614).
+    #[serde(default)]
+    pub height_rule: HeightRule,
+    /// `w:trPr/w:cantSplit`: Word keeps the row on one page.
+    #[serde(default)]
+    pub cant_split: bool,
 }
 
 /// A table cell (`w:tc`) — block content (paragraphs) plus merge spans.
@@ -1011,6 +1149,13 @@ pub struct TableCell {
     /// `w:tcPr/w:vAlign`.
     #[serde(default)]
     pub v_align: Option<CellVAlign>,
+    /// Borders, shading and width (doc ADR 614).
+    #[serde(default)]
+    pub look: CellLook,
+    /// Tables nested in the cell, whose content [`Self::paragraphs`] shows
+    /// flattened (doc ADR 614).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nested_tables: Vec<NestedTable>,
 }
 
 /// A cell's vertical-merge role (`w:vMerge`).

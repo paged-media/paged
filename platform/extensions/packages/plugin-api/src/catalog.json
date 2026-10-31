@@ -302,6 +302,62 @@
       "summary": "Move a page to follow another (omit/null: to the front)."
     },
     {
+      "name": "paged.placePage",
+      "params": "(pageId, [x, y]?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Put a page (an artboard) at [x, y] pt on the canvas (omit/null: its default slot)."
+    },
+    {
+      "name": "paged.symbols",
+      "params": "()",
+      "returns": "SymbolSummary[] JSON",
+      "kind": "read",
+      "summary": "The document's symbols: id, name, revision, bounds, 9-slice guides, instances."
+    },
+    {
+      "name": "paged.createSymbol",
+      "params": "(name, elementIds, { symbolId?, replace?, nineSlice? }?)",
+      "returns": "string | null",
+      "kind": "write",
+      "summary": "Make a symbol from page items; with replace (default) they become an instance, which is selected. Returns the symbol id."
+    },
+    {
+      "name": "paged.redefineSymbol",
+      "params": "(symbolId, { elementIds?, name?, nineSlice?, replace? })",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "New artwork, name or 9-slice guides ([] removes) for a symbol; every instance follows."
+    },
+    {
+      "name": "paged.placeSymbolInstance",
+      "params": "(symbolId, pageId, [x, y]?, [a, b, c, d]?)",
+      "returns": "string | null",
+      "kind": "write",
+      "summary": "Place an instance, its registration point at [x, y] page pt (omit: the page centre); returns its instance:<id> address."
+    },
+    {
+      "name": "paged.breakSymbolLink",
+      "params": "(elementId)",
+      "returns": "string | null",
+      "kind": "write",
+      "summary": "Break Link to Symbol: the instance becomes ordinary items; returns the new root's address."
+    },
+    {
+      "name": "paged.deleteSymbol",
+      "params": "(symbolId)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Delete a symbol; its instances become ordinary items first."
+    },
+    {
+      "name": "paged.expandAppearance",
+      "params": "(elementId)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Expand Appearance: the item becomes what its live vector effects draw (engine ADR 1042)."
+    },
+    {
       "name": "paged.createMaster",
       "params": "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })",
       "returns": "bool",
@@ -321,6 +377,27 @@
       "returns": "bool",
       "kind": "write",
       "summary": "Set (omit/null: clear) a master's name."
+    },
+    {
+      "name": "paged.setPageOverrides",
+      "params": "(pageId, itemIds)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Set a page's (or master page's) override list: the master items it hides."
+    },
+    {
+      "name": "paged.overrideMasterItems",
+      "params": "(pageId, itemIds, emptyText?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Copy master items onto a page where the master draws them and hide the master's."
+    },
+    {
+      "name": "paged.insertItemHyperlink",
+      "params": "(itemId, url, pageId?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Make a page item a hyperlink's source, to a URL or a page."
     },
     {
       "name": "paged.onMaster",
@@ -443,10 +520,10 @@
     },
     {
       "name": "paged.offsetPath",
-      "params": "(elemId, delta, join, miter)",
+      "params": "(elemId, delta, join, miter, side?)",
       "returns": "bool",
       "kind": "write",
-      "summary": "Inset (delta<0) / outset (delta>0) a single closed contour."
+      "summary": "Inset (delta<0) / outset (delta>0) a path; compound paths keep their holes; side (both|left|right) offsets an open contour to one side."
     },
     {
       "name": "paged.simplifyPath",
@@ -800,10 +877,10 @@
     },
     {
       "name": "paged.setFlowGrowRule",
-      "params": "(storyId, grow, maxPages?, copyFrameOptions?)",
+      "params": "(storyId, grow, maxPages?, copyFrameOptions?, {master?, firstMaster?, evenMaster?, sectionStart?})",
       "returns": "bool",
       "kind": "write",
-      "summary": "Let a story's frame chain grow: generated pages are added after its last frame's page while it oversets (InDesign's Smart Text Reflow), and removed when empty. copyFrameOptions gives generated frames the chain's frame options (a Word section's mode) instead of InDesign's defaults. grow=false clears the rule."
+      "summary": "Let a story's frame chain grow: generated pages are added after its last frame's page while it oversets (InDesign's Smart Text Reflow), and removed when empty. copyFrameOptions gives generated frames the chain's frame options (a Word section's mode) instead of InDesign's defaults. The options pick a Word section's first / odd / even masters and an odd- or even-page start (a blank page goes in front when it lands wrong). grow=false clears the rule."
     },
     {
       "name": "paged.activateConditionSet",
@@ -1156,6 +1233,139 @@
       "summary": "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."
     },
     {
+      "name": "paged.recordChange",
+      "params": "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?}, paragraph?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Record a tracked change (insert, delete, format, paraProps, insertMark, deleteMark) over story chars [start, end), or on a paragraph for the paragraph kinds: what an importer writes for Word's revisions. Undoable."
+    },
+    {
+      "name": "paged.acceptChange",
+      "params": "({storyId?, id?, author?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Accept a tracked change by id, every change by an author, or all (in one story when storyId is set). One undo step."
+    },
+    {
+      "name": "paged.rejectChange",
+      "params": "({storyId?, id?, author?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Reject a tracked change by id, an author's, or all: insertions go, deletions stay, formatting goes back. One undo step."
+    },
+    {
+      "name": "paged.insertComment",
+      "params": "(storyId, start, end, {text, id?, author?, initials?, date?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "A comment on story chars [start, end) (paged.collection(\"comments\")). Undoable."
+    },
+    {
+      "name": "paged.replyComment",
+      "params": "(parentId, {text, id?, author?, initials?, date?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Reply to a comment; the reply joins its thread. Undoable."
+    },
+    {
+      "name": "paged.resolveComment",
+      "params": "(commentId, resolved?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Resolve (or, with false, reopen) a comment's thread. Undoable."
+    },
+    {
+      "name": "paged.deleteComment",
+      "params": "(commentId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Delete a comment; a thread's first comment takes its replies and its range. Undoable."
+    },
+    {
+      "name": "paged.editComment",
+      "params": "(commentId, text, date?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Rewrite a comment's text. Undoable."
+    },
+    {
+      "name": "paged.find",
+      "params": "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})",
+      "returns": "string",
+      "kind": "read",
+      "summary": "Find text (literal, Word wildcards or a regex; ^p ^t ^l ^m work in every mode): a JSON array of hits with story, caret and character ranges and context."
+    },
+    {
+      "name": "paged.findReplace",
+      "params": "(text, replace, {replaceAll?, replaceParagraphStyle?, replaceCharacterStyle?, …find options})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Replace the first hit, or every hit, of a find; ^p ^t ^l ^& and $1 work in the replacement. One undo step."
+    },
+    {
+      "name": "paged.setListLevel",
+      "params": "(storyId, start, end, {level} | {delta})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Move the paragraphs touching story chars [start, end) to a list level 1–9, or by a delta (Tab / Shift+Tab). Undoable."
+    },
+    {
+      "name": "paged.restartNumbering",
+      "params": "(storyId, start, end, {startAt?, continueNumbering?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Restart the list count at the paragraphs touching [start, end) (or continue it). Undoable."
+    },
+    {
+      "name": "paged.setStyleBasedOn",
+      "params": "(collection, styleId, basedOn|null)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Re-parent a style; refused when it would inherit from itself. Undoable."
+    },
+    {
+      "name": "paged.updateFields",
+      "params": "({storyId?, offset?, now?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Word's F9: recompute the Word fields' results (every story's, one story's, or the one field at a story offset) over the current layout; DATE and TIME read now (YYYY-MM-DDTHH:MM:SS). One undo step; refused when nothing changes."
+    },
+    {
+      "name": "paged.insertTextAnchor",
+      "params": "(storyId, offset, name)",
+      "returns": "string|null",
+      "kind": "author",
+      "summary": "Word's Insert Bookmark: a named text destination at a story offset, which REF and PAGEREF fields and cross-references name. Returns its id."
+    },
+    {
+      "name": "paged.deleteTextAnchor",
+      "params": "(anchorId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Delete a bookmark (a text destination). Undoable."
+    },
+    {
+      "name": "paged.insertCrossReference",
+      "params": "(storyId, offset, {bookmark} | {storyId, paragraph}, {referTo?: text|pageNumber|aboveBelow, hyperlink?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Word's Insert Cross-reference: a REF or PAGEREF field with its result, to a bookmark or to a paragraph (which gets a hidden _Ref bookmark). One undo step."
+    },
+    {
+      "name": "paged.insertTableOfContents",
+      "params": "(storyId, offset, [{style, level}], {title?, tocStyleName?, pageNumbers?, leader?, tabPosition?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Word's Insert Table of Contents: the TOC style and TOC 1… entry styles (right tab with a leader) when missing, and the entries with their page numbers in paragraphs of their own at the caret. paged.updateTableOfContents rewrites them in place. One undo step."
+    },
+    {
+      "name": "paged.insertIndexMarker",
+      "params": "(storyId, offset, topic | [topic, subtopic…], {sortOrder?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Word's Mark Entry: an index marker for a topic path in the paragraph at a story offset; missing topics are created. paged.generateIndex lists it. Undoable."
+    },
+    {
       "name": "paged.convertNoteToText",
       "params": "(noteId)",
       "returns": "bool",
@@ -1481,6 +1691,11 @@
       "form": "$h:<name>",
       "example": "$h:newFrame",
       "note": "A batch handle bound earlier in the same batch."
+    },
+    {
+      "form": "instance:<id>",
+      "example": "instance:u9a",
+      "note": "A symbol instance (engine ADR 1039): a placed reference to a symbol definition."
     }
   ],
   "settablePaths": [
@@ -1547,10 +1762,13 @@
     "frameAutoFit",
     "framePdfPage",
     "frameFillRule",
+    "frameImageAdjustments",
     "frameGradientStrokeMode",
     "frameGradientFillStart",
-    "frameFillMesh",
-    "framePatternTransform",
+    "frameShapeSides",
+    "frameShapeStarInset",
+    "frameShapePieStart",
+    "frameShapePieEnd",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -1641,12 +1859,22 @@
     "groupIsolateBlending",
     "groupKnockout",
     "groupClip",
+    "groupEffectStack",
+    "symbolInstanceTint",
+    "symbolInstanceNineSlice",
+    "symbolInstanceSymbol",
     "frameDropShadowBlendMode",
     "frameDropShadowSpread",
     "frameDropShadowNoise",
     "frameDropShadowKnockedOut",
     "frameDropShadowUseGlobalLight",
     "frameGradientFeather",
+    "frameEffectStack",
+    "frameFillEffectStack",
+    "frameStrokeEffectStack",
+    "frameContentEffectStack",
+    "frameAppearance",
+    "frameAppearanceLayer",
     "cellFillColor",
     "cellFillTint",
     "cellInsetTop",
@@ -1696,6 +1924,17 @@
     "characterNoBreak",
     "characterLigatures",
     "characterOtfFeatures",
+    "characterHighlightColor",
+    "characterHidden",
+    "characterUnderlineType",
+    "characterUnderlineColor",
+    "characterDoubleStrikethrough",
+    "paragraphShadingOn",
+    "paragraphShadingColor",
+    "paragraphShadingTint",
+    "paragraphBorderOn",
+    "paragraphBorderColor",
+    "paragraphBorderWeight",
     "paragraphLeftIndent",
     "paragraphRightIndent",
     "paragraphDropCapCharacters",
@@ -1754,6 +1993,7 @@
     "insertFootnote",
     "deleteFootnote",
     "deleteHyperlink",
+    "insertItemHyperlink",
     "editHyperlink",
     "updateTableOfContents",
     "generateIndex",
@@ -1873,6 +2113,24 @@
     "renameTableStyle",
     "deleteTableStyle",
     "setStyleProperty",
+    "setStyleBasedOn",
+    "setListLevel",
+    "restartNumbering",
+    "findReplace",
+    "updateFields",
+    "insertTextAnchor",
+    "deleteTextAnchor",
+    "insertCrossReference",
+    "insertTableOfContents",
+    "insertIndexMarker",
+    "recordChange",
+    "acceptChange",
+    "rejectChange",
+    "insertComment",
+    "replyComment",
+    "resolveComment",
+    "deleteComment",
+    "editComment",
     "insertOval",
     "insertGuide",
     "moveGuide",
@@ -1883,10 +2141,19 @@
     "applyMasterToPage",
     "duplicatePage",
     "movePage",
+    "placePage",
+    "createSymbol",
+    "redefineSymbol",
+    "placeSymbolInstance",
+    "breakSymbolLink",
+    "deleteSymbol",
+    "expandAppearance",
     "onMaster",
     "createMaster",
     "deleteMaster",
     "renameMaster",
+    "setPageOverrides",
+    "overrideMasterItems",
     "insertSection",
     "editSection",
     "deleteSection",
@@ -3878,6 +4145,19 @@
     },
     {
       "addressKind": "frame",
+      "path": "frameImageAdjustments",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "RasterOp"
+      },
+      "wire": "imageAdjustments",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
       "path": "frameGradientStrokeMode",
       "type": {
         "kind": "enum",
@@ -3930,24 +4210,68 @@
     },
     {
       "addressKind": "frame",
-      "path": "frameFillMesh",
+      "path": "frameShapeSides",
       "type": {
-        "kind": "struct",
-        "shape": "MeshFillSpec"
+        "kind": "number",
+        "unit": "count"
       },
-      "wire": "fillMesh",
+      "wire": "length",
       "nullable": true,
+      "range": {
+        "min": 3.0,
+        "max": 100.0
+      },
       "access": "readWrite",
       "bindable": true
     },
     {
       "addressKind": "frame",
-      "path": "framePatternTransform",
+      "path": "frameShapeStarInset",
       "type": {
-        "kind": "transform"
+        "kind": "number",
+        "unit": "percent"
       },
-      "wire": "transform",
+      "wire": "length",
       "nullable": true,
+      "range": {
+        "min": 0.0,
+        "max": 99.0
+      },
+      "default": 0.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePieStart",
+      "type": {
+        "kind": "number",
+        "unit": "degrees"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": -360.0,
+        "max": 360.0
+      },
+      "default": 0.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePieEnd",
+      "type": {
+        "kind": "number",
+        "unit": "degrees"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": -360.0,
+        "max": 360.0
+      },
+      "default": 360.0,
       "access": "readWrite",
       "bindable": true
     },
@@ -6367,6 +6691,56 @@
     },
     {
       "addressKind": "frame",
+      "path": "groupEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "symbolInstanceTint",
+      "type": {
+        "kind": "list",
+        "unit": "pt",
+        "of": "length"
+      },
+      "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "symbolInstanceNineSlice",
+      "type": {
+        "kind": "list",
+        "unit": "pt",
+        "of": "length"
+      },
+      "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "symbolInstanceSymbol",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
       "path": "frameDropShadowBlendMode",
       "type": {
         "kind": "enum",
@@ -6500,6 +6874,83 @@
       "nullable": true,
       "access": "readWrite",
       "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameFillEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameStrokeEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameContentEffectStack",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "EffectEntrySpec"
+      },
+      "wire": "effectStack",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameAppearance",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "PaintLayerSpec"
+      },
+      "wire": "appearance",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameAppearanceLayer",
+      "type": {
+        "kind": "operation",
+        "shape": "AppearanceLayerSpec"
+      },
+      "wire": "appearanceLayer",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": false
     },
     {
       "addressKind": "cell",
@@ -7585,6 +8036,222 @@
     },
     {
       "addressKind": "storyRange",
+      "path": "characterHighlightColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterHidden",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterUnderlineType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "none",
+          "single",
+          "words",
+          "double",
+          "thick",
+          "dotted",
+          "dashed",
+          "dotDash",
+          "dotDotDash",
+          "wave",
+          "doubleWave"
+        ],
+        "open": true
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "single",
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyleRange",
+          "attribute": "UnderlineType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterUnderlineColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyleRange",
+          "attribute": "UnderlineColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterDoubleStrikethrough",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyleRange",
+          "attribute": "StrikeThroughType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphShadingOn",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphShadingOn",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphShadingColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphShadingColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphShadingTint",
+      "type": {
+        "kind": "number",
+        "unit": "percent"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0,
+        "max": 100.0
+      },
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphShadingTint",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphBorderOn",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphBorderOn",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphBorderColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphBorderColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphBorderWeight",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0
+      },
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphBorderWeight",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
       "path": "paragraphLeftIndent",
       "type": {
         "kind": "length",
@@ -8529,6 +9196,23 @@
     },
     {
       "addressKind": "page",
+      "path": "pageCanvasOrigin",
+      "type": {
+        "kind": "list",
+        "unit": "pt",
+        "of": "length"
+      },
+      "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "page",
       "path": "pageMarginTop",
       "type": {
         "kind": "length",
@@ -9275,6 +9959,91 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentShowHiddenText",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentShowFieldCodes",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentTrackChanges",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentTrackChangesAuthor",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentMarkupView",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "simple",
+          "all",
+          "none",
+          "original"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "all",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
     },
     {
       "addressKind": "textVariable",
@@ -10991,6 +11760,299 @@
     {
       "addressKind": "style",
       "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterHighlightColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterHidden",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterUnderlineType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "none",
+          "single",
+          "words",
+          "double",
+          "thick",
+          "dotted",
+          "dashed",
+          "dotDash",
+          "dotDotDash",
+          "wave",
+          "doubleWave"
+        ],
+        "open": true
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "single",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "UnderlineType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterUnderlineColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "UnderlineColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterDoubleStrikethrough",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "StrikeThroughType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphShadingOn",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphShadingOn",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphShadingColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphShadingColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphShadingTint",
+      "type": {
+        "kind": "number",
+        "unit": "percent"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0,
+        "max": 100.0
+      },
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphShadingTint",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphBorderOn",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphBorderOn",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphBorderColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphBorderColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphBorderWeight",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0
+      },
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphBorderWeight",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
         "character"
       ],
       "path": "characterFontSize",
@@ -11393,6 +12455,136 @@
         {
           "element": "CharacterStyle",
           "attribute": "NoBreak",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterHighlightColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterHidden",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterUnderlineType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "none",
+          "single",
+          "words",
+          "double",
+          "thick",
+          "dotted",
+          "dashed",
+          "dotDash",
+          "dotDotDash",
+          "wave",
+          "doubleWave"
+        ],
+        "open": true
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "single",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyle",
+          "attribute": "UnderlineType",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterUnderlineColor",
+      "type": {
+        "kind": "color",
+        "to": "swatch"
+      },
+      "wire": "colorRef",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyle",
+          "attribute": "UnderlineColor",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterDoubleStrikethrough",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyle",
+          "attribute": "StrikeThroughType",
           "kind": "attr"
         }
       ]
@@ -13798,6 +14990,58 @@
     },
     {
       "addressKind": "frame",
+      "path": "opacityMaskType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "luminosity",
+          "alpha"
+        ]
+      },
+      "wire": "text",
+      "nullable": false,
+      "default": "luminosity",
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "maskType"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "opacityMaskInvert",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "invert"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "opacityMaskClip",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "clip"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
       "path": "points[i].anchor",
       "type": {
         "kind": "list",
@@ -15310,6 +16554,91 @@
       },
       {
         "addressKind": "doc",
+        "path": "documentShowHiddenText",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentShowFieldCodes",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentTrackChanges",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentTrackChangesAuthor",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentMarkupView",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "simple",
+            "all",
+            "none",
+            "original"
+          ]
+        },
+        "nullable": true,
+        "default": "all",
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "doc",
         "path": "defaultFillColor",
         "type": {
           "kind": "color"
@@ -16766,6 +18095,23 @@
       },
       {
         "addressKind": "frame",
+        "path": "frameImageAdjustments",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "RasterOp",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "imageAdjustments"
+      },
+      {
+        "addressKind": "frame",
         "path": "frameGradientStrokeMode",
         "type": {
           "kind": "enum",
@@ -16819,28 +18165,70 @@
       },
       {
         "addressKind": "frame",
-        "path": "frameFillMesh",
+        "path": "frameShapeSides",
         "type": {
-          "kind": "struct",
-          "fields": {},
-          "shape": "MeshFillSpec",
-          "open": true
+          "kind": "number",
+          "integer": true
         },
         "nullable": true,
+        "range": {
+          "min": 3.0,
+          "max": 100.0
+        },
         "access": "readWrite",
         "bindable": true,
-        "wire": "fillMesh"
+        "wire": "length"
       },
       {
         "addressKind": "frame",
-        "path": "framePatternTransform",
+        "path": "frameShapeStarInset",
         "type": {
-          "kind": "transform"
+          "kind": "number",
+          "unit": "percent"
         },
         "nullable": true,
+        "range": {
+          "min": 0.0,
+          "max": 99.0
+        },
+        "default": 0.0,
         "access": "readWrite",
         "bindable": true,
-        "wire": "transform"
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePieStart",
+        "type": {
+          "kind": "number",
+          "unit": "deg"
+        },
+        "nullable": true,
+        "range": {
+          "min": -360.0,
+          "max": 360.0
+        },
+        "default": 0.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePieEnd",
+        "type": {
+          "kind": "number",
+          "unit": "deg"
+        },
+        "nullable": true,
+        "range": {
+          "min": -360.0,
+          "max": 360.0
+        },
+        "default": 360.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
       },
       {
         "addressKind": "frame",
@@ -19216,6 +20604,62 @@
       },
       {
         "addressKind": "frame",
+        "path": "groupEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "symbolInstanceTint",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "length"
+          }
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "lengths"
+      },
+      {
+        "addressKind": "frame",
+        "path": "symbolInstanceNineSlice",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "length"
+          }
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "lengths"
+      },
+      {
+        "addressKind": "frame",
+        "path": "symbolInstanceSymbol",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
         "path": "frameDropShadowBlendMode",
         "type": {
           "kind": "enum",
@@ -19350,6 +20794,91 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "gradientFeather"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameFillEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameStrokeEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameContentEffectStack",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "EffectEntrySpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameAppearance",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "PaintLayerSpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "appearance"
       },
       {
         "addressKind": "frame",
@@ -19880,6 +21409,58 @@
       },
       {
         "addressKind": "frame",
+        "path": "opacityMaskType",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "luminosity",
+            "alpha"
+          ]
+        },
+        "nullable": false,
+        "default": "luminosity",
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "maskType"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "opacityMaskInvert",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "invert"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "frame",
+        "path": "opacityMaskClip",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "clip"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "frame",
         "path": "points[].anchor",
         "type": {
           "kind": "list",
@@ -20318,6 +21899,24 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "page",
+        "path": "pageCanvasOrigin",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "length"
+          }
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "lengths"
       },
       {
         "addressKind": "page",
@@ -21244,6 +22843,216 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterHighlightColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "colorRef"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterHidden",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterUnderlineType",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "none",
+            "single",
+            "words",
+            "double",
+            "thick",
+            "dotted",
+            "dashed",
+            "dotDash",
+            "dotDotDash",
+            "wave",
+            "doubleWave"
+          ]
+        },
+        "nullable": true,
+        "default": "single",
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "CharacterStyleRange",
+            "attribute": "UnderlineType",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterUnderlineColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "CharacterStyleRange",
+            "attribute": "UnderlineColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterDoubleStrikethrough",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "CharacterStyleRange",
+            "attribute": "StrikeThroughType",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphShadingOn",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphShadingOn",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphShadingColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphShadingColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphShadingTint",
+        "type": {
+          "kind": "number",
+          "unit": "percent"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0,
+          "max": 100.0
+        },
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphShadingTint",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphBorderOn",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphBorderOn",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphBorderColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphBorderColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphBorderWeight",
+        "type": {
+          "kind": "length"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0
+        },
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphBorderWeight",
+            "kind": "attr"
+          }
+        ]
       },
       {
         "addressKind": "storyRange",
@@ -23723,6 +25532,313 @@
       {
         "addressKind": "style",
         "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterHighlightColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "colorRef"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterHidden",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterUnderlineType",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "none",
+            "single",
+            "words",
+            "double",
+            "thick",
+            "dotted",
+            "dashed",
+            "dotDash",
+            "dotDotDash",
+            "wave",
+            "doubleWave"
+          ]
+        },
+        "nullable": true,
+        "default": "single",
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "UnderlineType",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "UnderlineType",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterUnderlineColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "UnderlineColor",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "UnderlineColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterDoubleStrikethrough",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "StrikeThroughType",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "StrikeThroughType",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphShadingOn",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphShadingOn",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphShadingColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphShadingColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphShadingTint",
+        "type": {
+          "kind": "number",
+          "unit": "percent"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0,
+          "max": 100.0
+        },
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphShadingTint",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphBorderOn",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphBorderOn",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphBorderColor",
+        "type": {
+          "kind": "color"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "colorRef",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphBorderColor",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphBorderWeight",
+        "type": {
+          "kind": "length"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0
+        },
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphBorderWeight",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
           "character"
         ],
         "path": "characterNoBreak",
@@ -25548,5 +27664,1362 @@
         ]
       }
     ]
-  }
+  },
+  "effectKinds": [
+    {
+      "kind": "dropShadow",
+      "title": "Drop shadow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameDropShadow",
+      "fieldPaths": [
+        "frameDropShadowMode",
+        "frameDropShadowXOffset",
+        "frameDropShadowYOffset",
+        "frameDropShadowSize",
+        "frameDropShadowOpacity",
+        "frameDropShadowColor",
+        "frameDropShadowBlendMode",
+        "frameDropShadowSpread",
+        "frameDropShadowNoise",
+        "frameDropShadowKnockedOut",
+        "frameDropShadowUseGlobalLight"
+      ]
+    },
+    {
+      "kind": "innerShadow",
+      "title": "Inner shadow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameInnerShadowEnabled",
+      "fieldPaths": [
+        "frameInnerShadowBlendMode",
+        "frameInnerShadowColor",
+        "frameInnerShadowOpacity",
+        "frameInnerShadowAngle",
+        "frameInnerShadowDistance",
+        "frameInnerShadowSize",
+        "frameInnerShadowChoke",
+        "frameInnerShadowNoise"
+      ]
+    },
+    {
+      "kind": "outerGlow",
+      "title": "Outer glow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameOuterGlowEnabled",
+      "fieldPaths": [
+        "frameOuterGlowBlendMode",
+        "frameOuterGlowColor",
+        "frameOuterGlowOpacity",
+        "frameOuterGlowSpread",
+        "frameOuterGlowSize",
+        "frameOuterGlowNoise"
+      ]
+    },
+    {
+      "kind": "innerGlow",
+      "title": "Inner glow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameInnerGlowEnabled",
+      "fieldPaths": [
+        "frameInnerGlowBlendMode",
+        "frameInnerGlowColor",
+        "frameInnerGlowOpacity",
+        "frameInnerGlowChoke",
+        "frameInnerGlowSize",
+        "frameInnerGlowSource",
+        "frameInnerGlowNoise"
+      ]
+    },
+    {
+      "kind": "bevelEmboss",
+      "title": "Bevel and emboss",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameBevelEnabled",
+      "fieldPaths": [
+        "frameBevelStyle",
+        "frameBevelTechnique",
+        "frameBevelDepth",
+        "frameBevelDirection",
+        "frameBevelSize",
+        "frameBevelSoften",
+        "frameBevelAngle",
+        "frameBevelAltitude",
+        "frameBevelHighlightColor",
+        "frameBevelShadowColor",
+        "frameBevelHighlightOpacity",
+        "frameBevelShadowOpacity"
+      ]
+    },
+    {
+      "kind": "satin",
+      "title": "Satin",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameSatinEnabled",
+      "fieldPaths": [
+        "frameSatinBlendMode",
+        "frameSatinColor",
+        "frameSatinOpacity",
+        "frameSatinAngle",
+        "frameSatinDistance",
+        "frameSatinSize",
+        "frameSatinInvert"
+      ]
+    },
+    {
+      "kind": "feather",
+      "title": "Feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameFeatherEnabled",
+      "fieldPaths": [
+        "frameFeatherWidth",
+        "frameFeatherCornerType",
+        "frameFeatherNoise",
+        "frameFeatherChoke"
+      ]
+    },
+    {
+      "kind": "directionalFeather",
+      "title": "Directional feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameDirectionalFeatherEnabled",
+      "fieldPaths": [
+        "frameDirectionalFeatherLeftWidth",
+        "frameDirectionalFeatherRightWidth",
+        "frameDirectionalFeatherTopWidth",
+        "frameDirectionalFeatherBottomWidth",
+        "frameDirectionalFeatherAngle",
+        "frameDirectionalFeatherNoise",
+        "frameDirectionalFeatherChoke"
+      ]
+    },
+    {
+      "kind": "gradientFeather",
+      "title": "Gradient feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "fieldPaths": [
+        "frameGradientFeather"
+      ]
+    },
+    {
+      "kind": "gaussianBlur",
+      "title": "Gaussian blur",
+      "category": "blur",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "radiusPt",
+          "title": "Radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 2.0
+        }
+      ]
+    },
+    {
+      "kind": "outlineStroke",
+      "title": "Stroke (layer style)",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "sizePt",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 3.0
+        },
+        {
+          "field": "position",
+          "title": "Position",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "Outside",
+              "Inside",
+              "Center"
+            ]
+          },
+          "default": "Outside"
+        },
+        {
+          "field": "color",
+          "title": "Color",
+          "type": {
+            "kind": "color"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "colorOverlay",
+      "title": "Color overlay",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "color",
+          "title": "Color",
+          "type": {
+            "kind": "color"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "gradientOverlay",
+      "title": "Gradient overlay",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "gradient",
+          "title": "Gradient",
+          "type": {
+            "kind": "ref",
+            "to": "gradient"
+          }
+        },
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "reverse",
+          "title": "Reverse",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "kind": "reflection",
+      "title": "Reflection",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "distancePt",
+          "title": "Distance",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "sizePct",
+          "title": "Size",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "startOpacityPct",
+          "title": "Start opacity",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "endOpacityPct",
+          "title": "End opacity",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "blurPt",
+          "title": "Blur",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        }
+      ]
+    },
+    {
+      "kind": "softEdge",
+      "title": "Soft edge",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "sizePt",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        }
+      ]
+    },
+    {
+      "kind": "noise",
+      "title": "Add noise",
+      "category": "noise",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "amountPct",
+          "title": "Amount",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "monochromatic",
+          "title": "Monochromatic",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "kind": "colorAdjust",
+      "title": "Color adjustment",
+      "category": "color",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "brightness",
+          "title": "Brightness",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "contrast",
+          "title": "Contrast",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "saturation",
+          "title": "Saturation",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "hueDeg",
+          "title": "Hue",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -180.0,
+            "max": 180.0
+          },
+          "default": 0.0
+        }
+      ]
+    },
+    {
+      "kind": "roughen",
+      "title": "Roughen",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "size",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "detailPerInch",
+          "title": "Detail",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "smooth",
+          "title": "Smooth",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "zigZag",
+      "title": "Zig zag",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "size",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "ridges",
+          "title": "Ridges per segment",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 4.0
+        },
+        {
+          "field": "smooth",
+          "title": "Smooth",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "puckerBloat",
+      "title": "Pucker & bloat",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "amountPct",
+          "title": "Amount",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -200.0,
+            "max": 200.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "twist",
+      "title": "Twist",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -3600.0,
+            "max": 3600.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "tweak",
+      "title": "Tweak",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "amountH",
+          "title": "Horizontal",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "amountV",
+          "title": "Vertical",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "anchors",
+          "title": "Anchor points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "inHandles",
+          "title": "In control points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "outHandles",
+          "title": "Out control points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "transformCopies",
+      "title": "Transform",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "scaleHPct",
+          "title": "Scale horizontal",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -10000.0,
+            "max": 10000.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "scaleVPct",
+          "title": "Scale vertical",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -10000.0,
+            "max": 10000.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "moveH",
+          "title": "Move horizontal",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "moveV",
+          "title": "Move vertical",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "rotateDeg",
+          "title": "Rotate",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "reflectX",
+          "title": "Reflect X",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "reflectY",
+          "title": "Reflect Y",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "copies",
+          "title": "Copies",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "origin",
+          "title": "Origin",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "topLeft",
+              "top",
+              "topRight",
+              "left",
+              "center",
+              "right",
+              "bottomLeft",
+              "bottom",
+              "bottomRight"
+            ]
+          },
+          "default": "center"
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "freeDistort",
+      "title": "Free distort",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "corners",
+          "title": "Corners",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "list",
+              "of": {
+                "kind": "number"
+              }
+            }
+          }
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "warp",
+      "title": "Warp",
+      "category": "warp",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "style",
+          "title": "Style",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "arc",
+              "arcLower",
+              "arcUpper",
+              "arch",
+              "bulge",
+              "shellLower",
+              "shellUpper",
+              "flag",
+              "wave",
+              "fish",
+              "rise",
+              "fisheye",
+              "inflate",
+              "squeeze",
+              "twist"
+            ]
+          },
+          "default": "arc"
+        },
+        {
+          "field": "horizontal",
+          "title": "Horizontal",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "bendPct",
+          "title": "Bend",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "distortHPct",
+          "title": "Horizontal distortion",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "distortVPct",
+          "title": "Vertical distortion",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "offsetPath",
+      "title": "Offset path",
+      "category": "path",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "offset",
+          "title": "Offset",
+          "type": {
+            "kind": "length"
+          },
+          "default": 10.0
+        },
+        {
+          "field": "join",
+          "title": "Joins",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "miter",
+              "round",
+              "bevel"
+            ]
+          },
+          "default": "miter"
+        },
+        {
+          "field": "miterLimit",
+          "title": "Miter limit",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": 1.0,
+            "max": 500.0
+          },
+          "default": 4.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "outlinePath",
+      "title": "Outline stroke",
+      "category": "path",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [],
+      "vector": true
+    },
+    {
+      "kind": "roundCorners",
+      "title": "Round corners",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "radius",
+          "title": "Radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "scribble",
+      "title": "Scribble",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 30.0
+        },
+        {
+          "field": "pathOverlap",
+          "title": "Path overlap",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "pathOverlapVariation",
+          "title": "Overlap variation",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "strokeWidth",
+          "title": "Stroke width",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 3.0
+        },
+        {
+          "field": "curvinessPct",
+          "title": "Curviness",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "curvinessVariationPct",
+          "title": "Curviness variation",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "spacing",
+          "title": "Spacing",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "spacingVariation",
+          "title": "Spacing variation",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "convertToShape",
+      "title": "Convert to shape",
+      "category": "convertToShape",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "shape",
+          "title": "Shape",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "rectangle",
+              "roundedRectangle",
+              "ellipse"
+            ]
+          },
+          "default": "rectangle"
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "extraWidth",
+          "title": "Extra width",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "extraHeight",
+          "title": "Extra height",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "width",
+          "title": "Width",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 36.0
+        },
+        {
+          "field": "height",
+          "title": "Height",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 36.0
+        },
+        {
+          "field": "cornerRadius",
+          "title": "Corner radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 9.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "pathfinder",
+      "title": "Pathfinder",
+      "category": "pathfinder",
+      "indesign": false,
+      "targets": [
+        "group"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "op",
+          "title": "Shape mode",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "add",
+              "subtract",
+              "intersect",
+              "exclude"
+            ]
+          },
+          "default": "add"
+        }
+      ],
+      "vector": true
+    }
+  ],
+  "effectCategories": [
+    "stylize",
+    "blur",
+    "noise",
+    "color",
+    "distortAndTransform",
+    "path",
+    "pathfinder",
+    "warp",
+    "convertToShape",
+    "rasterize"
+  ]
 }

@@ -39,6 +39,7 @@ import manifestJson from "../manifest.json";
 
 import { contributePdfIo } from "./io/pdf";
 import { contributePdfCommands } from "./commands";
+import { contributeConvertMenu } from "./vectors/menu";
 
 // The bundle's German, beside its English (`defineMessages` in each file).
 defineTranslations("de", de);
@@ -50,6 +51,8 @@ export function activate(host: BundleHost): BundleHandle {
   const pdfIoSub = contributePdfIo(host);
   // ADR 323 — the import as a typed command (Node CLI, scripts).
   const commandsSub = contributePdfCommands(host);
+  // Publish ADR 658 — Object ▸ Convert Placed PDF to Vectors.
+  const convertSub = contributeConvertMenu(host);
   host.log.info(
     `activated — PDF importer (apiVersion ${manifestJson.apiVersion})`,
   );
@@ -59,6 +62,7 @@ export function activate(host: BundleHost): BundleHandle {
     dispose() {
       pdfIoSub.dispose();
       commandsSub?.dispose();
+      convertSub.dispose();
     },
   };
 }

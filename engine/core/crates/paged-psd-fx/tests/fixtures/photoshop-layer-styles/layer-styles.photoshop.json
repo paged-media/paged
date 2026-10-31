@@ -1,0 +1,152 @@
+{
+  "fixture": "layer-styles",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/layer-styles.jsx",
+    "script_sha256": "45d26f6e794f21e8c2dd8c959ecc0b7e28dd5fe9c3176ce7d708adf3daa6ecbe",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-25T03:05:53.338Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "ds-basic",
+      "params": {
+        "DrSh": "multiply black 75, 120 deg, distance 5, size 5"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-basic.psd"
+      ]
+    },
+    {
+      "id": "is-basic",
+      "params": {
+        "IrSh": "multiply black 75, 120 deg, distance 5, size 5"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/is-basic.psd"
+      ]
+    },
+    {
+      "id": "og-softer",
+      "params": {
+        "OrGl": "screen (255,255,190) 75, softer, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/og-softer.psd"
+      ]
+    },
+    {
+      "id": "og-gradient",
+      "params": {
+        "OrGl": "normal, gradient blue to red, size 12"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/og-gradient.psd"
+      ]
+    },
+    {
+      "id": "ig-edge",
+      "params": {
+        "IrGl": "screen (255,255,190) 75, softer, edge, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ig-edge.psd"
+      ]
+    },
+    {
+      "id": "bv-inner-smooth",
+      "params": {
+        "ebbl": "inner bevel, smooth, depth 100, size 5"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-inner-smooth.psd"
+      ]
+    },
+    {
+      "id": "bv-contour-cone",
+      "params": {
+        "ebbl": "inner bevel, smooth, size 10, contour cone"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-contour-cone.psd"
+      ]
+    },
+    {
+      "id": "sa-plain",
+      "params": {
+        "ChFX": "multiply black 50, 19 deg, distance 11, size 14"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/sa-plain.psd"
+      ]
+    },
+    {
+      "id": "co-fill0",
+      "params": {
+        "SoFi": "normal 100",
+        "fill": 0
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/co-fill0.psd"
+      ]
+    },
+    {
+      "id": "go-linear",
+      "params": {
+        "GrFl": "linear black to white, 90 deg"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-linear.psd"
+      ]
+    },
+    {
+      "id": "go-radial",
+      "params": {
+        "GrFl": "radial"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-radial.psd"
+      ]
+    },
+    {
+      "id": "st-outside-square",
+      "params": {
+        "FrFX": "outside 5"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/st-outside-square.psd"
+      ]
+    }
+  ],
+  "note": "A subset of modules/image/image-conformance/fixtures/photoshop/layer-styles (the PSDs only), recorded by the probe named in produced_by; copied for the engine mapper of engine ADR 1044."
+}

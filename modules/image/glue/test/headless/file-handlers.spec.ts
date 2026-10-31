@@ -21,6 +21,7 @@ import { createHeadlessHost } from "@paged-media/plugin-sdk";
 import { covers } from "@paged-media/test-kit";
 
 import { imageBundle } from "../../src";
+import { RASTER_IMPORT_EXTENSIONS } from "../../src/activate";
 import { lastSession } from "../bundle-session";
 import {
   at,
@@ -69,13 +70,9 @@ describe("the raster importer", () => {
   it("opens PNG, PSD and JPEG bytes into the session; into a selected empty frame it places the image as one document undo step", async () => {
     covers("importer:media.paged.image.importer.raster");
     const k = await host();
-    expect(k.importer.extensions).toEqual([
-      ".psd",
-      ".psb",
-      ".png",
-      ".jpg",
-      ".jpeg",
-    ]);
+    expect(k.importer.extensions).toEqual([...RASTER_IMPORT_EXTENSIONS]);
+    for (const ext of [".tif", ".webp", ".gif", ".bmp", ".avif", ".jxl"])
+      expect(k.importer.extensions).toContain(ext);
     // Nothing selected: the file opens in the panel's session, bound to
     // no frame (Commit has nowhere to go and says so).
     await k.open("two.png", await twoColourPng(), "image/png");

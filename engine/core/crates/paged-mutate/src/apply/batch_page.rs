@@ -229,15 +229,20 @@ pub(super) fn apply_insert_page(
         override_list: Vec::new(),
         name: None,
         show_master_items: None,
+        canvas_origin: None,
     };
     // paged.data D-23 — a new page takes its master's margins, as in
     // InDesign (a page's `<MarginPreference>` follows its master's until
     // the page overrides it); with no master, or a master that declares
     // none, the page it follows lends its own. Before, every inserted page
     // had none — a margin box equal to the page.
+    // Engine ADR 1026 — a master that declares no margins lends those of
+    // the master it is based on.
     let margins = master_id
-        .and_then(|m| doc.master_spread(m))
-        .and_then(|m| {
+        .map(|m| doc.master_chain(m))
+        .unwrap_or_default()
+        .into_iter()
+        .find_map(|m| {
             m.spread.pages.iter().find_map(|p| {
                 p.self_id
                     .as_ref()

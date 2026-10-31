@@ -82,6 +82,12 @@ export const STIMULI = {
   // (backdrop, source) pair along the 0..1 square is visited.
   "blend-bottom": (x, y) => [x / N, y / N, ((x + y) % SIZE) / N],
   "blend-top": (x, y) => [(N - y) / N, x / N, Math.abs(x - y) / N],
+  // Depth (image ADR 479): a neutral ramp with one level per pixel,
+  // 16384 of them in raster order — far more than 8 bits can hold.
+  "deep-ramp": (x, y) => {
+    const v = (y * SIZE + x) / (SIZE * SIZE - 1);
+    return [v, v, v];
+  },
 };
 
 export function writeStimuli(dir) {

@@ -181,7 +181,13 @@ describe.skipIf(!ready && !required)(
       expect(
         (await consumer.data.placements()).filter((p) => p.binding === b.id),
       ).toEqual([
-        { binding: b.id, address: "rectangle:urect", status: "linked" },
+        // It shows the first record (editor ADR 291's record markers).
+        {
+          binding: b.id,
+          address: "rectangle:urect",
+          status: "linked",
+          record: 0,
+        },
       ]);
       await consumer.data.unbind(b.id);
       expect(await consumer.data.bindings()).toEqual([]);

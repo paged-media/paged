@@ -92,3 +92,10 @@ says one cast survives. One read is still raw: `requestNearestPathPoint` in
 - [ADR 004](https://github.com/paged-media/core/blob/main/docs/adr/004-kurbo-geometry-kernel.md) — the engine's geometry kernel
 - [ADR 310](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/310-one-write-door.md), [ADR 305](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/305-doors-always-present.md) — the write door; probing instead of reading a version
 - [ADR 350](350-three-typescript-layers.md), [ADR 351](351-shapes-are-native-page-items.md), [ADR 357](357-image-trace-rust-lane.md) — the geometry package; native items; the tracer reuses the winding step
+
+## Amendment 2026-10-25 — the arrangement's caps
+
+Engine ADR 1019 rewrote the arrangement as a face walk. It takes at most 1000 inputs and
+100 000 faces, and refuses an input past its work budget with a sentence naming the stage;
+the 12-input / 256-face limit in the consequences above no longer holds. The bundle's
+mirrored constants (`packages/draw-bundle/src/handlers/planar-regions.ts`) follow.

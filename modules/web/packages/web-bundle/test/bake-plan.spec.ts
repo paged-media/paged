@@ -347,6 +347,9 @@ describe("bakeBatchOps — the whole bake as ONE batch", () => {
       paths: [],
       texts: ["t0"],
       images: [],
+      groups: [],
+      clips: [],
+      masks: [],
     });
     expect(ops.map((o) => o.op)).toEqual([
       "createSwatch",
@@ -424,6 +427,9 @@ describe("bakeBatchOps — the whole bake as ONE batch", () => {
       paths: [],
       texts: ["t0", "t1"],
       images: [],
+      groups: [],
+      clips: [],
+      masks: [],
     });
   });
 

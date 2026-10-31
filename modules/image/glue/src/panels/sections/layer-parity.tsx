@@ -28,6 +28,12 @@ import {
 } from "../../engine";
 import type { LayerFilter } from "../../session";
 import { parseCube, toKernelCube } from "../../cube";
+import {
+  D,
+  DEVELOP_SECTIONS,
+  DEVELOP_SETTINGS,
+  developDefaults,
+} from "../../develop";
 
 import { mono, note, row, sectionTitle } from "./styles";
 
@@ -55,6 +61,7 @@ const M = defineMessages("image.layerParity", {
   unlink: "Unlink",
   linked: "linked",
   blendingOptions: "Blending options…",
+  layerStyleTitle: "Layer style…",
   rasterize: "Rasterize",
   newFill: "New fill layer…",
   newAdjustment: "New adjustment layer…",
@@ -220,6 +227,7 @@ const ADJ_LABELS = defineMessages("image.adjustmentKind", {
   threshold: "Threshold",
   gradientMap: "Gradient Map",
   selectiveColor: "Selective Color",
+  develop: "Develop",
 });
 
 const COLOR_WORDS = defineMessages("image.colorLabel", {
@@ -384,6 +392,7 @@ export function ActiveLayerStrip({
   onLink,
   onUnlink,
   onBlendingOptions,
+  onLayerStyle,
   onRasterize,
 }: {
   layer: LayerInfo | null;
@@ -403,6 +412,8 @@ export function ActiveLayerStrip({
   onLink: () => void;
   onUnlink: () => void;
   onBlendingOptions: () => void;
+  /** Open the Layer Style dialog (the "fx" of the Layers panel). */
+  onLayerStyle?: () => void;
   onRasterize: () => void;
 }) {
   if (!layer) return null;
@@ -494,6 +505,19 @@ export function ActiveLayerStrip({
         >
           {t(M.blendingOptions)}
         </button>
+        {onLayerStyle && layer.kind !== "adjustment" ? (
+          <button
+            type="button"
+            data-image-open-layer-style
+            disabled={disabled}
+            onClick={onLayerStyle}
+            style={small}
+            aria-label={t(M.layerStyleTitle)}
+            title={t(M.layerStyleTitle)}
+          >
+            {layer.style.length > 0 ? `fx · ${layer.style.length}` : "fx"}
+          </button>
+        ) : null}
         {layer.kind === "fill" || layer.kind === "smart" ? (
           <button
             type="button"
@@ -792,6 +816,84 @@ function ColorWell({
 }
 
 /** A tab-like picker of which part of the block is being edited. */
+/** THE DEVELOP PANEL (WP5.2): a Develop layer's 61 settings by section
+ *  (Basic, Presence, HSL by range, Colour grading by wheel, Tone curve,
+ *  Detail), the same schema the Filter ▸ Develop… dialog draws. */
+function DevelopFields({
+  values,
+  disabled,
+  onValues,
+}: {
+  values: readonly number[];
+  disabled: boolean;
+  onValues: (v: number[]) => void;
+}) {
+  const [section, setSection] = useState(0);
+  const [sub, setSub] = useState(0);
+  const sections = DEVELOP_SECTIONS;
+  const name = sections[Math.min(section, sections.length - 1)]!;
+  const inSection = DEVELOP_SETTINGS.map((x, at) => ({ x, at })).filter(
+    ({ x }) => x.section === name,
+  );
+  const groups = [
+    ...new Set(inSection.map(({ x }) => x.group).filter((g) => g)),
+  ] as string[];
+  const group =
+    groups.length > 1 ? groups[Math.min(sub, groups.length - 1)] : null;
+  const full =
+    values.length === DEVELOP_SETTINGS.length ? values : developDefaults();
+  return (
+    <div data-image-develop>
+      <PartPicker
+        label={t(D.develop)}
+        parts={sections.map((x) => t(x))}
+        value={Math.min(section, sections.length - 1)}
+        onPick={(i) => {
+          setSection(i);
+          setSub(0);
+        }}
+        testAttr="data-image-develop-section"
+      />
+      {group !== null && (
+        <PartPicker
+          label={t(name)}
+          parts={groups.map((g) => t(g))}
+          value={Math.min(sub, groups.length - 1)}
+          onPick={setSub}
+          testAttr="data-image-develop-group"
+        />
+      )}
+      {inSection
+        .filter(({ x }) => group === null || x.group === group)
+        .map(({ x, at }) => (
+          <Field
+            key={at}
+            label={
+              x.group && group === null
+                ? `${t(x.group)} ${t(x.label)}`
+                : t(x.label)
+            }
+            values={full}
+            at={at}
+            min={x.min}
+            max={x.max}
+            step={x.step}
+            disabled={disabled}
+            onValues={onValues}
+          />
+        ))}
+      <button
+        type="button"
+        data-image-develop-reset
+        disabled={disabled}
+        onClick={() => onValues(developDefaults())}
+      >
+        {t(D.reset)}
+      </button>
+    </div>
+  );
+}
+
 function PartPicker({
   label,
   parts,
@@ -1439,6 +1541,8 @@ export function LayerPropertiesSection({
             {t(M.noSettings, { name: adjustmentKindLabel("invert") })}
           </div>
         );
+      case "develop":
+        return <DevelopFields values={v} disabled={disabled} onValues={set} />;
     }
   };
   return (

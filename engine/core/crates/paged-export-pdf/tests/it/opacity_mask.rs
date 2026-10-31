@@ -45,6 +45,7 @@ fn masked_pdf(mask_type: OpacityMaskType, invert: bool) -> Vec<u8> {
                 mask_item: mask,
                 mask_type,
                 invert,
+                clip: true,
             },
         );
         spread

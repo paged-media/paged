@@ -54,7 +54,9 @@
 //! on the host; `mod wasm` is `#[cfg(target_arch = "wasm32")]` and never
 //! type-checks there.
 
-use image_psd::abr::{AbrBrush, AbrFile, AbrTip};
+use image_psd::abr::{
+    AbrBrush, AbrFile, AbrTip, BlendMode, ControlSource, Dynamics, OptionSource, ToolKind,
+};
 use image_psd::Result;
 
 /// One preset, reduced to what the paint engine can act on.
@@ -84,6 +86,9 @@ pub struct BrushPreset {
     /// `Rndn` — minor/major axis ratio; 1.0 is circular.
     pub roundness: Option<f64>,
     pub angle_deg: Option<f64>,
+    /// Index into the file's sampled tips for a `sampled` tip whose
+    /// reference resolved — what `abr_tip` takes to fetch the bitmap.
+    pub sample_index: Option<usize>,
 }
 
 impl BrushPreset {
@@ -133,6 +138,7 @@ fn preset_of(brush: &AbrBrush) -> BrushPreset {
         spacing_enabled: common.map(|c| c.spacing_enabled),
         roundness,
         angle_deg: common.map(|c| c.angle_deg),
+        sample_index: brush.tip.as_sampled().and_then(|t| t.sample_index),
     }
 }
 
@@ -160,7 +166,11 @@ pub fn presets_json(bytes: &[u8]) -> Result<String> {
 
 fn render_json(file: &AbrFile) -> String {
     let presets = presets_of(file);
-    let rows: Vec<String> = presets.iter().map(row_json).collect();
+    let rows: Vec<String> = presets
+        .iter()
+        .zip(&file.brushes)
+        .map(|(p, b)| row_json(p, &dynamics_json(b)))
+        .collect();
     // `AbrWarning` is a structured enum with no `Display` — its `Debug`
     // form carries the fields (which id, which counts) that make a
     // warning actionable, so it is what the panel shows.
@@ -181,10 +191,11 @@ fn render_json(file: &AbrFile) -> String {
     )
 }
 
-fn row_json(p: &BrushPreset) -> String {
+fn row_json(p: &BrushPreset, dynamics: &str) -> String {
     format!(
         "{{\"index\":{},\"name\":{},\"kind\":\"{}\",\"diameter\":{},\"diameterUnit\":{},\
-         \"hardness\":{},\"spacing\":{},\"spacingEnabled\":{},\"roundness\":{},\"angle\":{}}}",
+         \"hardness\":{},\"spacing\":{},\"spacingEnabled\":{},\"roundness\":{},\"angle\":{},\
+         \"sampleIndex\":{},\"dynamics\":{}}}",
         p.index,
         json_string(&p.name),
         p.kind,
@@ -198,7 +209,275 @@ fn row_json(p: &BrushPreset) -> String {
             .map_or_else(|| "null".to_string(), |b| b.to_string()),
         json_num(p.roundness),
         json_num(p.angle_deg),
+        p.sample_index
+            .map_or_else(|| "null".to_string(), |i| i.to_string()),
+        dynamics,
     )
+}
+
+// ── the dynamics projection: EVERY parsed field ──────────────────────
+//
+// Nothing here is converted beyond what the reader already did (percents
+// are fractions, angles degrees, counts numbers): the glue maps these onto
+// its own brush settings and reports what it cannot apply. A group the
+// file's gate switched off is `null`, never a block of defaults.
+
+/// A JSON object under construction (keys in insertion order).
+struct Obj(Vec<String>);
+
+impl Obj {
+    fn new() -> Obj {
+        Obj(Vec::new())
+    }
+    fn raw(mut self, k: &str, v: String) -> Obj {
+        self.0.push(format!("{}:{v}", json_string(k)));
+        self
+    }
+    fn num(self, k: &str, v: Option<f64>) -> Obj {
+        self.raw(k, json_num(v))
+    }
+    fn int(self, k: &str, v: Option<i32>) -> Obj {
+        self.raw(k, v.map_or_else(|| "null".into(), |i| i.to_string()))
+    }
+    fn bool(self, k: &str, v: Option<bool>) -> Obj {
+        self.raw(k, v.map_or_else(|| "null".into(), |b| b.to_string()))
+    }
+    fn str(self, k: &str, v: Option<&str>) -> Obj {
+        self.raw(k, v.map_or_else(|| "null".into(), json_string))
+    }
+    fn done(self) -> String {
+        format!("{{{}}}", self.0.join(","))
+    }
+}
+
+fn opt<T>(v: Option<&T>, f: impl FnOnce(&T) -> String) -> String {
+    v.map_or_else(|| "null".to_string(), f)
+}
+
+/// The control's name in the glue's vocabulary (`BrushControl`).
+pub fn control_name(c: ControlSource) -> &'static str {
+    match c {
+        ControlSource::Off => "off",
+        ControlSource::Fade => "fade",
+        ControlSource::PenPressure => "pressure",
+        ControlSource::PenTilt => "tilt",
+        ControlSource::StylusWheel => "wheel",
+        ControlSource::InitialDirection => "initialDirection",
+        ControlSource::Direction => "direction",
+        ControlSource::InitialRotation => "initialRotation",
+        ControlSource::Rotation => "rotation",
+    }
+}
+
+fn dyn_json(d: Option<&Dynamics>) -> String {
+    opt(d, |d| {
+        Obj::new()
+            .int("control", Some(d.control_ordinal))
+            .str("controlName", Some(control_name(d.control)))
+            .int("fade", Some(d.fade_steps))
+            .num("jitter", Some(d.jitter))
+            .num("minimum", d.minimum)
+            .done()
+    })
+}
+
+fn blend_name(m: Option<BlendMode>) -> Option<&'static str> {
+    m.map(BlendMode::name)
+}
+
+fn source_name(s: OptionSource) -> &'static str {
+    match s {
+        OptionSource::Absent => "absent",
+        OptionSource::Brush => "brush",
+        OptionSource::ToolOptions => "toolOptions",
+    }
+}
+
+fn tip_kind(t: &AbrTip) -> &'static str {
+    match t {
+        AbrTip::Computed(_) => "computed",
+        AbrTip::Sampled(_) => "sampled",
+        AbrTip::Bristle(_) => "bristle",
+        AbrTip::Erodible(_) => "erodible",
+        AbrTip::Unsupported { .. } => "unsupported",
+        AbrTip::Missing => "missing",
+    }
+}
+
+/// Every dynamics group of `b`, as the nested `dynamics` object.
+pub fn dynamics_json(b: &AbrBrush) -> String {
+    let common = b.tip.common();
+    let tip = Obj::new()
+        .bool("flipX", common.map(|c| c.flip_x))
+        .bool("flipY", common.map(|c| c.flip_y))
+        .done();
+    let shape = opt(b.shape_dynamics.as_ref(), |s| {
+        Obj::new()
+            .raw("size", dyn_json(s.size.as_ref()))
+            .raw("angle", dyn_json(s.angle.as_ref()))
+            .raw("roundness", dyn_json(s.roundness.as_ref()))
+            .num("minimumDiameter", s.minimum_diameter)
+            .num("minimumRoundness", s.minimum_roundness)
+            .num("tiltScale", s.tilt_scale)
+            .bool("flipXJitter", s.flip_x_jitter)
+            .bool("flipYJitter", s.flip_y_jitter)
+            .bool("projection", s.brush_projection)
+            .done()
+    });
+    let scatter = opt(b.scatter.as_ref(), |s| {
+        Obj::new()
+            .raw("scatter", dyn_json(s.scatter.as_ref()))
+            .num("count", s.count)
+            .raw("countJitter", dyn_json(s.count_dynamics.as_ref()))
+            .bool("bothAxes", s.both_axes)
+            .done()
+    });
+    let texture = opt(b.texture.as_ref(), |t| {
+        Obj::new()
+            .str("patternId", t.pattern_id.as_deref())
+            .str("patternName", t.pattern_name.as_deref())
+            .str("mode", blend_name(t.blend_mode))
+            .num("scale", t.scale)
+            .num("depth", t.depth)
+            .num("minimumDepth", t.minimum_depth)
+            .raw("depthJitter", dyn_json(t.depth_dynamics.as_ref()))
+            .bool("invert", t.invert)
+            .int("brightness", t.brightness)
+            .int("contrast", t.contrast)
+            .bool("eachTip", t.per_tip)
+            .done()
+    });
+    let dual = opt(b.dual_brush.as_ref(), |d| {
+        let t = d.tip.as_deref();
+        let c = t.and_then(AbrTip::common);
+        let (roundness, hardness) = match t {
+            Some(AbrTip::Computed(x)) => (Some(x.roundness), Some(x.hardness)),
+            Some(AbrTip::Sampled(x)) => (Some(x.roundness), None),
+            _ => (None, None),
+        };
+        Obj::new()
+            .bool("enabled", Some(d.enabled))
+            .str("kind", t.map(tip_kind))
+            .num("diameter", c.map(|c| c.diameter))
+            .str(
+                "diameterUnit",
+                c.map(|c| unit_tag(&c.diameter_unit)).as_deref(),
+            )
+            .num("roundness", roundness)
+            .num("hardness", hardness)
+            .num("tipSpacing", c.map(|c| c.spacing))
+            .num("angle", c.map(|c| c.angle_deg))
+            .raw(
+                "sampleIndex",
+                t.and_then(AbrTip::as_sampled)
+                    .and_then(|s| s.sample_index)
+                    .map_or_else(|| "null".into(), |i| i.to_string()),
+            )
+            .bool("flip", d.flip)
+            .str("mode", blend_name(d.blend_mode))
+            .bool("useScatter", d.use_scatter)
+            .num("spacing", d.spacing)
+            .num("count", d.count)
+            .bool("bothAxes", d.both_axes)
+            .raw("countJitter", dyn_json(d.count_dynamics.as_ref()))
+            .raw("scatter", dyn_json(d.scatter_dynamics.as_ref()))
+            .done()
+    });
+    let color = opt(b.color_dynamics.as_ref(), |c| {
+        Obj::new()
+            .raw("fgBg", dyn_json(c.foreground_background.as_ref()))
+            .num("hue", c.hue)
+            .num("saturation", c.saturation)
+            .num("brightness", c.brightness)
+            .num("purity", c.purity)
+            .bool("perTip", c.per_tip)
+            .done()
+    });
+    let transfer = opt(b.transfer.as_ref(), |t| {
+        Obj::new()
+            .raw("flow", dyn_json(t.flow.as_ref()))
+            .raw("opacity", dyn_json(t.opacity.as_ref()))
+            .raw("wetness", dyn_json(t.wetness.as_ref()))
+            .raw("mix", dyn_json(t.mix.as_ref()))
+            .done()
+    });
+    let pose = opt(b.brush_pose.as_ref(), |p| {
+        Obj::new()
+            .bool("overrideAngle", p.override_angle)
+            .bool("overrideTiltX", p.override_tilt_x)
+            .bool("overrideTiltY", p.override_tilt_y)
+            .bool("overridePressure", p.override_pressure)
+            .num("pressure", p.pressure)
+            .int("tiltX", p.tilt_x)
+            .int("tiltY", p.tilt_y)
+            .int("angle", p.angle)
+            .done()
+    });
+    let o = &b.options;
+    let smoothing = opt(o.smoothing.as_ref(), |s| {
+        Obj::new()
+            .bool("enabled", s.enabled)
+            .num("amount", s.amount())
+            .bool("radiusMode", s.radius_mode)
+            .bool("catchUp", s.catch_up)
+            .bool("catchUpAtEnd", s.catch_up_at_end)
+            .bool("zoomCompensation", s.zoom_compensation)
+            .bool("pressureSmoothing", s.pressure_smoothing)
+            .str("source", Some(source_name(s.source)))
+            .done()
+    });
+    let tool = opt(b.tool_options.as_ref(), |t| {
+        Obj::new()
+            .str(
+                "kind",
+                Some(match t.kind {
+                    ToolKind::Mixer => "mixer",
+                    ToolKind::Smudge => "smudge",
+                    ToolKind::PlainBrush => "brush",
+                }),
+            )
+            .str("classId", Some(&t.class_id))
+            // 0..100 plain numbers on the wire, fractions here.
+            .num("flow", Some(t.flow / 100.0))
+            .num("opacity", Some(t.opacity / 100.0))
+            .str("blend", Some(t.blend_mode.name()))
+            .done()
+    });
+    Obj::new()
+        .raw("tip", tip)
+        .raw("shape", shape)
+        .raw("scatter", scatter)
+        .raw("texture", texture)
+        .raw("dual", dual)
+        .raw("color", color)
+        .raw("transfer", transfer)
+        .raw("pose", pose)
+        .bool("wetEdges", b.wet_edges)
+        .bool("noise", b.noise)
+        .bool("buildUp", o.build_up)
+        .bool("protectTexture", o.protect_texture)
+        .bool("pressureOverridesSize", o.pressure_overrides_size)
+        .bool("pressureOverridesOpacity", o.pressure_overrides_opacity)
+        .raw("smoothing", smoothing)
+        .raw("toolOptions", tool)
+        .done()
+}
+
+/// The sampled tip `index` of `bytes` as `[w u32 LE, h u32 LE, alpha…]`
+/// — 8-bit coverage, a 16-bit tip reduced by the explicit lossy call.
+pub fn tip_bitmap(bytes: &[u8], index: usize) -> Result<Vec<u8>> {
+    let file = AbrFile::parse(bytes)?;
+    let s = file.samples.get(index).ok_or_else(|| {
+        image_psd::PsdError::Unsupported(format!(
+            "no sampled tip {index} (the file has {})",
+            file.samples.len()
+        ))
+    })?;
+    let mut out = Vec::with_capacity(8 + (s.width * s.height) as usize);
+    out.extend_from_slice(&s.width.to_le_bytes());
+    out.extend_from_slice(&s.height.to_le_bytes());
+    out.extend_from_slice(&s.coverage8());
+    Ok(out)
 }
 
 /// `f64` as JSON, with the non-finite trap closed: `NaN`/`Infinity` are
@@ -230,6 +509,414 @@ fn json_string(s: &str) -> String {
     }
     out.push('"');
     out
+}
+
+// ── the writer's door: a preset from the glue's brush settings ───────
+//
+// The glue holds its presets as its own brush settings; exporting them
+// as `.abr` goes through `image_psd::abr::write_abr`. The values cross
+// as an f32 array IN THE ORDER OF [`EXPORT_KEYS`] — the glue packs by
+// name from this list (`abr_export_keys`), as it does for the stroke's
+// dynamics, and the names are the glue's own dynamics keys wherever the
+// concept is the same.
+//
+// NOT EXPORTED, and why: the texture (an `.abr` pattern is a `patt`
+// record, and this crate keeps patterns opaque — a texture whose `Idnt`
+// names no pattern would load as a broken preset), the bitmap of a dual
+// tip (the dual tip is written as a computed round tip), and the
+// symmetry / smoothing radius / lock-transparency settings, which are
+// tool state in Photoshop rather than preset fields. Smoothing's AMOUNT
+// and its two catch-up flags ARE preset fields and are written.
+
+/// The per-preset values `abr_export_add` takes, in order.
+pub const EXPORT_KEYS: &[&str] = &[
+    "diameter",
+    "hardness",
+    "spacing",
+    "opacity",
+    "flow",
+    "tip.angle",
+    "tip.roundness",
+    "tip.flipX",
+    "tip.flipY",
+    "tip.spacingEnabled",
+    "shape.enabled",
+    "shape.size.jitter",
+    "shape.size.control",
+    "shape.size.fade",
+    "shape.size.min",
+    "shape.minDiameter",
+    "shape.tiltScale",
+    "shape.angle.jitter",
+    "shape.angle.control",
+    "shape.angle.fade",
+    "shape.angle.min",
+    "shape.roundness.jitter",
+    "shape.roundness.control",
+    "shape.roundness.fade",
+    "shape.roundness.min",
+    "shape.minRoundness",
+    "shape.flipXJitter",
+    "shape.flipYJitter",
+    "shape.projection",
+    "scatter.enabled",
+    "scatter.amount.jitter",
+    "scatter.amount.control",
+    "scatter.amount.fade",
+    "scatter.amount.min",
+    "scatter.bothAxes",
+    "scatter.count",
+    "scatter.countJitter.jitter",
+    "scatter.countJitter.control",
+    "scatter.countJitter.fade",
+    "scatter.countJitter.min",
+    "dual.enabled",
+    "dual.mode",
+    "dual.diameter",
+    "dual.spacing",
+    "dual.scatter",
+    "dual.bothAxes",
+    "dual.count",
+    "dual.roundness",
+    "dual.flip",
+    "color.enabled",
+    "color.fgBg.jitter",
+    "color.fgBg.control",
+    "color.fgBg.fade",
+    "color.fgBg.min",
+    "color.hue",
+    "color.saturation",
+    "color.brightness",
+    "color.purity",
+    "color.perTip",
+    "transfer.enabled",
+    "transfer.opacity.jitter",
+    "transfer.opacity.control",
+    "transfer.opacity.fade",
+    "transfer.opacity.min",
+    "transfer.flow.jitter",
+    "transfer.flow.control",
+    "transfer.flow.fade",
+    "transfer.flow.min",
+    "pose.enabled",
+    "pose.tiltX",
+    "pose.tiltY",
+    "pose.rotation",
+    "pose.pressure",
+    "pose.overrideTilt",
+    "pose.overrideRotation",
+    "pose.overridePressure",
+    "noise",
+    "wetEdges",
+    "buildUp",
+    "smoothing.amount",
+    "smoothing.catchUp",
+    "smoothing.catchUpEnd",
+    "smoothing.zoomCompensation",
+    "protectTexture",
+];
+
+/// The dual tip's combine modes, in the glue's `COMBINE_MODES` order.
+const COMBINE_MODES: [BlendMode; 10] = [
+    BlendMode::Multiply,
+    BlendMode::SubtractionTexture,
+    BlendMode::Darken,
+    BlendMode::Overlay,
+    BlendMode::ColorDodge,
+    BlendMode::ColorBurn,
+    BlendMode::LinearBurn,
+    BlendMode::HardMix,
+    BlendMode::LinearHeight,
+    BlendMode::Height,
+];
+
+/// A deterministic, UUID-shaped sample id (Photoshop writes 36-char
+/// UUIDs; the join is plain string equality, so any unique id works —
+/// this one keeps an export byte-reproducible).
+fn sample_id(n: usize, name: &str) -> String {
+    // The workspace's one stateless mix (`image_gpu::brush::hash3`),
+    // folded over the name, seeded by the position.
+    let h = name.bytes().fold(n as u64, |h, b| {
+        image_gpu::brush::hash3(h, b as u64, 0xAB12)
+    });
+    let g = h.rotate_left(29) ^ 0x9e37_79b9_7f4a_7c15;
+    format!(
+        "{:08x}-{:04x}-4{:03x}-8{:03x}-{:012x}",
+        (h >> 32) as u32,
+        (h >> 16) as u16,
+        (h & 0xfff) as u16,
+        (g >> 52) as u16 & 0xfff,
+        g & 0xffff_ffff_ffff
+    )
+}
+
+/// One exported preset, built from the glue's packed values. `bitmap`
+/// is `(w, h, alpha)` for a sampled tip, `None` for the round tip.
+/// `n` is the preset's position in the export (it names the sample).
+pub fn export_brush(
+    n: usize,
+    name: &str,
+    values: &[f32],
+    bitmap: Option<(u32, u32, &[u8])>,
+) -> std::result::Result<(AbrBrush, Option<image_psd::abr::AbrSample>), String> {
+    use image_psd::abr::model::*;
+    use image_psd::descriptor::{units, Descriptor};
+    use image_psd::vm_array::{VmRect, VmSamples};
+
+    if values.len() != EXPORT_KEYS.len() {
+        return Err(format!(
+            "abr_export_add takes {} values (abr_export_keys), got {}",
+            EXPORT_KEYS.len(),
+            values.len()
+        ));
+    }
+    let v = |k: &str| -> f64 {
+        let i = EXPORT_KEYS
+            .iter()
+            .position(|x| *x == k)
+            .expect("a known key");
+        let x = values[i] as f64;
+        if x.is_finite() {
+            x
+        } else {
+            0.0
+        }
+    };
+    let on = |k: &str| v(k) != 0.0;
+    let dynamics = |p: &str| -> Option<Dynamics> {
+        let ordinal = v(&format!("{p}.control")).round() as i32;
+        let min = v(&format!("{p}.min"));
+        Some(Dynamics {
+            control_ordinal: ordinal,
+            control: ControlSource::from_ordinal(ordinal).unwrap_or(ControlSource::Off),
+            fade_steps: v(&format!("{p}.fade")).round() as i32,
+            jitter: v(&format!("{p}.jitter")),
+            minimum: (min != 0.0).then_some(min),
+        })
+    };
+    let common = TipCommon {
+        diameter: v("diameter").max(1.0),
+        diameter_unit: units::PIXELS,
+        angle_deg: v("tip.angle"),
+        spacing: v("spacing"),
+        spacing_enabled: on("tip.spacingEnabled"),
+        flip_x: on("tip.flipX"),
+        flip_y: on("tip.flipY"),
+    };
+    let roundness = v("tip.roundness").clamp(0.01, 1.0);
+    let mut sample = None;
+    let tip = match bitmap {
+        Some((w, h, alpha)) if w > 0 && h > 0 => {
+            if alpha.len() != (w as usize) * (h as usize) {
+                return Err(format!("tip bitmap is {} bytes for {w}x{h}", alpha.len()));
+            }
+            let id = sample_id(n, name);
+            sample = Some(image_psd::abr::AbrSample {
+                id: id.clone(),
+                bounds: VmRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h as i32,
+                    right: w as i32,
+                },
+                width: w,
+                height: h,
+                depth: 8,
+                coverage: VmSamples::Eight(alpha.to_vec()),
+            });
+            AbrTip::Sampled(SampledTipRef {
+                common,
+                roundness,
+                name: Some(name.to_string()),
+                sampled_id: id,
+                sample_index: Some(0),
+            })
+        }
+        _ => AbrTip::Computed(ComputedTip {
+            common,
+            roundness,
+            hardness: v("hardness").clamp(0.0, 1.0),
+        }),
+    };
+    let mode = COMBINE_MODES
+        .get(v("dual.mode").round().max(0.0) as usize)
+        .copied()
+        .unwrap_or(BlendMode::Multiply);
+    let dual_diameter = v("dual.diameter").max(1.0);
+    let scatter_jitter = v("dual.scatter");
+    let opacity = v("opacity").clamp(0.0, 1.0);
+    let flow = v("flow").clamp(0.0, 1.0);
+    let brush = AbrBrush {
+        index: n,
+        name: name.to_string(),
+        descriptor: Descriptor::default(),
+        tip,
+        wet_edges: Some(on("wetEdges")),
+        noise: Some(on("noise")),
+        use_brush_size: None,
+        brush_spacing: None,
+        shape_dynamics: on("shape.enabled").then(|| ShapeDynamics {
+            size: dynamics("shape.size"),
+            angle: dynamics("shape.angle"),
+            roundness: dynamics("shape.roundness"),
+            minimum_diameter: Some(v("shape.minDiameter")),
+            minimum_roundness: Some(v("shape.minRoundness")),
+            tilt_scale: Some(v("shape.tiltScale")),
+            flip_x_jitter: Some(on("shape.flipXJitter")),
+            flip_y_jitter: Some(on("shape.flipYJitter")),
+            brush_projection: Some(on("shape.projection")),
+        }),
+        scatter: on("scatter.enabled").then(|| Scatter {
+            scatter: dynamics("scatter.amount"),
+            count_dynamics: dynamics("scatter.countJitter"),
+            count: Some(v("scatter.count").round().max(1.0)),
+            both_axes: Some(on("scatter.bothAxes")),
+        }),
+        texture: None,
+        dual_brush: Some(DualBrush {
+            enabled: on("dual.enabled"),
+            tip: Some(Box::new(AbrTip::Computed(ComputedTip {
+                common: TipCommon {
+                    diameter: dual_diameter,
+                    diameter_unit: units::PIXELS,
+                    angle_deg: 0.0,
+                    spacing: v("dual.spacing"),
+                    spacing_enabled: true,
+                    flip_x: false,
+                    flip_y: false,
+                },
+                roundness: v("dual.roundness").clamp(0.01, 1.0),
+                hardness: 1.0,
+            }))),
+            flip: Some(on("dual.flip")),
+            blend_mode: Some(mode),
+            use_scatter: Some(scatter_jitter > 0.0),
+            spacing: Some(v("dual.spacing")),
+            count: Some(v("dual.count").round().max(1.0)),
+            both_axes: Some(on("dual.bothAxes")),
+            count_dynamics: None,
+            scatter_dynamics: Some(Dynamics {
+                control_ordinal: 0,
+                control: ControlSource::Off,
+                fade_steps: 25,
+                jitter: scatter_jitter,
+                minimum: None,
+            }),
+        }),
+        color_dynamics: on("color.enabled").then(|| ColorDynamics {
+            foreground_background: dynamics("color.fgBg"),
+            hue: Some(v("color.hue")),
+            saturation: Some(v("color.saturation")),
+            brightness: Some(v("color.brightness")),
+            purity: Some(v("color.purity")),
+            per_tip: Some(on("color.perTip")),
+        }),
+        transfer: on("transfer.enabled").then(|| Transfer {
+            flow: dynamics("transfer.flow"),
+            opacity: dynamics("transfer.opacity"),
+            wetness: None,
+            mix: None,
+        }),
+        brush_pose: on("pose.enabled").then(|| BrushPose {
+            override_angle: Some(on("pose.overrideRotation")),
+            override_tilt_x: Some(on("pose.overrideTilt")),
+            override_tilt_y: Some(on("pose.overrideTilt")),
+            override_pressure: Some(on("pose.overridePressure")),
+            pressure: Some(v("pose.pressure")),
+            tilt_x: Some(v("pose.tiltX").round() as i32),
+            tilt_y: Some(v("pose.tiltY").round() as i32),
+            angle: Some(v("pose.rotation").round() as i32),
+        }),
+        // Opacity and flow are tool state; they travel in the one
+        // `toolOptions` shape the corpus pins (class `PbTl`, 0..100
+        // plain numbers), and only when they are not full.
+        tool_options: (opacity < 1.0 || flow < 1.0).then(|| {
+            let mut d = Descriptor {
+                class_name: String::new(),
+                class_id: image_psd::descriptor::Key::four(b"PbTl"),
+                items: Vec::new(),
+            };
+            use image_psd::descriptor::{DescriptorValue, Key};
+            d.items.push((
+                Key::long("flow"),
+                DescriptorValue::Integer((flow * 100.0).round() as i32),
+            ));
+            d.items.push((
+                Key::four(b"Opct"),
+                DescriptorValue::Integer((opacity * 100.0).round() as i32),
+            ));
+            ToolOptions {
+                kind: ToolKind::PlainBrush,
+                class_id: "PbTl".into(),
+                flow: (flow * 100.0).round(),
+                opacity: (opacity * 100.0).round(),
+                blend_mode: BlendMode::Normal,
+                descriptor: d,
+            }
+        }),
+        options: BrushOptions {
+            build_up: Some(on("buildUp")),
+            build_up_source: OptionSource::Brush,
+            smoothing: Some(Smoothing {
+                enabled: Some(v("smoothing.amount") > 0.0),
+                value_raw: Some((v("smoothing.amount") * 100.0).round()),
+                radius_mode: None,
+                catch_up: Some(on("smoothing.catchUp")),
+                catch_up_at_end: Some(on("smoothing.catchUpEnd")),
+                zoom_compensation: Some(on("smoothing.zoomCompensation")),
+                pressure_smoothing: None,
+                smoo_raw: None,
+                source: OptionSource::Brush,
+            }),
+            protect_texture: Some(on("protectTexture")),
+            protect_texture_source: OptionSource::Brush,
+            pressure_overrides_size: None,
+            pressure_overrides_opacity: None,
+            use_legacy: None,
+            brush_group_present: true,
+            use_brush_group: Some(false),
+            interpretation: None,
+        },
+    };
+    Ok((brush, sample))
+}
+
+/// An export in progress (the `abr_export_*` doors hold one).
+#[derive(Default)]
+pub struct AbrExport {
+    brushes: Vec<AbrBrush>,
+    samples: Vec<image_psd::abr::AbrSample>,
+}
+
+impl AbrExport {
+    pub fn add(
+        &mut self,
+        name: &str,
+        values: &[f32],
+        bitmap: Option<(u32, u32, &[u8])>,
+    ) -> std::result::Result<(), String> {
+        let (mut b, s) = export_brush(self.brushes.len(), name, values, bitmap)?;
+        if let Some(s) = s {
+            if let AbrTip::Sampled(t) = &mut b.tip {
+                t.sample_index = Some(self.samples.len());
+            }
+            self.samples.push(s);
+        }
+        self.brushes.push(b);
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.brushes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.brushes.is_empty()
+    }
+
+    pub fn finish(self) -> Vec<u8> {
+        image_psd::abr::write_abr(&self.brushes, &self.samples)
+    }
 }
 
 #[cfg(test)]
@@ -276,6 +963,7 @@ mod tests {
             transfer: None,
             brush_pose: None,
             tool_options: None,
+            options: Default::default(),
         }
     }
 
@@ -353,6 +1041,7 @@ mod tests {
             spacing_enabled: Some(true),
             roundness: Some(1.0),
             angle_deg: Some(0.0),
+            sample_index: None,
         };
         assert!(p.diameter_is_pixels());
         p.diameter_unit = Some("#Prc".into());
@@ -477,8 +1166,107 @@ mod tests {
              \"warnings\":[],\"presets\":[{\"index\":0,\"name\":\"Soft Round 30\",\
              \"kind\":\"computed\",\"diameter\":30,\"diameterUnit\":\"#Pxl\",\
              \"hardness\":0.5,\"spacing\":0.25,\"spacingEnabled\":true,\
-             \"roundness\":1,\"angle\":0}]}"
+             \"roundness\":1,\"angle\":0,\"sampleIndex\":null,\
+             \"dynamics\":{\"tip\":{\"flipX\":false,\"flipY\":false},\"shape\":null,\
+             \"scatter\":null,\"texture\":null,\"dual\":null,\"color\":null,\
+             \"transfer\":null,\"pose\":null,\"wetEdges\":null,\"noise\":null,\
+             \"buildUp\":null,\"protectTexture\":null,\"pressureOverridesSize\":null,\
+             \"pressureOverridesOpacity\":null,\"smoothing\":null,\"toolOptions\":null}}]}"
         );
+    }
+
+    /// Every parsed group reaches the JSON — here a brush the WRITER made
+    /// from the glue's values, read back by the reader, so the dynamics a
+    /// user exports are the dynamics the next import shows.
+    #[test]
+    fn image_abr_engine_bridge_exports_and_projects_every_dynamics_group() {
+        let mut values = vec![0f32; EXPORT_KEYS.len()];
+        let mut set = |k: &str, x: f32| {
+            values[EXPORT_KEYS.iter().position(|e| *e == k).unwrap()] = x;
+        };
+        set("diameter", 30.0);
+        set("hardness", 0.5);
+        set("spacing", 0.25);
+        set("opacity", 0.8);
+        set("flow", 1.0);
+        set("tip.angle", 30.0);
+        set("tip.roundness", 0.5);
+        set("tip.spacingEnabled", 1.0);
+        set("shape.enabled", 1.0);
+        set("shape.size.jitter", 0.25);
+        set("shape.size.control", 2.0);
+        set("shape.size.fade", 25.0);
+        set("scatter.enabled", 1.0);
+        set("scatter.amount.jitter", 1.5);
+        set("scatter.count", 3.0);
+        set("dual.enabled", 1.0);
+        set("dual.mode", 5.0);
+        set("dual.diameter", 12.0);
+        set("dual.spacing", 0.5);
+        set("color.enabled", 1.0);
+        set("color.hue", 0.1);
+        set("transfer.enabled", 1.0);
+        set("transfer.opacity.control", 2.0);
+        set("pose.enabled", 1.0);
+        set("pose.tiltX", -30.0);
+        set("pose.overrideTilt", 1.0);
+        set("wetEdges", 1.0);
+        set("buildUp", 1.0);
+        set("smoothing.amount", 0.4);
+        set("smoothing.catchUp", 1.0);
+        set("protectTexture", 1.0);
+        let mut export = AbrExport::default();
+        export.add("Round", &values, None).unwrap();
+        let tip: Vec<u8> = (0..6).map(|i| i * 40).collect();
+        export.add("Bitmap", &values, Some((3, 2, &tip))).unwrap();
+        let bytes = export.finish();
+
+        let json = presets_json(&bytes).unwrap();
+        for needle in [
+            "\"presetCount\":2",
+            "\"kind\":\"computed\"",
+            "\"kind\":\"sampled\"",
+            "\"sampleIndex\":0",
+            "\"angle\":30",
+            "\"roundness\":0.5",
+            "\"size\":{\"control\":2,\"controlName\":\"pressure\",\"fade\":25,\"jitter\":0.25",
+            "\"scatter\":{\"scatter\":{\"control\":0",
+            "\"count\":3",
+            "\"mode\":\"colorBurn\"",
+            "\"hue\":0.1",
+            "\"tiltX\":-30",
+            "\"wetEdges\":true",
+            "\"buildUp\":true",
+            "\"protectTexture\":true",
+            "\"amount\":0.4",
+            "\"opacity\":0.8",
+        ] {
+            assert!(json.contains(needle), "missing {needle} in {json}");
+        }
+        // The bitmap comes back byte-identical through `abr_tip`.
+        let b = tip_bitmap(&bytes, 0).unwrap();
+        assert_eq!(&b[..8], &[3, 0, 0, 0, 2, 0, 0, 0]);
+        assert_eq!(&b[8..], &tip[..]);
+        assert!(tip_bitmap(&bytes, 1).is_err(), "only one sampled tip");
+        // And the file raises nothing but the [REF] colour-dynamics note.
+        let f = AbrFile::parse(&bytes).unwrap();
+        assert!(
+            f.warnings.iter().all(|w| matches!(
+                w,
+                image_psd::abr::AbrWarning::ColorDynamicsUnverified { .. }
+            )),
+            "{:?}",
+            f.warnings
+        );
+    }
+
+    #[test]
+    fn image_abr_engine_bridge_export_refuses_a_mis_sized_value_list() {
+        let mut export = AbrExport::default();
+        assert!(export.add("x", &[1.0, 2.0], None).is_err());
+        let ok = vec![0f32; EXPORT_KEYS.len()];
+        assert!(export.add("x", &ok, Some((4, 4, &[0u8; 3]))).is_err());
+        assert!(export.is_empty());
     }
 
     /// The JSON the panel parses: keys present, indices preserved, and a

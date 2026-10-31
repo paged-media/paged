@@ -57,7 +57,10 @@ the writer now spells at full `f32` precision (`blend-expanded`,
 `opacity-blend`, `opacity-mask`, `outline-stroke`, the five pathfinder
 cases, `pen-closed`, `repeat-expanded`, `svg-import`, `text-on-path`;
 engine ADR 199), still identical: InDesign reads the full-precision
-handles. Each
+handles; and on 2026-10-25 `pathfinder-exclude`, whose IDML the engine's
+face-walk booleans (engine ADR 1019) export with the circle's crossings
+computed on the arrangement (x 200.00066 for 200, handles a few thousandths
+of a point apart), still identical. Each
 recording's `produced_by` is the authority: app, version, locale, the
 reader's sha256 and the IDML's sha256 — the replay refuses a recording
 made by another reader or from another IDML.

@@ -156,6 +156,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   let cloneLanded: string | null = null;
   let healLanded: string | null = null;
   let cafLanded: string | null = null;
+  // What the status line said when a stroke reported no landing.
+  const silent: { clone?: string; heal?: string } = {};
   let committed: number | null = null;
   let changed = false;
 
@@ -204,6 +206,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         20_000,
         preClone,
       );
+      if (!cloneLanded) silent.clone = await panelStatus(ctx);
 
       // ── healing brush: new anchor, stroke elsewhere ──────────────
       // RESET the status line first (deselect writes its own text):
@@ -224,6 +227,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         [326, 186],
       ]);
       healLanded = await statusLanded(ctx, /Painted \d+ dab/, 20_000, preHeal);
+      if (!healLanded) silent.heal = await panelStatus(ctx);
 
       // ── content-aware fill on a marqueed region ──────────────────
       // The marquee sits on the flowered foreground at the lower
@@ -282,7 +286,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         notes.push(
           landed
             ? `${name} → ${landed.slice(0, 120)}`
-            : `${name}: no landing reported by the panel`,
+            : `${name}: no landing reported by the panel` +
+                (name in silent
+                  ? ` (it said: ${silent[name as keyof typeof silent]?.slice(0, 120)})`
+                  : ""),
         );
       }
     } else {

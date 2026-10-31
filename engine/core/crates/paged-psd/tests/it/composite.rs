@@ -375,12 +375,66 @@ fn a_cmyk_document_is_judged_by_its_own_blockers__feat__image_psd_layer_import()
     let err = f.layer_plates_rgba8().expect_err("needs the ink transform");
     assert!(err.to_string().contains("layer_plates_rgba8_via"), "{err}");
 
-    // Lab is still a colour-mode blocker.
+    // Lab is no longer a colour-mode blocker (image ADR 484); its plates
+    // need the caller's transform. Indexed still is (no layers).
     let lab = psd_model(3, 1, 1, ColorMode::Lab, false, 0, vec![0; 3]);
     let cats: Vec<&str> = lab
         .layer_import_blockers()
         .iter()
         .map(|b| b.category)
         .collect();
+    assert!(!cats.contains(&"colour-mode"), "{cats:?}");
+    let indexed = psd_model(1, 1, 1, ColorMode::Indexed, false, 0, vec![0; 1]);
+    let cats: Vec<&str> = indexed
+        .layer_import_blockers()
+        .iter()
+        .map(|b| b.category)
+        .collect();
     assert!(cats.contains(&"colour-mode"), "{cats:?}");
+}
+
+/// Any mode's merged composite in its stored numbers (image ADR 484):
+/// Lab un-matted against its white (a* and b* about the middle), a
+/// 32-bit composite as floats, an Indexed one as its index with the
+/// colour table beside it.
+#[test]
+#[allow(non_snake_case)]
+fn composite_samples_reads_every_mode_in_its_own_numbers__feat__image_io_depth_color_modes() {
+    // Lab, 1×1, transparent at 50 %: stored = v·α + white·(1 − α).
+    let (l, a, b, al) = (200u8, 60u8, 190u8, 128u8);
+    let matte = |v: u8, w: f32| ((f32::from(v) * 128.0 + w * 127.0) / 255.0).round() as u8;
+    let raw = vec![matte(l, 255.0), matte(a, 128.0), matte(b, 128.0), al];
+    let f = psd_model(4, 1, 1, ColorMode::Lab, true, 0, raw);
+    let c = f.composite_samples().expect("Lab");
+    assert_eq!((c.channels, c.depth), (3, 8));
+    for (got, want) in c.samples.iter().zip([l, a, b]) {
+        assert!(
+            (got * 255.0 - f32::from(want)).abs() < 1.5,
+            "{got} vs {want}"
+        );
+    }
+    assert!((c.alpha.unwrap()[0] - 128.0 / 255.0).abs() < 1e-6);
+
+    // 32-bit RGB, RAW big-endian floats, values above 1 kept.
+    let raw: Vec<u8> = [2.5f32, 0.25, 0.0]
+        .iter()
+        .flat_map(|v| v.to_be_bytes())
+        .collect();
+    let mut f = psd_model(3, 1, 1, ColorMode::Rgb, false, 0, raw);
+    f.header.depth = 32;
+    assert_eq!(
+        f.composite_samples().expect("float").samples,
+        vec![2.5, 0.25, 0.0]
+    );
+
+    // Indexed: the index and the 768-byte table (reds, greens, blues).
+    let mut f = psd_model(1, 1, 1, ColorMode::Indexed, false, 0, vec![2]);
+    let mut table = vec![0u8; 768];
+    table[2] = 10;
+    table[256 + 2] = 20;
+    table[512 + 2] = 30;
+    f.color_mode = ColorModeData { raw: table };
+    let c = f.composite_samples().expect("indexed");
+    assert_eq!((c.samples[0] * 255.0).round() as usize, 2);
+    assert_eq!(f.indexed_palette().expect("table").colours[2], [10, 20, 30]);
 }

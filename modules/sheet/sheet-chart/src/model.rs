@@ -230,6 +230,32 @@ pub struct AreaStyle {
     pub fill: Option<ColorRef>,
     pub no_fill: bool,
     pub line: Option<LineStyle>,
+    /// The DrawingML the role's colour does not hold (sheet ADR 527).
+    pub fx: Option<Box<DmlFx>>,
+}
+
+/// What a role's `c:spPr` paints beyond one solid colour (sheet ADR 527):
+/// a gradient, a pattern or a translucent fill, a gradient line, and the
+/// effect list — as authored (`paged_ooxml::drawingml`), so a theme colour
+/// in it is resolved against the workbook theme when the chart is drawn
+/// and lowered onto native page items through the shared mapper
+/// (`dml-native`). The role's [`ColorRef`] still holds the colour a reader
+/// without effects draws (a gradient's first stop).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct DmlFx {
+    /// `a:gradFill`, `a:pattFill`, or an `a:solidFill` with an alpha.
+    pub fill: Option<paged_ooxml::drawingml::Fill>,
+    /// The fill of `a:ln` when it is not one solid colour.
+    pub line_fill: Option<paged_ooxml::drawingml::Fill>,
+    /// `a:effectLst`.
+    pub effects: paged_ooxml::drawingml::Effects,
+}
+
+impl DmlFx {
+    /// Nothing beyond the solid colour.
+    pub fn is_empty(&self) -> bool {
+        self.fill.is_none() && self.line_fill.is_none() && self.effects.is_empty()
+    }
 }
 
 // ── the chart ───────────────────────────────────────────────────────────────
@@ -534,6 +560,10 @@ pub struct Series {
     pub marker: Option<Marker>,
     /// Per-point fills (`c:dPt`), by point index.
     pub points: Vec<(u32, ColorRef)>,
+    /// The series' gradient, translucency and effects (sheet ADR 527).
+    pub fx: Option<Box<DmlFx>>,
+    /// Per-point gradients and effects (`c:dPt`), by point index.
+    pub point_fx: Vec<(u32, DmlFx)>,
     pub labels: Option<DataLabels>,
     pub trendlines: Vec<Trendline>,
     pub error_bars: Vec<ErrorBars>,
@@ -569,6 +599,8 @@ impl Series {
             line: None,
             marker: None,
             points: Vec::new(),
+            fx: None,
+            point_fx: Vec::new(),
             labels: None,
             trendlines: Vec::new(),
             error_bars: Vec::new(),

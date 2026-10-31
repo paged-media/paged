@@ -290,3 +290,34 @@ fn a_variable_default_face_is_its_own_family_at_every_weight() {
     assert!(substitutions(&m).is_empty(), "{:?}", substitutions(&m));
     assert!(!is_missing(&m, "Inter"));
 }
+
+/// No family is "the face an un-styled run resolves to" (the host's
+/// `text.measureString` contract): `[No paragraph style]`'s font, the face
+/// layout sets such a run in. It answered the default face instead, so a
+/// host sized a table's columns in Inter while the engine set the cells in
+/// the root style's Open Sans.
+#[test]
+fn no_family_measures_in_the_face_an_unstyled_run_is_set_in() {
+    let sample = paged_gen::samples::build("layout").expect("sample");
+    let idml = paged_gen::write_idml(&sample).expect("idml");
+    let opts = CanvasOptions {
+        fonts: vec![inter()],
+        font_registry: vec![FontEntry {
+            family: "Open Sans".to_string(),
+            style: None,
+            bytes: corpus_font("OpenSans.ttf"),
+        }],
+        ..CanvasOptions::default()
+    };
+    let m = CanvasModel::load("layout", &idml, opts).expect("load");
+    let bare = m.measure_text("", None, "SumProduct", 12.0).expect("bare");
+    let open_sans = m
+        .measure_text("Open Sans", None, "SumProduct", 12.0)
+        .expect("Open Sans");
+    let inter = m
+        .measure_text("Inter", None, "SumProduct", 12.0)
+        .expect("Inter");
+    assert_eq!(bare.advance, open_sans.advance);
+    assert_eq!(bare.ascender, open_sans.ascender);
+    assert_ne!(bare.ascender, inter.ascender, "not the default face");
+}

@@ -57,6 +57,7 @@ fn assert_parts_identical(original: &[u8], saved: &[u8], except: &[&str]) {
 /// The host's read-back of an unedited document.
 fn identity(base: &LoweredDoc) -> StoryContentIn {
     StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story
@@ -64,6 +65,8 @@ fn identity(base: &LoweredDoc) -> StoryContentIn {
             .iter()
             .filter_map(|b| match b {
                 LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: p
                         .runs
@@ -392,6 +395,8 @@ fn a_paragraph_added_in_a_cell_takes_its_own_paragraph_style__feat__plugin_doc_s
         text: "Cell heading\nNew line".into(),
         paragraphs: Some(vec![
             ParagraphContentIn {
+                mark_change: None,
+                props_change: None,
                 paragraph_style: Some(heading),
                 runs: vec![RunContentIn {
                     text: "Cell heading".into(),
@@ -399,6 +404,8 @@ fn a_paragraph_added_in_a_cell_takes_its_own_paragraph_style__feat__plugin_doc_s
                 }],
             },
             ParagraphContentIn {
+                mark_change: None,
+                props_change: None,
                 paragraph_style: Some(normal),
                 runs: vec![RunContentIn {
                     text: "New line".into(),
@@ -548,7 +555,8 @@ fn an_edited_run_keeps_a_note_reference_inside_its_text_in_place__feat__plugin_d
     let mut content = identity(&base);
     let runs = &mut content.paragraphs[2].runs;
     let text: String = runs.iter().map(|r| r.text.as_str()).collect();
-    assert_eq!(text, "Before after.");
+    // The reference reads as the engine's footnote marker (doc ADR 611).
+    assert_eq!(text, "Before\u{E01C} after.");
     runs.truncate(1);
     runs[0].text = "Before, after!".into();
     let (saved, skips) = session.save_edited_from_content(&content).unwrap();

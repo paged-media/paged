@@ -40,8 +40,9 @@
 // is Illustrator's verb since engine 0.65: the FRONT object minus what is
 // behind it, in the front object's paint; 0.64 kept the back one.)
 //
-// REFUSALS ARE SHOWN. The engine caps the arrangement at 12 inputs and
-// 256 faces and REFUSES past either — it never truncates. The panel puts
+// REFUSALS ARE SHOWN. The engine caps the arrangement at 1000 inputs and
+// 100 000 faces behind a work budget (engine ADR 1019) and REFUSES past
+// any of them — it never truncates. The panel puts
 // the engine's reason in the status line, in words (the panel kit's
 // refusalText: never the wire's variant name), rather than looking like
 // nothing happened.

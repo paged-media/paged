@@ -594,18 +594,57 @@ test.describe("B-22 — the region Pathfinder row", () => {
     expect(await anchorCount(page, back)).toBe(4);
   });
 
-  test("AC-PF-7 — more than 12 inputs surfaces the engine's REASON, not a silent no-op @feat:editor-shell.panels.pathfinder @feat:frames-paths.pathfinder-boolean @level:edge", async ({
+  test("AC-PF-7 — more than the input cap surfaces the engine's REASON, not a silent no-op @feat:editor-shell.panels.pathfinder @feat:frames-paths.pathfinder-boolean @feat:frames-paths.geometry-kernels-v2 @level:edge", async ({
     page,
   }) => {
-    // Thirteen mutually overlapping quads — one past the planar
-    // kernel's input cap. The engine REFUSES rather than truncating.
-    const ids: PanelElementId[] = [];
-    for (let i = 0; i < 13; i++) {
-      const o = i * 5;
-      ids.push(
-        await insertQuad(page, pageId, [100 + o, 100 + o, 300 + o, 300 + o]),
-      );
-    }
+    // 1001 small overlapping quads — one past the planar kernel's input
+    // cap (1000 since engine ADR 1019), inserted in ONE batch. The engine
+    // REFUSES rather than truncating.
+    const known = new Set(
+      (await leafIds(page)).map((e) => `${e.kind}:${e.id}`),
+    );
+    await page.evaluate(async (pageId) => {
+      const dbg = (
+        window as unknown as {
+          __canvas?: { client?: { mutate(op: unknown): Promise<unknown> } };
+        }
+      ).__canvas;
+      if (!dbg?.client) throw new Error("no client");
+      const pt = (x: number, y: number) => ({
+        anchor: [x, y],
+        left: [x, y],
+        right: [x, y],
+      });
+      const ops = Array.from({ length: 1001 }, (_, i) => {
+        const [l, t] = [100 + (i % 40) * 8, 100 + Math.floor(i / 40) * 8];
+        return {
+          op: "insertPath",
+          args: {
+            pageId,
+            anchors: [
+              pt(l, t),
+              pt(l + 10, t),
+              pt(l + 10, t + 10),
+              pt(l, t + 10),
+            ],
+            open: false,
+          },
+        };
+      });
+      const reply = (await dbg.client.mutate({
+        op: "batch",
+        args: { ops },
+      })) as {
+        kind: string;
+      };
+      if (reply.kind !== "mutationApplied") {
+        throw new Error(`batch insert failed: ${reply.kind}`);
+      }
+    }, pageId);
+    const ids = (await leafIds(page)).filter(
+      (e) => !known.has(`${e.kind}:${e.id}`),
+    );
+    expect(ids).toHaveLength(1001);
     const before = (await leafIds(page)).length;
     await select(page, ids);
 
@@ -616,8 +655,8 @@ test.describe("B-22 — the region Pathfinder row", () => {
 
     const status = page.locator("[data-pathfinder-error]");
     await expect(status).toBeVisible();
-    await expect(status).toContainText("at most 12");
-    await expect(status).toContainText("13");
+    await expect(status).toContainText("at most 1000");
+    await expect(status).toContainText("1001");
     // Refused means nothing changed — not a partial, truncated result.
     expect((await leafIds(page)).length).toBe(before);
   });

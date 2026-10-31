@@ -13,12 +13,17 @@ workspace = true
 [features]
 # ADR 187 — `schemars::JsonSchema` next to the `Tsify` derive of each type the
 # wire's `Mutation` carries; `paged-wire`'s `schema` feature turns it on.
-schema = ["dep:schemars"]
+schema = ["dep:schemars", "paged-model/schema"]
 
 [dependencies]
-paged-model = { path = "../paged-model" }
+paged-model = { path = "../paged-model", features = ["wire"] }
 paged-scene = { path = "../paged-scene" }
 paged-template = { path = "../paged-template" }
+# The path kernels (outline, offset, simplify, booleans, the arrangement)
+# live in paged-geom since ADR 1042; their modules are re-exported here.
+paged-geom = { path = "../paged-geom" }
+# Expand Appearance bakes an item through its live vector effects (ADR 1042).
+paged-vector-fx = { path = "../paged-vector-fx" }
 serde = { workspace = true }
 # Lossless style-delete undo serialises the captured StyleDef to JSON
 # (the def is Serialize+Deserialize) and restores it verbatim.
@@ -49,3 +54,5 @@ bytes = { workspace = true }
 # W1.16 — the anchored-object round-trip test builds an in-memory IDML
 # package (anchored frame nested in a story) to drive `Document::open`.
 zip = { workspace = true }
+# Engine ADR 1018 — the based-on cycle refusal over random style chains.
+proptest = { version = "1", default-features = false, features = ["std"] }

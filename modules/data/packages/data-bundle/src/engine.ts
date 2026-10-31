@@ -157,6 +157,26 @@ export interface DataEngineLike {
     height: number,
     metrics: unknown,
   ): boolean;
+  /** Data ADR 564: is a threaded story's text overset in its frames
+   *  (`[width, height][]` pt, in chain order), wrapped through each in
+   *  turn? Optional: a wasm built before it lacks it. */
+  text_overset_chain?(
+    text: string,
+    boxes: readonly (readonly [number, number])[],
+    metrics: unknown,
+  ): boolean;
+  /** Data ADR 564: the distinct pieces of a story's runs per face
+   *  (`string[][]`), `runs` being `{ text, face }[]`. Optional: a wasm built
+   *  before it lacks it. */
+  text_run_words?(runs: readonly { text: string; face: number }[]): unknown;
+  /** Data ADR 564: is a story of several faces overset in its frames
+   *  (`[width, height][]` pt, in chain order), each run wrapped at its own
+   *  face's metrics (`faces`, one `{ leadingPt, advances }` each)? */
+  text_overset_runs?(
+    runs: readonly { text: string; face: number }[],
+    boxes: readonly (readonly [number, number])[],
+    faces: unknown,
+  ): boolean;
   /** Editor ADR 291: the Data Merge placeholders of a text that name a field
    *  (`{ start, end, field, image }[]`, byte offsets as the host counts
    *  them). Optional: a wasm built before it lacks it. */
@@ -251,6 +271,13 @@ export interface DataEngineLike {
   mark_rows_applied?(): void;
   /** §8: the row diff per query since `mark_rows_applied` (`QueryRowDiff[]`). */
   row_diff?(opts: unknown): unknown;
+  /** Snapshot ONE query's result as the one the document was written from
+   *  (a Data Merge). */
+  mark_query_applied?(query: string): void;
+  /** Editor ADR 291: one query's per-record status since it was written
+   *  from (`EngineRecordStatus`, or null without a result). `opts` is
+   *  `{ key?, instances? }`. */
+  record_status?(query: string, opts: unknown): unknown;
   /** Check an expression: `{ ok, error?, fields, unknownFields }`. */
   check_expression?(src: string, query?: string | null): unknown;
   /** §9.5: which records a condition fires on, `{ fires, total, error? }`. */

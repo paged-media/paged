@@ -170,6 +170,14 @@ fn item_info(spread: &Spread, fr: FrameRef) -> Option<ItemInfo<'_>> {
                 .find_map(|m| item_info(spread, *m).and_then(|i| i.layer)),
             style: None,
         }),
+        // Engine ADR 1039 — its definition's bounds, placed.
+        FrameRef::Instance(i) => spread.instances.get(i).map(|inst| ItemInfo {
+            kind: AddressKind::Instance,
+            id: inst.self_id.as_deref(),
+            geometry: Some((inst.bounds, Some(inst.item_transform))),
+            layer: inst.item_layer.as_deref(),
+            style: None,
+        }),
     }
 }
 
@@ -203,6 +211,7 @@ fn ref_key(fr: FrameRef) -> (u8, usize) {
         FrameRef::GraphicLine(i) => (3, i),
         FrameRef::Polygon(i) => (4, i),
         FrameRef::Group(i) => (5, i),
+        FrameRef::Instance(i) => (6, i),
     }
 }
 
@@ -214,6 +223,7 @@ fn all_refs(spread: &Spread) -> Vec<FrameRef> {
     out.extend((0..spread.graphic_lines.len()).map(FrameRef::GraphicLine));
     out.extend((0..spread.polygons.len()).map(FrameRef::Polygon));
     out.extend((0..spread.groups.len()).map(FrameRef::Group));
+    out.extend((0..spread.instances.len()).map(FrameRef::Instance));
     out
 }
 

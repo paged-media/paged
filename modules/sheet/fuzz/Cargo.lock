@@ -9,6 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "aho-corasick"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19,6 +28,27 @@ name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
+name = "bit-set"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+dependencies = [
+ "bit-vec",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
 name = "bitflags"
@@ -106,10 +136,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "dml-native"
+version = "0.0.0"
+dependencies = [
+ "paged-model",
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+
+[[package]]
+name = "fancy-regex"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72cf461f865c862bb7dc573f643dd6a2b6842f7c30b07882b56bd148cc2761b8"
+dependencies = [
+ "bit-set",
+ "regex-automata",
+ "regex-syntax",
+]
 
 [[package]]
 name = "find-msvc-tools"
@@ -269,6 +319,15 @@ name = "paged-fmt"
 version = "0.0.0"
 
 [[package]]
+name = "paged-model"
+version = "0.0.0"
+dependencies = [
+ "base64",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "paged-ooxml"
 version = "0.0.0"
 dependencies = [
@@ -336,6 +395,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
+name = "regex-automata"
+version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
 name = "rustc-hash"
 version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -395,6 +471,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_json"
+version = "1.0.154"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6"
+dependencies = [
+ "itoa",
+ "memchr",
+ "serde",
+ "serde_core",
+ "zmij",
+]
+
+[[package]]
 name = "serde_norway"
 version = "0.9.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -414,6 +503,7 @@ dependencies = [
  "rustc-hash",
  "sheet-core",
  "sheet-fn",
+ "sheet-format",
  "sheet-parser",
  "smallvec",
 ]
@@ -423,10 +513,13 @@ name = "sheet-chart"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "dml-native",
+ "paged-ooxml",
  "plotters",
  "plotters-backend",
  "serde",
  "sheet-core",
+ "sheet-fn",
  "sheet-format",
 ]
 
@@ -446,7 +539,10 @@ name = "sheet-fn"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "fancy-regex",
  "paged-fmt",
+ "regex-automata",
+ "regex-syntax",
  "serde",
  "serde_norway",
  "sheet-core",
@@ -459,6 +555,7 @@ version = "0.0.0"
 dependencies = [
  "compact_str",
  "paged-fmt",
+ "paged-ooxml",
  "rustc-hash",
  "ryu",
  "sheet-core",
@@ -481,6 +578,7 @@ name = "sheet-grid"
 version = "0.0.0"
 dependencies = [
  "serde",
+ "sheet-chart",
  "sheet-core",
  "sheet-format",
  "sheet-lower",

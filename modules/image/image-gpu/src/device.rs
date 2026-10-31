@@ -109,6 +109,19 @@ impl GpuContext {
         )
     }
 
+    /// The largest side of a 2-D texture this device makes (16384 on
+    /// Apple silicon, 8192 on many others): past it a whole-canvas
+    /// texture cannot exist, and the layer fold works tile by tile.
+    pub fn max_texture_dim(&self) -> u32 {
+        self.device.limits().max_texture_dimension_2d
+    }
+
+    /// The largest buffer this device makes — what bounds one readback
+    /// (a whole canvas of rgba16float is `w · h · 8` bytes).
+    pub fn max_buffer_size(&self) -> u64 {
+        self.device.limits().max_buffer_size
+    }
+
     /// How many kernels have a compiled pipeline (diagnostics, tests).
     pub fn cached_pipelines(&self) -> usize {
         self.pipelines.lock().expect("pipeline cache lock").len()

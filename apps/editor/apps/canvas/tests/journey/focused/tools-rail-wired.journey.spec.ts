@@ -145,8 +145,8 @@ test.describe("journey · rail tools that were dead", () => {
       fail.push(`frame.ellipse (${String(e).slice(0, 55)})`);
     }
 
-    // ROTATE — the `transform` slot faces Rotate (Free Transform is a
-    // planned stub and never takes the face). Select a frame, drag →
+    // ROTATE — the `transform` slot faces Free Transform; Alt+click
+    // cycles it to Rotate. Select a frame, drag →
     // the engine's `rotate` arm commits a non-zero rotation.
     try {
       const rectId = await designer.drawRectangle({
@@ -158,6 +158,11 @@ test.describe("journey · rail tools that were dead", () => {
       const ref: Ref = { kind: "rectangle", id: rectId };
       await designer.selectElement("rectangle", rectId);
       await activateTool(page, "transform");
+      // The slot faces Free Transform (its group default); Alt+click
+      // cycles to Rotate.
+      await page
+        .locator('[data-tool-slot="transform"]')
+        .click({ modifiers: ["Alt"] });
       await expect(
         page.locator(
           '[data-tool-slot="transform"][data-tool="paged.tool.rotate"][data-active="true"]',

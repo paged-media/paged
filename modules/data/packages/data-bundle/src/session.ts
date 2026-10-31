@@ -78,21 +78,31 @@ import {
   type RecordTemplateMethods,
 } from "./record-templates";
 import {
+  ASSET_INDEX_PART,
   DATA_PART_DIR,
   SESSION_PART,
+  assetPartPath,
+  carriedHash,
   contentHash,
+  decodeAssetIndex,
+  storeAssets,
+  type AssetIndex,
   decodeSession,
   emptyTargets,
   encodeSession,
   dataPartOf,
+  loadAppliedValues,
   loadData,
   loadFile,
+  storeAppliedValues,
   storeData,
   storeFile,
+  valuesPartOf,
   type BinaryFormat,
   type PersistedData,
   type PersistedSession,
   type PersistedTargets,
+  type ValuesCache,
 } from "./persist";
 import type { LowerStamp, LoweredTableAt } from "./lower";
 import { commitRecordFlow } from "./flow-writer";
@@ -119,6 +129,7 @@ import {
   mergeRecords as writeMerge,
   readMergeTemplate,
   measureWords,
+  storyFaces,
   storyFont,
   type MergeResult,
   type MergeTemplate,
@@ -1083,6 +1094,20 @@ export function createSession(
   // edit (core normalises it to the run start, and anything inserted in front
   // moves it), so every write re-reads placeholders() for the address.
   const placedVariables = new Set<string>();
+  // Data ADR 564: the stories each variable binding was placed into (by the
+  // door, by Lower, by a record dropped on a design), so its text is checked
+  // for overset and its frame is in the placements. A text variable's
+  // instances are not fields the document lists by story: the session keeps
+  // where it put them.
+  const variableStories = new Map<string, Set<string>>();
+  /** A variable binding is in the document now, in `storyId` when known. */
+  function variablePlaced(id: string, storyId?: string | null): void {
+    placedVariables.add(id);
+    if (!storyId) return;
+    let stories = variableStories.get(id);
+    if (!stories) variableStories.set(id, (stories = new Set()));
+    stories.add(storyId);
+  }
   // D-13: the rule scope→query each rule binding evaluates against + its host
   // target (story range / table column). Caller-supplied.
   const ruleTargets = new Map<string, { query: string; target: RuleTarget }>();
@@ -1114,6 +1139,14 @@ export function createSession(
   // dropped record shows (every refresh resolves it at that record).
   const tableInto = new Map<string, { frame: ElementId; storyId: string }>();
   const recordOf = new Map<string, number>();
+  // Editor ADR 291: the record the record preview stepped a binding to, where
+  // it is not the record the binding shows otherwise (the first, or its
+  // dropped record). A field refresh keeps it; Lower writes the document from
+  // the data again and drops it.
+  const steppedAt = new Map<string, number>();
+  /** The record a binding shows in the document, when it is not the first. */
+  const shownRecord = (id: string): number | undefined =>
+    steppedAt.get(id) ?? recordOf.get(id);
   const barcodeMinted = new Map<string, ElementId[]>();
   // Data ADR 564 — what the last placements left to check for issues: each
   // image binding's outcome, each record flow's frames and unplaced records,
@@ -1125,7 +1158,9 @@ export function createSession(
   >();
   let mergeFrames: TextTarget[] = [];
   const storyOfFrame = new Map<string, string>();
-  const variableFrames = new Map<string, string>();
+  // The pixel size of a picture placed from a plain link, read from the
+  // host once per placement (`assets.getPlacedImage`): frame id → pixels.
+  const linkedPixels = new Map<string, [number, number]>();
   let issuesTimer: ReturnType<typeof setTimeout> | null = null;
   let issuesToProblems = false;
   // The template each merge read last: a consumed template is gone from its
@@ -1138,6 +1173,8 @@ export function createSession(
   let bootPayload: unknown = null;
   // Data parts this session wrote or read (a large CSV is written once).
   const knownDataParts = new Set<string>();
+  /** Each query's applied values as last stored (editor ADR 291). */
+  const valuesCache: ValuesCache = new Map();
   const persistence: PersistenceState = { status: "empty", hash: null };
   let lastWritten: string | null = null;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1147,6 +1184,12 @@ export function createSession(
   // Bumped when another document opens: a write queued for the previous
   // document checks it and is dropped instead of landing in the new one.
   let docEpoch = 0;
+  // Data ADR 563 (amended 2026-10-28): the open document's asset index, read
+  // when first needed (a reference no cache holds, or a save), never at open.
+  let assetIndexRead: {
+    epoch: number;
+    index: Promise<AssetIndex | null>;
+  } | null = null;
   const listeners = new Set<() => void>();
   const PERSIST_DEBOUNCE_MS = 250;
 
@@ -1345,10 +1388,46 @@ export function createSession(
     return { kind, id: rest.join(":") } as ElementId;
   }
 
-  /** Resolve a binding at the record it shows: the record a dropped record
-   *  fixed (editor ADR 291), else the first. */
-  function resolveFor(e: DataEngineLike, id: string): unknown {
-    const at = recordOf.get(id);
+  /** The record preview is about to write `record` into the document for
+   *  `id`: from then on it shows that record (editor ADR 291), so the
+   *  per-record status counts it placed, its placements name it, and a field
+   *  refresh keeps it there (Lower goes back to the binding's own record).
+   *  Recorded BEFORE the write, with the session version written, so the
+   *  label the write carries names the version that holds the record (as
+   *  the applied snapshot, `markAppliedBeforeWrite`). Returns what takes it
+   *  back when nothing was written. */
+  async function steppedTo(
+    id: string,
+    record: number,
+    atRecord: boolean,
+  ): Promise<() => void> {
+    // An engine without the record lane writes the first record.
+    const at = atRecord ? record : 0;
+    const before = steppedAt.get(id);
+    const set = (n: number | undefined) => {
+      if (n === undefined || n === (recordOf.get(id) ?? 0))
+        steppedAt.delete(id);
+      else steppedAt.set(id, n);
+    };
+    set(at);
+    if (steppedAt.get(id) === before) return () => {};
+    markDirty();
+    await settleLabel();
+    return () => {
+      set(before);
+      markDirty();
+    };
+  }
+
+  /** Resolve a binding at the record it shows: the record the preview
+   *  stepped it to, else the record a dropped record fixed (editor ADR 291),
+   *  else the first. A lower (`lowering`) writes the binding's own record. */
+  function resolveFor(
+    e: DataEngineLike,
+    id: string,
+    lowering = false,
+  ): unknown {
+    const at = lowering ? recordOf.get(id) : shownRecord(id);
     return at !== undefined && typeof e.resolve_lowered_at === "function"
       ? e.resolve_lowered_at(id, at)
       : e.resolve_lowered(id);
@@ -1403,6 +1482,7 @@ export function createSession(
       }
     }
     if (recordOf.size > 0) targets.record = Object.fromEntries(recordOf);
+    if (steppedAt.size > 0) targets.stepped = Object.fromEntries(steppedAt);
     const data: PersistedData[] = [];
     for (const [source, text] of importedCsv) {
       const stored = await storeData(
@@ -1431,9 +1511,17 @@ export function createSession(
         ),
       );
     }
+    // Editor ADR 291: the applied values leave the recipe and are stored
+    // like imported data (inline when small, else a part of their own).
+    const applied = await storeAppliedValues(
+      payload,
+      (path, bytes) => host.parts.write(path, bytes),
+      knownDataParts,
+      valuesCache,
+    );
     return {
       v: 1,
-      engine: payload,
+      engine: applied.engine,
       locale,
       sync,
       targets,
@@ -1448,6 +1536,9 @@ export function createSession(
       refresh: Object.fromEntries(refreshPolicies),
       ...(previewAt.size > 0 ? { preview: Object.fromEntries(previewAt) } : {}),
       ...(appliedSet !== null ? { dataSet: appliedSet } : {}),
+      ...(Object.keys(applied.values).length > 0
+        ? { appliedValues: applied.values }
+        : {}),
       ...(assetColumns.size > 0
         ? { assets: Object.fromEntries(assetColumns) }
         : {}),
@@ -1524,12 +1615,16 @@ export function createSession(
     try {
       const built = await buildPersisted();
       if (!built) return;
-      const named = new Set(
-        built.data.flatMap((d) => {
+      const named = new Set([
+        ...built.data.flatMap((d) => {
           const part = dataPartOf(d);
           return part ? [part] : [];
         }),
-      );
+        ...Object.values(built.appliedValues ?? {}).flatMap((v) => {
+          const part = valuesPartOf(v);
+          return part ? [part] : [];
+        }),
+      ]);
       for (const rel of await host.parts.list(DATA_PART_DIR)) {
         const path = rel.startsWith(DATA_PART_DIR)
           ? rel
@@ -1663,6 +1758,21 @@ export function createSession(
    *  write carries the label naming it. Nothing to do without labels. */
   async function settleLabel(): Promise<void> {
     if (persistTimer && labelActive) await flushPersistInternal();
+  }
+
+  /** The document is about to be written from the current results: record
+   *  them as the applied snapshot (the per-record status's "before", saved
+   *  as the payload's `applied`, editor ADR 291) BEFORE the write, so the
+   *  label the write carries names the version that holds it. Marked after
+   *  the write, the session moved past its label as soon as the write
+   *  landed, and the next document write (or the first one after a
+   *  reopen) labelled a version no write of the user's made. Without
+   *  labels the snapshot is saved with the next session write, as before. */
+  async function markAppliedBeforeWrite(
+    mark: () => Promise<void> | void,
+  ): Promise<void> {
+    await mark();
+    if (labelActive) await flushPersistInternal();
   }
 
   /** After an undo or redo: if the document's label now names another
@@ -2262,7 +2372,8 @@ export function createSession(
     flowNotes.clear();
     mergeFrames = [];
     storyOfFrame.clear();
-    variableFrames.clear();
+    variableStories.clear();
+    linkedPixels.clear();
     ruleTargets.clear();
     remoteSources.clear();
     importedCsv.clear();
@@ -2276,12 +2387,15 @@ export function createSession(
     loweredInto.clear();
     tableInto.clear();
     recordOf.clear();
+    steppedAt.clear();
     hostOids.clear();
     hostElements.clear();
     relinkSources.length = 0;
     labelRecipe = null;
     pendingDefs.length = 0;
     knownDataParts.clear();
+    valuesCache.clear();
+    assetIndexRead = null;
     bootPayload = null;
     lastWritten = null;
     persistence.status = "empty";
@@ -2380,9 +2494,22 @@ export function createSession(
       return;
     }
 
-    // The engine: boot it with the saved recipe, then the user's decisions.
+    // The engine: boot it with the saved recipe (the applied values back in
+    // it, editor ADR 291), then the user's decisions.
     locale = saved.locale;
-    bootPayload = saved.engine;
+    const withValues = await loadAppliedValues(
+      saved.engine,
+      saved.appliedValues,
+      (path) => host.parts.read(path),
+    );
+    for (const part of withValues.parts) knownDataParts.add(part);
+    if (withValues.missing.length > 0)
+      report({
+        level: "warn",
+        source: "restore",
+        message: `the values the document was last written from are missing for ${withValues.missing.join(", ")} — the row diff has no "before" until the next update`,
+      });
+    bootPayload = withValues.engine;
     let e: DataEngineLike;
     try {
       e = await ensureEngine();
@@ -2435,6 +2562,8 @@ export function createSession(
     }
     for (const [id, n] of Object.entries(saved.targets.record ?? {}))
       if (Number.isInteger(n) && n >= 0) recordOf.set(id, n);
+    for (const [id, n] of Object.entries(saved.targets.stepped ?? {}))
+      if (Number.isInteger(n) && n >= 0) steppedAt.set(id, n);
 
     // Imported data: back into the store when it is first used.
     for (const d of saved.data) {
@@ -2582,6 +2711,7 @@ export function createSession(
     host.document.onWillSave(async () => {
       await flushPersistInternal();
       await collectDataParts();
+      await persistAssets();
       // ADR 559: the recipe also lives in the elements' labels (the first
       // save of a session written before them adds them).
       await props.syncLabels().catch(() => ({ written: 0 }));
@@ -2660,6 +2790,7 @@ export function createSession(
     barcodeTargets,
     loweredInto,
     ruleTargets: ruleTargets as never,
+    variableStories,
     hostOids,
     hostElements,
     relink: relinkSources,
@@ -2667,6 +2798,56 @@ export function createSession(
   const objectsUp = () => objectsOf(host) !== null;
 
   // ── data issues (data ADR 564) ──────────────────────────────────────────
+  /** The stories each data field's text variable has an instance in, read
+   *  from every story's runs (a run names the variable it is an instance
+   *  of): the copies a user pasted by hand as well as the session's own.
+   *  Read once per document state. */
+  let instanceStories: {
+    at: number;
+    stories: Map<string, Set<string>>;
+  } | null = null;
+  async function variableInstanceStories(): Promise<Map<string, Set<string>>> {
+    if (instanceStories?.at === docChanges) return instanceStories.stories;
+    const out = new Map<string, Set<string>>();
+    const objects = objectsOf(host);
+    if (objects) {
+      try {
+        const bindingOf = new Map<string, string>();
+        for (const address of await objects.query(
+          'textVariable[name^="paged:"]',
+        )) {
+          const name = (await objects.get(address, "textVariableName")) as {
+            value?: unknown;
+          };
+          if (typeof name?.value !== "string") continue;
+          const id = address.slice("textVariable:".length);
+          bindingOf.set(bareVariableId(id), name.value.slice("paged:".length));
+        }
+        if (bindingOf.size > 0)
+          for (const address of await objects.query("story")) {
+            const storyId = address.slice("story:".length);
+            const content = await host.document.storyContent(storyId);
+            for (const para of content?.paragraphs ?? [])
+              for (const run of para.runs) {
+                const v = run.textVariable;
+                const binding = v
+                  ? bindingOf.get(bareVariableId(v))
+                  : undefined;
+                if (!binding) continue;
+                let set = out.get(binding);
+                if (!set) out.set(binding, (set = new Set()));
+                set.add(storyId);
+              }
+          }
+      } catch {
+        // a host without the object model or story reads: the session's own
+        // placements are still checked
+      }
+    }
+    instanceStories = { at: docChanges, stories: out };
+    return out;
+  }
+
   /** What may be wrong with the placed content, read now: the engine's own
    *  answers (sync state, resolved values, the paginator's overflow) and the
    *  host's geometry (frame chains, frame sizes). */
@@ -2686,21 +2867,26 @@ export function createSession(
     const addressOf = new Map<string, string>();
     for (const p of placed)
       if (!addressOf.has(p.binding)) addressOf.set(p.binding, p.address);
-    // A variable placed into a frame through the door: its frame, where the
-    // placements do not name one (a text variable's instances).
-    for (const [id, frame] of variableFrames)
-      if (!addressOf.has(id)) addressOf.set(id, `textFrame:${frame}`);
 
     // Overset: every story a variable is placed in, every frame a table or
     // a flow was lowered into, every frame of the last merge.
     const texts: TextTarget[] = [];
     if (placedVariables.size > 0) {
       // A placeholder field names its story; a text variable's instances
-      // do not (its field reads under the variable), so the frames the
-      // variable is placed in are read for theirs.
+      // do not (its field reads under the variable): the stories the
+      // session placed it into, and the frame its label names (a reopened
+      // document), are read instead.
       for (const f of await readFieldsQuietly())
         if (placedVariables.has(f.key) && !f.variable)
           texts.push({ binding: f.key, storyId: f.storyId });
+      for (const [binding, stories] of variableStories)
+        if (placedVariables.has(binding))
+          for (const storyId of stories) texts.push({ binding, storyId });
+      // Every story an instance of the field's text variable is in, a copy
+      // pasted by hand included (a run names its variable, data ADR 564).
+      for (const [binding, stories] of await variableInstanceStories())
+        if (placedVariables.has(binding))
+          for (const storyId of stories) texts.push({ binding, storyId });
       for (const [binding, address] of addressOf)
         if (placedVariables.has(binding) && address.startsWith("textFrame:"))
           texts.push({
@@ -2708,9 +2894,18 @@ export function createSession(
             frame: address.slice("textFrame:".length),
           });
     }
+    const tables = new Set(
+      (payload.bindings ?? [])
+        .filter((b) => b.kind === "table")
+        .map((b) => b.id),
+    );
     for (const [id, el] of loweredInto)
       if (el.kind === "textFrame" && !flowNotes.has(id))
-        texts.push({ binding: id, frame: String(el.id) });
+        texts.push({
+          binding: id,
+          frame: String(el.id),
+          ...(tables.has(id) ? { table: true } : {}),
+        });
     for (const [id, note] of flowNotes) {
       if (note.storyId) texts.push({ binding: id, storyId: note.storyId });
       else for (const frame of note.frames) texts.push({ binding: id, frame });
@@ -2759,6 +2954,7 @@ export function createSession(
               ]);
           return sizes;
         },
+        linkedPixelsOf,
       )),
     );
 
@@ -2816,15 +3012,23 @@ export function createSession(
     return out;
   }
 
-  /** Whether a one-frame story's text overflows its frame as the engine
-   *  wraps it at the host's advances (the host's own layout reported none:
-   *  a host without fonts never does). False where it cannot be measured. */
+  /** Whether a story's text overflows its frames (`frameIds`, in chain
+   *  order) as the engine wraps it at the host's advances through each
+   *  frame in turn (the host's own layout reported none: a host without
+   *  fonts never does). Each run is measured in its own face (the font,
+   *  style and size it sets, the story's where it sets none); a wasm
+   *  without the run rule measures the story at one face. False where it
+   *  cannot be measured. */
   async function measuredOverset(
     storyId: string,
-    frameId: string,
+    frameIds: readonly string[],
   ): Promise<boolean> {
     const e = engine;
     if (!e?.text_words || !e.text_overset) return false;
+    // A threaded story needs the chain rule; a wasm without it measures
+    // one-frame stories only.
+    if (frameIds.length > 1 && !e.text_overset_chain && !e.text_overset_runs)
+      return false;
     if (!host.supports("document.readStory@1")) return false;
     const content = await host.document.storyContent(storyId);
     if (!content) return false;
@@ -2834,11 +3038,31 @@ export function createSession(
       .replace(/[\r\u2028\u2029]/g, "\n")
       .replace(/\n+$/, "");
     if (text === "") return false;
-    const [g] = (await host.document.elementGeometry([
-      { kind: "textFrame", id: frameId } as ElementId,
-    ])) as { bounds?: [number, number, number, number] }[];
-    if (!g?.bounds) return false;
-    const [top, left, bottom, right] = g.bounds;
+    const geom = (await host.document.elementGeometry(
+      frameIds.map((id) => ({ kind: "textFrame", id }) as ElementId),
+    )) as {
+      id?: ElementId;
+      bounds?: [number, number, number, number];
+    }[];
+    const boxes: [number, number][] = [];
+    for (const [i, id] of frameIds.entries()) {
+      const g = geom.find((x) => String(x.id?.id) === id) ?? geom[i];
+      if (!g?.bounds) return false;
+      const [top, left, bottom, right] = g.bounds;
+      boxes.push([right - left, bottom - top]);
+    }
+    if (e.text_run_words && e.text_overset_runs) {
+      // Each run in its own face: a story of several sizes is judged at
+      // each (the run rule is the chain rule for one face).
+      const faces = await storyFaces(host, storyId, text, content);
+      const words = e.text_run_words(faces.runs) as string[][];
+      const metrics = await measureWords(
+        host,
+        { frames: faces.fonts.map((font) => ({ font })) } as never,
+        faces.fonts.map((_, i) => words[i] ?? []),
+      );
+      return e.text_overset_runs(faces.runs, boxes, metrics);
+    }
     const font = await storyFont(host, storyId, text);
     const words = e.text_words(text) as string[];
     const [metrics] = await measureWords(
@@ -2846,7 +3070,27 @@ export function createSession(
       { frames: [{ font }] } as never,
       [words],
     );
-    return e.text_overset(text, right - left, bottom - top, metrics);
+    return boxes.length === 1
+      ? e.text_overset(text, boxes[0]![0], boxes[0]![1], metrics)
+      : e.text_overset_chain!(text, boxes, metrics);
+  }
+
+  /** The pixel size of the picture placed from a plain link on `element`,
+   *  as the host reads the placed image (`assets.getPlacedImage`: the
+   *  engine's decoded copy, so null until it has drawn it). Read once per
+   *  placement: the answer carries the file's bytes. */
+  async function linkedPixelsOf(
+    element: ElementId,
+  ): Promise<[number, number] | null> {
+    const id = String(element.id);
+    const known = linkedPixels.get(id);
+    if (known) return known;
+    if (!host.supports("assets.images@1")) return null;
+    const placed = await host.assets.getPlacedImage(id);
+    if (!placed || !(placed.width > 0 && placed.height > 0)) return null;
+    const pixels: [number, number] = [placed.width, placed.height];
+    linkedPixels.set(id, pixels);
+    return pixels;
   }
 
   /** Our fields (placeholders and text variables), or none when they do not
@@ -2944,8 +3188,10 @@ export function createSession(
     placeRecord: (target, query, record) =>
       self.placeRecord(query, record, elementOfAddress(target)),
     loadSample: () => self.loadSample(),
-    recordOf: (id) => recordOf.get(id),
-    placements: () => props.placements(),
+    recordOf: (id) => shownRecord(id),
+    placements: () => props.placements(shownRecord),
+    recordStatus: (query) =>
+      props.recordStatus(query, self.diffKeyOf(query), shownRecord),
     issues: () => publishIssues(),
     assetColumns: () => self.assetColumns(),
     setAssetColumn: (query, field, def) =>
@@ -2973,9 +3219,115 @@ export function createSession(
   const assetColumns = new Map<string, AssetColumnDef>();
   const assets = createAssetPipeline(host, {
     consentedOrigins: () => consentedOriginsSafe(),
+    // A reference the open document carries is read from its part.
+    // An `asset:<id>` names it by the reference its column resolved or by
+    // its content hash.
+    fromDocument: async (reference) => {
+      const index = await documentAssetIndex();
+      if (!index) return null;
+      const hash = carriedHash(index, reference);
+      if (!hash) return null;
+      return {
+        hash,
+        mediaType: index.assets[hash]?.mediaType ?? "",
+        read: () => host.parts.read(assetPartPath(hash)),
+      };
+    },
   });
+
+  /** The open document's asset index (read once per document). */
+  function documentAssetIndex(): Promise<AssetIndex | null> {
+    if (!partsAvailable()) return Promise.resolve(null);
+    if (assetIndexRead?.epoch !== docEpoch)
+      assetIndexRead = {
+        epoch: docEpoch,
+        index: host.parts
+          .read(ASSET_INDEX_PART)
+          .then(decodeAssetIndex)
+          .catch(() => null),
+      };
+    return assetIndexRead.index;
+  }
+
+  /** Data ADR 563 (amended 2026-10-28): on save, the assets the asset
+   *  columns reference now go into the document as parts, with their index
+   *  (`persist.ts` `storeAssets`). A column whose query has no records yet
+   *  keeps what the document carried for it. */
+  async function persistAssets(): Promise<void> {
+    if (!partsAvailable()) return;
+    const epoch = docEpoch;
+    try {
+      const previous = await documentAssetIndex();
+      if (assetColumns.size === 0 && !previous) return;
+      const columns = new Map<string, string[] | null>();
+      for (const key of assetColumns.keys()) {
+        const dot = key.indexOf(".");
+        const query = key.slice(0, dot);
+        const field = key.slice(dot + 1);
+        const n = engine?.query_record_count?.(query) ?? 0;
+        if (!engine?.evaluate_at || n === 0) {
+          columns.set(key, null);
+          continue;
+        }
+        const refs: string[] = [];
+        let failed = 0;
+        for (let r = 0; r < n; r++) {
+          const v = engine.evaluate_at(query, field, r);
+          if (v.error) failed++;
+          else if (v.display?.trim()) refs.push(v.display.trim());
+        }
+        // A field that does not evaluate says nothing about its references.
+        columns.set(key, failed === n ? null : refs);
+      }
+      if (epoch !== docEpoch) return;
+      const cleans = host.supports("storage.parts@2");
+      const { index } = await storeAssets(
+        columns,
+        (reference) => assets.kept(reference),
+        previous,
+        {
+          write: (path, bytes) => host.parts.write(path, bytes),
+          ...(cleans
+            ? {
+                list: (prefix: string) => host.parts.list(prefix),
+                delete: (path: string) => host.parts.delete(path),
+              }
+            : {}),
+        },
+      );
+      assetIndexRead = {
+        epoch,
+        index: Promise.resolve(
+          Object.keys(index.assets).length > 0 ? index : null,
+        ),
+      };
+    } catch (err) {
+      report({
+        level: "warn",
+        source: "persist",
+        message: `the asset columns' pictures were not saved with the document: ${errText(err)}`,
+      });
+    }
+  }
   /** The asset resolver of an image binding over an asset column, if any. */
-  function assetResolverOf(bindingId: string) {
+  /** An `asset:<id>` image: the bytes the document carries (or this
+   *  session's cache), through the binding's column chain when it has one. */
+  function assetIdResolverOf(bindingId: string) {
+    return async (id: string) => {
+      const r = await assets.resolve(
+        `asset:${id}`,
+        assetColumnOf(bindingId) ?? {},
+      );
+      imageNotes.set(
+        bindingId,
+        r.ok ? (r.pixels ? { pixels: r.pixels } : {}) : { missing: r.reason },
+      );
+      return r.ok ? { uri: r.uri } : { reason: r.reason };
+    };
+  }
+
+  /** The asset column an image binding reads, if it reads one. */
+  function assetColumnOf(bindingId: string): AssetColumnDef | undefined {
     const b = (
       (
         engine?.payload() as
@@ -2990,10 +3342,13 @@ export function createSession(
           | undefined
       )?.bindings ?? []
     ).find((x) => x.id === bindingId);
-    const def =
-      b?.kind === "image" && b.query && b.expr
-        ? assetColumns.get(`${b.query}.${b.expr.trim()}`)
-        : undefined;
+    return b?.kind === "image" && b.query && b.expr
+      ? assetColumns.get(`${b.query}.${b.expr.trim()}`)
+      : undefined;
+  }
+
+  function assetResolverOf(bindingId: string) {
+    const def = assetColumnOf(bindingId);
     if (!def) return undefined;
     return async (uri: string) => {
       const r = await assets.resolve(uri, def);
@@ -3089,8 +3444,7 @@ export function createSession(
           story,
         );
         if (!placed) throw new Error(`the field ${field} could not be placed`);
-        placedVariables.add(id);
-        variableFrames.set(id, String(target.id));
+        variablePlaced(id, placed.storyId);
         emit();
         issuesSoon();
         return { binding: id, kind: "variable" };
@@ -3148,7 +3502,7 @@ export function createSession(
             recordOf.set(id, n);
             markDirty();
           },
-          placed: (id) => placedVariables.add(id),
+          placed: (id, storyId) => variablePlaced(id, storyId),
           lowerBinding: (id) => self.lowerBinding(id),
           removeBinding: (id) => self.removeBinding(id),
         },
@@ -3175,6 +3529,8 @@ export function createSession(
     async removeBinding(id, mode) {
       tableInto.delete(id);
       recordOf.delete(id);
+      steppedAt.delete(id);
+      variableStories.delete(id);
       return props.removeBinding(id, mode);
     },
     setAssetColumn(query, field, def) {
@@ -4075,6 +4431,9 @@ export function createSession(
     async lowerBinding(id) {
       try {
         const e = await ensureEngine();
+        // Lower writes the binding from the data at its own record: a record
+        // the preview stepped to is left (editor ADR 291).
+        if (steppedAt.delete(id)) markDirty();
         // ADR 558: property bindings (and visibility, re-expressed as its
         // elementVisible triple, where the host has the object model) write
         // through host.objects — in lowerAll, all of them in ONE batch.
@@ -4170,7 +4529,24 @@ export function createSession(
               boxH = Math.max(1, bottom - top);
             }
           }
-          const bc = e.lower_barcode(id, boxW, boxH) as LoweredBarcode | null;
+          // At the record it shows (a record stepped to or dropped), else
+          // the first.
+          const at = recordOf.get(id);
+          const lowerAt = (
+            e as {
+              lower_barcode_at?: (
+                b: string,
+                r: number,
+                w: number,
+                h: number,
+              ) => unknown;
+            }
+          ).lower_barcode_at;
+          const bc = (
+            at !== undefined && typeof lowerAt === "function"
+              ? lowerAt.call(e, id, at, boxW, boxH)
+              : e.lower_barcode(id, boxW, boxH)
+          ) as LoweredBarcode | null;
           if (bc) {
             const plan = await relowerPlan(
               { kind: "barcode", binding: id },
@@ -4191,7 +4567,7 @@ export function createSession(
           state.message = tr(STATUS.loweredBarcode, { id });
           return;
         }
-        const lowered = resolveFor(e, id) as { kind?: string } | null;
+        const lowered = resolveFor(e, id, true) as { kind?: string } | null;
         if (lowered?.kind === "table") {
           const plan = await relowerPlan({ kind: "table", binding: id });
           const known = tableAt.get(id);
@@ -4248,7 +4624,7 @@ export function createSession(
                 null,
                 lowerCtx,
               );
-              if (placed) placedVariables.add(id);
+              if (placed) variablePlaced(id, placed.storyId);
             }
           } else if (lowerCtx) {
             // Already placed: the command re-resolves the live fields once.
@@ -4265,13 +4641,18 @@ export function createSession(
           if (status === "flagged")
             imageNotes.set(id, { missing: tr(ISSUES.noReference) });
           if (tgt) {
-            await commitLoweredImage(
+            const resolver = assetResolverOf(id);
+            linkedPixels.delete(tgt.elementId);
+            const placed = await commitLoweredImage(
               host,
               lowered as never,
               tgt.elementId,
               tgt.fit,
-              assetResolverOf(id),
+              resolver,
+              assetIdResolverOf(id),
             );
+            // A plain link: the host is asked the picture's pixel size.
+            if (placed && !resolver) imageNotes.set(id, { linked: true });
           } else {
             host.log.info(
               `image binding "${id}" has no bound rectangle target — define it via addImageBinding`,
@@ -4297,6 +4678,15 @@ export function createSession(
 
     async lowerAll() {
       await this.refreshData();
+      // Every binding is written at its own record: the records the preview
+      // stepped to go, in the session version the first write names.
+      if (steppedAt.size > 0) {
+        steppedAt.clear();
+        markDirty();
+      }
+      // The document is written from these results: the row diff's
+      // "before", marked ahead of the writes so the first carries its label.
+      await markAppliedBeforeWrite(() => this.markApplied());
       // One command: its lowerings share one read of the active page.
       // Variables are planned first and placed together: one batch, one undo
       // step for the whole command (budget W5).
@@ -4311,7 +4701,7 @@ export function createSession(
         }
         if (ctx.variables!.length > 0) await settleLabel();
         const placed = await commitLoweredVariables(host, ctx.variables!, ctx);
-        for (const key of placed.keys()) placedVariables.add(key);
+        for (const [key, at] of placed) variablePlaced(key, at.storyId);
         // ADR 558: every property binding of the command in ONE batch.
         if (ctx.properties!.length > 0) {
           await props.applyProperties({
@@ -4323,8 +4713,6 @@ export function createSession(
         lowerCtx = undefined;
       }
       if (ctx.refreshFields) await this.refreshFields();
-      // The document is now written from these results: the row diff's "before".
-      await this.markApplied();
       issuesSoon();
     },
 
@@ -4441,6 +4829,7 @@ export function createSession(
               : e.lower_barcode(bindingId, boxW, boxH)
           ) as LoweredBarcode | null;
           if (bc) {
+            await steppedTo(bindingId, record, typeof lowerAt === "function");
             // Update in place: the previous step's symbol goes in the same batch.
             const plan = await relowerPlan(
               { kind: "barcode", binding: bindingId },
@@ -4496,8 +4885,10 @@ export function createSession(
             : await readOwnFields("preview", bindingId);
           previewFields = null;
           if (fields === null) return;
+          const atRecord = typeof e.resolve_lowered_at === "function";
           if (fields.length > 0) {
             const stale = fields.filter((f) => f.value !== value);
+            const undoStep = await steppedTo(bindingId, record, atRecord);
             const before = docChanges;
             const written = await writeFields(
               "preview",
@@ -4522,14 +4913,17 @@ export function createSession(
                 fields: fields.map((f) => ({ ...f, value })),
               };
             }
+            if (written === 0 && stale.length > 0) undoStep();
           } else if (!placedVariables.has(bindingId)) {
             // Not in the document yet: place it once (the normal lower lane).
+            const undoStep = await steppedTo(bindingId, record, atRecord);
             const placed = await commitLoweredVariable(
               host,
               lowered as never,
               bindingId,
             );
-            if (placed) placedVariables.add(bindingId);
+            if (placed) variablePlaced(bindingId, placed.storyId);
+            else undoStep();
           } else {
             // Placed earlier and since removed from the document. Placing it
             // again on every step would mint a frame per step; say so instead.
@@ -4544,12 +4938,18 @@ export function createSession(
         } else if (lowered?.kind === "image") {
           const tgt = imageTargets.get(bindingId);
           if (tgt) {
+            await steppedTo(
+              bindingId,
+              record,
+              typeof e.resolve_lowered_at === "function",
+            );
             await commitLoweredImage(
               host,
               lowered as never,
               tgt.elementId,
               tgt.fit,
               assetResolverOf(bindingId),
+              assetIdResolverOf(bindingId),
             );
           }
         }
@@ -4608,8 +5008,9 @@ export function createSession(
         { value: string | null } | "kept" | "failed" | "same"
       >();
       const ours = fields.filter((f) => bindingKinds.get(f.key) === "variable");
-      // A field placed by a dropped record resolves at its record (below).
-      const atZero = ours.filter((f) => !recordOf.has(f.key));
+      // A field placed by a dropped record, or stepped to a record by the
+      // preview, resolves at its record (below).
+      const atZero = ours.filter((f) => shownRecord(f.key) === undefined);
       if (typeof e.refresh_field_values === "function" && atZero.length > 0) {
         let decided: FieldRefreshOut[] = [];
         try {
@@ -4680,8 +5081,12 @@ export function createSession(
         });
       }
 
+      // The document is now written from these results: the row diff's
+      // "before", marked ahead of the write that carries its label.
+      if (writes.length > 0)
+        await markAppliedBeforeWrite(() => this.markApplied());
+      else await this.markApplied();
       const written = await writeFields("refresh", writes);
-      await this.markApplied();
       issuesSoon();
       const kept = [...resolved.values()].filter((r) => r === "kept").length;
       state.status = "ready";
@@ -5219,6 +5624,16 @@ export function createSession(
         undefined,
         snapshot,
       );
+      // The document is written from this query's records: the "before" of
+      // its per-record status (editor ADR 291), marked ahead of the write so
+      // the label the merge carries names the version holding it.
+      await markAppliedBeforeWrite(() => {
+        try {
+          e.mark_query_applied?.(options.query);
+        } catch {
+          // an engine without the lane: no status, nothing else changes
+        }
+      });
       await settleLabel();
       const engineForMerge = e as Required<
         Pick<DataEngineLike, "plan_merge" | "merge_words" | "merge_overset">
@@ -5230,6 +5645,7 @@ export function createSession(
         template: mode,
         imageBase: options.imageBase,
         mergeId,
+        dataQuery: options.query,
         clear: plan.remove,
         templatePresent,
         pageHandles: labelActive,
@@ -5392,4 +5808,9 @@ export function createSession(
     },
   };
   return self;
+}
+
+/** A text variable's id without the `TextVariable/` a run may name it by. */
+function bareVariableId(id: string): string {
+  return id.startsWith("TextVariable/") ? id.slice("TextVariable/".length) : id;
 }

@@ -50,6 +50,29 @@ export { createGradientFeatherHandler } from "./handlers/gradient-feather-tool";
 export { createGradientSwatchHandler } from "./handlers/gradient-tool";
 export { createLineHandler } from "./handlers/line-tool";
 export { createPageHandler } from "./handlers/page-tool";
+// Engine ADR 1011 — artboards: the tool, the shared selection and the
+// geometry the Artboards panel and export per artboard use.
+export { createArtboardHandler } from "./handlers/artboard-tool";
+export {
+  artboardSelectionOf,
+  type ArtboardSelection,
+} from "./artboards/selection";
+export {
+  ARTBOARD_GAP_PT,
+  ARTBOARD_META_KEY,
+  ARTBOARD_PRESETS,
+  MIN_ARTBOARD_PT,
+  artboardFileName,
+  artboardNameOf,
+  artboardsOf,
+  gridLayout,
+  placeArtboardMutation,
+  rearrangeMutation,
+  renameArtboardMutation,
+  resizeArtboardMutation,
+  type Artboard,
+  type PageSummaryLike,
+} from "./artboards/model";
 export { createPencilHandler } from "./handlers/pencil-tool";
 export { createPenHandler } from "./handlers/pen-tool";
 // Direct path editing — the session the canvas mounts while path-edit
@@ -66,10 +89,32 @@ export {
   type EngineSnapQuery,
   type EngineSnapResult,
 } from "./handlers/snapper";
-export { createPolygonHandler } from "./handlers/polygon-tool";
+export {
+  createPolygonHandler,
+  livePolygonInsert,
+} from "./handlers/polygon-tool";
+// Engine ADR 1047 / editor ADR 310 — the live-shape geometry the
+// on-canvas widgets, the Transform panel's Shape section and the Polygon
+// tool share (the editor's twin of `paged_model::live_shape`).
+export * from "./live-shapes/geometry";
 export { createRectangleHandler } from "./handlers/rectangle-tool";
 export { createScissorsHandler } from "./handlers/scissors-tool";
 export { createShearHandler } from "./handlers/shear-tool";
+export {
+  BOX_MODES,
+  FREE_TRANSFORM_TOOL_ID,
+  REFERENCE_KEYS,
+  REFERENCE_UV,
+  createFreeTransformHandler,
+  distortBatchFor,
+  distortRefusal,
+  freeTransformBoxOf,
+  referencePointOf,
+  shearSelectionBy,
+  type FreeTransformBox,
+  type ShearClient,
+  type ReferenceKey,
+} from "./handlers/free-transform-tool";
 export { createSmoothHandler } from "./handlers/smooth-tool";
 export {
   createRotateHandler,

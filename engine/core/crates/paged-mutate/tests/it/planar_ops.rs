@@ -578,7 +578,8 @@ fn faces_rejects_an_unknown_face_id() {
 fn region_verbs_reject_more_inputs_than_the_cap() {
     let (mut doc, elements) = two_squares();
     let mut many = elements.clone();
-    for i in 0..20 {
+    // Engine ADR 1019: the cap is 1000 inputs (it was 12).
+    for i in 0..paged_mutate::planar::MAX_PLANAR_INPUTS {
         many.push(NodeId::Rectangle(format!("ghost{i}")));
     }
     let before = snapshot(&doc);
@@ -590,7 +591,7 @@ fn region_verbs_reject_more_inputs_than_the_cap() {
         },
     )
     .expect_err("past the cap the op refuses");
-    assert!(format!("{err:?}").contains("at most 12"), "{err:?}");
+    assert!(format!("{err:?}").contains("at most 1000"), "{err:?}");
     assert_eq!(snapshot(&doc), before, "a refused op mutates nothing");
 }
 

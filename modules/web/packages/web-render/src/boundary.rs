@@ -22,6 +22,7 @@
 
 use std::cell::RefCell;
 
+use crate::effects::LayerEffects;
 use crate::perf::{self, Counter};
 
 thread_local! {
@@ -29,6 +30,24 @@ thread_local! {
     /// layer (one for a frame, one per frame for a flow) — read once by
     /// [`take_text_advances_json`].
     static TEXT_ADVANCES: RefCell<Vec<Vec<f32>>> = const { RefCell::new(Vec::new()) };
+    /// The CSS effect groups of the last render, one entry per layer — read
+    /// once by [`take_effects_json`].
+    static EFFECTS: RefCell<Vec<LayerEffects>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Record the last render's effect groups (see [`take_effects_json`]).
+pub fn set_effects(effects: Vec<LayerEffects>) {
+    EFFECTS.with(|e| *e.borrow_mut() = effects);
+}
+
+/// The body of the `take_effects` export: the last render's CSS effect
+/// groups (ADR 415) as JSON (`[{"groups":[…],"losses":{…}}, …]`, one entry
+/// per layer), then forgotten. Like the text advances it rides beside the
+/// render, not in it: the canvas composes the flat layer, and only a bake
+/// reads the groups.
+pub fn take_effects_json() -> String {
+    let all = EFFECTS.with(|e| std::mem::take(&mut *e.borrow_mut()));
+    serde_json::to_string(&all).unwrap_or_else(|_| "[]".to_string())
 }
 
 /// Record the last render's text advances (see [`take_text_advances_json`]).
@@ -75,6 +94,7 @@ pub fn render_web_frame_json(html: &str, width_px: u32, height_px: u32) -> Strin
     perf::bump(Counter::BytesIn, html.len() as u64);
     let lowered = crate::capture::render_and_lower(html, width_px, height_px);
     set_text_advances(vec![lowered.text_advances.clone()]);
+    set_effects(vec![lowered.effects.clone()]);
     let out =
         serde_json::to_string(&lowered.layer).unwrap_or_else(|_| "{\"items\":[]}".to_string());
     perf::bump(Counter::BytesOut, out.len() as u64);

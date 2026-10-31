@@ -29,6 +29,9 @@
 /// ADR 132 — `Mutation::Set` resolution and the property read twin.
 #[path = "virtual_set.rs"]
 pub mod virtual_set;
+/// Engine ADR 1022 — Word's fields, cross-references, tables of contents.
+#[path = "word_structure.rs"]
+pub(crate) mod word_structure;
 
 use std::collections::HashMap;
 
@@ -61,6 +64,10 @@ pub const INK_COVERAGE_DPI: f32 = 72.0;
 /// which is why this being a constant rather than a wire argument
 /// costs nothing.
 pub const INK_COVERAGE_LIMIT_PCT: f32 = 300.0;
+
+/// Engine ADR 1037 — the least display density (device px per pt) a live
+/// build evaluates an image filter stack for: a 2× (retina) screen at 100 %.
+const LIVE_IMAGE_ADJUST_PX_PER_PT: f32 = 2.0;
 
 /// The type size a run takes when nothing in its cascade names one: the
 /// renderer's own default (`PipelineOptions::default_point_size`), so a
@@ -188,6 +195,12 @@ pub struct DocumentHandle {
     /// The navigator needs these to size thumbnails before any
     /// rasterisation has happened.
     pub page_sizes_pt: Vec<(f32, f32)>,
+    /// v77 (engine ADR 1011) — each page's top-left on the canvas (its
+    /// artboard position), pt; same length as `page_ids`. A page nobody
+    /// placed has its slot in the default vertical stack. Additive: an
+    /// older worker omits it and the host stacks the pages itself.
+    #[serde(default)]
+    pub page_origins_pt: Vec<(f32, f32)>,
     /// Aggregate counts for debugging / UI badges.
     pub stats: DocumentStats,
     /// Plan-2 §8.3 — ruler guides per page. The overlay renders
@@ -377,6 +390,47 @@ fn created_element_ids(
             .filter_map(page_item_element_id)
             .collect();
     }
+    // Engine ADR 1026 — an override mints one copy per master item (a
+    // group's members ride along and are not reported).
+    if let paged_mutate::Operation::OverrideMasterItems { ids, .. } = op {
+        use crate::element_selection::ElementId;
+        let mut out = Vec::new();
+        for parsed in &doc.spreads {
+            let sp = &parsed.spread;
+            let member = |id: &str| {
+                sp.groups.iter().any(|g| {
+                    g.members
+                        .iter()
+                        .any(|m| frame_self_id(sp, *m).as_deref() == Some(id))
+                })
+            };
+            for id in ids {
+                if member(id) {
+                    continue;
+                }
+                fn is<'a>(mut v: impl Iterator<Item = Option<&'a String>>, id: &str) -> bool {
+                    v.any(|s| s.map(String::as_str) == Some(id))
+                }
+                let e = if is(sp.text_frames.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::TextFrame(id.clone())
+                } else if is(sp.rectangles.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::Rectangle(id.clone())
+                } else if is(sp.ovals.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::Oval(id.clone())
+                } else if is(sp.graphic_lines.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::GraphicLine(id.clone())
+                } else if is(sp.polygons.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::Polygon(id.clone())
+                } else if is(sp.groups.iter().map(|f| f.self_id.as_ref()), id) {
+                    ElementId::Group(id.clone())
+                } else {
+                    continue;
+                };
+                out.push(e);
+            }
+        }
+        return out;
+    }
     created_element_id(doc, op).into_iter().collect()
 }
 
@@ -413,8 +467,43 @@ fn page_item_element_id(
         NodeId::GraphicLine(id) => ElementId::GraphicLine(id.clone()),
         NodeId::Polygon(id) => ElementId::Polygon(id.clone()),
         NodeId::Group(id) => ElementId::Group(id.clone()),
+        NodeId::Instance(id) => ElementId::Instance(id.clone()),
         _ => return None,
     })
+}
+
+/// Engine ADR 1039 — the page item `id` names, by its kind.
+fn element_of_id(
+    doc: &paged_scene::Document,
+    id: &str,
+) -> Option<crate::element_selection::ElementId> {
+    use crate::element_selection::ElementId;
+    let is = |s: &Option<String>| s.as_deref() == Some(id);
+    for p in &doc.spreads {
+        let s = &p.spread;
+        if s.text_frames.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::TextFrame(id.to_string()));
+        }
+        if s.rectangles.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Rectangle(id.to_string()));
+        }
+        if s.ovals.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Oval(id.to_string()));
+        }
+        if s.graphic_lines.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::GraphicLine(id.to_string()));
+        }
+        if s.polygons.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Polygon(id.to_string()));
+        }
+        if s.groups.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Group(id.to_string()));
+        }
+        if s.instances.iter().any(|f| is(&f.self_id)) {
+            return Some(ElementId::Instance(id.to_string()));
+        }
+    }
+    None
 }
 
 /// The element an operation created, or the LAST of them. `doc` is the
@@ -430,6 +519,8 @@ fn changes_page_list(mutation: &Mutation) -> bool {
         Mutation::InsertPage { .. }
         | Mutation::DeletePage { .. }
         | Mutation::ResizePage { .. }
+        // Engine ADR 1011 — the grid's geometry: where each page sits.
+        | Mutation::PlacePage { .. }
         // W0.5 — DuplicatePage adds a spread; the others change page
         // labels/masters but keep the page count, so they don't force a
         // grid rebuild.
@@ -610,10 +701,27 @@ fn created_element_id(
     if let paged_mutate::Operation::CreateGroup { spec } = op {
         return spec.self_id.clone().map(ElementId::Group);
     }
+    // Engine ADR 1039 — the instance a symbol op placed, or the root a
+    // broken link left.
+    match op {
+        paged_mutate::Operation::CreateSymbol { instance_id, .. }
+        | paged_mutate::Operation::RedefineSymbol { instance_id, .. }
+        | paged_mutate::Operation::PlaceSymbolInstance { instance_id, .. } => {
+            return instance_id.clone().map(ElementId::Instance);
+        }
+        paged_mutate::Operation::BreakSymbolLink { .. } => {
+            return paged_mutate::symbol_break_root(op).and_then(|id| element_of_id(doc, id));
+        }
+        _ => {}
+    }
     // v52 — an inserted anchored frame is a Rectangle; report its minted id so
     // the caller can address it (e.g. offset the anchor after placement).
     if let paged_mutate::Operation::InsertAnchoredFrame { self_id, .. } = op {
         return Some(ElementId::Rectangle(self_id.clone()));
+    }
+    // Engine ADR 1026 — an insert on a master reports what it made.
+    if let paged_mutate::Operation::OnMaster { op, .. } = op {
+        return created_element_id(doc, op);
     }
     // Protocol v34 — a batch reports its LAST creating child (the id
     // the batch-created sentinel resolved to), so insert-with-
@@ -736,6 +844,7 @@ fn path_node_id_for(id: &crate::element_selection::ElementId) -> Option<paged_mu
         // gestures never target them.
         ElementId::Oval(_)
         | ElementId::Group(_)
+        | ElementId::Instance(_)
         | ElementId::StoryRange { .. }
         | ElementId::Table { .. }
         | ElementId::TableCell { .. } => None,
@@ -853,6 +962,7 @@ fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate:
         ElementId::Polygon(s) => NodeId::Polygon(s.clone()),
         ElementId::GraphicLine(s) => NodeId::GraphicLine(s.clone()),
         ElementId::Group(s) => NodeId::Group(s.clone()),
+        ElementId::Instance(s) => NodeId::Instance(s.clone()),
         ElementId::StoryRange {
             story_id,
             start,
@@ -968,6 +1078,14 @@ fn frame_to_tree_node_at(
             let id = f.self_id.clone()?;
             Some(leaf(id.clone(), "GraphicLine", ElementId::GraphicLine(id)))
         }),
+        // Engine ADR 1039 — an instance is a leaf; the symbol it draws
+        // rides its label.
+        FrameRef::Instance(i) => spread.instances.get(i).and_then(|f| {
+            let id = f.self_id.clone()?;
+            let mut node = leaf(id.clone(), "Instance", ElementId::Instance(id.clone()));
+            node.label = format!("Instance {id} ({})", f.symbol);
+            Some(node)
+        }),
         FrameRef::Group(i) => spread.groups.get(i).map(|g| {
             let id = g.self_id.clone().unwrap_or_else(|| format!("group#{i}"));
             let children = g
@@ -1011,6 +1129,10 @@ fn group_union_aabb(spread: &paged_model::Spread, group_idx: usize) -> Option<pa
                 .get(i)
                 .map(|f| (f.bounds, f.item_transform)),
             FrameRef::Polygon(i) => spread.polygons.get(i).map(|f| (f.bounds, f.item_transform)),
+            FrameRef::Instance(i) => spread
+                .instances
+                .get(i)
+                .map(|f| (f.bounds, Some(f.item_transform))),
             FrameRef::Group(_) => None,
         }?;
         // `transform_bbox` returns the axis-aligned bbox of the
@@ -1123,6 +1245,7 @@ fn story_id_of_logged(entry: &LoggedMutation) -> Option<String> {
         LoggedMutation::Composite(children) => children.iter().find_map(story_id_of_logged),
         // App state, not story content.
         LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => None,
+        LoggedMutation::Reverted(inner) => story_id_of_logged(inner),
     }
 }
 
@@ -1428,6 +1551,27 @@ fn gradient_feather_entry(
                 .map(paged_mutate::operation::GradientFeatherSpec::from_parse),
         )),
     }
+}
+
+/// Engine ADR 1008 — the four effect-stack rows of an effect-bearing
+/// item: each target's stack as the user sees it.
+fn effect_stack_entries(
+    item: &dyn paged_model::effect_stack::EffectBearing,
+) -> Vec<crate::channel::PropertyEntry> {
+    use paged_model::effect_stack::EffectTarget as T;
+    use paged_mutate::PropertyPath as P;
+    [
+        (P::FrameEffectStack, T::Object),
+        (P::FrameFillEffectStack, T::Fill),
+        (P::FrameStrokeEffectStack, T::Stroke),
+        (P::FrameContentEffectStack, T::Content),
+    ]
+    .into_iter()
+    .map(|(path, target)| crate::channel::PropertyEntry {
+        path,
+        value: Some(paged_mutate::operation::effect_stack_value(item, target)),
+    })
+    .collect()
 }
 
 /// W0.4 — read-side mirror of the transparency-effect per-field paths
@@ -1966,6 +2110,9 @@ pub struct CanvasModel {
     /// in the current test harness; this stays as forward-looking
     /// infra for when asset resolvers wire up.
     image_decode_cache: std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>>,
+    /// Engine ADR 1039 — built symbol definitions, per revision, kept
+    /// across rebuilds.
+    symbol_cache: paged_renderer::pipeline::SymbolCache,
     /// ADR 026 — generated-page counts per growing story, carried
     /// from one build to the next so an edit starts from the pages it had
     /// (usually one build) instead of growing from zero.
@@ -2032,6 +2179,9 @@ pub struct CanvasModel {
     /// pour its text, style it, put it on a layer — used to pay that
     /// per child.
     rebuild_deferred: bool,
+    /// Engine ADR 1040 — set while a tracked text edit's lowered batch
+    /// applies, so its own untracked children are not lowered again.
+    tracked_lowering: bool,
     /// Set by a deferred `rebuild_after_mutation`; consumed by the one
     /// build the batch executor runs when its children are done. A batch
     /// whose children changed nothing owes nothing and builds nothing.
@@ -2045,6 +2195,13 @@ pub struct CanvasModel {
     /// than the cap lost its first children to eviction outright, so no
     /// undo could remove them.
     applied_log_cap_held: bool,
+    /// Engine ADR 1030 — how many undo steps the log keeps
+    /// ([`Self::set_history_depth`]); `MAX_APPLIED_LOG` by default.
+    history_depth: usize,
+    /// Engine ADR 1030 — how many steps the depth has evicted since the
+    /// document opened: while `0`, undoing every step reaches the opened
+    /// document.
+    evicted_steps: usize,
     /// ADR 027 §4 — when set, every rebuild is checked against a
     /// cold build ([`Self::digest_gate_check`]) and a difference panics.
     /// Seeded from `PAGED_DIGEST_GATE=1`; a CI / debug lane only.
@@ -2075,6 +2232,9 @@ pub struct CanvasModel {
     /// v67 (RFI C-68) — the session's snapping preferences, shared by
     /// every gesture and by `RequestSnapPoint`.
     pub(crate) snap_settings: crate::snap_point::SnapSettings,
+    /// v77 (editor ADR 287) — how the screen draws the document. Session
+    /// state; no build reads it, only the screen's rasterization.
+    pub(crate) view_settings: crate::view::ViewSettings,
     /// v75 — the session's role and overrides; the document's template
     /// policy applies through them (engine ADR 1000). Session state.
     pub(crate) session_policy: paged_template::SessionPolicy,
@@ -2182,6 +2342,72 @@ fn into_entries(
         .collect()
 }
 
+/// Engine ADR 1018 — the five character additions of one level as the
+/// setters read them back: a flag unset is `""`, a colour unset `None`,
+/// the underline kind its name (`""` unset).
+fn decoration_values(
+    d: &paged_model::CharacterDecorations,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 5] {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let flag = |o: Option<bool>| o.map(V::Bool).unwrap_or(V::Text(String::new()));
+    [
+        (
+            P::CharacterHighlightColor,
+            V::ColorRef(d.highlight_color.clone()),
+        ),
+        (P::CharacterHidden, flag(d.hidden)),
+        (
+            P::CharacterUnderlineType,
+            V::Text(
+                d.underline_kind
+                    .map(|k| k.as_name().to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+        (
+            P::CharacterUnderlineColor,
+            V::ColorRef(d.underline_color.clone()),
+        ),
+        (
+            P::CharacterDoubleStrikethrough,
+            flag(d.double_strikethrough),
+        ),
+    ]
+}
+
+/// Engine ADR 1018 — a level's shading and border paths, read back.
+fn shading_border_values(
+    s: &paged_model::ParagraphShading,
+    b: &paged_model::ParagraphBorder,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 6] {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let flag = |o: Option<bool>| o.map(V::Bool).unwrap_or(V::Text(String::new()));
+    [
+        (P::ParagraphShadingOn, flag(s.on)),
+        (P::ParagraphShadingColor, V::ColorRef(s.color.clone())),
+        (P::ParagraphShadingTint, V::Length(s.tint)),
+        (P::ParagraphBorderOn, flag(b.on)),
+        (P::ParagraphBorderColor, V::ColorRef(b.color.clone())),
+        (P::ParagraphBorderWeight, V::Length(b.weight)),
+    ]
+}
+
+/// One entry per path of `values` (each level's array), collapsed: `None`
+/// when the levels disagree.
+fn collapsed_entries<const N: usize>(
+    values: &[[(paged_mutate::PropertyPath, paged_mutate::Value); N]],
+    paths: [(paged_mutate::PropertyPath, paged_mutate::Value); N],
+) -> Vec<crate::channel::PropertyEntry> {
+    paths
+        .iter()
+        .enumerate()
+        .map(|(i, (path, _))| crate::channel::PropertyEntry {
+            path: *path,
+            value: collapse_uniform(&values.iter().map(|v| v[i].1.clone()).collect::<Vec<_>>()),
+        })
+        .collect()
+}
+
 fn character_style_entries(
     d: &paged_model::CharacterStyleDef,
 ) -> Vec<crate::channel::PropertyEntry> {
@@ -2190,6 +2416,7 @@ fn character_style_entries(
         paged_mutate::PropertyPath::CharacterNoBreak,
         paged_mutate::Value::Bool(d.no_break.unwrap_or(false)),
     ));
+    pairs.extend(decoration_values(&d.decorations));
     into_entries(pairs)
 }
 
@@ -2204,6 +2431,8 @@ fn paragraph_style_entries(
     let count = |o: Option<u32>| V::Length(o.map(|n| n as f32));
     let span = &d.span_columns;
     let mut pairs = style_run_entries!(d);
+    pairs.extend(decoration_values(&d.decorations));
+    pairs.extend(shading_border_values(&d.shading, &d.border));
     pairs.extend([
         (
             P::ParagraphJustification,
@@ -2442,6 +2671,36 @@ const AMEND_ORIGINS_CAP: usize = 256;
 pub struct AppliedRecord {
     pub applied_seq: u64,
     pub kind: LoggedMutation,
+    /// Engine ADR 1030 — the step's name. Set by the entry point that
+    /// logged it (the caller's explicit label, else the default of the
+    /// wire mutation or gesture); `None` reads as the default of `kind`
+    /// ([`crate::undo_label::for_logged`]).
+    pub label: Option<crate::undo_label::UndoLabel>,
+}
+
+/// Engine ADR 1030 — one named step of the undo timeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndoLogEntry {
+    /// The step's `applied_seq` — what `UndoTo` / `RedoTo` name.
+    pub applied_seq: u64,
+    pub label: crate::undo_label::UndoLabel,
+}
+
+/// Engine ADR 1030 — the named undo timeline ([`CanvasModel::undo_log`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndoLog {
+    /// Oldest first; the last entry is the step an undo reverts.
+    pub undo: Vec<UndoLogEntry>,
+    /// Next redo first.
+    pub redo: Vec<UndoLogEntry>,
+    /// The whole log's length (`undo` may be cut to the limit).
+    pub undo_len: usize,
+    pub redo_len: usize,
+    /// The history depth in force.
+    pub depth: usize,
+    /// Steps the depth evicted since the document opened (`0`: the oldest
+    /// undo step is the document's first edit).
+    pub evicted: usize,
 }
 
 /// W1.24 (audit B18) — per-rebuild timing + size instrumentation.
@@ -2530,6 +2789,12 @@ pub enum LoggedMutation {
         prev: Box<Mutation>,
         next: Box<Mutation>,
     },
+    /// v77 (engine ADR 1030) — a step that REVERSES the steps it holds:
+    /// applying it reverts `inner`, undoing it replays `inner`. A snapshot
+    /// restore (`restore_to`) logs the steps it walked back as one of
+    /// these, so going back to a snapshot is ONE new undo step instead of a
+    /// move along the history (the steps it reverted stay recoverable).
+    Reverted(Box<LoggedMutation>),
 }
 
 impl CanvasModel {
@@ -2555,6 +2820,11 @@ impl CanvasModel {
             let opened =
                 paged_renderer::container::open_document(bytes).map_err(LoadError::Parse)?;
             let mut doc = opened.document;
+            // Engine ADR 1039 — an IDML this engine wrote carries its
+            // symbols as labelled artwork; bring the instances back.
+            if !opened.from_model_part {
+                paged_mutate::restore_symbols_from_labels(&mut doc);
+            }
             if opened.from_model_part {
                 // The IDML parts beside the model keep each next /
                 // previous page number in a range of its own; cut the
@@ -2647,6 +2917,8 @@ impl CanvasModel {
                 // EPS/PDF ghost-cross); export builds keep the default
                 // `false` so output stays pixel-faithful.
                 degraded_asset_markers: true,
+                // Engine ADR 1037 — the first build is a live one too.
+                image_adjust_px_per_pt: Some(LIVE_IMAGE_ADJUST_PX_PER_PT),
                 ..PipelineOptions::default()
             };
             // Phase 4 Step 1 — install an empty cache for the initial
@@ -2729,6 +3001,7 @@ impl CanvasModel {
             // above; subsequent rebuild_after_mutation calls share
             // this RefCell so decode cost amortises.
             image_decode_cache,
+            symbol_cache: paged_renderer::pipeline::SymbolCache::default(),
             grow_hint,
             // Perf-FontTable — built once above and reused by every
             // rebuild_after_mutation.
@@ -2754,8 +3027,11 @@ impl CanvasModel {
             },
             pending_op_apply_ms: 0.0,
             rebuild_deferred: false,
+            tracked_lowering: false,
             rebuild_owed: false,
             applied_log_cap_held: false,
+            history_depth: MAX_APPLIED_LOG,
+            evicted_steps: 0,
             digest_gate: std::env::var("PAGED_DIGEST_GATE").is_ok_and(|v| v == "1"),
             keep_seeds: Default::default(),
             pending_keep_hints: HashMap::new(),
@@ -2764,6 +3040,7 @@ impl CanvasModel {
             pending_edit_spans: HashMap::new(),
             build_generation: 0,
             snap_settings: Default::default(),
+            view_settings: Default::default(),
             session_policy: Default::default(),
             snap_index: None,
             emission_prints: Default::default(),
@@ -2883,9 +3160,16 @@ impl CanvasModel {
             page_count: self.built.pages.len(),
             page_ids,
             page_sizes_pt,
+            page_origins_pt: self.page_origins_pt(),
             stats,
             ruler_guides,
         }
+    }
+
+    /// Engine ADR 1011 — every page's top-left on the canvas, pt, in
+    /// document order (`BuiltPage::canvas_origin`).
+    pub fn page_origins_pt(&self) -> Vec<(f32, f32)> {
+        self.built.pages.iter().map(|p| p.canvas_origin).collect()
     }
 
     pub fn page_count(&self) -> usize {
@@ -2917,7 +3201,47 @@ impl CanvasModel {
     /// the list of affected page ids (caller invalidates the LOD
     /// cache for them). Rebuild is full + synchronous —
     /// "correctness, not pessimisation" (see plan §Item 5).
+    ///
+    /// Engine ADR 1030 — the step it logs is named after `mutation`
+    /// ([`crate::undo_label::for_mutation`]); [`Self::apply_mutation_labeled`]
+    /// names it after the caller instead.
     pub fn apply_mutation(
+        &mut self,
+        mutation: &Mutation,
+    ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        let outcome = self.apply_mutation_unlabeled(mutation)?;
+        // The outermost call names the step last, so a `Set` reads as the
+        // property it wrote and a batch as its children, not as the op one
+        // of them lowered to.
+        if self.top_step_is(outcome.applied_seq) {
+            let label = crate::undo_label::for_mutation(mutation);
+            self.set_step_label(outcome.applied_seq, label);
+        }
+        Ok(outcome)
+    }
+
+    /// Engine ADR 1040 — the date the tracked changes recorded from now on
+    /// carry (ISO 8601): the host's clock, stamped before each edit. The
+    /// engine reads no clock of its own.
+    pub fn set_review_clock(&mut self, date: Option<String>) {
+        self.scene.designmap.document_preference.review_clock = date;
+    }
+
+    /// Engine ADR 1030 — [`Self::apply_mutation`], with the undo step named
+    /// `label` (the caller's words; blank keeps the default).
+    pub fn apply_mutation_labeled(
+        &mut self,
+        mutation: &Mutation,
+        label: Option<&str>,
+    ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        let outcome = self.apply_mutation(mutation)?;
+        if let Some(label) = label.and_then(crate::undo_label::UndoLabel::explicit) {
+            self.set_step_label(outcome.applied_seq, label);
+        }
+        Ok(outcome)
+    }
+
+    fn apply_mutation_unlabeled(
         &mut self,
         mutation: &Mutation,
     ) -> Result<MutationOutcome, crate::channel::WorkerError> {
@@ -2925,6 +3249,19 @@ impl CanvasModel {
         // author (an unknown composer) is refused before anything runs.
         refuse_unauthorable(mutation)?;
         self.refuse_unpermitted(mutation)?;
+        // Engine ADR 1040 — while the document tracks changes, a text edit
+        // is recorded: lowered to one batch of the untracked edit and the
+        // changes it makes (`review::lower_tracked`).
+        if !self.tracked_lowering
+            && self.scene.designmap.document_preference.track_changes == Some(true)
+        {
+            if let Some(ops) = crate::review::lower_tracked(&self.scene, mutation) {
+                self.tracked_lowering = true;
+                let outcome = self.apply_mutation_unlabeled(&Mutation::Batch { ops });
+                self.tracked_lowering = false;
+                return outcome;
+            }
+        }
         // A colour written as a swatch ADDRESS is stored as the swatch's
         // `Self` id — the only form the renderer resolves.
         if let Some(normalized) = self.normalize_color_refs(mutation) {
@@ -2957,6 +3294,7 @@ impl CanvasModel {
                                 prev: Box::new(prev),
                                 next: Box::new(m),
                             },
+                            label: None,
                         });
                         self.redo_log.clear();
                         Ok(outcome)
@@ -3218,6 +3556,27 @@ impl CanvasModel {
         // (carries an inverse `TextOp`), so frame-shape mutations
         // synthesise an empty text op into the response. Future
         // convergence folds both into one shape.
+        // Engine ADR 1021 — a find-and-replace is the batch of the edits it
+        // makes, so Replace All is one undo step.
+        if let Mutation::FindReplace {
+            spec,
+            replace,
+            replace_all,
+            paragraph_style,
+            character_style,
+        } = mutation
+        {
+            let batch = self
+                .lower_find_replace(
+                    spec,
+                    replace,
+                    *replace_all,
+                    paragraph_style.as_deref(),
+                    character_style.as_deref(),
+                )
+                .map_err(|what| crate::channel::WorkerError::NotImplemented { what })?;
+            return self.apply_mutation(&batch);
+        }
         let lowered = match mutation {
             // Reads the layout, so it lowers here, where a build a batch
             // still owes can be settled first.
@@ -3229,6 +3588,54 @@ impl CanvasModel {
             Mutation::ConvertNoteToText { note_id } => {
                 Some(self.lower_convert_note_to_text(note_id)?)
             }
+            // Engine ADR 1022 — these read the layout too.
+            Mutation::UpdateFields {
+                story_id,
+                offset,
+                now,
+            } => Some(self.lower_update_fields(story_id.as_deref(), *offset, now.as_deref())?),
+            Mutation::InsertField {
+                story_id,
+                offset,
+                field: paged_mutate::operation::FieldKind::Word { code, result: None },
+                content_offset,
+            } => Some(self.lower_insert_word_field(story_id, *offset, *content_offset, code)?),
+            Mutation::InsertCrossReference {
+                story_id,
+                offset,
+                content_offset,
+                target,
+                refer_to,
+                hyperlink,
+            } => Some(self.lower_insert_cross_reference(
+                story_id,
+                *offset,
+                *content_offset,
+                target,
+                *refer_to,
+                hyperlink.unwrap_or(true),
+            )?),
+            Mutation::InsertTableOfContents {
+                story_id,
+                offset,
+                content_offset,
+                levels,
+                title,
+                toc_style_name,
+                page_numbers,
+                leader,
+                tab_position,
+            } => Some(self.lower_insert_toc(
+                story_id,
+                *offset,
+                *content_offset,
+                levels,
+                title.as_deref(),
+                toc_style_name.as_deref(),
+                page_numbers.unwrap_or(true),
+                leader.as_deref(),
+                *tab_position,
+            )?),
             _ => self.try_translate_frame_mutation_to_operation(mutation, &mut 0),
         };
         if let Some(op) = lowered {
@@ -3248,6 +3655,7 @@ impl CanvasModel {
                 Mutation::Batch { .. }
                     | Mutation::DuplicateElements { .. }
                     | Mutation::PasteElements { .. }
+                    | Mutation::OverrideMasterItems { .. }
             ) {
                 created_element_ids(&self.scene, &outcome.applied.op)
                     .into_iter()
@@ -3456,6 +3864,7 @@ impl CanvasModel {
                 op: text_op,
                 inverse: applied.inverse.clone(),
             },
+            label: None,
         });
         self.redo_log.clear();
         Ok(MutationOutcome {
@@ -3630,6 +4039,7 @@ impl CanvasModel {
                 self.push_applied(AppliedRecord {
                     applied_seq,
                     kind: LoggedMutation::Defaults { prev, next },
+                    label: None,
                 });
                 continue;
             }
@@ -3710,6 +4120,7 @@ impl CanvasModel {
             self.push_applied(AppliedRecord {
                 applied_seq,
                 kind: LoggedMutation::Composite(entries),
+                label: None,
             });
         }
         self.redo_log.clear();
@@ -3787,11 +4198,15 @@ impl CanvasModel {
     fn story_of_element(&self, id: &crate::element_selection::ElementId) -> Option<String> {
         use crate::element_selection::ElementId;
         match id {
+            // A master's frames too (engine ADR 1026: an insert on a master
+            // binds its story).
             ElementId::TextFrame(frame_id) => self
                 .scene
                 .spreads
                 .iter()
-                .flat_map(|parsed| parsed.spread.text_frames.iter())
+                .map(|parsed| &parsed.spread)
+                .chain(self.scene.master_spreads.values().map(|m| &m.spread))
+                .flat_map(|spread| spread.text_frames.iter())
                 .find(|f| f.self_id.as_deref() == Some(frame_id.as_str()))
                 .and_then(|f| f.parent_story.clone()),
             ElementId::StoryRange { story_id, .. }
@@ -3841,6 +4256,13 @@ impl CanvasModel {
                     next: next.clone(),
                 }
             }
+            // ADR 1030 — the step's forward effect is its inner steps'
+            // reversal; their inverses stay as captured (the state they run
+            // against is the one they were captured from).
+            LoggedMutation::Reverted(inner) => {
+                self.revert_logged(inner);
+                LoggedMutation::Reverted(inner.clone())
+            }
         })
     }
 
@@ -3869,6 +4291,9 @@ impl CanvasModel {
             // unlogged app-state writes, so this adds no record of its own.
             LoggedMutation::AppState { prev, .. } => {
                 let _ = self.apply_mutation(prev);
+            }
+            LoggedMutation::Reverted(inner) => {
+                let _ = self.replay_logged(inner);
             }
         }
     }
@@ -3921,9 +4346,9 @@ impl CanvasModel {
                 })
             }
             Mutation::InsertFrame { page_id, bounds } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
                 // Append to the kind vec = top of the z-order.
-                let position = self.scene.spreads[idx].spread.rectangles.len();
+                let position = sp.rectangles.len();
                 let d = &self.document_defaults;
                 Some(Operation::InsertNode {
                     parent: NodeId::Spread(spread_id),
@@ -3944,8 +4369,8 @@ impl CanvasModel {
                 })
             }
             Mutation::InsertTextFrame { page_id, bounds } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
-                let position = self.scene.spreads[idx].spread.text_frames.len();
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
+                let position = sp.text_frames.len();
                 // Mint the frame's ParentStory id here (the apply layer
                 // creates the story for an unknown id) — every wire-
                 // inserted text frame is immediately pour-able/hit-able.
@@ -4006,8 +4431,8 @@ impl CanvasModel {
                 start,
                 end,
             } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
-                let position = self.scene.spreads[idx].spread.graphic_lines.len();
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
+                let position = sp.graphic_lines.len();
                 let s = [start.0 + ox, start.1 + oy];
                 let e = [end.0 + ox, end.1 + oy];
                 let corner = |p: [f32; 2]| paged_mutate::operation::PathAnchorSpec {
@@ -4049,8 +4474,8 @@ impl CanvasModel {
                 open,
                 smooth,
             } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
-                let position = self.scene.spreads[idx].spread.polygons.len();
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
+                let position = sp.polygons.len();
                 let mut conv: Vec<paged_mutate::operation::PathAnchorSpec> = anchors
                     .iter()
                     .map(|a| paged_mutate::operation::PathAnchorSpec {
@@ -4228,6 +4653,7 @@ impl CanvasModel {
                 delta,
                 join,
                 miter_limit,
+                side,
             } => Some(Operation::SetProperty {
                 node: path_node_id_for(element_id)?,
                 path: PropertyPath::OffsetPath,
@@ -4235,6 +4661,7 @@ impl CanvasModel {
                     delta: *delta,
                     join: join.clone(),
                     miter_limit: *miter_limit,
+                    side: side.clone(),
                     prev_anchors: None,
                     prev_subpath_starts: None,
                     prev_subpath_open: None,
@@ -4319,6 +4746,7 @@ impl CanvasModel {
                 mask_id,
                 mask_type,
                 invert,
+                clip,
             } => Some(Operation::ApplyOpacityMask {
                 target: element_to_leaf_node_id(target_id)?,
                 mask: element_to_leaf_node_id(mask_id)?,
@@ -4327,6 +4755,7 @@ impl CanvasModel {
                     _ => paged_mutate::OpacityMaskMode::Luminosity,
                 },
                 invert: invert.unwrap_or(false),
+                clip: clip.unwrap_or(true),
             }),
             Mutation::ReleaseOpacityMask { target_id } => Some(Operation::ReleaseOpacityMask {
                 target: element_to_leaf_node_id(target_id)?,
@@ -4914,10 +5343,46 @@ impl CanvasModel {
                 path: *path,
                 value: value.clone(),
             }),
+            // Engine ADR 1018.
+            Mutation::SetStyleBasedOn {
+                collection,
+                style_id,
+                based_on,
+            } => Some(Operation::SetStyleBasedOn {
+                collection: *collection,
+                style_id: style_id.clone(),
+                based_on: based_on.clone(),
+            }),
+            Mutation::SetListLevel {
+                story_id,
+                start,
+                end,
+                level,
+                delta,
+            } => Some(Operation::SetListLevel {
+                story_id: story_id.clone(),
+                start: *start,
+                end: *end,
+                level: *level,
+                delta: *delta,
+            }),
+            Mutation::RestartNumbering {
+                story_id,
+                start,
+                end,
+                start_at,
+                continue_numbering,
+            } => Some(Operation::RestartNumbering {
+                story_id: story_id.clone(),
+                start: *start,
+                end: *end,
+                start_at: *start_at,
+                continue_numbering: *continue_numbering,
+            }),
             // ── W0.5 wire-expansion ─────────────────────────────────
             Mutation::InsertOval { page_id, bounds } => {
-                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
-                let position = self.scene.spreads[idx].spread.ovals.len();
+                let (spread_id, (ox, oy), sp) = self.page_insert_context(page_id)?;
+                let position = sp.ovals.len();
                 let d = &self.document_defaults;
                 Some(Operation::InsertNode {
                     parent: NodeId::Spread(spread_id),
@@ -4982,6 +5447,7 @@ impl CanvasModel {
                 height: *height,
                 image_uri: image_uri.clone(),
                 self_id: self.mint_page_item_id_with_offset(mint_offset),
+                restore: None,
             }),
             Mutation::InsertHyperlink {
                 story_id,
@@ -5010,6 +5476,28 @@ impl CanvasModel {
                     },
                     hyperlink_id: format!("Hyperlink/{base}"),
                     page: page.as_ref().map(|p| p.0.clone()),
+                })
+            }
+            // Engine ADR 1026 — a clickable item: the source, link and
+            // destination share one minted suffix, as a text link's do.
+            Mutation::InsertItemHyperlink {
+                item,
+                url,
+                page,
+                name,
+            } => {
+                let base = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::InsertItemHyperlink {
+                    item_id: item.clone(),
+                    url: url.clone(),
+                    page: page.as_ref().map(|p| p.0.clone()),
+                    name: name.clone(),
+                    source_id: format!("HyperlinkPageItemSource/{base}"),
+                    dest_id: match page {
+                        Some(_) => format!("HyperlinkPageDestination/{base}"),
+                        None => format!("HyperlinkURLDestination/{base}"),
+                    },
+                    hyperlink_id: format!("Hyperlink/{base}"),
                 })
             }
             Mutation::InsertFootnote {
@@ -5079,6 +5567,127 @@ impl CanvasModel {
                     offset: *offset,
                 })
             }
+            // Engine ADR 1040 — tracked changes recorded and resolved.
+            Mutation::RecordChange {
+                story_id,
+                start,
+                end,
+                cell,
+                paragraph,
+                change,
+            } => Some(Operation::RecordChange {
+                story_id: story_id.clone(),
+                cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                    table_id: c.table_id.clone(),
+                    row: c.row,
+                    col: c.col,
+                }),
+                start: *start,
+                end: *end,
+                paragraph: *paragraph,
+                change: paged_mutate::ChangeSpec {
+                    // The engine names a new change before it applies, so
+                    // the redo of an undone record lands on the same id.
+                    id: change.id.clone().or_else(|| {
+                        (!matches!(
+                            change.kind,
+                            paged_mutate::ChangeSpecKind::Insert
+                                | paged_mutate::ChangeSpecKind::Delete
+                        ))
+                        .then(|| paged_mutate::next_change_id(&self.scene))
+                    }),
+                    ..change.clone()
+                },
+            }),
+            Mutation::AcceptChange {
+                story_id,
+                id,
+                author,
+            } => Some(Operation::AcceptChange {
+                story_id: story_id.clone(),
+                id: id.clone(),
+                author: author.clone(),
+            }),
+            Mutation::RejectChange {
+                story_id,
+                id,
+                author,
+            } => Some(Operation::RejectChange {
+                story_id: story_id.clone(),
+                id: id.clone(),
+                author: author.clone(),
+            }),
+            // Engine ADR 1020 — comments.
+            Mutation::InsertComment {
+                story_id,
+                start,
+                end,
+                cell,
+                comment,
+            } => Some(Operation::InsertComment {
+                story_id: story_id.clone(),
+                cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                    table_id: c.table_id.clone(),
+                    row: c.row,
+                    col: c.col,
+                }),
+                start: *start,
+                end: *end,
+                comment: paged_mutate::CommentSpec {
+                    id: comment
+                        .id
+                        .clone()
+                        .or_else(|| Some(paged_mutate::next_comment_id(&self.scene))),
+                    // A comment inserted on a range is a thread's root.
+                    parent_id: None,
+                    ..comment.clone()
+                },
+            }),
+            Mutation::ReplyComment { parent_id, comment } => {
+                let story_id = paged_mutate::comment_story(&self.scene, parent_id)?;
+                // A reply to a reply joins its thread's root, as Word's do.
+                let root = self
+                    .scene
+                    .stories
+                    .iter()
+                    .flat_map(|s| s.story.comments.iter())
+                    .find(|c| &c.id == parent_id)
+                    .and_then(|c| c.parent.clone())
+                    .unwrap_or_else(|| parent_id.clone());
+                Some(Operation::InsertComment {
+                    story_id,
+                    cell: None,
+                    start: 0,
+                    end: 0,
+                    comment: paged_mutate::CommentSpec {
+                        id: comment
+                            .id
+                            .clone()
+                            .or_else(|| Some(paged_mutate::next_comment_id(&self.scene))),
+                        parent_id: Some(root),
+                        ..comment.clone()
+                    },
+                })
+            }
+            Mutation::ResolveComment {
+                comment_id,
+                resolved,
+            } => Some(Operation::ResolveComment {
+                comment_id: comment_id.clone(),
+                resolved: *resolved,
+            }),
+            Mutation::DeleteComment { comment_id } => Some(Operation::DeleteComment {
+                comment_id: comment_id.clone(),
+            }),
+            Mutation::EditComment {
+                comment_id,
+                text,
+                date,
+            } => Some(Operation::EditComment {
+                comment_id: comment_id.clone(),
+                text: text.clone(),
+                date: date.clone(),
+            }),
             Mutation::InsertEndnote {
                 story_id,
                 offset,
@@ -5131,6 +5740,42 @@ impl CanvasModel {
             Mutation::DeleteBookmark { bookmark_id } => Some(Operation::DeleteBookmark {
                 bookmark_id: bookmark_id.clone(),
             }),
+            // Engine ADR 1022 — Word's bookmarks and index markers.
+            Mutation::InsertTextAnchor {
+                story_id,
+                offset,
+                content_offset,
+                name,
+            } => {
+                let (paragraph, local) = self.paragraph_at(story_id, *offset, *content_offset)?;
+                let base = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::InsertTextAnchor {
+                    story_id: story_id.clone(),
+                    paragraph,
+                    offset: local,
+                    self_id: format!("HyperlinkTextDestination/{base}"),
+                    name: Some(name.clone()),
+                    index: None,
+                })
+            }
+            Mutation::DeleteTextAnchor { anchor_id } => Some(Operation::DeleteTextAnchor {
+                anchor_id: anchor_id.clone(),
+            }),
+            Mutation::InsertIndexMarker {
+                story_id,
+                offset,
+                content_offset,
+                topic,
+                sort_order,
+            } => {
+                let (paragraph, _) = self.paragraph_at(story_id, *offset, *content_offset)?;
+                Some(Operation::InsertIndexMarker {
+                    story_id: story_id.clone(),
+                    paragraph,
+                    topic: topic.clone(),
+                    sort_order: sort_order.clone(),
+                })
+            }
             Mutation::RenameBookmark { bookmark_id, name } => Some(Operation::RenameBookmark {
                 bookmark_id: bookmark_id.clone(),
                 name: name.clone(),
@@ -5315,16 +5960,119 @@ impl CanvasModel {
             } => self
                 .lower_paste(snippet, page_id, *center, mint_offset)
                 .ok(),
+            // Engine ADR 1039 — symbols. The ids are minted here, on the
+            // inserts' number lines; the kernel validates.
+            Mutation::CreateSymbol {
+                name,
+                element_ids,
+                symbol_id,
+                replace,
+                nine_slice,
+            } => {
+                let replace = replace.unwrap_or(true);
+                Some(Operation::CreateSymbol {
+                    symbol_id: symbol_id
+                        .clone()
+                        .unwrap_or_else(|| self.mint_symbol_id(*mint_offset)),
+                    name: name.clone(),
+                    sources: element_ids.iter().map(element_to_node_id).collect(),
+                    replace,
+                    instance_id: replace.then(|| self.mint_page_item_id_with_offset(mint_offset)),
+                    nine_slice: *nine_slice,
+                })
+            }
+            // Engine ADR 1042 — the item becomes what its vector effects
+            // describe; the kernel bakes and refuses.
+            Mutation::ExpandAppearance { element_id } => Some(Operation::ExpandAppearance {
+                node: element_to_node_id(element_id),
+                restore: None,
+            }),
+            Mutation::RedefineSymbol {
+                symbol_id,
+                element_ids,
+                name,
+                nine_slice,
+                replace,
+            } => {
+                let replace = !element_ids.is_empty() && replace.unwrap_or(true);
+                Some(Operation::RedefineSymbol {
+                    symbol_id: symbol_id.clone(),
+                    sources: element_ids.iter().map(element_to_node_id).collect(),
+                    name: name.clone(),
+                    nine_slice: nine_slice.clone(),
+                    replace,
+                    instance_id: replace.then(|| self.mint_page_item_id_with_offset(mint_offset)),
+                })
+            }
+            Mutation::PlaceSymbolInstance {
+                symbol_id,
+                page_id,
+                at,
+                linear,
+                nine_slice,
+            } => {
+                let (spread_id, (ox, oy), _) = self.page_insert_context(page_id)?;
+                let (x, y) = match at {
+                    Some(p) => *p,
+                    None => {
+                        let page = self
+                            .scene
+                            .spreads
+                            .iter()
+                            .flat_map(|s| s.spread.pages.iter())
+                            .find(|p| p.self_id.as_deref() == Some(page_id.as_str()))?;
+                        (page.bounds.width() / 2.0, page.bounds.height() / 2.0)
+                    }
+                };
+                let [a, b, c, d] = linear.unwrap_or([1.0, 0.0, 0.0, 1.0]);
+                Some(Operation::PlaceSymbolInstance {
+                    symbol_id: symbol_id.clone(),
+                    spread: spread_id,
+                    transform: [a, b, c, d, x + ox, y + oy],
+                    instance_id: Some(self.mint_page_item_id_with_offset(mint_offset)),
+                    nine_slice: *nine_slice,
+                })
+            }
+            Mutation::BreakSymbolLink { element_id } => {
+                let instance = element_id.raw_id().to_string();
+                let demand = paged_mutate::symbol_break_demand(&self.scene, &instance)?;
+                let ids = (0..demand.items)
+                    .map(|_| self.mint_page_item_id_with_offset(mint_offset))
+                    .collect();
+                let story_ids = self.mint_story_ids(demand.stories, *mint_offset);
+                Some(Operation::BreakSymbolLink {
+                    instance,
+                    ids,
+                    story_ids,
+                })
+            }
+            Mutation::DeleteSymbol { symbol_id } => Some(Operation::DeleteSymbol {
+                symbol_id: symbol_id.clone(),
+            }),
             Mutation::SetFlowGrowRule {
                 story_id,
                 grow,
                 max_pages,
                 copy_frame_options,
+                master,
+                first_master,
+                even_master,
+                section_start,
             } => Some(Operation::SetFlowGrowRule {
                 story_id: story_id.clone(),
                 rule: grow.then(|| paged_model::FlowGrowRule {
                     max_pages: *max_pages,
                     copy_frame_options: copy_frame_options.unwrap_or(false),
+                    master: master.clone(),
+                    first_master: first_master.clone(),
+                    even_master: even_master.clone(),
+                    section_start: match section_start.unwrap_or_default() {
+                        paged_wire::SectionStartSpec::NewPage => paged_model::SectionStart::NewPage,
+                        paged_wire::SectionStartSpec::OddPage => paged_model::SectionStart::OddPage,
+                        paged_wire::SectionStartSpec::EvenPage => {
+                            paged_model::SectionStart::EvenPage
+                        }
+                    },
                 }),
             }),
             Mutation::ActivateConditionSet { set } => {
@@ -5363,9 +6111,41 @@ impl CanvasModel {
                 master_id: master.clone(),
                 name: name.clone(),
             }),
+            Mutation::SetPageOverrides { page, overrides } => Some(Operation::SetPageOverrides {
+                page: page.0.clone(),
+                overrides: overrides.clone(),
+            }),
+            // Engine ADR 1026 — the copies' ids are minted here, from the
+            // same number lines as a paste's.
+            Mutation::OverrideMasterItems {
+                page,
+                items,
+                empty_text,
+            } => {
+                let copy =
+                    paged_mutate::override_copy(&self.scene, page.as_str(), items, *empty_text)
+                        .ok()?;
+                let demand = paged_mutate::snippet_demand(&copy.snippet);
+                let story_ids = self.mint_story_ids(demand.stories, *mint_offset);
+                let ids = (0..demand.items)
+                    .map(|_| self.mint_page_item_id_with_offset(mint_offset))
+                    .collect();
+                Some(Operation::OverrideMasterItems {
+                    page: page.0.clone(),
+                    items: items.clone(),
+                    ids,
+                    story_ids,
+                    empty_text: *empty_text,
+                })
+            }
             Mutation::MovePage { page, after } => Some(Operation::MovePage {
                 page_id: page.0.clone(),
                 after_page_id: after.as_ref().map(|a| a.0.clone()),
+            }),
+            Mutation::PlacePage { page, origin_pt } => Some(Operation::SetProperty {
+                node: NodeId::Page(page.0.clone()),
+                path: PropertyPath::PageCanvasOrigin,
+                value: Value::Lengths(origin_pt.map(|(x, y)| vec![x, y]).unwrap_or_default()),
             }),
             Mutation::DuplicatePage { page } => Some(Operation::DuplicatePage {
                 page: page.0.clone(),
@@ -5661,6 +6441,18 @@ impl CanvasModel {
         }
     }
 
+    /// Engine ADR 1039 — a fresh symbol id, `Symbol/u<n>`.
+    fn mint_symbol_id(&self, offset: u64) -> String {
+        let mut n = self.scene.symbols.len() + 1 + offset as usize;
+        loop {
+            let id = format!("Symbol/u{n}");
+            if self.scene.symbol(&id).is_none() {
+                return id;
+            }
+            n += 1;
+        }
+    }
+
     pub(crate) fn mint_page_item_id_with_offset(&self, offset: &mut u64) -> String {
         let max = paged_mutate::ids::highest_u_hex_id(&self.scene).max(self.source_id_floor);
         let id = format!("u{:x}", max + 1 + *offset);
@@ -5714,12 +6506,28 @@ impl CanvasModel {
     pub(crate) fn page_insert_context(
         &self,
         page_id: &PageId,
-    ) -> Option<(String, (f32, f32), usize)> {
+    ) -> Option<(String, (f32, f32), &paged_model::Spread)> {
+        // Engine ADR 1026 — a master page: an insert wrapped in `onMaster`
+        // lands on the master spread, which is the only spread it sees.
+        if let Some(m) = self.master_of_page(page_id) {
+            let page = m
+                .spread
+                .pages
+                .iter()
+                .find(|p| p.self_id.as_deref() == Some(page_id.as_str()))?;
+            let b = crate::hit::transform_bbox(page.bounds, page.item_transform);
+            let id = m
+                .spread
+                .self_id
+                .clone()
+                .unwrap_or_else(|| m.self_id.clone());
+            return Some((id, (b.left, b.top), &m.spread));
+        }
         let origin = match self.page(page_id) {
             Some(p) => p.spread_origin,
             None => self.scene_page_origin(page_id)?,
         };
-        let (idx, parsed) = self.scene.spreads.iter().enumerate().find(|(_, parsed)| {
+        let parsed = self.scene.spreads.iter().find(|parsed| {
             parsed
                 .spread
                 .pages
@@ -5734,7 +6542,7 @@ impl CanvasModel {
             .self_id
             .clone()
             .unwrap_or_else(|| parsed.src.clone());
-        Some((spread_id, origin, idx))
+        Some((spread_id, origin, &parsed.spread))
     }
 
     pub(crate) fn resolve_frame_node_id(&self, frame_id: &str) -> Option<paged_mutate::NodeId> {
@@ -5754,6 +6562,7 @@ impl CanvasModel {
                     | (K::Oval, paged_mutate::NodeId::Oval(_))
                     | (K::Polygon, paged_mutate::NodeId::Polygon(_))
                     | (K::GraphicLine, paged_mutate::NodeId::GraphicLine(_))
+                    | (K::Instance, paged_mutate::NodeId::Instance(_))
                     | (K::Frame, _)
             );
             return matches.then_some(node);
@@ -5798,6 +6607,14 @@ impl CanvasModel {
                 .any(|o| o.self_id.as_deref() == Some(frame_id))
             {
                 return Some(paged_mutate::NodeId::Oval(frame_id.to_string()));
+            }
+            // Draw ADR 365 — a symbol instance deletes like a frame (the
+            // Symbol Sprayer's Alt-drag, a script's `deleteFrame`).
+            if s.instances
+                .iter()
+                .any(|i| i.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::Instance(frame_id.to_string()));
             }
         }
         None
@@ -5976,6 +6793,7 @@ impl CanvasModel {
         self.push_applied(AppliedRecord {
             applied_seq,
             kind: LoggedMutation::Frame(applied.clone()),
+            label: None,
         });
         self.redo_log.clear();
         Ok(FrameMutationOutcome {
@@ -6027,6 +6845,11 @@ impl CanvasModel {
             LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => {
                 self.revert_logged(&rec.kind);
                 None
+            }
+            // ADR 1030 — undoing a restore replays what it reverted.
+            LoggedMutation::Reverted(inner) => {
+                self.revert_logged(&rec.kind);
+                story_id_of_logged(inner)
             }
         };
         // Perf-MasterText + Perf-BodyStory — undo replays an inverse
@@ -6096,6 +6919,9 @@ impl CanvasModel {
             LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => {
                 (self.replay_logged(&rec.kind)?, None)
             }
+            LoggedMutation::Reverted(inner) => {
+                (self.replay_logged(&rec.kind)?, story_id_of_logged(inner))
+            }
         };
         // Perf-MasterText + Perf-BodyStory — same invariant as undo():
         // the replayed op mutates content/structure under the caches.
@@ -6109,6 +6935,7 @@ impl CanvasModel {
         self.push_applied(AppliedRecord {
             applied_seq: redone_seq,
             kind: new_kind,
+            label: rec.label,
         });
         // Engine ADR 1004 — history moved: the replayed entry is not one a
         // follow-up write may join.
@@ -6161,6 +6988,7 @@ impl CanvasModel {
                 log.push(AppliedRecord {
                     applied_seq,
                     kind: LoggedMutation::Composite(children),
+                    label: Some(crate::undo_label::for_script()),
                 });
             }
         };
@@ -6216,6 +7044,14 @@ impl CanvasModel {
             return;
         }
         let records: Vec<AppliedRecord> = self.applied_log.drain(base - 1..).collect();
+        // Engine ADR 1030 — the amended step keeps its name: the write that
+        // joined it is a consequence of the edit, not a new edit.
+        let label = records.first().map(|first| {
+            first
+                .label
+                .clone()
+                .unwrap_or_else(|| crate::undo_label::for_logged(&first.kind))
+        });
         if let Some(first) = records.first() {
             if first.applied_seq != applied_seq {
                 self.amend_origins.push((applied_seq, first.applied_seq));
@@ -6237,7 +7073,11 @@ impl CanvasModel {
         } else {
             LoggedMutation::Composite(children)
         };
-        self.applied_log.push(AppliedRecord { applied_seq, kind });
+        self.applied_log.push(AppliedRecord {
+            applied_seq,
+            kind,
+            label,
+        });
         self.redo_log.clear();
         self.amend_anchor = Some(applied_seq);
     }
@@ -6290,6 +7130,219 @@ impl CanvasModel {
         let outcome = self.apply_mutation(mutation)?;
         self.fold_amend(base, outcome.applied_seq);
         Ok(outcome)
+    }
+
+    /// Engine ADR 1030 — is the step `applied_seq` the top of the undo log?
+    fn top_step_is(&self, applied_seq: u64) -> bool {
+        self.applied_log
+            .last()
+            .is_some_and(|r| r.applied_seq == applied_seq)
+    }
+
+    /// Engine ADR 1030 — name the undo step `applied_seq`, when it is the
+    /// top of the undo log (the step a write just made). Returns whether it
+    /// was named; a write that logged no step names nothing.
+    pub fn set_step_label(
+        &mut self,
+        applied_seq: u64,
+        label: crate::undo_label::UndoLabel,
+    ) -> bool {
+        match self.applied_log.last_mut() {
+            Some(top) if top.applied_seq == applied_seq => {
+                top.label = Some(label);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Engine ADR 1030 — the history depth: how many undo steps the log
+    /// keeps (oldest evicted first). [`MAX_APPLIED_LOG`] unless a host set
+    /// less with [`Self::set_history_depth`].
+    pub fn history_depth(&self) -> usize {
+        self.history_depth
+    }
+
+    /// Engine ADR 1030 — keep at most `depth` undo steps (clamped to
+    /// `1..=MAX_APPLIED_LOG`); a shallower depth evicts the oldest steps
+    /// now. Returns the depth in force.
+    pub fn set_history_depth(&mut self, depth: usize) -> usize {
+        self.history_depth = depth.clamp(1, MAX_APPLIED_LOG);
+        self.enforce_applied_log_cap();
+        self.history_depth
+    }
+
+    /// Engine ADR 1030 — the named undo timeline: the newest `limit` undo
+    /// steps, OLDEST FIRST (the last one is the step an undo reverts), and
+    /// the newest `limit` redo steps in the order redo replays them (the
+    /// first is the next redo).
+    pub fn undo_log(&self, limit: usize) -> UndoLog {
+        let entry = |r: &AppliedRecord| UndoLogEntry {
+            applied_seq: r.applied_seq,
+            label: r
+                .label
+                .clone()
+                .unwrap_or_else(|| crate::undo_label::for_logged(&r.kind)),
+        };
+        let start = self.applied_log.len().saturating_sub(limit);
+        UndoLog {
+            undo: self.applied_log[start..].iter().map(entry).collect(),
+            redo: self.redo_log.iter().rev().take(limit).map(entry).collect(),
+            undo_len: self.applied_log.len(),
+            redo_len: self.redo_log.len(),
+            depth: self.history_depth,
+            evicted: self.evicted_steps,
+        }
+    }
+
+    /// Engine ADR 1030 — undo every step down to and including
+    /// `applied_seq`, in one call. Refused (nothing undone) when that seq is
+    /// not on the undo log. Answers each step's outcome, newest first; an
+    /// undo that fails mid-way stops there and answers the steps it made.
+    pub fn undo_to(
+        &mut self,
+        applied_seq: u64,
+    ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        if !self
+            .applied_log
+            .iter()
+            .any(|r| r.applied_seq == applied_seq)
+        {
+            return Err(crate::channel::WorkerError::NotImplemented {
+                what: format!("undoTo: step {applied_seq} is not on the undo log"),
+            });
+        }
+        let mut out = Vec::new();
+        while let Some(outcome) = self.undo() {
+            let done = outcome.undone_seq == applied_seq;
+            out.push(outcome);
+            if done {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Engine ADR 1030 — redo every step up to and including
+    /// `applied_seq`, in one call. Refused (nothing redone) when that seq
+    /// is not on the redo log.
+    pub fn redo_to(
+        &mut self,
+        applied_seq: u64,
+    ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        if !self.redo_log.iter().any(|r| r.applied_seq == applied_seq) {
+            return Err(crate::channel::WorkerError::NotImplemented {
+                what: format!("redoTo: step {applied_seq} is not on the redo log"),
+            });
+        }
+        let mut out = Vec::new();
+        while let Some(outcome) = self.redo() {
+            let done = outcome.undone_seq == applied_seq;
+            out.push(outcome);
+            if done {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Engine ADR 1030 — make the document what it was right after the step
+    /// `applied_seq` (`0`: before the oldest step on the undo log — the
+    /// opened document while nothing was evicted), as ONE new undo step
+    /// named `label` (default "Restore"). A step on the undo log is reached
+    /// by reverting the newer steps: they stay on the undo log, and the
+    /// restore is one [`LoggedMutation::Reverted`] step on top of them, so
+    /// undoing it brings them back and the history stays whole. A step on
+    /// the redo log is reached by replaying the steps up to it (logged as
+    /// one step). Either
+    /// way the redo log is cleared, as by any new step. Refused (nothing
+    /// moves) when `applied_seq` is on neither log or is the current step.
+    pub fn restore_to(
+        &mut self,
+        applied_seq: u64,
+        label: Option<&str>,
+    ) -> Result<Vec<UndoOutcome>, crate::channel::WorkerError> {
+        let refuse = |what: &str| crate::channel::WorkerError::NotImplemented {
+            what: format!("restoreTo: {what}"),
+        };
+        let current = self.applied_log.last().map_or(0, |r| r.applied_seq);
+        if applied_seq == current {
+            return Err(refuse("the document is already at that step"));
+        }
+        let on_undo = applied_seq == 0
+            || self
+                .applied_log
+                .iter()
+                .any(|r| r.applied_seq == applied_seq);
+        let (outcomes, kind) = if on_undo {
+            // The first step newer than the target is the last to revert.
+            let first_newer = self
+                .applied_log
+                .iter()
+                .find(|r| r.applied_seq > applied_seq)
+                .map(|r| r.applied_seq)
+                .ok_or_else(|| refuse("no step is newer than that one"))?;
+            let outcomes = self.undo_to(first_newer)?;
+            let n = outcomes.len().min(self.redo_log.len());
+            // The redo log's tail holds them newest-undone LAST, i.e. the
+            // oldest step last: reversed, they are in apply order.
+            let walked: Vec<AppliedRecord> = self
+                .redo_log
+                .split_off(self.redo_log.len() - n)
+                .into_iter()
+                .rev()
+                .collect();
+            // They go back on the undo log as they were — the restore is a
+            // step ON TOP of the history, which therefore stays whole: the
+            // step below the restore is the one the user went back from.
+            // The scene is the snapshot's meanwhile; the `Reverted` step
+            // pushed next is what makes the log and the scene agree.
+            let mut steps: Vec<LoggedMutation> = walked.iter().map(|r| r.kind.clone()).collect();
+            for rec in walked {
+                self.applied_log.push(rec);
+            }
+            let inner = if steps.len() == 1 {
+                steps.pop().expect("one")
+            } else {
+                LoggedMutation::Composite(steps)
+            };
+            (outcomes, LoggedMutation::Reverted(Box::new(inner)))
+        } else if self.redo_log.iter().any(|r| r.applied_seq == applied_seq) {
+            let outcomes = self.redo_to(applied_seq)?;
+            let n = outcomes.len().min(self.applied_log.len());
+            let mut steps: Vec<LoggedMutation> = self
+                .applied_log
+                .split_off(self.applied_log.len() - n)
+                .into_iter()
+                .map(|r| r.kind)
+                .collect();
+            let kind = if steps.len() == 1 {
+                steps.pop().expect("one")
+            } else {
+                LoggedMutation::Composite(steps)
+            };
+            (outcomes, kind)
+        } else {
+            return Err(refuse(&format!(
+                "step {applied_seq} is on neither the undo nor the redo log"
+            )));
+        };
+        if outcomes.is_empty() {
+            return Err(refuse("no step could be moved"));
+        }
+        self.redo_log.clear();
+        let applied_seq = self.bump_applied_seq();
+        let label = label
+            .and_then(crate::undo_label::UndoLabel::explicit)
+            .unwrap_or_else(crate::undo_label::for_restore);
+        self.push_applied(AppliedRecord {
+            applied_seq,
+            kind,
+            label: Some(label),
+        });
+        // A restore is not a step a follow-up write may join.
+        self.amend_anchor = None;
+        Ok(outcomes)
     }
 
     /// Read-only inspection of the most recently logged mutation.
@@ -6544,14 +7597,18 @@ impl CanvasModel {
         &self,
         link_base: Option<&str>,
     ) -> Result<(Vec<u8>, Vec<ExportedLink>), idml_export::WriteError> {
+        // Engine ADR 1039 — IDML has no symbols: the export writes each
+        // instance as its artwork, labelled, with the store in a document
+        // label (`restore_symbols_from_labels` undoes it on reopen).
+        let mut scene = self.export_scene();
+        paged_mutate::expand_symbols_for_interchange(&mut scene);
         // Engine ADR 1007 — IDML says paint v2 only as unnamed stop
         // colours and gradient feathers; the rest is reported lost.
-        let mut scene = self.export_scene();
+        crate::paint_v2_export::lower_for_idml(&mut scene);
+        // Engine ADR 1048 — a mesh fill rides in its frame's label.
+        crate::mesh_fill_export::lower_for_idml(&mut scene);
         // Engine ADR 1041 — a pattern paint rides in its frame's label.
         crate::pattern_export::lower_for_idml(&mut scene);
-        crate::paint_v2_export::lower_for_idml(&mut scene);
-        // Engine ADR 1040 — a mesh fill rides in its frame's label.
-        crate::mesh_fill_export::lower_for_idml(&mut scene);
         let out = idml_export::write_idml_with(
             &scene,
             &self.source_idml,
@@ -6675,7 +7732,16 @@ impl CanvasModel {
     /// drop is loud rather than silent.
     pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
+        // Engine ADR 1039 — every symbol instance is written as artwork.
+        out.extend(paged_mutate::expand_symbols_for_interchange(
+            &mut self.scene.clone(),
+        ));
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
+        out.extend(crate::export_losses::live_shape_losses(&self.scene));
+        out.extend(crate::export_losses::effect_stack_losses(&self.scene));
+        out.extend(crate::export_losses::vector_effect_losses(&self.scene));
+        out.extend(crate::export_losses::appearance_losses(&self.scene));
+        out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -7323,7 +8389,7 @@ impl CanvasModel {
                                     f.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
                                 )),
                             },
-                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
                             PropertyEntry {
                                 path: PropertyPath::FrameFillMesh,
                                 value: Some(Value::FillMesh(
@@ -7420,6 +8486,12 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientFillLength,
                                 value: Some(Value::Length(f.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    f.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
@@ -7645,6 +8717,13 @@ impl CanvasModel {
                             f.effects.as_ref(),
                             f.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(f));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(f)),
+                        });
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -7697,19 +8776,17 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(f.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(f.image_adjustments.clone())),
+                            },
                             // Engine ADR 1007 — how a gradient stroke maps.
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(f.gradient_stroke_mode.as_str().into())),
                             },
-                            // Engine ADR 1007 — the gradient's start point.
-                            PropertyEntry {
-                                path: PropertyPath::FrameGradientFillStart,
-                                value: Some(Value::Lengths(
-                                    f.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
-                                )),
-                            },
-                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
                             PropertyEntry {
                                 path: PropertyPath::FrameFillMesh,
                                 value: Some(Value::FillMesh(
@@ -7795,6 +8872,12 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientFillLength,
                                 value: Some(Value::Length(f.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    f.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
@@ -8040,6 +9123,13 @@ impl CanvasModel {
                             f.effects.as_ref(),
                             f.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(f));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(f)),
+                        });
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -8113,6 +9203,18 @@ impl CanvasModel {
                                 path: PropertyPath::GroupClip,
                                 value: Some(Value::Bool(g.clip)),
                             },
+                            // Engine ADR 1042 — its vector effects.
+                            PropertyEntry {
+                                path: PropertyPath::GroupEffectStack,
+                                value: Some(Value::EffectStack {
+                                    entries: g
+                                        .effect_stack
+                                        .iter()
+                                        .map(paged_mutate::operation::EffectEntrySpec::from_model)
+                                        .collect(),
+                                    prev: None,
+                                }),
+                            },
                         ];
                         // C-18 / E-1 — a `<Group>` carries the corner
                         // vocabulary on disk (37 corpus groups do, 11
@@ -8127,6 +9229,64 @@ impl CanvasModel {
                         // recompose, and its name.
                         entries.extend(transform_decompose_entries(g.item_transform));
                         entries.push(item_name_entry(spread, raw));
+                        entries
+                    }),
+                // Engine ADR 1039 — a symbol instance: its box (the
+                // definition's), its transform and the overrides it carries.
+                ElementId::Instance(_) => spread
+                    .instances
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        let b = f.bounds;
+                        let o = &f.overrides;
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([b.top, b.left, b.bottom, b.right])),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(Some(f.item_transform))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOpacity,
+                                value: Some(Value::Length(o.opacity)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameBlendMode,
+                                value: Some(Value::Text(o.blend_mode.clone().unwrap_or_default())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ElementVisible,
+                                value: Some(Value::Bool(f.visible)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ElementLocked,
+                                value: Some(Value::Bool(f.locked)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceTint,
+                                value: Some(Value::Lengths(
+                                    o.tint
+                                        .map(|t| vec![t.color[0], t.color[1], t.color[2], t.amount])
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceNineSlice,
+                                value: Some(Value::Lengths(
+                                    f.nine_slice
+                                        .map(|n| vec![n.left, n.top, n.right, n.bottom])
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::SymbolInstanceSymbol,
+                                value: Some(Value::Text(f.symbol.clone())),
+                            },
+                        ];
+                        entries.extend(transform_decompose_entries(Some(f.item_transform)));
                         entries
                     }),
                 // Punch-list (rides v35) — Polygon / GraphicLine surface
@@ -8173,19 +9333,26 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(p.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1047 — the live polygon's side
+                            // count: `None` for a path that is not one.
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapeSides,
+                                value: Some(Value::Length(
+                                    paged_model::live_shape::live_polygon(p)
+                                        .map(|s| s.sides as f32),
+                                )),
+                            },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(p.image_adjustments.clone())),
+                            },
                             // Engine ADR 1007 — how a gradient stroke maps.
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(p.gradient_stroke_mode.as_str().into())),
                             },
-                            // Engine ADR 1007 — the gradient's start point.
-                            PropertyEntry {
-                                path: PropertyPath::FrameGradientFillStart,
-                                value: Some(Value::Lengths(
-                                    p.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
-                                )),
-                            },
-                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
                             PropertyEntry {
                                 path: PropertyPath::FrameFillMesh,
                                 value: Some(Value::FillMesh(
@@ -8215,6 +9382,12 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientFillLength,
                                 value: Some(Value::Length(p.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    p.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
@@ -8308,6 +9481,13 @@ impl CanvasModel {
                             p.effects.as_ref(),
                             p.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(p));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(p)),
+                        });
                         entries.extend(target_property_entries(
                             Some(p.fill_transparency.as_ref()),
                             p.stroke_transparency.as_ref(),
@@ -8351,6 +9531,15 @@ impl CanvasModel {
                         entries.extend(visible_locked_entries(p.visible, p.locked));
                         entries.push(frame_path_entry(&p.anchors, &p.subpath_starts));
                         entries.push(item_name_entry(spread, raw));
+                        // Engine ADR 1047 — a live polygon's star inset
+                        // (`None` for a path that is not one, which takes
+                        // only `None` back).
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameShapeStarInset,
+                            value: Some(Value::Length(
+                                paged_model::live_shape::live_polygon(p).map(|s| s.star_inset),
+                            )),
+                        });
                         entries
                     }),
                 ElementId::GraphicLine(_) => spread
@@ -8569,19 +9758,31 @@ impl CanvasModel {
                                 path: PropertyPath::FrameFillRule,
                                 value: Some(Value::Text(o.fill_rule.as_str().into())),
                             },
+                            // Engine ADR 1047 — the live pie (0 and 360
+                            // for the whole ellipse).
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapePieStart,
+                                value: Some(Value::Length(Some(
+                                    paged_model::live_shape::pie_start(o),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapePieEnd,
+                                value: Some(Value::Length(Some(
+                                    paged_model::live_shape::pie_end(o),
+                                ))),
+                            },
+                            // Engine ADR 1037 — the placed picture's filter stack.
+                            PropertyEntry {
+                                path: PropertyPath::FrameImageAdjustments,
+                                value: Some(Value::ImageAdjustments(o.image_adjustments.clone())),
+                            },
                             // Engine ADR 1007 — how a gradient stroke maps.
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(o.gradient_stroke_mode.as_str().into())),
                             },
-                            // Engine ADR 1007 — the gradient's start point.
-                            PropertyEntry {
-                                path: PropertyPath::FrameGradientFillStart,
-                                value: Some(Value::Lengths(
-                                    o.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
-                                )),
-                            },
-                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
                             PropertyEntry {
                                 path: PropertyPath::FrameFillMesh,
                                 value: Some(Value::FillMesh(
@@ -8642,6 +9843,12 @@ impl CanvasModel {
                                 value: Some(Value::Length(o.gradient_fill_length)),
                             },
                             PropertyEntry {
+                                path: PropertyPath::FrameGradientFillStart,
+                                value: Some(Value::Lengths(
+                                    o.gradient_fill_start.map(|p| p.to_vec()).unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeAngle,
                                 value: Some(Value::Length(o.gradient_stroke_angle)),
                             },
@@ -8680,6 +9887,13 @@ impl CanvasModel {
                             o.effects.as_ref(),
                             o.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(o));
+                        // Engine ADR 1043 — the appearance.
+                        entries.push(crate::channel::PropertyEntry {
+                            path: paged_mutate::PropertyPath::FrameAppearance,
+                            value: Some(paged_mutate::appearance_wire::appearance_value(o)),
+                        });
                         entries.extend(target_property_entries(
                             Some(o.fill_transparency.as_ref()),
                             o.stroke_transparency.as_ref(),
@@ -8823,6 +10037,9 @@ impl CanvasModel {
         let mut underlines: Vec<Option<bool>> = Vec::new();
         let mut strikethrus: Vec<Option<bool>> = Vec::new();
         let mut no_breaks: Vec<Option<bool>> = Vec::new();
+        // Engine ADR 1018.
+        let mut decorations = Vec::new();
+        let mut shadings = Vec::new();
         let mut ligatures: Vec<Option<bool>> = Vec::new();
         let mut space_before: Vec<Option<f32>> = Vec::new();
         let mut space_after: Vec<Option<f32>> = Vec::new();
@@ -8918,6 +10135,7 @@ impl CanvasModel {
                     paged_scene::ResolvedParagraphAttrs::from_paragraph(para)
                 };
                 space_before.push(rp.space_before);
+                shadings.push(shading_border_values(&rp.shading, &rp.border));
                 space_after.push(rp.space_after);
                 first_line_indent.push(rp.first_line_indent);
                 applied_paragraph_styles.push(para.paragraph_style.clone().unwrap_or_default());
@@ -9000,6 +10218,7 @@ impl CanvasModel {
                 underlines.push(rr.underline);
                 strikethrus.push(rr.strikethru);
                 no_breaks.push(rr.no_break);
+                decorations.push(decoration_values(&rr.decorations));
                 ligatures.push(rr.ligatures_on);
                 applied_conditions.push(run.applied_conditions.join(" "));
             }
@@ -9408,6 +10627,16 @@ impl CanvasModel {
                 }),
             },
         ];
+        // Engine ADR 1018 — Word's additions, per run and per paragraph.
+        let mut entries = entries;
+        entries.extend(collapsed_entries(
+            &decorations,
+            decoration_values(&Default::default()),
+        ));
+        entries.extend(collapsed_entries(
+            &shadings,
+            shading_border_values(&Default::default(), &Default::default()),
+        ));
 
         Some(ElementProperties {
             id: id.clone(),
@@ -9910,6 +11139,14 @@ impl CanvasModel {
                         let (bounds, transform) = crate::group_box::group_box(spread, i)?;
                         (ElementId::Group(id(&g.self_id)?), bounds, transform)
                     }
+                    FrameRef::Instance(i) => {
+                        let f = spread.instances.get(i)?;
+                        (
+                            ElementId::Instance(id(&f.self_id)?),
+                            f.bounds,
+                            Some(f.item_transform),
+                        )
+                    }
                 };
                 Some(crate::channel::SpreadMemberSummary {
                     id: element,
@@ -9973,6 +11210,15 @@ impl CanvasModel {
         // WP2.7 — page self id → (its index in the spread, is it a verso).
         let mut placement_of: std::collections::HashMap<&str, (u32, bool)> =
             std::collections::HashMap::new();
+        // Engine ADR 1022 — page self id → its applied master, as grown.
+        let mut master_of: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+        // Engine ADR 1026 — page self id → its override list.
+        let mut overrides_of: std::collections::HashMap<&str, &[String]> =
+            std::collections::HashMap::new();
+        // Engine ADR 1011 — the pages placed on the canvas.
+        let mut placed: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        let mut inner_bounds: std::collections::HashMap<&str, [f32; 4]> =
+            std::collections::HashMap::new();
         for parsed in &scene.spreads {
             for (pid, m) in &parsed.spread.page_margins {
                 margins.insert(pid.as_str(), m);
@@ -9984,6 +11230,10 @@ impl CanvasModel {
                 .unwrap_or_else(|| parsed.src.clone());
             for (pi, pg) in parsed.spread.pages.iter().enumerate() {
                 if let Some(id) = pg.self_id.as_deref() {
+                    if let Some(m) = pg.applied_master.as_deref() {
+                        master_of.insert(id, m);
+                    }
+                    overrides_of.insert(id, &pg.override_list);
                     spread_of.insert(id, &parsed.spread);
                     spread_id_of.insert(id, spread_id.clone());
                     // WP2.7 — the renderer's binding rule
@@ -9993,6 +11243,18 @@ impl CanvasModel {
                     let b = crate::hit::transform_bbox(pg.bounds, pg.item_transform);
                     let verso = (b.left + b.right) * 0.5 < -0.5;
                     placement_of.insert(id, (pi as u32, verso));
+                    if pg.canvas_origin.is_some() {
+                        placed.insert(id);
+                    }
+                    inner_bounds.insert(
+                        id,
+                        [
+                            pg.bounds.top,
+                            pg.bounds.left,
+                            pg.bounds.bottom,
+                            pg.bounds.right,
+                        ],
+                    );
                 }
             }
         }
@@ -10039,6 +11301,14 @@ impl CanvasModel {
                     }),
                     margin_inside_pt: inside,
                     margin_outside_pt: outside,
+                    applied_master: master_of.get(p.id.as_str()).map(|m| m.to_string()),
+                    canvas_origin_pt: Some([p.canvas_origin.0, p.canvas_origin.1]),
+                    canvas_placed: placed.contains(p.id.as_str()),
+                    bounds_pt: inner_bounds.get(p.id.as_str()).copied(),
+                    override_list: overrides_of
+                        .get(p.id.as_str())
+                        .map(|l| l.to_vec())
+                        .unwrap_or_default(),
                 }
             })
             .collect()
@@ -10116,6 +11386,44 @@ impl CanvasModel {
                 label: ms.name.clone().unwrap_or_else(|| self_id.clone()),
                 self_id: self_id.clone(),
                 page_count: ms.spread.pages.len() as u32,
+                pages: ms
+                    .spread
+                    .pages
+                    .iter()
+                    .filter_map(|pg| {
+                        let id = pg.self_id.clone()?;
+                        Some(crate::channel::MasterPageEntry {
+                            size_pt: [
+                                pg.bounds.right - pg.bounds.left,
+                                pg.bounds.bottom - pg.bounds.top,
+                            ],
+                            applied_master: pg.applied_master.clone(),
+                            override_list: pg.override_list.clone(),
+                            plugin_metadata: tree_plugin_metadata(&ms.spread, &id),
+                            self_id: id,
+                        })
+                    })
+                    .collect(),
+                items: {
+                    let sp = &ms.spread;
+                    let order: Vec<paged_model::FrameRef> = if !sp.frames_in_order.is_empty() {
+                        sp.frames_in_order.clone()
+                    } else {
+                        let mut v = Vec::new();
+                        v.extend((0..sp.text_frames.len()).map(paged_model::FrameRef::TextFrame));
+                        v.extend((0..sp.rectangles.len()).map(paged_model::FrameRef::Rectangle));
+                        v.extend((0..sp.ovals.len()).map(paged_model::FrameRef::Oval));
+                        v.extend(
+                            (0..sp.graphic_lines.len()).map(paged_model::FrameRef::GraphicLine),
+                        );
+                        v.extend((0..sp.polygons.len()).map(paged_model::FrameRef::Polygon));
+                        v
+                    };
+                    order
+                        .into_iter()
+                        .filter_map(|fr| frame_to_tree_node(sp, fr))
+                        .collect()
+                },
             })
             .collect();
         out.sort_by(|a, b| a.self_id.cmp(&b.self_id));
@@ -10323,6 +11631,14 @@ impl CanvasModel {
                         Some(paged_model::HyperlinkDestinationKind::Page(p)) => Some(p.clone()),
                         _ => None,
                     },
+                    source_item: h.source.as_deref().and_then(|src| {
+                        self.scene
+                            .designmap
+                            .hyperlink_page_item_sources
+                            .iter()
+                            .find(|p| p.self_id == src)
+                            .map(|p| p.source_page_item.clone())
+                    }),
                 }
             })
             .collect()
@@ -10648,6 +11964,10 @@ impl CanvasModel {
                         user_name: change.user_name.clone(),
                         date: change.date.clone(),
                         text: change.deleted_text.clone().unwrap_or_default(),
+                        id: None,
+                        kind: Some("delete".to_string()),
+                        end: None,
+                        paragraph: None,
                     });
                 }
                 start += para
@@ -10657,7 +11977,23 @@ impl CanvasModel {
                     .sum::<u32>();
             }
         }
+        // Engine ADR 1040 — Word's changes, one row per story and change id.
+        for story in &self.scene.stories {
+            out.extend(crate::review::change_rows(
+                &story.self_id,
+                &story.story.paragraphs,
+            ));
+        }
         out
+    }
+
+    /// Engine ADR 1020 — the document's comments, threads in story order.
+    pub fn comments(&self) -> Vec<crate::channel::CommentSummary> {
+        self.scene
+            .stories
+            .iter()
+            .flat_map(|s| crate::review::comment_rows(&s.self_id, &s.story))
+            .collect()
     }
 
     /// The story, paragraph and index in it of note `note_id`.
@@ -10675,6 +12011,79 @@ impl CanvasModel {
     /// `ConvertNoteToText` (ADR 172): the note's place becomes a space and
     /// its text, its paragraphs the story's, as InDesign 20.0.1 converts
     /// one (`notes-probe`). One `ReplaceStoryParagraphs`: one undo.
+    /// Engine ADR 1021 — the hits of `spec` in the document as it stands.
+    pub fn find_text(
+        &self,
+        spec: &paged_wire::FindSpec,
+    ) -> Result<Vec<paged_wire::FindHit>, String> {
+        crate::find::find(&self.scene, spec)
+    }
+
+    /// Engine ADR 1021 — `findReplace` as one batch of text edits: per hit,
+    /// last first (so no edit moves an offset still to come), the hit's
+    /// text deleted, the replacement inserted, and the replacement styled
+    /// when asked. Refused when nothing matches or the replacement cannot
+    /// be written.
+    fn lower_find_replace(
+        &self,
+        spec: &paged_wire::FindSpec,
+        replace: &str,
+        replace_all: bool,
+        paragraph_style: Option<&str>,
+        character_style: Option<&str>,
+    ) -> Result<Mutation, String> {
+        let mut hits = crate::find::find(&self.scene, spec)?;
+        if hits.is_empty() {
+            return Err(format!("findReplace: nothing matches {:?}", spec.find));
+        }
+        if !replace_all {
+            hits.truncate(1);
+        }
+        let mut ops = Vec::with_capacity(hits.len() * 3);
+        for hit in hits.iter().rev() {
+            let text = crate::find::replacement_text(replace, spec.mode, hit)
+                .map_err(|e| format!("findReplace: {e}"))?;
+            ops.push(Mutation::DeleteRange {
+                story_id: hit.story_id.clone(),
+                start: hit.start,
+                end: hit.end,
+                cell: None,
+            });
+            if !text.is_empty() {
+                ops.push(Mutation::InsertText {
+                    story_id: hit.story_id.clone(),
+                    offset: hit.start,
+                    text: text.clone(),
+                    cell: None,
+                });
+            }
+            let chars = text.chars().filter(|c| *c != '\n').count() as u32;
+            for (style, scope) in [
+                (
+                    paragraph_style,
+                    paged_mutate::operation::StyleScope::Paragraph,
+                ),
+                (
+                    character_style,
+                    paged_mutate::operation::StyleScope::Character,
+                ),
+            ] {
+                if let Some(style) = style {
+                    ops.push(Mutation::ApplyStyle {
+                        story_id: hit.story_id.clone(),
+                        start: hit.char_start,
+                        end: hit.char_start + chars,
+                        style: style.to_string(),
+                        scope,
+                        cell: None,
+                        paragraph: None,
+                    });
+                }
+            }
+        }
+        Ok(Mutation::Batch { ops })
+    }
+
     fn lower_convert_note_to_text(
         &self,
         note_id: &str,
@@ -10819,6 +12228,30 @@ impl CanvasModel {
     /// The editor's list-definitions surface renders this;
     /// `continue_across_stories` drives cross-story numbering
     /// continuity in the renderer.
+    /// Engine ADR 1039 — the `symbols` collection.
+    pub fn symbols(&self) -> Vec<crate::channel::SymbolSummary> {
+        self.scene
+            .symbols
+            .iter()
+            .map(|d| crate::channel::SymbolSummary {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                revision: d.revision,
+                bounds: [d.bounds.top, d.bounds.left, d.bounds.bottom, d.bounds.right],
+                nine_slice: d.nine_slice.map(|n| [n.left, n.top, n.right, n.bottom]),
+                item_count: d.items.frames_in_order.len() as u32,
+                instances: self
+                    .scene
+                    .spreads
+                    .iter()
+                    .flat_map(|p| p.spread.instances.iter())
+                    .filter(|i| i.symbol == d.id)
+                    .filter_map(|i| i.self_id.as_ref().map(|id| format!("instance:{id}")))
+                    .collect(),
+            })
+            .collect()
+    }
+
     pub fn numbering_lists(&self) -> Vec<crate::channel::NumberingListSummary> {
         use crate::channel::NumberingListSummary;
         self.scene
@@ -11219,6 +12652,8 @@ impl CanvasModel {
         // S4 — the first-class overset continuation (where the flow overran),
         // keyed by story id.
         let overset_at = self.built.diagnostics.overset_continuations();
+        // Data ADR 564 — the table cells whose text does not fit their row.
+        let overset_cells = self.built.diagnostics.overset_cells();
         self.scene
             .stories
             .iter()
@@ -11240,6 +12675,19 @@ impl CanvasModel {
                             paragraph: c.paragraph_idx,
                             line: c.line_idx,
                         }),
+                    overset_cells: overset_cells
+                        .get(&s.self_id)
+                        .map(|cells| {
+                            cells
+                                .iter()
+                                .map(|c| crate::channel::OversetCellAt {
+                                    table: c.table_id.clone(),
+                                    row: c.row,
+                                    column: c.column,
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                     grow_rule: s
                         .story
                         .grow
@@ -11248,6 +12696,12 @@ impl CanvasModel {
                             grow: true,
                             max_pages: r.max_pages,
                             copy_frame_options: r.copy_frame_options,
+                            master: r.master.clone(),
+                            first_master: r.first_master.clone(),
+                            even_master: r.even_master.clone(),
+                            section_start: crate::model::virtual_set::section_start_spec(
+                                r.section_start,
+                            ),
                         }),
                 }
             })
@@ -11264,6 +12718,21 @@ impl CanvasModel {
         Some(crate::channel::StoryContent {
             self_id: s.self_id.clone(),
             paragraphs: s.story.paragraphs.iter().map(paragraph_content).collect(),
+            text_anchors: s
+                .story
+                .destinations
+                .iter()
+                .filter(|d| !d.paragraph_destination)
+                .filter_map(|d| {
+                    Some(crate::channel::TextAnchorContent {
+                        self_id: d.self_id.clone(),
+                        name: d.name.clone()?,
+                        paragraph: d.paragraph,
+                        offset: d.offset,
+                    })
+                })
+                .collect(),
+            comments: crate::review::comment_rows(&s.self_id, &s.story),
         })
     }
 
@@ -11320,11 +12789,13 @@ impl CanvasModel {
             TemplateFindings => json(paged_template::preflight(&self.scene)),
             XmlElements => json(self.xml_elements()),
             TrackedChanges => json(self.tracked_changes()),
+            Comments => json(self.comments()),
             Endnotes => json(self.endnotes()),
             Inks => json(self.inks()),
             Sections => json(self.sections()),
             Stories => json(self.stories()),
             NumberingLists => json(self.numbering_lists()),
+            Symbols => json(self.symbols()),
             InkCoverage => json(self.ink_coverage()),
         }
     }
@@ -11628,6 +13099,13 @@ impl CanvasModel {
                                 stack.push(nested);
                             }
                         }
+                        paged_model::FrameRef::Instance(i) => {
+                            if let Some(f) = spread.instances.get(i) {
+                                if let Some(id) = f.self_id.as_deref() {
+                                    out.push(ElementId::Instance(id.to_string()));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -11846,8 +13324,20 @@ impl CanvasModel {
                 continue;
             }
             let raw = id.raw_id();
-            for parsed in &self.scene().spreads {
-                let spread = &parsed.spread;
+            // Engine ADR 1026 — a master's items too, after the pages':
+            // their page is the master's page, their transform in its space.
+            let candidates = self
+                .scene()
+                .spreads
+                .iter()
+                .map(|p| (&p.spread, None))
+                .chain(self.scene().master_spreads.values().map(|m| {
+                    (
+                        &m.spread,
+                        m.spread.pages.first().and_then(|pg| pg.self_id.clone()),
+                    )
+                }));
+            for (spread, master_page) in candidates {
                 let mut story_id = None;
                 let resolved: Option<(paged_model::Bounds, Option<[f32; 6]>, bool)> = match id {
                     ElementId::TextFrame(_) => spread
@@ -11916,6 +13406,13 @@ impl CanvasModel {
                         .position(|g| g.self_id.as_deref() == Some(raw))
                         .and_then(|gi| crate::group_box::group_box(spread, gi))
                         .map(|(bounds, transform)| (bounds, transform, false)),
+                    // Engine ADR 1039 — an instance's box is its
+                    // definition's, oriented by its transform.
+                    ElementId::Instance(_) => spread
+                        .instances
+                        .iter()
+                        .find(|f| f.self_id.as_deref() == Some(raw))
+                        .map(|f| (f.bounds, Some(f.item_transform), false)),
                     // StoryRange is a property-address, not a
                     // geometric element — its bounds are the host
                     // frame's. The caret/selection-rect surface
@@ -11931,7 +13428,20 @@ impl CanvasModel {
                 let Some((bounds, item_transform, has_image)) = resolved else {
                     continue;
                 };
-                let built_page = self.host_page(&parsed.spread, bounds, item_transform);
+                if let Some(page) = master_page {
+                    out.push(crate::channel::ElementGeometryItem {
+                        id: id.clone(),
+                        page_id: Some(PageId(page)),
+                        spread_id: spread.self_id.clone(),
+                        bounds: [bounds.top, bounds.left, bounds.bottom, bounds.right],
+                        item_transform,
+                        page_origin: Some([0.0, 0.0]),
+                        has_image,
+                        story_id,
+                    });
+                    break;
+                }
+                let built_page = self.host_page(spread, bounds, item_transform);
                 // C-23 — an element whose centroid lands on no page is
                 // ON THE PASTEBOARD, not absent. This used to `if let`
                 // the push away, so the door answered nothing for an
@@ -11939,7 +13449,7 @@ impl CanvasModel {
                 out.push(crate::channel::ElementGeometryItem {
                     id: id.clone(),
                     page_id: built_page.map(|bp| bp.id.clone()),
-                    spread_id: parsed.spread.self_id.clone(),
+                    spread_id: spread.self_id.clone(),
                     bounds: [bounds.top, bounds.left, bounds.bottom, bounds.right],
                     item_transform: page_space_transform(built_page, item_transform),
                     page_origin: built_page.map(|bp| [bp.spread_origin.0, bp.spread_origin.1]),
@@ -12233,7 +13743,7 @@ impl CanvasModel {
                             f.subpath_open.as_slice(),
                         )
                     }),
-                ElementId::Group(_) => None,
+                ElementId::Group(_) | ElementId::Instance(_) => None,
                 // StoryRange doesn't carry path anchors.
                 ElementId::StoryRange { .. } => None,
                 // W3.A1 — tables / cells have no path-anchor array.
@@ -12419,6 +13929,7 @@ impl CanvasModel {
             // Perf-S — the decode cache is content-addressed (URI →
             // DecodedImage), not positional, so every build may share it.
             image_decode_cache: Some(&self.image_decode_cache),
+            symbol_cache: Some(&self.symbol_cache),
             grow_hint: Some(&self.grow_hint),
             // Perf-FontTable — reuse the shaping table built at load
             // (saves the ~225ms harvest+resolve walk).
@@ -12473,6 +13984,13 @@ impl CanvasModel {
                 build_generation: self.build_generation,
                 emission_prints: Some(&self.emission_prints),
                 render_scale: self.resource_render_scale,
+                // Engine ADR 1037 — an image filter stack is evaluated for
+                // the screen: at the camera's scale, at least a 2× (retina)
+                // display's 2 px per pt. The export evaluates at the
+                // picture's own pixels (the option's `None`).
+                image_adjust_px_per_pt: Some(
+                    self.resource_render_scale.max(LIVE_IMAGE_ADJUST_PX_PER_PT),
+                ),
                 // A5 — live rebuilds keep the degraded-asset markers on
                 // (mirrors the initial load); an export stays faithful.
                 degraded_asset_markers: true,
@@ -12568,6 +14086,23 @@ impl CanvasModel {
         Ok(doc)
     }
 
+    /// Engine ADR 1026 — the master spread that holds page `page_id`, when
+    /// it is a master page.
+    fn master_of_page(&self, page_id: &PageId) -> Option<&paged_scene::ParsedMasterSpread> {
+        self.scene.master_spreads.values().find(|m| {
+            m.spread
+                .pages
+                .iter()
+                .any(|p| p.self_id.as_deref() == Some(page_id.as_str()))
+        })
+    }
+
+    /// Engine ADR 1026 — whether `page_id` is a master page (a snapshot
+    /// draws it as a page of its own).
+    pub fn is_master_page(&self, page_id: &PageId) -> bool {
+        self.master_of_page(page_id).is_some()
+    }
+
     /// v70 — the page as it draws with some items hidden: a slideshow's
     /// build steps (each frame is the slide without the items later steps
     /// reveal). A copy of the scene with those items (a group: all its
@@ -12596,9 +14131,30 @@ impl CanvasModel {
         hide: &[crate::element_selection::ElementId],
         only: &[crate::element_selection::ElementId],
     ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
+        self.build_page_filtered_in(self.scene.clone(), page_id, hide, only)
+    }
+
+    /// [`build_page_filtered`](Self::build_page_filtered) over `scene`, a
+    /// copy of the model's scene a caller may have added to (engine ADR
+    /// 10XX's snapshot story).
+    pub(crate) fn build_page_filtered_in(
+        &self,
+        mut scene: Document,
+        page_id: &PageId,
+        hide: &[crate::element_selection::ElementId],
+        only: &[crate::element_selection::ElementId],
+    ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
         use crate::element_selection::ElementId;
         use std::collections::HashSet;
-        let mut scene = self.scene.clone();
+        // Engine ADR 1026 — a master page is drawn as the only page of a
+        // copy whose one spread is its master: the master's items as page
+        // items, over the masters its page applies.
+        if let Some(m) = self.master_of_page(page_id) {
+            let spread = m.spread.clone();
+            let src = m.src.clone();
+            scene.spreads = vec![paged_scene::ParsedSpread { src, spread }];
+            scene.rebuild_indexes();
+        }
         let spreads = || {
             scene
                 .spreads
@@ -12705,6 +14261,58 @@ impl CanvasModel {
         for m in scene.master_spreads.values_mut() {
             hide_in(&mut m.spread);
         }
+        // Editor ADR 309 — a mask item named in `only` without its
+        // target is drawn as an object of its own (the Transparency
+        // panel's mask thumbnail): in this throwaway copy the relation
+        // is released and the artwork stacks on top.
+        if !only.is_empty() {
+            let named: HashSet<&str> = only.iter().map(|e| e.raw_id()).collect();
+            for p in scene.spreads.iter_mut() {
+                let sp = &mut p.spread;
+                let freed: Vec<String> = sp
+                    .opacity_masks
+                    .iter()
+                    .filter(|(target, m)| {
+                        named.contains(m.mask_item.as_str()) && !named.contains(target.as_str())
+                    })
+                    .map(|(target, _)| target.clone())
+                    .collect();
+                for target in freed {
+                    let Some(mask) = sp.opacity_masks.remove(&target) else {
+                        continue;
+                    };
+                    let id = Some(mask.mask_item.as_str());
+                    let found = sp
+                        .rectangles
+                        .iter()
+                        .position(|f| f.self_id.as_deref() == id)
+                        .map(paged_model::FrameRef::Rectangle)
+                        .or_else(|| {
+                            sp.ovals
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::Oval)
+                        })
+                        .or_else(|| {
+                            sp.polygons
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::Polygon)
+                        })
+                        .or_else(|| {
+                            sp.graphic_lines
+                                .iter()
+                                .position(|f| f.self_id.as_deref() == id)
+                                .map(paged_model::FrameRef::GraphicLine)
+                        });
+                    if let Some(r) = found {
+                        if !sp.frames_in_order.is_empty() {
+                            sp.frames_in_order.push(r);
+                        }
+                    }
+                }
+            }
+        }
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
         let resource_providers = self.resource_tiles.provider_entries();
         let options = self.pipeline_options(
@@ -12721,6 +14329,12 @@ impl CanvasModel {
             .into_iter()
             .find(|p| &p.id == page_id)
             .ok_or_else(|| crate::channel::LoadError::Build(format!("no page {page_id}")))
+    }
+
+    /// The faces registered for the document's text (engine ADR 1031's
+    /// SVG import lays text out with them).
+    pub(crate) fn document_fonts(&self) -> &[FontEntry] {
+        &self.font_registry
     }
 
     /// Concept 3 — read accessors for the export session's begin.
@@ -13098,6 +14712,21 @@ impl CanvasModel {
         use crate::channel::WorkerError;
         self.settle_owed_build("updateTableOfContents")?;
         let refuse = |what: String| WorkerError::NotImplemented { what };
+        let parsed = self
+            .scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)
+            .ok_or_else(|| refuse(format!("updateTableOfContents: no story {story_id}")))?;
+        // Engine ADR 1022 — a table of contents standing in the text (Word's)
+        // is rewritten in place.
+        let in_text = parsed.story.applied_toc_style.is_none()
+            && parsed.story.paragraphs.iter().any(|p| p.toc.is_some());
+        if in_text {
+            if let Some(op) = self.lower_update_toc_in_text(story_id)? {
+                return Ok(op);
+            }
+        }
         let parsed = self
             .scene
             .stories
@@ -13782,13 +15411,14 @@ impl CanvasModel {
     /// from [`Self::push_applied`] so the mixed-batch executor can run it
     /// once over its collapsed entry (C-79).
     fn enforce_applied_log_cap(&mut self) {
-        if self.applied_log.len() > MAX_APPLIED_LOG {
+        if self.applied_log.len() > self.history_depth {
             // O(n) on the eviction only; eviction happens at most once
             // per push past the cap, so amortised O(1). A VecDeque would
             // make the front-pop O(1) but `applied_log` is read as a
             // slice elsewhere (`applied_log_back`); keep the Vec and pay
             // the rare shift.
-            let overflow = self.applied_log.len() - MAX_APPLIED_LOG;
+            let overflow = self.applied_log.len() - self.history_depth;
+            self.evicted_steps += overflow;
             self.applied_log.drain(0..overflow);
         }
     }
@@ -13861,6 +15491,17 @@ impl CanvasModel {
     /// not undoable.
     pub fn set_snap_settings(&mut self, settings: crate::snap_point::SnapSettings) {
         self.snap_settings = settings;
+    }
+
+    /// v77 — how the screen draws the document (editor ADR 287).
+    pub fn view_settings(&self) -> crate::view::ViewSettings {
+        self.view_settings
+    }
+
+    /// v77 — replace the view settings. Session state: not saved, not
+    /// undoable, and no rebuild — the build does not depend on them.
+    pub fn set_view_settings(&mut self, settings: crate::view::ViewSettings) {
+        self.view_settings = settings;
     }
 
     /// v75 — the session's role and overrides (engine ADR 1000).
@@ -13987,7 +15628,30 @@ impl CanvasModel {
     ) -> Option<TextMetrics> {
         use paged_renderer::AssetResolver;
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref())?;
-        let bytes = resolver.resolve_font(family, style)?;
+        // No family is "the face an un-styled run resolves to": layout gives
+        // such a run `[No paragraph style]`'s font, so measure in that face
+        // too. The resolver's own fallback differs from it in a document
+        // whose default font is another (a host sized a table's columns
+        // and rows in one face while the engine set them in another).
+        let default = family
+            .is_empty()
+            .then(|| {
+                self.scene
+                    .styles
+                    .resolve_paragraph("ParagraphStyle/$ID/[No paragraph style]")
+            })
+            .filter(|p| p.font.as_deref().is_some_and(|f| !f.is_empty()));
+        // A default family no face serves falls back to the resolver's own
+        // fallback, as the run it stands for does.
+        let bytes = default
+            .as_ref()
+            .and_then(|p| {
+                resolver.resolve_font(
+                    p.font.as_deref().unwrap_or(family),
+                    style.or(p.font_style.as_deref()),
+                )
+            })
+            .or_else(|| resolver.resolve_font(family, style))?;
         let face = paged_text::Face::from_bytes(&bytes, 0)?;
 
         let upem = face.units_per_em() as f32;
@@ -14532,6 +16196,7 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameOverprintStroke
             | P::FrameGradientFillAngle
             | P::FrameGradientFillLength
+            | P::FrameGradientFillStart
             | P::FrameGradientStrokeAngle
             | P::FrameGradientStrokeLength
             | P::ImageContentTransform
@@ -14616,8 +16281,14 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameDirectionalFeatherNoise
             | P::FrameDirectionalFeatherChoke
             | P::FrameGradientFeather
+            | P::FrameEffectStack
+            | P::FrameFillEffectStack
+            | P::FrameStrokeEffectStack
+            | P::FrameContentEffectStack
             | P::FrameFillMesh
             | P::FramePatternTransform
+            | P::FrameAppearance
+            | P::FrameAppearanceLayer
     )
 }
 
@@ -15211,6 +16882,7 @@ fn frame_self_id(spread: &paged_model::Spread, fr: paged_model::FrameRef) -> Opt
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.clone(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.clone(),
         FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+        FrameRef::Instance(i) => spread.instances.get(i)?.self_id.clone(),
     }
 }
 
@@ -15396,24 +17068,48 @@ fn indesign_index_paragraph_style(id: &str, based_on: &str) -> paged_model::Para
 pub(crate) fn paragraph_content(para: &paged_model::Paragraph) -> crate::channel::ParagraphContent {
     crate::channel::ParagraphContent {
         paragraph_style: para.paragraph_style.clone(),
-        runs: para
-            .runs
-            .iter()
-            .map(|run| crate::channel::RunContent {
-                text: run.text.clone(),
-                character_style: run.character_style.clone(),
-                font: run.font.clone(),
-                font_style: run.font_style.clone(),
-                point_size: run.point_size,
-                fill_color: run.fill_color.clone(),
-                underline: run.underline,
-                strikethru: run.strikethru,
-                capitalization: run.capitalization.clone(),
-                baseline_shift: run.baseline_shift,
-                position: run.position.clone(),
-                tracking: run.tracking,
-            })
-            .collect(),
+        runs: para.runs.iter().map(run_content).collect(),
+        toc: para.toc.clone(),
+        mark_change: para
+            .mark_revision
+            .as_ref()
+            .map(crate::review::change_content),
+        props_change: para
+            .props_change
+            .as_ref()
+            .map(|pc| crate::channel::PropsChangeContent {
+                change: crate::review::change_content(&pc.change),
+                before_paragraph_style: pc.before.paragraph_style.clone(),
+            }),
+    }
+}
+
+/// DOC-03 — one run as the content read gives it.
+pub(crate) fn run_content(run: &paged_model::CharacterRun) -> crate::channel::RunContent {
+    crate::channel::RunContent {
+        text: run.text.clone(),
+        character_style: run.character_style.clone(),
+        font: run.font.clone(),
+        font_style: run.font_style.clone(),
+        point_size: run.point_size,
+        fill_color: run.fill_color.clone(),
+        underline: run.underline,
+        strikethru: run.strikethru,
+        capitalization: run.capitalization.clone(),
+        baseline_shift: run.baseline_shift,
+        position: run.position.clone(),
+        tracking: run.tracking,
+        text_variable: run.text_variable.clone(),
+        field_code: run.field.as_ref().map(|f| f.code.clone()),
+        change: run.revision.as_ref().map(crate::review::change_content),
+        format_change: run
+            .format_change
+            .as_ref()
+            .map(|fc| crate::channel::FormatChangeContent {
+                change: crate::review::change_content(&fc.change),
+                before: Box::new(run_content(&fc.before)),
+            }),
+        comments: run.comments.clone(),
     }
 }
 
@@ -16137,6 +17833,7 @@ mod tests {
                 encoded: bytes::Bytes::from(file.clone()),
                 rgba: bytes::Bytes::new(),
                 icc: None,
+                rendering: None,
             },
         );
         // Now the door hands back the ORIGINAL encoded bytes + natural dims.
@@ -16234,6 +17931,36 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
         assert_eq!(name2, "file:///photo.png");
         assert_eq!((w2, h2), (4, 2));
         assert_eq!(got2, got, "same embedded payload, reached the same way");
+    }
+
+    /// Engine ADR 1036 — an inline-placed PDF (a frame whose bytes are a
+    /// PDF, as `replaceImageBytes` writes one) is readable through the
+    /// placed-asset door once a build has drawn it, as a linked one always
+    /// was: paged.pdf's Convert Placed PDF to Vectors reads it there.
+    #[test]
+    #[allow(non_snake_case)]
+    fn an_inline_placed_pdf_is_reachable_through_the_door__feat__editor_shell_import_svg_pdf_vectors(
+    ) {
+        let pdf = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../corpus/generated/placed-pdf-Links/placed-art.pdf"
+        ))
+        .expect("the generated placed-art fixture (engine/core/scripts/regen-fixtures.sh)");
+        let bytes = inline_image_idml_bytes();
+        let mut model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        model
+            .apply_mutation(&crate::channel::Mutation::ReplaceImageBytes {
+                element_id: "r1".into(),
+                bytes: Some(crate::channel::ByteBuf(pdf.clone())),
+            })
+            .expect("the frame takes the PDF");
+        let page = crate::PageId(model.pages()[0].self_id.clone());
+        assert!(model.display_list_for_page(&page).is_some(), "built");
+        let (_, w, h, got) = model
+            .placed_asset_bytes("r1")
+            .expect("an inline PDF the engine drew is readable");
+        assert_eq!(got, pdf, "the PDF itself");
+        assert_eq!((w, h), (200, 120), "its page size");
     }
 
     /// C-27 — a placed image's own fit/crop transform is readable.
@@ -16643,6 +18370,7 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
     fn dummy_record(seq: u64) -> AppliedRecord {
         AppliedRecord {
             applied_seq: seq,
+            label: None,
             kind: LoggedMutation::Text {
                 op: crate::mutate::TextOp::InsertText {
                     story_id: String::new(),

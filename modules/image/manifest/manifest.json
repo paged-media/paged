@@ -15,6 +15,10 @@
     "actions": {
       "register": true
     },
+    "storage": {
+      "blob": true,
+      "quotaBytes": 67108864
+    },
     "workers": {
       "max": 4,
       "sharedMemory": true
@@ -27,14 +31,17 @@
         "name": "compute",
         "path": "wasm/image_js_bg.wasm",
         "purpose": "compute",
-        "maxBytes": 8388608
+        "maxBytes": 9437184
       }
     ]
   },
   "contributes": {
     "panels": [
       "media.paged.image.panel.adjustments",
-      "media.paged.image.panel.properties"
+      "media.paged.image.panel.properties",
+      "media.paged.image.panel.brushSettings",
+      "media.paged.image.panel.brushPresets",
+      "media.paged.image.panel.cloneSource"
     ],
     "commands": [
       "media.paged.image.command.openImage",
@@ -48,6 +55,7 @@
       "media.paged.image.command.setType",
       "media.paged.image.command.applyToFile",
       "media.paged.image.command.saveToFile",
+      "media.paged.image.command.exportAs",
       "media.paged.image.command.loadBrushLibrary",
       "media.paged.image.command.selectionToPath",
       "media.paged.image.command.pathToSelection",
@@ -73,9 +81,21 @@
       "media.paged.image.command.flipVertical",
       "media.paged.image.command.commitImage",
       "media.paged.image.command.convertLayerToSmart",
+      "media.paged.image.command.smartEditContents",
+      "media.paged.image.command.smartSaveContents",
+      "media.paged.image.command.smartCloseContents",
+      "media.paged.image.command.smartTransform",
+      "media.paged.image.command.smartReplaceContents",
+      "media.paged.image.command.smartRelink",
+      "media.paged.image.command.smartUpdateLinked",
+      "media.paged.image.command.smartEmbed",
+      "media.paged.image.command.smartExportContents",
+      "media.paged.image.command.smartPlacePageItems",
+      "media.paged.image.command.convertForSmartFilters",
       "media.paged.image.command.definePattern",
       "media.paged.image.command.fillPattern",
       "media.paged.image.command.shapeBlur",
+      "media.paged.image.command.filterGaussianBlur",
       "media.paged.image.command.filterBoxBlur",
       "media.paged.image.command.filterSurfaceBlur",
       "media.paged.image.command.filterMotionBlur",
@@ -108,6 +128,76 @@
       "media.paged.image.command.filterTexturizer",
       "media.paged.image.command.filterGradientMap",
       "media.paged.image.command.filterSelectiveColour",
+      "media.paged.image.command.filterGallery",
+      "media.paged.image.command.filterDisplace",
+      "media.paged.image.command.filterPolarCoordinates",
+      "media.paged.image.command.filterRipple",
+      "media.paged.image.command.filterShear",
+      "media.paged.image.command.filterZigzag",
+      "media.paged.image.command.filterClouds",
+      "media.paged.image.command.filterDifferenceClouds",
+      "media.paged.image.command.filterFibers",
+      "media.paged.image.command.filterLensFlare",
+      "media.paged.image.command.filterLightingEffects",
+      "media.paged.image.command.filterWind",
+      "media.paged.image.command.filterExtrude",
+      "media.paged.image.command.filterTiles",
+      "media.paged.image.command.filterTraceContour",
+      "media.paged.image.command.filterCrystallize",
+      "media.paged.image.command.filterPointillize",
+      "media.paged.image.command.filterMezzotint",
+      "media.paged.image.command.filterColorHalftone",
+      "media.paged.image.command.filterShadowsHighlights",
+      "media.paged.image.command.filterHdrToning",
+      "media.paged.image.command.filterMatchColor",
+      "media.paged.image.command.filterReplaceColor",
+      "media.paged.image.command.filterDevelop",
+      "media.paged.image.command.filterColoredPencil",
+      "media.paged.image.command.filterCutout",
+      "media.paged.image.command.filterDryBrush",
+      "media.paged.image.command.filterFresco",
+      "media.paged.image.command.filterNeonGlow",
+      "media.paged.image.command.filterPaletteKnife",
+      "media.paged.image.command.filterPlasticWrap",
+      "media.paged.image.command.filterRoughPastels",
+      "media.paged.image.command.filterSmudgeStick",
+      "media.paged.image.command.filterSponge",
+      "media.paged.image.command.filterUnderpainting",
+      "media.paged.image.command.filterWatercolor",
+      "media.paged.image.command.filterAccentedEdges",
+      "media.paged.image.command.filterAngledStrokes",
+      "media.paged.image.command.filterDarkStrokes",
+      "media.paged.image.command.filterInkOutlines",
+      "media.paged.image.command.filterSprayedStrokes",
+      "media.paged.image.command.filterSumiE",
+      "media.paged.image.command.filterDiffuseGlow",
+      "media.paged.image.command.filterOceanRipple",
+      "media.paged.image.command.filterChalkCharcoal",
+      "media.paged.image.command.filterCharcoal",
+      "media.paged.image.command.filterChrome",
+      "media.paged.image.command.filterConteCrayon",
+      "media.paged.image.command.filterGraphicPen",
+      "media.paged.image.command.filterNotePaper",
+      "media.paged.image.command.filterPlaster",
+      "media.paged.image.command.filterReticulation",
+      "media.paged.image.command.filterStamp",
+      "media.paged.image.command.filterTornEdges",
+      "media.paged.image.command.filterWaterPaper",
+      "media.paged.image.command.filterCraquelure",
+      "media.paged.image.command.filterGrain",
+      "media.paged.image.command.filterMosaicTiles",
+      "media.paged.image.command.filterPatchwork",
+      "media.paged.image.command.filterFieldBlur",
+      "media.paged.image.command.filterIrisBlur",
+      "media.paged.image.command.filterTiltShift",
+      "media.paged.image.command.filterPathBlur",
+      "media.paged.image.command.filterSpinBlur",
+      "media.paged.image.command.solarize",
+      "media.paged.image.command.facet",
+      "media.paged.image.command.desaturate",
+      "media.paged.image.command.equalize",
+      "media.paged.image.command.newAdjustmentDevelop",
+      "media.paged.image.command.curvesTarget",
       "media.paged.image.command.average",
       "media.paged.image.command.imageSize",
       "media.paged.image.command.trim",
@@ -135,6 +225,25 @@
       "media.paged.image.command.linkLayers",
       "media.paged.image.command.unlinkLayer",
       "media.paged.image.command.newLayerComp",
+      "media.paged.image.command.layerStyleBevel",
+      "media.paged.image.command.layerStyleStroke",
+      "media.paged.image.command.layerStyleInnerShadow",
+      "media.paged.image.command.layerStyleInnerGlow",
+      "media.paged.image.command.layerStyleSatin",
+      "media.paged.image.command.layerStyleColorOverlay",
+      "media.paged.image.command.layerStyleGradientOverlay",
+      "media.paged.image.command.layerStylePatternOverlay",
+      "media.paged.image.command.layerStyleOuterGlow",
+      "media.paged.image.command.layerStyleDropShadow",
+      "media.paged.image.command.copyLayerStyle",
+      "media.paged.image.command.pasteLayerStyle",
+      "media.paged.image.command.clearLayerStyle",
+      "media.paged.image.command.globalLight",
+      "media.paged.image.command.toggleEffects",
+      "media.paged.image.command.scaleEffects",
+      "media.paged.image.command.rasterizeType",
+      "media.paged.image.command.paintTextIntoLayer",
+      "media.paged.image.command.warpText",
       "media.paged.image.command.newAdjustmentBrightnessContrast",
       "media.paged.image.command.newAdjustmentLevels",
       "media.paged.image.command.newAdjustmentCurves",
@@ -150,10 +259,81 @@
       "media.paged.image.command.newAdjustmentPosterize",
       "media.paged.image.command.newAdjustmentThreshold",
       "media.paged.image.command.newAdjustmentGradientMap",
-      "media.paged.image.command.newAdjustmentSelectiveColor"
+      "media.paged.image.command.newAdjustmentSelectiveColor",
+      "media.paged.image.command.openBrushSettings",
+      "media.paged.image.command.openBrushPresets",
+      "media.paged.image.command.defineBrushPreset",
+      "media.paged.image.command.importBrushPresets",
+      "media.paged.image.command.exportBrushPresetsAbr",
+      "media.paged.image.command.exportBrushPresetsJson",
+      "media.paged.image.command.newSnapshot",
+      "media.paged.image.command.historyOptions",
+      "media.paged.image.command.presetManager",
+      "media.paged.image.command.toggleLockTransparent",
+      "media.paged.image.command.colorRange",
+      "media.paged.image.command.selectAndMask",
+      "media.paged.image.command.quickMask",
+      "media.paged.image.command.grow",
+      "media.paged.image.command.similar",
+      "media.paged.image.command.focusArea",
+      "media.paged.image.command.saveSelection",
+      "media.paged.image.command.loadSelection",
+      "media.paged.image.command.makeWorkPath",
+      "media.paged.image.command.contentAwareFillWorkspace",
+      "media.paged.image.command.openCloneSource",
+      "media.paged.image.command.fillPath",
+      "media.paged.image.command.strokePath",
+      "media.paged.image.command.saveWorkPath",
+      "media.paged.image.command.vectorMaskRevealAll",
+      "media.paged.image.command.vectorMaskHideAll",
+      "media.paged.image.command.vectorMaskCurrentPath",
+      "media.paged.image.command.vectorMaskDelete",
+      "media.paged.image.command.vectorMaskToggle",
+      "media.paged.image.command.vectorMaskInvert",
+      "media.paged.image.command.vectorMaskRasterize",
+      "media.paged.image.command.freeTransform",
+      "media.paged.image.command.transformDistort",
+      "media.paged.image.command.transformPerspective",
+      "media.paged.image.command.transformWarp",
+      "media.paged.image.command.puppetWarp",
+      "media.paged.image.command.contentAwareScale",
+      "media.paged.image.command.filterLiquify",
+      "media.paged.image.command.commitPerspectiveCrop",
+      "media.paged.image.command.modeBits8",
+      "media.paged.image.command.modeBits16",
+      "media.paged.image.command.modeBits32",
+      "media.paged.image.command.modeGray",
+      "media.paged.image.command.modeRgb",
+      "media.paged.image.command.modeCmyk",
+      "media.paged.image.command.modeLab",
+      "media.paged.image.command.modeIndexed",
+      "media.paged.image.command.modeMultichannel",
+      "media.paged.image.command.proofColors",
+      "media.paged.image.command.gamutWarning",
+      "media.paged.image.command.proofSetupCmyk",
+      "media.paged.image.command.proofSetupGray",
+      "media.paged.image.command.rulerUnitPx",
+      "media.paged.image.command.rulerUnitIn",
+      "media.paged.image.command.rulerUnitCm",
+      "media.paged.image.command.rulerUnitMm",
+      "media.paged.image.command.toggleGuides",
+      "media.paged.image.command.toggleLockGuides",
+      "media.paged.image.command.toggleSnapGuides",
+      "media.paged.image.command.clearGuides",
+      "media.paged.image.command.newGuide",
+      "media.paged.image.command.slicesFromGuides",
+      "media.paged.image.command.clearSlices",
+      "media.paged.image.command.exportSlices",
+      "media.paged.image.command.clearNotes",
+      "media.paged.image.command.clearCount",
+      "media.paged.image.command.newCountGroup",
+      "media.paged.image.command.straightenToRuler",
+      "media.paged.image.command.clearRuler"
     ],
     "tools": [
       "media.paged.image.tool.crop",
+      "media.paged.image.tool.transform",
+      "media.paged.image.tool.perspectiveCrop",
       "media.paged.image.tool.move",
       "media.paged.image.tool.marqueeRect",
       "media.paged.image.tool.marqueeEllipse",
@@ -178,13 +358,41 @@
       "media.paged.image.tool.sharpen",
       "media.paged.image.tool.spotHeal",
       "media.paged.image.tool.patch",
-      "media.paged.image.tool.type"
+      "media.paged.image.tool.type",
+      "media.paged.image.tool.smudge",
+      "media.paged.image.tool.mixerBrush",
+      "media.paged.image.tool.colorReplacement",
+      "media.paged.image.tool.historyBrush",
+      "media.paged.image.tool.artHistoryBrush",
+      "media.paged.image.tool.backgroundEraser",
+      "media.paged.image.tool.magicEraser",
+      "media.paged.image.tool.magneticLasso",
+      "media.paged.image.tool.refineEdge",
+      "media.paged.image.tool.contentAwareMove",
+      "media.paged.image.tool.remove",
+      "media.paged.image.tool.cafSampling",
+      "media.paged.image.tool.pen",
+      "media.paged.image.tool.freeformPen",
+      "media.paged.image.tool.pathSelect",
+      "media.paged.image.tool.directSelect",
+      "media.paged.image.tool.rectangleShape",
+      "media.paged.image.tool.ellipseShape",
+      "media.paged.image.tool.polygonShape",
+      "media.paged.image.tool.lineShape",
+      "media.paged.image.tool.customShape",
+      "media.paged.image.tool.ruler",
+      "media.paged.image.tool.count",
+      "media.paged.image.tool.note",
+      "media.paged.image.tool.slice"
     ],
     "importers": ["media.paged.image.importer.raster"],
     "exporters": [
       "media.paged.image.exporter.psd",
       "media.paged.image.exporter.png",
-      "media.paged.image.exporter.jpeg"
+      "media.paged.image.exporter.jpeg",
+      "media.paged.image.exporter.tiff",
+      "media.paged.image.exporter.tiffLayers",
+      "media.paged.image.exporter.webp"
     ],
     "editContexts": [
       {
@@ -262,6 +470,70 @@
         {
           "id": "media.paged.image.command.claimTiles",
           "title": "Serve image tiles to the renderer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.freeTransform",
+          "title": "Free transform",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.transformDistort",
+          "title": "Transform: distort",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.transformPerspective",
+          "title": "Transform: perspective",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.transformWarp",
+          "title": "Transform: warp…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.puppetWarp",
+          "title": "Puppet warp…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.contentAwareScale",
+          "title": "Content-aware scale…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterLiquify",
+          "title": "Liquify…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.commitPerspectiveCrop",
+          "title": "Apply perspective crop",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -460,6 +732,14 @@
           }
         },
         {
+          "id": "media.paged.image.command.filterGaussianBlur",
+          "title": "Gaussian blur… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.filterBoxBlur",
           "title": "Box blur… (filter)",
           "args": {
@@ -613,7 +893,7 @@
         },
         {
           "id": "media.paged.image.command.filterHalftone",
-          "title": "Colour halftone… (filter)",
+          "title": "Halftone pattern… (filter)",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -710,6 +990,558 @@
         {
           "id": "media.paged.image.command.filterSelectiveColour",
           "title": "Selective colour… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterGallery",
+          "title": "Filter gallery… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterDisplace",
+          "title": "Displace… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterPolarCoordinates",
+          "title": "Polar coordinates… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterRipple",
+          "title": "Ripple… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterShear",
+          "title": "Shear… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterZigzag",
+          "title": "ZigZag… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterClouds",
+          "title": "Clouds… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterDifferenceClouds",
+          "title": "Difference clouds… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterFibers",
+          "title": "Fibers… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterLensFlare",
+          "title": "Lens flare… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterLightingEffects",
+          "title": "Lighting effects… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterWind",
+          "title": "Wind… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterExtrude",
+          "title": "Extrude… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterTiles",
+          "title": "Tiles… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterTraceContour",
+          "title": "Trace contour… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterCrystallize",
+          "title": "Crystallize… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterPointillize",
+          "title": "Pointillize… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterMezzotint",
+          "title": "Mezzotint… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterColorHalftone",
+          "title": "Colour halftone… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterShadowsHighlights",
+          "title": "Shadows/highlights… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterHdrToning",
+          "title": "HDR toning… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterMatchColor",
+          "title": "Match colour… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterReplaceColor",
+          "title": "Replace colour… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterDevelop",
+          "title": "Develop… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterColoredPencil",
+          "title": "Coloured pencil… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterCutout",
+          "title": "Cutout… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterDryBrush",
+          "title": "Dry brush… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterFresco",
+          "title": "Fresco… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterNeonGlow",
+          "title": "Neon glow… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterPaletteKnife",
+          "title": "Palette knife… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterPlasticWrap",
+          "title": "Plastic wrap… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterRoughPastels",
+          "title": "Rough pastels… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterSmudgeStick",
+          "title": "Smudge stick… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterSponge",
+          "title": "Sponge… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterUnderpainting",
+          "title": "Underpainting… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterWatercolor",
+          "title": "Watercolour… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterAccentedEdges",
+          "title": "Accented edges… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterAngledStrokes",
+          "title": "Angled strokes… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterDarkStrokes",
+          "title": "Dark strokes… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterInkOutlines",
+          "title": "Ink outlines… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterSprayedStrokes",
+          "title": "Sprayed strokes… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterSumiE",
+          "title": "Sumi-e… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterDiffuseGlow",
+          "title": "Diffuse glow… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterOceanRipple",
+          "title": "Ocean ripple… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterChalkCharcoal",
+          "title": "Chalk & charcoal… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterCharcoal",
+          "title": "Charcoal… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterChrome",
+          "title": "Chrome… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterConteCrayon",
+          "title": "Conté crayon… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterGraphicPen",
+          "title": "Graphic pen… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterNotePaper",
+          "title": "Note paper… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterPlaster",
+          "title": "Plaster… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterReticulation",
+          "title": "Reticulation… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterStamp",
+          "title": "Stamp… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterTornEdges",
+          "title": "Torn edges… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterWaterPaper",
+          "title": "Water paper… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterCraquelure",
+          "title": "Craquelure… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterGrain",
+          "title": "Grain… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterMosaicTiles",
+          "title": "Mosaic tiles… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterPatchwork",
+          "title": "Patchwork… (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterFieldBlur",
+          "title": "Blur gallery: Field blur…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterIrisBlur",
+          "title": "Blur gallery: Iris blur…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterTiltShift",
+          "title": "Blur gallery: Tilt-shift…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterPathBlur",
+          "title": "Blur gallery: Path blur…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.filterSpinBlur",
+          "title": "Blur gallery: Spin blur…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.solarize",
+          "title": "Solarize (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.facet",
+          "title": "Facet (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.desaturate",
+          "title": "Desaturate (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.equalize",
+          "title": "Equalize (filter)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.curvesTarget",
+          "title": "Curves: targeted adjustment on the image",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -932,6 +1764,158 @@
           }
         },
         {
+          "id": "media.paged.image.command.layerStyleBevel",
+          "title": "Layer style: bevel and emboss…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleStroke",
+          "title": "Layer style: stroke…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleInnerShadow",
+          "title": "Layer style: inner shadow…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleInnerGlow",
+          "title": "Layer style: inner glow…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleSatin",
+          "title": "Layer style: satin…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleColorOverlay",
+          "title": "Layer style: colour overlay…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleGradientOverlay",
+          "title": "Layer style: gradient overlay…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStylePatternOverlay",
+          "title": "Layer style: pattern overlay…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleOuterGlow",
+          "title": "Layer style: outer glow…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerStyleDropShadow",
+          "title": "Layer style: drop shadow…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.copyLayerStyle",
+          "title": "Copy layer style",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.pasteLayerStyle",
+          "title": "Paste layer style",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearLayerStyle",
+          "title": "Clear layer style",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.globalLight",
+          "title": "Global light…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleEffects",
+          "title": "Hide or show all effects",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.scaleEffects",
+          "title": "Scale effects…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rasterizeType",
+          "title": "Rasterize type layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.paintTextIntoLayer",
+          "title": "Paint text into layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.warpText",
+          "title": "Warp text…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.newAdjustmentBrightnessContrast",
           "title": "New adjustment layer: Brightness/Contrast",
           "args": {
@@ -1060,6 +2044,14 @@
           }
         },
         {
+          "id": "media.paged.image.command.newAdjustmentDevelop",
+          "title": "New adjustment layer: Develop",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.commitImage",
           "title": "Commit image edits to the document",
           "args": {
@@ -1078,6 +2070,94 @@
                 "to": "plugin:media.paged.image/layer"
               }
             }
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartEditContents",
+          "title": "Edit smart object contents",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartSaveContents",
+          "title": "Save and close smart object contents",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartCloseContents",
+          "title": "Close smart object contents without saving",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartTransform",
+          "title": "Transform smart object…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartReplaceContents",
+          "title": "Replace smart object contents…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartRelink",
+          "title": "Relink smart object to file…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartUpdateLinked",
+          "title": "Update linked smart object from file…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartEmbed",
+          "title": "Embed linked smart object",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartExportContents",
+          "title": "Export smart object contents…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.smartPlacePageItems",
+          "title": "Place selected page items as a smart object",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.convertForSmartFilters",
+          "title": "Convert for smart filters",
+          "args": {
+            "kind": "struct",
+            "fields": {}
           }
         },
         {
@@ -1113,6 +2193,14 @@
           }
         },
         {
+          "id": "media.paged.image.command.exportAs",
+          "title": "Export as…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.saveToFile",
           "title": "Save the adjusted file",
           "args": {
@@ -1123,6 +2211,86 @@
         {
           "id": "media.paged.image.command.loadBrushLibrary",
           "title": "Load brush library (.abr)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.openBrushSettings",
+          "title": "Brush settings",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.openBrushPresets",
+          "title": "Brush presets",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.defineBrushPreset",
+          "title": "Define brush preset…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.importBrushPresets",
+          "title": "Import brush presets…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.exportBrushPresetsAbr",
+          "title": "Export brush presets (.abr)…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.exportBrushPresetsJson",
+          "title": "Export brush presets (.json)…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newSnapshot",
+          "title": "New snapshot",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.historyOptions",
+          "title": "History options…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.presetManager",
+          "title": "Preset manager…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleLockTransparent",
+          "title": "Lock transparent pixels",
           "args": {
             "kind": "struct",
             "fields": {}
@@ -1169,6 +2337,22 @@
           }
         },
         {
+          "id": "media.paged.image.command.contentAwareFillWorkspace",
+          "title": "Content-aware fill… (workspace)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.openCloneSource",
+          "title": "Clone source panel",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.image.command.selectAll",
           "title": "Select all (image)",
           "args": {
@@ -1195,6 +2379,398 @@
         {
           "id": "media.paged.image.command.featherSelection",
           "title": "Feather selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.colorRange",
+          "title": "Color range… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.selectAndMask",
+          "title": "Select and mask… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.quickMask",
+          "title": "Quick mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.grow",
+          "title": "Grow selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.similar",
+          "title": "Similar (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.focusArea",
+          "title": "Focus area… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.saveSelection",
+          "title": "Save selection as channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.loadSelection",
+          "title": "Load selection… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.makeWorkPath",
+          "title": "Make work path from selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.fillPath",
+          "title": "Fill path (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.strokePath",
+          "title": "Stroke path (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.saveWorkPath",
+          "title": "Save work path (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskRevealAll",
+          "title": "Add vector mask (reveal all) (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskHideAll",
+          "title": "Add vector mask (hide all) (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskCurrentPath",
+          "title": "Add vector mask (current path) (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskDelete",
+          "title": "Delete vector mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskToggle",
+          "title": "Enable / disable vector mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskInvert",
+          "title": "Invert vector mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.vectorMaskRasterize",
+          "title": "Rasterize vector mask (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeBits8",
+          "title": "Mode: 8 bits per channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeBits16",
+          "title": "Mode: 16 bits per channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeBits32",
+          "title": "Mode: 32 bits per channel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeGray",
+          "title": "Mode: greyscale (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeRgb",
+          "title": "Mode: RGB colour (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeCmyk",
+          "title": "Mode: CMYK colour (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeLab",
+          "title": "Mode: Lab colour (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeIndexed",
+          "title": "Mode: indexed colour… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.modeMultichannel",
+          "title": "Mode: multichannel (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.proofColors",
+          "title": "Proof colours (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.gamutWarning",
+          "title": "Gamut warning (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.proofSetupCmyk",
+          "title": "Proof setup: working CMYK (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.proofSetupGray",
+          "title": "Proof setup: working grey (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rulerUnitPx",
+          "title": "Rulers in pixels",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rulerUnitIn",
+          "title": "Rulers in inches",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rulerUnitCm",
+          "title": "Rulers in centimetres",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rulerUnitMm",
+          "title": "Rulers in millimetres",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleGuides",
+          "title": "Show or hide guides",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleLockGuides",
+          "title": "Lock or unlock guides",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.toggleSnapGuides",
+          "title": "Snap to guides on or off",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearGuides",
+          "title": "Clear guides",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newGuide",
+          "title": "New guide…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.slicesFromGuides",
+          "title": "Slices from guides",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearSlices",
+          "title": "Delete all slices",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.exportSlices",
+          "title": "Export slices…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearNotes",
+          "title": "Delete all notes",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearCount",
+          "title": "Clear count",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newCountGroup",
+          "title": "New count group",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.straightenToRuler",
+          "title": "Straighten to ruler",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.clearRuler",
+          "title": "Clear ruler",
           "args": {
             "kind": "struct",
             "fields": {}

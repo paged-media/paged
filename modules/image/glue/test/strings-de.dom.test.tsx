@@ -111,6 +111,8 @@ describe("the image bundle in German", () => {
       "Härte",
       "Deckkraft",
       "Fluss",
+      "Transparente Pixel fixieren",
+      "Symmetrie",
     ]);
     const panel = imagePropertiesPanel();
     expect(panel.title).toBe("Bildeigenschaften");

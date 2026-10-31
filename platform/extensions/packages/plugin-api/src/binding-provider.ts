@@ -145,7 +145,13 @@
 
 import type { Disposable, MutationOutcome } from "./host.js";
 import type { MutationInput } from "./mutations.js";
-import type { CollectionName, ElementId, PropertyPath, Value } from "./wire.js";
+import type {
+  CollectionName,
+  ElementId,
+  PageId,
+  PropertyPath,
+  Value,
+} from "./wire.js";
 
 // ---------------------------------------------------------------- targets
 
@@ -295,6 +301,40 @@ export type BindingWrite =
 export type BindingCollection =
   { kind: "rows"; rows: readonly unknown[] } | BindingDecline;
 
+/**
+ * Image ADR 482 — a row a provider serves for the `"links"` collection:
+ * core's `LinkSummary` (`hostSelfId`, `hostKind`, `uri`, `status`) for a
+ * file the provider's content LINKS to or EMBEDS (paged.image's smart
+ * objects), plus the one field the host reads beyond core's shape:
+ * `actions`, the COMMANDS the Links panel's toolbar runs for the row.
+ *
+ * Core has no relink / update operation a provider could take first
+ * refusal on (`applyMutation`), and a link inside a provider's content
+ * is not a core link anyway — so the row names the provider's own
+ * commands, and the host runs them with `{ link: hostSelfId }` as their
+ * payload. The host branches on the PRESENCE of an action, never on the
+ * provider's identity; an action left out keeps its button disabled.
+ * Each command is one undo step of the provider's, as any command is.
+ */
+export interface ProvidedLinkRow {
+  hostSelfId: string;
+  /** What holds the link, in the provider's words (`"smartObject"`). */
+  hostKind: string;
+  /** The linked file's path, or an embedded file's name. */
+  uri: string;
+  /** `"ok"`, `"missing"` (a link whose file is not at hand), or
+   *  `"embedded"` (the file is held inside the document). */
+  status?: string;
+  actions?: {
+    /** Point the link at another file (the command picks it). */
+    relink?: string;
+    /** Read the linked file again (Update Modified Content). */
+    update?: string;
+    /** Embed a linked file in the document. */
+    embed?: string;
+  };
+}
+
 // --------------------------------------------------------------- provider
 
 /** The op names a provider may intercept — core's own mutation
@@ -357,7 +397,142 @@ export interface BindingProviderScope {
    *  WHOLE batch: the registry never decomposes one to route children
    *  separately (that would split one undo step across two authorities). */
   ops?: readonly BindingOp[];
+  /**
+   * Extensions ADR 340 — this provider supplies the active context's
+   * WORKSPACE: the coordinate frame the host RULERS measure in, the
+   * context's own ruler GUIDES (drawn, dragged out of the rulers, moved
+   * and deleted by the host's one guide machinery), and the area the
+   * host GRID covers. Declaring it requires `readWorkspace` and
+   * `editGuide`. Probe `supports("bindings.workspace@1")`.
+   *
+   * Not a `PropertyPath`, deliberately and by the vocabulary rule's own
+   * escape: rulers, guides and the grid are HOST CHROME, not document
+   * values — no panel binds to them and nothing is written to core. The
+   * host asks one question ("what frame do the rulers measure in, and
+   * which guides does it carry?") whose answer is the same shape for
+   * every content type, so no host code branches on who answered.
+   */
+  workspace?: boolean;
+  /**
+   * Extensions ADR 340 — host READOUT surfaces this provider adds rows
+   * to while its context is active (`"info"`: the Info panel). Declaring
+   * one requires `readReadouts`. Readouts are display text the host shows
+   * and never writes back — the same reasoning as `workspace`: an Info
+   * panel's "pixel colour under the cursor" is not a document value.
+   * Probe `supports("bindings.readouts@1")`.
+   */
+  readouts?: readonly BindingReadoutSurface[];
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// WORKSPACE and READOUTS (extensions ADR 340)
+// ─────────────────────────────────────────────────────────────────────
+
+/** The host surfaces a provider may add readout rows to. */
+export type BindingReadoutSurface = "info";
+
+/** The unit the rulers count in: its label (`"px"`, `"in"`, `"cm"`,
+ *  `"mm"`, …) and how many BASE units one of it spans. */
+export interface BindingRulerUnit {
+  label: string;
+  basePerUnit: number;
+}
+
+/** One of the context's own ruler guides. `position` is in BASE units
+ *  from the workspace origin (an x for a vertical guide, a y for a
+ *  horizontal one); `id` is the provider's, opaque to the host. */
+export interface BindingWorkspaceGuide {
+  id: string;
+  orientation: "horizontal" | "vertical";
+  position: number;
+}
+
+/**
+ * The active context's workspace. The context measures in its own BASE
+ * unit (a raster image: the pixel) from an ORIGIN on a page; the host
+ * rulers count from that origin in `unit`, the host grid covers `size`
+ * from it, and guides lie on it. Axis-aligned by construction: a context
+ * whose frame is rotated answers `decline` and the rulers stay the page's.
+ */
+export interface BindingWorkspace {
+  /** The page the workspace lies on. */
+  pageId: PageId;
+  /** Its origin (base 0, 0), page-local pt. */
+  origin: [number, number];
+  /** Page pt one base unit spans (the image's display scale). */
+  ptPerBase: number;
+  /** Its extent in base units [width, height] — the grid covers it and
+   *  guides span it. */
+  size: [number, number];
+  /** What the rulers count in. */
+  unit: BindingRulerUnit;
+  /** Base units per PHYSICAL point (a 300 ppi image: 300 / 72). The
+   *  host's grid preference is a physical length; this maps it, so a
+   *  "gridline every 1 in" covers 300 pixels of a 300 ppi image. */
+  basePerPoint: number;
+  /** A dropped or moved guide rounds to a multiple of this many base
+   *  units (default 1: whole pixels). */
+  guideStep?: number;
+  guides: readonly BindingWorkspaceGuide[];
+  /** The context's View ▸ Guides toggle: false hides its guides (the
+   *  host then neither draws them nor lets one be dragged). */
+  guidesVisible: boolean;
+  /** View ▸ Lock Guides: the guides draw but cannot be moved or deleted;
+   *  a new one can still be dragged out of a ruler. */
+  guidesLocked: boolean;
+}
+
+export type BindingWorkspaceRead =
+  { kind: "workspace"; workspace: BindingWorkspace } | BindingDecline;
+
+/** A guide edit the HOST's guide machinery asks the provider for: a
+ *  guide dragged out of a ruler (create), moved, or dropped back onto a
+ *  ruler (delete). Positions in base units, already rounded to
+ *  `guideStep`. One edit is one undo step in the context's own history. */
+export type BindingGuideEdit =
+  | {
+      kind: "create";
+      orientation: "horizontal" | "vertical";
+      position: number;
+    }
+  | { kind: "move"; id: string; position: number }
+  | { kind: "delete"; id: string };
+
+/** The host's view state a workspace provider snaps by: its grid (the
+ *  same lines the host draws over the workspace) and its tolerance. */
+export interface BindingWorkspaceView {
+  showGrid: boolean;
+  snapToGrid: boolean;
+  /** "Gridline every", physical pt (see `basePerPoint`). */
+  gridEveryPt: number;
+  gridSubdivisions: number;
+  /** Snapping distance in screen px. */
+  snapTolerancePx: number;
+}
+
+/** One readout row: a label and its value as text (an optional colour
+ *  swatch, `#rrggbb`). `id` names the row for tests. */
+export interface BindingReadoutRow {
+  id: string;
+  label: string;
+  value: string;
+  swatch?: string;
+}
+
+/** A titled group of readout rows. */
+export interface BindingReadoutSection {
+  id: string;
+  title: string;
+  rows: readonly BindingReadoutRow[];
+}
+
+export interface BindingReadoutRequest {
+  surface: BindingReadoutSurface;
+}
+
+export type BindingReadoutsRead =
+  | { kind: "readouts"; sections: readonly BindingReadoutSection[] }
+  | BindingDecline;
 
 /**
  * The resolver a bundle registers through
@@ -419,6 +594,21 @@ export interface BindingProvider {
   /** Take first refusal on a declared structural op. Required iff
    *  `provides.ops` is non-empty. */
   applyMutation?(mutation: MutationInput): BindingWrite | Promise<BindingWrite>;
+  /** The context's workspace (rulers, guides, grid area). Required iff
+   *  `provides.workspace`. */
+  readWorkspace?(): BindingWorkspaceRead | Promise<BindingWorkspaceRead>;
+  /** Apply a guide edit from the host's guide machinery. Required iff
+   *  `provides.workspace`; the write lands in the context's own undo
+   *  history (the undo rule above). */
+  editGuide?(edit: BindingGuideEdit): BindingWrite | Promise<BindingWrite>;
+  /** The host's grid and snapping state, delivered when the provider
+   *  becomes active and whenever it changes. Optional. */
+  workspaceView?(view: BindingWorkspaceView): void;
+  /** Rows for a declared readout surface. Required iff `provides.readouts`
+   *  is non-empty. Re-read on `invalidate()`. */
+  readReadouts?(
+    request: BindingReadoutRequest,
+  ): BindingReadoutsRead | Promise<BindingReadoutsRead>;
 }
 
 /**
@@ -470,6 +660,28 @@ export type BindingReadResult =
 export type BindingWriteResult =
   | { handled: true; provider: string; outcome: MutationOutcome }
   | { handled: false; reason: string };
+
+/** The registry's answer to a workspace read. `resolved: false` ⇒ the
+ *  rulers measure the page and the host's own guides apply. `elementId`
+ *  is the active context's scope root. */
+export type BindingWorkspaceResult =
+  | {
+      resolved: true;
+      provider: string;
+      elementId: string | null;
+      workspace: BindingWorkspace;
+    }
+  | { resolved: false; reason: string };
+
+/** The registry's answer to a readout read: the claiming provider's
+ *  sections, or `resolved: false` (the surface shows only its own rows). */
+export type BindingReadoutsResult =
+  | {
+      resolved: true;
+      provider: string;
+      sections: readonly BindingReadoutSection[];
+    }
+  | { resolved: false; reason: string };
 
 /** The registry's answer to a collection read. `resolved: false` ⇒ the
  *  host reads core (`document.collection(name)`). */

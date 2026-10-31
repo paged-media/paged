@@ -57,6 +57,20 @@ export interface BrushSample {
   y: number;
   /** Normalized pressure in [0, 1] — see [`normalizePressure`]. */
   pressure: number;
+  /** A PEN's tilt in degrees (−90..90, Pointer Events) — present only
+   *  for a pen, so a mouse stroke keeps the three-field wire. */
+  tiltX?: number;
+  tiltY?: number;
+  /** Barrel rotation in degrees, when the host reports one. */
+  rotation?: number;
+  /** Airbrush wheel 0..1, when the host reports one. */
+  wheel?: number;
+}
+
+/** A pen's extra readings, as `CanvasPointerEvent` carries them. */
+export interface PenReadings {
+  tiltX?: number;
+  tiltY?: number;
 }
 
 /** The pressure a NON-PEN device paints at.
@@ -130,6 +144,7 @@ export interface BrushMachine {
     point: [number, number],
     pressure: number,
     pointerType: BrushPointerType,
+    pen?: PenReadings,
   ): boolean;
   /** Pointer move: queues a sample. False when no stroke is open, when
    *  the point is not finite, or when the sample is an EXACT duplicate
@@ -140,7 +155,13 @@ export interface BrushMachine {
     point: [number, number],
     pressure: number,
     pointerType: BrushPointerType,
+    pen?: PenReadings,
   ): boolean;
+  /** The pointer is HELD STILL: queue the last sample again. The engine
+   *  reads a repeated sample as time passing — Build-up deposits again,
+   *  smoothing's catch-up pulls the brush toward the pointer. False when
+   *  no stroke is open. */
+  hold(): boolean;
   /** Pointer up: no further samples. The stroke is finished once every
    *  queued sample has been taken (see [`BrushMachine.drained`]). */
   up(): void;
@@ -173,6 +194,7 @@ export function createBrushMachine(): BrushMachine {
     point: [number, number],
     pressure: number,
     pointerType: BrushPointerType,
+    pen?: PenReadings,
   ): BrushSample | null => {
     if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null;
     const sample: BrushSample = {
@@ -180,6 +202,16 @@ export function createBrushMachine(): BrushMachine {
       y: point[1],
       pressure: normalizePressure(pressure, pointerType),
     };
+    // Tilt crosses only for a PEN that reports one: a mouse reports 0,
+    // and sending it would turn every mouse stroke into a pen stroke.
+    if (
+      pointerType === "pen" &&
+      pen &&
+      (Number.isFinite(pen.tiltX) || Number.isFinite(pen.tiltY))
+    ) {
+      sample.tiltX = Number.isFinite(pen.tiltX) ? pen.tiltX : 0;
+      sample.tiltY = Number.isFinite(pen.tiltY) ? pen.tiltY : 0;
+    }
     queue.push(sample);
     accepted.push(sample);
     last = sample;
@@ -194,29 +226,40 @@ export function createBrushMachine(): BrushMachine {
       queued: queue.length,
     }),
 
-    down(point, pressure, pointerType) {
+    down(point, pressure, pointerType, pen) {
       if (drawing) return false;
       queue = [];
       accepted = [];
       last = null;
       ended = false;
-      if (!push(point, pressure, pointerType)) return false;
+      if (!push(point, pressure, pointerType, pen)) return false;
       drawing = true;
       return true;
     },
 
-    move(point, pressure, pointerType) {
+    move(point, pressure, pointerType, pen) {
       if (!drawing) return false;
       const p = normalizePressure(pressure, pointerType);
       if (
         last &&
         last.x === point[0] &&
         last.y === point[1] &&
-        last.pressure === p
+        last.pressure === p &&
+        (pointerType !== "pen" ||
+          ((last.tiltX ?? 0) === (pen?.tiltX ?? 0) &&
+            (last.tiltY ?? 0) === (pen?.tiltY ?? 0)))
       ) {
         return false;
       }
-      return push(point, pressure, pointerType) !== null;
+      return push(point, pressure, pointerType, pen) !== null;
+    },
+
+    hold() {
+      if (!drawing || !last) return false;
+      const again = { ...last };
+      queue.push(again);
+      accepted.push(again);
+      return true;
     },
 
     up() {

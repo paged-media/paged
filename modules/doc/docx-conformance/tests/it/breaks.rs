@@ -222,12 +222,26 @@ fn every_break_lowers_to_the_rule_on_the_paragraph_that_starts_over() {
             ("A21b", "NextPage"),  // the split part after a mid-paragraph break
             ("B04", "NextColumn"), // after the paragraph holding only a column break
             ("B08b", "NextColumn"),
-            ("C01", "NextOddPage"),
-            ("D01", "NextOddPage"),
-            ("E01", "NextEvenPage"),
-            ("F01", "NextEvenPage"),
         ],
         "all rules: {rules:?}"
+    );
+    // An odd- or even-page section opens its own story: its grow rule's
+    // section start puts the blank page in (engine ADR 1022, doc ADR 611),
+    // not a rule on its first paragraph.
+    let starts: Vec<Option<&str>> = ir
+        .sections
+        .iter()
+        .map(|s| s.section_start.as_deref())
+        .collect();
+    assert_eq!(
+        starts[starts.len() - 4..],
+        [
+            Some("oddPage"),
+            Some("oddPage"),
+            Some("evenPage"),
+            Some("evenPage")
+        ],
+        "{starts:?}"
     );
 
     // The break paragraphs themselves stay (empty, unruled): Word keeps
@@ -299,6 +313,14 @@ fn the_rules_reproduce_words_page_map() {
     for (k, sec) in ir.sections.iter().enumerate() {
         let cols = sec.columns as usize;
         let new_page = |pages: &mut Vec<Vec<Vec<String>>>| pages.push(vec![Vec::new(); cols]);
+        // The section start (engine ADR 1022): a blank page in front when
+        // the section's first page would have the wrong parity.
+        if let Some(start) = sec.section_start.as_deref() {
+            let want_odd = start == "oddPage";
+            while ((pages.len() + 1) % 2 == 1) != want_odd {
+                pages.push(vec![Vec::new()]);
+            }
+        }
         new_page(&mut pages);
         let (mut col, mut line) = (0usize, 0usize);
         let end = ir
@@ -389,6 +411,7 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
     // What the host reads back: one paragraph per native paragraph, a run
     // split in two where a break cut it.
     let read_back = || StoryContentIn {
+        comments: Vec::new(),
         self_id: "docx_s0".into(),
         paragraphs: ir
             .story
@@ -400,6 +423,8 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
                 };
                 let cuts: Vec<usize> = p.segments.iter().map(|s| s.at as usize).collect();
                 let mut parts = vec![ParagraphContentIn {
+                    mark_change: None,
+                    props_change: None,
                     paragraph_style: p.para_style_id.clone(),
                     runs: Vec::new(),
                 }];
@@ -416,6 +441,8 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
                                 });
                             }
                             parts.push(ParagraphContentIn {
+                                mark_change: None,
+                                props_change: None,
                                 paragraph_style: None,
                                 runs: Vec::new(),
                             });

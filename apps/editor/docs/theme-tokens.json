@@ -161,6 +161,11 @@
       "light": "#7c5cff",
       "dark": "#7c5cff"
     },
+    "--overlay-isolation-dim": {
+      "group": "canvas overlays",
+      "light": "rgba(255, 255, 255, 0.5)",
+      "dark": "rgba(24, 24, 27, 0.55)"
+    },
     "--overlay-selection": {
       "group": "canvas overlays",
       "light": "#e0408f",

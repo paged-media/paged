@@ -145,6 +145,19 @@ pub struct Diagnostic {
     /// frame. `None` for document-run substitutions and all other codes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font: Option<String>,
+    /// For an `OversetTextDropped` of a table cell (a cell whose text does not
+    /// fit its row): the cell — the table's `Self` and the template row and
+    /// column. `None` for a story's overset and all other codes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cell: Option<OversetCell>,
+}
+
+/// A table cell whose text does not fit its row ([`Diagnostic::cell`]).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct OversetCell {
+    pub table_id: String,
+    pub row: u32,
+    pub column: u32,
 }
 
 impl Diagnostic {
@@ -161,7 +174,18 @@ impl Diagnostic {
             uri: None,
             overset: None,
             font: None,
+            cell: None,
         }
+    }
+
+    /// Attach the table cell an overset is in (a cell's text past its row).
+    pub fn with_cell(mut self, table_id: impl Into<String>, row: u32, column: u32) -> Self {
+        self.cell = Some(OversetCell {
+            table_id: table_id.into(),
+            row,
+            column,
+        });
+        self
     }
 
     pub fn with_page(mut self, page_index: usize) -> Self {
@@ -251,6 +275,24 @@ impl RenderDiagnostics {
     /// deduplicated, but we collect into a `BTreeSet` for stable
     /// order regardless of build/page-visit order. Backs the editor
     /// Preflight + per-story overset flag (panels.md gap 1).
+    /// The table cells whose text does not fit their row, keyed by the story
+    /// the table is in, in report order without duplicates.
+    pub fn overset_cells(&self) -> BTreeMap<String, Vec<OversetCell>> {
+        let mut out: BTreeMap<String, Vec<OversetCell>> = BTreeMap::new();
+        for d in &self.items {
+            if d.code != DiagnosticCode::OversetTextDropped {
+                continue;
+            }
+            if let (Some(story), Some(cell)) = (&d.story_id, &d.cell) {
+                let cells = out.entry(story.clone()).or_default();
+                if !cells.contains(cell) {
+                    cells.push(cell.clone());
+                }
+            }
+        }
+        out
+    }
+
     pub fn overset_story_ids(&self) -> std::collections::BTreeSet<String> {
         self.items
             .iter()

@@ -36,9 +36,16 @@
 // (item opacity), a box with one corner radius (a rectangle with rounded
 // corners), an outer box shadow (the native drop-shadow effect on the
 // rectangle or path that casts it) and raster images (an image frame with the
-// pixels inline). What does not is COUNTED in `deferred`, never faked: sweep
-// gradients, gradient strokes, blend modes, inner shadows, a shadow with no
-// shape of its size to carry it, translucent gradient stops (baked opaque).
+// pixels inline), an inset box shadow (the native inner shadow of the box it
+// is cast in). The CSS effects of an element (ADR 415: `opacity`,
+// `mix-blend-mode`, `isolation`, `filter: drop-shadow() / opacity()`,
+// `clip-path`, `mask-image`) arrive as effect groups beside the layer and map
+// onto the items' and native groups' transparency, clip groups and opacity
+// masks (`planEffects`). What does not is COUNTED in `deferred`, never faked:
+// sweep gradients, gradient strokes, per-fill blend lanes, a shadow with no
+// shape of its size to carry it, translucent gradient stops (baked opaque),
+// and every effect without a native twin (`filter: blur()` and the colour
+// filters, a drop shadow on a group, a mask on a group or text).
 // Geometry stays in the SceneLayer's own frame-content POINTS; the
 // orchestrator offsets by the frame's page origin.
 
@@ -48,8 +55,11 @@ import type {
   PathAnchorSpec,
 } from "@paged-media/plugin-api";
 import type {
+  SceneEffectGroup,
   SceneGradient,
+  SceneItem,
   SceneLayer,
+  SceneLayerEffects,
   ScenePathSeg,
 } from "@paged-media/web-model";
 
@@ -95,6 +105,56 @@ export interface BakeShadow {
   colorId: string;
 }
 
+/** A native inner shadow: the light's angle (degrees, IDML) and distance,
+ *  size in points, opacity 0..100, colour a swatch id. */
+export interface BakeInnerShadow {
+  angle: number;
+  distance: number;
+  size: number;
+  opacityPct: number;
+  colorId: string;
+}
+
+/** A planned item or native group: `index` into the plan's list of that
+ *  kind. */
+export interface BakeRef {
+  kind: "rect" | "path" | "text" | "image" | "group";
+  index: number;
+}
+
+/** A native group (ADR 415) of planned items and groups — created after
+ *  them, children before parents. With `clip`, the group is a clip group
+ *  whose top member is a path of that outline (frame-content points). */
+export interface BakeGroup {
+  members: BakeRef[];
+  clip?: PathAnchorSpec[][];
+  /** Group opacity 0..100; absent = opaque. */
+  opacity?: number;
+  /** The group's blend mode, IDML spelling. */
+  blend?: string;
+  isolate?: boolean;
+}
+
+/** An opacity mask (CSS `mask-image`) on one planned item: a rectangle
+ *  painting the mask — a gradient whose grey levels are the mask's alpha
+ *  (`Luminosity`), or the mask image itself (`Alpha`). */
+export type BakeMask = {
+  target: BakeRef;
+  bounds: [number, number, number, number];
+} & (
+  | {
+      kind: "gradient";
+      gradientId: string;
+      gradient: BakeGradientPlacement;
+    }
+  | {
+      kind: "image";
+      rgba: Uint8Array | number[];
+      width: number;
+      height: number;
+    }
+);
+
 /** A rectangle → a native rectangle frame. Bounds are frame-content points
  *  `[top, left, bottom, right]`; `fillColorId` is a {@link BakeSwatch} or
  *  {@link BakeGradient} id (`null`: no fill, a stroke-only rectangle). */
@@ -106,6 +166,9 @@ export interface BakeRect {
   /** Item opacity 0..100 (a translucent paint); absent = opaque. */
   opacity?: number;
   shadow?: BakeShadow;
+  innerShadow?: BakeInnerShadow;
+  /** Blend mode, IDML spelling (an element's `mix-blend-mode`). */
+  blend?: string;
   /** One radius (points) on all four corners, as rounded corners; absent =
    *  square corners. */
   cornerRadius?: number;
@@ -125,6 +188,8 @@ export interface BakePath {
   stroke?: BakeStroke;
   opacity?: number;
   shadow?: BakeShadow;
+  innerShadow?: BakeInnerShadow;
+  blend?: string;
 }
 
 /** A single-line text run → a native text frame. `left`/`baseline` are the
@@ -144,6 +209,8 @@ export interface BakeText {
   /** The run's shaped advance (points), from the engine. */
   advance?: number;
   opacity?: number;
+  shadow?: BakeShadow;
+  blend?: string;
 }
 
 /** A raster image → a native image frame carrying the pixels. `rgba` is
@@ -153,6 +220,9 @@ export interface BakeImage {
   rgba: Uint8Array | number[];
   width: number;
   height: number;
+  opacity?: number;
+  shadow?: BakeShadow;
+  blend?: string;
 }
 
 /** The native-content plan for one rendered web frame — pure data. */
@@ -163,6 +233,10 @@ export interface BakePlan {
   paths: BakePath[];
   texts: BakeText[];
   images: BakeImage[];
+  /** Native groups (ADR 415), children before parents; absent when none. */
+  groups?: BakeGroup[];
+  /** Opacity masks (ADR 415); absent when none. */
+  masks?: BakeMask[];
   /** Un-baked SceneItem kinds, counted honestly (never faked). Keys are the
    *  wire `kind` (or a refinement like `dropShadow.noShape`); values are
    *  counts. */
@@ -429,11 +503,13 @@ const NEAR = (a: number, b: number) => Math.abs(a - b) <= 0.5;
  * total — same layer → same plan, never throws. Colours are deduplicated into
  * `swatches` (a fully transparent paint is skipped as "nothing to paint"; a
  * translucent one becomes the item's opacity). `advances` is the engine's
- * shaped advance per `text` item, in item order (`take_text_advances`).
+ * shaped advance per `text` item, in item order (`take_text_advances`);
+ * `effects` the layer's CSS effect groups (`take_effects`, ADR 415).
  */
 export function sceneLayerToBakePlan(
   layer: SceneLayer,
   advances: readonly number[] = [],
+  effects?: SceneLayerEffects,
 ): BakePlan {
   const swatchById = new Map<string, BakeSwatch>();
   const gradientById = new Map<string, BakeGradient>();
@@ -527,6 +603,16 @@ export function sceneLayerToBakePlan(
     };
   };
 
+  /** What each layer item became (`null`: nothing of its own — a shadow
+   *  carried by a shape, a skipped or deferred item). */
+  const refs: (BakeRef | null)[] = [];
+  /** The rectangles and paths in paint order, with their bounds — where an
+   *  inset shadow finds the box it is cast in. */
+  const shapes: {
+    ref: BakeRef;
+    bounds: [number, number, number, number];
+  }[] = [];
+
   /** A filled or stroked shape: a rectangle when it is one (square, or with
    *  one corner radius), else a path. */
   const shape = (
@@ -534,7 +620,7 @@ export function sceneLayerToBakePlan(
     fill: { colorId: string | null; gradient?: BakeGradientPlacement },
     extra: { stroke?: BakeStroke; opacity?: number },
     kind: string,
-  ): void => {
+  ): BakeRef | null => {
     const closed =
       extra.stroke === undefined || path.some((sg) => sg.op === "close");
     const square = closed ? pathAsRect(path) : null;
@@ -549,12 +635,14 @@ export function sceneLayerToBakePlan(
       const shadow = takeShadow(rect);
       if (shadow) r.shadow = shadow;
       rects.push(r);
-      return;
+      const ref: BakeRef = { kind: "rect", index: rects.length - 1 };
+      shapes.push({ ref, bounds: rect });
+      return ref;
     }
     const geo = pathToSubpaths(path);
     if (geo === null) {
       defer(`${kind}.degenerate`);
-      return;
+      return null;
     }
     const p: BakePath = { anchors: geo.subpaths[0], fillColorId: fill.colorId };
     if (geo.subpaths.length > 1) p.subpaths = geo.subpaths;
@@ -566,10 +654,14 @@ export function sceneLayerToBakePlan(
     const shadow = bounds ? takeShadow(bounds) : undefined;
     if (shadow) p.shadow = shadow;
     paths.push(p);
+    const ref: BakeRef = { kind: "path", index: paths.length - 1 };
+    if (bounds) shapes.push({ ref, bounds });
+    return ref;
   };
 
   let textIndex = 0;
-  for (const item of layer.items) {
+  for (const [itemIndex, item] of layer.items.entries()) {
+    refs[itemIndex] = null;
     switch (item.kind) {
       case "text": {
         const advance = advances[textIndex];
@@ -592,12 +684,13 @@ export function sceneLayerToBakePlan(
         const opacity = opacityOf(item.paint.a);
         if (opacity !== undefined) t.opacity = opacity;
         texts.push(t);
+        refs[itemIndex] = { kind: "text", index: texts.length - 1 };
         break;
       }
       case "fillPath": {
         const colorId = swatchFor(item.paint);
         if (colorId === null) break; // transparent fill → nothing to bake
-        shape(
+        refs[itemIndex] = shape(
           item.path,
           { colorId },
           { opacity: opacityOf(item.paint.a) },
@@ -608,7 +701,7 @@ export function sceneLayerToBakePlan(
       case "strokePath": {
         const colorId = swatchFor(item.paint);
         if (colorId === null || !(item.width > 0)) break;
-        shape(
+        refs[itemIndex] = shape(
           item.path,
           { colorId: null },
           {
@@ -625,7 +718,7 @@ export function sceneLayerToBakePlan(
           defer(`fillPathGradient.${item.gradient.type}`);
           break;
         }
-        shape(
+        refs[itemIndex] = shape(
           item.path,
           { colorId: g.id, gradient: g.placement },
           {},
@@ -667,6 +760,50 @@ export function sceneLayerToBakePlan(
           width: item.width,
           height: item.height,
         });
+        refs[itemIndex] = { kind: "image", index: images.length - 1 };
+        break;
+      }
+      case "innerShadow": {
+        // An inset box shadow: the path is the element's border box moved
+        // by the shadow's offset. The box it is cast in is the latest shape
+        // of that size painted before it (the element's background).
+        const b = pathBounds(item.path);
+        const colorId = swatchFor({ r: item.r, g: item.g, b: item.b, a: 1 });
+        if (b === null || colorId === null || item.a <= 0) break;
+        const h = b[2] - b[0];
+        const w = b[3] - b[1];
+        let host: (typeof shapes)[number] | undefined;
+        for (let i = shapes.length - 1; i >= 0; i -= 1) {
+          const sb = shapes[i].bounds;
+          if (NEAR(sb[2] - sb[0], h) && NEAR(sb[3] - sb[1], w)) {
+            host = shapes[i];
+            break;
+          }
+        }
+        if (!host) {
+          defer("innerShadow.noShape");
+          break;
+        }
+        const target =
+          host.ref.kind === "rect"
+            ? rects[host.ref.index]
+            : paths[host.ref.index];
+        if (target.innerShadow) {
+          defer("innerShadow.stacked");
+          break;
+        }
+        const dx = b[1] - host.bounds[1] + item.offset_x;
+        const dy = b[0] - host.bounds[0] + item.offset_y;
+        const distance = Math.hypot(dx, dy);
+        target.innerShadow = {
+          // IDML casts an effect at `(-d·cos a, d·sin a)` (y down).
+          angle:
+            distance > 0 ? round3((Math.atan2(dy, -dx) * 180) / Math.PI) : 120,
+          distance: round3(distance),
+          size: round3(item.blur_radius),
+          opacityPct: Math.round(Math.max(0, Math.min(1, item.a)) * 1000) / 10,
+          colorId,
+        };
         break;
       }
       default: {
@@ -682,15 +819,244 @@ export function sceneLayerToBakePlan(
   // it).
   for (let i = 0; i < shadows.length; i += 1) defer("dropShadow.noShape");
 
-  return {
-    swatches: [...swatchById.values()],
-    gradients: [...gradientById.values()],
+  const plan: BakePlan = {
+    swatches: [],
+    gradients: [],
     rects,
     paths,
     texts,
     images,
     deferred,
   };
+  if (effects) {
+    planEffects(plan, refs, effects, { defer, swatchFor, gradientFor });
+  }
+  plan.swatches = [...swatchById.values()];
+  plan.gradients = [...gradientById.values()];
+  return plan;
+}
+
+// ------------------------------------------------------------ CSS effects
+
+/** The planner's colour helpers, lent to {@link planEffects}. */
+interface EffectHelpers {
+  defer: (key: string) => void;
+  swatchFor: (paint: {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+  }) => string | null;
+  gradientFor: (
+    gradient: SceneGradient,
+  ) => { id: string; placement: BakeGradientPlacement } | null;
+}
+
+/** The planned item a ref names (never a group). */
+type PlannedItem = BakeRect | BakePath | BakeText | BakeImage;
+
+/** Multiply an opacity percentage (absent = 100) by a 0..1 factor. */
+function mulOpacity(
+  pct: number | undefined,
+  factor: number,
+): number | undefined {
+  const v =
+    Math.round((pct ?? 100) * Math.max(0, Math.min(1, factor)) * 10) / 10;
+  return v >= 100 ? undefined : v;
+}
+
+/**
+ * Map a layer's CSS effect groups (ADR 415) onto the plan, innermost first.
+ * A group whose effects one item can carry is folded into that item (its
+ * opacity multiplied in, its blend mode, drop shadow and mask set on it); any
+ * other becomes a native group of its members (a clip group when it has a
+ * `clip-path`). What has no native twin is deferred by key, never faked:
+ * `filter.blur`, `filter.<colour function>` (the image-adjustment stack is
+ * not on this engine), `filter.url`, a drop shadow or mask a group or text
+ * would have to carry, a second drop shadow.
+ */
+export function planEffects(
+  plan: BakePlan,
+  refs: readonly (BakeRef | null)[],
+  effects: SceneLayerEffects,
+  h: EffectHelpers,
+): void {
+  for (const [key, n] of Object.entries(effects.losses ?? {}))
+    for (let i = 0; i < n; i += 1) h.defer(key);
+  const groups = effects.groups;
+  const groupsOut: BakeGroup[] = [];
+  const masks: BakeMask[] = [];
+  /** What each effect group resolved to (`null`: it baked nothing). */
+  const node: (BakeRef | null)[] = groups.map(() => null);
+  const children = groups.map(() => [] as number[]);
+  groups.forEach((g, i) => {
+    if (g.parent !== undefined && g.parent < i) children[g.parent].push(i);
+  });
+  const item = (ref: BakeRef): PlannedItem | undefined =>
+    ref.kind === "rect"
+      ? plan.rects[ref.index]
+      : ref.kind === "path"
+        ? plan.paths[ref.index]
+        : ref.kind === "text"
+          ? plan.texts[ref.index]
+          : ref.kind === "image"
+            ? plan.images[ref.index]
+            : undefined;
+  const wrap = (members: BakeRef[], clip?: PathAnchorSpec[][]): BakeRef => {
+    const grp: BakeGroup = { members };
+    if (clip) grp.clip = clip;
+    groupsOut.push(grp);
+    return { kind: "group", index: groupsOut.length - 1 };
+  };
+
+  for (let gi = groups.length - 1; gi >= 0; gi -= 1) {
+    const g = groups[gi];
+    for (const key of g.losses ?? []) h.defer(key);
+    // The direct members, in paint order: the items no child group holds,
+    // and what each child group became.
+    const members: { at: number; ref: BakeRef }[] = [];
+    const inChild = (i: number) =>
+      children[gi].some((c) => groups[c].start <= i && i < groups[c].end);
+    for (let i = g.start; i < g.end; i += 1) {
+      const ref = refs[i];
+      if (ref && !inChild(i)) members.push({ at: i, ref });
+    }
+    for (const c of children[gi]) {
+      const ref = node[c];
+      if (ref) members.push({ at: groups[c].start, ref });
+    }
+    members.sort((a, b) => a.at - b.at);
+    if (members.length === 0) continue;
+
+    // The filter list: opacity() multiplies in, a drop shadow maps, the rest
+    // has no native twin.
+    let opacity = g.opacity;
+    const dropShadows: Extract<
+      NonNullable<SceneEffectGroup["filters"]>[number],
+      { kind: "dropShadow" }
+    >[] = [];
+    for (const f of g.filters ?? []) {
+      if (f.kind === "opacity") opacity *= f.amount;
+      else if (f.kind === "dropShadow") dropShadows.push(f);
+      else if (f.kind === "blur") h.defer("filter.blur");
+      else if (f.kind === "url") h.defer("filter.url");
+      else h.defer(`filter.${f.function}`);
+    }
+
+    let clip: PathAnchorSpec[][] | undefined;
+    if (g.clip) {
+      const geo = pathToSubpaths(g.clip);
+      if (geo) clip = geo.subpaths;
+      else h.defer("clipPath.degenerate");
+    }
+
+    // One member and no clip: the member carries the effects itself.
+    let ref: BakeRef =
+      members.length === 1 && !clip
+        ? members[0].ref
+        : wrap(members.map((m) => m.ref));
+
+    // The mask goes on the one item it masks, inside any clip group.
+    if (g.mask && g.mask.length > 0) {
+      const target = members.length === 1 ? members[0].ref : ref;
+      const mask = planMask(g.mask, target, h);
+      if (target.kind === "group") h.defer("mask.group");
+      else if (target.kind === "text") h.defer("mask.text");
+      else if (mask === null) h.defer("mask.unsupported");
+      else masks.push(mask);
+    }
+    if (clip) {
+      // The clip group wraps what the element painted (its members, or the
+      // group made of them).
+      ref =
+        ref.kind === "group" && groupsOut[ref.index].clip === undefined
+          ? ((groupsOut[ref.index].clip = clip), ref)
+          : wrap([ref], clip);
+    }
+
+    // Blend: a node already blended (by a child group) is wrapped, so both
+    // modes apply in the CSS order.
+    const target = (): PlannedItem | BakeGroup =>
+      ref.kind === "group" ? groupsOut[ref.index] : (item(ref) as PlannedItem);
+    if (g.blend) {
+      if (target().blend !== undefined) ref = wrap([ref]);
+      target().blend = g.blend;
+    }
+    if (opacity < 1) {
+      const t = target();
+      t.opacity = mulOpacity(t.opacity, opacity);
+    }
+    if (g.isolate && ref.kind === "group") groupsOut[ref.index].isolate = true;
+
+    for (const [i, f] of dropShadows.entries()) {
+      const t = target();
+      if (i > 0) h.defer("filter.dropShadow.multiple");
+      else if (ref.kind === "group") h.defer("filter.dropShadow.group");
+      else if ((t as BakeRect).shadow) h.defer("filter.dropShadow.stacked");
+      else {
+        const colorId = h.swatchFor({ r: f.r, g: f.g, b: f.b, a: 1 });
+        if (colorId === null) continue;
+        (t as BakeRect).shadow = {
+          xOffset: f.dx,
+          yOffset: f.dy,
+          size: f.blur,
+          opacityPct: Math.round(Math.max(0, Math.min(1, f.a)) * 1000) / 10,
+          colorId,
+        };
+      }
+    }
+    node[gi] = ref;
+  }
+  if (groupsOut.length > 0) plan.groups = groupsOut;
+  if (masks.length > 0) plan.masks = masks;
+}
+
+/** The opacity mask a CSS mask's paint makes on `target`: one gradient fill
+ *  (its stops' alpha as grey levels — a luminosity mask) or one image (an
+ *  alpha mask). `null` for anything else. */
+function planMask(
+  paint: readonly SceneItem[],
+  target: BakeRef,
+  h: EffectHelpers,
+): BakeMask | null {
+  if (paint.length !== 1) return null;
+  const m = paint[0];
+  if (m.kind === "image") {
+    if (!(m.width > 0 && m.height > 0)) return null;
+    return {
+      target,
+      bounds: [m.y, m.x, m.y + m.h, m.x + m.w],
+      kind: "image",
+      rgba: m.rgba,
+      width: m.width,
+      height: m.height,
+    };
+  }
+  if (m.kind === "fillPathGradient") {
+    const bounds = pathBounds(m.path);
+    if (bounds === null) return null;
+    // White where the mask is opaque, black where it is clear.
+    const grey: SceneGradient = {
+      ...m.gradient,
+      stops: m.gradient.stops.map((st) => ({
+        offset: st.offset,
+        r: st.a,
+        g: st.a,
+        b: st.a,
+        a: 1,
+      })),
+    } as SceneGradient;
+    const g = h.gradientFor(grey);
+    if (g === null) return null;
+    return {
+      target,
+      bounds,
+      kind: "gradient",
+      gradientId: g.id,
+      gradient: g.placement,
+    };
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------- one batch
@@ -718,6 +1084,9 @@ export interface PlacedBakePlan {
   left: number;
   metrics: readonly RunMetrics[];
   imageBytes?: readonly (Uint8Array | null)[];
+  /** One encoded image (PNG) per image mask in `plan.masks` order (`null`
+   *  for a gradient mask or where encoding failed). */
+  maskBytes?: readonly (Uint8Array | null)[];
 }
 
 /** The ops of one bake batch, plus the handle each created item is bound to
@@ -735,6 +1104,10 @@ export interface BakeBatch {
     paths: string[];
     texts: string[];
     images: string[];
+    /** Native groups (ADR 415), clip paths and mask rectangles. */
+    groups: string[];
+    clips: string[];
+    masks: string[];
   };
 }
 
@@ -906,6 +1279,9 @@ export function bakeBatchOps(
     paths: [] as string[],
     texts: [] as string[],
     images: [] as string[],
+    groups: [] as string[],
+    clips: [] as string[],
+    masks: [] as string[],
   };
 
   for (const { plan } of placed) {
@@ -949,11 +1325,28 @@ export function bakeBatchOps(
     }
   }
 
-  for (const { plan, pageId: page, top, left, metrics, imageBytes } of placed) {
+  for (const {
+    plan,
+    pageId: page,
+    top,
+    left,
+    metrics,
+    imageBytes,
+    maskBytes,
+  } of placed) {
     const pageId = page as PageId;
+    // This frame's created items by plan index (`null`: not created).
+    const made = {
+      rect: [] as (string | null)[],
+      path: [] as (string | null)[],
+      image: [] as (string | null)[],
+      text: [] as (string | null)[],
+      group: [] as (string | null)[],
+    };
     for (const rect of plan.rects) {
       const handle = `r${handles.rects.length}`;
       handles.rects.push(handle);
+      made.rect.push(handle);
       const el = { kind: "rectangle", id: `$h:${handle}` };
       const [rt, rl, rb, rr] = rect.bounds;
       ops.push(
@@ -967,10 +1360,12 @@ export function bakeBatchOps(
       if (rect.cornerRadius !== undefined)
         ops.push(...cornerOps(el, rect.cornerRadius));
       if (rect.shadow) ops.push(...shadowOps(el, rect.shadow));
+      ops.push(...effectOps(el, rect));
     }
     for (const p of plan.paths) {
       const handle = `p${handles.paths.length}`;
       handles.paths.push(handle);
+      made.path.push(handle);
       const el = { kind: "polygon", id: `$h:${handle}` };
       const anchors = p.anchors.map((a) => shift(a, left, top));
       ops.push(
@@ -996,9 +1391,11 @@ export function bakeBatchOps(
       }
       ops.push(...shapeStyleOps(el, p));
       if (p.shadow) ops.push(...shadowOps(el, p.shadow));
+      ops.push(...effectOps(el, p));
     }
     plan.images.forEach((img, i) => {
       const png = imageBytes?.[i];
+      made.image.push(png ? `i${handles.images.length}` : null);
       if (!png) return;
       const handle = `i${handles.images.length}`;
       handles.images.push(handle);
@@ -1016,9 +1413,17 @@ export function bakeBatchOps(
           args: { elementId: `$h:${handle}`, bytes: Array.from(png) },
         } as MutationInput,
       );
+      const el = { kind: "rectangle", id: `$h:${handle}` };
+      if (img.opacity !== undefined)
+        ops.push(
+          setProp(el, "frameOpacity", { type: "length", value: img.opacity }),
+        );
+      if (img.shadow) ops.push(...shadowOps(el, img.shadow));
+      ops.push(...effectOps(el, img));
     });
     plan.texts.forEach((t, i) => {
       const m = metrics[i];
+      made.text.push(m ? `t${handles.texts.length}` : null);
       if (!m) return;
       const handle = `t${handles.texts.length}`;
       handles.texts.push(handle);
@@ -1069,16 +1474,182 @@ export function bakeBatchOps(
           );
         }
       }
+      const frameEl = { kind: "textFrame", id: `$h:${handle}` };
       if (t.opacity !== undefined) {
         ops.push(
-          setProp({ kind: "textFrame", id: `$h:${handle}` }, "frameOpacity", {
+          setProp(frameEl, "frameOpacity", {
             type: "length",
             value: t.opacity,
           }),
         );
       }
+      if (t.shadow) ops.push(...shadowOps(frameEl, t.shadow));
+      ops.push(...effectOps(frameEl, t));
     });
+
+    // The CSS effects (ADR 415): opacity masks on their items, then the
+    // native groups, children before parents.
+    const elementOf = (ref: BakeRef): { kind: string; id: string } | null => {
+      const h = made[ref.kind][ref.index];
+      if (!h) return null;
+      const kind =
+        ref.kind === "path"
+          ? "polygon"
+          : ref.kind === "text"
+            ? "textFrame"
+            : ref.kind === "group"
+              ? "group"
+              : "rectangle";
+      return { kind, id: `$h:${h}` };
+    };
+    (plan.masks ?? []).forEach((mask, i) => {
+      const target = elementOf(mask.target);
+      const png = mask.kind === "image" ? maskBytes?.[i] : null;
+      if (!target || (mask.kind === "image" && !png)) return;
+      const handle = `m${handles.masks.length}`;
+      handles.masks.push(handle);
+      const el = { kind: "rectangle", id: `$h:${handle}` };
+      const [mt, ml, mb, mr] = mask.bounds;
+      ops.push(
+        {
+          op: "insertFrame",
+          args: { pageId, bounds: [mt + top, ml + left, mb + top, mr + left] },
+        },
+        { op: "bindCreated", args: { handle } },
+      );
+      if (mask.kind === "gradient") {
+        ops.push(
+          setProp(el, "frameFillColor", {
+            type: "colorRef",
+            value: mask.gradientId,
+          }),
+          setProp(el, "frameGradientFillAngle", {
+            type: "length",
+            value: round3(mask.gradient.angle),
+          }),
+          setProp(el, "frameGradientFillLength", {
+            type: "length",
+            value: round3(mask.gradient.length),
+          }),
+        );
+      } else if (png) {
+        ops.push({
+          op: "replaceImageBytes",
+          args: { elementId: el.id, bytes: Array.from(png) },
+        } as MutationInput);
+      }
+      ops.push({
+        op: "applyOpacityMask",
+        args: {
+          targetId: target,
+          maskId: el,
+          maskType: mask.kind === "image" ? "alpha" : "luminosity",
+        },
+      } as MutationInput);
+    });
+    for (const g of plan.groups ?? []) {
+      const members = g.members
+        .map(elementOf)
+        .filter((m): m is { kind: string; id: string } => m !== null);
+      if (members.length === 0) {
+        made.group.push(null);
+        continue;
+      }
+      if (g.clip) {
+        // The clipping path: the top member of a clip group, geometry only.
+        const handle = `c${handles.clips.length}`;
+        handles.clips.push(handle);
+        const anchors = g.clip[0].map((a) => shift(a, left, top));
+        const clipEl = { kind: "polygon", id: `$h:${handle}` };
+        ops.push(
+          { op: "insertPath", args: { pageId, anchors, open: false } },
+          { op: "bindCreated", args: { handle } },
+          setProp(clipEl, "frameStrokeColor", {
+            type: "colorRef",
+            value: NO_SWATCH,
+          }),
+        );
+        if (g.clip.length > 1) {
+          const starts: number[] = [];
+          let n = 0;
+          for (const sp of g.clip) {
+            starts.push(n);
+            n += sp.length;
+          }
+          ops.push(
+            setProp(clipEl, "framePath", {
+              type: "framePath",
+              value: {
+                anchors: g.clip.flat().map((a) => shift(a, left, top)),
+                subpathStarts: starts,
+              },
+            }),
+          );
+        }
+        members.push(clipEl);
+      }
+      const handle = `g${handles.groups.length}`;
+      handles.groups.push(handle);
+      made.group.push(handle);
+      const el = { kind: "group", id: `$h:${handle}` };
+      ops.push(
+        {
+          op: "createGroup",
+          args: { memberIds: members, ...(g.clip ? { clip: true } : {}) },
+        } as MutationInput,
+        { op: "bindCreated", args: { handle } },
+      );
+      if (g.opacity !== undefined)
+        ops.push(
+          setProp(el, "frameOpacity", { type: "length", value: g.opacity }),
+        );
+      if (g.blend)
+        ops.push(
+          setProp(el, "frameBlendMode", { type: "text", value: g.blend }),
+        );
+      if (g.isolate)
+        ops.push(
+          setProp(el, "groupIsolateBlending", { type: "bool", value: true }),
+        );
+    }
   }
 
   return { ops, swatchIds, gradientIds, handles };
+}
+
+/** An item's own CSS effects (ADR 415): its blend mode and inner shadow. */
+function effectOps(
+  el: { kind: string; id: string },
+  s: { blend?: string; innerShadow?: BakeInnerShadow },
+): MutationInput[] {
+  const ops: MutationInput[] = [];
+  if (s.blend)
+    ops.push(setProp(el, "frameBlendMode", { type: "text", value: s.blend }));
+  const sh = s.innerShadow;
+  if (sh) {
+    ops.push(
+      setProp(el, "frameInnerShadowEnabled", { type: "bool", value: true }),
+      // CSS composites an inset shadow normally (InDesign defaults to
+      // Multiply).
+      setProp(el, "frameInnerShadowBlendMode", {
+        type: "text",
+        value: "Normal",
+      }),
+      setProp(el, "frameInnerShadowColor", {
+        type: "colorRef",
+        value: sh.colorId,
+      }),
+      setProp(el, "frameInnerShadowOpacity", {
+        type: "length",
+        value: sh.opacityPct,
+      }),
+      setProp(el, "frameInnerShadowAngle", { type: "length", value: sh.angle }),
+      setProp(el, "frameInnerShadowDistance", {
+        type: "length",
+        value: sh.distance,
+      }),
+      setProp(el, "frameInnerShadowSize", { type: "length", value: sh.size }),
+    );
+  }
+  return ops;
 }

@@ -53,8 +53,9 @@
 //!   beside — none of these is modelled;
 //! * **layer effects** that are drawn (`lfx2`; a block whose effects are
 //!   all off draws nothing and imports) other than a Color Overlay,
-//!   **adjustment layers** other than Curves, Levels, Exposure, Invert and
-//!   Hue/Saturation (`crate::adjustment`), and **artboards** — importing
+//!   **adjustment layers** the stack does not reproduce (the legacy
+//!   Hue/Saturation, Color Lookup, and the parts
+//!   `crate::adjustment::Adjustment::unmodelled` names), and **artboards** — importing
 //!   them as plain pixel layers would draw something else;
 //! * **fill opacity** below 100 % on one of Photoshop's eight special
 //!   blend modes (where fill and layer opacity differ), or on a group;
@@ -118,7 +119,7 @@
 
 use crate::adjustment::Adjustment;
 use crate::composite::MergedData;
-use crate::effects::{ColorOverlay, Effects};
+use crate::effects::{Effects, LayerStyle};
 use crate::model::ColorMode;
 use crate::model::{LayerMaskData, LayerRecord, PsdFile, SectionKind};
 use crate::vector_mask::VectorMask;
@@ -146,6 +147,17 @@ pub struct LayerPlate {
     /// layer record's rectangle clipped to the canvas (ADR 464); `None`
     /// means canvas-extent. Everything outside is transparent.
     pub rgba: Vec<u8>,
+    /// The same pixels at FULL DEPTH when the document is 16-bit RGB
+    /// (`rgba` is their high bytes), so a 16-bit document's layers can be
+    /// held at 16 bits (image ADR 479). `None` for an 8-bit or CMYK
+    /// document, an adjustment, and a channel stored as 16-bit RLE (read
+    /// at 8 bits only, see `ChannelData::decode`).
+    pub rgba16: Option<Vec<u16>>,
+    /// The same pixels as 32-bit FLOAT, linear light, when the document is
+    /// 32 bits per channel (RGB, or Grayscale replicated to RGB; image ADR
+    /// 483). `rgba` is then the linear values clamped to a byte — not a
+    /// display view; the consumer reads these.
+    pub rgba32: Option<Vec<f32>>,
     /// The rectangle `rgba` covers, in canvas pixels; `None` = the whole
     /// canvas.
     pub rect: Option<paged_pixel::Region>,
@@ -162,9 +174,8 @@ pub struct LayerPlate {
     /// Photoshop's cached render of the vector mask (see
     /// [`LayerPlate::vector_mask`]).
     pub mask: Option<MaskPlate>,
-    /// A COLOR OVERLAY effect on the layer: the stack draws it as a
-    /// solid layer clipped to this one, in the overlay's mode and opacity.
-    pub color_overlay: Option<ColorOverlay>,
+    /// The layer's STYLE (its effects), when it draws any.
+    pub style: Option<LayerStyle>,
     /// The layer is an ADJUSTMENT: no pixels of its own (`rgba` is
     /// empty), the adjustment transforms what is below it.
     pub adjustment: Option<Adjustment>,
@@ -389,6 +400,23 @@ fn crop_rgba(
     (to, out)
 }
 
+/// [`crop_rgba`] for 16-bit samples.
+fn crop_rgba16<T: Copy>(
+    r: paged_pixel::Region,
+    px: &[T],
+    to: paged_pixel::Region,
+) -> (paged_pixel::Region, Vec<T>) {
+    if to.w == 0 || to.h == 0 {
+        return (paged_pixel::Region::new(0, 0, 0, 0), Vec::new());
+    }
+    let mut out = Vec::with_capacity(to.w as usize * to.h as usize * 4);
+    for y in to.y..to.y + to.h as i32 {
+        let s = (((y - r.y) as usize) * r.w as usize + (to.x - r.x) as usize) * 4;
+        out.extend_from_slice(&px[s..s + to.w as usize * 4]);
+    }
+    (to, out)
+}
+
 /// `a ∩ b` (an empty region when they do not meet).
 fn intersect(a: paged_pixel::Region, b: paged_pixel::Region) -> paged_pixel::Region {
     let x0 = a.x.max(b.x);
@@ -417,6 +445,9 @@ pub struct LayerImport {
     /// in RGB from here on. Reported like `depth_reduced`: the session's
     /// working space is no longer the file's.
     pub converted_from_cmyk: bool,
+    /// The document's GLOBAL LIGHT (resources 1037 / 1049), which every
+    /// effect with Use Global Light is lit by.
+    pub global_light: crate::effects::GlobalLight,
     /// BOTTOM-first, the order PSD stores them in and the order the
     /// layer stack composites in.
     pub layers: Vec<LayerPlate>,
@@ -433,20 +464,25 @@ const UNMODELLED: &[(&[u8; 4], &str)] = &[
     // `artb` is READ (an artboard group: `artboard_of`).
     (b"artd", "an artboard"),
     (b"abdd", "an artboard"),
-    // `levl`, `curv`, `hue2`, `expA` and `nvrt` are READ
-    // (`crate::adjustment`); the legacy `hue ` is not.
+    // Every `Adjustment::KEYS` block is READ (`crate::adjustment`); the
+    // legacy `hue ` and Color Lookup are not.
     (b"hue ", "a legacy Hue/Saturation adjustment layer"),
-    (b"brit", "a Brightness/Contrast adjustment layer"),
-    (b"blnc", "a Color Balance adjustment layer"),
-    (b"mixr", "a Channel Mixer adjustment layer"),
-    (b"phfl", "a Photo Filter adjustment layer"),
-    (b"post", "a Posterize adjustment layer"),
-    (b"thrs", "a Threshold adjustment layer"),
-    (b"selc", "a Selective Color adjustment layer"),
-    (b"vibA", "a Vibrance adjustment layer"),
-    (b"blwh", "a Black & White adjustment layer"),
-    (b"grdm", "a Gradient Map adjustment layer"),
     (b"clrL", "a Color Lookup adjustment layer"),
+];
+
+/// Adjustment kinds that are READ (and written back) but whose render in
+/// the layer stack is not yet Photoshop's, so a layer of one opens the
+/// file flattened rather than drawn differently. Measured against layers
+/// Photoshop 27.10 wrote (`modules/image/image-conformance/fixtures/
+/// photoshop/adjustment-layers*`, the stack's fold vs Photoshop's merged
+/// composite, 8-bit levels, max over the colour sweep) [OBS].
+const NOT_REPRODUCED: &[(&[u8; 4], &str)] = &[
+    (b"brit", "Brightness/Contrast (25 levels from Photoshop)"),
+    (b"blnc", "Color Balance (109 levels from Photoshop)"),
+    (b"vibA", "Vibrance (77 levels from Photoshop)"),
+    (b"phfl", "Photo Filter (89 levels from Photoshop)"),
+    (b"grdm", "Gradient Map (50 levels from Photoshop)"),
+    (b"selc", "Selective Color (47 levels from Photoshop)"),
 ];
 
 /// Blend modes a CMYK document's layers may use and still import. The
@@ -475,9 +511,31 @@ const UNMODELLED: &[(&[u8; 4], &str)] = &[
 /// footprints), so the list stays this short.
 pub const CMYK_RGB_SAFE_BLENDS: &[&[u8; 4]] = &[b"norm", b"mul "];
 
+/// The blend modes that still decline a CMYK document's LAYER import
+/// (image ADR 484): those its consumer cannot composite in the inks. Since
+/// image ADR 481 a CMYK document with a profile folds every SEPARABLE mode
+/// in its inks as Photoshop does (`image-js`'s ink fold, within 7 levels
+/// of Photoshop's merged composite on `cmyk-stacks/blend-modes`), and Hue,
+/// Saturation, Color and Luminosity too (image ADR 484); the consumer's
+/// per-file check against the merged composite still judges each file.
+/// Darker and Lighter Color are unmeasured in CMYK and would blend the
+/// converted colours in RGB, so they keep the flattened open.
+/// ([`CMYK_RGB_SAFE_BLENDS`] still judges a Color Overlay: a style folds
+/// in RGB.)
+pub const CMYK_INK_FOLD_DECLINES: &[&[u8; 4]] = &[b"dkCl", b"lgCl"];
+
 /// A CMYK document's ink transform as the import takes it: packed 4-ink
 /// CMYK8 (0 = no ink) in, the same number of RGBA8 pixels out.
 pub type InkToRgba8<'a> = &'a dyn Fn(&[u8]) -> Vec<u8>;
+
+/// A Grayscale or Lab document's colour transform as the import takes it
+/// (image ADR 484): the colour channels of a run of pixels as the file
+/// stores them, normalised to `0..=1` (`v / 255` or `v / 65535`; Lab's L*
+/// over the full range, a* and b* about the middle), interleaved — one a
+/// pixel for Grayscale, three for Lab — in; straight sRGB `0..=1`, three a
+/// pixel, out. This crate has no CMS; the caller's transform must be the
+/// one its merged composite took.
+pub type DeviceToRgb<'a> = &'a dyn Fn(&[f32]) -> Vec<f32>;
 
 /// A readable name for a blend-mode key in a refusal.
 fn blend_name(key: &[u8; 4]) -> String {
@@ -530,7 +588,14 @@ fn addl_payload(a: &crate::model::AdditionalLayerInfo) -> &[u8] {
 /// off). A legacy `lrFX` block without its `lfx2` twin is not read and
 /// counts as drawn (an `Err`).
 fn effects_of(layer: &LayerRecord) -> Result<Option<Effects>> {
-    if let Some(a) = layer.addl.iter().find(|a| &a.key == b"lfx2") {
+    // `lmfx` holds the whole style when an effect has several instances
+    // (Photoshop writes no `lfx2` beside it then) [OBS].
+    if let Some(a) = layer
+        .addl
+        .iter()
+        .find(|a| &a.key == b"lmfx")
+        .or_else(|| layer.addl.iter().find(|a| &a.key == b"lfx2"))
+    {
         let fx = Effects::parse_lfx2(addl_payload(a))?;
         return Ok((!fx.enabled.is_empty()).then_some(fx));
     }
@@ -542,30 +607,21 @@ fn effects_of(layer: &LayerRecord) -> Result<Option<Effects>> {
     Ok(None)
 }
 
-/// Knockout (`knko`) off and "blend interior effects as group" (`infx`)
-/// off — the defaults, under which an overlay is drawn on the layer's
-/// content before the layer blends.
-fn default_effect_blending(layer: &LayerRecord) -> bool {
-    let byte = |k: &[u8; 4]| {
-        layer
-            .addl
-            .iter()
-            .find(|a| &a.key == k)
-            .and_then(|a| addl_payload(a).first().copied())
-            .unwrap_or(0)
-    };
-    byte(b"knko") == 0 && byte(b"infx") == 0
+/// The first byte of a one-flag block (`knko`, `clbl`, `tsly`, …), or
+/// `default` when the record has none.
+fn flag_byte(layer: &LayerRecord, k: &[u8; 4], default: u8) -> u8 {
+    layer
+        .addl
+        .iter()
+        .find(|a| &a.key == k)
+        .and_then(|a| addl_payload(a).first().copied())
+        .unwrap_or(default)
 }
 
 /// The record's adjustment, when it is an adjustment layer this module
 /// reads.
 fn adjustment_of(layer: &LayerRecord) -> Result<Option<Adjustment>> {
-    for a in &layer.addl {
-        if Adjustment::KEYS.contains(&&a.key) {
-            return Adjustment::parse(&a.key, addl_payload(a));
-        }
-    }
-    Ok(None)
+    Adjustment::from_blocks(layer.addl.iter().map(|a| (&a.key, addl_payload(a))))
 }
 
 /// Does the record's mask carry parameters this import cannot apply?
@@ -706,6 +762,16 @@ impl PsdFile {
         self.layer_plates_checked(Some(ink_to_rgba8), true)
     }
 
+    /// [`Self::layer_plates_rgba8`] for a GRAYSCALE, DUOTONE (its grey) or
+    /// LAB document (image
+    /// ADR 484): every plate's stored colour goes through `to_rgb`
+    /// ([`DeviceToRgb`]) at the file's depth, so a 16-bit document's plates
+    /// carry `rgba16`. A 32-bit Grayscale document needs no transform (its
+    /// grey is linear light, replicated); an RGB one ignores it.
+    pub fn layer_plates_device(&self, to_rgb: DeviceToRgb<'_>) -> Result<LayerImport> {
+        self.layer_plates_checked_with(None, Some(to_rgb), false)
+    }
+
     fn layer_plates_impl(&self, ink_to_rgba8: Option<InkToRgba8<'_>>) -> Result<LayerImport> {
         self.layer_plates_checked(ink_to_rgba8, false)
     }
@@ -713,6 +779,15 @@ impl PsdFile {
     fn layer_plates_checked(
         &self,
         ink_to_rgba8: Option<InkToRgba8<'_>>,
+        measuring_cmyk_blends: bool,
+    ) -> Result<LayerImport> {
+        self.layer_plates_checked_with(ink_to_rgba8, None, measuring_cmyk_blends)
+    }
+
+    fn layer_plates_checked_with(
+        &self,
+        ink_to_rgba8: Option<InkToRgba8<'_>>,
+        to_rgb: Option<DeviceToRgb<'_>>,
         measuring_cmyk_blends: bool,
     ) -> Result<LayerImport> {
         let h = &self.header;
@@ -731,6 +806,22 @@ impl PsdFile {
             return Err(PsdError::Unsupported(first.message));
         }
         let (cw, ch) = (h.width, h.height);
+        let sixteen_rgb = h.depth == 16 && h.color_mode == ColorMode::Rgb;
+        let float = h.depth == 32;
+        // Grayscale and Lab at 8 or 16 bits go through the caller's
+        // transform; without one they are refused here, by name.
+        let device = matches!(
+            h.color_mode,
+            ColorMode::Grayscale | ColorMode::Lab | ColorMode::Duotone
+        ) && !float;
+        let device16 = device && h.depth == 16;
+        if device && to_rgb.is_none() {
+            return Err(PsdError::Unsupported(format!(
+                "layer import for color mode {:?} needs the colour transform: call \
+                 `layer_plates_device` with the file's {:?} → sRGB conversion",
+                h.color_mode, h.color_mode
+            )));
+        }
         let canvas_texels = (cw as usize)
             .checked_mul(ch as usize)
             .ok_or_else(|| PsdError::Unsupported("canvas extent overflows usize".into()))?;
@@ -745,7 +836,17 @@ impl PsdFile {
             let h = (i64::from(l.bottom).clamp(0, i64::from(ch))
                 - i64::from(l.top).clamp(0, i64::from(ch)))
             .max(0) as usize;
-            w * h * 4
+            // A 16-bit document's plates are held twice during the
+            // import: their 8-bit view and their 16-bit samples; a 32-bit
+            // one's, its byte view and its floats.
+            w * h
+                * if float {
+                    20
+                } else if sixteen_rgb || device16 {
+                    12
+                } else {
+                    4
+                }
         };
         // Masks: a group's is canvas-extent, an adjustment's too (it says
         // where the adjustment applies); a pixel layer's is cut to its
@@ -766,11 +867,7 @@ impl PsdFile {
             if has_mask {
                 total = total.saturating_add(rect_bytes(l) / 4);
             }
-            let overlay = effects_of(l)
-                .ok()
-                .flatten()
-                .is_some_and(|fx| matches!(fx.color_overlay, Some(Ok(_))));
-            total = total.saturating_add(rect_bytes(l) * if overlay { 2 } else { 1 });
+            total = total.saturating_add(rect_bytes(l));
         }
         if total > MAX_IMPORT_BYTES {
             return Err(PsdError::Unsupported(format!(
@@ -786,6 +883,8 @@ impl PsdFile {
         }
 
         let mut layers = Vec::with_capacity(pixel_layers.len());
+        // Every pixel layer was read at 16 bits.
+        let mut all_deep = sixteen_rgb || float || (device && h.depth == 16);
         for (layer, group) in pixel_layers {
             let adjustment = adjustment_of(layer)?;
             // An adjustment has no pixels of its own (its channels hold
@@ -799,29 +898,69 @@ impl PsdFile {
                 }
                 cur = groups[gi].parent;
             }
-            let (rect, rgba) = if adjustment.is_some() {
-                (paged_pixel::Region::new(0, 0, 0, 0), Vec::new())
+            let empty = paged_pixel::Region::new(0, 0, 0, 0);
+            let cut = |r: paged_pixel::Region| match clip {
+                Some(c) => intersect(r, c),
+                None => r,
+            };
+            let (rect, rgba, rgba16, rgba32) = if adjustment.is_some() {
+                (empty, Vec::new(), None, None)
+            } else if float {
+                // 32 bits: linear floats, the byte view their clamp.
+                let (r, f) = self.layer_bounded_rgba32(layer, cw, ch)?;
+                let (r, f) = crop_rgba16(r, &f, cut(r));
+                let b = f
+                    .iter()
+                    .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
+                    .collect();
+                (r, b, None, Some(f))
+            } else if device {
+                let convert = to_rgb.expect("checked above");
+                let (r, deep) = self.layer_bounded_device(layer, cw, ch, convert)?;
+                let (r, deep) = crop_rgba16(r, &deep, cut(r));
+                let b = deep.iter().map(|v| (v >> 8) as u8).collect();
+                let keep16 = h.depth == 16 && self.layer_channels_read_at_16(layer);
+                (r, b, keep16.then_some(deep), None)
             } else {
                 let (r, px) = self.layer_bounded_rgba8(layer, cw, ch, ink_to_rgba8)?;
-                match clip {
+                let (r, px) = match clip {
                     Some(c) => crop_rgba(r, &px, intersect(r, c)),
                     None => (r, px),
-                }
+                };
+                // The same rectangle at 16 bits (a channel it cannot read
+                // at full depth leaves the layer at 8).
+                let rgba16 = if sixteen_rgb {
+                    self.layer_bounded_rgba16(layer, cw, ch)
+                        .ok()
+                        .map(|(r, px)| match clip {
+                            Some(c) => crop_rgba16(r, &px, intersect(r, c)).1,
+                            None => px,
+                        })
+                        .filter(|deep| deep.len() == px.len())
+                } else {
+                    None
+                };
+                (r, px, rgba16, None)
             };
-            // The walk refused every overlay it does not model.
-            let color_overlay = effects_of(layer)
+            all_deep &= adjustment.is_some() || rgba16.is_some() || rgba32.is_some();
+            // The walk refused every style it does not model.
+            let style = effects_of(layer)
                 .ok()
                 .flatten()
-                .and_then(|fx| fx.color_overlay)
-                .and_then(|o| o.ok())
-                .and_then(|mut o| {
+                .filter(|fx| !fx.enabled.is_empty())
+                .map(|fx| {
+                    let mut style = fx.style;
                     // A colour given as ink goes through the document's
                     // own ink transform, as its layers do.
-                    if let Some(ink) = o.cmyk {
-                        let rgba = ink_to_rgba8?(&ink);
-                        o.rgb = [*rgba.first()?, *rgba.get(1)?, *rgba.get(2)?];
+                    for o in &mut style.color_overlays {
+                        if let (Some(ink), Some(convert)) = (o.cmyk, ink_to_rgba8) {
+                            let rgba = convert(&ink);
+                            if rgba.len() >= 3 {
+                                o.color = [rgba[0], rgba[1], rgba[2]];
+                            }
+                        }
                     }
-                    Some(o)
+                    style
                 });
             // Fill opacity folds into opacity (see the refusals above).
             let opacity =
@@ -841,6 +980,8 @@ impl PsdFile {
                 // An adjustment has no pixels of its own (its channels
                 // hold an empty rect or a mask).
                 rgba,
+                rgba16,
+                rgba32,
                 rect: Some(rect),
                 group,
                 // A pixel layer's mask at its rectangle; an adjustment's
@@ -857,6 +998,9 @@ impl PsdFile {
                     }),
                     (true, None, m) => m,
                     (false, _, Some(m)) if mask_params.is_some() => Some(m),
+                    // A layer's STYLE draws beyond its rectangle, and its
+                    // mask (which shapes or hides the effects) with it.
+                    (false, _, Some(m)) if style.is_some() => Some(m),
                     (false, _, Some(m)) => Some(m.crop(cw, rect)),
                     (false, _, None) => None,
                 },
@@ -869,7 +1013,7 @@ impl PsdFile {
                     .iter()
                     .any(|a| &a.key == b"TySh" || &a.key == b"tySh"),
                 adjustment,
-                color_overlay,
+                style,
                 record: self
                     .layer_mask
                     .layers
@@ -886,8 +1030,12 @@ impl PsdFile {
         Ok(LayerImport {
             width: cw,
             height: ch,
-            depth_reduced: h.depth == 16,
+            // A 16-bit document whose every layer came with its 16-bit
+            // samples lost nothing; a CMYK one (converted through 8-bit
+            // ink) or one with a 16-bit RLE channel did.
+            depth_reduced: h.depth >= 16 && !all_deep,
             converted_from_cmyk: h.color_mode == ColorMode::Cmyk,
+            global_light: crate::effects::GlobalLight::of(self),
             layers,
             groups,
         })
@@ -921,23 +1069,33 @@ impl PsdFile {
         // its own evidence, so a 16-bit RLE file still declines — but a
         // 16-bit RAW one imports its LAYERS instead of the whole file
         // falling back to a flattened composite.
-        if h.depth != 8 && h.depth != 16 {
+        let float_ok =
+            h.depth == 32 && matches!(h.color_mode, ColorMode::Rgb | ColorMode::Grayscale);
+        if h.depth != 8 && h.depth != 16 && !float_ok {
             block(
                 "depth",
                 format!(
-                    "layer import at depth {} (8- and 16-bit only; 1-bit and 32-bit \
-                     float are separate lanes)",
+                    "layer import at depth {} (8 and 16 bits, and 32-bit float RGB or \
+                     Grayscale; 1-bit is a separate lane)",
                     h.depth
                 ),
             );
         }
         let cmyk = h.color_mode == ColorMode::Cmyk;
-        if h.color_mode != ColorMode::Rgb && !cmyk {
+        if !matches!(
+            h.color_mode,
+            ColorMode::Rgb
+                | ColorMode::Cmyk
+                | ColorMode::Grayscale
+                | ColorMode::Lab
+                | ColorMode::Duotone
+        ) {
             block(
                 "colour-mode",
                 format!(
-                    "layer import for color mode {:?} (RGB, and CMYK through its \
-                     profile; Lab and the indexed modes are not imported)",
+                    "layer import for color mode {:?} (RGB, Grayscale, Duotone (its grey) and \
+                     Lab, and CMYK through its profile; Indexed and Multichannel documents \
+                     have no layers in Photoshop and open as their composite)",
                     h.color_mode
                 ),
             );
@@ -973,62 +1131,68 @@ impl PsdFile {
             match effects_of(layer) {
                 Ok(None) => {}
                 Ok(Some(fx)) => {
-                    let others: Vec<&str> = fx
-                        .enabled
-                        .iter()
-                        .map(String::as_str)
-                        .filter(|k| *k != "SoFi")
-                        .collect();
-                    if !others.is_empty() {
-                        block(
-                            "effects",
-                            format!(
-                                "layer import of a PSD with layer effects {} (\"{}\"): not \
-                                 modelled, so the merged composite is kept instead",
-                                others.join(", "),
-                                layer.name()
-                            ),
-                        );
-                    }
-                    if let Some(overlay) = &fx.color_overlay {
-                        let why = match overlay {
-                            Err(why) => Some(why.clone()),
-                            Ok(_) if is_folder => Some("a Color Overlay on a group".into()),
-                            Ok(_) if layer.clipping != 0 => {
-                                Some("a Color Overlay on a clipped layer".into())
-                            }
-                            Ok(_) if fill_opacity(layer) < 255 => {
-                                Some("a Color Overlay under fill opacity".into())
-                            }
-                            Ok(_) if adjustment_of(layer).ok().flatten().is_some() => {
-                                Some("a Color Overlay on an adjustment layer".into())
-                            }
-                            Ok(_) if !default_effect_blending(layer) => Some(
-                                "a Color Overlay with knockout or blend-interior-effects set"
-                                    .into(),
-                            ),
-                            Ok(o) if o.cmyk.is_some() && !cmyk => {
-                                Some("a Color Overlay given in CMYK in an RGB document".into())
-                            }
-                            Ok(o) if cmyk && !CMYK_RGB_SAFE_BLENDS.contains(&&o.blend_key) => {
+                    // The whole style is modelled; what is refused is
+                    // where the stack cannot draw it as Photoshop does.
+                    let why: Option<String> = if is_folder {
+                        Some("a layer style on a group".into())
+                    } else if adjustment_of(layer).ok().flatten().is_some() {
+                        Some("a layer style on an adjustment layer".into())
+                    } else if fx.style.uses_patterns() {
+                        Some(
+                            "a pattern in a layer style (the document's patterns are not \
+                             read)"
+                                .into(),
+                        )
+                    } else if flag_byte(layer, b"knko", 0) != 0 {
+                        Some("knockout on a layer with a style".into())
+                    } else if flag_byte(layer, b"clbl", 1) == 0 {
+                        Some("a layer style with Blend Clipped Layers as Group off".into())
+                    } else if flag_byte(layer, b"tsly", 1) == 0 {
+                        Some("a layer style with Transparency Shapes Layer off".into())
+                    } else if cmyk {
+                        // Photoshop draws a style in the document's inks;
+                        // only an overlay the RGB stack matches is taken.
+                        let others: Vec<&str> = fx
+                            .enabled
+                            .iter()
+                            .map(String::as_str)
+                            .filter(|k| *k != "SoFi")
+                            .collect();
+                        match &fx.color_overlay {
+                            _ if !others.is_empty() => Some(format!(
+                                "layer effects {} in a CMYK document (Photoshop draws them \
+                                 in its inks)",
+                                others.join(", ")
+                            )),
+                            Some(Err(why)) => Some(why.clone()),
+                            Some(Ok(o)) if !CMYK_RGB_SAFE_BLENDS.contains(&&o.blend_key) => {
                                 Some(format!(
                                     "a Color Overlay in {} in a CMYK document (Photoshop blends \
                                      it in CMYK)",
                                     blend_name(&o.blend_key)
                                 ))
                             }
-                            Ok(_) => None,
-                        };
-                        if let Some(why) = why {
-                            block(
-                                "effects",
-                                format!(
-                                    "layer import of {why} (\"{}\"): not modelled, so the \
-                                     merged composite is kept instead",
-                                    layer.name()
-                                ),
-                            );
+                            _ => None,
                         }
+                    } else if fx
+                        .style
+                        .color_overlays
+                        .iter()
+                        .any(|o| o.enabled && o.cmyk.is_some())
+                    {
+                        Some("a Color Overlay given in CMYK in an RGB document".into())
+                    } else {
+                        None
+                    };
+                    if let Some(why) = why {
+                        block(
+                            "effects",
+                            format!(
+                                "layer import of {why} (\"{}\"): not modelled, so the merged \
+                                 composite is kept instead",
+                                layer.name()
+                            ),
+                        );
                     }
                 }
                 Err(e) => block(
@@ -1053,6 +1217,20 @@ impl PsdFile {
                                  (\"{}\"): only normal is modelled, so the merged composite \
                                  is kept instead",
                                 String::from_utf8_lossy(&layer.blend_key),
+                                layer.name()
+                            ),
+                        );
+                    }
+                    if let Some((_, what)) = NOT_REPRODUCED
+                        .iter()
+                        .find(|(k, _)| layer.addl.iter().any(|a| &a.key == *k))
+                    {
+                        block(
+                            "adjustment-layers",
+                            format!(
+                                "layer import of a {what} adjustment layer (\"{}\"): the layer \
+                                 stack does not draw it as Photoshop does yet, so the merged \
+                                 composite is kept instead",
                                 layer.name()
                             ),
                         );
@@ -1159,7 +1337,7 @@ impl PsdFile {
                     let group_blend = lsct_blend.unwrap_or(layer.blend_key);
                     if cmyk
                         && &group_blend != b"pass"
-                        && !CMYK_RGB_SAFE_BLENDS.contains(&&group_blend)
+                        && CMYK_INK_FOLD_DECLINES.contains(&&group_blend)
                     {
                         block(
                             "cmyk-blend",
@@ -1290,7 +1468,7 @@ impl PsdFile {
                 }
                 masked += 1;
             }
-            if cmyk && !CMYK_RGB_SAFE_BLENDS.contains(&&layer.blend_key) {
+            if cmyk && CMYK_INK_FOLD_DECLINES.contains(&&layer.blend_key) {
                 block(
                     "cmyk-blend",
                     format!(
@@ -1471,6 +1649,282 @@ impl PsdFile {
             enabled: flags & 0x02 == 0,
             rect: None,
         })
+    }
+
+    /// [`Self::layer_bounded_rgba8`] at 16 bits, for an RGB document of
+    /// depth 16: the R, G, B and transparency channels at full precision
+    /// (`ChannelData::decode_samples16`; a 16-bit RLE channel is an
+    /// error, and the caller keeps the layer at 8 bits).
+    fn layer_bounded_rgba16(
+        &self,
+        layer: &LayerRecord,
+        cw: u32,
+        ch: u32,
+    ) -> Result<(paged_pixel::Region, Vec<u16>)> {
+        let lw = (layer.right - layer.left).max(0) as u32;
+        let lh = (layer.bottom - layer.top).max(0) as u32;
+        let plane_len = (lw as usize) * (lh as usize);
+        let x0 = i64::from(layer.left).clamp(0, i64::from(cw));
+        let y0 = i64::from(layer.top).clamp(0, i64::from(ch));
+        let x1 = i64::from(layer.right).clamp(0, i64::from(cw));
+        let y1 = i64::from(layer.bottom).clamp(0, i64::from(ch));
+        let rect = paged_pixel::Region::new(
+            x0 as i32,
+            y0 as i32,
+            (x1 - x0).max(0) as u32,
+            (y1 - y0).max(0) as u32,
+        );
+        if plane_len == 0 || rect.w == 0 || rect.h == 0 {
+            return Ok((paged_pixel::Region::new(0, 0, 0, 0), Vec::new()));
+        }
+        let mut planes = vec![vec![0u16; plane_len]; 3];
+        let mut a = vec![u16::MAX; plane_len];
+        for (ci, info) in layer.channels.iter().enumerate() {
+            let dst = match info.id {
+                id @ 0..=2 => &mut planes[id as usize],
+                -1 => &mut a,
+                _ => continue,
+            };
+            let data = layer
+                .channel_data
+                .get(ci)
+                .ok_or_else(|| PsdError::Malformed {
+                    section: "layer channel image data",
+                    detail: format!("layer \"{}\" is missing channel {}", layer.name(), info.id),
+                })?;
+            let plane = data.decode_samples16(lh, lw)?;
+            if plane.len() != plane_len {
+                return Err(PsdError::Malformed {
+                    section: "layer channel image data",
+                    detail: format!(
+                        "layer \"{}\" channel {} decoded to {} samples, expected {plane_len}",
+                        layer.name(),
+                        info.id,
+                        plane.len()
+                    ),
+                });
+            }
+            dst.copy_from_slice(&plane);
+        }
+        let (cw2, ch2) = (rect.w, rect.h);
+        let mut out = vec![0u16; cw2 as usize * ch2 as usize * 4];
+        for ly in 0..lh as i64 {
+            let dy = layer.top as i64 + ly - i64::from(rect.y);
+            if dy < 0 || dy >= ch2 as i64 {
+                continue;
+            }
+            for lx in 0..lw as i64 {
+                let dx = layer.left as i64 + lx - i64::from(rect.x);
+                if dx < 0 || dx >= cw2 as i64 {
+                    continue;
+                }
+                let si = (ly * lw as i64 + lx) as usize;
+                let di = ((dy * cw2 as i64 + dx) as usize) * 4;
+                out[di] = planes[0][si];
+                out[di + 1] = planes[1][si];
+                out[di + 2] = planes[2][si];
+                out[di + 3] = a[si];
+            }
+        }
+        Ok((rect, out))
+    }
+
+    /// Every colour and transparency channel of `layer` stored without
+    /// RLE, so it reads at 16 bits ([`ChannelData::decode_samples16`]).
+    fn layer_channels_read_at_16(&self, layer: &LayerRecord) -> bool {
+        layer
+            .channels
+            .iter()
+            .zip(&layer.channel_data)
+            .filter(|(c, _)| c.id >= -1)
+            .all(|(_, d)| d.compression != crate::model::Compression::Rle)
+    }
+
+    /// The record's rectangle clipped to the canvas, and the record's own
+    /// size: what every bounded decode starts from.
+    fn layer_rect(layer: &LayerRecord, cw: u32, ch: u32) -> (paged_pixel::Region, u32, u32) {
+        let lw = (layer.right - layer.left).max(0) as u32;
+        let lh = (layer.bottom - layer.top).max(0) as u32;
+        let x0 = i64::from(layer.left).clamp(0, i64::from(cw));
+        let y0 = i64::from(layer.top).clamp(0, i64::from(ch));
+        let x1 = i64::from(layer.right).clamp(0, i64::from(cw));
+        let y1 = i64::from(layer.bottom).clamp(0, i64::from(ch));
+        (
+            paged_pixel::Region::new(
+                x0 as i32,
+                y0 as i32,
+                (x1 - x0).max(0) as u32,
+                (y1 - y0).max(0) as u32,
+            ),
+            lw,
+            lh,
+        )
+    }
+
+    /// Place a record-sized interleaved buffer (`px`, four values a pixel)
+    /// into its clipped rectangle's own frame.
+    fn place<T: Copy + Default>(
+        layer: &LayerRecord,
+        rect: paged_pixel::Region,
+        lw: u32,
+        lh: u32,
+        px: &[T],
+    ) -> Vec<T> {
+        let (cw2, ch2) = (rect.w as i64, rect.h as i64);
+        let mut out = vec![T::default(); rect.w as usize * rect.h as usize * 4];
+        for ly in 0..lh as i64 {
+            let dy = layer.top as i64 + ly - i64::from(rect.y);
+            if dy < 0 || dy >= ch2 {
+                continue;
+            }
+            for lx in 0..lw as i64 {
+                let dx = layer.left as i64 + lx - i64::from(rect.x);
+                if dx < 0 || dx >= cw2 {
+                    continue;
+                }
+                let si = ((ly * lw as i64 + lx) as usize) * 4;
+                let di = ((dy * cw2 + dx) as usize) * 4;
+                out[di..di + 4].copy_from_slice(&px[si..si + 4]);
+            }
+        }
+        out
+    }
+
+    /// One channel of `layer` as normalised floats at the document's
+    /// depth (`v / 255`, `v / 65535`, or the float itself; a 16-bit RLE
+    /// channel is read at 8 bits).
+    fn channel_f32(&self, layer: &LayerRecord, ci: usize, lw: u32, lh: u32) -> Result<Vec<f32>> {
+        let info = &layer.channels[ci];
+        let data = layer
+            .channel_data
+            .get(ci)
+            .ok_or_else(|| PsdError::Malformed {
+                section: "layer channel image data",
+                detail: format!("layer \"{}\" is missing channel {}", layer.name(), info.id),
+            })?;
+        let plane: Vec<f32> = match self.header.depth {
+            32 => data.decode_samples32(lh, lw)?,
+            16 if data.compression != crate::model::Compression::Rle => data
+                .decode_samples16(lh, lw)?
+                .iter()
+                .map(|&v| f32::from(v) / 65535.0)
+                .collect(),
+            d => data
+                .decode(self.container, lh, lw, d)?
+                .iter()
+                .map(|&v| f32::from(v) / 255.0)
+                .collect(),
+        };
+        let want = lw as usize * lh as usize;
+        if plane.len() != want {
+            return Err(PsdError::Malformed {
+                section: "layer channel image data",
+                detail: format!(
+                    "layer \"{}\" channel {} decoded to {} samples, expected {want}",
+                    layer.name(),
+                    info.id,
+                    plane.len()
+                ),
+            });
+        }
+        Ok(plane)
+    }
+
+    /// A 32-bit RGB or Grayscale layer's linear floats (grey replicated),
+    /// straight RGBA over its clipped rectangle (image ADR 484).
+    fn layer_bounded_rgba32(
+        &self,
+        layer: &LayerRecord,
+        cw: u32,
+        ch: u32,
+    ) -> Result<(paged_pixel::Region, Vec<f32>)> {
+        let (rect, lw, lh) = Self::layer_rect(layer, cw, ch);
+        let n = lw as usize * lh as usize;
+        if n == 0 || rect.w == 0 || rect.h == 0 {
+            return Ok((paged_pixel::Region::new(0, 0, 0, 0), Vec::new()));
+        }
+        let gray = self.header.color_mode == ColorMode::Grayscale;
+        let mut planes = vec![vec![0f32; n]; 3];
+        let mut a = vec![1f32; n];
+        for ci in 0..layer.channels.len() {
+            match layer.channels[ci].id {
+                0 if gray => {
+                    let p = self.channel_f32(layer, ci, lw, lh)?;
+                    planes[1].clone_from(&p);
+                    planes[2].clone_from(&p);
+                    planes[0] = p;
+                }
+                id @ 0..=2 if !gray => planes[id as usize] = self.channel_f32(layer, ci, lw, lh)?,
+                -1 => a = self.channel_f32(layer, ci, lw, lh)?,
+                _ => {}
+            }
+        }
+        let px: Vec<f32> = (0..n)
+            .flat_map(|i| {
+                [
+                    planes[0][i],
+                    planes[1][i],
+                    planes[2][i],
+                    a[i].clamp(0.0, 1.0),
+                ]
+            })
+            .collect();
+        Ok((rect, Self::place(layer, rect, lw, lh, &px)))
+    }
+
+    /// A Grayscale or Lab layer through the caller's transform, as
+    /// straight RGBA16 over its clipped rectangle (8-bit documents
+    /// widened); see [`DeviceToRgb`].
+    fn layer_bounded_device(
+        &self,
+        layer: &LayerRecord,
+        cw: u32,
+        ch: u32,
+        to_rgb: DeviceToRgb<'_>,
+    ) -> Result<(paged_pixel::Region, Vec<u16>)> {
+        let (rect, lw, lh) = Self::layer_rect(layer, cw, ch);
+        let n = lw as usize * lh as usize;
+        if n == 0 || rect.w == 0 || rect.h == 0 {
+            return Ok((paged_pixel::Region::new(0, 0, 0, 0), Vec::new()));
+        }
+        let lab = self.header.color_mode == ColorMode::Lab;
+        let k = if lab { 3 } else { 1 };
+        let mid = if self.header.depth == 16 {
+            32768.0 / 65535.0
+        } else {
+            128.0 / 255.0
+        };
+        let mut planes: Vec<Vec<f32>> = (0..k)
+            .map(|c| vec![if lab && c > 0 { mid } else { 0.0 }; n])
+            .collect();
+        let mut a = vec![1f32; n];
+        for ci in 0..layer.channels.len() {
+            match layer.channels[ci].id {
+                id @ 0..=2 if (id as usize) < k => {
+                    planes[id as usize] = self.channel_f32(layer, ci, lw, lh)?
+                }
+                -1 => a = self.channel_f32(layer, ci, lw, lh)?,
+                _ => {}
+            }
+        }
+        let dev: Vec<f32> = (0..n)
+            .flat_map(|i| planes.iter().map(move |p| p[i]))
+            .collect();
+        let rgb = to_rgb(&dev);
+        if rgb.len() != n * 3 {
+            return Err(PsdError::Malformed {
+                section: "layer channel image data",
+                detail: format!(
+                    "the colour transform answered {} values for {n} pixels",
+                    rgb.len()
+                ),
+            });
+        }
+        let q = |v: f32| (v.clamp(0.0, 1.0) * 65535.0).round() as u16;
+        let px: Vec<u16> = (0..n)
+            .flat_map(|i| [q(rgb[i * 3]), q(rgb[i * 3 + 1]), q(rgb[i * 3 + 2]), q(a[i])])
+            .collect();
+        Ok((rect, Self::place(layer, rect, lw, lh, &px)))
     }
 
     /// One layer's canvas-extent straight RGBA8: decode its modeled

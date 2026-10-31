@@ -67,7 +67,7 @@ export async function hitUnder(
     return null;
   const r = viewport.getBoundingClientRect();
   const [x, y] = viewportToDoc(cam, clientX - r.left, clientY - r.top);
-  const rects = layoutPages(handle.pageSizesPt);
+  const rects = layoutPages(handle.pageSizesPt, handle.pageOriginsPt);
   const i = rects.findIndex(
     (p) => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h,
   );

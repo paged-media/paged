@@ -118,6 +118,9 @@ export interface EditorHostOptionDeps {
     openPanel?: ((id: string) => void) | null;
     closeTab?: ((id: string) => void) | null;
   };
+  /** Extensions ADR 348 amendment 1 — point a panel at its target before
+   *  `openPanel` shows it (`host.shell.openPanel(id, { target })`). */
+  panelTarget?: (panelId: string, target: string) => void;
   /** The shell's edit-context entry by type, the one a double-click takes. */
   enterEditContext: NonNullable<ShellBackend["enterEditContext"]>;
   /** Leave the active edit context of a type (extensions ADR 334). */
@@ -173,7 +176,10 @@ export function createEditorHostOptions(
   // injected so the SDK's adapter stays a pure function over the editor
   // handle.
   const shell: ShellBackend = {
-    openPanel: (id: string) => deps.panels.openPanel?.(id),
+    openPanel: (id: string, options?: { target?: string }) => {
+      if (options?.target) deps.panelTarget?.(id, options.target);
+      deps.panels.openPanel?.(id);
+    },
     closePanel: (id: string) => deps.panels.closeTab?.(id),
     // K-5 / S-11: the host file picker — a bundle gets the chosen files'
     // bytes (read at this boundary; no DOM File crosses the contract).
@@ -339,6 +345,8 @@ export function createEditorHostOptions(
     // (use-edit-context-entry.tsx), so this host vouches for
     // supports("editContext.enterPoint@1").
     editContextEnterPoint: true,
+    // Editor ADR 285 — the History panel lists an active context's steps.
+    editContextHistorySteps: true,
   };
   return {
     shared,

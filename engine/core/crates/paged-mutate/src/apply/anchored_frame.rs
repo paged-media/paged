@@ -106,6 +106,7 @@ pub(super) fn apply_insert_anchored_frame(
     height: f32,
     image_uri: Option<&str>,
     self_id: &str,
+    restore: Option<&str>,
 ) -> Result<AppliedOperation, OperationError> {
     if locate_anchored_frame(doc, self_id).is_some() {
         return Err(OperationError::DuplicateNodeId {
@@ -145,6 +146,20 @@ pub(super) fn apply_insert_anchored_frame(
             .ok_or_else(|| OperationError::NodeNotFound(NodeId::Story(story_id.to_string())))?,
     };
 
+    // Engine ADR 1045 — a remove's inverse puts the removed frame back
+    // whole.
+    let restored = match restore {
+        Some(json) => Some(
+            serde_json::from_str::<paged_model::AnchoredFrame>(json).map_err(|e| {
+                OperationError::InvalidValue {
+                    node: NodeId::Story(story_id.to_string()),
+                    path: crate::PropertyPath::AnchoredPosition,
+                    reason: format!("not an anchored frame: {e}"),
+                }
+            })?,
+        ),
+        None => None,
+    };
     let para = &mut doc.stories[story_idx].story.paragraphs[para_idx];
     // The frame stands in its line at `offset` (an inline object is a
     // character of its line). Frames without a recorded anchor anchor
@@ -153,30 +168,32 @@ pub(super) fn apply_insert_anchored_frame(
     let recorded = para.anchored_frames.len();
     para.anchored_frame_offsets.resize(recorded, 0);
     para.anchored_frame_offsets.push(local);
-    para.anchored_frames.push(paged_model::AnchoredFrame {
-        frame_kind: paged_model::AnchoredFrameKind::Rectangle,
-        self_id: Some(self_id.to_string()),
-        bounds: Some(paged_model::Bounds {
-            top: 0.0,
-            left: 0.0,
-            bottom: height,
-            right: width,
-        }),
-        item_transform: None,
-        parent_story: None,
-        // `setting: None` ⇒ the renderer defaults `anchored_position` to
-        // "InlinePosition": the frame is a character of its line at `offset`.
-        setting: None,
-        fill_color: None,
-        stroke_color: None,
-        stroke_weight: None,
-        fill_tint: None,
-        gradient_fill_angle: None,
-        applied_object_style: None,
-        image_link: image_uri.map(str::to_string),
-        image_item_transform: None,
-        children: Vec::new(),
-    });
+    para.anchored_frames
+        .push(restored.unwrap_or_else(|| paged_model::AnchoredFrame {
+            frame_kind: paged_model::AnchoredFrameKind::Rectangle,
+            self_id: Some(self_id.to_string()),
+            bounds: Some(paged_model::Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: height,
+                right: width,
+            }),
+            item_transform: None,
+            parent_story: None,
+            // `setting: None` ⇒ the renderer defaults `anchored_position` to
+            // "InlinePosition": the frame is a character of its line at `offset`.
+            setting: None,
+            fill_color: None,
+            stroke_color: None,
+            stroke_weight: None,
+            fill_tint: None,
+            gradient_fill_angle: None,
+            applied_object_style: None,
+            image_link: image_uri.map(str::to_string),
+            image_item_transform: None,
+            children: Vec::new(),
+            ..Default::default()
+        }));
 
     let invalidation = reflow_hint_for_story(doc, story_id);
     Ok(AppliedOperation {
@@ -188,6 +205,7 @@ pub(super) fn apply_insert_anchored_frame(
             height,
             image_uri: image_uri.map(str::to_string),
             self_id: self_id.to_string(),
+            restore: restore.map(str::to_string),
         },
         inverse: Operation::RemoveAnchoredFrame {
             story_id: story_id.to_string(),
@@ -237,6 +255,7 @@ pub(super) fn apply_remove_anchored_frame(
             height,
             image_uri: removed.image_link.clone(),
             self_id: self_id.to_string(),
+            restore: serde_json::to_string(&removed).ok(),
         },
         invalidation,
     })

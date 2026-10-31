@@ -102,6 +102,8 @@ defineMessages("menu", {
   "Define from selection": "Define from selection",
   "Place instance": "Place instance",
   "Reset transform": "Reset transform",
+  "Replace symbol": "Replace symbol",
+  "Symbol options…": "Symbol options…",
   "Live paint": "Live paint",
   Regenerate: "Regenerate",
   Blend: "Blend",
@@ -135,6 +137,18 @@ defineMessages("menu", {
   "Edit colors": "Edit colors",
   "Recolor artwork…": "Recolor artwork…",
   "Rasterize…": "Rasterize…",
+  "Puppet warp": "Puppet warp",
+  Perspective: "Perspective",
+  "Attach to active plane": "Attach to active plane",
+  "Release with perspective": "Release with perspective",
+  "Perspective grid": "Perspective grid",
+  "Show grid": "Show grid",
+  "Hide grid": "Hide grid",
+  "Lock grid": "Lock grid",
+  "Unlock grid": "Unlock grid",
+  "One-point perspective": "One-point perspective",
+  "Two-point perspective": "Two-point perspective",
+  "Three-point perspective": "Three-point perspective",
 });
 
 const C = "media.paged.draw.command";
@@ -240,6 +254,10 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Symbol/Redefine", "redefineSymbol", "sym"],
   ["Draw/Symbol/Break link", "breakSymbolLink", "sym"],
   ["Draw/Symbol/Reset transform", "resetSymbolTransform", "sym"],
+  // WP6.8 — engine symbols: Replace symbol (the selected instances draw the
+  // chosen symbol) and Symbol options… (raises the panel's options).
+  ["Draw/Symbol/Replace symbol", "replaceSymbol", "sym"],
+  ["Draw/Symbol/Symbol options…", "symbolOptions", "sym"],
 
   // ── Live paint ──
   ["Draw/Live paint/Make", "makeLivePaintGroup", "lp"],
@@ -299,6 +317,43 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    raises the Path Options panel's Rasterize section (resolution,
   //    background). ──
   ["Object/Rasterize…", "rasterizeOptions", "plugin-rasterize"],
+
+  // ── WP6.7 — Puppet Warp (switches to the tool; Illustrator keeps it in
+  //    the Free Transform group, and lists no menu row — this one is for
+  //    finding it), and Illustrator's Object ▸ Perspective pair. ──
+  ["Object/Puppet warp", "puppetWarpTool", "plugin-distort"],
+  [
+    "Object/Perspective/Attach to active plane",
+    "attachToPerspective",
+    "plugin-perspective",
+  ],
+  [
+    "Object/Perspective/Release with perspective",
+    "releaseFromPerspective",
+    "plugin-perspective",
+  ],
+  // ── View ▸ Perspective grid — merges into the host's View menu, as in
+  //    Illustrator. Show / Hide and Lock / Unlock are separate rows: a
+  //    menu entry carries no checked state. ──
+  ["View/Perspective grid/Show grid", "perspectiveShowGrid", "persp-show"],
+  ["View/Perspective grid/Hide grid", "perspectiveHideGrid", "persp-show"],
+  ["View/Perspective grid/Lock grid", "perspectiveLockGrid", "persp-lock"],
+  ["View/Perspective grid/Unlock grid", "perspectiveUnlockGrid", "persp-lock"],
+  [
+    "View/Perspective grid/One-point perspective",
+    "perspectiveOnePoint",
+    "persp-preset",
+  ],
+  [
+    "View/Perspective grid/Two-point perspective",
+    "perspectiveTwoPoint",
+    "persp-preset",
+  ],
+  [
+    "View/Perspective grid/Three-point perspective",
+    "perspectiveThreePoint",
+    "persp-preset",
+  ],
 
   // ── Select same — merges into Edit, where selection verbs live. ──
   ["Edit/Select same/Fill", "selectSameFill", "select-same"],

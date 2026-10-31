@@ -96,6 +96,7 @@ fn anchor_at(point: (f32, f32)) -> GestureAnchor {
         page_id: paged_renderer::PageId("p1".into()),
         point_in_page: point,
         pivot_in_page: None,
+        shear_axis: None,
     }
 }
 
@@ -411,6 +412,7 @@ fn rotate_90_degrees_about_an_explicit_pivot_keeps_the_pivot_fixed() {
         // Pointer starts to the right of the pivot …
         point_in_page: (200.0, 100.0),
         pivot_in_page: Some((100.0, 100.0)),
+        shear_axis: None,
     };
     let h = m
         .begin_gesture(

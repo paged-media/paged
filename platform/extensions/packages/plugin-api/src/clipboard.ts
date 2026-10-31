@@ -17,7 +17,7 @@
  */
 
 // The capability-gated CLIPBOARD door (K-6 / S-14). A read/write surface
-// over the SYSTEM clipboard with a rich `{ text?, tabular? }` payload —
+// over the SYSTEM clipboard with a rich `{ text?, tabular?, svg? }` payload —
 // the home the sheets-mode grid's range copy/paste had nowhere to land
 // (RFI §6 K-6). The editor injects a backend over `navigator.clipboard`;
 // when none is wired, `read` answers `null` and `write` is a no-op (the
@@ -34,10 +34,14 @@
 //   · `"full"`  — BOTH `text` and `tabular`. The rich grid interchange
 //     (cells as a rectangular display-string grid). What paged.sheet
 //     declares.
-//   · `"vector"` — `text` ONLY. A vector plugin copies a textual/SVG
-//     representation, not a cell grid; a `tabular` payload it tries to
-//     WRITE is dropped (the host strips it, logs once), and a `tabular`
-//     payload it READS is never surfaced (read returns the `text` half).
+//   · `"vector"` — `text` and `svg`. A vector plugin copies a textual
+//     and an SVG representation, not a cell grid; a `tabular` payload it
+//     tries to WRITE is dropped (the host strips it, logs once), and a
+//     `tabular` payload it READS is never surfaced.
+//   (`"full"` carries `svg` too.) The `svg` half (extensions ADR 341,
+//   `clipboard.svg@1`) is the platform's vector interchange,
+//   `image/svg+xml`: what Illustrator, Figma and Inkscape put on and read
+//   off the clipboard.
 //   · `"none"` / absent — the door is DENIED: `read` answers `null`,
 //     `write` refuses (a capability error in `'enforce'`, a warn+no-op in
 //     `'warn'`). This is the manifest default, so a bundle that never
@@ -74,6 +78,18 @@ export interface ClipboardPayload {
    *  `capabilities.clipboard: "full"` — a `"vector"` declaration sees the
    *  `text` half only. */
   tabular?: TabularClipboard;
+  /**
+   * The vector half: an SVG document (UTF-8 text). On WRITE the host puts
+   * it on the system clipboard as `image/svg+xml` where the platform
+   * takes that type (and leaves it out where it does not). On READ it is
+   * the clipboard's SVG: the `image/svg+xml` flavour, or a `text/plain`
+   * flavour that IS an SVG document (Illustrator writes both; a browser
+   * sanitises the first, dropping `<style>`, so the plain text is
+   * preferred when it parses as SVG). Probe `supports("clipboard.svg@1")`:
+   * without it the host neither writes nor reads this half (extensions
+   * ADR 341).
+   */
+  svg?: string;
 }
 
 /**
@@ -91,13 +107,14 @@ export interface ClipboardSurface {
    * Read the current clipboard payload, or `null` when there is nothing
    * readable, the read is denied by the platform, or no backend is wired
    * (the honest no-clipboard door). A `"vector"` declaration never
-   * receives the `tabular` half (only `text`).
+   * receives the `tabular` half (only `text` and `svg`).
    */
   read(): Promise<ClipboardPayload | null>;
   /**
    * Write a payload to the system clipboard. A `"vector"` declaration may
-   * only write `text` — a `tabular` half it supplies is DROPPED (the host
-   * logs once). With no backend wired this is a no-op (probe
+   * only write `text` and `svg` — a `tabular` half it supplies is DROPPED
+   * (the host logs once). An `svg` half reaches the platform only where
+   * `supports("clipboard.svg@1")` holds; elsewhere it is dropped. With no backend wired this is a no-op (probe
    * `supports("clipboard@1")` first). Never throws on a platform refusal:
    * a denied write resolves without effect (the honest browser posture —
    * the clipboard API rejects without a user gesture).

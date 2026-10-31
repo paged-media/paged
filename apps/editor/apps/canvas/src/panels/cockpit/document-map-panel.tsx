@@ -271,7 +271,9 @@ export function DocumentMapPanel(_props: PanelProps) {
     () => (handle ? groupSpreads(handle.pageIds, spreads) : []),
     [handle, spreads],
   );
-  const rects = handle ? layoutPages(handle.pageSizesPt) : [];
+  const rects = handle
+    ? layoutPages(handle.pageSizesPt, handle.pageOriginsPt)
+    : [];
 
   // REAL per-page missing-link counts (gap 2) — host frame resolved to
   // its page via elementGeometry.

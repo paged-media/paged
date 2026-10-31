@@ -265,7 +265,12 @@ pub(super) fn apply_character_property_in(
     // for parsed docs) we leave the hint default.
     let paint_only = matches!(
         path,
-        PropertyPath::CharacterUnderline | PropertyPath::CharacterStrikethru
+        PropertyPath::CharacterUnderline
+            | PropertyPath::CharacterStrikethru
+            | PropertyPath::CharacterHighlightColor
+            | PropertyPath::CharacterUnderlineType
+            | PropertyPath::CharacterUnderlineColor
+            | PropertyPath::CharacterDoubleStrikethrough
     );
     let invalidation = match doc.frame_for_story.get(story_id) {
         Some(frame) => {

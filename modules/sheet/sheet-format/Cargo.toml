@@ -11,6 +11,9 @@ description = "paged.sheet number-format engine (spec §9): ECMA-376 format code
 workspace = true
 
 [dependencies]
+# SpreadsheetML's `tint` (and the HSL arithmetic) from the shared OOXML
+# colour module, one definition for doc, slide and sheet.
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
 sheet-core = { path = "../sheet-core" }
 # The calendar, the locale table and digit grouping (platform/shared/fmt).
 paged-fmt = { path = "../../../platform/shared/fmt" }

@@ -42,3 +42,10 @@ after the open are not edits (they are outside the undo log).
 shape's key (`<slide part>#<cNvPr path>`) in its item metadata, together with its placeholder,
 its preset and its click action (`link`: URL, slide part, show action, tooltip). Export reads
 the key to write the shape back from its own XML.
+
+## Amendment (2026-10-29): the theme is in the deck label
+
+[ADR 713](713-live-theme.md): the theme the document shows (name, slot colours, fonts, variant,
+the remap of missing references) and the deck's own theme are kept in the deck label, not in a
+container part as the table above has it. Applying a theme writes the label in the same batch as
+the swatches and styles it changes, so undo puts both back together.

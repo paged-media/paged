@@ -1,0 +1,55 @@
+# cargo-deny configuration for dml-geom (platform/shared/dml-geom).
+# Run:  cargo deny check
+# Docs: https://embarkstudios.github.io/cargo-deny/
+#
+# The crate is a path dependency of modules/slide (and of doc's shapes when
+# they land); each such workspace checks the graph it builds with its own
+# deny.toml. This
+# file checks the crate's standalone graph (every feature), under the same
+# policy.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+# paged-ooxml without its `dom` feature: no ooxmlsdk, no zip 8.
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# paged is AGPL-3.0-only OR PMEL (ADR PM-0001). Dependencies must be
+# permissively licensed (weak copyleft MPL-2.0 at most) so the whole work can
+# be distributed under both: the AGPL and the commercial PMEL. No GPL/AGPL
+# dependency can pass this gate.
+allow = [
+    "MPL-2.0",
+    "LicenseRef-PMEL",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "BSL-1.0",
+]
+exceptions = []
+
+# The crate is AGPL-3.0-only OR LicenseRef-PMEL (ADR PM-0001) and unpublished.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

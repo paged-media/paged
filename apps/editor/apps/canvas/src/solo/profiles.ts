@@ -54,7 +54,26 @@ const M = defineMessages("app.soloProfiles", {
   docBlurb: "Text, styles, outline",
   webBlurb: "HTML source, flow, bake",
   dataBlurb: "Sources, bindings, generated pages",
+  slideBlurb: "Slides, notes, comments",
 });
+
+/** Editor ADR 311 (plan WP10.7) — the host panels and tools that work on
+ *  any page item, so every solo application keeps them whatever else it
+ *  drops: Gradients, Picture adjustments and History; Free Transform. */
+const SHARED_HOST_PANELS: readonly string[] = [
+  "paged.gradients",
+  "paged.picture-adjustments",
+  "paged.history",
+];
+const SHARED_HOST_TOOLS: readonly string[] = ["paged.tool.freeTransform"];
+
+/** A profile's own list, then each shared id it does not name already. */
+function withShared(
+  shared: readonly string[],
+  own: readonly string[],
+): readonly string[] {
+  return [...own, ...shared.filter((id) => !own.includes(id))];
+}
 
 /** A plugin hosted as its own application. */
 export interface SoloProfile {
@@ -111,7 +130,7 @@ const DRAW_PROFILE: SoloProfile = {
   // Square, and large enough that the artboard reads as a canvas rather
   // than a page. Verified end-to-end at this exact size.
   documentSizePt: [2000, 2000],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.object-transform",
     "paged.align",
@@ -123,13 +142,15 @@ const DRAW_PROFILE: SoloProfile = {
     "paged.color-wheel",
     "paged.stroke",
     "paged.effects",
+    "paged.transparency",
+    "paged.appearance",
     "paged.attributes",
     "paged.info",
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: [
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
     // Drawing primitives the HOST owns and draw builds on (the Pencil
     // among them: draw retired its own into it, draw ADR 359). draw's own
     // tools arrive with the bundle.
@@ -162,7 +183,7 @@ const DRAW_PROFILE: SoloProfile = {
     // brushes). NOT ONE creates geometry. Pen, rectangle, ellipse, line
     // and polygon are the HOST's. A profile of "draw's tools plus
     // navigation" would be an illustration program you cannot draw in.
-  ],
+  ]),
   // `Draw` itself is contributed by the bundle, not listed here.
   menuTopLevels: ["File", "Edit", "View", "Object", "Window", "Help"],
   slots: {
@@ -215,7 +236,7 @@ const IMAGE_PROFILE: SoloProfile = {
   bundleId: "media.paged.image",
   title: "paged.image",
   documentSizePt: [1600, 1200],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.object-transform",
     "paged.layers",
@@ -223,13 +244,18 @@ const IMAGE_PROFILE: SoloProfile = {
     "paged.color",
     "paged.color-wheel",
     "paged.effects",
+    "paged.transparency",
+    "paged.appearance",
     "paged.align",
     "paged.info",
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.rectangle", "paged.tool.ellipse"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.rectangle",
+    "paged.tool.ellipse",
+  ]),
   menuTopLevels: ["File", "Edit", "View", "Object", "Window", "Help"],
   slots: {
     left: "media.paged.image.panel.adjustments",
@@ -267,7 +293,7 @@ const SHEET_PROFILE: SoloProfile = {
   bundleId: "media.paged.sheet",
   title: "paged.sheet",
   documentSizePt: [1400, 900],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.object-transform",
     "paged.table",
@@ -275,12 +301,19 @@ const SHEET_PROFILE: SoloProfile = {
     "paged.table-styles",
     "paged.swatches",
     "paged.color",
+    "paged.effects",
+    "paged.transparency",
+    "paged.appearance",
+    "paged.picture-adjustments",
     "paged.info",
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.rectangle", "paged.tool.type"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.rectangle",
+    "paged.tool.type",
+  ]),
   menuTopLevels: ["File", "Edit", "View", "Object", "Window", "Help"],
   slots: {
     left: "media.paged.sheet.panel.workbook",
@@ -330,7 +363,7 @@ const DOC_PROFILE: SoloProfile = {
   bundleId: "media.paged.doc",
   title: "paged.doc",
   documentSizePt: [612, 792],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.character",
     "paged.paragraph",
@@ -344,12 +377,19 @@ const DOC_PROFILE: SoloProfile = {
     "paged.text-frame-options",
     "paged.swatches",
     "paged.color",
+    "paged.effects",
+    "paged.transparency",
+    "paged.appearance",
+    "paged.picture-adjustments",
     "paged.info",
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.type", "paged.tool.rectangle"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.type",
+    "paged.tool.rectangle",
+  ]),
   // `Type` STAYS — it is the point of a word processor. `Layout` and
   // `Data` go: pagination is automatic here, not composed by hand.
   menuTopLevels: ["File", "Edit", "View", "Type", "Object", "Window", "Help"],
@@ -392,7 +432,7 @@ const WEB_PROFILE: SoloProfile = {
   bundleId: "media.paged.web",
   title: "paged.web",
   documentSizePt: [612, 792],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.pages",
     "paged.stories",
@@ -401,12 +441,18 @@ const WEB_PROFILE: SoloProfile = {
     "paged.color",
     "paged.character",
     "paged.paragraph",
+    "paged.effects",
+    "paged.transparency",
+    "paged.appearance",
     "paged.info",
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.type", "paged.tool.rectangle"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.type",
+    "paged.tool.rectangle",
+  ]),
   menuTopLevels: ["File", "Edit", "View", "Layout", "Object", "Window", "Help"],
   slots: {
     left: "media.paged.web.panel.source",
@@ -446,7 +492,7 @@ const DATA_PROFILE: SoloProfile = {
   bundleId: "media.paged.data",
   title: "paged.data",
   documentSizePt: [612, 792],
-  panelIds: [
+  panelIds: withShared(SHARED_HOST_PANELS, [
     "paged.properties",
     "paged.pages",
     "paged.stories",
@@ -454,12 +500,18 @@ const DATA_PROFILE: SoloProfile = {
     "paged.swatches",
     "paged.character",
     "paged.paragraph",
+    "paged.effects",
+    "paged.transparency",
+    "paged.appearance",
     "paged.info",
     "paged.problems",
     "paged.actions",
     "paged.keyboard-shortcuts",
-  ],
-  toolIds: ["paged.tool.type", "paged.tool.rectangle"],
+  ]),
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.type",
+    "paged.tool.rectangle",
+  ]),
   // `Data` stays — it is this application's own menu, and the host
   // already curates three panel-raising rows into it.
   menuTopLevels: [
@@ -495,6 +547,97 @@ const DATA_PROFILE: SoloProfile = {
   ],
 };
 
+/**
+ * paged.slide — a presentation program (editor ADR 307).
+ *
+ * PowerPoint's Normal view: the slide in the middle at the deck's size,
+ * the Slides rail on the left (thumbnails, sections, drag to reorder,
+ * Delete on a thumbnail), and the slide's own panels in the right dock:
+ * Slide, Transition, Placeholder, Deck, Comments and Notes. A new document
+ * is a 16:9 slide at PowerPoint's default size (13.333 × 7.5 in, 960 ×
+ * 540 pt); an opened deck brings its own size.
+ *
+ * NOTES ARE A DOCK TAB, not a pane under the slide: the cockpit has no
+ * bottom dock (`ModeCockpitSlots` is left / right / canvas), and the
+ * panel's `defaultDock: "bottom"` is a wish the host does not honour yet.
+ * ADR 307 records the gap.
+ *
+ * MENUS. PowerPoint's bar is File, Home, Insert, Design, Transitions,
+ * Animations, Slide Show, Review, View; a menu-bar app has File, Edit,
+ * View, Insert, Format, Arrange, Slide, Window, Help. The host has no
+ * Insert or Format menu: its inserts live under Object (Insert text
+ * frame, rectangle, …) and its text formatting under Type, so those two
+ * stand in for Insert and Format. The `Slide` menu is the bundle's own and
+ * arrives with it.
+ *
+ * Text is the most common thing on a slide, so the text panels stay (as
+ * in doc); the page-layout surfaces (pages, masters, spreads, preflight,
+ * separations, stories) do not: a deck's pages ARE the slides, which the
+ * Slides rail shows.
+ */
+const SLIDE_PROFILE: SoloProfile = {
+  bundleId: "media.paged.slide",
+  title: "paged.slide",
+  documentSizePt: [960, 540],
+  panelIds: withShared(SHARED_HOST_PANELS, [
+    "paged.properties",
+    "paged.object-transform",
+    "paged.align",
+    "paged.character",
+    "paged.paragraph",
+    "paged.bullets-numbering",
+    "paged.fonts",
+    "paged.swatches",
+    "paged.color",
+    "paged.stroke",
+    "paged.effects",
+    "paged.transparency",
+    "paged.appearance",
+    "paged.picture-adjustments",
+    "paged.layers",
+    "paged.info",
+    "paged.problems",
+    "paged.actions",
+    "paged.keyboard-shortcuts",
+  ]),
+  // PowerPoint's Insert ▸ Text Box and Shapes: the host's type tool and its
+  // shape primitives. The slide bundle contributes no tools of its own.
+  toolIds: withShared(SHARED_HOST_TOOLS, [
+    "paged.tool.type",
+    "paged.tool.rectangle",
+    "paged.tool.ellipse",
+    "paged.tool.line",
+    "paged.tool.polygon",
+  ]),
+  menuTopLevels: ["File", "Edit", "View", "Type", "Object", "Window", "Help"],
+  slots: {
+    left: "media.paged.slide.panel.slides",
+    tabs: [
+      "media.paged.slide.panel.slide",
+      "media.paged.slide.panel.transition",
+      "media.paged.slide.panel.placeholder",
+      "media.paged.slide.panel.deck",
+      "media.paged.slide.panel.comments",
+      "media.paged.slide.panel.notes",
+    ],
+  },
+  panelRailIds: [
+    "media.paged.slide.panel.slides",
+    "media.paged.slide.panel.notes",
+    "media.paged.slide.panel.comments",
+    "paged.properties",
+    "paged.problems",
+  ],
+  get blurb() {
+    return t(M.slideBlurb);
+  },
+  paletteSuggestions: [
+    "media.paged.slide.command.newSlide",
+    "media.paged.slide.command.addComment",
+    "media.paged.slide.command.exportPptx",
+  ],
+};
+
 /** Every profile, keyed by the `?solo=` value a user types. The key is
  *  the SHORT name (`paged.draw`), not the manifest id — a URL is typed
  *  by a person. */
@@ -505,6 +648,7 @@ export const SOLO_PROFILES: Readonly<Record<string, SoloProfile>> = {
   "paged.doc": DOC_PROFILE,
   "paged.web": WEB_PROFILE,
   "paged.data": DATA_PROFILE,
+  "paged.slide": SLIDE_PROFILE,
 };
 
 // NO PROFILE FOR paged.pdf OR paged.publish, and the reason is measured

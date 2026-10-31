@@ -35,8 +35,39 @@
 // import REJECTS — bootEngine surfaces that honestly so the panel can
 // say "engine wasm not built".
 
+import {
+  maskingEngine,
+  type MaskingEngine,
+  type MaskingWasm,
+} from "./masking-engine";
+import { modeEngine, type ModeEngine, type ModeWasm } from "./mode-engine";
+import type { GlobalLight, LayerStyle } from "./layer-style";
+import {
+  wrapVectors,
+  type VectorEngine,
+  type VectorWasm,
+} from "./vector-engine";
+import { type SmartEngine, type SmartWasm, wrapSmart } from "./smart-engine";
+import type { HistorySource } from "./brush-dynamics";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
+
+import {
+  wrapRetouch,
+  type RetouchEngine,
+  type RetouchWasm,
+} from "./retouch-engine";
+import {
+  filterEngineOf,
+  type FilterEngine,
+  type FilterWasm,
+} from "./engine-filters";
+import {
+  workspaceEngine,
+  type WorkspaceEngine,
+  type WorkspaceWasm,
+} from "./workspace-engine";
+import { wrapWarps, type WarpEngine, type WarpWasm } from "./warp-engine";
 
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
@@ -515,7 +546,10 @@ export type DisplayTreatment =
   | "assumed-srgb"
   | "profile-rejected"
   | "cmyk-converted"
-  | "cmyk-uncalibrated";
+  | "cmyk-uncalibrated"
+  | "hdr-clipped"
+  /** A float source held as 32-bit float, linear light (image ADR 484). */
+  | "float-32";
 
 /** The DecodedInfo every kernel-apply returns. One place, because six
  *  hand-written copies of the same field list is six chances to forget
@@ -528,6 +562,16 @@ function decodedInfoOf(h: DecodedHandleWasm): DecodedInfo {
     display: displayTreatmentOf(h.display),
     depthReduced: h.depth_reduced === true,
   };
+}
+
+/** WP5.10 — a type layer's render: straight RGBA8, `width × height`, its
+ *  top-left at canvas pixel `(x, y)` (it may reach past the canvas). */
+export interface TypeRenderPixels {
+  rgba: Uint8Array;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /** The distortion kinds `geom.warp_backward` carries. Order matches the
@@ -546,6 +590,10 @@ export function displayTreatmentOf(code: number | undefined): DisplayTreatment {
       return "cmyk-converted";
     case 4:
       return "cmyk-uncalibrated";
+    case 5:
+      return "hdr-clipped";
+    case 6:
+      return "float-32";
     default:
       return "assumed-srgb";
   }
@@ -557,6 +605,8 @@ const TREATMENT = defineMessages("image.colourTreatment", {
   profileRejected: "sRGB assumed (profile rejected)",
   cmykConverted: "CMYK, converted to sRGB",
   cmykUncalibrated: "CMYK, converted to sRGB without a profile",
+  hdrClipped: "HDR, clipped to sRGB (no tone mapping)",
+  float32: "32-bit float, linear light (shown at exposure 0)",
   assumed: "sRGB assumed",
 });
 
@@ -570,6 +620,10 @@ export function displayTreatmentLabel(treatment: DisplayTreatment): string {
       return t(TREATMENT.cmykConverted);
     case "cmyk-uncalibrated":
       return t(TREATMENT.cmykUncalibrated);
+    case "hdr-clipped":
+      return t(TREATMENT.hdrClipped);
+    case "float-32":
+      return t(TREATMENT.float32);
     default:
       return t(TREATMENT.assumed);
   }
@@ -584,6 +638,9 @@ export function isCmykConversion(t: DisplayTreatment): boolean {
  *  forwards to the wasm surface; the facade only renames + shapes. */
 /** The T1 resample kernels the resize door accepts. */
 export type ResampleFilter = "nearest" | "mitchell" | "lanczos3";
+
+/** The filters of the CPU resize (`resizeCpu`, ADR 467). */
+export type CpuResampleFilter = "lanczos3" | "bilinear";
 
 /** Whole-canvas operations (`layersCanvasOp`). */
 export type CanvasOpKind =
@@ -614,8 +671,87 @@ export const GRADIENT_KINDS: GradientKind[] = [
 /** A straight RGBA colour in [0,1] — the fill door's stop format. */
 export type Rgba01 = [number, number, number, number];
 
-/** The raster re-encode formats the non-PSD save-back lane offers. */
-export type RasterFormat = "png" | "jpeg";
+/** The raster formats the non-PSD lane writes (ADR 468; GIF, BMP, TGA
+ *  and JPEG XL from engine ADR 1038). AVIF is not here: its encoder is
+ *  not in the module's wasm (the engine's `avif-encode` feature). */
+export type RasterFormat = SaveBackFormat | "gif" | "bmp" | "tga" | "jxl";
+
+/** The formats a save-back writes a file back as (its own format, PNG
+ *  for any other) and the `image.encode` action takes. */
+export type SaveBackFormat = "png" | "jpeg" | "webp" | "tiff";
+
+/** EXPORT AS (ADR 468): what the dialog chooses. */
+export interface ExportOptions {
+  format: RasterFormat;
+  /** JPEG quality, 1–100. */
+  quality: number;
+  /** The written size in px (the session's own when absent). */
+  width?: number;
+  height?: number;
+  /** Pixels per inch to write (none when null). */
+  ppi: number | null;
+  /** Keep the source's EXIF, XMP and IPTC. */
+  keepMetadata: boolean;
+  /** Embed the profile of the pixels as written (sRGB, or the CMYK one). */
+  embedProfile: boolean;
+  mode: "rgb" | "gray" | "cmyk";
+  bits: 8 | 16;
+  compression: "none" | "lzw" | "deflate";
+  intent:
+    | "perceptual"
+    | "relativeColorimetric"
+    | "saturation"
+    | "absoluteColorimetric";
+}
+
+/** What an export did that the user is told (the engine's wire names). */
+export type ExportNote =
+  | "webp-lossless"
+  | "cmyk-profile"
+  | "cmyk-naive"
+  | "widened"
+  | "narrowed"
+  | "alpha-dropped"
+  | "gray-untagged"
+  | "gif-palette"
+  | "jxl-lossless"
+  | "no-metadata";
+
+/** The engine's spec string for `export_image*`. */
+export function exportSpec(o: ExportOptions): string {
+  const parts = [
+    `format=${o.format}`,
+    `quality=${Math.round(Math.min(100, Math.max(1, o.quality)))}`,
+    `meta=${o.keepMetadata ? 1 : 0}`,
+    `icc=${o.embedProfile ? 1 : 0}`,
+    `mode=${o.mode}`,
+    `bits=${o.bits}`,
+    `compression=${o.compression}`,
+    `intent=${o.intent}`,
+  ];
+  if (o.width !== undefined && o.height !== undefined)
+    parts.push(
+      `width=${Math.max(1, Math.round(o.width))}`,
+      `height=${Math.max(1, Math.round(o.height))}`,
+    );
+  if (o.ppi !== null && o.ppi > 0) parts.push(`ppi=${o.ppi}`);
+  return parts.join(";");
+}
+
+/** The file extension and media type of an export format. */
+export const EXPORT_FORMATS: Record<
+  RasterFormat,
+  { extension: string; mimeType: string }
+> = {
+  png: { extension: ".png", mimeType: "image/png" },
+  jpeg: { extension: ".jpg", mimeType: "image/jpeg" },
+  webp: { extension: ".webp", mimeType: "image/webp" },
+  tiff: { extension: ".tif", mimeType: "image/tiff" },
+  gif: { extension: ".gif", mimeType: "image/gif" },
+  bmp: { extension: ".bmp", mimeType: "image/bmp" },
+  tga: { extension: ".tga", mimeType: "image/x-tga" },
+  jxl: { extension: ".jxl", mimeType: "image/jxl" },
+};
 
 // ─────────────────────────────── PAINT ───────────────────────────────
 
@@ -647,7 +783,18 @@ export type StrokeTool =
   /** SPOT HEALING BRUSH: paint over a blemish; on release the engine
    *  finds a source itself (an exemplar search around the stroke) and
    *  heals from it. No Alt-click, and nothing lands until release. */
-  | "spot-heal";
+  | "spot-heal"
+  /** The brush engine's tools (`stroke::engine`): smudge and the mixer
+   *  brush drag paint along (wet, dab by dab); the history and art
+   *  history brushes paint an earlier state of the layer; the background
+   *  eraser erases, and colour replacement recolours, only the colour
+   *  they sample under the tip. */
+  | "smudge"
+  | "mixer"
+  | "history"
+  | "art-history"
+  | "background-eraser"
+  | "color-replace";
 
 export const STROKE_TOOLS: StrokeTool[] = [
   "brush",
@@ -661,6 +808,12 @@ export const STROKE_TOOLS: StrokeTool[] = [
   "blur",
   "sharpen",
   "spot-heal",
+  "smudge",
+  "mixer",
+  "history",
+  "art-history",
+  "background-eraser",
+  "color-replace",
 ];
 
 /** The filter strokes that take tone options (`brush_stroke_set_tone`). */
@@ -747,6 +900,36 @@ export const DEFAULT_BRUSH_PARAMS: BrushParams = {
   pressureTarget: "both",
 };
 
+/** A tip bitmap as the engine takes it: coverage, 255 = paint. */
+export interface TipBitmapBytes {
+  width: number;
+  height: number;
+  alpha: Uint8Array;
+}
+
+/** A pen sample with everything Pointer Events report (and the barrel
+ *  rotation and wheel a host may add). */
+export interface PenSample {
+  x: number;
+  y: number;
+  pressure: number;
+  tiltX: number;
+  tiltY: number;
+  rotation: number;
+  wheel: number;
+}
+
+/** The magic eraser's options (Photoshop's options bar). */
+export interface MagicEraseOptions {
+  /** 0..255, per channel. */
+  tolerance: number;
+  antialias: boolean;
+  contiguous: boolean;
+  sampleAll: boolean;
+  /** 0..1. */
+  opacity: number;
+}
+
 /** The in-flight stroke's readout (`brush_stroke_stats`): the dab count
  *  and the stroke's bounding box in image px. Null when no stroke is in
  *  progress or nothing has landed on the canvas yet. */
@@ -780,7 +963,7 @@ export interface LayerInfo {
    *  transforms everything beneath it; a `smart` layer's pixels are a
    *  cached RENDER of preserved source bytes, so rescaling it is
    *  lossless. */
-  kind: "pixels" | "adjustment" | "smart" | "fill";
+  kind: "pixels" | "adjustment" | "smart" | "fill" | "type";
   /** Whether a layer mask is attached at all. */
   hasMask: boolean;
   /** Whether that mask APPLIES. Disabled keeps the coverage — the two
@@ -792,6 +975,13 @@ export interface LayerInfo {
   clipped: boolean;
   /** The GROUP this layer belongs to, or null. */
   group: number | null;
+  /** The descriptor keys of the layer STYLE's enabled effects (`DrSh`,
+   *  `ebbl`, …, the Layer Style dialog's order); empty without a style. */
+  style: string[];
+  /** The style's master switch (Hide / Show All Effects). */
+  styleOn: boolean;
+  /** Blending Options' style switches (`styleOptionsFromBits`). */
+  styleOptions: number;
   /** FILL opacity 0–1: the layer's own pixels, apart from its opacity.
    *  On the eight special modes it acts inside the blend. */
   fillOpacity: number;
@@ -809,11 +999,24 @@ export interface LayerInfo {
   adjustKind: AdjustmentKind | "chain" | null;
   /** A fill layer's kind. */
   fillKind: FillKind | null;
+  /** The layer's VECTOR MASK (image ADR 476) — on a fill layer it makes
+   *  a shape layer — or null. Absent on a row built by hand. */
+  vectorMask?: {
+    enabled: boolean;
+    invert: boolean;
+    subpaths: number;
+    anchors: number;
+  } | null;
+  /** A TYPE layer (WP5.10): whether its pixels need a new render. */
+  typeStale?: boolean | null;
 }
 
 /** A plain layer's parity fields (Photoshop's defaults) — for a reader
  *  that builds a row by hand, such as a test. */
 export const PLAIN_LAYER_PARITY = {
+  style: [] as string[],
+  styleOn: false,
+  styleOptions: 6,
   fillOpacity: 1,
   knockout: "none",
   locks: { transparency: false, position: false, all: false },
@@ -824,6 +1027,9 @@ export const PLAIN_LAYER_PARITY = {
   fillKind: null,
 } as const satisfies Pick<
   LayerInfo,
+  | "style"
+  | "styleOn"
+  | "styleOptions"
   | "fillOpacity"
   | "knockout"
   | "locks"
@@ -834,7 +1040,8 @@ export const PLAIN_LAYER_PARITY = {
   | "fillKind"
 >;
 
-/** Photoshop's sixteen adjustment-layer kinds, in its menu order. */
+/** Photoshop's sixteen adjustment-layer kinds, in its menu order, and
+ *  Develop. */
 export const ADJUSTMENT_KINDS = [
   "brightnessContrast",
   "levels",
@@ -852,6 +1059,9 @@ export const ADJUSTMENT_KINDS = [
   "threshold",
   "gradientMap",
   "selectiveColor",
+  // Not one of Photoshop's sixteen: the Camera Raw-class Develop
+  // adjustment (WP5.2), a layer kind of the engine's own.
+  "develop",
 ] as const;
 export type AdjustmentKind = (typeof ADJUSTMENT_KINDS)[number];
 
@@ -944,6 +1154,51 @@ export interface LayerHistory {
   undoSteps: readonly string[];
   /** Every redo step, next-to-replay first. */
   redoSteps: readonly string[];
+  /** Each undo step's id, in `undoSteps` order (ADR 477): stable for the
+   *  step's life, what a History brush source names (`step:<id>`). */
+  undoIds: readonly number[];
+  /** Each redo step's id, in `redoSteps` order. */
+  redoIds: readonly number[];
+  /** The named snapshots, oldest first. */
+  snapshots: readonly HistorySnapshotInfo[];
+  /** Bytes the snapshots alone hold (layer buffers nothing else keeps). */
+  snapshotBytes: number;
+}
+
+/** A named snapshot of the layer stack (ADR 477). */
+export interface HistorySnapshotInfo {
+  id: number;
+  name: string;
+  width: number;
+  height: number;
+}
+
+/** A pattern preset's metadata (its RGBA8 travels beside it). */
+export interface PatternPresetMeta {
+  /** As written (Photoshop's localisable `$$$/…=Name` form survives). */
+  name: string;
+  /** The name to show. */
+  display?: string;
+  id: string;
+  width: number;
+  height: number;
+}
+
+/** A gradient stop list (paged-psd's `Gradient`, its serde form). */
+export interface GradientValue {
+  name: string;
+  /** 0–100. */
+  smoothness: number;
+  stops: ReadonlyArray<{
+    at: number;
+    rgb: [number, number, number];
+    midpoint: number;
+  }>;
+  opacityStops: ReadonlyArray<{
+    at: number;
+    opacity: number;
+    midpoint: number;
+  }>;
 }
 
 /** A layer GROUP — a named, contiguous run that composites into its own
@@ -1111,7 +1366,21 @@ export interface FilterMask {
   feather?: number;
 }
 
-export interface ImageEngine {
+/** WP5.8 — the retouching doors live in `retouch-engine.ts`; WP5.2's filter
+ *  doors in `engine-filters.ts`; the vectors (ADR 476) in `vector-engine.ts`;
+ *  the workspace (image ADR 475) in `workspace-engine.ts`; the
+ *  smart objects (ADR 482) in `smart-engine.ts`; the pixel warps (ADR 483)
+ *  in `warp-engine.ts`. */
+export interface ImageEngine
+  extends
+    MaskingEngine,
+    ModeEngine,
+    RetouchEngine<DecodedInfo>,
+    FilterEngine,
+    VectorEngine<DecodedInfo>,
+    WorkspaceEngine,
+    SmartEngine<DecodedInfo>,
+    WarpEngine<DecodedInfo> {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -1147,6 +1416,14 @@ export interface ImageEngine {
    *  returning a handle for the GPU adjust + tile paths. `rgba` must be
    *  `width*height*4` bytes; a mismatch throws. */
   ingestRgba8(width: number, height: number, rgba: Uint8Array): DecodedInfo;
+  /** `ingestRgba8`'s 16-bit twin: `width*height*4` straight RGBA samples
+   *  at 16 bits (the decode worker's hand-off of a 16-bit source, so the
+   *  off-thread decode keeps the depth; image ADR 479). */
+  ingestRgba16(
+    width: number,
+    height: number,
+    samples: Uint16Array,
+  ): DecodedInfo;
   /** Run the adjustments chain (GPU for the kernel stages + a CPU curve
    *  LUT pass) and return straight RGBA8 — the C-1 Stage-A scene-item
    *  payload. Identity params return the decode verbatim without touching
@@ -1209,6 +1486,25 @@ export interface ImageEngine {
     outH: number,
     filter: ResampleFilter,
   ): Promise<DecodedInfo>;
+  /** RESAMPLE on the CPU (ADR 467): the separable, premultiplied resize of
+   *  `paged-resample`. Needs no device and gives the same bytes with or
+   *  without one — the headless and batch actions' backend. Returns a NEW
+   *  engine-held image; the source stays. */
+  resizeCpu(
+    handle: number,
+    outW: number,
+    outH: number,
+    filter: CpuResampleFilter,
+  ): DecodedInfo;
+  /** STRAIGHTEN + CROP on the CPU (ADR 467): turn by `−degrees` about the
+   *  rect's centre and cut the rect (bilinear, premultiplied,
+   *  clamp-to-edge). The rect must lie inside the image. Returns a NEW
+   *  engine-held image; the source stays. */
+  straightenCropCpu(
+    handle: number,
+    rect: CropRect,
+    degrees: number,
+  ): DecodedInfo;
   /** PSD structural session — the mutatable tier's wasm reach ("Paged
    *  never destroys a PSD" was a Rust-test-only property until these).
    *  `psdOpen` retains the PARSED file behind a handle; edits accumulate
@@ -1225,6 +1521,65 @@ export interface ImageEngine {
    *  the reader's own message on bytes that are not an `.abr` (which is
    *  a different answer from a library that contains no presets). */
   abrPresets(bytes: Uint8Array): BrushLibraryInfo;
+  /** PRESET MANAGER files (ADR 477): Photoshop `.grd`, `.pat` and `.asl`,
+   *  read and written by paged-psd. Patterns come back as metadata plus
+   *  one buffer of every pattern's RGBA8 in order. Each read throws the
+   *  reader's message on bytes that are not that kind of file. */
+  presetsReadGrd(bytes: Uint8Array): {
+    gradients: Array<{ display: string; gradient: GradientValue }>;
+    skipped: number;
+  };
+  presetsWriteGrd(gradients: readonly GradientValue[]): Uint8Array;
+  presetsReadPat(bytes: Uint8Array): {
+    patterns: PatternPresetMeta[];
+    skipped: string[];
+    rgba: Uint8Array;
+  };
+  presetsWritePat(
+    patterns: readonly PatternPresetMeta[],
+    rgba: Uint8Array,
+  ): Uint8Array;
+  presetsReadAsl(bytes: Uint8Array): {
+    styles: Array<{
+      name: string;
+      display: string;
+      id: string;
+      style: LayerStyle;
+    }>;
+    patterns: PatternPresetMeta[];
+    skipped: string[];
+    rgba: Uint8Array;
+  };
+  presetsWriteAsl(
+    styles: ReadonlyArray<{ name: string; id: string; style: LayerStyle }>,
+    patterns: readonly PatternPresetMeta[],
+    rgba: Uint8Array,
+  ): Uint8Array;
+  /** HISTORY (ADR 477): the journal's depth and byte budget, for the open
+   *  stack and every stack opened after (clamped; answers what was set). */
+  layersSetHistoryBudget(
+    maxEntries: number,
+    maxBytes: number,
+  ): { maxEntries: number; maxBytes: number };
+  /** Name the current state (not an undo step); answers its id. */
+  snapshotTake(name: string): number;
+  snapshotRename(id: number, name: string): void;
+  snapshotDelete(id: number): void;
+  /** Restore a snapshot as ONE undo step named `label`, re-composited. */
+  snapshotRestore(id: number, label: string): Promise<string>;
+  /** One sampled tip of an `.abr` by its `sampleIndex` (raw
+   *  `[w, h, alpha…]`, decoded by `abr-preset.ts` `decodeTipBitmap`). */
+  abrTip(bytes: Uint8Array, sampleIndex: number): Uint8Array;
+  /** WRITE an `.abr` (v6.2): each preset's values in `abrExportKeys`
+   *  order plus its sampled tip, or null for a round tip. */
+  abrExportKeys(): string[];
+  abrExport(
+    presets: ReadonlyArray<{
+      name: string;
+      values: Float32Array;
+      bitmap: TipBitmapBytes | null;
+    }>,
+  ): Uint8Array;
   /** PSD SAVE-BACK: write the ADJUSTED full-resolution RGBA8 into the
    *  retained parse (the merged composite is always rewritten) and
    *  answer the HONEST description of what happened to the layer
@@ -1266,6 +1621,34 @@ export interface ImageEngine {
     quality: number,
     reduce: boolean,
   ): Uint8Array;
+  /** EXPORT AS: straight RGBA8 written as `spec` (`exportSpec`) says,
+   *  carrying `source`'s metadata (empty = none) and converting to CMYK
+   *  through `cmykProfile` (empty = the naive formula). */
+  exportImage(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    spec: string,
+    source: Uint8Array,
+    cmykProfile: Uint8Array,
+  ): Uint8Array;
+  /** `exportImage` from an engine-held image at its own depth (a 16-bit
+   *  session writes 16-bit PNG/TIFF samples). */
+  exportImageHandle(
+    handle: number,
+    spec: string,
+    source: Uint8Array,
+    cmykProfile: Uint8Array,
+  ): Uint8Array;
+  /** The notes of the last export. */
+  exportNotes(): ExportNote[];
+  /** Byte lengths of the ICC, EXIF, XMP and IPTC a file carries. */
+  imageMetadata(bytes: Uint8Array): {
+    icc: number;
+    exif: number;
+    xmp: number;
+    iptc: number;
+  };
   /** FILL the bound SELECTION (the whole image when none) with a fixed
    *  two-stop gradient, compositing through the coverage mask on the
    *  GPU. DESTRUCTIVE: returns a NEW engine-held image (the crop/resize
@@ -1441,6 +1824,37 @@ export interface ImageEngine {
    *  `brushBegin` and the first extend). THROWS for any other tool. */
   brushSetTone(tone: ToneOptions): void;
   brushExtend(x: number, y: number, pressure: number): Promise<Uint8Array>;
+  /** BRUSH ENGINE doors (`brush-dynamics.ts`). The settings keys, in the
+   *  order `brushSetDynamics` reads them — packed BY NAME. */
+  brushDynamicsKeys(): string[];
+  /** The texture / dual-brush combine modes, in ordinal order (the TS
+   *  `COMBINE_MODES` must equal it). */
+  brushCombineModes(): string[];
+  /** Freeze Brush Settings into the in-flight stroke (between begin and
+   *  the first extend). */
+  brushSetDynamics(values: Float32Array): void;
+  /** The sampled tip (`null` = the computed tip). */
+  brushSetTipBitmap(tip: TipBitmapBytes | null): void;
+  /** The dual brush's sampled tip. */
+  brushSetDualBitmap(tip: TipBitmapBytes | null): void;
+  /** An engine-held image (the defined pattern) as the brush texture. */
+  brushSetTextureImage(handle: number): void;
+  /** The history state the History / Art History stroke paints from. */
+  brushSetHistorySource(kind: HistorySource): void;
+  /** Extend with a pen's full state (tilt in degrees, barrel rotation in
+   *  degrees, the wheel 0..1). */
+  brushExtendPen(sample: PenSample): Promise<Uint8Array>;
+  /** MAGIC ERASER at an image-px point: one undo step on the active
+   *  layer. */
+  magicErase(
+    handle: number,
+    x: number,
+    y: number,
+    o: MagicEraseOptions,
+  ): Promise<DecodedInfo>;
+  /** DEFINE BRUSH PRESET: the selection's pixels (the whole image without
+   *  one) as a tip bitmap. Throws when nothing would paint. */
+  brushTipFromSelection(handle: number): TipBitmapBytes;
   /** CLOSE the stroke. With a layer stack bound the painted pixels go
    *  into the ACTIVE LAYER (journaled — undoable), the stack is
    *  re-composited, and the returned handle is the SAME one you started
@@ -1508,6 +1922,14 @@ export interface ImageEngine {
   /** Write the open layer stack into the retained PSD as its layers;
    *  returns the description. Throws for adjustment layers / non-RGB-8. */
   psdSaveLayers(psdHandle: number): string;
+  /** A layered PSD's bytes as a layered TIFF (engine ADR 1038): its
+   *  composite as the image, its layers in tag 37724, which Photoshop
+   *  reopens. Throws for a 16/32-bit document, a PSB or one without
+   *  layers. */
+  psdToLayeredTiff(
+    psd: Uint8Array,
+    compression: ExportOptions["compression"],
+  ): Uint8Array;
   /** The open stack as bytes: manifest first, then its buffers. */
   layersExport(): Uint8Array[];
   /** Replace the open stack with stored bytes and composite it. */
@@ -1526,6 +1948,15 @@ export interface ImageEngine {
     kind: WarpKindName,
     amount: number,
     frequency?: number,
+  ): Promise<DecodedInfo>;
+  /** FREE TRANSFORM of the active layer (`geom.warp_projective`): the
+   *  FORWARD 3×3 map in image px (row-major), bilinear or bicubic,
+   *  transparent outside; with a selection only its pixels move. One
+   *  journaled edit. */
+  applyProjective(
+    handle: number,
+    matrix: readonly number[],
+    interp: "bilinear" | "bicubic",
   ): Promise<DecodedInfo>;
   /** STYLIZE — directional relief. `height === 0` is the identity. */
   applyEmboss(
@@ -1919,9 +2350,55 @@ export interface ImageEngine {
     values: readonly number[],
     tileHandle: number,
   ): Promise<void>;
-  /** A fill layer's or smart object's render becomes pixels. */
+  /** A fill layer's, smart object's or type layer's render becomes
+   *  pixels. */
   layerRasterize(index: number): void;
+  /** WP5.10 — a TYPE layer of `source` (its JSON), its pixels the
+   *  engine's render `render`, bent by the source's warp. One undo step.
+   *  Returns its index. */
+  layerAddType(
+    source: string,
+    render: TypeRenderPixels,
+    name: string,
+  ): Promise<number>;
+  /** A type layer's new source and render; writes sharing `session`
+   *  merge into one undo step. */
+  layerSetType(
+    index: number,
+    source: string,
+    render: TypeRenderPixels,
+    session: string,
+  ): Promise<void>;
+  /** A type layer's source JSON and state, or null for another layer. */
+  layerTypeSource(index: number): {
+    stale: boolean;
+    fromPsd: boolean;
+    source: unknown;
+  } | null;
   layerSetFillOpacity(index: number, fill: number): void;
+  /** The layer's STYLE (null: none). */
+  layerStyle(index: number): LayerStyle | null;
+  /** Set (null: clear) the layer's style; the dialog's edits to one layer
+   *  merge into one undo step. */
+  layerSetStyle(index: number, style: LayerStyle | null): void;
+  /** Paste Layer Style onto several layers (one undo step). */
+  layersPasteStyle(indices: readonly number[], style: LayerStyle): void;
+  /** Blending Options' style switches (`styleOptionsBits`). */
+  layerSetStyleOptions(index: number, bits: number): void;
+  /** The document's Global Light. */
+  globalLight(): GlobalLight;
+  setGlobalLight(angle: number, altitude: number): void;
+  /** Layer ▸ Layer Style ▸ Scale Effects (percent). */
+  layerScaleEffects(index: number, percent: number): void;
+  /** Hide / Show All Effects. */
+  layerSetEffectsVisible(index: number, on: boolean): void;
+  /** A pattern the styles can draw, by name (straight RGBA8). */
+  defineStylePattern(
+    name: string,
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+  ): void;
   /** Blend If's 32 sliders, or null to clear. */
   layerSetBlendIf(index: number, sliders: readonly number[] | null): void;
   layerSetKnockout(index: number, knockout: Knockout): void;
@@ -2002,7 +2479,16 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule {
+export interface ImageWasmModule
+  extends
+    MaskingWasm,
+    ModeWasm,
+    RetouchWasm,
+    FilterWasm,
+    VectorWasm,
+    WorkspaceWasm,
+    SmartWasm,
+    WarpWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -2035,6 +2521,11 @@ export interface ImageWasmModule {
     width: number,
     height: number,
     bytes: Uint8Array,
+  ): DecodedHandleWasm;
+  ingest_rgba16(
+    width: number,
+    height: number,
+    samples: Uint16Array,
   ): DecodedHandleWasm;
   adjust_image(
     handle: number,
@@ -2127,6 +2618,22 @@ export interface ImageWasmModule {
     quality: number,
     reduce: boolean,
   ): Uint8Array;
+  export_image(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    spec: string,
+    source: Uint8Array,
+    cmyk_profile: Uint8Array,
+  ): Uint8Array;
+  export_image_handle(
+    handle: number,
+    spec: string,
+    source: Uint8Array,
+    cmyk_profile: Uint8Array,
+  ): Uint8Array;
+  export_last_notes(): string;
+  image_metadata(bytes: Uint8Array): Uint32Array;
   psd_apply_adjusted(
     psd_handle: number,
     width: number,
@@ -2196,6 +2703,20 @@ export interface ImageWasmModule {
     outH: number,
     filter: string,
   ): Promise<DecodedHandleWasm>;
+  resize_image_cpu(
+    handle: number,
+    outW: number,
+    outH: number,
+    filter: string,
+  ): DecodedHandleWasm;
+  straighten_crop_image_cpu(
+    handle: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    degrees: number,
+  ): DecodedHandleWasm;
   selection_bind(handle: number): void;
   image_channel_stats(handle: number): string;
   image_readout(handle: number): string;
@@ -2251,6 +2772,44 @@ export interface ImageWasmModule {
     pressure: number,
   ): Promise<Uint8Array>;
   brush_stroke_set_source(x: number, y: number, aligned: boolean): void;
+  brush_dynamics_keys(): string;
+  brush_combine_modes(): string;
+  brush_stroke_set_dynamics(values: Float32Array): void;
+  brush_stroke_set_tip_bitmap(w: number, h: number, alpha: Uint8Array): void;
+  brush_stroke_set_dual_bitmap(w: number, h: number, alpha: Uint8Array): void;
+  brush_stroke_set_texture_image(handle: number): void;
+  brush_stroke_set_history_source(kind: string): void;
+  brush_stroke_extend_pen(
+    x: number,
+    y: number,
+    pressure: number,
+    tilt_x: number,
+    tilt_y: number,
+    rotation: number,
+    wheel: number,
+  ): Promise<Uint8Array>;
+  magic_erase(
+    handle: number,
+    x: number,
+    y: number,
+    tolerance: number,
+    antialias: boolean,
+    contiguous: boolean,
+    sample_all: boolean,
+    opacity: number,
+  ): Promise<DecodedHandleWasm>;
+  brush_tip_from_selection(handle: number): Uint8Array;
+  abr_tip(bytes: Uint8Array, sample_index: number): Uint8Array;
+  abr_export_keys(): string;
+  abr_export_begin(): void;
+  abr_export_add(
+    name: string,
+    values: Float32Array,
+    w: number,
+    h: number,
+    alpha: Uint8Array,
+  ): void;
+  abr_export_finish(): Uint8Array;
   brush_stroke_set_tone(
     range: string,
     exposure: number,
@@ -2270,6 +2829,23 @@ export interface ImageWasmModule {
   psd_save(handle: number): Uint8Array;
   psd_close(handle: number): void;
   abr_presets(bytes: Uint8Array): string;
+  presets_read_grd(bytes: Uint8Array): string;
+  presets_write_grd(json: string): Uint8Array;
+  presets_read_pat(bytes: Uint8Array): string;
+  presets_read_pat_pixels(bytes: Uint8Array): Uint8Array;
+  presets_write_pat(meta: string, rgba: Uint8Array): Uint8Array;
+  presets_read_asl(bytes: Uint8Array): string;
+  presets_read_asl_pixels(bytes: Uint8Array): Uint8Array;
+  presets_write_asl(
+    styles: string,
+    patterns: string,
+    rgba: Uint8Array,
+  ): Uint8Array;
+  layers_set_history_budget(max_entries: number, max_bytes: number): string;
+  layers_snapshot_take(name: string): number;
+  layers_snapshot_rename(id: number, name: string): void;
+  layers_snapshot_delete(id: number): void;
+  layers_snapshot_restore(id: number, label: string): Promise<string>;
   layers_open(handle: number): void;
   layers_open_from_psd(
     image_handle: number,
@@ -2339,6 +2915,11 @@ export interface ImageWasmModule {
     kind: number,
     amount: number,
     frequency: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_projective(
+    handle: number,
+    matrix: Float32Array,
+    interp: number,
   ): Promise<DecodedHandleWasm>;
   apply_emboss(
     handle: number,
@@ -2632,7 +3213,41 @@ export interface ImageWasmModule {
     tile_handle: number,
   ): Promise<void>;
   layers_rasterize(index: number): void;
+  layers_add_type(
+    source: string,
+    rgba: Uint8Array,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    name: string,
+  ): Promise<number>;
+  layers_set_type(
+    index: number,
+    source: string,
+    rgba: Uint8Array,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    session: string,
+  ): Promise<void>;
+  layers_type_source(index: number): string;
   layers_set_fill_opacity(index: number, fill: number): void;
+  layers_style(index: number): string;
+  layers_set_style(index: number, json: string): void;
+  layers_paste_style(indices: Uint32Array, json: string): void;
+  layers_set_style_options(index: number, bits: number): void;
+  layers_global_light(): Float32Array | number[];
+  layers_set_global_light(angle: number, altitude: number): void;
+  layers_scale_effects(index: number, percent: number): void;
+  layers_set_effects_visible(index: number, on: boolean): void;
+  layers_define_style_pattern(
+    name: string,
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+  ): void;
   layers_set_blend_if(index: number, sliders: Uint8Array): void;
   layers_set_knockout(index: number, knockout: string): void;
   layers_set_locks(
@@ -2694,6 +3309,7 @@ export interface ImageWasmModule {
   layers_export(): Uint8Array[];
   layers_import(manifest: Uint8Array, buffers: Uint8Array[]): Promise<void>;
   psd_save_layers(psd_handle: number): string;
+  psd_to_layered_tiff(psd: Uint8Array, compression: string): Uint8Array;
   layers_extent(): Uint32Array;
   layers_undo(): Promise<string>;
   layers_redo(): Promise<string>;
@@ -2705,6 +3321,14 @@ export interface ImageWasmModule {
  *  mapping is unit-testable over a fake wasm object (no real wasm). */
 export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
   return {
+    ...maskingEngine(wasm),
+    ...modeEngine(wasm),
+    ...wrapRetouch(wasm, decodedInfoOf),
+    ...filterEngineOf(wasm, decodedInfoOf),
+    ...wrapVectors(wasm, decodedInfoOf),
+    ...workspaceEngine(wasm),
+    ...wrapSmart(wasm, decodedInfoOf),
+    ...wrapWarps(wasm, decodedInfoOf),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,
@@ -2751,6 +3375,18 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     },
     ingestRgba8(width, height, rgba) {
       const h = wasm.ingest_rgba8(width, height, rgba);
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    ingestRgba16(width, height, samples) {
+      const h = wasm.ingest_rgba16(width, height, samples);
       const info = {
         handle: h.handle,
         width: h.width,
@@ -2881,10 +3517,54 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       wasm.encode_image(rgba, width, height, format),
     encodeOpt: (rgba, width, height, format, quality, reduce) =>
       wasm.encode_image_opt(rgba, width, height, format, quality, reduce),
+    exportImage: (rgba, width, height, spec, source, cmykProfile) =>
+      wasm.export_image(rgba, width, height, spec, source, cmykProfile),
+    exportImageHandle: (handle, spec, source, cmykProfile) =>
+      wasm.export_image_handle(handle, spec, source, cmykProfile),
+    exportNotes: () =>
+      wasm
+        .export_last_notes()
+        .split("\n")
+        .filter((n) => n !== "") as ExportNote[],
+    imageMetadata(bytes) {
+      const [icc = 0, exif = 0, xmp = 0, iptc = 0] = wasm.image_metadata(bytes);
+      return { icc, exif, xmp, iptc };
+    },
     psdApplyAdjusted: (psdHandle, width, height, rgba) =>
       wasm.psd_apply_adjusted(psdHandle, width, height, rgba),
     resize: async (handle, outW, outH, filter) => {
       const h = await wasm.resize_image(handle, outW, outH, filter);
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    resizeCpu(handle, outW, outH, filter) {
+      const h = wasm.resize_image_cpu(handle, outW, outH, filter);
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    straightenCropCpu(handle, rect, degrees) {
+      const h = wasm.straighten_crop_image_cpu(
+        handle,
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        degrees,
+      );
       const info = {
         handle: h.handle,
         width: h.width,
@@ -2907,6 +3587,43 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     psdClose: (handle) => wasm.psd_close(handle),
     abrPresets: (bytes) =>
       JSON.parse(wasm.abr_presets(bytes)) as BrushLibraryInfo,
+    presetsReadGrd: (bytes) =>
+      JSON.parse(wasm.presets_read_grd(bytes)) as ReturnType<
+        ImageEngine["presetsReadGrd"]
+      >,
+    presetsWriteGrd: (gradients) =>
+      wasm.presets_write_grd(JSON.stringify(gradients)),
+    presetsReadPat(bytes) {
+      const meta = JSON.parse(wasm.presets_read_pat(bytes)) as {
+        patterns: PatternPresetMeta[];
+        skipped: string[];
+      };
+      return { ...meta, rgba: wasm.presets_read_pat_pixels(bytes) };
+    },
+    presetsWritePat: (patterns, rgba) =>
+      wasm.presets_write_pat(JSON.stringify(patterns), rgba),
+    presetsReadAsl(bytes) {
+      const meta = JSON.parse(wasm.presets_read_asl(bytes)) as Omit<
+        ReturnType<ImageEngine["presetsReadAsl"]>,
+        "rgba"
+      >;
+      return { ...meta, rgba: wasm.presets_read_asl_pixels(bytes) };
+    },
+    presetsWriteAsl: (styles, patterns, rgba) =>
+      wasm.presets_write_asl(
+        JSON.stringify(styles),
+        JSON.stringify(patterns),
+        rgba,
+      ),
+    layersSetHistoryBudget: (maxEntries, maxBytes) =>
+      JSON.parse(wasm.layers_set_history_budget(maxEntries, maxBytes)) as {
+        maxEntries: number;
+        maxBytes: number;
+      },
+    snapshotTake: (name) => wasm.layers_snapshot_take(name),
+    snapshotRename: (id, name) => wasm.layers_snapshot_rename(id, name),
+    snapshotDelete: (id) => wasm.layers_snapshot_delete(id),
+    snapshotRestore: (id, label) => wasm.layers_snapshot_restore(id, label),
     histogram(handle) {
       const flat = wasm.image_histogram(handle);
       return {
@@ -3090,6 +3807,85 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     brushSetTone: (t) =>
       wasm.brush_stroke_set_tone(t.range, t.exposure, t.saturate),
     brushExtend: (x, y, pressure) => wasm.brush_stroke_extend(x, y, pressure),
+    brushDynamicsKeys: () =>
+      wasm
+        .brush_dynamics_keys()
+        .split("\n")
+        .filter((k) => k.length > 0),
+    brushCombineModes: () =>
+      wasm
+        .brush_combine_modes()
+        .split("\n")
+        .filter((k) => k.length > 0),
+    brushSetDynamics: (values) => wasm.brush_stroke_set_dynamics(values),
+    brushSetTipBitmap: (tip) =>
+      tip
+        ? wasm.brush_stroke_set_tip_bitmap(tip.width, tip.height, tip.alpha)
+        : wasm.brush_stroke_set_tip_bitmap(0, 0, new Uint8Array(0)),
+    brushSetDualBitmap: (tip) =>
+      tip
+        ? wasm.brush_stroke_set_dual_bitmap(tip.width, tip.height, tip.alpha)
+        : wasm.brush_stroke_set_dual_bitmap(0, 0, new Uint8Array(0)),
+    brushSetTextureImage: (handle) =>
+      wasm.brush_stroke_set_texture_image(handle),
+    brushSetHistorySource: (kind) => wasm.brush_stroke_set_history_source(kind),
+    brushExtendPen: (p) =>
+      wasm.brush_stroke_extend_pen(
+        p.x,
+        p.y,
+        p.pressure,
+        p.tiltX,
+        p.tiltY,
+        p.rotation,
+        p.wheel,
+      ),
+    async magicErase(handle, x, y, o) {
+      const h = await wasm.magic_erase(
+        handle,
+        x,
+        y,
+        Math.max(0, Math.min(255, Math.round(o.tolerance))),
+        o.antialias,
+        o.contiguous,
+        o.sampleAll,
+        Math.max(0, Math.min(1, o.opacity)),
+      );
+      const info = {
+        handle: h.handle,
+        width: h.width,
+        height: h.height,
+        display: displayTreatmentOf(h.display),
+        depthReduced: h.depth_reduced === true,
+      };
+      h.free();
+      return info;
+    },
+    abrTip: (bytes, sampleIndex) => wasm.abr_tip(bytes, sampleIndex),
+    abrExportKeys: () =>
+      wasm
+        .abr_export_keys()
+        .split("\n")
+        .filter((k) => k.length > 0),
+    abrExport(presets) {
+      wasm.abr_export_begin();
+      for (const p of presets) {
+        wasm.abr_export_add(
+          p.name,
+          p.values,
+          p.bitmap?.width ?? 0,
+          p.bitmap?.height ?? 0,
+          p.bitmap?.alpha ?? new Uint8Array(0),
+        );
+      }
+      return wasm.abr_export_finish();
+    },
+    brushTipFromSelection(handle) {
+      const b = wasm.brush_tip_from_selection(handle);
+      const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+      const width = v.getUint32(0, true);
+      const height = v.getUint32(4, true);
+      return { width, height, alpha: b.slice(8, 8 + width * height) };
+    },
     async brushCommit() {
       const h = await wasm.brush_stroke_commit();
       const info = {
@@ -3180,6 +3976,15 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         display: displayTreatmentOf(h.display),
         depthReduced: h.depth_reduced === true,
       };
+    },
+    async applyProjective(handle, matrix, interp) {
+      return decodedInfoOf(
+        await wasm.apply_projective(
+          handle,
+          Float32Array.from(matrix),
+          interp === "bicubic" ? 1 : 0,
+        ),
+      );
     },
     // ONE decoder for all six: the return shape is identical, and six
     // hand-written copies of it is six chances to forget a field.
@@ -3620,8 +4425,47 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     layerSetFill: (index, kind, values, tile) =>
       wasm.layers_set_fill(index, kind, Float32Array.from(values), tile),
     layerRasterize: (index) => wasm.layers_rasterize(index),
+    layerAddType: (source, r, name) =>
+      wasm.layers_add_type(source, r.rgba, r.x, r.y, r.width, r.height, name),
+    layerSetType: (index, source, r, session) =>
+      wasm.layers_set_type(
+        index,
+        source,
+        r.rgba,
+        r.x,
+        r.y,
+        r.width,
+        r.height,
+        session,
+      ),
+    layerTypeSource: (index) => {
+      const json = wasm.layers_type_source(index);
+      return json ? (JSON.parse(json) as never) : null;
+    },
     layerSetFillOpacity: (index, fill) =>
       wasm.layers_set_fill_opacity(index, fill),
+    layerStyle: (index) =>
+      JSON.parse(wasm.layers_style(index)) as LayerStyle | null,
+    layerSetStyle: (index, style) =>
+      wasm.layers_set_style(index, JSON.stringify(style)),
+    layersPasteStyle: (indices, style) =>
+      wasm.layers_paste_style(Uint32Array.from(indices), JSON.stringify(style)),
+    layerSetStyleOptions: (index, bits) =>
+      wasm.layers_set_style_options(index, bits),
+    globalLight: () => {
+      const [angle = 120, altitude = 30] = Array.from(
+        wasm.layers_global_light(),
+      );
+      return { angle, altitude };
+    },
+    setGlobalLight: (angle, altitude) =>
+      wasm.layers_set_global_light(angle, altitude),
+    layerScaleEffects: (index, percent) =>
+      wasm.layers_scale_effects(index, percent),
+    layerSetEffectsVisible: (index, on) =>
+      wasm.layers_set_effects_visible(index, on),
+    defineStylePattern: (name, rgba, width, height) =>
+      wasm.layers_define_style_pattern(name, rgba, width, height),
     layerSetBlendIf: (index, sliders) =>
       wasm.layers_set_blend_if(index, Uint8Array.from(sliders ?? [])),
     layerSetKnockout: (index, k) => wasm.layers_set_knockout(index, k),
@@ -3671,6 +4515,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         packAdjustExt(p),
       ),
     psdSaveLayers: (psdHandle) => wasm.psd_save_layers(psdHandle),
+    psdToLayeredTiff: (psd, compression) =>
+      wasm.psd_to_layered_tiff(psd, compression),
     layersExport: () => Array.from(wasm.layers_export()),
     layersImport: (manifest, buffers) => wasm.layers_import(manifest, buffers),
     layersSetAdjustment: (index, p) =>

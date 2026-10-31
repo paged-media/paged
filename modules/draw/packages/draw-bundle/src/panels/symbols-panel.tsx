@@ -55,6 +55,20 @@ import {
   SYMBOLS_FEATURE,
   type SymbolDefinition,
 } from "../commands/symbols";
+import {
+  applyReplaceSymbol,
+  applySymbolOptions,
+  BIND_SYMBOL_OPTIONS_FOCUS,
+} from "../commands/symbols";
+import {
+  chooseSymbol,
+  currentSymbol,
+  engineSymbols,
+  instancesIn,
+  readEngineSymbols,
+  type EngineSymbol,
+} from "../commands/symbols-engine";
+import { defaultNineSlice } from "@paged-media/draw-geometry";
 import { usePanelReload } from "./use-panel-reload";
 import {
   About,
@@ -100,9 +114,25 @@ const M = defineMessages("draw.symbolsPanel", {
   deleteHint:
     "Delete the symbol and unlink its instances (the placed artwork stays). Cannot be undone.",
   title: "Symbols",
+  choose:
+    "Choose this symbol for the Symbol Sprayer, Replace and Symbol Options",
+  replace: "Replace",
+  replaceHint: "Make the selected instances draw this symbol",
+  options: "Symbol options",
+  name: "Name",
+  guides: "Enable guides for 9-slice scaling",
+  guideLeft: "Left",
+  guideTop: "Top",
+  guideRight: "Right",
+  guideBottom: "Bottom",
+  apply: "Apply",
+  optionsHint:
+    "Guides are insets from the symbol's edges: scaling an instance keeps the corners at their size and stretches the edges and the centre. Drag them on the canvas with the 9-Slice Guides tool.",
+  noteEngine:
+    "Symbols are kept by the document: an instance draws its symbol, text, gradients and placed images included, and Redefine updates every instance at once. Reset transform returns the selected instance to the symbol's own size and angle where it is. Break link turns an instance back into ordinary artwork. Every action can be undone. IDML has no symbols: an exported file carries the artwork, and reopening it in paged brings the instances back.",
 });
 
-export const SYMBOLS_PANEL_ID = "media.paged.draw.panel.symbols";
+export { SYMBOLS_PANEL_ID } from "../commands/symbols";
 
 /** What the panel is for, in one sentence (shown at the top). */
 export const SYMBOLS_SUMMARY = M.summary;
@@ -152,8 +182,9 @@ const mutedStyle: React.CSSProperties = {
 export function symbolRowLabel(
   symbol: SymbolDefinition,
   instances: number,
+  pieceCount?: number,
 ): string {
-  const pieces = symbol.pieces.length;
+  const pieces = pieceCount ?? symbol.pieces.length;
   return t(M.rowLabel, {
     pieces,
     registration: tokenLabel(symbol.registration).toLowerCase(),
@@ -173,6 +204,23 @@ export function makeSymbolsPanel(host: BundleHost): {
     const [selected, setSelected] = React.useState<string[]>([]);
     const [hasSelection, setHasSelection] = React.useState(false);
     const [portable, setPortable] = React.useState(true);
+    // Engine ADR 1039 — the engine keeps the symbols (`document.symbols@1`);
+    // the rows then come from its `symbols` collection.
+    const [engine, setEngine] = React.useState(false);
+    const [pieceCounts, setPieceCounts] = React.useState<
+      Record<string, number>
+    >({});
+    // WP6.8 — the chosen symbol (Sprayer, Replace, Symbol Options) and the
+    // options form over it.
+    const [rows, setRows] = React.useState<EngineSymbol[]>([]);
+    const [hasInstances, setHasInstances] = React.useState(false);
+    const [chosen, setChosen] = React.useState<string | null>(null);
+    const [form, setForm] = React.useState<{
+      id: string;
+      name: string;
+      guides: boolean;
+      insets: [number, number, number, number];
+    } | null>(null);
 
     // WHAT A RELOAD COSTS (`test/panels/symbols-panel.dom.test.tsx`, and it
     // may only go down): the library part once, and the document's links
@@ -183,6 +231,55 @@ export function makeSymbolsPanel(host: BundleHost): {
       host,
       "symbols",
       async ({ live, selection }) => {
+        if (engineSymbols(host)) {
+          const rows = await readEngineSymbols(host);
+          const current = await currentSymbol(host);
+          if (!live()) return;
+          setRows(rows);
+          setHasInstances(instancesIn(selection).length > 0);
+          setChosen(current?.id ?? null);
+          setForm((f) => {
+            const keep = f && current && f.id === current.id;
+            if (keep || !current) return keep ? f : null;
+            const [top, left, bottom, right] = current.bounds;
+            return {
+              id: current.id,
+              name: current.name,
+              guides: current.nineSlice !== null,
+              insets: current.nineSlice
+                ? [...current.nineSlice]
+                : defaultNineSlice([left, top, right, bottom]),
+            };
+          });
+          const picked = new Set(
+            instancesIn(selection).map((e) => `instance:${e.id}`),
+          );
+          setEngine(true);
+          setPortable(true);
+          setSymbols(
+            rows.map((r) => ({
+              id: r.id,
+              name: r.name,
+              registration: "center",
+              origin: [0, 0],
+              pieces: [],
+            })),
+          );
+          setPieceCounts(
+            Object.fromEntries(rows.map((r) => [r.id, r.itemCount])),
+          );
+          setCounts(
+            Object.fromEntries(rows.map((r) => [r.id, r.instances.length])),
+          );
+          setHasSelection(selection.length > 0);
+          setSelected(
+            rows
+              .filter((r) => r.instances.some((i) => picked.has(i)))
+              .map((r) => r.id),
+          );
+          return;
+        }
+        setEngine(false);
         const library = await readSymbolLibrary(host);
         if (!live()) return;
         const tally: Record<string, number> = {};
@@ -207,6 +304,22 @@ export function makeSymbolsPanel(host: BundleHost): {
 
     const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
+    // Symbol Options… (the menu row) names its symbol through a binding:
+    // the panel re-reads, and the options form follows the chosen symbol.
+    React.useEffect(() => {
+      const sub = host.bindings.onDidChange((name) => {
+        if (name === BIND_SYMBOL_OPTIONS_FOCUS) reload();
+      });
+      return () => sub.dispose();
+    }, [reload]);
+
+    const choose = (id: string) => {
+      chooseSymbol(host, id);
+      setForm(null);
+      reload();
+    };
+    const chosenRow = rows.find((r) => r.id === chosen) ?? null;
+
     const isInstance = selected.length > 0;
 
     return (
@@ -214,6 +327,7 @@ export function makeSymbolsPanel(host: BundleHost): {
         style={{ padding: 12 }}
         data-draw-symbols-panel={symbols.length}
         data-draw-symbols-portable={portable ? "true" : "false"}
+        data-draw-symbols-engine={engine ? "true" : "false"}
         data-draw-symbol-selected={selected[0] ?? ""}
       >
         <PanelIntro
@@ -290,11 +404,46 @@ export function makeSymbolsPanel(host: BundleHost): {
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                   }}
-                  title={symbolRowLabel(symbol, instances)}
+                  title={symbolRowLabel(
+                    symbol,
+                    instances,
+                    engine ? pieceCounts[symbol.id] : undefined,
+                  )}
                 >
                   {symbol.name}
                 </span>
                 {followed && <span style={tagStyle}>{s.t(M.instance)}</span>}
+                {engine && (
+                  <button
+                    type="button"
+                    style={{
+                      ...iconBtn,
+                      fontWeight: chosen === symbol.id ? 600 : 400,
+                    }}
+                    title={s.t(M.choose)}
+                    aria-pressed={chosen === symbol.id}
+                    data-draw-symbol-choose={symbol.id}
+                    onClick={() => choose(symbol.id)}
+                  >
+                    {chosen === symbol.id ? "●" : "○"}
+                  </button>
+                )}
+                {engine && (
+                  <button
+                    type="button"
+                    style={iconBtn}
+                    title={
+                      hasInstances ? s.t(M.replaceHint) : s.t(M.selectInstance)
+                    }
+                    data-draw-symbol-replace
+                    disabled={!hasInstances}
+                    onClick={() =>
+                      void run(() => applyReplaceSymbol(host, symbol.id))
+                    }
+                  >
+                    {s.t(M.replace)}
+                  </button>
+                )}
                 <button
                   type="button"
                   style={iconBtn}
@@ -336,7 +485,89 @@ export function makeSymbolsPanel(host: BundleHost): {
           })
         )}
 
-        <About attr="data-draw-symbols-note">{s.t(SYMBOLS_NOTE)}</About>
+        {engine && chosenRow && form && (
+          <div data-draw-symbol-options={chosenRow.id}>
+            <div style={sectionStyle}>{s.t(M.options)}</div>
+            <label style={rowStyle}>
+              <span style={{ width: 56 }}>{s.t(M.name)}</span>
+              <input
+                type="text"
+                value={form.name}
+                data-draw-symbol-option-name
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </label>
+            <label style={rowStyle}>
+              <input
+                type="checkbox"
+                checked={form.guides}
+                data-draw-symbol-option-guides
+                onChange={(e) => setForm({ ...form, guides: e.target.checked })}
+              />
+              <span>{s.t(M.guides)}</span>
+            </label>
+            {form.guides && (
+              <div style={{ ...rowStyle, flexWrap: "wrap" }}>
+                {(
+                  [
+                    [0, M.guideLeft],
+                    [1, M.guideTop],
+                    [2, M.guideRight],
+                    [3, M.guideBottom],
+                  ] as const
+                ).map(([i, label]) => (
+                  <label key={i} style={{ display: "flex", gap: 4 }}>
+                    <span>{s.t(label)}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      style={{ width: 52 }}
+                      value={Math.round(form.insets[i] * 100) / 100}
+                      data-draw-symbol-option-inset={i}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (!Number.isFinite(v)) return;
+                        const insets = [...form.insets] as [
+                          number,
+                          number,
+                          number,
+                          number,
+                        ];
+                        insets[i] = v;
+                        setForm({ ...form, insets });
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+            <div style={mutedStyle}>{s.t(M.optionsHint)}</div>
+            <button
+              type="button"
+              style={iconBtn}
+              data-draw-symbol-option-apply
+              onClick={() =>
+                void run(() =>
+                  applySymbolOptions(host, {
+                    symbolId: form.id,
+                    name: form.name,
+                    nineSlice: form.guides ? form.insets : null,
+                  }).then((ok) => {
+                    setForm(null);
+                    return ok;
+                  }),
+                )
+              }
+            >
+              {s.t(M.apply)}
+            </button>
+          </div>
+        )}
+
+        <About attr="data-draw-symbols-note">
+          {s.t(engine ? M.noteEngine : SYMBOLS_NOTE)}
+        </About>
       </div>
     );
   };

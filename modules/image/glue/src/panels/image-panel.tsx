@@ -26,9 +26,17 @@
 // crop geometry are the engine's deterministic Rust (image_core / the
 // reduce histogram); this leaf only renders + forwards.
 
+import {
+  GlobalLightDialog,
+  LayerStyleDialog,
+  ScaleEffectsDialog,
+  StylesSection,
+} from "./sections/layer-style";
+import { styleOptionsFromBits } from "../layer-style";
 import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
+import { WARP_STYLES, type TypeWarp, type WarpStyle } from "../type-layer";
 import {
   createStrings,
   defineMessages,
@@ -77,15 +85,21 @@ import {
 import type { AspectPreset } from "../crop-machine";
 import { COLOR_NAMES, gradientKindLabel, toneRangeLabel } from "../words";
 
+import { MaskingSections } from "./sections/masking-section";
 import { CanvasSection, type CanvasSize } from "./sections/canvas-section";
 import { HueSatSection } from "./sections/hue-sat-section";
 import { ToneSection } from "./sections/tone-section";
 import { ColorSection } from "./sections/color-section";
+import { NewGuideDialog, WorkspaceSection } from "./sections/workspace-section";
+import { DEFAULT_PPI, pxPerUnit } from "../workspace";
 import { RankLookupSection } from "./sections/rank-lookup-section";
 import { SelectModifySection } from "./sections/select-modify-section";
 import { MoveSection } from "./sections/move-section";
 import { PatternSection } from "./sections/pattern-section";
-import { SmartObjectSection } from "./sections/smart-object-section";
+import {
+  SmartObjectSection,
+  SmartTransformDialog,
+} from "./sections/smart-object-section";
 import {
   DISTORT_DEFAULTS,
   DistortSection,
@@ -93,8 +107,15 @@ import {
 } from "./sections/distort-section";
 import { Section } from "./sections/disclosure";
 import { FilterDialog } from "./sections/filter-dialog";
+import { ExportAsDialog } from "./sections/export-dialog";
+import {
+  ContentAwareFillWorkspace,
+  RetouchOptionsSection,
+} from "./sections/retouch-sections";
+import { DEFAULT_CAF } from "../retouch";
 import {
   ImageSizeDialog,
+  IndexedColorDialog,
   RotateDialog,
   TrimDialog,
 } from "./sections/image-dialogs";
@@ -110,7 +131,21 @@ import {
   matchesLayerFilter,
 } from "./sections/layer-parity";
 import type { LayerFilter } from "../session";
-import { FILTERS, filterDef, type FilterId } from "../filters";
+import {
+  FILTERS,
+  FIRST_FAMILIES,
+  GALLERY_EFFECTS,
+  filterDef,
+  type FilterId,
+} from "../filters";
+import { MoreFilters } from "./sections/more-filters";
+import { HistorySection } from "./sections/history-section";
+import {
+  HistoryOptionsDialog,
+  PresetManagerDialog,
+  type PresetRowDetail,
+} from "./sections/preset-manager";
+import type { PresetEntry, PresetKind } from "../preset-library";
 import {
   actionBar,
   kicker,
@@ -774,8 +809,10 @@ const TYPE = defineMessages("image.type", {
   face: "Face",
   size: "Size (px)",
   note:
-    "Click the canvas to set the baseline and paint the text as pixels in " +
-    "the brush colour; the Character panel styles it.",
+    "Click the canvas for point type, drag for a text box: either makes an " +
+    "editable type layer in the foreground colour, laid out by the " +
+    "document's text engine. Click a type layer's text to edit it; the " +
+    "Character and Paragraph panels style it.",
   shaping:
     "Glyphs are shaped by the font's own tables — joining, reordering, " +
     "ligatures and kerning. Only fonts the document already embeds can be " +
@@ -783,13 +820,112 @@ const TYPE = defineMessages("image.type", {
     "glyph in the chosen face is reported and left undrawn rather than " +
     "replaced with a box.",
   pixels:
-    "This paints pixels, not a text object. The Character panel applies " +
-    "family, style, size, tracking, leading, case, scale, slant, baseline " +
-    "shift, super/subscript, underline, strikethrough, ligatures and line " +
-    "alignment. Anything that needs a text column — wrapping, indents, " +
-    "hyphenation — is absent: a line ends where you end it. For live, " +
-    "editable, wrapping text use a text frame.",
+    "A type layer keeps its text: it wraps in its box, justifies and " +
+    "hyphenates as a text frame does, and is drawn again after every edit. " +
+    "Type ▸ Rasterize type layer turns it into pixels; Type ▸ Paint text " +
+    "into layer paints the text straight into the active layer instead.",
+  warpTitle: "Warp text",
+  warpStyle: "Style",
+  bend: "Bend (%)",
+  horizontal: "Horizontal distortion (%)",
+  vertical: "Vertical distortion (%)",
+  verticalOrientation: "Vertical",
+  warpNote: "Warp text bends the active type layer; it stays editable.",
 });
+
+const WARP_NAMES = defineMessages("image.warpStyle", {
+  none: "None",
+  arc: "Arc",
+  arcLower: "Arc lower",
+  arcUpper: "Arc upper",
+  arch: "Arch",
+  bulge: "Bulge",
+  shellLower: "Shell lower",
+  shellUpper: "Shell upper",
+  flag: "Flag",
+  wave: "Wave",
+  fish: "Fish",
+  rise: "Rise",
+  fishEye: "Fish eye",
+  inflate: "Inflate",
+  squeeze: "Squeeze",
+  twist: "Twist",
+});
+
+/** Warp Text for the active TYPE layer (WP5.10). PURE. */
+export function WarpTextSection({
+  warp,
+  disabled,
+  onChange,
+}: {
+  warp: TypeWarp;
+  disabled: boolean;
+  onChange: (warp: TypeWarp) => void;
+}) {
+  const pct = (v: number) => Math.round(v * 100);
+  return (
+    <Section title={t(TYPE.warpTitle)} data-image-warp-section>
+      <div style={row}>
+        <label htmlFor="pg-image-warp-style">{t(TYPE.warpStyle)}</label>
+        <select
+          id="pg-image-warp-style"
+          data-image-warp-style
+          value={warp.style}
+          disabled={disabled}
+          onChange={(e) =>
+            onChange({ ...warp, style: e.target.value as WarpStyle })
+          }
+        >
+          {WARP_STYLES.map((w) => (
+            <option key={w} value={w}>
+              {t(WARP_NAMES[w])}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Slider
+        label={t(TYPE.bend)}
+        min={-100}
+        max={100}
+        step={1}
+        value={pct(warp.bend)}
+        disabled={disabled || warp.style === "none"}
+        onChange={(v) => onChange({ ...warp, bend: v / 100 })}
+      />
+      <Slider
+        label={t(TYPE.horizontal)}
+        min={-100}
+        max={100}
+        step={1}
+        value={pct(warp.horizontal)}
+        disabled={disabled}
+        onChange={(v) => onChange({ ...warp, horizontal: v / 100 })}
+      />
+      <Slider
+        label={t(TYPE.vertical)}
+        min={-100}
+        max={100}
+        step={1}
+        value={pct(warp.vertical)}
+        disabled={disabled}
+        onChange={(v) => onChange({ ...warp, vertical: v / 100 })}
+      />
+      <label style={row}>
+        <input
+          type="checkbox"
+          data-image-warp-vertical
+          checked={warp.rotateVertical === true}
+          disabled={disabled}
+          onChange={(e) =>
+            onChange({ ...warp, rotateVertical: e.target.checked })
+          }
+        />
+        {t(TYPE.verticalOrientation)}
+      </label>
+      <div style={note}>{t(TYPE.warpNote)}</div>
+    </Section>
+  );
+}
 
 /** The TYPE section — the string, face and size the type tool paints on
  *  its next click. PURE, like the sections around it.
@@ -877,11 +1013,10 @@ const RETOUCH = defineMessages("image.retouch", {
   cafNote:
     "Fills the selection with texture copied from elsewhere in the image.",
   cafAbout:
-    "It works patch by patch from the edge inward, so it keeps grain and " +
-    "continues edges rather than blurring across them, and decides " +
-    "large-scale structure at half resolution before matching texture at " +
-    "full. Its search is limited to a window around the hole: a match on " +
-    "the far side of a large image will not be found.",
+    "It fills by PatchMatch from coarse to fine, so it keeps grain and " +
+    "continues edges rather than blurring across them; the search reaches " +
+    "the whole image. Edit ▸ Content-Aware Fill… sets the sampling area, " +
+    "the adaptation and the output.",
 });
 
 /** The RETOUCH section: the clone source, and the honest limit of the
@@ -1045,9 +1180,9 @@ const CHANNELS = defineMessages("image.channels", {
     "a mid-grey channel selects at 50%. Luma is the Rec.709 luminance, the " +
     "usual luminosity mask.",
   noView:
-    "Viewing one channel on its own is not offered: the frame shows the " +
-    "composited image, and faking a channel view would mean writing a " +
-    "greyscale image into the document.",
+    "To view one channel on its own, use the eye beside it in the channel " +
+    "list below: the frame then shows that channel as grey, without " +
+    "changing the document.",
 });
 
 /** The CHANNELS list — per-channel statistics and the one operation a
@@ -2315,6 +2450,14 @@ export function makeImagePanel(session: ImageSession) {
     }
     // The Curves tools (Auto, the eyedroppers) set the channel curves in
     // the session; the editor here follows them.
+    // Curves' targeted adjustment moves a point on the image; the editor
+    // follows the curve it moved.
+    const [targetFor, setTargetFor] = useState(s.curvesTarget);
+    if (targetFor !== s.curvesTarget) {
+      setTargetFor(s.curvesTarget);
+      const c = s.curvesTarget;
+      if (c) setCurvePointsBy((m) => ({ ...m, [c.channel]: c.points }));
+    }
     const [curvesFor, setCurvesFor] = useState(s.channelCurves);
     if (curvesFor !== s.channelCurves) {
       setCurvesFor(s.channelCurves);
@@ -2492,6 +2635,25 @@ export function makeImagePanel(session: ImageSession) {
             onBefore={(b) => void session.setFilterBefore(b)}
             onOk={() => void session.commitFilterDialog()}
             onCancel={() => void session.cancelFilterDialog()}
+            onChooseImage={(key, choice) =>
+              void session.chooseFilterImage(key, choice)
+            }
+            effects={GALLERY_EFFECTS}
+          />
+        )}
+        {s.dialog?.kind === "contentAwareFill" && s.retouch.caf && (
+          <ContentAwareFillWorkspace
+            caf={s.retouch.caf}
+            busy={s.busy}
+            onChange={(patch) => void session.setContentAwareFill(patch)}
+            onReset={() =>
+              void session.setContentAwareFill({
+                ...DEFAULT_CAF,
+                fill: { ...DEFAULT_CAF.fill },
+              })
+            }
+            onOk={() => void session.commitContentAwareFill()}
+            onCancel={() => void session.cancelContentAwareFill()}
           />
         )}
         {s.dialog?.kind === "imageSize" && s.source && (
@@ -2510,6 +2672,88 @@ export function makeImagePanel(session: ImageSession) {
             onCancel={() => void session.closeDialog()}
           />
         )}
+        {s.dialog?.kind === "exportAs" && s.source && (
+          <ExportAsDialog
+            width={s.source.width}
+            height={s.source.height}
+            ppi={s.ppi}
+            sixteenBit={false}
+            metadata={s.sourceMetadata}
+            profileName={s.exportProfile}
+            busy={s.busy}
+            onExport={(o) => void session.exportAs(o)}
+            onPickProfile={() => void session.pickExportProfile()}
+            onClearProfile={() => session.clearExportProfile()}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "presetManager" &&
+          (() => {
+            const tab = s.dialog.tab;
+            const { entries, details } = presetRows(s, tab);
+            return (
+              <PresetManagerDialog
+                tab={tab}
+                entries={entries}
+                details={details}
+                busy={s.busy}
+                onTab={(k) => session.setPresetManagerTab(k)}
+                onApply={(id) => void session.applyPresetOf(tab, id)}
+                onRename={(id, name) => session.renamePresetOf(tab, id, name)}
+                onDelete={(id) => session.deletePresetOf(tab, id)}
+                onMove={(from, to) => session.movePresetOf(tab, from, to)}
+                onSave={(name) => void session.savePresetOf(tab, name)}
+                onImport={() => void session.importPresetsOf(tab)}
+                onExport={() => void session.exportPresetsOf(tab)}
+                onClose={() => void session.closeDialog()}
+              />
+            );
+          })()}
+        {s.dialog?.kind === "historyOptions" && (
+          <HistoryOptionsDialog
+            prefs={s.historyPrefs}
+            usedBytes={s.history?.bytes ?? 0}
+            snapshotBytes={s.history?.snapshotBytes ?? 0}
+            onApply={(p) => {
+              session.setHistoryPrefs(p);
+              void session.closeDialog();
+            }}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "newGuide" && (
+          <NewGuideDialog
+            unit={live.workspace().state().view.rulerUnit}
+            pxPerUnit={pxPerUnit(
+              live.workspace().state().view.rulerUnit,
+              s.ppi ?? DEFAULT_PPI,
+            )}
+            onAdd={(orientation, px) => {
+              if (session.workspace().addGuide(orientation, px))
+                void session.closeDialog();
+            }}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "smartTransform" && (
+          <SmartTransformDialog
+            busy={s.busy}
+            onApply={(f) =>
+              void session
+                .smart()
+                .transform(s.layers.active, f)
+                .then(() => session.closeDialog())
+            }
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "indexedColor" && (
+          <IndexedColorDialog
+            busy={s.busy}
+            onApply={(p, n) => void session.setIndexedColor(p, n)}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
         {s.dialog?.kind === "trim" && (
           <TrimDialog
             busy={s.busy}
@@ -2523,6 +2767,49 @@ export function makeImagePanel(session: ImageSession) {
             busy={s.busy}
             onRotate={(d) => void session.rotateCanvas(d)}
             onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "layerStyle" &&
+          (() => {
+            const i = s.dialog.index;
+            const l = s.layers.layers[i];
+            return l ? (
+              <LayerStyleDialog
+                layer={l}
+                style={s.layerStyle}
+                options={styleOptionsFromBits(l.styleOptions)}
+                light={s.globalLight}
+                pane={s.dialog.pane}
+                disabled={s.busy}
+                onPane={(p) => session.setLayerStylePane(p)}
+                onStyle={(st) => void session.setLayerStyle(i, st)}
+                onOptions={(o) => void session.setLayerStyleOptions(i, o)}
+                onGlobalLight={(a, alt) => void session.setGlobalLight(a, alt)}
+                onUsePattern={() => session.stylePattern()}
+                onMoreBlending={() => session.openBlendingOptions(i)}
+                onClose={() => void session.closeDialog()}
+              />
+            ) : null;
+          })()}
+        {s.dialog?.kind === "globalLight" && (
+          <GlobalLightDialog
+            light={s.globalLight}
+            disabled={s.busy}
+            onApply={(a, alt) =>
+              void session
+                .setGlobalLight(a, alt)
+                .then(() => session.closeDialog())
+            }
+            onClose={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "scaleEffects" && (
+          <ScaleEffectsDialog
+            disabled={s.busy}
+            onApply={(pct) =>
+              void session.scaleEffects(pct).then(() => session.closeDialog())
+            }
+            onClose={() => void session.closeDialog()}
           />
         )}
         {s.dialog?.kind === "blendingOptions" &&
@@ -3246,6 +3533,8 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           scale={smartScale}
           onScale={setSmartScale}
+          info={s.smartInfo}
+          nested={s.smartNested}
         />
 
         <HueSatSection
@@ -3338,7 +3627,7 @@ export function makeImagePanel(session: ImageSession) {
 
         <div style={sectionTitle}>{t(P.stylize)}</div>
         <div style={row}>
-          {FILTERS.filter((f) => !RANK_FILTERS.has(f.id)).map((f) => (
+          {FIRST_FAMILIES.filter((f) => !RANK_FILTERS.has(f.id)).map((f) => (
             <button
               key={f.id}
               type="button"
@@ -3362,6 +3651,13 @@ export function makeImagePanel(session: ImageSession) {
           </button>
         </div>
         <div style={note}>{t(P.galleryNote)}</div>
+        <MoreFilters
+          filters={FILTERS.filter((f) => !FIRST_FAMILIES.includes(f))}
+          disabled={s.busy || !s.source}
+          onOpen={(id) => void session.openFilterDialog(id)}
+          onOneShot={(k) => void session.applyOneShot(k)}
+          onBlurGallery={(k) => void session.openBlurGallery(k)}
+        />
 
         {/* LAYERS — the layer graph itself: order, visibility, opacity,
             blend and the active-layer choice paint/fill/bake land in,
@@ -3414,6 +3710,19 @@ export function makeImagePanel(session: ImageSession) {
           onFilter={(patch) => session.setLayerFilter(patch)}
           onColor={(i, c) => session.setLayerColor(i, c)}
         />
+        <HistorySection
+          history={s.history}
+          source={s.paintTools.history.source}
+          disabled={disabled}
+          onSnapshot={() => session.takeSnapshot()}
+          onRestore={(id) => void session.restoreSnapshot(id)}
+          onRename={(id, name) => session.renameSnapshot(id, name)}
+          onDelete={(id) => session.deleteSnapshot(id)}
+          onSource={(source) =>
+            session.setPaintToolOptions("history", { source })
+          }
+          onOptions={() => session.openHistoryOptions()}
+        />
         {s.layers.layers.length > 0 ? (
           <>
             <ActiveLayerStrip
@@ -3430,6 +3739,7 @@ export function makeImagePanel(session: ImageSession) {
               }
               onUnlink={() => session.unlinkLayer(s.layers.active)}
               onBlendingOptions={() => session.openBlendingOptions()}
+              onLayerStyle={() => void session.openLayerStyle()}
               onRasterize={() => void session.rasterizeLayer(s.layers.active)}
             />
             <LayerVerbs
@@ -3481,6 +3791,18 @@ export function makeImagePanel(session: ImageSession) {
               onDelete={(id) => session.deleteLayerComp(id)}
               onRename={(id, name) => session.renameLayerComp(id, name)}
             />
+            <StylesSection
+              presets={s.stylePresets}
+              hasStyle={s.layerStyle !== null}
+              hasClipboard={s.styleClipboard !== null}
+              disabled={disabled}
+              onApply={(name) => void session.applyStylePreset(name)}
+              onSave={(name) => session.saveStylePreset(name)}
+              onDelete={(name) => session.deleteStylePreset(name)}
+              onCopy={() => session.copyLayerStyle()}
+              onPaste={() => void session.pasteLayerStyle()}
+              onClear={() => void session.clearLayerStyle()}
+            />
           </>
         ) : null}
 
@@ -3491,6 +3813,10 @@ export function makeImagePanel(session: ImageSession) {
           eyedropper={s.eyedropper}
           samplers={s.samplers}
         />
+
+        {/* WORKSPACE (WP5.12) — rulers, guides, the Ruler, Count, Note
+            and Slice tools' data. */}
+        <WorkspaceSection session={session} disabled={disabled} />
 
         {/* BRUSH — the paint tools' frozen-at-pointer-down parameters
             (paged.image's RASTER brush/pencil/eraser, distinct from
@@ -3522,6 +3848,22 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(patch) => session.setType(patch)}
         />
 
+        {/* WARP TEXT — the active type layer's (WP5.10). */}
+        {s.layers.layers[s.layers.active]?.kind === "type" ? (
+          <WarpTextSection
+            warp={
+              live.typeLayerSource(s.layers.active)?.warp ?? {
+                style: "none",
+                bend: 0,
+                horizontal: 0,
+                vertical: 0,
+              }
+            }
+            disabled={disabled}
+            onChange={(w) => void session.setTypeWarp(w)}
+          />
+        ) : null}
+
         {/* RETOUCH — the clone/heal source and the healing brush's
             honest limit. */}
         <RetouchSection
@@ -3531,6 +3873,17 @@ export function makeImagePanel(session: ImageSession) {
           onContentAwareFill={() =>
             void session.fillSelection({ kind: "contentAware" })
           }
+        />
+        <RetouchOptionsSection
+          move={s.retouch.move}
+          pending={s.retouch.pendingMove}
+          heal={s.retouch.heal}
+          busy={s.busy}
+          onMove={(patch) => session.setMoveOptions(patch)}
+          onTransform={(patch) => session.setMoveTransform(patch)}
+          onCommit={() => void session.commitContentAwareMove()}
+          onCancel={() => session.cancelContentAwareMove()}
+          onHeal={(patch) => session.setHealOptions(patch)}
         />
 
         {/* PATHS — the raster↔vector bridge (the vector side itself is
@@ -3555,6 +3908,10 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           onLoadSelection={(c) => session.selectionFromChannel(c)}
         />
+
+        {/* SELECTION AND MASKING — Color Range, Select and Mask, Quick
+            Mask, alpha / spot channels and paths (WP5.5, ADR 470). */}
+        <MaskingSections session={session} disabled={disabled} />
 
         {/* BRUSH PRESETS — the `.abr` reader, finally reachable. Until
             this section existed the parser was dead-code-eliminated from
@@ -3733,6 +4090,10 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           onAuto={() => void session.autoCurves()}
           onArm={(k) => session.armCurvesPicker(k)}
+          targeting={s.curvesTarget !== null}
+          onTarget={(on) =>
+            session.armCurvesTarget(on ? curveChannel : null, curvePoints)
+          }
         />
 
         {/* Crop + straighten */}
@@ -3876,4 +4237,44 @@ export function makeImagePanel(session: ImageSession) {
     );
   }
   return ImagePanel;
+}
+
+/** The Preset Manager's rows for one kind, with what each row shows
+ *  beside its name (a pattern's size, a gradient's swatch). */
+function presetRows(
+  s: ReturnType<ImageSession["state"]>,
+  tab: PresetKind,
+): { entries: readonly PresetEntry[]; details: PresetRowDetail[] } {
+  switch (tab) {
+    case "brushes":
+      return { entries: s.brushPresets, details: [] };
+    case "tools":
+      return { entries: s.toolPresets, details: [] };
+    case "adjustments":
+      return { entries: s.adjustmentPresets, details: [] };
+    case "styles":
+      return { entries: s.stylePresets, details: [] };
+    case "patterns":
+      return {
+        entries: s.patternPresets,
+        details: s.patternPresets.map((p) => ({
+          id: p.id,
+          detail: `${p.width}×${p.height}`,
+        })),
+      };
+    case "gradients":
+      return {
+        entries: s.gradientPresets,
+        details: s.gradientPresets.map((g) => ({
+          id: g.id,
+          swatch: `linear-gradient(to right, ${[...g.gradient.stops]
+            .sort((a, b) => a.at - b.at)
+            .map(
+              (st) =>
+                `rgb(${st.rgb[0]} ${st.rgb[1]} ${st.rgb[2]}) ${Math.round(st.at * 100)}%`,
+            )
+            .join(", ")})`,
+        })),
+      };
+  }
 }

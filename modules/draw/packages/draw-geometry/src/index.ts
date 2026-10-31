@@ -59,10 +59,12 @@ export {
   invertAffine,
   affineScale,
   composeAffine,
+  fitAffine,
   IDENTITY_AFFINE,
   type Affine,
 } from "./affine";
-// SVG interchange — the round-trip path/shape/document layer (Phase 8).
+// SVG path data and the basic shapes as anchor tables (SVG DOCUMENTS are
+// the engine's: paged-svg, draw ADR 364).
 export { parsePathData, serializePathData, quadToCubic } from "./svg-path";
 export { arcToCubics, type ArcCubic } from "./svg-arc";
 export {
@@ -74,18 +76,6 @@ export {
   ovalToPath,
   polyToPath,
 } from "./svg-shapes";
-export {
-  parseSvgDocument,
-  serializeSvgDocument,
-  parseTransform,
-  type SvgDocument,
-  type DrawShape,
-  type SvgStyle,
-  type SvgGradient,
-  type SvgGradientStop,
-  type FillRule,
-  type SvgWriteOptions,
-} from "./svg-doc";
 export { parseCssColor, rgbToHex, cmykToRgb, type Rgb } from "./svg-color";
 export {
   NEUTRAL_PRESSURE,
@@ -184,7 +174,6 @@ export {
   reverseContour,
   contourDepths,
   orientForNonZeroHoles,
-  orientForFillRule,
   orientByPaintOrder,
   mergeCompound,
   makeCompoundTable,
@@ -323,3 +312,10 @@ export {
   type ShaperRecognition,
   type ShaperOptions,
 } from "./shaper";
+// WP6.7 — the distortion tools' kernels (the future `paged-warp` crate's
+// vector half): the liquify family, the constrained puppet mesh and its
+// ARAP solve, homographies and the perspective grid.
+export * from "./warp";
+// WP6.8 — the Symbolism tools' kernels (draw ADR 365) and 9-slice scaling.
+export * from "./symbolism";
+export * from "./nine-slice";

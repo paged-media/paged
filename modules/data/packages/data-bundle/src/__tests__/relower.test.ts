@@ -13,7 +13,8 @@ const label = (data: Record<string, unknown>) => [
 ];
 
 /** Two pages: page 1 has a table frame (labelled), an older duplicate of it,
- *  a user frame and two barcode modules (only the last labelled); page 2 was
+ *  a user frame and two barcode modules an older lowering drew (only the
+ *  last labelled); page 2 was
  *  added by a merge and holds its two frames. */
 const TREE: any[] = [
   {
@@ -118,6 +119,61 @@ describe("re-lower updates in place [data.lower.relower-in-place]", () => {
     expect(plan.reuse).toBeNull();
     // "gone" was undone already: nothing to remove.
     expect(plan.removed.map((e) => e.id).sort()).toEqual(["m1", "m2"]);
+  });
+
+  it("a barcode either writer drew is found whole by its stamps, with nothing remembered", () => {
+    // `paged data apply` and the module both stamp every module
+    // `{ kind: "barcode", binding }` (the headless writer's envelope carries
+    // target and symbology too); the frame the symbol is drawn into carries
+    // the binding under `bind` and stays.
+    const stamp = {
+      binding: "bc",
+      kind: "barcode",
+      target: "bc-frame",
+      symbology: "ean13",
+    };
+    const tree: any[] = [
+      {
+        kind: "Spread",
+        children: [
+          {
+            kind: "Page",
+            children: [
+              {
+                kind: "Rectangle",
+                id: { kind: "rectangle", id: "host" },
+                pluginMetadata: label({
+                  bind: [{ id: "bc", kind: "barcode" }],
+                  kind: "barcode",
+                  binding: "bc",
+                }),
+              },
+              ...["m1", "m2", "m3"].map((id) => ({
+                kind: "Polygon",
+                id: { kind: "polygon", id },
+                pluginMetadata: label(stamp),
+              })),
+              {
+                kind: "Polygon",
+                id: { kind: "polygon", id: "other" },
+                pluginMetadata: label({ ...stamp, binding: "bc2" }),
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const plan = planRelower(
+      documentElements(tree),
+      { kind: "barcode", binding: "bc" },
+      { pages: ["p1"] as never },
+    );
+    expect(plan.remove).toEqual(
+      ["m1", "m2", "m3"].map((frameId) => ({
+        op: "deleteFrame",
+        args: { frameId },
+      })),
+    );
   });
 
   it("a merge removes its frames and the pages it added once they are empty", () => {

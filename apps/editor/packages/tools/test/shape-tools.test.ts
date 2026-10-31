@@ -466,37 +466,57 @@ describe("Ellipse tool", () => {
 });
 
 describe("Polygon tool", () => {
-  it("draws the default hexagon (6 corner anchors, first at 12 o'clock) as ONE closed insertPath @level:gesture", async () => {
+  type Leaf = {
+    op: string;
+    args: {
+      anchors?: Array<{ anchor: number[]; left: number[]; right: number[] }>;
+      open?: boolean;
+      smooth?: boolean;
+      elementId?: { kind: string; id: string };
+      path?: string;
+      value?: { type: string; value: number };
+    };
+  };
+  const insertOf = (fake: Parameters<typeof leaves>[0]) =>
+    (leaves(fake) as unknown as Leaf[]).find((m) => m.op === "insertPath")!;
+  const writesOf = (fake: Parameters<typeof leaves>[0]) =>
+    (leaves(fake) as unknown as Leaf[])
+      .filter(
+        (m) =>
+          m.op === "setElementProperty" &&
+          m.args.path?.startsWith("frameShape"),
+      )
+      .map((m) => [m.args.elementId?.id, m.args.path, m.args.value?.value]);
+
+  it("draws the default hexagon (6 corner anchors, first at 12 o'clock) as a LIVE polygon: one closed insertPath + its sides, one batch @level:gesture", async () => {
     covers("tool:paged.tool.polygonFrame");
     const { fake, g } = harness();
+    const mark = fake.mark();
     await g
       .tool(() => createPolygonHandler({ frame: true }))
       .drag({ from: [100, 100], to: [300, 300] })
       .settle();
-    const [m] = fake.mutations() as Array<{
-      op: string;
-      args: {
-        anchors: Array<{ anchor: number[]; left: number[]; right: number[] }>;
-        open: boolean;
-        smooth: boolean;
-      };
-    }>;
-    expect(m.op).toBe("insertPath");
+    expect(expectOneCommit(fake, mark)).toMatchObject({
+      mutation: { op: "batch" },
+    });
+    const m = insertOf(fake);
     expect(m.args.open).toBe(false);
     expect(m.args.smooth).toBe(false);
     expect(m.args.anchors).toHaveLength(6);
-    expect(rb(m.args.anchors[0].anchor)).toEqual([200, 100]);
-    for (const a of m.args.anchors) {
+    expect(rb(m.args.anchors![0]!.anchor)).toEqual([200, 100]);
+    for (const a of m.args.anchors!) {
       expect(a.left).toEqual(a.anchor);
       expect(a.right).toEqual(a.anchor);
-      expect(Math.hypot(a.anchor[0] - 200, a.anchor[1] - 200)).toBeCloseTo(
+      expect(Math.hypot(a.anchor[0]! - 200, a.anchor[1]! - 200)).toBeCloseTo(
         100,
         9,
       );
     }
+    // Engine ADR 1047: the sides ride the same batch, on the insert.
+    expect(writesOf(fake)).toEqual([["$created", "frameShapeSides", 6]]);
   });
 
-  it("reads sides and star inset from the tool settings: a 5-point star has 10 anchors, inner radius × (1 − inset) @level:gesture", async () => {
+  it("reads sides and star inset from the tool settings: a 5-point star is the pentagon + its points + its inset (the engine draws the star), the preview the 10-point ring @level:gesture", async () => {
     covers("tool:paged.tool.polygon");
     const { fake, g } = harness({
       toolSettings: { "paged.tool.polygon": { sides: 5, starInset: 40 } },
@@ -505,33 +525,44 @@ describe("Polygon tool", () => {
       .tool(() => createPolygonHandler())
       .drag({ from: [100, 100], to: [300, 300] })
       .settle();
-    const anchors = (
-      leaves(fake)[0].args as { anchors: Array<{ anchor: number[] }> }
-    ).anchors;
-    expect(anchors).toHaveLength(10);
-    const radii = anchors.map((a) =>
-      Math.hypot(a.anchor[0] - 200, a.anchor[1] - 200),
+    const anchors = insertOf(fake).args.anchors!;
+    expect(anchors).toHaveLength(5);
+    for (const a of anchors) {
+      expect(Math.hypot(a.anchor[0]! - 200, a.anchor[1]! - 200)).toBeCloseTo(
+        100,
+        9,
+      );
+    }
+    expect(writesOf(fake)).toEqual([
+      ["$created", "frameShapeSides", 5],
+      ["$created", "frameShapeStarInset", 40],
+    ]);
+    // The preview is the star's vertex ring, closed: outer 100, inner 60.
+    const points = (
+      previews(fake).at(-1) as { points: number[][]; close: boolean }
+    ).points;
+    expect(points).toHaveLength(10);
+    points.forEach((p, i) =>
+      expect(Math.hypot(p[0]! - 200, p[1]! - 200)).toBeCloseTo(
+        i % 2 === 0 ? 100 : 60,
+        9,
+      ),
     );
-    radii.forEach((rad, i) =>
-      expect(rad).toBeCloseTo(i % 2 === 0 ? 100 : 60, 9),
-    );
-    // The preview is the same vertex ring, closed.
-    expect(
-      (previews(fake).at(-1) as { points: unknown[]; close: boolean }).points,
-    ).toHaveLength(10);
   });
 
-  it("clamps the settings (sides 3…100, inset 0…100) @level:gesture", async () => {
+  it("clamps the settings (sides 3…100, inset 0…99, the engine's limits) @level:gesture", async () => {
     const { fake, g } = harness({
-      toolSettings: { "paged.tool.polygon": { sides: 1, starInset: -5 } },
+      toolSettings: { "paged.tool.polygon": { sides: 1, starInset: 250 } },
     });
     await g
       .tool(() => createPolygonHandler({ frame: true }))
       .drag({ from: [100, 100], to: [300, 300] })
       .settle();
-    expect(
-      (leaves(fake)[0].args as { anchors: unknown[] }).anchors,
-    ).toHaveLength(3);
+    expect(insertOf(fake).args.anchors).toHaveLength(3);
+    expect(writesOf(fake)).toEqual([
+      ["$created", "frameShapeSides", 3],
+      ["$created", "frameShapeStarInset", 99],
+    ]);
   });
 
   it("Shift squares the bounds @level:gesture", async () => {
@@ -540,9 +571,7 @@ describe("Polygon tool", () => {
       .tool(() => createPolygonHandler({ frame: true }))
       .drag({ from: [100, 100], to: [300, 140], mods: ["shift"] })
       .settle();
-    const xs = (
-      leaves(fake)[0].args as { anchors: Array<{ anchor: number[] }> }
-    ).anchors.map((a) => a.anchor[1]);
+    const xs = insertOf(fake).args.anchors!.map((a) => a.anchor[1]!);
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(150);
   });
 });

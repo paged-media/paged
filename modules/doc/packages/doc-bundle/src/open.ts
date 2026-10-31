@@ -27,11 +27,17 @@
 // file opens that skeleton, sets the rules, and pours each section's blocks
 // into its story with the shared pour.
 
-import type { LoweredDoc } from "@paged-media/doc-host-model";
+import type {
+  LoweredDoc,
+  LoweredSection,
+  LoweredSectionMasters,
+} from "@paged-media/doc-host-model";
 import {
   buildStoryBlocks,
   buildStyleMutations,
+  noteTexts,
   sectionBlocks,
+  trackChangesMutation,
 } from "@paged-media/doc-host-model";
 import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
 import { refusalText } from "@paged-media/panel-kit";
@@ -39,6 +45,7 @@ import { t } from "@paged-media/strings";
 
 import type { DocEngine } from "./engine.js";
 import { DOC } from "./messages.js";
+import { pourPageItems } from "./page-items.js";
 import { applyStyleOpsReporting, pourSteps } from "./pour.js";
 
 /** What a standalone open produced: the section stories (save-back reads
@@ -75,11 +82,39 @@ export const SPAN_COLUMN_PATHS: readonly string[] = [
  * Word's line-box fit on every page. Typed by the plugin-api canary's
  * vendored v64 wire (0.2.37-canary.0), so no cast.
  */
-export function growRuleOp(storyId: string): Mutation {
+export function growRuleOp(
+  storyId: string,
+  section?: Pick<LoweredSection, "masters" | "sectionStart">,
+): Mutation {
+  // Doc ADR 611 — the masters the story's pages take and its odd/even
+  // start (engine ADR 1022), when the Word section has them.
+  const m: LoweredSectionMasters = section?.masters ?? {};
   return {
     op: "setFlowGrowRule",
-    args: { storyId, grow: true, maxPages: null, copyFrameOptions: true },
+    args: {
+      storyId,
+      grow: true,
+      maxPages: null,
+      copyFrameOptions: true,
+      ...(m.master ? { master: m.master } : {}),
+      ...(m.firstMaster ? { firstMaster: m.firstMaster } : {}),
+      ...(m.evenMaster ? { evenMaster: m.evenMaster } : {}),
+      ...(section?.sectionStart && section.sectionStart !== "newPage"
+        ? { sectionStart: section.sectionStart }
+        : {}),
+    },
   };
+}
+
+/** The section that opens each native story, in story order (the one
+ *  whose masters and start the story's grow rule takes). */
+export function storySections(ir: LoweredDoc): LoweredSection[] {
+  const out: LoweredSection[] = [];
+  for (const s of ir.sections ?? [ir.section]) {
+    const k = s.story ?? 0;
+    if (out[k] === undefined) out[k] = s;
+  }
+  return out;
 }
 
 /**
@@ -91,9 +126,10 @@ export function growRuleOp(storyId: string): Mutation {
 export async function setGrowRules(
   host: BundleHost,
   storyIds: readonly string[],
+  sections: readonly (LoweredSection | undefined)[] = [],
 ): Promise<string[]> {
   if (storyIds.length === 0) return [];
-  const ops = storyIds.map(growRuleOp);
+  const ops = storyIds.map((id, k) => growRuleOp(id, sections[k]));
   const refused: string[] = [];
   let error: unknown = null;
   const whole = await host.document.mutate({
@@ -186,11 +222,32 @@ export async function finishStandalone(
     host.diagnostics.set(COLUMNS_DIAGNOSTICS_KEY, []);
   }
 
-  await setGrowRules(host, storyIds);
+  await setGrowRules(host, storyIds, storySections(ir));
 
+  // Doc ADR 611 — notes are placed at their references in the body.
+  const notes = noteTexts(ir);
   const groups = sectionBlocks(ir);
   for (let k = 0; k < groups.length && k < storyIds.length; k++) {
-    await pourSteps(host, buildStoryBlocks(groups[k], storyIds[k]));
+    await pourSteps(
+      host,
+      buildStoryBlocks(groups[k], storyIds[k], {
+        notes,
+        comments: ir.comments ?? [],
+      }),
+    );
+  }
+  await pourHeadersFooters(host, ir);
+  await pourPageItems(host, ir);
+  await setFootnoteOptions(host, ir);
+  // Doc ADR 613 — a document Word tracked changes in keeps tracking them:
+  // switched on last, so the pour itself was not recorded.
+  if (ir.trackChanges) {
+    const on = await host.document.mutate(trackChangesMutation());
+    if (!on.applied) {
+      host.log.warn(
+        `paged.doc: the engine did not turn change tracking on: ${JSON.stringify(on.error)}`,
+      );
+    }
   }
 
   const frameId: ElementId = { kind: "textFrame", id: "docx_f0" };
@@ -212,4 +269,84 @@ export async function finishStandalone(
     host.log.warn(`paged.doc: could not persist source part: ${String(err)}`);
   }
   return { storyIds, frameId, ir, midPageColumns };
+}
+
+/**
+ * Doc ADR 611 — pour every master's header and footer story with the part
+ * it shows (the skeleton wrote the masters, their frames and the empty
+ * stories). A part on several masters is poured into each.
+ */
+export async function pourHeadersFooters(
+  host: BundleHost,
+  ir: LoweredDoc,
+): Promise<void> {
+  const parts = ir.headerFooterParts ?? [];
+  for (const m of ir.masters ?? []) {
+    for (const f of [m.header, m.footer]) {
+      const part = f ? parts[f.part] : undefined;
+      if (!f || !part) continue;
+      const blocks = part.paragraphs.map((p) => ({
+        kind: "paragraph" as const,
+        ...p,
+      }));
+      await pourSteps(host, buildStoryBlocks(blocks, f.storyId));
+    }
+  }
+}
+
+/** Word's footnote number formats as the engine's numbering styles. */
+const NOTE_STYLES: Record<string, string> = {
+  lowerRoman: "LowerRoman",
+  upperRoman: "UpperRoman",
+  lowerLetter: "LowerLetters",
+  upperLetter: "UpperLetters",
+  chicago: "Asterisks",
+};
+
+/** Word's `w:numRestart` as the engine's footnote restart. */
+const NOTE_RESTARTS: Record<string, string> = {
+  continuous: "DontRestart",
+  eachSect: "SectionRestart",
+  eachPage: "PageRestart",
+};
+
+/**
+ * Doc ADR 611 — the document's footnote numbering from the first section's
+ * `w:footnotePr` (the engine's options are document-wide; ADR 034 decision
+ * 4: other sections' differing options are a diagnostic of the lowering).
+ * Refusals change nothing.
+ */
+export async function setFootnoteOptions(
+  host: BundleHost,
+  ir: LoweredDoc,
+): Promise<void> {
+  if (!(ir.notes ?? []).some((n) => !n.endnote)) return;
+  const n = (ir.sections ?? [ir.section])[0]?.footnoteNumbering;
+  if (!n) return;
+  const ops: Mutation[] = [];
+  const set = (path: string, value: unknown) =>
+    ops.push({ op: "set", args: { address: "doc", path, value } } as Mutation);
+  if (n.numFmt && NOTE_STYLES[n.numFmt]) {
+    set("documentFootnoteNumberingStyle", {
+      type: "text",
+      value: NOTE_STYLES[n.numFmt],
+    });
+  }
+  if (n.numStart != null && n.numStart >= 1) {
+    set("documentFootnoteStartAt", { type: "length", value: n.numStart });
+  }
+  if (n.numRestart && NOTE_RESTARTS[n.numRestart]) {
+    set("documentFootnoteRestartNumbering", {
+      type: "text",
+      value: NOTE_RESTARTS[n.numRestart],
+    });
+  }
+  if (ops.length === 0) return;
+  const r = await host.document.mutate({
+    op: "batch",
+    args: { ops },
+  } as Mutation);
+  if (!r.applied) {
+    for (const op of ops) await host.document.mutate(op);
+  }
 }

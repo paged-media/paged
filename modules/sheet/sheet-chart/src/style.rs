@@ -51,7 +51,8 @@
 use std::collections::BTreeMap;
 
 use crate::model::{
-    Axis, ChartKind, ChartModel, ColorRef, ConcreteColor, DocSwatchRef, LineStyle, TextStyleRef,
+    Axis, ChartKind, ChartModel, ColorRef, ConcreteColor, DmlFx, DocSwatchRef, LineStyle,
+    TextStyleRef,
 };
 
 /// The colour roles, in panel order.
@@ -159,7 +160,57 @@ pub fn effective(model: &ChartModel, default: &ChartStyle) -> ChartModel {
         apply_palette(&mut m, p);
     }
     default.apply(&mut m);
+    doc_colour_wins(&mut m);
     m
+}
+
+/// A document colour wins over the file's gradient or pattern (sheet ADR
+/// 527): a role painted by a swatch drops the DrawingML fill it was read
+/// with; its translucency stays with the fill it went with, its effects
+/// stay.
+fn doc_colour_wins(m: &mut ChartModel) {
+    fn drop_fill(fx: &mut Option<Box<DmlFx>>) {
+        if let Some(f) = fx.as_mut() {
+            f.fill = None;
+            if f.is_empty() {
+                *fx = None;
+            }
+        }
+    }
+    let doc = |c: &Option<ColorRef>| c.as_ref().is_some_and(|c| c.doc.is_some());
+    for a in [&mut m.chart_area, &mut m.plot_area] {
+        if doc(&a.fill) {
+            drop_fill(&mut a.fx);
+        }
+    }
+    for plot in &mut m.plots {
+        for s in &mut plot.series {
+            if doc(&s.fill) {
+                drop_fill(&mut s.fx);
+            }
+            for (i, c) in &s.points {
+                if c.doc.is_none() {
+                    continue;
+                }
+                match s.point_fx.iter_mut().find(|(p, _)| p == i) {
+                    Some((_, fx)) => fx.fill = None,
+                    // The point would draw the series' gradient: it takes
+                    // the series' effects alone.
+                    None => {
+                        if let Some(sfx) = s.fx.as_deref() {
+                            s.point_fx.push((
+                                *i,
+                                DmlFx {
+                                    fill: None,
+                                    ..sfx.clone()
+                                },
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// The colour a swatch reference paints where the document is absent.

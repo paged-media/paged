@@ -72,6 +72,8 @@ fn a_row_taller_than_the_page_flows_as_text__feat__plugin_doc_word_pagination() 
 fn save_back_steps_over_a_flowed_table__feat__plugin_doc_word_pagination() {
     let baseline = lowered();
     let para = |text: &str| ParagraphContentIn {
+        mark_change: None,
+        props_change: None,
         paragraph_style: None,
         runs: vec![RunContentIn {
             text: text.to_string(),
@@ -88,6 +90,7 @@ fn save_back_steps_over_a_flowed_table__feat__plugin_doc_word_pagination() {
     let edited = overlay_story_content(
         &baseline,
         &StoryContentIn {
+            comments: Vec::new(),
             self_id: "s".into(),
             paragraphs,
         },

@@ -143,7 +143,9 @@ async function revealStoryFrame(
     if (!g || !g.pageId || !handle) return;
     const pageIndex = handle.pageIds.indexOf(g.pageId);
     if (pageIndex < 0) return;
-    const pageRect = layoutPages(handle.pageSizesPt)[pageIndex];
+    const pageRect = layoutPages(handle.pageSizesPt, handle.pageOriginsPt)[
+      pageIndex
+    ];
     if (!pageRect) return;
     const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
     const corners = [

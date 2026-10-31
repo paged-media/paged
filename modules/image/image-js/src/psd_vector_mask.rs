@@ -367,9 +367,38 @@ pub fn rasterize(mask: &VectorMask, width: u32, height: u32) -> SelectionCoverag
 /// that exists, kept but not applied (the user mask when both exist: the
 /// stack holds one mask per layer). `None` when the plate has no mask.
 pub fn plate_mask(plate: &LayerPlate, width: u32, height: u32) -> Option<MaskPlate> {
+    plate_mask_with(plate, width, height, true)
+}
+
+/// The plate's vector mask when the stack can keep it EDITABLE (image
+/// ADR 476): it has one, and no live density or feather of its own —
+/// those stay drawn into the one mask ([`plate_mask`]).
+pub fn editable_vector_mask(plate: &LayerPlate) -> Option<&VectorMask> {
+    let v = plate.vector_mask.as_ref()?;
+    match plate.mask_params {
+        Some(p) if p.vector_density != 255 || p.vector_feather > 0.0 => None,
+        _ => Some(v),
+    }
+}
+
+/// The plate's USER mask alone, as [`plate_mask`] draws it — for a layer
+/// whose vector mask is kept as paths ([`editable_vector_mask`]).
+pub fn plate_user_mask(plate: &LayerPlate, width: u32, height: u32) -> Option<MaskPlate> {
+    plate_mask_with(plate, width, height, false)
+}
+
+fn plate_mask_with(
+    plate: &LayerPlate,
+    width: u32,
+    height: u32,
+    with_vector: bool,
+) -> Option<MaskPlate> {
     // A pixel layer's masks live at its plate's rectangle (ADR 464; the
-    // import cut the user mask there); an adjustment's span the canvas.
-    let rect = plate.rect.filter(|_| plate.adjustment.is_none());
+    // import cut the user mask there); an adjustment's span the canvas,
+    // and so do a styled layer's (its effects reach past its rectangle).
+    let rect = plate
+        .rect
+        .filter(|_| plate.adjustment.is_none() && plate.style.is_none());
     let params = plate.mask_params;
     // The record's density/feather, applied as Photoshop applies them —
     // live, on the canvas, before the cut (a feather reaches past the
@@ -395,7 +424,7 @@ pub fn plate_mask(plate: &LayerPlate, width: u32, height: u32) -> Option<MaskPla
             _ => m,
         },
     });
-    let vector = plate.vector_mask.as_ref().map(|v| {
+    let vector = plate.vector_mask.as_ref().filter(|_| with_vector).map(|v| {
         let mut coverage = rasterize(v, width, height).data().to_vec();
         if let Some(p) = params {
             feather_mask(&mut coverage, width, height, p.vector_feather);
@@ -730,6 +759,8 @@ mod tests {
             )]);
             v.disabled = vector_disabled;
             LayerPlate {
+                rgba16: None,
+                rgba32: None,
                 name: String::new(),
                 blend_key: *b"norm",
                 opacity: 255,
@@ -744,7 +775,7 @@ mod tests {
                 smart: false,
                 text: false,
                 adjustment: None,
-                color_overlay: None,
+                style: None,
                 record: usize::MAX,
             }
         };

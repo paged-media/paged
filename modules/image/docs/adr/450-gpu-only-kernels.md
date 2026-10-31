@@ -111,3 +111,14 @@ headless host. The statements above change as follows; everything else stands.
 - The CI guard still fails when `image-js`'s wasm32 tree names `image-conformance` or
   `proptest`, and a second guard fails when that tree turns on `image-kernels`'s `reference`
   feature (`.github/workflows/image-ci.yml`; the file named in the scope above is now this one).
+
+## Amendment — 2026-10-25
+
+[ADR 467](467-cpu-resample-for-headless-actions.md) adds a second exception: a CPU resample
+(the engine crate `paged-resample`, separable Lanczos-3 / bilinear and a bilinear
+rotate-and-crop) ships behind the wasm exports `resize_image_cpu` and
+`straighten_crop_image_cpu`, the backend of the module's headless and batch actions (resize,
+fit, a straightened crop). It is not a kernel twin: it runs in every realm, with or without a
+device, and is held to the GPU resample kernels within one 8-bit level on opaque pixels on the
+GPU lanes. `resize_image`, `straighten_crop_image` at a non-zero angle and every resample kernel
+still return an error without a device.

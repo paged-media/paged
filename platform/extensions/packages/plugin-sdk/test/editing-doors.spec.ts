@@ -515,3 +515,150 @@ describe("host.text format extent", () => {
     ).toEqual({ story_id: "u1", start: 0, end: 7 });
   });
 });
+
+describe("host.text find, replace and the character range (amendment 1)", () => {
+  const HIT = {
+    storyId: "u1",
+    start: 8,
+    end: 13,
+    charStart: 7,
+    charEnd: 12,
+    paragraph: 1,
+    text: "three",
+    context: "three",
+    contextOffset: 0,
+    groups: [],
+  };
+  function findHost(sel: { storyId: string; start: number; end: number }) {
+    const fake = makeFakeEditor();
+    fake.onSend("requestStoryContent", () => ({
+      kind: "storyContentResult",
+      payload: {
+        content: {
+          selfId: "u1",
+          paragraphs: [
+            { runs: [{ text: "One two" }] },
+            { runs: [{ text: "three" }] },
+          ],
+        },
+      },
+    }));
+    fake.onSend("requestFindText", (p) => {
+      const { spec } = p as { spec: { find: string } };
+      if (spec.find === "(") {
+        return { kind: "foundText", payload: { hits: [], error: "bad" } };
+      }
+      return {
+        kind: "foundText",
+        payload: { hits: spec.find === "three" ? [HIT, HIT] : [] },
+      };
+    });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      textSelection: { read: () => sel, subscribe: () => () => {} },
+    });
+    return { fake, host };
+  }
+
+  it("finds through RequestFindText with the wire spec, hits in both offsets", async () => {
+    const { fake, host } = findHost({ storyId: "u1", start: 0, end: 0 });
+    expect(host.supports("text.find@1")).toBe(true);
+    const r = await host.text.find({
+      find: "three",
+      matchCase: true,
+      mode: "wildcards",
+      storyId: "u1",
+      paragraphStyle: "ParagraphStyle/Body",
+    });
+    expect(r.error).toBeUndefined();
+    expect(r.hits).toHaveLength(2);
+    expect(r.hits[0]).toEqual({
+      storyId: "u1",
+      start: 8,
+      end: 13,
+      charStart: 7,
+      charEnd: 12,
+      paragraph: 1,
+      text: "three",
+      context: "three",
+      contextOffset: 0,
+    });
+    expect(fake.sent.at(-1)).toEqual({
+      kind: "requestFindText",
+      payload: {
+        spec: {
+          find: "three",
+          storyId: "u1",
+          mode: "wildcards",
+          matchCase: true,
+          paragraphStyle: "ParagraphStyle/Body",
+        },
+      },
+    });
+    expect((await host.text.find({ find: "(" })).error).toBe("bad");
+    expect(await host.text.find({ find: "" })).toEqual({ hits: [] });
+  });
+
+  it("replaces in ONE findReplace mutation and counts the hits", async () => {
+    const { fake, host } = findHost({ storyId: "u1", start: 0, end: 0 });
+    const all = await host.text.replace({
+      find: "three",
+      replace: "3",
+      all: true,
+      replaceCharacterStyle: "CharacterStyle/Em",
+    });
+    expect(all).toEqual({ applied: true, replaced: 2 });
+    expect(fake.mutations.at(-1)).toEqual({
+      op: "findReplace",
+      args: {
+        spec: { find: "three" },
+        replace: "3",
+        replaceAll: true,
+        characterStyle: "CharacterStyle/Em",
+      },
+    });
+    expect(await host.text.replace({ find: "three", replace: "3" })).toEqual({
+      applied: true,
+      replaced: 1,
+    });
+    const n = fake.mutations.length;
+    const none = await host.text.replace({ find: "four", replace: "4" });
+    expect(none.applied).toBe(false);
+    expect(none.replaced).toBe(0);
+    // Nothing matching sends no mutation: no empty undo step.
+    expect(fake.mutations).toHaveLength(n);
+  });
+
+  it("answers the selection in story characters", async () => {
+    const { host } = findHost({ storyId: "u1", start: 8, end: 13 });
+    expect(await host.text.characterRange()).toEqual({
+      storyId: "u1",
+      start: 7,
+      end: 12,
+    });
+  });
+
+  it("openPanel hands the target to the host's shell", () => {
+    const fake = makeFakeEditor();
+    const opened: unknown[][] = [];
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      shell: {
+        openPanel: (...args: unknown[]) => void opened.push(args),
+        closePanel: () => {},
+        pickFile: async () => [],
+      },
+    });
+    host.shell.openPanel("paged.style-options", {
+      target: "style:paragraph/ParagraphStyle/Body",
+    });
+    host.shell.openPanel("paged.layers");
+    expect(opened).toEqual([
+      [
+        "paged.style-options",
+        { target: "style:paragraph/ParagraphStyle/Body" },
+      ],
+      ["paged.layers"],
+    ]);
+  });
+});

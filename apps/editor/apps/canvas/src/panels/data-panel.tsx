@@ -28,6 +28,9 @@
 //   · a field that a binding reads is marked in its header, with how many
 //     bindings read it; a double-click on that header selects the page
 //     items those bindings are placed in (the service's `placements`);
+//   · a query's rows by their record's status: new, changed, placed (a
+//     double-click selects where), and the placed records gone from the
+//     data counted (`data-record-status.ts`);
 //   · the grid is windowed: the service sorts and filters (guarded SQL), and
 //     only the rows in view cross;
 //   · with no data yet, a three-step start: import, query, bind;
@@ -63,10 +66,20 @@ import {
   groupRows,
   ident,
   nextSort,
+  RECORD_FIELD,
   type FilterOp,
   type FilterRow,
   type SortKey,
 } from "./data-grid-model";
+import {
+  numbersRecords,
+  recordAttrs,
+  recordCue,
+  recordStyle,
+  RM,
+  selectRecord,
+  useRecordStatus,
+} from "./data-record-status";
 import { DataPipeline, offersPipeline, PipelineToggle } from "./data-pipeline";
 import {
   AssetColumnEditor,
@@ -385,7 +398,14 @@ function Grid({
   const keys = group
     ? [{ field: group, desc: false }, ...sort.filter((s) => s.field !== group)]
     : sort;
-  const sql = gridSql(table.name, filters, match, keys);
+  const sql = gridSql(
+    table.name,
+    filters,
+    match,
+    keys,
+    numbersRecords(service, table),
+  );
+  const records = useRecordStatus(service, table, revision);
   const bound = fieldStates(statuses, table.name);
   const rowsDrag =
     table.kind === "query" &&
@@ -459,6 +479,12 @@ function Grid({
     return c < 0 ? "" : cell(page.columns[c]?.[index % PAGE]);
   };
 
+  // The record a row shows (the grid numbers a query's rows, `gridSql`).
+  const recordAt = (index: number): number | null => {
+    const v = valueAt(index, RECORD_FIELD);
+    return v === "" ? null : Number(v);
+  };
+
   const colW = 120;
   return (
     <div
@@ -481,6 +507,11 @@ function Grid({
         <span style={muted} data-data-count="">
           {t(M.rows, { count })}
         </span>
+        {(records?.removed ?? 0) > 0 && (
+          <span style={{ ...small, color: status.warn }} data-data-removed="">
+            {t(RM.removed, { count: records!.removed })}
+          </span>
+        )}
         {table.kind === "query" && (
           // Editor ADR 291: the query as a table, its shown columns in order.
           <span
@@ -847,6 +878,8 @@ function Grid({
                   <span style={muted}>({r.count})</span>
                 </button>
               );
+            const record = records ? recordAt(r.index) : null;
+            const cue = recordCue(records, record);
             return (
               <div
                 key={`r:${r.index}`}
@@ -856,7 +889,6 @@ function Grid({
                 // shows the query's own order: a row's place is then its
                 // record number.
                 draggable={rowsDrag}
-                title={rowsDrag ? t(M.rowHint) : undefined}
                 onDragStart={(e) => {
                   e.dataTransfer.setData(
                     DATA_RECORD_DRAG_TYPE,
@@ -865,6 +897,21 @@ function Grid({
                   e.dataTransfer.setData("text/plain", String(r.index + 1));
                   e.dataTransfer.effectAllowed = "copy";
                 }}
+                {...recordAttrs(cue, t, rowsDrag ? t(M.rowHint) : undefined)}
+                onDoubleClick={() => {
+                  if (!cue.placed || record === null) return;
+                  void selectRecord(
+                    {
+                      service,
+                      client,
+                      setElementSelection,
+                      setElementGeometry,
+                    },
+                    statuses,
+                    table.name,
+                    record,
+                  );
+                }}
                 style={{
                   display: "flex",
                   position: "absolute",
@@ -872,6 +919,7 @@ function Grid({
                   left: 0,
                   height: ROW_H,
                   borderBottom: `1px solid ${color.border}`,
+                  ...recordStyle(cue),
                 }}
               >
                 {visible.map((f) => (

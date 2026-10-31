@@ -87,3 +87,58 @@ export function affineScale(m: Affine | null): number {
 }
 
 export type { Vec2 };
+
+/** The least-squares affine that maps `src[i]` onto `dst[i]` (at least
+ *  three points not on one line); null when the points cannot determine
+ *  one. Solves the normal equations of `[x y 1] · [a c e; b d f]ᵀ` once
+ *  per output coordinate. */
+export function fitAffine(
+  src: readonly Vec2[],
+  dst: readonly Vec2[],
+): Affine | null {
+  const n = Math.min(src.length, dst.length);
+  if (n < 3) return null;
+  // Centre both sets for conditioning.
+  let sx = 0;
+  let sy = 0;
+  let tx = 0;
+  let ty = 0;
+  for (let i = 0; i < n; i++) {
+    sx += src[i]![0];
+    sy += src[i]![1];
+    tx += dst[i]![0];
+    ty += dst[i]![1];
+  }
+  sx /= n;
+  sy /= n;
+  tx /= n;
+  ty /= n;
+  let xx = 0;
+  let xy = 0;
+  let yy = 0;
+  let xu = 0;
+  let yu = 0;
+  let xv = 0;
+  let yv = 0;
+  for (let i = 0; i < n; i++) {
+    const x = src[i]![0] - sx;
+    const y = src[i]![1] - sy;
+    const u = dst[i]![0] - tx;
+    const v = dst[i]![1] - ty;
+    xx += x * x;
+    xy += x * y;
+    yy += y * y;
+    xu += x * u;
+    yu += y * u;
+    xv += x * v;
+    yv += y * v;
+  }
+  const det = xx * yy - xy * xy;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-9 * Math.max(1, xx * yy))
+    return null;
+  const a = (xu * yy - yu * xy) / det;
+  const c = (yu * xx - xu * xy) / det;
+  const b = (xv * yy - yv * xy) / det;
+  const d = (yv * xx - xv * xy) / det;
+  return [a, b, c, d, tx - a * sx - c * sy, ty - b * sx - d * sy];
+}

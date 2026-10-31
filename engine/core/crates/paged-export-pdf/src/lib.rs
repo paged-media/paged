@@ -221,8 +221,22 @@ pub struct ExportInkSettings {
 /// unembeddable resource). Surfaced to preflight, never silent.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExportDiagnostic {
-    FontNotEmbeddable { font_id: u32, runs_outlined: usize },
-    ImageMissingBytes { image_index: u32 },
+    FontNotEmbeddable {
+        font_id: u32,
+        runs_outlined: usize,
+    },
+    ImageMissingBytes {
+        image_index: u32,
+    },
+    /// Engine ADR 1008 — an effect-stack layer (Gaussian blur, noise,
+    /// colour adjustment) has no PDF operator; it was drawn as an image
+    /// at `ppi` inside its transparency group.
+    EffectRasterized {
+        ppi: f32,
+    },
+    /// The build carries no rasterizer (`raster-effects` off): the layer's
+    /// content was written without its effect.
+    EffectNotRasterized,
 }
 
 /// Severity of a preflight finding (panels.md gap 20). Errors block a
@@ -249,6 +263,8 @@ impl ExportDiagnostic {
         match self {
             ExportDiagnostic::FontNotEmbeddable { .. } => "font_not_embeddable",
             ExportDiagnostic::ImageMissingBytes { .. } => "image_missing_bytes",
+            ExportDiagnostic::EffectRasterized { .. } => "effect_rasterized",
+            ExportDiagnostic::EffectNotRasterized => "effect_not_rasterized",
         }
     }
 
@@ -261,6 +277,8 @@ impl ExportDiagnostic {
         match self {
             ExportDiagnostic::FontNotEmbeddable { .. } => FindingSeverity::Warning,
             ExportDiagnostic::ImageMissingBytes { .. } => FindingSeverity::Warning,
+            ExportDiagnostic::EffectRasterized { .. } => FindingSeverity::Warning,
+            ExportDiagnostic::EffectNotRasterized => FindingSeverity::Warning,
         }
     }
 
@@ -276,6 +294,14 @@ impl ExportDiagnostic {
             ExportDiagnostic::ImageMissingBytes { image_index } => {
                 format!("placed image {image_index} had no usable bytes; placeholder drawn")
             }
+            ExportDiagnostic::EffectRasterized { ppi } => format!(
+                "an object's blur, noise or colour adjustment has no PDF form; it was drawn as \
+                 an image at {ppi:.0} ppi"
+            ),
+            ExportDiagnostic::EffectNotRasterized => "an object's blur, noise or colour \
+                 adjustment has no PDF form and this build cannot rasterise it; the object was \
+                 written without it"
+                .to_string(),
         }
     }
 }

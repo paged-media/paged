@@ -68,6 +68,7 @@ pub mod blend;
 pub mod model;
 pub mod phry;
 pub mod samp;
+pub mod write;
 
 use crate::descriptor::{read_versioned_descriptor, Descriptor, DESCRIPTOR_VERSION};
 use crate::reader::ByteReader;
@@ -75,13 +76,14 @@ use crate::{PsdError, Result};
 
 pub use blend::BlendMode;
 pub use model::{
-    AbrBrush, AbrTip, Airbrush, BristleShape, BristleTip, BrushPose, ColorDynamics, ComputedTip,
-    ControlSource, Dynamics, ErodibleTip, HeightMap, SampledTipRef, Scatter, ShapeDynamics,
-    Texture, ToolKind, ToolOptions, Transfer, ABSENT_PERCENT_DEFAULT, FRACTION_SCALE_PERCENT_KEYS,
-    TOOL_OPTIONS_ABSENT_DEFAULT,
+    AbrBrush, AbrTip, Airbrush, BristleShape, BristleTip, BrushOptions, BrushPose, ColorDynamics,
+    ComputedTip, ControlSource, Dynamics, ErodibleTip, HeightMap, OptionSource, SampledTipRef,
+    Scatter, ShapeDynamics, Smoothing, Texture, ToolKind, ToolOptions, Transfer,
+    ABSENT_PERCENT_DEFAULT, FRACTION_SCALE_PERCENT_KEYS, TOOL_OPTIONS_ABSENT_DEFAULT,
 };
 pub use phry::HierarchyNode;
 pub use samp::AbrSample;
+pub use write::write_abr;
 
 /// The 4-byte section signature (shared with PSD's own `8BIM` blocks).
 pub const SECTION_SIGNATURE: [u8; 4] = *b"8BIM";

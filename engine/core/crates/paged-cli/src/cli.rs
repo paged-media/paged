@@ -396,9 +396,16 @@ pub enum DataCommand {
     /// recipe's source id; every query passes the query guard first (a
     /// document's queries are code it carries). Property bindings are
     /// written on the objects their selectors name, variable bindings on
-    /// their text variables, as `paged set` writes. Bindings the headless
-    /// lane cannot write yet (images, tables, barcodes, record flows,
-    /// rules) are listed, not skipped.
+    /// their text variables, as `paged set` writes; tables, local images,
+    /// barcodes and rules in their frames. A record flow is paginated into
+    /// one frame per page from the page of its bound frame, adding pages,
+    /// and replaces the flow an earlier apply placed; like a rule, it
+    /// places every record, so `--record` does not restrict it. A remote
+    /// image is fetched only from an origin `--allow-origin` lists; a
+    /// document asset id (`asset:<id>`) is placed from the bytes a `.paged`
+    /// container carries. Bindings the headless lane cannot write (a
+    /// remote image of an unlisted origin, an asset id the document does
+    /// not carry) are listed, not skipped.
     Apply {
         /// IDML or `.paged` document.
         doc: PathBuf,
@@ -408,6 +415,13 @@ pub enum DataCommand {
         /// The record (0-based) the bindings resolve at.
         #[arg(long, default_value_t = 0)]
         record: usize,
+        /// An origin remote images may be fetched from, repeatable:
+        /// `--allow-origin https://images.example.com`. Exact
+        /// `scheme://host[:port]`; redirects (at most 3) only to listed
+        /// origins; plain http only for localhost; 50 MiB and 30 s per
+        /// image; no cookies, credentials or proxies.
+        #[arg(long = "allow-origin", value_name = "ORIGIN")]
+        allow_origins: Vec<String>,
         /// Write the result here. The format follows the extension.
         #[arg(short, long)]
         out: Option<PathBuf>,

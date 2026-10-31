@@ -44,29 +44,48 @@
 //! (image-conformance / `image-kernels` feature `reference`) is
 //! reachable from this crate (cargo-tree guard, spec §4 dep rule 2).
 
+pub mod adjust_readouts;
 pub mod brushes;
 pub mod channels;
+pub mod clone_source;
 pub mod cmyk;
 // Engine work counters (thread-local, always on) — budgets count these.
+pub mod color_mode;
+pub mod content_aware;
 pub mod counters;
 pub mod display;
+pub mod export;
 pub mod fill;
+pub mod focus;
 pub mod heal;
 pub mod ingest;
 pub mod inpaint;
 pub mod layers;
+pub mod magnetic;
+pub mod masking;
 pub mod mip;
+pub mod patchmatch;
 pub mod paths;
 pub mod pixels;
+pub mod planes;
+pub mod preset_files;
 pub mod psd_layer_ext;
+pub mod psd_source;
 pub mod psd_vector_mask;
+pub mod psd_write;
+pub mod psd_write_smart;
 pub mod readouts;
+pub mod refine;
 pub mod region_filter;
 pub mod retouch;
 pub mod saveback;
 pub mod selection;
+pub mod smart;
 pub mod stroke;
 pub mod text;
+pub mod vectors;
+pub mod warps;
+pub mod workspace;
 
 /// The frozen kernel ABI version this artifact was built against.
 pub fn abi_version() -> u32 {
@@ -108,7 +127,20 @@ mod wasm {
     use crate::saveback::{encode_rgba8, psd_write_adjusted, RasterFormat};
     use crate::selection::SessionSelection;
     use crate::stroke::{blend_kernel, blend_names, StrokeParams, StrokeSession, StrokeTool};
-    use image_gpu::dab::{PressureTarget, StrokeSample};
+    use image_gpu::dab::PressureTarget;
+
+    // WP5.2 filter doors: one child module per family group (`src/wasm/`).
+    // Each reaches this module's private helpers (`apply_point_kernel`,
+    // `fill_prelude`, the landing) as a descendant.
+    mod filters_adjust;
+    mod filters_blur;
+    mod filters_chain;
+    mod filters_distort;
+    mod filters_stylize;
+    // Smart objects (ADR 482): transform, filters, contents, links.
+    mod smart_doors;
+    // WP5.6: Warp, Liquify, Puppet Warp, Content-Aware Scale (ADR 483).
+    mod warps;
 
     thread_local! {
         /// The bundle-realm GPU device (I-07: created HERE, where
@@ -332,6 +364,8 @@ mod wasm {
             D::ProfileRejected => 2,
             D::CmykConverted => 3,
             D::CmykUncalibrated => 4,
+            D::HdrClipped => 5,
+            D::Float32 => 6,
         }
     }
 
@@ -406,6 +440,79 @@ mod wasm {
             height,
             display,
             depth_reduced,
+        })
+    }
+
+    /// [`ingest_rgba8`]'s 16-bit twin: straight RGBA at 16 bits per
+    /// sample, `width*height*4` samples — what the decode worker hands
+    /// over for a 16-bit source, so the off-thread decode keeps the depth
+    /// the main-thread one does (image ADR 479).
+    #[wasm_bindgen]
+    pub fn ingest_rgba16(
+        width: u32,
+        height: u32,
+        samples: Vec<u16>,
+    ) -> Result<DecodedHandle, JsValue> {
+        if width == 0 || height == 0 || samples.len() != width as usize * height as usize * 4 {
+            return Err(JsValue::from_str(&format!(
+                "ingest_rgba16: {} samples for {width}×{height} (expected {})",
+                samples.len(),
+                width as usize * height as usize * 4
+            )));
+        }
+        let img = DecodedImage {
+            width,
+            height,
+            rgba: crate::pixels::Pixels::from_rgba16(&samples),
+            display: crate::display::DisplayTreatment::AssumedSrgb,
+            depth_reduced: false,
+        };
+        let handle = NEXT_HANDLE.with(|n| {
+            let h = n.get();
+            n.set(h + 1);
+            h
+        });
+        let display = display_code(img.display);
+        IMAGES.with(|m| m.borrow_mut().insert(handle, img));
+        Ok(DecodedHandle {
+            handle,
+            width,
+            height,
+            display,
+            depth_reduced: false,
+        })
+    }
+
+    /// An engine-held image's samples at 16 bits (an 8-bit image widened
+    /// exactly) — the decode worker's hand-off of a 16-bit source.
+    #[wasm_bindgen]
+    pub fn image_samples16(handle: u32) -> Result<Vec<u16>, JsValue> {
+        IMAGES.with(|m| {
+            let map = m.borrow();
+            let img = map
+                .get(&handle)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+            let px = &img.rgba;
+            Ok((0..px.pixel_count() * 4)
+                .map(|i| px.sample16(i / 4, i % 4))
+                .collect())
+        })
+    }
+
+    /// Bits per channel an engine-held image holds: 8 or 16 (Image ▸
+    /// Mode's checked depth).
+    #[wasm_bindgen]
+    pub fn image_bits(handle: u32) -> Result<u8, JsValue> {
+        IMAGES.with(|m| {
+            let map = m.borrow();
+            let img = map
+                .get(&handle)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+            Ok(match img.rgba.depth() {
+                image_core::SampleDepth::F32 => 32,
+                image_core::SampleDepth::U16 => 16,
+                _ => 8,
+            })
         })
     }
 
@@ -1008,6 +1115,7 @@ mod wasm {
             .with(|m| m.borrow().get(&handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
         SELECTION.with(|s| s.borrow_mut().bind(handle, img.width, img.height));
+        note_selection(None, None);
         Ok(())
     }
 
@@ -1022,7 +1130,9 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
-        Ok(SELECTION.with(|s| s.borrow_mut().transfer(handle, img.width, img.height)))
+        let kept = SELECTION.with(|s| s.borrow_mut().transfer(handle, img.width, img.height));
+        note_selection(None, None);
+        Ok(kept)
     }
 
     /// Marquee RECT: fold the anti-aliased rectangle `[x, x+w) × [y, y+h)`
@@ -1035,7 +1145,9 @@ mod wasm {
             let b = s.bound().ok_or("no image bound (selection_bind first)")?;
             let shape = SelectionCoverage::rasterize_rect(b.width, b.height, x, y, w, h);
             s.apply_shape(shape, mode)
-        })
+        })?;
+        note_selection(Some("Rectangular Marquee"), None);
+        Ok(())
     }
 
     /// Marquee ELLIPSE: center `(cx, cy)`, radii `(rx, ry)` (image px),
@@ -1053,7 +1165,9 @@ mod wasm {
             let b = s.bound().ok_or("no image bound (selection_bind first)")?;
             let shape = SelectionCoverage::rasterize_ellipse(b.width, b.height, cx, cy, rx, ry);
             s.apply_shape(shape, mode)
-        })
+        })?;
+        note_selection(Some("Elliptical Marquee"), None);
+        Ok(())
     }
 
     /// LASSO polygon: `points_flat` is `[x0, y0, x1, y1, …]` image-px
@@ -1073,7 +1187,9 @@ mod wasm {
             let b = s.bound().ok_or("no image bound (selection_bind first)")?;
             let shape = SelectionCoverage::rasterize_polygon(b.width, b.height, &pts);
             s.apply_shape(shape, mode)
-        })
+        })?;
+        note_selection(Some("Lasso"), None);
+        Ok(())
     }
 
     /// MAGIC WAND at `(x, y)`: color-distance flood over the BOUND
@@ -1113,7 +1229,7 @@ mod wasm {
             tolerance,
             contiguous,
         );
-        with_selection(|s| s.apply_shape(shape, mode))
+        selection_step("Magic Wand", |s| s.apply_shape(shape, mode))
     }
 
     /// Feather the selection: a Gaussian of `sigma` px on the COVERAGE
@@ -1122,7 +1238,7 @@ mod wasm {
     /// explicit selection exists.
     #[wasm_bindgen]
     pub fn selection_feather(sigma: f32) -> Result<(), JsValue> {
-        with_selection(|s| s.feather(sigma))
+        selection_step("Feather", |s| s.feather(sigma))
     }
 
     /// Select ▸ Modify: `op` ∈ expand | contract | border | smooth, by
@@ -1134,7 +1250,13 @@ mod wasm {
                 "unknown selection modification \"{op}\" (expand | contract | border | smooth)"
             ))
         })?;
-        with_selection(|s| s.modify(op, radius))
+        let label = match op {
+            crate::selection::ModifyOp::Expand => "Expand",
+            crate::selection::ModifyOp::Contract => "Contract",
+            crate::selection::ModifyOp::Border => "Border",
+            crate::selection::ModifyOp::Smooth => "Smooth",
+        };
+        selection_step(label, |s| s.modify(op, radius))
     }
 
     /// SELECTION → PATH: trace the live selection's coverage into closed
@@ -1220,7 +1342,7 @@ mod wasm {
             .with(|m| m.borrow().get(&handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
         let bytes = crate::channels::channel_bytes(&img.rgba.to_rgba8(), ch);
-        with_selection(|s| {
+        selection_step("Load Selection", |s| {
             let b = s.bound().ok_or("no image bound (selection_bind first)")?;
             let shape =
                 SelectionCoverage::from_data(b.width, b.height, bytes).ok_or_else(|| {
@@ -1243,27 +1365,39 @@ mod wasm {
     #[wasm_bindgen]
     pub fn selection_set_coverage(bytes: &[u8], mode: u32) -> Result<(), JsValue> {
         let mode = decode_mode(mode)?;
-        with_selection(|s| s.apply_coverage(bytes, mode))
+        with_selection(|s| s.apply_coverage(bytes, mode))?;
+        // A selection given back (a frame's kept selection) is not a
+        // step: the stack's mirror only follows it.
+        note_selection(None, None);
+        Ok(())
     }
 
     /// Select ALL explicitly (a full-extent selection in the readouts;
     /// the adjust chain still takes the trivial-mask fast path).
     #[wasm_bindgen]
     pub fn selection_select_all() -> Result<(), JsValue> {
-        with_selection(|s| s.select_all())
+        selection_step("Select All", |s| s.select_all())
     }
 
     /// Deselect: back to "no selection" (adjustments run unmasked).
     #[wasm_bindgen]
     pub fn selection_clear() {
-        SELECTION.with(|s| s.borrow_mut().clear());
+        let had = SELECTION.with(|s| {
+            let mut s = s.borrow_mut();
+            let had = s.coverage().is_some();
+            s.clear();
+            had
+        });
+        if had {
+            note_selection(Some("Deselect"), None);
+        }
     }
 
     /// Invert the selection ("everything" inverts to the explicit EMPTY
     /// selection — adjust applies nowhere until reselected).
     #[wasm_bindgen]
     pub fn selection_invert() -> Result<(), JsValue> {
-        with_selection(|s| s.invert())
+        selection_step("Inverse", |s| s.invert())
     }
 
     /// The bounding box of the selection's non-zero coverage as
@@ -1308,6 +1442,1535 @@ mod wasm {
             Some(c) => js_sys::Uint8Array::from(c.data()),
             None => js_sys::Uint8Array::new_with_length(0),
         })
+    }
+
+    // ───────────── SELECTION & MASKING doors (ADR 470, WP5.5) ─────────────
+    //
+    // Every selection change made by a person is ONE undo step on the
+    // layer stack's list (`note_selection(Some(label))`); a change that is
+    // not a step (a kept selection restored, a rebind) only syncs the
+    // stack's mirror (`note_selection(None)`), so the mirror always equals
+    // the session selection. Undo and redo copy a restored selection back
+    // (`history_step`).
+
+    /// After a selection mutation: record it as a step (`label`) or sync
+    /// the stack's mirror — only when the stack is bound to the image the
+    /// selection is bound to.
+    fn note_selection(label: Option<&str>, merge: Option<&str>) {
+        let (handle, cov) = SELECTION.with(|s| {
+            let s = s.borrow();
+            (s.bound().map(|b| b.handle), s.coverage().cloned())
+        });
+        LAYERS.with(|l| {
+            if let Some(d) = l.borrow_mut().as_mut() {
+                if Some(d.handle) == handle {
+                    match label {
+                        Some(lb) => d.stack.record_selection(lb, merge, cov),
+                        None => d.stack.sync_selection(cov),
+                    }
+                }
+            }
+        });
+    }
+
+    /// A selection mutation recorded as one undo step.
+    fn selection_step<T>(
+        label: &str,
+        f: impl FnOnce(&mut SessionSelection) -> Result<T, String>,
+    ) -> Result<T, JsValue> {
+        let out = with_selection(f)?;
+        note_selection(Some(label), None);
+        Ok(out)
+    }
+
+    /// The bound image's straight RGBA8 pixels and extent.
+    fn bound_pixels() -> Result<(u32, u32, Vec<u8>), JsValue> {
+        let bound = SELECTION
+            .with(|s| s.borrow().bound())
+            .ok_or_else(|| JsValue::from_str("no image bound (selection_bind first)"))?;
+        IMAGES.with(|m| {
+            let m = m.borrow();
+            let img = m.get(&bound.handle).ok_or_else(|| {
+                JsValue::from_str(&format!("bound image handle {} is gone", bound.handle))
+            })?;
+            Ok((img.width, img.height, img.rgba.to_rgba8().into_owned()))
+        })
+    }
+
+    fn coverage_of(w: u32, h: u32, data: Vec<u8>) -> Result<SelectionCoverage, JsValue> {
+        SelectionCoverage::from_data(w, h, data)
+            .ok_or_else(|| JsValue::from_str("internal: coverage is mis-sized"))
+    }
+
+    /// The Color Range param block from the dialog's flat values:
+    /// `kind` 0 sampled | 1 hue | 2 tonal | 3 skin; `samples` = per
+    /// sample `L, a, b, x, y`; `range` > 0 with `localized`; `hue` the
+    /// preset's centre; `lower`/`upper` the tonal limits on 0…255 and
+    /// `midtones` their two-sided width.
+    #[allow(clippy::too_many_arguments)]
+    fn color_range_params(
+        kind: u32,
+        fuzziness: f32,
+        invert: bool,
+        samples: &[f32],
+        localized: bool,
+        range: f32,
+        hue: f32,
+        lower: f32,
+        upper: f32,
+        midtones: bool,
+    ) -> Result<image_kernels::families::select::ColorRangeParams, JsValue> {
+        use image_kernels::families::select::{ColorRangeMode, ColorRangeParams};
+        let mode = ColorRangeMode::from_u32(kind).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown Color Range kind {kind} (0 sampled | 1 hue | 2 tonal | 3 skin)"
+            ))
+        })?;
+        Ok(match mode {
+            ColorRangeMode::Sampled => {
+                if !samples.len().is_multiple_of(5) {
+                    return Err(JsValue::from_str("samples are L, a, b, x, y each"));
+                }
+                let s: Vec<([f32; 3], [f32; 2])> = samples
+                    .as_chunks::<5>()
+                    .0
+                    .iter()
+                    .map(|c| ([c[0], c[1], c[2]], [c[3], c[4]]))
+                    .collect();
+                ColorRangeParams::sampled(&s, fuzziness, invert, localized.then_some(range))
+            }
+            ColorRangeMode::Hue => ColorRangeParams::hue(hue, invert),
+            ColorRangeMode::Tonal => {
+                ColorRangeParams::tonal(lower, upper, fuzziness, midtones, invert)
+            }
+            ColorRangeMode::Skin => ColorRangeParams::skin(fuzziness, invert),
+        })
+    }
+
+    /// Color Range's coverage over straight RGBA8: the `select.color_range`
+    /// kernel on the GPU, its CPU twin where there is no device or the
+    /// image exceeds the texture limit (ADR 470).
+    async fn color_range_coverage(
+        rgba: &[u8],
+        w: u32,
+        h: u32,
+        p: &image_kernels::families::select::ColorRangeParams,
+    ) -> Vec<u8> {
+        use image_kernels::families::select::{color_range_rgba8, SELECT_COLOR_RANGE};
+        if let Some(ctx) = GPU.with(|g| g.borrow().clone()) {
+            let one = half::f16::ONE.to_le_bytes();
+            let mut f16 = Vec::with_capacity(rgba.len() * 2);
+            for px in rgba.as_chunks::<4>().0 {
+                for &c in &px[..3] {
+                    f16.extend_from_slice(&half::f16::from_f32(f32::from(c) / 255.0).to_le_bytes());
+                }
+                f16.extend_from_slice(&one);
+            }
+            if let Ok(out) = image_gpu::execute_tile_once_async(
+                &ctx,
+                &SELECT_COLOR_RANGE,
+                &[image_gpu::TileInput { f16_bytes: &f16 }],
+                p.as_bytes(),
+                None,
+                w,
+                h,
+            )
+            .await
+            {
+                return out
+                    .as_chunks::<8>()
+                    .0
+                    .iter()
+                    .map(|t| {
+                        let m = half::f16::from_le_bytes([t[0], t[1]]).to_f32();
+                        (m.clamp(0.0, 1.0) * 255.0).round() as u8
+                    })
+                    .collect();
+            }
+        }
+        color_range_rgba8(rgba, w, p)
+    }
+
+    /// The Lab (D50) of the bound image's pixel at `(x, y)` — what a
+    /// Color Range eyedropper click samples.
+    #[wasm_bindgen]
+    pub fn color_range_sample(x: u32, y: u32) -> Result<Vec<f32>, JsValue> {
+        let (w, h, px) = bound_pixels()?;
+        if x >= w || y >= h {
+            return Err(JsValue::from_str(&format!("({x}, {y}) is outside {w}×{h}")));
+        }
+        let i = ((y * w + x) * 4) as usize;
+        let lab = image_kernels::families::select::to_lab([
+            f32::from(px[i]) / 255.0,
+            f32::from(px[i + 1]) / 255.0,
+            f32::from(px[i + 2]) / 255.0,
+        ]);
+        Ok(lab.to_vec())
+    }
+
+    /// Color Range's coverage WITHOUT applying it — the dialog preview.
+    /// It also becomes the coverage of the `matte` view.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn color_range_preview(
+        kind: u32,
+        fuzziness: f32,
+        invert: bool,
+        samples: Vec<f32>,
+        localized: bool,
+        range: f32,
+        hue: f32,
+        lower: f32,
+        upper: f32,
+        midtones: bool,
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        let p = color_range_params(
+            kind, fuzziness, invert, &samples, localized, range, hue, lower, upper, midtones,
+        )?;
+        let (w, h, px) = bound_pixels()?;
+        let cov = color_range_coverage(&px, w, h, &p).await;
+        let out = js_sys::Uint8Array::from(&cov[..]);
+        let cov = Arc::new(coverage_of(w, h, cov)?);
+        VIEW.with(|v| v.borrow_mut().matte = Some(cov));
+        Ok(out)
+    }
+
+    /// Select ▸ Color Range: fold the coverage into the selection under
+    /// `mode`; one undo step.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn selection_color_range(
+        kind: u32,
+        fuzziness: f32,
+        invert: bool,
+        samples: Vec<f32>,
+        localized: bool,
+        range: f32,
+        hue: f32,
+        lower: f32,
+        upper: f32,
+        midtones: bool,
+        mode: u32,
+    ) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        let p = color_range_params(
+            kind, fuzziness, invert, &samples, localized, range, hue, lower, upper, midtones,
+        )?;
+        let (w, h, px) = bound_pixels()?;
+        let cov = coverage_of(w, h, color_range_coverage(&px, w, h, &p).await)?;
+        selection_step("Color Range", |s| s.apply_shape(cov, mode))
+    }
+
+    /// Select ▸ Grow (`contiguous`) / Similar, by the wand's tolerance.
+    #[wasm_bindgen]
+    pub fn selection_grow(tolerance: u8, contiguous: bool) -> Result<(), JsValue> {
+        let (_, _, px) = bound_pixels()?;
+        let label = if contiguous { "Grow" } else { "Similar" };
+        selection_step(label, |s| {
+            let cov = s.coverage().ok_or("no selection to grow from")?;
+            let grown = crate::selection::grow_coverage(cov, &px, tolerance, contiguous)
+                .ok_or("nothing is selected — there is no colour range to grow from")?;
+            s.apply_shape(grown, CombineMode::Replace)
+        })
+    }
+
+    /// Select ▸ Focus Area: the in-focus regions (sharpness map, ADR 470),
+    /// folded under `mode`; one undo step.
+    #[wasm_bindgen]
+    pub fn selection_focus_area(range: f32, noise: f32, mode: u32) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        let (w, h, px) = bound_pixels()?;
+        let cov = crate::focus::focus_area(&px, w, h, crate::focus::FocusParams { range, noise });
+        selection_step("Focus Area", |s| s.apply_shape(cov, mode))
+    }
+
+    /// Focus Area's coverage without applying it (the dialog preview; it
+    /// becomes the `matte` view's coverage).
+    #[wasm_bindgen]
+    pub fn focus_area_preview(range: f32, noise: f32) -> Result<js_sys::Uint8Array, JsValue> {
+        let (w, h, px) = bound_pixels()?;
+        let cov = crate::focus::focus_area(&px, w, h, crate::focus::FocusParams { range, noise });
+        let out = js_sys::Uint8Array::from(cov.data());
+        VIEW.with(|v| v.borrow_mut().matte = Some(Arc::new(cov)));
+        Ok(out)
+    }
+
+    // ── the display view ────────────────────────────────────────────
+
+    struct ViewState {
+        view: crate::masking::View,
+        /// The coverage a `Matte` view shows (Color Range / Focus Area
+        /// previews, Select and Mask).
+        matte: Option<Arc<SelectionCoverage>>,
+        /// Show the spot channels over the composite (the Channels
+        /// panel's eye on a spot channel).
+        spots: bool,
+    }
+
+    thread_local! {
+        static VIEW: RefCell<ViewState> = const {
+            RefCell::new(ViewState {
+                view: crate::masking::View::Composite,
+                matte: None,
+                spots: false,
+            })
+        };
+    }
+
+    /// What the frame shows: `composite` | `component` (arg: red, green,
+    /// blue, alpha, luma) | `channel` (arg: a channel id) | `quickMask` |
+    /// `matte` (arg: overlay, onBlack, onWhite, blackWhite, onLayers;
+    /// `opacity` for the overlay); `spots` shows spot channels over the
+    /// composite. A display transform only — the document is untouched.
+    #[wasm_bindgen]
+    pub fn view_set(kind: &str, arg: &str, opacity: f32, spots: bool) -> Result<(), JsValue> {
+        use crate::masking::{MatteMode, View};
+        let view = match kind {
+            "composite" => View::Composite,
+            "component" => View::Component(
+                crate::channels::Channel::from_name(arg)
+                    .ok_or_else(|| JsValue::from_str(&format!("unknown channel {arg:?}")))?,
+            ),
+            "channel" => View::Channel(
+                arg.parse()
+                    .map_err(|_| JsValue::from_str(&format!("not a channel id: {arg:?}")))?,
+            ),
+            "quickMask" => View::QuickMask,
+            "matte" => View::Matte(
+                MatteMode::from_wire(arg, opacity)
+                    .ok_or_else(|| JsValue::from_str(&format!("unknown matte {arg:?}")))?,
+            ),
+            k => return Err(JsValue::from_str(&format!("unknown view {k:?}"))),
+        };
+        VIEW.with(|v| {
+            let mut v = v.borrow_mut();
+            v.view = view;
+            v.spots = spots;
+        });
+        Ok(())
+    }
+
+    /// Does the display differ from the composite (so the glue must pass
+    /// it through `view_apply`)?
+    #[wasm_bindgen]
+    pub fn view_active() -> bool {
+        let has_spots = LAYERS.with(|l| {
+            l.borrow().as_ref().is_some_and(|d| {
+                d.stack
+                    .masking()
+                    .channels
+                    .iter()
+                    .any(|c| matches!(c.kind, crate::masking::ChannelKind::Spot { .. }))
+            })
+        });
+        let proofing = PROOF.with(|p| p.borrow().is_some());
+        VIEW.with(|v| {
+            let v = v.borrow();
+            v.view != crate::masking::View::Composite || (v.spots && has_spots) || proofing
+        })
+    }
+
+    /// Transform a `w`×`h` composite (straight RGBA8, possibly a preview
+    /// proxy) into what the current view shows.
+    #[wasm_bindgen]
+    pub fn view_apply(rgba: &[u8], w: u32, h: u32) -> Result<Vec<u8>, JsValue> {
+        use crate::masking::{matte, MatteMode, View, QUICK_MASK_OPACITY};
+        if rgba.len() != (w as usize) * (h as usize) * 4 {
+            return Err(JsValue::from_str("view_apply: rgba is not w·h·4 bytes"));
+        }
+        let (view, matte_cov, spots) = VIEW.with(|v| {
+            let v = v.borrow();
+            (v.view.clone(), v.matte.clone(), v.spots)
+        });
+        LAYERS.with(|l| {
+            let b = l.borrow();
+            let doc = b.as_ref().map(|d| &d.stack);
+            let channel_data = |id: u32| -> Option<crate::masking::DocChannel> {
+                let st = doc?;
+                let mut ch = st.masking().channel(id)?.clone();
+                if st.edit_channel().map(|c| c.id) == Some(id) {
+                    if let Some(p) = st.channel_preview() {
+                        ch.data = Arc::clone(p);
+                    }
+                }
+                Some(ch)
+            };
+            let base = match (&view, doc) {
+                (View::Composite, Some(st)) if spots => {
+                    let s: Vec<&crate::masking::DocChannel> = st
+                        .masking()
+                        .channels
+                        .iter()
+                        .filter(|c| matches!(c.kind, crate::masking::ChannelKind::Spot { .. }))
+                        .collect();
+                    crate::masking::with_spots(rgba, w, h, &s)
+                }
+                (View::Composite, _) => rgba.to_vec(),
+                (View::Component(c), _) => crate::channels::channel_bytes(rgba, *c)
+                    .iter()
+                    .flat_map(|&v| [v, v, v, 255])
+                    .collect(),
+                (View::Channel(id), _) => match channel_data(*id) {
+                    Some(ch) => crate::masking::channel_view(w, h, &ch),
+                    None => rgba.to_vec(),
+                },
+                (View::QuickMask, Some(st)) => match st.quick_mask().and_then(channel_data) {
+                    Some(ch) => matte(rgba, w, h, &ch.data, MatteMode::Overlay(QUICK_MASK_OPACITY)),
+                    None => rgba.to_vec(),
+                },
+                (View::QuickMask, None) => rgba.to_vec(),
+                (View::Matte(m), _) => match &matte_cov {
+                    Some(c) => matte(rgba, w, h, c, *m),
+                    None => rgba.to_vec(),
+                },
+            };
+            // Proof Colors / Gamut Warning (ADR 479): over the composite
+            // view only — a channel shown as grey has no colours to proof.
+            let base = if view == View::Composite {
+                PROOF.with(|p| match p.borrow().as_ref() {
+                    Some(proof) => proof.apply_rgba8(&base),
+                    None => base,
+                })
+            } else {
+                base
+            };
+            Ok(base)
+        })
+    }
+
+    thread_local! {
+        static PROOF: RefCell<Option<crate::color_mode::Proof>> = const { RefCell::new(None) };
+    }
+
+    /// VIEW ▸ PROOF COLORS and GAMUT WARNING on the image preview:
+    /// `target` is `off`, `gray` (Gray Gamma 2.2) or `cmyk` (through
+    /// `cmyk_profile`; empty: the document's own CMYK profile, refused
+    /// when it has none). `colors` simulates the output, `gamut` paints
+    /// the colours it cannot reproduce grey. A display transform, applied
+    /// by `view_apply` — the document is untouched.
+    #[wasm_bindgen]
+    pub fn view_set_proof(
+        target: &str,
+        colors: bool,
+        gamut: bool,
+        cmyk_profile: &[u8],
+    ) -> Result<(), JsValue> {
+        if target == "off" || (!colors && !gamut) {
+            PROOF.with(|p| *p.borrow_mut() = None);
+            return Ok(());
+        }
+        let mode = crate::color_mode::ColorMode::from_name(target)
+            .ok_or_else(|| JsValue::from_str(&format!("unknown proof target {target:?}")))?;
+        let own = LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .and_then(|d| d.stack.mode().cmyk_profile.clone())
+        });
+        let profile: Option<&[u8]> = if cmyk_profile.is_empty() {
+            own.as_deref()
+        } else {
+            Some(cmyk_profile)
+        };
+        let proof =
+            crate::color_mode::Proof::new(mode, profile, colors, gamut).map_err(ingest_err)?;
+        PROOF.with(|p| *p.borrow_mut() = Some(proof));
+        Ok(())
+    }
+
+    /// The bound document's colour mode: `rgb`, `gray`, `cmyk` or `lab`
+    /// (`rgb` with no stack open).
+    #[wasm_bindgen]
+    pub fn image_mode() -> String {
+        LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .map_or("rgb", |d| d.stack.mode().mode.name())
+                .to_string()
+        })
+    }
+
+    /// IMAGE ▸ MODE ▸ Grayscale / RGB Color / CMYK Color / Lab Color over
+    /// the bound stack (`LayerStack::set_mode`, one undo step), the
+    /// composite landing in `handle`. `cmyk_profile` is the press a CMYK
+    /// document converts through (empty: none, the plain ink formula,
+    /// which changes no colour). Answers whether anything changed.
+    #[wasm_bindgen]
+    pub async fn image_set_mode(
+        handle: u32,
+        mode: &str,
+        cmyk_profile: Vec<u8>,
+    ) -> Result<bool, JsValue> {
+        let mode = crate::color_mode::ColorMode::from_name(mode)
+            .ok_or_else(|| JsValue::from_str(&format!("unknown colour mode {mode:?}")))?;
+        if LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) != Some(handle) {
+            return Err(JsValue::from_str(
+                "no layer stack open on this image (layers_open first)",
+            ));
+        }
+        let doc_mode = crate::color_mode::DocMode {
+            mode,
+            cmyk_profile: (mode == crate::color_mode::ColorMode::Cmyk && !cmyk_profile.is_empty())
+                .then(|| Arc::from(cmyk_profile.into_boxed_slice())),
+            table: None,
+        };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let result = async {
+                // Multichannel (image ADR 484): the channels of the
+                // document's RGB or grey, the stack flattened.
+                let changed = if mode == crate::color_mode::ColorMode::Multichannel {
+                    let from = doc.stack.mode().mode;
+                    let m =
+                        crate::color_mode::DocMode::multichannel_from(from).ok_or_else(|| {
+                            JsValue::from_str(&format!(
+                                "Multichannel is made from an RGB or Grayscale document, not {}",
+                                from.label()
+                            ))
+                        })?;
+                    doc.stack
+                        .convert_flat(ctx.as_deref(), m)
+                        .await
+                        .map_err(ingest_err)?
+                } else {
+                    doc.stack.set_mode(doc_mode).map_err(ingest_err)?
+                };
+                if !changed {
+                    return Ok(false);
+                }
+                let rgba = doc
+                    .stack
+                    .composite_px(ctx.as_deref(), None)
+                    .await
+                    .map_err(ingest_err)?;
+                set_image_pixels(doc.handle, rgba)?;
+                Ok(true)
+            }
+            .await;
+            (doc, result)
+        })
+        .await
+    }
+
+    /// IMAGE ▸ MODE ▸ INDEXED COLOR… (image ADR 484) over the bound stack:
+    /// the visible image flattened and every pixel the nearest colour of
+    /// `palette` — `exact` (the image's own colours, at most 256), `web`
+    /// (216), or `adaptive` (`colours` of them, median cut) — at 8 bits,
+    /// one undo step. Answers whether anything changed.
+    #[wasm_bindgen]
+    pub async fn image_set_indexed(
+        handle: u32,
+        palette: &str,
+        colours: u32,
+    ) -> Result<bool, JsValue> {
+        if LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) != Some(handle) {
+            return Err(JsValue::from_str(
+                "no layer stack open on this image (layers_open first)",
+            ));
+        }
+        let palette = palette.to_string();
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let result = async {
+                let rgba = doc
+                    .stack
+                    .composite(ctx.as_deref(), None)
+                    .await
+                    .map_err(ingest_err)?;
+                let table = match palette.as_str() {
+                    "web" => crate::color_mode::web_palette(),
+                    "exact" => crate::color_mode::exact_palette(&rgba).ok_or_else(|| {
+                        JsValue::from_str(
+                            "the image has more than 256 colours: an Exact palette needs at most 256",
+                        )
+                    })?,
+                    "adaptive" => crate::color_mode::adaptive_palette(&rgba, colours as usize),
+                    p => return Err(JsValue::from_str(&format!("unknown palette {p:?}"))),
+                };
+                let changed = doc
+                    .stack
+                    .convert_flat(ctx.as_deref(), crate::color_mode::DocMode::indexed(table))
+                    .await
+                    .map_err(ingest_err)?;
+                if changed {
+                    let rgba = doc
+                        .stack
+                        .composite_px(ctx.as_deref(), None)
+                        .await
+                        .map_err(ingest_err)?;
+                    set_image_pixels(doc.handle, rgba)?;
+                }
+                Ok(changed)
+            }
+            .await;
+            (doc, result)
+        })
+        .await
+    }
+
+    // ── Quick Mask ──────────────────────────────────────────────────
+
+    /// Enter Quick Mask: the selection becomes a temporary channel the
+    /// brushes paint, shown as a red overlay. One undo step.
+    #[wasm_bindgen]
+    pub fn quick_mask_enter() -> Result<u32, JsValue> {
+        let cov = SELECTION.with(|s| s.borrow().coverage().cloned());
+        let id = with_stack(|d| {
+            d.stack.sync_selection(cov.clone());
+            d.stack.enter_quick_mask(cov.as_deref()).map_err(ingest_err)
+        })?;
+        VIEW.with(|v| v.borrow_mut().view = crate::masking::View::QuickMask);
+        Ok(id)
+    }
+
+    /// Leave Quick Mask: the painted channel becomes the selection. One
+    /// undo step (it brings the channel and the old selection back).
+    #[wasm_bindgen]
+    pub fn quick_mask_exit() -> Result<(), JsValue> {
+        let sel = with_stack(|d| d.stack.exit_quick_mask().map_err(ingest_err))?;
+        SELECTION.with(|s| s.borrow_mut().restore(Some(sel)));
+        VIEW.with(|v| {
+            let mut v = v.borrow_mut();
+            if v.view == crate::masking::View::QuickMask {
+                v.view = crate::masking::View::Composite;
+            }
+        });
+        Ok(())
+    }
+
+    /// Is Quick Mask on?
+    #[wasm_bindgen]
+    pub fn quick_mask_active() -> bool {
+        LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .is_some_and(|d| d.stack.quick_mask().is_some())
+        })
+    }
+
+    // ── channels ────────────────────────────────────────────────────
+
+    /// The Channels / Paths panels' readout (`MaskingDoc::list_json`, plus
+    /// the channel being painted as `editChannel`).
+    #[wasm_bindgen]
+    pub fn masking_list() -> String {
+        LAYERS.with(|l| match l.borrow().as_ref() {
+            Some(d) => {
+                let j = d.stack.masking().list_json();
+                let edit = d
+                    .stack
+                    .edit_channel()
+                    .map_or_else(|| "null".to_string(), |c| c.id.to_string());
+                format!("{},\"editChannel\":{edit}}}", &j[..j.len() - 1])
+            }
+            None => {
+                "{\"channels\":[],\"paths\":[],\"quickMask\":null,\"editChannel\":null}".to_string()
+            }
+        })
+    }
+
+    /// Select ▸ Save Selection: a new alpha channel (everything without a
+    /// selection). One undo step; answers its id.
+    #[wasm_bindgen]
+    pub fn channel_save_selection(name: &str) -> Result<u32, JsValue> {
+        let cov = SELECTION.with(|s| s.borrow().coverage().cloned());
+        with_stack(|d| {
+            d.stack
+                .save_selection(name, cov.as_deref())
+                .map_err(ingest_err)
+        })
+    }
+
+    /// Select ▸ Load Selection: a channel folded into the selection under
+    /// `mode` (replace, add, subtract, intersect). One undo step.
+    #[wasm_bindgen]
+    pub fn channel_load_selection(id: u32, invert: bool, mode: u32) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        let data = with_stack(|d| {
+            d.stack
+                .masking()
+                .channel(id)
+                .map(|c| Arc::clone(&c.data))
+                .ok_or_else(|| JsValue::from_str(&format!("no channel {id}")))
+        })?;
+        let mut shape = (*data).clone();
+        if invert {
+            shape.invert();
+        }
+        selection_step("Load Selection", |s| s.apply_shape(shape, mode))
+    }
+
+    /// Delete / rename / duplicate a channel; one undo step each.
+    #[wasm_bindgen]
+    pub fn channel_delete(id: u32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            if d.stack.quick_mask() == Some(id) {
+                return Err(JsValue::from_str(
+                    "Quick Mask's channel goes away by leaving Quick Mask",
+                ));
+            }
+            if d.stack.edit_channel().map(|c| c.id) == Some(id) {
+                d.stack.set_edit_channel(None).map_err(ingest_err)?;
+            }
+            d.stack
+                .masking_edit("Delete channel", |m, _, _| m.remove_channel(id))
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn channel_rename(id: u32, name: &str) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Rename channel", |m, _, _| m.rename_channel(id, name))
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn channel_duplicate(id: u32) -> Result<u32, JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Duplicate channel", |m, _, _| m.duplicate_channel(id))
+                .map_err(ingest_err)
+        })
+    }
+
+    /// New Spot Channel: the selection (nothing without one) as the
+    /// coverage of an ink of `r, g, b` at `solidity` (0…1). One step.
+    #[wasm_bindgen]
+    pub fn channel_new_spot(
+        name: &str,
+        r: u8,
+        g: u8,
+        b: u8,
+        solidity: f32,
+    ) -> Result<u32, JsValue> {
+        let cov = SELECTION.with(|s| s.borrow().coverage().cloned());
+        with_stack(|d| {
+            let (w, h) = (d.stack.width(), d.stack.height());
+            let data = match cov {
+                Some(c) if c.width() == w && c.height() == h => (*c).clone(),
+                _ => SelectionCoverage::empty(w, h),
+            };
+            d.stack
+                .masking_edit("New spot channel", |m, _, _| {
+                    Ok(m.add_channel(
+                        name,
+                        crate::masking::ChannelKind::Spot {
+                            colour: [r, g, b],
+                            solidity: solidity.clamp(0.0, 1.0),
+                        },
+                        data,
+                    ))
+                })
+                .map_err(ingest_err)
+        })
+    }
+
+    /// Change a channel's spot ink (an alpha channel becomes a spot one).
+    #[wasm_bindgen]
+    pub fn channel_set_spot(id: u32, r: u8, g: u8, b: u8, solidity: f32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Channel options", |m, _, _| {
+                    m.set_spot(id, [r, g, b], solidity)
+                })
+                .map_err(ingest_err)
+        })
+    }
+
+    /// Paint channel `id` with the pixel tools (`-1`: back to the layers).
+    #[wasm_bindgen]
+    pub fn channel_set_edit(id: i32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .set_edit_channel(u32::try_from(id).ok())
+                .map_err(ingest_err)
+        })
+    }
+
+    /// The channel stroke in flight was cancelled: drop its preview.
+    #[wasm_bindgen]
+    pub fn channel_clear_preview() {
+        LAYERS.with(|l| {
+            if let Some(d) = l.borrow_mut().as_mut() {
+                d.stack.clear_channel_preview();
+            }
+        });
+    }
+
+    // ── paths ───────────────────────────────────────────────────────
+
+    /// Make Work Path: trace the selection (at `threshold`, simplified by
+    /// `tolerance` px) into the work path (`name` empty) or a saved path
+    /// named `name`. One undo step; answers the path id.
+    #[wasm_bindgen]
+    pub fn path_from_selection(name: &str, threshold: u8, tolerance: f32) -> Result<u32, JsValue> {
+        let (cov, bound) = SELECTION.with(|s| {
+            let s = s.borrow();
+            (s.coverage().cloned(), s.bound())
+        });
+        let cov = cov.ok_or_else(|| JsValue::from_str("no selection to make a path from"))?;
+        let b = bound.ok_or_else(|| JsValue::from_str("no image bound"))?;
+        let contours = crate::paths::trace(
+            cov.data(),
+            b.width as usize,
+            b.height as usize,
+            threshold,
+            tolerance,
+        );
+        if contours.is_empty() {
+            return Err(JsValue::from_str(&format!(
+                "nothing is selected at coverage ≥ {threshold}"
+            )));
+        }
+        let subpaths = crate::masking::subpaths_from_contours(&contours);
+        // Without a name it is Photoshop's Make Work Path: the WORK PATH,
+        // made or replaced (ADR 476); with one, a saved path.
+        with_stack(|d| {
+            if name.trim().is_empty() {
+                d.stack.set_work_path(subpaths).map_err(ingest_err)
+            } else {
+                d.stack.add_path(name, subpaths).map_err(ingest_err)
+            }
+        })
+    }
+
+    /// Store a path drawn elsewhere (a host shape's anchors): `closed`
+    /// per subpath, `lens` anchors per subpath, `anchors` 6 floats each
+    /// (point, in handle, out handle; image px). One step; answers its id.
+    #[wasm_bindgen]
+    pub fn path_add(
+        name: &str,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+    ) -> Result<u32, JsValue> {
+        let mut at = 0usize;
+        let mut flat = Vec::new();
+        for &n in &lens {
+            let end = at + n as usize * 6;
+            let part = anchors
+                .get(at..end)
+                .ok_or_else(|| JsValue::from_str("anchors are shorter than the lengths say"))?;
+            flat.push(part.to_vec());
+            at = end;
+        }
+        let closed: Vec<bool> = closed.iter().map(|&c| c != 0).collect();
+        let subpaths = crate::masking::subpaths_from_flat(&closed, &flat)
+            .map_err(|e| JsValue::from_str(&e))?;
+        with_stack(|d| d.stack.add_path(name, subpaths).map_err(ingest_err))
+    }
+
+    /// One stored path as JSON (`masking::path_json`).
+    #[wasm_bindgen]
+    pub fn path_get(id: u32) -> Result<String, JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking()
+                .path(id)
+                .map(crate::masking::path_json)
+                .ok_or_else(|| JsValue::from_str(&format!("no path {id}")))
+        })
+    }
+
+    /// Make Selection from a stored path (nonzero winding, anti-aliased,
+    /// feathered by `feather` px), folded under `mode`. One undo step.
+    #[wasm_bindgen]
+    pub fn path_make_selection(id: u32, feather: f32, mode: u32) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        let mut cov = with_stack(|d| {
+            let (w, h) = (d.stack.width(), d.stack.height());
+            d.stack
+                .masking()
+                .path(id)
+                .map(|p| crate::masking::path_coverage(p, w, h))
+                .ok_or_else(|| JsValue::from_str(&format!("no path {id}")))
+        })?;
+        if feather > 0.0 {
+            cov.feather(feather);
+        }
+        selection_step("Make Selection", |s| s.apply_shape(cov, mode))
+    }
+
+    // ── vectors inside the image (ADR 476) ───────────────────────────
+
+    /// Geometry in the glue's flat encoding: per subpath its `closed`
+    /// flag, its anchor count in `lens`, its anchors as 6 floats each in
+    /// `anchors` (point, in handle, out handle; image px) and, in `ops`,
+    /// two numbers — the PSD operation (0–3, or 0xFFFF to continue the
+    /// component before it) and fill rule (1 even-odd, 2 non-zero).
+    /// `ops` may be empty: every subpath then combines.
+    fn geometry(
+        closed: &[u8],
+        lens: &[u32],
+        anchors: &[f32],
+        ops: &[u32],
+    ) -> Result<Vec<crate::masking::SubPath>, JsValue> {
+        if closed.len() != lens.len() || !(ops.is_empty() || ops.len() == 2 * lens.len()) {
+            return Err(JsValue::from_str(
+                "a path is one closed flag, one length and (optionally) two op numbers per subpath",
+            ));
+        }
+        let mut at = 0usize;
+        let mut flat = Vec::new();
+        for &n in lens {
+            let end = at + n as usize * 6;
+            let part = anchors
+                .get(at..end)
+                .ok_or_else(|| JsValue::from_str("anchors are shorter than the lengths say"))?;
+            flat.push(part.to_vec());
+            at = end;
+        }
+        if at != anchors.len() {
+            return Err(JsValue::from_str("anchors are longer than the lengths say"));
+        }
+        let closed: Vec<bool> = closed.iter().map(|&c| c != 0).collect();
+        let mut subpaths = crate::masking::subpaths_from_flat(&closed, &flat)
+            .map_err(|e| JsValue::from_str(&e))?;
+        for (k, sp) in subpaths.iter_mut().enumerate() {
+            if let (Some(&op), Some(&rule)) = (ops.get(2 * k), ops.get(2 * k + 1)) {
+                let op = u16::try_from(op).unwrap_or(1);
+                sp.op = crate::masking::SubOp {
+                    op: if op <= 3 || op == 0xFFFF { op } else { 1 },
+                    rule: if rule == 2 {
+                        2
+                    } else if op == 0xFFFF {
+                        0
+                    } else {
+                        1
+                    },
+                };
+            }
+        }
+        Ok(subpaths)
+    }
+
+    /// One geometry as JSON: `{"closed":[…],"ops":[[op,rule],…],
+    /// "anchors":[[x,y,ix,iy,ox,oy,…],…]}`.
+    fn geometry_json(subpaths: &[crate::masking::SubPath]) -> String {
+        let closed: Vec<&str> = subpaths
+            .iter()
+            .map(|s| if s.closed { "true" } else { "false" })
+            .collect();
+        let ops: Vec<String> = subpaths
+            .iter()
+            .map(|s| format!("[{},{}]", s.op.op, s.op.rule))
+            .collect();
+        let anchors: Vec<String> = subpaths
+            .iter()
+            .map(|s| {
+                let v: Vec<String> = s
+                    .anchors
+                    .iter()
+                    .flat_map(|a| [a.p[0], a.p[1], a.i[0], a.i[1], a.o[0], a.o[1]])
+                    .map(|f| format!("{f}"))
+                    .collect();
+                format!("[{}]", v.join(","))
+            })
+            .collect();
+        format!(
+            "{{\"closed\":[{}],\"ops\":[{}],\"anchors\":[{}]}}",
+            closed.join(","),
+            ops.join(","),
+            anchors.join(",")
+        )
+    }
+
+    /// A stored path's geometry with its operations
+    /// ([`geometry_json`]), plus its id, name and whether it is the work
+    /// path.
+    #[wasm_bindgen]
+    pub fn path_geometry(id: u32) -> Result<String, JsValue> {
+        with_stack(|d| {
+            let p = d
+                .stack
+                .masking()
+                .path(id)
+                .ok_or_else(|| JsValue::from_str(&format!("no path {id}")))?;
+            Ok(format!(
+                "{{\"id\":{},\"name\":{},\"work\":{},\"geometry\":{}}}",
+                p.id,
+                json_escape(&p.name),
+                p.work,
+                geometry_json(&p.subpaths)
+            ))
+        })
+    }
+
+    /// Replace a stored path's geometry (the Pen, Direct Selection, Path
+    /// Selection). One undo step.
+    #[wasm_bindgen]
+    pub fn path_set(
+        id: u32,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<(), JsValue> {
+        let g = geometry(&closed, &lens, &anchors, &ops)?;
+        with_stack(|d| d.stack.set_path_subpaths(id, g).map_err(ingest_err))
+    }
+
+    /// Put geometry in the WORK PATH (created, or replaced). One undo
+    /// step; answers its id.
+    #[wasm_bindgen]
+    pub fn path_set_work(
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<u32, JsValue> {
+        let g = geometry(&closed, &lens, &anchors, &ops)?;
+        with_stack(|d| d.stack.set_work_path(g).map_err(ingest_err))
+    }
+
+    /// Save Path: the work path becomes a saved path (`name` empty: the
+    /// next `Path n`). One undo step.
+    #[wasm_bindgen]
+    pub fn path_save(id: u32, name: &str) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.save_path(id, name).map_err(ingest_err))
+    }
+
+    /// FILL geometry with `color` (straight RGBA in `[0, 1]`) on the
+    /// active layer through its drawing — Fill Path, and the shape tools'
+    /// Pixels mode (`shape`). The paint is the ordinary masked solid fill
+    /// (GPU-only). One undo step.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn fill_geometry(
+        handle: u32,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+        color: Vec<f32>,
+        shape: bool,
+    ) -> Result<DecodedHandle, JsValue> {
+        if color.len() != 4 {
+            return Err(JsValue::from_str(
+                "fill colour must be 4 floats (straight RGBA in [0,1])",
+            ));
+        }
+        let g = geometry(&closed, &lens, &anchors, &ops)?;
+        crate::vectors::check(&g).map_err(|e| JsValue::from_str(&e))?;
+        let (img, ctx, _sel, layered) = fill_prelude(handle)?;
+        let cov = crate::vectors::coverage(&g, img.width, img.height);
+        let Some(damage) = cov.bounds() else {
+            return Err(JsValue::from_str("the path encloses no pixel"));
+        };
+        let spec = FillSpec::Solid {
+            color: [color[0], color[1], color[2], color[3]],
+        };
+        let out = fill_rgba8(&ctx, &img, &spec, Some(Arc::new(cov)))
+            .await
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let label = if shape { "Shape (pixels)" } else { "Fill path" };
+        land_fill_in(label, img.width, img.height, out, layered, damage).await
+    }
+
+    /// ADD A VECTOR MASK to layer `index`: `start` 0 reveal all, 1 hide
+    /// all, 2 the given geometry. One undo step.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_add(
+        index: usize,
+        start: u32,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<(), JsValue> {
+        let start = match start {
+            0 => crate::layers::VectorMaskStart::RevealAll,
+            1 => crate::layers::VectorMaskStart::HideAll,
+            2 => crate::layers::VectorMaskStart::Paths(geometry(&closed, &lens, &anchors, &ops)?),
+            s => {
+                return Err(JsValue::from_str(&format!(
+                    "vector mask start {s} (0, 1 or 2)"
+                )))
+            }
+        };
+        with_stack(|d| d.stack.add_vector_mask(index, start).map_err(ingest_err))
+    }
+
+    /// Replace the geometry of layer `index`'s vector mask. One step.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_set(
+        index: usize,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<(), JsValue> {
+        let g = geometry(&closed, &lens, &anchors, &ops)?;
+        with_stack(|d| d.stack.set_vector_mask_paths(index, g).map_err(ingest_err))
+    }
+
+    /// Switch layer `index`'s vector mask (enabled, inverted). One step;
+    /// answers whether anything changed.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_flags(
+        index: usize,
+        enabled: bool,
+        invert: bool,
+    ) -> Result<bool, JsValue> {
+        with_stack(|d| {
+            d.stack
+                .set_vector_mask_flags(index, enabled, invert)
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_delete(index: usize) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.delete_vector_mask(index).map_err(ingest_err))
+    }
+
+    /// Rasterize layer `index`'s vector mask into its user mask. One step.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_rasterize(index: usize) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.rasterize_vector_mask(index).map_err(ingest_err))
+    }
+
+    /// Layer `index`'s vector mask: `{"enabled","invert","geometry"}`, or
+    /// `null` without one.
+    #[wasm_bindgen]
+    pub fn layers_vector_mask_get(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            Ok(d.stack.vector_mask(index).map_or_else(
+                || "null".to_string(),
+                |v| {
+                    format!(
+                        "{{\"enabled\":{},\"invert\":{},\"geometry\":{}}}",
+                        v.enabled,
+                        v.invert,
+                        geometry_json(&v.subpaths)
+                    )
+                },
+            ))
+        })
+    }
+
+    /// A SHAPE LAYER: a solid fill of `rgb` (3 bytes) cut by the geometry,
+    /// above the active layer. Rendered on the GPU before it returns. One
+    /// undo step; answers its index.
+    #[wasm_bindgen]
+    pub async fn layers_add_shape(
+        name: &str,
+        rgb: Vec<u8>,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+        ops: Vec<u32>,
+    ) -> Result<usize, JsValue> {
+        let [r, g, b] = rgb[..] else {
+            return Err(JsValue::from_str("a shape's colour is 3 bytes"));
+        };
+        let geo = geometry(&closed, &lens, &anchors, &ops)?;
+        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
+            JsValue::from_str("a shape layer renders on the GPU — call init_gpu first")
+        })?;
+        let name = name.to_string();
+        with_stack_async(|mut doc| async move {
+            let r = match doc.stack.add_shape_layer(&name, [r, g, b], geo) {
+                Ok(i) => doc
+                    .stack
+                    .refresh_fills(Some(&ctx))
+                    .await
+                    .map(|_| i)
+                    .map_err(ingest_err),
+                Err(e) => Err(ingest_err(e)),
+            };
+            (doc, r)
+        })
+        .await
+    }
+
+    /// Read the PSD's paths (resources 2000–2997 and the work path 1025)
+    /// into the open stack's Paths panel, without a step — the document
+    /// had them all along. Only when the panel has no paths yet (a stored
+    /// session's paths win). Answers `{"imported":n,"skipped":[…]}`.
+    #[wasm_bindgen]
+    pub fn psd_paths_into_stack(psd_handle: u32) -> Result<String, JsValue> {
+        let (paths, skipped) = PSDS.with(|m| {
+            m.borrow()
+                .get(&psd_handle)
+                .map(crate::vectors::paths_from_psd)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown psd handle {psd_handle}")))
+        })?;
+        with_stack(|d| {
+            let n = if d.stack.masking().paths.is_empty() {
+                let mut doc = d.stack.masking().clone();
+                let n = paths.len();
+                doc.import_paths(paths);
+                d.stack.set_masking(doc);
+                n
+            } else {
+                0
+            };
+            Ok(format!(
+                "{{\"imported\":{n},\"skipped\":[{}]}}",
+                skipped
+                    .iter()
+                    .map(|s| json_escape(s))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn path_delete(id: u32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Delete path", |m, _, _| m.remove_path(id))
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn path_rename(id: u32, name: &str) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Rename path", |m, _, _| m.rename_path(id, name))
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn path_duplicate(id: u32) -> Result<u32, JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Duplicate path", |m, _, _| m.duplicate_path(id))
+                .map_err(ingest_err)
+        })
+    }
+
+    // ── Select and Mask ─────────────────────────────────────────────
+
+    struct SamState {
+        base: Arc<SelectionCoverage>,
+        params: crate::refine::RefineParams,
+        band: Vec<u8>,
+        /// An alpha a matting provider answered (the ML hook, WP8.2).
+        matte: Option<Vec<u8>>,
+        last: Option<crate::refine::Refined>,
+    }
+
+    thread_local! {
+        static SAM: RefCell<Option<SamState>> = const { RefCell::new(None) };
+    }
+
+    /// The external matte as a hook.
+    struct ProvidedMatte<'a>(Option<&'a [u8]>);
+
+    impl crate::refine::MattingHook for ProvidedMatte<'_> {
+        fn solve(&self, _: &[u8], _: u32, _: u32, _: &[u8]) -> Option<Vec<u8>> {
+            self.0.map(<[u8]>::to_vec)
+        }
+    }
+
+    /// Open the Select and Mask workspace over the current selection
+    /// (everything without one is refused: there is no edge to refine).
+    #[wasm_bindgen]
+    pub fn sam_begin() -> Result<(), JsValue> {
+        let cov = SELECTION
+            .with(|s| s.borrow().coverage().cloned())
+            .ok_or_else(|| JsValue::from_str("Select and Mask needs a selection to refine"))?;
+        let n = cov.data().len();
+        SAM.with(|s| {
+            *s.borrow_mut() = Some(SamState {
+                base: cov,
+                params: crate::refine::RefineParams::default(),
+                band: vec![0; n],
+                matte: None,
+                last: None,
+            })
+        });
+        Ok(())
+    }
+
+    fn with_sam<T>(f: impl FnOnce(&mut SamState) -> Result<T, JsValue>) -> Result<T, JsValue> {
+        SAM.with(|s| {
+            let mut b = s.borrow_mut();
+            let st = b
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("Select and Mask is not open (sam_begin)"))?;
+            f(st)
+        })
+    }
+
+    /// The workspace's sliders.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub fn sam_set_params(
+        radius: f32,
+        smart_radius: bool,
+        smooth: f32,
+        feather: f32,
+        contrast: f32,
+        shift_edge: f32,
+        decontaminate: bool,
+        amount: f32,
+    ) -> Result<(), JsValue> {
+        with_sam(|s| {
+            s.params = crate::refine::RefineParams {
+                radius,
+                smart_radius,
+                smooth,
+                feather,
+                contrast,
+                shift_edge,
+                decontaminate,
+                amount,
+            };
+            s.last = None;
+            Ok(())
+        })
+    }
+
+    /// The Refine Edge brush: mark (or with `erase`, unmark) a disc of
+    /// `radius` px at `(x, y)` as part of the band to re-solve.
+    #[wasm_bindgen]
+    pub fn sam_paint_band(x: f32, y: f32, radius: f32, erase: bool) -> Result<(), JsValue> {
+        with_sam(|s| {
+            let (w, h) = (s.base.width() as i64, s.base.height() as i64);
+            let r = radius.max(0.5);
+            let (x0, x1) = ((x - r).floor() as i64, (x + r).ceil() as i64);
+            let (y0, y1) = ((y - r).floor() as i64, (y + r).ceil() as i64);
+            for py in y0.max(0)..y1.min(h) {
+                for px in x0.max(0)..x1.min(w) {
+                    let (dx, dy) = (px as f32 + 0.5 - x, py as f32 + 0.5 - y);
+                    if dx * dx + dy * dy <= r * r {
+                        s.band[(py * w + px) as usize] = if erase { 0 } else { 255 };
+                    }
+                }
+            }
+            s.last = None;
+            Ok(())
+        })
+    }
+
+    /// The trimap the solve sees (0 / 128 / 255 per pixel) — what a
+    /// matting provider is handed.
+    #[wasm_bindgen]
+    pub fn sam_trimap() -> Result<js_sys::Uint8Array, JsValue> {
+        let (_, _, px) = bound_pixels()?;
+        with_sam(|s| {
+            let t = crate::refine::trimap(&px, &s.base, Some(&s.band), &s.params);
+            Ok(js_sys::Uint8Array::from(&t[..]))
+        })
+    }
+
+    /// A matting provider's alpha (WP8.2); an EMPTY array clears it and
+    /// the classical solve runs again.
+    #[wasm_bindgen]
+    pub fn sam_set_matte(alpha: &[u8]) -> Result<(), JsValue> {
+        with_sam(|s| {
+            if alpha.is_empty() {
+                s.matte = None;
+            } else if alpha.len() == s.band.len() {
+                s.matte = Some(alpha.to_vec());
+            } else {
+                return Err(JsValue::from_str("the matte must be one byte per pixel"));
+            }
+            s.last = None;
+            Ok(())
+        })
+    }
+
+    fn sam_refined() -> Result<crate::refine::Refined, JsValue> {
+        let (_, _, px) = bound_pixels()?;
+        with_sam(|s| {
+            if s.last.is_none() {
+                let hook = ProvidedMatte(s.matte.as_deref());
+                s.last = Some(crate::refine::refine(
+                    &px,
+                    &s.base,
+                    Some(&s.band),
+                    &s.params,
+                    &hook,
+                ));
+            }
+            Ok(s.last.clone().expect("computed above"))
+        })
+    }
+
+    /// The refined alpha (one byte per pixel); it becomes the coverage of
+    /// the `matte` view.
+    #[wasm_bindgen]
+    pub fn sam_preview() -> Result<js_sys::Uint8Array, JsValue> {
+        let r = sam_refined()?;
+        let out = js_sys::Uint8Array::from(r.alpha.data());
+        VIEW.with(|v| v.borrow_mut().matte = Some(Arc::new(r.alpha)));
+        Ok(out)
+    }
+
+    /// OK: the refined edge to `output` — `selection`, `layerMask` (the
+    /// active layer's mask) or `newLayerWithMask` (a masked copy, with the
+    /// decontaminated colours when asked for). One undo step; the
+    /// workspace closes.
+    #[wasm_bindgen]
+    pub fn sam_commit(output: &str) -> Result<(), JsValue> {
+        let r = sam_refined()?;
+        let alpha = Arc::new(r.alpha);
+        match output {
+            "selection" => {
+                let a = (*alpha).clone();
+                selection_step("Select and Mask", |s| {
+                    s.apply_shape(a, CombineMode::Replace)
+                })?;
+            }
+            "layerMask" => {
+                recorded_edit("Select and Mask", None, |st| {
+                    let i = st.active_index();
+                    st.set_mask(i, Arc::clone(&alpha))
+                })?;
+            }
+            "newLayerWithMask" => {
+                let px = r
+                    .decontaminated
+                    .map(|d| Arc::<[u8]>::from(d.into_boxed_slice()));
+                with_stack(|d| d.stack.add_masked_copy(px, alpha).map_err(ingest_err))?;
+            }
+            o => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown output {o:?} (selection | layerMask | newLayerWithMask)"
+                )))
+            }
+        }
+        sam_cancel();
+        Ok(())
+    }
+
+    /// Close the workspace without changing anything.
+    #[wasm_bindgen]
+    pub fn sam_cancel() {
+        SAM.with(|s| *s.borrow_mut() = None);
+        VIEW.with(|v| {
+            let mut v = v.borrow_mut();
+            v.matte = None;
+            if matches!(v.view, crate::masking::View::Matte(_)) {
+                v.view = crate::masking::View::Composite;
+            }
+        });
+    }
+
+    // ── the Magnetic Lasso ──────────────────────────────────────────
+
+    thread_local! {
+        static MAGNETIC: RefCell<Option<crate::magnetic::MagneticSession>> =
+            const { RefCell::new(None) };
+    }
+
+    fn magnetic_outline_flat() -> Vec<f32> {
+        MAGNETIC.with(|m| {
+            m.borrow()
+                .as_ref()
+                .map(|s| s.outline().into_iter().flatten().collect())
+                .unwrap_or_default()
+        })
+    }
+
+    /// Start a magnetic gesture at `(x, y)` with the tool's options;
+    /// answers the outline so far (flat x, y).
+    #[wasm_bindgen]
+    pub fn magnetic_begin(
+        x: f32,
+        y: f32,
+        width: f32,
+        contrast: f32,
+        frequency: f32,
+    ) -> Result<Vec<f32>, JsValue> {
+        let (w, h, px) = bound_pixels()?;
+        let s = crate::magnetic::MagneticSession::begin(
+            &px,
+            w,
+            h,
+            x,
+            y,
+            crate::magnetic::MagneticOptions {
+                width,
+                contrast,
+                frequency,
+            },
+        )
+        .ok_or_else(|| JsValue::from_str("no pixels to trace"))?;
+        MAGNETIC.with(|m| *m.borrow_mut() = Some(s));
+        Ok(magnetic_outline_flat())
+    }
+
+    fn with_magnetic(
+        f: impl FnOnce(&mut crate::magnetic::MagneticSession),
+    ) -> Result<Vec<f32>, JsValue> {
+        MAGNETIC.with(|m| {
+            let mut b = m.borrow_mut();
+            let s = b
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("no magnetic gesture (magnetic_begin)"))?;
+            f(s);
+            Ok::<(), JsValue>(())
+        })?;
+        Ok(magnetic_outline_flat())
+    }
+
+    /// The pointer moved: the live wire follows (anchors auto-placed).
+    #[wasm_bindgen]
+    pub fn magnetic_move(x: f32, y: f32) -> Result<Vec<f32>, JsValue> {
+        with_magnetic(|s| s.move_to(x, y))
+    }
+
+    /// A click: fix an anchor at the (snapped) point.
+    #[wasm_bindgen]
+    pub fn magnetic_anchor(x: f32, y: f32) -> Result<Vec<f32>, JsValue> {
+        with_magnetic(|s| s.anchor_at(x, y))
+    }
+
+    /// Backspace: drop the newest anchor.
+    #[wasm_bindgen]
+    pub fn magnetic_undo_anchor() -> Result<Vec<f32>, JsValue> {
+        with_magnetic(|s| s.undo_anchor())
+    }
+
+    /// The anchors placed so far (flat x, y pixel centres).
+    #[wasm_bindgen]
+    pub fn magnetic_anchors() -> Vec<f32> {
+        MAGNETIC.with(|m| {
+            m.borrow()
+                .as_ref()
+                .map(|s| {
+                    s.anchors()
+                        .iter()
+                        .flat_map(|&(x, y)| [x as f32 + 0.5, y as f32 + 0.5])
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+    }
+
+    /// Close the outline back to the first anchor and fold it into the
+    /// selection under `mode`; one undo step. False (nothing selected)
+    /// when the outline is too short.
+    #[wasm_bindgen]
+    pub fn magnetic_close(mode: u32) -> Result<bool, JsValue> {
+        let mode = decode_mode(mode)?;
+        let poly = MAGNETIC.with(|m| m.borrow_mut().take().and_then(|mut s| s.close()));
+        let Some(poly) = poly else {
+            return Ok(false);
+        };
+        let pts: Vec<(f32, f32)> = poly.iter().map(|p| (p[0], p[1])).collect();
+        selection_step("Magnetic Lasso", |s| {
+            let b = s.bound().ok_or("no image bound (selection_bind first)")?;
+            let shape = SelectionCoverage::rasterize_polygon(b.width, b.height, &pts);
+            s.apply_shape(shape, mode)
+        })?;
+        Ok(true)
+    }
+
+    /// Escape: abandon the gesture.
+    #[wasm_bindgen]
+    pub fn magnetic_cancel() {
+        MAGNETIC.with(|m| *m.borrow_mut() = None);
     }
 
     /// RESAMPLE an engine-held image to `out_w`×`out_h` and register the
@@ -1398,6 +3061,107 @@ mod wasm {
             display: resized_display,
             depth_reduced: resized_reduced,
         })
+    }
+
+    /// Register `rgba` (`width`×`height`) as a NEW engine-held image
+    /// derived from `src`: it inherits the source's colour treatment and
+    /// its depth provenance, as a crop and a resize do.
+    fn register_derived(
+        src: &DecodedImage,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> DecodedHandle {
+        let handle = NEXT_HANDLE.with(|n| {
+            let h = n.get();
+            n.set(h + 1);
+            h
+        });
+        let (display, depth_reduced) = (display_code(src.display), src.depth_reduced);
+        IMAGES.with(|m| {
+            m.borrow_mut().insert(
+                handle,
+                DecodedImage {
+                    width,
+                    height,
+                    rgba: rgba.into(),
+                    display: src.display,
+                    depth_reduced,
+                },
+            )
+        });
+        DecodedHandle {
+            handle,
+            width,
+            height,
+            display,
+            depth_reduced,
+        }
+    }
+
+    /// RESAMPLE on the CPU (image ADR 467): `paged_resample`'s separable,
+    /// premultiplied resize of an engine-held image to `out_w`×`out_h`,
+    /// registered as a NEW engine-held image (the source stays). `filter`
+    /// ∈ lanczos3 | bilinear. Needs no device and gives the same bytes
+    /// whether or not `init_gpu` succeeded: the supported backend of the
+    /// headless and batch actions. The editor's interactive resize stays
+    /// on the GPU kernels ([`resize_image`]).
+    #[wasm_bindgen]
+    pub fn resize_image_cpu(
+        handle: u32,
+        out_w: u32,
+        out_h: u32,
+        filter: &str,
+    ) -> Result<DecodedHandle, JsValue> {
+        let f = paged_resample::Filter::parse(filter).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown CPU resample filter \"{filter}\" (lanczos3 | bilinear)"
+            ))
+        })?;
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let out = paged_resample::resize_rgba8(
+            &img.rgba.to_rgba8(),
+            img.width,
+            img.height,
+            out_w,
+            out_h,
+            f,
+        )
+        .map_err(|e| JsValue::from_str(&format!("resize: {e}")))?;
+        Ok(register_derived(&img, out_w, out_h, out))
+    }
+
+    /// STRAIGHTEN + CROP on the CPU (image ADR 467): turn the image by
+    /// `−degrees` about the centre of the rectangle `(x, y, w, h)` and cut
+    /// it out (`paged_resample::rotate_crop_rgba8`: bilinear,
+    /// premultiplied, clamp-to-edge — the model of `geom.rotate_bilinear`),
+    /// registered as a NEW engine-held image. The rectangle must lie
+    /// inside the image. At 0° it is [`crop_image`]'s cut, byte for byte.
+    /// Needs no device; the editor's crop tool stays on
+    /// [`straighten_crop_image`].
+    #[wasm_bindgen]
+    pub fn straighten_crop_image_cpu(
+        handle: u32,
+        x: u32,
+        y: u32,
+        w: u32,
+        h: u32,
+        degrees: f64,
+    ) -> Result<DecodedHandle, JsValue> {
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let out = paged_resample::rotate_crop_rgba8(
+            &img.rgba.to_rgba8(),
+            img.width,
+            img.height,
+            paged_resample::Rect { x, y, w, h },
+            degrees,
+        )
+        .map_err(|e| JsValue::from_str(&format!("straighten: {e}")))?;
+        Ok(register_derived(&img, w, h, out))
     }
 
     // ─────────────────────── GENERATE / FILL doors ───────────────────
@@ -1561,7 +3325,7 @@ mod wasm {
                     .map_err(ingest_err)?;
                 let rgba = doc
                     .stack
-                    .composite(ctx.as_deref(), None)
+                    .composite_px(ctx.as_deref(), None)
                     .await
                     .map_err(ingest_err)?;
                 set_image_pixels(doc.handle, rgba)?;
@@ -1596,14 +3360,27 @@ mod wasm {
         pixels: Vec<u8>,
         layered: bool,
     ) -> Result<DecodedHandle, JsValue> {
-        if !layered {
-            return register(width, height, pixels);
-        }
         // The damage is the SELECTION's box when there is one (the fill
         // cannot land outside it), else the whole canvas.
         let damage = SELECTION
             .with(|s| s.borrow().coverage().and_then(|c| c.bounds()))
             .unwrap_or(image_core::Region::new(0, 0, width, height));
+        land_fill_in(label, width, height, pixels, layered, damage).await
+    }
+
+    /// [`land_fill_as`] with the damage rectangle given (a fill through a
+    /// coverage that is not the selection: a path, a shape).
+    async fn land_fill_in(
+        label: &'static str,
+        width: u32,
+        height: u32,
+        pixels: Vec<u8>,
+        layered: bool,
+        damage: image_core::Region,
+    ) -> Result<DecodedHandle, JsValue> {
+        if !layered {
+            return register(width, height, pixels);
+        }
         let ctx = GPU.with(|g| g.borrow().clone());
         let pixels: Arc<[u8]> = Arc::from(pixels.into_boxed_slice());
         with_stack_async(|mut doc| async move {
@@ -1613,7 +3390,7 @@ mod wasm {
                     .map_err(ingest_err)?;
                 let rgba = doc
                     .stack
-                    .composite(ctx.as_deref(), None)
+                    .composite_px(ctx.as_deref(), None)
                     .await
                     .map_err(ingest_err)?;
                 set_image_pixels(doc.handle, rgba)?;
@@ -1923,13 +3700,11 @@ mod wasm {
     }
 
     /// CONTENT-AWARE FILL: synthesise the selection from the rest of the
-    /// image (exemplar-based inpainting).
+    /// image (multi-resolution PatchMatch, `crate::patchmatch`).
     ///
-    /// Unlike every other fill here it is CPU: it is a search, not a
-    /// dispatch, and there is no kernel that could express "find the
-    /// patch elsewhere in this image that best continues this one". The
-    /// GPU-only rule (spec §6) is about the KERNEL path, and this adds
-    /// none — it produces pixels that land through the same journaled
+    /// The SEARCH is CPU — it is sequential, not a dispatch — and the final
+    /// VOTE is the registered `geom.patch_vote` kernel when a device exists
+    /// (its CPU twin otherwise). The pixels land through the same journaled
     /// layer write as any other fill.
     ///
     /// Requires a SELECTION: with nothing selected there is no hole, and
@@ -1938,21 +3713,10 @@ mod wasm {
     /// nothing would read as a broken button.
     #[wasm_bindgen]
     pub async fn fill_content_aware(handle: u32) -> Result<DecodedHandle, JsValue> {
-        let (img, _ctx, sel, layered) = fill_prelude(handle)?;
-        let coverage = sel.ok_or_else(|| {
-            JsValue::from_str(
-                "content-aware fill needs a selection — it synthesises the \
-                 selected region from the rest of the image",
-            )
-        })?;
-        let out = crate::inpaint::fill(&img.rgba.to_rgba8(), img.width, img.height, &coverage, 128)
-            .ok_or_else(|| {
-                JsValue::from_str(
-                    "nothing to fill, or nothing to fill FROM (an empty \
-                     selection, or one covering the whole image)",
-                )
-            })?;
-        land_fill(img.width, img.height, out, layered).await
+        // WP5.8: the multi-resolution PatchMatch over the whole image
+        // (`retouch_doors::fill_whole`) — no search window, and no GPU
+        // needed for a one-layer document.
+        retouch_doors::fill_whole(handle).await
     }
 
     /// PATCH: replace the SELECTION with the region `(dx, dy)` image px
@@ -2034,6 +3798,47 @@ mod wasm {
         let radius = (img.width.min(img.height) as f32) / 2.0;
         let params = WarpBackwardParams::new(k, amount, cx, cy, radius).with_frequency(frequency);
         apply_point_kernel(handle, &GEOM_WARP_BACKWARD, params.as_bytes()).await
+    }
+
+    /// FREE TRANSFORM of the active layer (`geom.warp_projective`; WP5.6,
+    /// editor ADR 295). `matrix` is the FORWARD 3×3 map in image px
+    /// (row-major: where each source pixel goes), as the host's transform
+    /// box reports it seen through the frame's fit; it is inverted here in
+    /// f64. `interp` 0 bilinear, 1 bicubic. What the layer no longer covers
+    /// is transparent. With a selection only the selected pixels move (the
+    /// rest stay), as one journaled edit — one undo step either way. The
+    /// kernel reads ASSOCIATED alpha, so the upload associates even an
+    /// opaque layer: its new edges are interpolated against transparent
+    /// black, which is exact only premultiplied.
+    #[wasm_bindgen]
+    pub async fn apply_projective(
+        handle: u32,
+        matrix: Vec<f32>,
+        interp: u32,
+    ) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::geom::{
+            WarpInterp, WarpProjectiveParams, GEOM_WARP_PROJECTIVE,
+        };
+        if matrix.len() != 9 {
+            return Err(JsValue::from_str(
+                "a projective matrix is 9 numbers (3×3, row-major)",
+            ));
+        }
+        let interp = match interp {
+            0 => WarpInterp::Bilinear,
+            1 => WarpInterp::Bicubic,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown interpolation {other} (0 bilinear | 1 bicubic)"
+                )))
+            }
+        };
+        let m: [f64; 9] = std::array::from_fn(|i| f64::from(matrix[i]));
+        let masked = SELECTION.with(|s| s.borrow().mask_for(handle)).is_some();
+        let params = WarpProjectiveParams::from_forward(m, interp, masked).ok_or_else(|| {
+            JsValue::from_str("the transform is singular (it folds the layer flat)")
+        })?;
+        apply_point_kernel_inner(handle, &GEOM_WARP_PROJECTIVE, params.as_bytes(), None, true).await
     }
 
     /// STYLIZE — emboss. `angle_deg` is the light direction, `height`
@@ -2891,6 +4696,21 @@ mod wasm {
         params: &[u8],
         mask_override: Option<Arc<SelectionCoverage>>,
     ) -> Result<DecodedHandle, JsValue> {
+        apply_point_kernel_inner(handle, def, params, mask_override, false).await
+    }
+
+    /// [`apply_point_kernel_masked`], optionally ASSOCIATING alpha even
+    /// for an opaque image (`force_associate`): a kernel that reads outside
+    /// the image as transparent (the projective warp) makes new partial
+    /// alpha at the edges, which only premultiplied interpolation keeps
+    /// free of a dark fringe, and whose result must then be unassociated.
+    async fn apply_point_kernel_inner(
+        handle: u32,
+        def: &'static image_kernels::KernelDef,
+        params: &[u8],
+        mask_override: Option<Arc<SelectionCoverage>>,
+        force_associate: bool,
+    ) -> Result<DecodedHandle, JsValue> {
         use half::f16;
         let (img, ctx, sel, layered) = fill_prelude(handle)?;
         let sel = mask_override.or(sel);
@@ -2923,12 +4743,20 @@ mod wasm {
         // Alpha association is a question about the ALPHA, so ask the
         // buffer at its own depth rather than a narrowed copy.
         let n_px = img.rgba.pixel_count();
-        let associate = (0..n_px).any(|i| img.rgba.sample16(i, 3) != u16::MAX);
+        let associate = force_associate || (0..n_px).any(|i| img.rgba.sample16(i, 3) != u16::MAX);
         // DEPTH-AGNOSTIC upload. `sample16` widens an 8-bit sample as
         // `(v << 8) | v`, which maps 255 to 65535 exactly, so an 8-bit
         // image produces byte-identical f16 to the old `/ 255.0` path
         // while a 16-bit one keeps every bit it has.
+        // A 32-bit image is filtered on its linear values (unclamped).
+        let lin = img.rgba.is_float().then(|| img.rgba.to_f32_linear());
         let px_f16 = |px: usize, c: usize| -> [u8; 2] {
+            if let Some(l) = &lin {
+                let a = l[px * 4 + 3];
+                let v = l[px * 4 + c];
+                let v = if associate && c < 3 { v * a } else { v };
+                return f16::from_f32(v).to_le_bytes();
+            }
             let v = f32::from(img.rgba.sample16(px, c)) / 65535.0;
             let a = f32::from(img.rgba.sample16(px, 3)) / 65535.0;
             let v = if associate && c < 3 { v * a } else { v };
@@ -3015,7 +4843,23 @@ mod wasm {
         // so this step was the ONLY place precision was ever lost — and
         // it was lost once per operation, so a chain of N adjustments
         // quantised N times.
-        let landed = if img.rgba.is_16bit() {
+        let landed = if img.rgba.is_float() {
+            let mut f: Vec<f32> = out
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|p| f16::from_le_bytes(*p).to_f32())
+                .collect();
+            for p in f.as_chunks_mut::<4>().0 {
+                p[3] = p[3].clamp(0.0, 1.0);
+                if associate {
+                    for c in 0..3 {
+                        p[c] = if p[3] > 0.0 { p[c] / p[3] } else { 0.0 };
+                    }
+                }
+            }
+            crate::pixels::Pixels::from_rgba32f(&f)
+        } else if img.rgba.is_16bit() {
             let s16 = if associate {
                 crate::fill::f16_to_rgba16_unpremul(&out)
             } else {
@@ -3071,13 +4915,26 @@ mod wasm {
         static LAYERS: RefCell<Option<LayerDoc>> = const { RefCell::new(None) };
     }
 
+    /// WP5.8 — the retouching doors (content-aware fill / move, remove,
+    /// the clone source's sampling and overlay).
+    /// (`include!`d: an inline module's `#[path]` resolves under a
+    /// directory that does not exist.)
+    mod retouch_doors {
+        include!("retouch_doors.rs");
+    }
+
     /// Replace an engine-held image's pixels in place (same handle, same
     /// extent) and drop its mip pyramid, which the new pixels invalidate.
     /// [`set_image_pixels`] for a composite whose extent may differ from
     /// the bound image's (an undo or redo across a canvas operation): the
     /// image takes `w`x`h`, and when that changed, the selection is
     /// re-bound to it as a canvas operation does.
-    fn set_image_extent(handle: u32, w: u32, h: u32, rgba: Arc<[u8]>) -> Result<(), JsValue> {
+    fn set_image_extent(
+        handle: u32,
+        w: u32,
+        h: u32,
+        rgba: crate::pixels::Pixels,
+    ) -> Result<(), JsValue> {
         let resized = IMAGES.with(|m| {
             let mut map = m.borrow_mut();
             let img = map
@@ -3086,7 +4943,7 @@ mod wasm {
             let resized = (img.width, img.height) != (w, h);
             img.width = w;
             img.height = h;
-            img.rgba = crate::pixels::Pixels::from_rgba8(rgba);
+            img.rgba = rgba;
             Ok::<bool, JsValue>(resized)
         })?;
         PYRAMIDS.with(|p| p.borrow_mut().remove(&handle));
@@ -3108,18 +4965,22 @@ mod wasm {
         })
     }
 
-    fn set_image_pixels(handle: u32, rgba: Arc<[u8]>) -> Result<(), JsValue> {
+    /// Write a composite back into the bound image AT ITS DEPTH (a 16-bit
+    /// document's composite keeps 16 bits in the image the adjust chain,
+    /// export and save read).
+    fn set_image_pixels(handle: u32, rgba: crate::pixels::Pixels) -> Result<(), JsValue> {
         IMAGES.with(|m| {
             let mut map = m.borrow_mut();
             let img = map
                 .get_mut(&handle)
                 .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
-            if rgba.len() != img.rgba.len() {
+            // The extent must match; the depth may not (Image ▸ Mode).
+            if rgba.pixel_count() != img.rgba.pixel_count() {
                 return Err(JsValue::from_str(
                     "internal: composite extent does not match the bound image",
                 ));
             }
-            img.rgba = crate::pixels::Pixels::from_rgba8(rgba);
+            img.rgba = rgba;
             Ok(())
         })?;
         PYRAMIDS.with(|p| {
@@ -3186,10 +5047,65 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
-        let stack = LayerStack::from_image(img.width, img.height, img.rgba.raw_arc())
+        // At the image's own depth: a 16-bit image opens a 16-bit
+        // Background layer (its pixels shared, not copied).
+        let stack = LayerStack::from_image_px(img.width, img.height, img.rgba.clone())
             .map_err(ingest_err)?;
         LAYERS.with(|l| *l.borrow_mut() = Some(LayerDoc { handle, stack }));
+        note_selection(None, None);
         Ok(())
+    }
+
+    /// IMAGE ▸ MODE ▸ 8 or 16 Bits/Channel (`bits` 8 | 16). With a layer
+    /// stack bound to `handle`, every layer converts as one undo step
+    /// (`LayerStack::set_depth`) and the composite lands at the new depth;
+    /// without one the image itself converts. Answers whether anything
+    /// changed. Narrowing rounds to the nearest level, widening is exact.
+    #[wasm_bindgen]
+    pub async fn image_set_bits(handle: u32, bits: u8) -> Result<bool, JsValue> {
+        let depth = match bits {
+            8 => image_core::SampleDepth::U8,
+            16 => image_core::SampleDepth::U16,
+            32 => image_core::SampleDepth::F32,
+            b => {
+                return Err(JsValue::from_str(&format!(
+                    "image_set_bits: {b} bits per channel (8, 16 or 32)"
+                )))
+            }
+        };
+        let bound = LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) == Some(handle);
+        if !bound {
+            return IMAGES.with(|m| {
+                let mut map = m.borrow_mut();
+                let img = map
+                    .get_mut(&handle)
+                    .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+                if img.rgba.depth() == depth {
+                    return Ok(false);
+                }
+                img.rgba = img.rgba.at_depth(depth);
+                PYRAMIDS.with(|p| p.borrow_mut().remove(&handle));
+                Ok(true)
+            });
+        }
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let result = async {
+                if !doc.stack.set_depth(depth).map_err(ingest_err)? {
+                    return Ok(false);
+                }
+                let rgba = doc
+                    .stack
+                    .composite_px(ctx.as_deref(), None)
+                    .await
+                    .map_err(ingest_err)?;
+                set_image_pixels(doc.handle, rgba)?;
+                Ok(true)
+            }
+            .await;
+            (doc, result)
+        })
+        .await
     }
 
     /// OPEN a layer stack from a retained PSD parse instead of from the
@@ -3229,7 +5145,34 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&image_handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {image_handle}")))?;
-        let (import, stack) = PSDS.with(|m| {
+        // An Indexed or Multichannel document is one image in Photoshop
+        // (no layer records): it opens as its composite in its mode, with
+        // its table, so an edit stays in the mode and the save writes it
+        // back (image ADR 484).
+        let single = PSDS.with(|m| {
+            m.borrow().get(&psd_handle).and_then(|f| {
+                matches!(
+                    f.header.color_mode,
+                    image_psd::model::ColorMode::Indexed
+                        | image_psd::model::ColorMode::Multichannel
+                )
+                .then(|| crate::color_mode::DocMode::of_psd(f))
+                .flatten()
+            })
+        });
+        if let Some(mode) = single {
+            let mut stack = LayerStack::from_image_px(img.width, img.height, img.rgba.clone())
+                .map_err(ingest_err)?;
+            stack.adopt_mode(mode);
+            LAYERS.with(|l| {
+                *l.borrow_mut() = Some(LayerDoc {
+                    handle: image_handle,
+                    stack,
+                })
+            });
+            return Ok(1);
+        }
+        let (import, mut stack) = PSDS.with(|m| {
             let map = m.borrow();
             let file = map
                 .get(&psd_handle)
@@ -3238,9 +5181,14 @@ mod wasm {
             // the merged composite took at ingest (`decode_psd`), so the
             // layered open and the flattened one agree; the stack then
             // works in RGB, which the image's treatment already states.
+            // A Grayscale or Lab document's plates go through the
+            // transform its composite took (image ADR 484).
+            let stored = crate::color_mode::StoredToSrgb::for_psd(file).map_err(ingest_err)?;
             let import = if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
                 let ink = crate::ingest::psd_ink_transform(file);
                 file.layer_plates_rgba8_via(&|cmyk| ink.to_rgba8(cmyk))
+            } else if let Some(t) = &stored {
+                file.layer_plates_device(&|d| t.rgb_of(d))
             } else {
                 file.layer_plates_rgba8()
             }
@@ -3253,8 +5201,39 @@ mod wasm {
             }
             // The records too: blending ranges, fill opacity, locks and
             // fill content live there, not on the plates.
-            let stack = LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
-                .map_err(ingest_err)?;
+            let mut stack =
+                LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
+                    .map_err(ingest_err)?;
+            // The document keeps the file's mode, so an edit lands in its
+            // colours and the layered save writes the mode back.
+            if let Some(mode) = crate::color_mode::DocMode::of_psd(file) {
+                stack.adopt_mode(mode);
+            }
+            // A CMYK file's layers keep its own inks, which the ink fold
+            // composites and the layered save writes (image ADR 481).
+            if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
+                let through = |f: fn(&[u8; 4]) -> [u8; 3]| {
+                    move |ink: &[u8]| -> Vec<u8> {
+                        ink.as_chunks::<4>()
+                            .0
+                            .iter()
+                            .flat_map(|p| {
+                                let c = f(p);
+                                [c[0], c[1], c[2], 255]
+                            })
+                            .collect()
+                    }
+                };
+                let cmy = file.layer_plates_rgba8_via(&through(|p| [p[0], p[1], p[2]]));
+                let k = file.layer_plates_rgba8_via(&through(|p| [p[3]; 3]));
+                if let (Ok(cmy), Ok(k)) = (cmy, k) {
+                    stack.attach_inks(&cmy, &k);
+                }
+            }
+            // Smart objects keep their sources, placements and filters
+            // (ADR 482); the notes say which keep their stored render.
+            let notes = stack.adopt_psd_smart_objects(file);
+            SMART_NOTES.with(|n| *n.borrow_mut() = notes);
             Ok::<_, JsValue>((import, stack))
         })?;
         let smart = import.layers.iter().any(|p| p.smart);
@@ -3266,7 +5245,20 @@ mod wasm {
                 .map_err(ingest_err)?;
             let theirs = img.rgba.to_rgba8();
             if smart {
-                crate::layers::smart_renders_agree(&import, &ours, &theirs).map_err(ingest_err)?;
+                if let Err(stale) = crate::layers::smart_renders_agree(&import, &ours, &theirs) {
+                    // A stored render can be stale (a mock-up whose
+                    // contents changed): draw each smart object from its
+                    // source instead, and judge again (ADR 482).
+                    if stack.rerender_smart_objects() == 0 {
+                        return Err(ingest_err(stale));
+                    }
+                    let again = stack
+                        .composite(ctx.as_deref(), None)
+                        .await
+                        .map_err(ingest_err)?;
+                    crate::layers::smart_renders_agree(&import, &again, &theirs)
+                        .map_err(|_| ingest_err(stale))?;
+                }
             }
             // A CMYK document blended in RGB must still look like the
             // file: `theirs` is its merged composite through the same
@@ -3294,6 +5286,18 @@ mod wasm {
             })
         });
         Ok(n)
+    }
+
+    thread_local! {
+        /// What the last layered PSD open said about its smart objects.
+        static SMART_NOTES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// The notes of the last layered PSD open about its smart objects
+    /// (one per object that keeps Photoshop's render), one per line.
+    #[wasm_bindgen]
+    pub fn layers_smart_notes() -> String {
+        SMART_NOTES.with(|n| n.borrow().join("\n"))
     }
 
     /// Drop the bound stack (and its undo history).
@@ -3464,8 +5468,9 @@ mod wasm {
                 return "null".to_string();
             };
             let h = doc.stack.history();
+            let ids = doc.stack.step_ids();
             format!(
-                "{{\"canUndo\":{},\"canRedo\":{},\"depth\":{},\"redoDepth\":{},\"bytes\":{},\"maxBytes\":{},\"maxEntries\":{},\"dropped\":{},\"generation\":{},\"undoLabel\":{},\"redoLabel\":{},\"undoSteps\":[{}],\"redoSteps\":[{}]}}",
+                "{{\"canUndo\":{},\"canRedo\":{},\"depth\":{},\"redoDepth\":{},\"bytes\":{},\"maxBytes\":{},\"maxEntries\":{},\"dropped\":{},\"generation\":{},\"undoLabel\":{},\"redoLabel\":{},\"undoSteps\":[{}],\"redoSteps\":[{}],\"undoIds\":[{}],\"redoIds\":[{}],\"snapshots\":[{}],\"snapshotBytes\":{}}}",
                 h.can_undo,
                 h.can_redo,
                 h.depth,
@@ -3493,8 +5498,90 @@ mod wasm {
                     .map(|l| json_escape(l))
                     .collect::<Vec<_>>()
                     .join(","),
+                ids.0
+                    .iter()
+                    .map(u64::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+                ids.1
+                    .iter()
+                    .map(u64::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+                doc.stack
+                    .snapshots()
+                    .iter()
+                    .map(|s| format!(
+                        "{{\"id\":{},\"name\":{},\"width\":{},\"height\":{}}}",
+                        s.id,
+                        json_escape(&s.name),
+                        s.width,
+                        s.height
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                doc.stack.snapshot_bytes(),
             )
         })
+    }
+
+    /// HISTORY OPTIONS (ADR 477): the journal's depth (steps) and byte
+    /// budget, for the open stack and every stack opened after. Clamped
+    /// (1–1000 steps, 16 MiB–2 GiB); answers `{maxEntries, maxBytes}` as
+    /// set. A tighter bound drops the oldest steps at once.
+    #[wasm_bindgen]
+    pub fn layers_set_history_budget(max_entries: u32, max_bytes: f64) -> String {
+        let bytes = if max_bytes.is_finite() && max_bytes > 0.0 {
+            max_bytes.min(usize::MAX as f64) as usize
+        } else {
+            0
+        };
+        let b = crate::layers::set_default_history_budget(max_entries as usize, bytes);
+        LAYERS.with(|l| {
+            if let Some(doc) = l.borrow_mut().as_mut() {
+                doc.stack.set_history_budget(b.max_entries, b.max_bytes);
+            }
+        });
+        format!(
+            "{{\"maxEntries\":{},\"maxBytes\":{}}}",
+            b.max_entries, b.max_bytes
+        )
+    }
+
+    /// Name the current state as a SNAPSHOT (not an undo step). Answers
+    /// its id.
+    #[wasm_bindgen]
+    pub fn layers_snapshot_take(name: &str) -> Result<u32, JsValue> {
+        with_stack(|d| Ok(d.stack.take_snapshot(name)))
+    }
+
+    /// Rename snapshot `id` (an empty name is refused).
+    #[wasm_bindgen]
+    pub fn layers_snapshot_rename(id: u32, name: &str) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.rename_snapshot(id, name).map_err(ingest_err))
+    }
+
+    /// Delete snapshot `id`.
+    #[wasm_bindgen]
+    pub fn layers_snapshot_delete(id: u32) -> Result<(), JsValue> {
+        with_stack(|d| d.stack.delete_snapshot(id).map_err(ingest_err))
+    }
+
+    /// RESTORE snapshot `id` as ONE undo step named `label`, then
+    /// re-composite exactly as an undo does (extent, selection). Answers
+    /// `label`.
+    #[wasm_bindgen]
+    pub async fn layers_snapshot_restore(id: u32, label: String) -> Result<String, JsValue> {
+        with_stack_async(|mut doc| async move {
+            match doc.stack.restore_snapshot(id, &label) {
+                Ok(()) => {
+                    let out = after_history_move(&mut doc, label).await;
+                    (doc, out)
+                }
+                Err(e) => (doc, Err(ingest_err(e))),
+            }
+        })
+        .await
     }
 
     /// Add an empty transparent layer above the active one (it becomes
@@ -3909,10 +5996,88 @@ mod wasm {
         .await
     }
 
-    /// Rasterize a fill layer or smart object (its render becomes pixels).
+    /// Rasterize a fill layer, smart object or type layer (its render
+    /// becomes pixels).
     #[wasm_bindgen]
     pub fn layers_rasterize(index: usize) -> Result<(), JsValue> {
         recorded_edit("Rasterize Layer", None, |st| st.rasterize(index))
+    }
+
+    /// Layer ▸ New ▸ Type Layer (WP5.10): a type layer of `source` (the
+    /// `TypeSource` JSON) whose pixels are the engine's render `rgba`
+    /// (`w × h`, its top-left at canvas `(x, y)`), bent by the source's
+    /// warp on the GPU. One undo step. An empty `name` names it after the
+    /// text.
+    #[wasm_bindgen]
+    pub async fn layers_add_type(
+        source: &str,
+        rgba: Vec<u8>,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        name: &str,
+    ) -> Result<usize, JsValue> {
+        let source =
+            crate::layers::TypeSource::from_json(source).map_err(|e| JsValue::from_str(&e))?;
+        let render = crate::layers::type_layer::TypeRender { rgba, x, y, w, h };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        let (cw, ch) = with_stack(|d| Ok((d.stack.width(), d.stack.height())))?;
+        let px = render
+            .warped(ctx.as_deref(), &source.warp, cw, ch)
+            .await
+            .map_err(ingest_err)?;
+        recorded_edit("New Type Layer", None, |st| {
+            st.add_type_layer(name, source, px)
+        })
+    }
+
+    /// A type layer's new source and render (an edit of its text, styles,
+    /// frame or warp). Writes sharing a non-empty `session` merge into one
+    /// undo step: one per editing session on the canvas.
+    #[wasm_bindgen]
+    pub async fn layers_set_type(
+        index: usize,
+        source: &str,
+        rgba: Vec<u8>,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        session: &str,
+    ) -> Result<(), JsValue> {
+        let source =
+            crate::layers::TypeSource::from_json(source).map_err(|e| JsValue::from_str(&e))?;
+        let render = crate::layers::type_layer::TypeRender { rgba, x, y, w, h };
+        let ctx = GPU.with(|g| g.borrow().clone());
+        let (cw, ch) = with_stack(|d| Ok((d.stack.width(), d.stack.height())))?;
+        let px = render
+            .warped(ctx.as_deref(), &source.warp, cw, ch)
+            .await
+            .map_err(ingest_err)?;
+        let merge = (!session.is_empty()).then(|| format!("type:{index}:{session}"));
+        recorded_edit("Edit Type", merge, |st| st.set_type(index, source, px))
+    }
+
+    /// A type layer's source as JSON, with `"stale"` (its pixels need a
+    /// new render); `""` for any other layer.
+    #[wasm_bindgen]
+    pub fn layers_type_source(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            Ok(d.stack
+                .layers()
+                .get(index)
+                .and_then(|l| l.type_layer())
+                .map(|t| {
+                    format!(
+                        "{{\"stale\":{},\"fromPsd\":{},\"source\":{}}}",
+                        t.stale,
+                        t.psd.is_some(),
+                        t.source.to_json()
+                    )
+                })
+                .unwrap_or_default())
+        })
     }
 
     /// Fill opacity 0–1 (a drag is one undo step).
@@ -3944,6 +6109,109 @@ mod wasm {
         recorded_edit("Blend If", Some(format!("blend-if:{index}")), |st| {
             st.set_blend_if(index, bi)
         })
+    }
+
+    /// The layer's STYLE as JSON (`paged-psd`'s model; `null` for none).
+    #[wasm_bindgen]
+    pub fn layers_style(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            let l = d
+                .stack
+                .layers()
+                .get(index)
+                .ok_or_else(|| JsValue::from_str(&format!("no layer {index}")))?;
+            Ok(crate::layers::style_to_json(l.ext.style.as_deref()))
+        })
+    }
+
+    /// Set the layer's style from JSON (`null` clears it). The dialog's
+    /// edits merge into one undo step per layer.
+    #[wasm_bindgen]
+    pub fn layers_set_style(index: usize, json: &str) -> Result<(), JsValue> {
+        let style = crate::layers::style_from_json(json).map_err(ingest_err)?;
+        let label = if style.is_some() {
+            "Layer Style"
+        } else {
+            "Clear Layer Style"
+        };
+        let key = style.is_some().then(|| format!("layer-style:{index}"));
+        recorded_edit(label, key, |st| st.set_style(index, style))
+    }
+
+    /// Paste Layer Style onto several layers (one undo step).
+    #[wasm_bindgen]
+    pub fn layers_paste_style(indices: &[u32], json: &str) -> Result<(), JsValue> {
+        let style = crate::layers::style_from_json(json)
+            .map_err(ingest_err)?
+            .ok_or_else(|| JsValue::from_str("nothing to paste: no layer style"))?;
+        let idx: Vec<usize> = indices.iter().map(|&i| i as usize).collect();
+        recorded_edit("Paste Layer Style", None, |st| st.paste_style(&idx, &style))
+    }
+
+    /// The style switches of Blending Options (`StyleOptions::bits`).
+    #[wasm_bindgen]
+    pub fn layers_set_style_options(index: usize, bits: u8) -> Result<(), JsValue> {
+        recorded_edit("Blending Options", None, |st| {
+            st.set_style_options(index, crate::layers::StyleOptions::from_bits(bits))
+        })
+    }
+
+    /// The document's Global Light: `[angle, altitude]` in degrees.
+    #[wasm_bindgen]
+    pub fn layers_global_light() -> Result<Vec<f32>, JsValue> {
+        with_stack(|d| {
+            let g = d.stack.style_doc().global_light;
+            Ok(vec![g.angle, g.altitude])
+        })
+    }
+
+    /// Layer ▸ Layer Style ▸ Global Light (a drag is one undo step).
+    #[wasm_bindgen]
+    pub fn layers_set_global_light(angle: f32, altitude: f32) -> Result<(), JsValue> {
+        recorded_edit("Global Light", Some("global-light".into()), |st| {
+            st.set_global_light(image_psd::effects::GlobalLight { angle, altitude })
+        })
+    }
+
+    /// Layer ▸ Layer Style ▸ Scale Effects.
+    #[wasm_bindgen]
+    pub fn layers_scale_effects(index: usize, percent: f32) -> Result<(), JsValue> {
+        recorded_edit("Scale Effects", None, |st| st.scale_effects(index, percent))
+    }
+
+    /// Layer ▸ Layer Style ▸ Hide / Show All Effects.
+    #[wasm_bindgen]
+    pub fn layers_set_effects_visible(index: usize, on: bool) -> Result<(), JsValue> {
+        let label = if on {
+            "Show All Effects"
+        } else {
+            "Hide All Effects"
+        };
+        recorded_edit(label, None, |st| st.set_effects_visible(index, on))
+    }
+
+    /// Add (or replace, by `name`) a pattern the styles can draw (Pattern
+    /// Overlay, a pattern Stroke, a bevel's Texture): `rgba` is `width ×
+    /// height` straight RGBA8.
+    #[wasm_bindgen]
+    pub fn layers_define_style_pattern(
+        name: &str,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<(), JsValue> {
+        let p = crate::layers::PatternFill {
+            name: name.to_string(),
+            tile: std::sync::Arc::from(rgba.to_vec().into_boxed_slice()),
+            width,
+            height,
+            scale: 100.0,
+            angle: 0.0,
+        };
+        // Document state, but not an edit of its own: the pattern is
+        // defined by Edit ▸ Define Pattern, which has no undo step either;
+        // the effect that draws it is the undoable edit.
+        with_stack(|d| d.stack.define_style_pattern(p).map_err(ingest_err))
     }
 
     /// Knockout: "none", "shallow" or "deep".
@@ -4129,6 +6397,284 @@ mod wasm {
         })
     }
 
+    // ───────────────────── workspace (image ADR 475) ─────────────────────
+    //
+    // Guides, count marks, notes and slices. Each verb is one undo step
+    // on the image's list (a verb that changes nothing records nothing);
+    // indices address the lists `layers_workspace` reads.
+
+    fn ws_edit<T>(
+        label: &str,
+        f: impl FnOnce(&mut crate::workspace::Workspace, u32, u32) -> Result<(T, bool), IngestError>,
+    ) -> Result<T, JsValue> {
+        with_stack(|d| d.stack.edit_workspace(label, f).map_err(ingest_err))
+    }
+
+    /// The workspace as JSON: `{guides: [{orientation, position}],
+    /// counts: [{name, color, visible, marks}], activeCount, notes: [{at,
+    /// author, text}], slices: [{x, y, w, h, name}]}` (image px).
+    #[wasm_bindgen]
+    pub fn layers_workspace() -> String {
+        LAYERS.with(|l| {
+            l.borrow().as_ref().map_or_else(
+                || crate::workspace::Workspace::default().to_json(),
+                |d| d.stack.workspace().to_json(),
+            )
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_add(vertical: bool, position: f32) -> Result<u32, JsValue> {
+        ws_edit("New Guide", |ws, _, _| {
+            Ok((ws.add_guide(vertical, position)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_move(index: u32, position: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Guide", |ws, _, _| {
+            let c = ws.move_guide(index as usize, position)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guide_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Guide", |ws, _, _| {
+            Ok((ws.delete_guide(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_guides_clear() -> Result<bool, JsValue> {
+        ws_edit("Clear Guides", |ws, _, _| {
+            let c = ws.clear_guides();
+            Ok((c, c))
+        })
+    }
+
+    /// COUNT: mark `(x, y)` in the active group; answers the mark's
+    /// number in its group (from 1).
+    #[wasm_bindgen]
+    pub fn layers_count_add(x: f32, y: f32) -> Result<u32, JsValue> {
+        ws_edit("Count", |ws, _, _| {
+            Ok((ws.add_count([x, y])?.1 as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_move(group: u32, index: u32, x: f32, y: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Count", |ws, _, _| {
+            let c = ws.move_count(group as usize, index as usize, [x, y])?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_remove(group: u32, index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Count", |ws, _, _| {
+            Ok((ws.remove_count(group as usize, index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_clear(group: u32) -> Result<bool, JsValue> {
+        ws_edit("Clear Count", |ws, _, _| {
+            let c = ws.clear_counts(group as usize)?;
+            Ok((c, c))
+        })
+    }
+
+    /// A new count group (`name` empty: "Count Group n"), made active.
+    #[wasm_bindgen]
+    pub fn layers_count_group_new(name: &str) -> Result<u32, JsValue> {
+        ws_edit("New Count Group", |ws, _, _| {
+            let name = Some(name.trim()).filter(|n| !n.is_empty());
+            Ok((ws.new_count_group(name)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_group_active(group: u32) -> Result<bool, JsValue> {
+        ws_edit("Count Group", |ws, _, _| {
+            let c = ws.set_active_count(group as usize)?;
+            Ok((c, c))
+        })
+    }
+
+    /// Rename / recolour / show or hide a count group. `name` empty keeps
+    /// the name; a negative `r` keeps the colour; `visible` −1 keeps it.
+    #[wasm_bindgen]
+    pub fn layers_count_group_set(
+        group: u32,
+        name: &str,
+        r: i32,
+        g: i32,
+        b: i32,
+        visible: i32,
+    ) -> Result<bool, JsValue> {
+        ws_edit("Count Group", |ws, _, _| {
+            let name = Some(name.trim()).filter(|n| !n.is_empty());
+            let color = (r >= 0).then(|| {
+                [
+                    r.clamp(0, 255) as u8,
+                    g.clamp(0, 255) as u8,
+                    b.clamp(0, 255) as u8,
+                ]
+            });
+            let visible = (visible >= 0).then_some(visible > 0);
+            let c = ws.set_count_group(group as usize, name, color, visible)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_count_group_delete(group: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Count Group", |ws, _, _| {
+            Ok((ws.delete_count_group(group as usize)?, true))
+        })
+    }
+
+    /// NOTE at `(x, y)`; answers its index.
+    #[wasm_bindgen]
+    pub fn layers_note_add(x: f32, y: f32, author: &str, text: &str) -> Result<u32, JsValue> {
+        ws_edit("New Note", |ws, _, _| {
+            Ok((ws.add_note([x, y], author, text)? as u32, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_edit(index: u32, author: &str, text: &str) -> Result<bool, JsValue> {
+        ws_edit("Edit Note", |ws, _, _| {
+            let c = ws.edit_note(index as usize, author, text)?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_move(index: u32, x: f32, y: f32) -> Result<bool, JsValue> {
+        ws_edit("Move Note", |ws, _, _| {
+            let c = ws.move_note(index as usize, [x, y])?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_note_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Note", |ws, _, _| {
+            Ok((ws.delete_note(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_notes_clear() -> Result<bool, JsValue> {
+        ws_edit("Delete All Notes", |ws, _, _| {
+            let c = ws.clear_notes();
+            Ok((c, c))
+        })
+    }
+
+    /// SLICE: a rectangle of whole pixels (clipped to the canvas; `name`
+    /// empty: "slice_nn"); answers its index.
+    #[wasm_bindgen]
+    pub fn layers_slice_add(x: i32, y: i32, w: i32, h: i32, name: &str) -> Result<u32, JsValue> {
+        ws_edit("Slice", |ws, cw, ch| {
+            let i = ws.add_slice(
+                i64::from(x),
+                i64::from(y),
+                i64::from(w),
+                i64::from(h),
+                name,
+                cw,
+                ch,
+            )?;
+            Ok((i as u32, true))
+        })
+    }
+
+    /// Move / resize / rename a slice (`name` empty keeps it).
+    #[wasm_bindgen]
+    pub fn layers_slice_set(
+        index: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        name: &str,
+    ) -> Result<bool, JsValue> {
+        ws_edit("Edit Slice", |ws, cw, ch| {
+            let c = ws.set_slice(
+                index as usize,
+                i64::from(x),
+                i64::from(y),
+                i64::from(w),
+                i64::from(h),
+                Some(name),
+                cw,
+                ch,
+            )?;
+            Ok((c, c))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_slice_delete(index: u32) -> Result<(), JsValue> {
+        ws_edit("Delete Slice", |ws, _, _| {
+            Ok((ws.delete_slice(index as usize)?, true))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_slices_clear() -> Result<bool, JsValue> {
+        ws_edit("Delete All Slices", |ws, _, _| {
+            let c = ws.clear_slices();
+            Ok((c, c))
+        })
+    }
+
+    /// SLICES FROM GUIDES: the guides cut the canvas into cells, one
+    /// slice each (replacing the slices); answers how many.
+    #[wasm_bindgen]
+    pub fn layers_slices_from_guides() -> Result<u32, JsValue> {
+        ws_edit("Slices From Guides", |ws, cw, ch| {
+            Ok((ws.slices_from_guides(cw, ch)? as u32, true))
+        })
+    }
+
+    /// Take the ruler guides of the retained PSD behind `psd_handle`
+    /// (Photoshop's grid-and-guides resource, id 1032) as the open
+    /// stack's — at open, so NOT an undo step. Answers how many.
+    #[wasm_bindgen]
+    pub fn layers_adopt_psd_guides(psd_handle: u32) -> Result<u32, JsValue> {
+        let guides = PSDS.with(|m| {
+            m.borrow()
+                .get(&psd_handle)
+                .map(|f| crate::workspace::Workspace::guides_from_psd(f.resources.guides()))
+                .ok_or_else(|| JsValue::from_str(&format!("unknown psd handle {psd_handle}")))
+        })?;
+        let n = guides.len() as u32;
+        with_stack(|d| {
+            d.stack.adopt_guides(guides);
+            Ok(n)
+        })
+    }
+
+    /// Write the open stack's guides into the retained PSD behind
+    /// `psd_handle` as its grid-and-guides resource (id 1032). Unchanged
+    /// guides leave the file's bytes alone (the preservation rule);
+    /// answers whether the record changed.
+    #[wasm_bindgen]
+    pub fn psd_write_guides(psd_handle: u32) -> Result<bool, JsValue> {
+        let guides = with_stack(|d| Ok(d.stack.workspace().psd_guides()))?;
+        PSDS.with(|m| {
+            let mut map = m.borrow_mut();
+            let file = map
+                .get_mut(&psd_handle)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown psd handle {psd_handle}")))?;
+            Ok(file.resources.set_guides(&guides))
+        })
+    }
+
     /// MOVE the active layer — and every layer linked with it — by whole
     /// pixels, as one undo step.
     #[wasm_bindgen]
@@ -4224,9 +6770,11 @@ mod wasm {
             if let Err(e) = doc.stack.refresh_fills(ctx.as_deref()).await {
                 return (doc, Err(ingest_err(e)));
             }
-            let result = match doc.stack.composite(ctx.as_deref(), None).await {
-                Ok(rgba) => set_image_pixels(doc.handle, Arc::clone(&rgba))
-                    .map(|()| js_sys::Uint8Array::from(&rgba[..])),
+            let result = match doc.stack.composite_px(ctx.as_deref(), None).await {
+                Ok(rgba) => {
+                    let view = js_sys::Uint8Array::from(&rgba.to_rgba8()[..]);
+                    set_image_pixels(doc.handle, rgba).map(|()| view)
+                }
                 Err(e) => Err(ingest_err(e)),
             };
             (doc, result)
@@ -4312,12 +6860,46 @@ mod wasm {
                 )))
             }
         };
+        run_canvas_op(op).await
+    }
+
+    /// The PERSPECTIVE CROP tool's commit (WP5.6, image ADR 483) over the
+    /// whole stack, in place on the bound handle: the quadrilateral `quad`
+    /// (NW, NE, SE, SW, canvas px — eight numbers) drawn upright onto a
+    /// `width`×`height` canvas through its homography (every layer, mask
+    /// and channel through `geom.warp_projective`, bicubic; paths, guides
+    /// and smart placements through the same map). GPU-only; drops the
+    /// selection; one undo step. Returns `[width, height]`.
+    #[wasm_bindgen]
+    pub async fn layers_perspective_crop(
+        quad: Vec<f32>,
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u32>, JsValue> {
+        let quad: [f32; 8] = quad.try_into().map_err(|q: Vec<f32>| {
+            JsValue::from_str(&format!(
+                "a perspective crop is four corners (8 numbers), got {}",
+                q.len()
+            ))
+        })?;
+        run_canvas_op(crate::layers::CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        })
+        .await
+    }
+
+    /// One canvas op over the whole stack (see `layers_canvas_op`).
+    async fn run_canvas_op(op: crate::layers::CanvasOp) -> Result<Vec<u32>, JsValue> {
+        use crate::layers::CanvasOp;
         let deselect = matches!(
             op,
             CanvasOp::Crop { .. }
                 | CanvasOp::Straighten { .. }
                 | CanvasOp::Resample { .. }
                 | CanvasOp::RotateArbitrary { .. }
+                | CanvasOp::Perspective { .. }
         );
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {
@@ -4325,10 +6907,11 @@ mod wasm {
                 // Refuse BEFORE changing anything when the new composite
                 // could not be computed: a transformed stack over an
                 // untransformed image is the state this must never leave.
-                if ctx.is_none() && !doc.stack.composite_is_trivial() {
+                if ctx.is_none() && !doc.stack.composite_runs_without_gpu() {
                     return Err(JsValue::from_str(
-                        "a canvas operation on a layered image is GPU-only \
-                         (the composite is a kernel dispatch) — call init_gpu first",
+                        "a canvas operation on this layered image needs a GPU (a layer \
+                         style or a direct adjustment composites only there) — call \
+                         init_gpu first",
                     ));
                 }
                 doc.stack
@@ -4342,7 +6925,7 @@ mod wasm {
                     .map_err(ingest_err)?;
                 let rgba = doc
                     .stack
-                    .composite(ctx.as_deref(), None)
+                    .composite_px(ctx.as_deref(), None)
                     .await
                     .map_err(ingest_err)?;
                 let (w, h) = (doc.stack.width(), doc.stack.height());
@@ -4353,7 +6936,7 @@ mod wasm {
                     })?;
                     img.width = w;
                     img.height = h;
-                    img.rgba = crate::pixels::Pixels::from_rgba8(rgba);
+                    img.rgba = rgba;
                     Ok::<(), JsValue>(())
                 })?;
                 PYRAMIDS.with(|p| p.borrow_mut().remove(&doc.handle));
@@ -4367,6 +6950,10 @@ mod wasm {
                     // stay where it was — over other pixels — or drop).
                     sel.follow_canvas_op(&op, doc.handle, w, h);
                 });
+                // The op's step keeps the selection it was taken with (undo
+                // brings it back); the mirror follows the deselect now.
+                doc.stack
+                    .sync_selection(SELECTION.with(|s| s.borrow().coverage().cloned()));
                 Ok(vec![w, h])
             }
             .await;
@@ -4392,8 +6979,8 @@ mod wasm {
     }
 
     /// Replace the open stack with one stored by `layers_export`, then
-    /// composite it into the bound image (GPU-only unless the stored stack
-    /// is a single plain layer). The stored extent must equal the bound
+    /// composite it into the bound image (on the CPU fold without a device,
+    /// unless a style or a direct adjustment needs one — ADR 480). The stored extent must equal the bound
     /// image's; the history starts empty.
     #[wasm_bindgen]
     pub async fn layers_import(manifest: &[u8], buffers: js_sys::Array) -> Result<(), JsValue> {
@@ -4403,7 +6990,7 @@ mod wasm {
             .collect();
         let stack = LayerStack::import(manifest, &bufs).map_err(ingest_err)?;
         let ctx = GPU.with(|g| g.borrow().clone());
-        with_stack_async(|mut doc| async move {
+        let out = with_stack_async(|mut doc| async move {
             let result = async {
                 if (stack.width(), stack.height()) != (doc.stack.width(), doc.stack.height()) {
                     return Err(JsValue::from_str(&format!(
@@ -4414,14 +7001,14 @@ mod wasm {
                         doc.stack.height()
                     )));
                 }
-                if ctx.is_none() && !stack.composite_is_trivial() {
+                if ctx.is_none() && !stack.composite_runs_without_gpu() {
                     return Err(JsValue::from_str(
-                        "reopening a layered image is GPU-only (the composite is a \
-                         kernel dispatch) — call init_gpu first",
+                        "reopening this layered image needs a GPU (a layer style or a \
+                         direct adjustment composites only there) — call init_gpu first",
                     ));
                 }
                 let rgba = stack
-                    .composite(ctx.as_deref(), None)
+                    .composite_px(ctx.as_deref(), None)
                     .await
                     .map_err(ingest_err)?;
                 set_image_pixels(doc.handle, rgba)?;
@@ -4431,7 +7018,9 @@ mod wasm {
             .await;
             (doc, result)
         })
-        .await
+        .await;
+        note_selection(None, None);
+        out
     }
 
     /// CONVERT a pixel layer into a smart object, preserving its pixels
@@ -4442,51 +7031,36 @@ mod wasm {
         recorded_edit("Convert to smart object", None, |st| st.make_smart(index))
     }
 
-    /// RE-RENDER a smart object at `scale` — from its preserved SOURCE,
-    /// never from the current cache, which is the whole point: scaling
-    /// down and back up loses nothing.
-    ///
-    /// GPU-only (the resample is a kernel dispatch). The rendered result
-    /// is letterboxed into the canvas extent, so the layer keeps its
-    /// place in a stack whose layers are all canvas-sized.
+    /// RE-RENDER a smart object at `scale` of its source's size — from
+    /// its preserved SOURCE, never from the current render, so scaling
+    /// down and back up loses nothing. The placement keeps its first
+    /// corner and its turn (ADR 482); the render is the CPU placement
+    /// draw, so this needs no device. One undo step.
     #[wasm_bindgen]
-    pub async fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
-        // `is_finite` first, so NaN is refused by NAME rather than by the
-        // side effect of failing `> 0.0`. Same verdict, but a reader no
-        // longer has to reconstruct why the comparison was negated.
+    pub fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
         if !scale.is_finite() || scale <= 0.0 || scale > 16.0 {
             return Err(JsValue::from_str(
                 "smart re-render scale must be in (0, 16]",
             ));
         }
-        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
-            JsValue::from_str("smart re-render is GPU-only — call init_gpu first")
-        })?;
-
-        // Read the SOURCE (not the cached render) and the canvas extent.
-        let (src, cw, ch) = LAYERS
+        let quad = LAYERS
             .with(|l| {
                 let b = l.borrow();
-                let d = b.as_ref()?;
-                let layer = d.stack.layers().get(index)?;
-                let s = layer.smart_source()?;
-                Some((s.clone(), d.stack.width(), d.stack.height()))
+                let s = b
+                    .as_ref()?
+                    .stack
+                    .layers()
+                    .get(index)?
+                    .smart_source()?
+                    .clone();
+                Some(crate::smart::scaled_quad(&s, f64::from(scale)))
             })
             .ok_or_else(|| JsValue::from_str(&format!("layer {index} is not a smart object")))?;
-
-        let canvas = crate::layers::render_smart(
-            &ctx,
-            &src,
-            scale,
-            crate::layers::ResampleFilter::Mitchell,
-            cw,
-            ch,
-        )
-        .await
-        .map_err(ingest_err)?;
-
-        recorded_edit("Scale smart object", None, |st| {
-            st.set_smart_render(index, Arc::from(canvas.into_boxed_slice()), scale)
+        with_stack(|d| {
+            d.stack
+                .smart_place(index, quad)
+                .map(|_| ())
+                .map_err(ingest_err)
         })
     }
 
@@ -4685,23 +7259,21 @@ mod wasm {
             display: crate::display::DisplayTreatment::AssumedSrgb,
             depth_reduced: false,
         };
-        let out = adjust_rgba8(ctx, &src, &params, selection)
+        // At the layer's depth: a 16-bit layer bakes at 16 bits.
+        let out = crate::ingest::adjust_px(ctx, &src, &params, selection)
             .await
             .map_err(ingest_err)?;
         doc.stack
-            .edit_active(
-                "Bake adjustments",
-                image_core::Region::new(0, 0, w, h),
-                crate::pixels::Pixels::from_rgba8(Arc::from(out.into_boxed_slice())),
-            )
+            .edit_active("Bake adjustments", image_core::Region::new(0, 0, w, h), out)
             .map_err(ingest_err)?;
         let rgba = doc
             .stack
-            .composite(Some(ctx), None)
+            .composite_px(Some(ctx), None)
             .await
             .map_err(ingest_err)?;
-        set_image_pixels(doc.handle, Arc::clone(&rgba))?;
-        Ok(js_sys::Uint8Array::from(&rgba[..]))
+        let view = js_sys::Uint8Array::from(&rgba.to_rgba8()[..]);
+        set_image_pixels(doc.handle, rgba)?;
+        Ok(view)
     }
 
     /// UNDO the newest journaled pixel edit (paint / fill / bake),
@@ -4720,7 +7292,6 @@ mod wasm {
     }
 
     async fn history_step(undo: bool) -> Result<String, JsValue> {
-        let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {
             let label = if undo {
                 doc.stack.undo()
@@ -4730,18 +7301,37 @@ mod wasm {
             let Some(label) = label else {
                 return (doc, Ok(String::new()));
             };
-            // Finding IMG-1: a step across a canvas operation (rotate,
-            // canvas size) changes the stack's EXTENT, so the bound image
-            // takes the extent with the pixels — the 4x2 image came back
-            // from an undone 90 degree turn as its bytes read as 2x4.
-            let (w, h) = (doc.stack.width(), doc.stack.height());
-            let result = match doc.stack.composite(ctx.as_deref(), None).await {
-                Ok(rgba) => set_image_extent(doc.handle, w, h, rgba).map(|()| label),
-                Err(e) => Err(ingest_err(e)),
-            };
+            let result = after_history_move(&mut doc, label).await;
             (doc, result)
         })
         .await
+    }
+
+    /// After the stack moved through its history (an undo, a redo, a
+    /// snapshot restore): re-composite into the bound image at the
+    /// stack's extent and put the selection back.
+    async fn after_history_move(doc: &mut LayerDoc, label: String) -> Result<String, JsValue> {
+        let ctx = GPU.with(|g| g.borrow().clone());
+        // A step taken with another selection puts it back (ADR 470)
+        // — after the extent is followed below, which rebinds.
+        let sel_change = doc.stack.take_selection_change();
+        // Finding IMG-1: a step across a canvas operation (rotate,
+        // canvas size) changes the stack's EXTENT, so the bound image
+        // takes the extent with the pixels — the 4x2 image came back
+        // from an undone 90 degree turn as its bytes read as 2x4.
+        let (w, h) = (doc.stack.width(), doc.stack.height());
+        let result = match doc.stack.composite_px(ctx.as_deref(), None).await {
+            Ok(rgba) => set_image_extent(doc.handle, w, h, rgba).map(|()| label),
+            Err(e) => Err(ingest_err(e)),
+        };
+        match sel_change {
+            Some(sel) => SELECTION.with(|s| s.borrow_mut().restore(sel)),
+            // A rebind may have dropped the selection: the mirror follows.
+            None => doc
+                .stack
+                .sync_selection(SELECTION.with(|s| s.borrow().coverage().cloned())),
+        }
+        result
     }
 
     // ───────────────────────── PAINT doors ───────────────────────────
@@ -4772,6 +7362,265 @@ mod wasm {
         // Whether the in-flight stroke paints the active layer's MASK
         // (fixed at begin, like every other stroke parameter).
         static STROKE_ON_MASK: Cell<bool> = const { Cell::new(false) };
+        // An undo label that overrides the tool's (the magic eraser
+        // commits through the eraser's stroke).
+        static STROKE_LABEL: Cell<Option<&'static str>> = const { Cell::new(None) };
+    }
+
+    /// The undo step's name for a committed stroke of `tool`.
+    fn stroke_label(tool: StrokeTool) -> &'static str {
+        match tool {
+            StrokeTool::Smudge => "Smudge",
+            StrokeTool::Mixer => "Mixer Brush",
+            StrokeTool::History => "History Brush",
+            StrokeTool::ArtHistory => "Art History Brush",
+            StrokeTool::BackgroundEraser => "Background Eraser",
+            StrokeTool::ColorReplace => "Color Replacement",
+            _ => "Paint",
+        }
+    }
+
+    /// Run `f` on the in-flight stroke (errors when there is none).
+    fn with_stroke<T>(
+        f: impl FnOnce(&mut StrokeSession) -> Result<T, JsValue>,
+    ) -> Result<T, JsValue> {
+        STROKE.with(|s| {
+            let mut slot = s.borrow_mut();
+            let session = slot
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("no stroke in progress"))?;
+            f(session)
+        })
+    }
+
+    /// The BRUSH ENGINE's settings keys, newline-separated, in the order
+    /// `brush_stroke_set_dynamics` reads its values. The bundle packs by
+    /// NAME against this list, so a key added here never shifts another.
+    #[wasm_bindgen]
+    pub fn brush_dynamics_keys() -> String {
+        image_gpu::dynamics::DYNAMICS_KEYS.join("\n")
+    }
+
+    /// The texture / dual-brush combine modes, newline-separated, in
+    /// ordinal order.
+    #[wasm_bindgen]
+    pub fn brush_combine_modes() -> String {
+        image_gpu::brush::CombineKind::ALL
+            .iter()
+            .map(|m| m.as_wire())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Freeze BRUSH SETTINGS (every pane, the paint tools' options, the
+    /// stroke's seed) into the in-flight stroke: `values[i]` is
+    /// `brush_dynamics_keys()[i]`. Call between begin and the first
+    /// extend. A smudge / mixer stroke that samples all layers reads the
+    /// composite as it is now.
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_dynamics(values: Vec<f32>) -> Result<(), JsValue> {
+        let d = image_gpu::dynamics::BrushDynamics::from_values(&values);
+        let composite = STROKE.with(|s| {
+            s.borrow().as_ref().and_then(|session| {
+                let t = session.params().tool;
+                let all = (t == StrokeTool::Smudge && d.tools.smudge_sample_all)
+                    || (t == StrokeTool::Mixer && d.tools.mixer_sample_all);
+                all.then(|| session.handle())
+            })
+        });
+        let composite = composite.and_then(|h| IMAGES.with(|m| m.borrow().get(&h).cloned()));
+        with_stroke(|session| {
+            session.set_dynamics(d);
+            if let Some(img) = composite {
+                let rgba: Arc<[u8]> =
+                    Arc::from(img.rgba.to_rgba8().into_owned().into_boxed_slice());
+                session.set_alt_source(rgba).map_err(ingest_err)?;
+            }
+            Ok(())
+        })
+    }
+
+    fn tip_from(w: u32, h: u32, alpha: Vec<u8>) -> Result<Option<image_gpu::SampledTip>, JsValue> {
+        if w == 0 || h == 0 {
+            return Ok(None);
+        }
+        image_gpu::SampledTip::new(w, h, alpha)
+            .map(Some)
+            .ok_or_else(|| JsValue::from_str("tip bitmap: w × h does not match its bytes"))
+    }
+
+    /// The SAMPLED TIP for the in-flight stroke: a `w × h` coverage
+    /// bitmap (255 = paint). `w = 0` returns to the computed tip.
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_tip_bitmap(w: u32, h: u32, alpha: Vec<u8>) -> Result<(), JsValue> {
+        let tip = tip_from(w, h, alpha)?;
+        with_stroke(|session| {
+            session.set_tip_bitmap(tip);
+            Ok(())
+        })
+    }
+
+    /// The DUAL BRUSH's sampled tip (`w = 0`: its computed tip).
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_dual_bitmap(w: u32, h: u32, alpha: Vec<u8>) -> Result<(), JsValue> {
+        let tip = tip_from(w, h, alpha)?;
+        with_stroke(|session| {
+            session.set_dual_bitmap(tip);
+            Ok(())
+        })
+    }
+
+    /// The TEXTURE: an engine-held image (the defined pattern) as the
+    /// brush texture of the in-flight stroke.
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_texture_image(handle: u32) -> Result<(), JsValue> {
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let rgba: Arc<[u8]> = Arc::from(img.rgba.to_rgba8().into_owned().into_boxed_slice());
+        with_stroke(|session| {
+            session
+                .set_texture_source(img.width, img.height, rgba)
+                .map_err(ingest_err)
+        })
+    }
+
+    /// The HISTORY STATE the in-flight History / Art History stroke paints
+    /// from: `open` (the active layer as opened — before its first edit
+    /// this session), `previous` (before its newest edit), `step:<id>`
+    /// (right after that undo or redo step) or `snapshot:<id>` (a named
+    /// snapshot; ADR 477). Errors for any other tool, without a layer
+    /// stack, or when the state no longer fits (another canvas size, a
+    /// step no longer held, a layer that did not exist then).
+    #[wasm_bindgen]
+    pub fn brush_stroke_set_history_source(kind: &str) -> Result<(), JsValue> {
+        let kind = crate::layers::HistoryKind::from_wire(kind).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown history state \"{kind}\" (open | previous | step:<id> | snapshot:<id>)"
+            ))
+        })?;
+        let handle = with_stroke(|session| {
+            if !session.params().tool.reads_history() {
+                return Err(JsValue::from_str(
+                    "only the history and art history brushes read a history state",
+                ));
+            }
+            Ok(session.handle())
+        })?;
+        let src = LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .filter(|d| d.handle == handle)
+                .map(|d| d.stack.history_source(kind))
+        });
+        let src = match src {
+            None => {
+                return Err(JsValue::from_str(
+                    "the history brush paints a layer's earlier state, and this image has no layer stack",
+                ))
+            }
+            Some(None) => {
+                return Err(JsValue::from_str(
+                    "that history state no longer fits: the canvas changed size, the step is no longer held, or the active layer has no pixels in it",
+                ))
+            }
+            Some(Some(px)) => px,
+        };
+        with_stroke(|session| session.set_alt_source(src).map_err(ingest_err))
+    }
+
+    /// MAGIC ERASER: erase the colour region at `(x, y)` to transparency
+    /// on the ACTIVE layer, in one undo step. The region is the magic
+    /// wand's (`tolerance` 0–255 per channel, `contiguous`), read from
+    /// the active layer or with `sample_all` from the composite;
+    /// `antialias` softens its edge by a 0.6 px feather; `opacity` 0–1
+    /// scales the erase. The current selection clips it.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn magic_erase(
+        handle: u32,
+        x: u32,
+        y: u32,
+        tolerance: u8,
+        antialias: bool,
+        contiguous: bool,
+        sample_all: bool,
+        opacity: f32,
+    ) -> Result<DecodedHandle, JsValue> {
+        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
+            JsValue::from_str("the magic eraser is GPU-only — call init_gpu first")
+        })?;
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        if x >= img.width || y >= img.height {
+            return Err(JsValue::from_str(&format!(
+                "magic eraser click ({x},{y}) outside {}×{}",
+                img.width, img.height
+            )));
+        }
+        let layer = LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .filter(|d| d.handle == handle)
+                .map(|d| d.stack.active().rgba.canvas().to_rgba8().into_owned())
+        });
+        let source = match (sample_all, layer) {
+            (false, Some(px)) => px,
+            _ => img.rgba.to_rgba8().into_owned(),
+        };
+        let mut field = SelectionCoverage::magic_wand(
+            img.width, img.height, &source, x, y, tolerance, contiguous,
+        );
+        if antialias {
+            field.feather(0.6);
+        }
+        brush_stroke_begin(
+            handle,
+            "eraser",
+            1.0,
+            1.0,
+            opacity,
+            1.0,
+            0.25,
+            "normal",
+            vec![0.0, 0.0, 0.0, 1.0],
+            "none",
+        )?;
+        let mut session = STROKE
+            .with(|s| s.borrow_mut().take())
+            .ok_or_else(|| JsValue::from_str("internal: the magic eraser's stroke did not open"))?;
+        let painted = session.paint_field(&ctx, &field).await;
+        STROKE.with(|s| *s.borrow_mut() = Some(session));
+        if let Err(e) = painted {
+            brush_stroke_cancel();
+            return Err(JsValue::from_str(&e.to_string()));
+        }
+        STROKE_LABEL.with(|l| l.set(Some("Magic Eraser")));
+        brush_stroke_commit().await
+    }
+
+    /// DEFINE BRUSH PRESET: the selection's pixels (the whole image when
+    /// nothing is selected) as a brush-tip bitmap — `[w, h]` as two
+    /// little-endian u32, then `w·h` coverage bytes. Coverage is
+    /// Photoshop's rule: dark paints, white does not, transparent does
+    /// not (`(255 − luma) · alpha`), times the selection's own coverage.
+    /// Read from the composite; at most 2500 px a side.
+    #[wasm_bindgen]
+    pub fn brush_tip_from_selection(handle: u32) -> Result<Vec<u8>, JsValue> {
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let sel = SELECTION.with(|s| s.borrow().mask_for(handle));
+        let rgba = img.rgba.to_rgba8();
+        let out = crate::stroke::tip_from_pixels(img.width, img.height, &rgba, sel.as_deref())
+            .ok_or_else(|| {
+                JsValue::from_str(
+                    "nothing to define a brush from — the selection is empty, or the area is \
+                     blank (white or transparent everywhere)",
+                )
+            })?;
+        Ok(out)
     }
 
     /// BEGIN a stroke on the engine-held image `handle`.
@@ -4809,7 +7658,8 @@ mod wasm {
         let tool = StrokeTool::from_wire(tool).ok_or_else(|| {
             JsValue::from_str(&format!(
                 "unknown paint tool \"{tool}\" \
-                 (brush | pencil | eraser | clone | heal | dodge | burn | sponge | blur | sharpen | spot-heal)"
+                 (brush | pencil | eraser | clone | heal | dodge | burn | sponge | blur | sharpen | spot-heal \
+                 | smudge | mixer | history | art-history | background-eraser | color-replace)"
             ))
         })?;
         let blend_kernel = blend_kernel(blend).ok_or_else(|| {
@@ -4906,6 +7756,39 @@ mod wasm {
     /// composite of the same samples.
     #[wasm_bindgen]
     pub async fn brush_stroke_extend(x: f32, y: f32, pressure: f32) -> Result<Vec<u8>, JsValue> {
+        extend_with(image_gpu::dynamics::PenSample::at(x, y, pressure)).await
+    }
+
+    /// EXTEND with everything a PEN reports — the brush engine's door
+    /// (`brush_stroke_extend` is this with no tilt, no rotation and the
+    /// wheel at full). `tilt_x` / `tilt_y` in degrees −90..90 (Pointer
+    /// Events), `rotation` the barrel twist in degrees 0..360, `wheel`
+    /// the airbrush wheel 0..1. Taken verbatim, so a recorded stroke
+    /// replays identically.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn brush_stroke_extend_pen(
+        x: f32,
+        y: f32,
+        pressure: f32,
+        tilt_x: f32,
+        tilt_y: f32,
+        rotation: f32,
+        wheel: f32,
+    ) -> Result<Vec<u8>, JsValue> {
+        extend_with(image_gpu::dynamics::PenSample {
+            x,
+            y,
+            pressure,
+            tilt_x,
+            tilt_y,
+            rotation,
+            wheel,
+        })
+        .await
+    }
+
+    async fn extend_with(pen: image_gpu::dynamics::PenSample) -> Result<Vec<u8>, JsValue> {
         let ctx = GPU
             .with(|g| g.borrow().clone())
             .ok_or_else(|| JsValue::from_str("painting is GPU-only — call init_gpu first"))?;
@@ -4914,9 +7797,7 @@ mod wasm {
         let mut session = STROKE
             .with(|s| s.borrow_mut().take())
             .ok_or_else(|| JsValue::from_str("no stroke in progress (brush_stroke_begin first)"))?;
-        let result = session
-            .extend(&ctx, StrokeSample::new(x, y, pressure))
-            .await;
+        let result = session.extend_pen(&ctx, pen).await;
         let handle = session.handle();
         // Shared, not copied: the stroke copies on its next write only if
         // the fold still holds this handle.
@@ -4965,6 +7846,9 @@ mod wasm {
         }
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|doc| async move {
+            // The stroke paints 8-bit; the fold takes the override at
+            // its own depth beside 16-bit layers.
+            let painted = crate::pixels::Pixels::from_rgba8(painted);
             let out = doc
                 .stack
                 .composite(ctx.as_deref(), Some(&painted))
@@ -5072,6 +7956,16 @@ mod wasm {
         let mut session = STROKE
             .with(|s| s.borrow_mut().take())
             .ok_or_else(|| JsValue::from_str("no stroke in progress"))?;
+        // CATCH-UP AT END: a smoothed stroke lands on the pointer first.
+        if let Some(ctx) = GPU.with(|g| g.borrow().clone()) {
+            session
+                .finish(&ctx)
+                .await
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        }
+        let label = STROKE_LABEL
+            .with(|l| l.take())
+            .unwrap_or_else(|| stroke_label(session.params().tool));
         // The SPOT HEALING BRUSH deposits nothing while it is dragged; its
         // source is found and its heal composited here, on release.
         if session.params().tool == StrokeTool::SpotHeal {
@@ -5120,7 +8014,7 @@ mod wasm {
             let result = if on_mask {
                 commit_mask_stroke(&mut doc, ctx.as_deref(), damage, &pixels).await
             } else {
-                commit_stroke_into_active(&mut doc, ctx.as_deref(), damage, pixels).await
+                commit_stroke_into_active(&mut doc, ctx.as_deref(), damage, pixels, label).await
             };
             (doc, result)
         })
@@ -5132,12 +8026,17 @@ mod wasm {
         ctx: Option<&GpuContext>,
         damage: image_core::Region,
         pixels: Arc<[u8]>,
+        label: &'static str,
     ) -> Result<DecodedHandle, JsValue> {
         let (w, h) = (doc.stack.width(), doc.stack.height());
         doc.stack
-            .edit_active("Paint", damage, pixels.into())
+            .edit_active(label, damage, pixels.into())
             .map_err(ingest_err)?;
-        let rgba = doc.stack.composite(ctx, None).await.map_err(ingest_err)?;
+        let rgba = doc
+            .stack
+            .composite_px(ctx, None)
+            .await
+            .map_err(ingest_err)?;
         set_image_pixels(doc.handle, rgba)?;
         Ok(DecodedHandle {
             handle: doc.handle,
@@ -5164,7 +8063,11 @@ mod wasm {
         doc.stack
             .edit_active_mask("Paint mask", damage, mask)
             .map_err(ingest_err)?;
-        let rgba = doc.stack.composite(ctx, None).await.map_err(ingest_err)?;
+        let rgba = doc
+            .stack
+            .composite_px(ctx, None)
+            .await
+            .map_err(ingest_err)?;
         set_image_pixels(doc.handle, rgba)?;
         Ok(DecodedHandle {
             handle: doc.handle,
@@ -5177,10 +8080,24 @@ mod wasm {
 
     /// CANCEL the stroke: throw the painted pixels away. The engine-held
     /// source was never mutated, so this restores it exactly.
+    /// PEN UP inside the stroke in flight: the next sample starts a new
+    /// run (a dab where it lands, no segment from the last one) but the
+    /// stroke — and its one undo step — goes on. Stroke Path strokes
+    /// every subpath of a path as one stroke this way (ADR 476).
+    #[wasm_bindgen]
+    pub fn brush_stroke_lift() -> Result<(), JsValue> {
+        with_stroke(|st| {
+            st.lift();
+            Ok(())
+        })
+    }
+
     #[wasm_bindgen]
     pub fn brush_stroke_cancel() {
         STROKE.with(|s| *s.borrow_mut() = None);
+        channel_clear_preview();
         STROKE_ON_MASK.with(|m| m.set(false));
+        STROKE_LABEL.with(|l| l.set(None));
     }
 
     /// Is a stroke in progress?
@@ -5274,6 +8191,150 @@ mod wasm {
         Ok(js_sys::Uint8Array::from(&bytes[..]))
     }
 
+    thread_local! {
+        /// The notes of the last `export_image*` call (wire names).
+        static EXPORT_NOTES: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+    }
+
+    fn run_export(
+        pixels: crate::export::Rgba<'_>,
+        width: u32,
+        height: u32,
+        spec: &str,
+        source: &[u8],
+        cmyk_profile: &[u8],
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        let mut spec =
+            crate::export::ExportSpec::from_wire(spec).map_err(|e| JsValue::from_str(&e))?;
+        if !cmyk_profile.is_empty() {
+            spec.cmyk_profile = Some(cmyk_profile.to_vec());
+        }
+        let source = (!source.is_empty()).then_some(source);
+        let out = crate::export::export(pixels, width, height, &spec, source)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        EXPORT_NOTES.with(|n| *n.borrow_mut() = out.notes.iter().map(|n| n.wire()).collect());
+        Ok(js_sys::Uint8Array::from(&out.bytes[..]))
+    }
+
+    /// EXPORT AS (ADR 468): straight RGBA8 (`width*height*4`, the adjusted
+    /// result) written as `spec` says (`export::ExportSpec::from_wire`:
+    /// format, quality, size, ppi, metadata, profile, mode, bits,
+    /// compression, intent). `source` is the file the session opened (its
+    /// EXIF, XMP and IPTC are kept when the spec says `meta=1`; empty =
+    /// none); `cmyk_profile` the CMYK output profile (empty = none). The
+    /// notes are read with [`export_last_notes`].
+    #[wasm_bindgen]
+    pub fn export_image(
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+        spec: &str,
+        source: &[u8],
+        cmyk_profile: &[u8],
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        run_export(
+            crate::export::Rgba::U8(rgba),
+            width,
+            height,
+            spec,
+            source,
+            cmyk_profile,
+        )
+    }
+
+    /// [`export_image`] from an engine-held image, at ITS depth: a 16-bit
+    /// session exports its own 16-bit samples (PNG, TIFF) instead of the
+    /// 8-bit bytes the adjust door hands out.
+    #[wasm_bindgen]
+    pub fn export_image_handle(
+        handle: u32,
+        spec: &str,
+        source: &[u8],
+        cmyk_profile: &[u8],
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        let (w, h, px) = IMAGES
+            .with(|m| {
+                m.borrow()
+                    .get(&handle)
+                    .map(|i| (i.width, i.height, i.rgba.clone()))
+            })
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        // A 32-bit image exports its display encoding at 16 bits (the
+        // exporters write integer samples).
+        let px = if px.is_float() {
+            px.at_depth(image_core::SampleDepth::U16)
+        } else {
+            px
+        };
+        let pixels = if px.is_16bit() {
+            crate::export::Rgba::U16(
+                px.raw()
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|p| u16::from_ne_bytes(*p))
+                    .collect(),
+            )
+        } else {
+            let b = px.to_rgba8().into_owned();
+            return run_export(
+                crate::export::Rgba::U8(&b),
+                w,
+                h,
+                spec,
+                source,
+                cmyk_profile,
+            );
+        };
+        run_export(pixels, w, h, spec, source, cmyk_profile)
+    }
+
+    /// A layered PSD as a layered TIFF (engine ADR 1038): the composite as
+    /// the TIFF's image, the layers in tag 37724 (ImageSourceData), which
+    /// Photoshop reopens. `compression` is `none`, `lzw` or `deflate`.
+    /// 8-bit documents with layers; anything else is refused by name.
+    #[wasm_bindgen]
+    pub fn psd_to_layered_tiff(psd: &[u8], compression: &str) -> Result<Vec<u8>, JsValue> {
+        let compression = match compression {
+            "none" => paged_raster::TiffCompression::None,
+            "lzw" => paged_raster::TiffCompression::Lzw,
+            "deflate" | "zip" => paged_raster::TiffCompression::Deflate,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown compression \"{other}\""
+                )))
+            }
+        };
+        paged_raster::psd_to_layered_tiff(
+            psd,
+            paged_raster::TiffEncodeOptions {
+                compression,
+                predictor: false,
+                rows_per_strip: None,
+            },
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// The notes of the last export, newline-separated wire names
+    /// (`webp-lossless`, `cmyk-profile`, `cmyk-naive`, `widened`,
+    /// `narrowed`, `alpha-dropped`, `gray-untagged`, `gif-palette`,
+    /// `jxl-lossless`, `no-metadata`).
+    #[wasm_bindgen]
+    pub fn export_last_notes() -> String {
+        EXPORT_NOTES.with(|n| n.borrow().join("\n"))
+    }
+
+    /// What a file carries besides its pixels, for the Export As dialog's
+    /// metadata row: the byte length of its `[ICC, EXIF, XMP, IPTC]` (0 =
+    /// absent).
+    #[wasm_bindgen]
+    pub fn image_metadata(bytes: &[u8]) -> Vec<u32> {
+        let m = paged_raster::read_metadata(bytes);
+        let len = |v: &Option<Vec<u8>>| v.as_ref().map_or(0, |b| b.len() as u32);
+        vec![len(&m.icc), len(&m.exif), len(&m.xmp), len(&m.iptc)]
+    }
+
     /// Write the open LAYER STACK into the retained PSD as its layers
     /// (`saveback::psd_write_stack`), with the bound image (the stack's
     /// composite) as the merged image. Refuses stacks with adjustment
@@ -5287,18 +8348,14 @@ mod wasm {
                 .as_ref()
                 .ok_or_else(|| JsValue::from_str("no layer stack is open"))?;
             let composite = IMAGES
-                .with(|m| {
-                    m.borrow()
-                        .get(&doc.handle)
-                        .map(|i| i.rgba.to_rgba8().into_owned())
-                })
+                .with(|m| m.borrow().get(&doc.handle).map(|i| i.rgba.clone()))
                 .ok_or_else(|| JsValue::from_str("the layer stack's image is gone"))?;
             PSDS.with(|m| {
                 let mut map = m.borrow_mut();
                 let file = map.get_mut(&psd_handle).ok_or_else(|| {
                     JsValue::from_str(&format!("unknown psd handle {psd_handle}"))
                 })?;
-                let shape = crate::saveback::psd_write_stack(file, &doc.stack, &composite)
+                let shape = crate::psd_write::psd_write_stack_px(file, &doc.stack, &composite)
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 Ok(shape.describe().to_string())
             })
@@ -5458,6 +8515,64 @@ mod wasm {
         crate::brushes::presets_json(bytes).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    // ── the Preset Manager's files (ADR 477; `crate::preset_files`) ──
+
+    fn preset_err(e: IngestError) -> JsValue {
+        JsValue::from_str(&e.to_string())
+    }
+
+    /// Photoshop `.grd` → `{gradients: [{display, gradient}], skipped}`.
+    #[wasm_bindgen]
+    pub fn presets_read_grd(bytes: &[u8]) -> Result<String, JsValue> {
+        crate::preset_files::read_grd_json(bytes).map_err(preset_err)
+    }
+
+    /// `[gradient]` → `.grd` bytes.
+    #[wasm_bindgen]
+    pub fn presets_write_grd(json: &str) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::write_grd_json(json).map_err(preset_err)
+    }
+
+    /// Photoshop `.pat` → `{patterns: [meta], skipped}`.
+    #[wasm_bindgen]
+    pub fn presets_read_pat(bytes: &[u8]) -> Result<String, JsValue> {
+        crate::preset_files::read_pat_json(bytes).map_err(preset_err)
+    }
+
+    /// `.pat` → every pattern's RGBA8, in order.
+    #[wasm_bindgen]
+    pub fn presets_read_pat_pixels(bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::read_pat_pixels(bytes).map_err(preset_err)
+    }
+
+    /// Pattern metadata and their RGBA8 → `.pat` bytes.
+    #[wasm_bindgen]
+    pub fn presets_write_pat(meta: &str, rgba: &[u8]) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::write_pat_json(meta, rgba).map_err(preset_err)
+    }
+
+    /// Photoshop `.asl` → `{styles, patterns, skipped}`.
+    #[wasm_bindgen]
+    pub fn presets_read_asl(bytes: &[u8]) -> Result<String, JsValue> {
+        crate::preset_files::read_asl_json(bytes).map_err(preset_err)
+    }
+
+    /// `.asl` → its patterns' RGBA8, in order.
+    #[wasm_bindgen]
+    pub fn presets_read_asl_pixels(bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::read_asl_pixels(bytes).map_err(preset_err)
+    }
+
+    /// Style rows, pattern metadata and their RGBA8 → `.asl` bytes.
+    #[wasm_bindgen]
+    pub fn presets_write_asl(
+        styles: &str,
+        patterns: &str,
+        rgba: &[u8],
+    ) -> Result<Vec<u8>, JsValue> {
+        crate::preset_files::write_asl_json(styles, patterns, rgba).map_err(preset_err)
+    }
+
     /// The parity properties of one `layers_list` row (appended inside
     /// its object): fill opacity, knockout, locks, colour label, link,
     /// Blend If's 32 sliders (or null), and the kind detail.
@@ -5476,7 +8591,19 @@ mod wasm {
             },
         );
         format!(
-            ",\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{}}}",
+            ",\"style\":[{}],\"styleOn\":{},\"styleOptions\":{},\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{},\"typeStale\":{}}}",
+            l.ext
+                .style
+                .as_ref()
+                .map(|s| s
+                    .enabled_keys()
+                    .iter()
+                    .map(|k| format!("\"{k}\""))
+                    .collect::<Vec<_>>()
+                    .join(","))
+                .unwrap_or_default(),
+            l.ext.style.as_ref().is_some_and(|s| s.enabled),
+            l.ext.style_options.bits(),
             l.ext.fill_opacity,
             l.ext.knockout.as_wire(),
             l.ext.locks.transparency,
@@ -5488,7 +8615,86 @@ mod wasm {
                 .map_or_else(|| "null".to_string(), |a| format!("\"{}\"", a.kind_name())),
             l.fill()
                 .map_or_else(|| "null".to_string(), |f| format!("\"{}\"", f.source.kind_name())),
+            l.type_layer()
+                .map_or_else(|| "null".to_string(), |t| t.stale.to_string()),
         )
+        .trim_end_matches('}')
+        .to_string()
+            + &format!(
+                ",\"vectorMask\":{}}}",
+                l.ext.vector_mask.as_deref().map_or_else(
+                    || "null".to_string(),
+                    |v| format!(
+                        "{{\"enabled\":{},\"invert\":{},\"subpaths\":{},\"anchors\":{}}}",
+                        v.enabled,
+                        v.invert,
+                        v.subpaths.len(),
+                        v.subpaths.iter().map(|s| s.anchors.len()).sum::<usize>()
+                    )
+                )
+            )
+    }
+
+    /// The SAMPLED TIP `sample_index` of an `.abr` (a preset's
+    /// `sampleIndex`) as `[w u32 LE, h u32 LE, alpha…]` — 8-bit
+    /// coverage, 255 = paint; a 16-bit tip is reduced by the explicit
+    /// lossy call. Stateless: the glue keeps the file's bytes.
+    #[wasm_bindgen]
+    pub fn abr_tip(bytes: &[u8], sample_index: u32) -> Result<Vec<u8>, JsValue> {
+        crate::brushes::tip_bitmap(bytes, sample_index as usize)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    thread_local! {
+        // The `.abr` export in progress (begin → add* → finish).
+        static ABR_EXPORT: RefCell<Option<crate::brushes::AbrExport>> =
+            const { RefCell::new(None) };
+    }
+
+    /// The per-preset values `abr_export_add` takes, newline-separated,
+    /// in order — the glue packs by NAME from this list.
+    #[wasm_bindgen]
+    pub fn abr_export_keys() -> String {
+        crate::brushes::EXPORT_KEYS.join("\n")
+    }
+
+    /// Start an `.abr` export (drops one left unfinished).
+    #[wasm_bindgen]
+    pub fn abr_export_begin() {
+        ABR_EXPORT.with(|e| *e.borrow_mut() = Some(Default::default()));
+    }
+
+    /// Add one preset: `values` in `abr_export_keys` order; `w`/`h`/
+    /// `alpha` its sampled tip, or `w = h = 0` for the round tip.
+    #[wasm_bindgen]
+    pub fn abr_export_add(
+        name: &str,
+        values: Vec<f32>,
+        w: u32,
+        h: u32,
+        alpha: Vec<u8>,
+    ) -> Result<(), JsValue> {
+        ABR_EXPORT.with(|e| {
+            let mut slot = e.borrow_mut();
+            let export = slot
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("no export in progress (abr_export_begin)"))?;
+            let bitmap = (w > 0 && h > 0).then_some((w, h, &alpha[..]));
+            export
+                .add(name, &values, bitmap)
+                .map_err(|m| JsValue::from_str(&m))
+        })
+    }
+
+    /// Finish the export: the `.abr` bytes (version 6.2).
+    #[wasm_bindgen]
+    pub fn abr_export_finish() -> Result<Vec<u8>, JsValue> {
+        ABR_EXPORT.with(|e| {
+            e.borrow_mut()
+                .take()
+                .map(|x| x.finish())
+                .ok_or_else(|| JsValue::from_str("no export in progress (abr_export_begin)"))
+        })
     }
 
     /// Minimal JSON string escape (quotes, backslash, control chars) —

@@ -107,7 +107,10 @@ test.describe("focus: the ring, the menus, the toolbars, the dialogs", () => {
       page.evaluate(
         () =>
           document
-            .querySelector('[role="menu"] [role="menuitem"][data-highlighted]')
+            // A row is a menuitem or, in View, a checkbox item.
+            .querySelector(
+              '[role="menu"] :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"])[data-highlighted]',
+            )
             ?.textContent?.trim() ?? null,
       );
     await expect.poll(highlighted).not.toBeNull();

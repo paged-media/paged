@@ -137,6 +137,25 @@ pub(crate) fn parse_paragraph_border(e: &quick_xml::events::BytesStart) -> Parag
     }
 }
 
+/// Engine ADR 1018 — the part of Word's character additions IDML can
+/// spell: the underline's look (`UnderlineType`, when it is a stroke style
+/// with a Word counterpart), its colour (`UnderlineColor`), and a double
+/// strikethrough (`StrikeThroughType="…ThinThin"`). Highlight and hidden
+/// text have no IDML attribute.
+pub(crate) fn parse_character_decorations(
+    e: &quick_xml::events::BytesStart,
+) -> paged_model::CharacterDecorations {
+    paged_model::CharacterDecorations {
+        underline_kind: attr(e, b"UnderlineType")
+            .and_then(|s| paged_model::UnderlineKind::from_idml_stroke_type(&s)),
+        underline_color: attr(e, b"UnderlineColor"),
+        double_strikethrough: attr(e, b"StrikeThroughType")
+            .filter(|s| s.ends_with("/ThinThin"))
+            .map(|_| true),
+        ..Default::default()
+    }
+}
+
 /// Parse a [`ParagraphShading`] from the `ParagraphShading*` attrs off a
 /// `<ParagraphStyle>` (or `<ParagraphStyleRange>`) element. Returns a
 /// fully-default instance when no attrs are present; callers can check `on`
@@ -1093,6 +1112,7 @@ fn parse_character_style(e: &quick_xml::events::BytesStart) -> Option<CharacterS
         tracking: attr(e, b"Tracking").and_then(|s| s.parse().ok()),
         underline: attr(e, b"Underline").and_then(|s| s.parse().ok()),
         strikethru: attr(e, b"StrikeThru").and_then(|s| s.parse().ok()),
+        decorations: parse_character_decorations(e),
         no_break: attr(e, b"NoBreak").and_then(|s| s.parse().ok()),
         overprint_fill: attr(e, b"OverprintFill").and_then(|s| s.parse().ok()),
         overprint_stroke: attr(e, b"OverprintStroke").and_then(|s| s.parse().ok()),
@@ -1230,6 +1250,8 @@ fn parse_numbering_list(e: &quick_xml::events::BytesStart) -> Option<NumberingLi
             .and_then(|s| s.parse().ok()),
         continue_across_documents: attr(e, b"ContinueNumbersAcrossDocuments")
             .and_then(|s| s.parse().ok()),
+        // Word's per-level definitions have no IDML spelling (ADR 1018).
+        levels: Vec::new(),
     })
 }
 
@@ -1680,6 +1702,7 @@ fn parse_paragraph_style(e: &quick_xml::events::BytesStart) -> Option<ParagraphS
         space_after: attr(e, b"SpaceAfter").and_then(|s| s.parse().ok()),
         underline: attr(e, b"Underline").and_then(|s| s.parse().ok()),
         strikethru: attr(e, b"StrikeThru").and_then(|s| s.parse().ok()),
+        decorations: parse_character_decorations(e),
         tab_list: Vec::new(),
         bullets_list_type: attr(e, b"BulletsAndNumberingListType"),
         bullet_character: None,

@@ -31,15 +31,17 @@
 //! for export (`Transition::xml`, `Slide::timing_xml`) and otherwise reported in
 //! [`Presentation::diagnostics`].
 
+pub mod anim;
 pub mod chart;
+pub mod media;
 
 use serde::{Deserialize, Serialize};
 
 /// English Metric Units: 914 400 per inch, 12 700 per point.
 pub type Emu = i64;
 
-/// EMU per point.
-pub const EMU_PER_PT: f64 = 12_700.0;
+/// EMU per point (`paged_ooxml::units`).
+pub use paged_ooxml::units::EMU_PER_PT;
 
 /// A whole deck.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -62,9 +64,16 @@ pub struct Presentation {
     pub embedded_fonts: Vec<EmbeddedFont>,
     /// Sections from the `p14:sectionLst` extension.
     pub sections: Vec<Section>,
+    /// Custom shows (`p:custShowLst`), each a named list of slides.
+    pub custom_shows: Vec<CustomShow>,
     /// Every SmartArt drawing (the shapes PowerPoint drew for a diagram,
     /// in the diagram frame's own coordinates), keyed by part name.
     pub diagrams: std::collections::BTreeMap<String, Vec<Shape>>,
+    /// Every SmartArt data model, keyed by its drawing's part name: the
+    /// text points and which drawing shape shows which (slide W4, the text
+    /// pane).
+    #[serde(default)]
+    pub diagram_models: std::collections::BTreeMap<String, DiagramModel>,
     /// Every chart a slide, layout or master shows, keyed by part name.
     pub charts: std::collections::BTreeMap<String, chart::Chart>,
     /// The table styles the deck defines (`ppt/tableStyles.xml`). A deck
@@ -90,6 +99,9 @@ pub struct Master {
     pub other_style: Option<ListStyle>,
     /// Part names of the layouts this master owns, in `p:sldLayoutIdLst` order.
     pub layouts: Vec<String>,
+    /// `preserve`: kept when no slide uses it (slide ADR 712).
+    #[serde(default)]
+    pub preserve: bool,
 }
 
 /// A slide layout (`p:sldLayout`).
@@ -106,6 +118,9 @@ pub struct Layout {
     pub shapes: Vec<Shape>,
     /// `p:clrMapOvr` — `None` = use the master's map.
     pub color_map_override: Option<ColorMap>,
+    /// `preserve`: kept when no slide uses it (slide ADR 712).
+    #[serde(default)]
+    pub preserve: bool,
 }
 
 /// A slide (`p:sld`).
@@ -128,6 +143,95 @@ pub struct Slide {
     pub transition: Option<Transition>,
     /// `p:timing`, verbatim, for export and for the build-step parser.
     pub timing_xml: Option<String>,
+    /// `p:timing` read as a tree (slide ADR 714); `None` when the slide has
+    /// none or it did not read (then `timing_xml` still has it).
+    #[serde(default)]
+    pub timing: Option<anim::Timing>,
+    /// The slide's review comments: modern threaded comments and legacy
+    /// ones, in the order the deck lists them (slide ADR 711).
+    pub comments: Vec<Comment>,
+}
+
+/// A review comment on a slide: a modern threaded comment
+/// (`p188:cm`, PowerPoint 365) or a legacy one (`p:cm`).
+///
+/// The JSON form (camelCase) is what the slide bundle keeps per page and
+/// hands back to export.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Comment {
+    /// `{GUID}` for a modern comment; `legacy-<authorId>-<idx>` for a
+    /// legacy one.
+    pub id: String,
+    /// The author's `{GUID}` (modern) or `legacy-<id>`.
+    pub author_id: String,
+    pub author: String,
+    pub initials: String,
+    /// The creation time as the deck wrote it.
+    pub created: Option<String>,
+    /// Plain text, one line per paragraph.
+    pub text: String,
+    /// The comment's position on the slide, pt (absent: on the slide as a
+    /// whole).
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    /// The `cNvPr id` of the shape the comment is anchored to.
+    pub shape_id: Option<u32>,
+    /// `active`, `resolved` or `closed` (absent: active).
+    pub status: Option<String>,
+    pub replies: Vec<CommentReply>,
+    /// Read from a legacy `p:cm` (export writes it as a modern comment).
+    pub legacy: bool,
+    /// The `p188:cm` element as the deck wrote it, re-emitted verbatim
+    /// while the comment is unchanged.
+    #[serde(skip)]
+    pub raw: Option<String>,
+    /// Its marker list (`pc:sldMkLst`, `ac:deMkLst`, `ac:txMkLst`) as
+    /// written.
+    #[serde(skip)]
+    pub marker_xml: Option<String>,
+}
+
+/// A reply in a comment's thread (`p188:reply`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CommentReply {
+    pub id: String,
+    pub author_id: String,
+    pub author: String,
+    pub initials: String,
+    pub created: Option<String>,
+    pub text: String,
+}
+
+impl Comment {
+    /// The same comment as far as the model goes (what the user can see and
+    /// change), ignoring the verbatim XML kept beside it.
+    pub fn same_as(&self, other: &Comment) -> bool {
+        let close = |a: Option<f64>, b: Option<f64>| match (a, b) {
+            (Some(a), Some(b)) => (a - b).abs() < 1e-6,
+            (None, None) => true,
+            _ => false,
+        };
+        let active = |s: &Option<String>| s.clone().filter(|s| s != "active");
+        self.id == other.id
+            && self.author_id == other.author_id
+            && self.author == other.author
+            && self.initials == other.initials
+            && self.created == other.created
+            && self.text == other.text
+            && close(self.x, other.x)
+            && close(self.y, other.y)
+            && self.shape_id == other.shape_id
+            && active(&self.status) == active(&other.status)
+            && self.replies == other.replies
+            && self.legacy == other.legacy
+    }
+}
+
+/// Two comment lists that are the same as far as the model goes.
+pub fn same_comments(a: &[Comment], b: &[Comment]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.same_as(y))
 }
 
 /// `p:bg`: either explicit properties or a reference into the theme's
@@ -148,6 +252,76 @@ pub struct ColorMap {
     /// Pairs such as (`bg1`, `lt1`), (`tx1`, `dk1`), (`accent1`, `accent1`).
     pub entries: Vec<(String, String)>,
 }
+
+/// Every effect a `p:transition` can name, by the element's local name: what
+/// [`Transition::kind`] holds. ECMA-376 Part 1 (`p:`), MS-PPTX (`p14:`,
+/// PowerPoint 2010; `p15:prstTrans`, 2013, whose `prst` attribute names the
+/// preset) and `p159:morph` (2019). The slide show's
+/// shader manifest (slide ADR 721) covers each one; its tests check that
+/// against this list.
+pub const TRANSITION_KINDS: &[&str] = &[
+    // ECMA-376 (p:)
+    "blinds",
+    "checker",
+    "circle",
+    "comb",
+    "cover",
+    "cut",
+    "diamond",
+    "dissolve",
+    "fade",
+    "newsflash",
+    "plus",
+    "pull",
+    "push",
+    "random",
+    "randomBar",
+    "split",
+    "strips",
+    "wedge",
+    "wheel",
+    "wipe",
+    "zoom",
+    // [MS-PPTX] PowerPoint 2010 (p14:)
+    "conveyor",
+    "doors",
+    "ferris",
+    "flash",
+    "flip",
+    "flythrough",
+    "gallery",
+    "glitter",
+    "honeycomb",
+    "pan",
+    "prism",
+    "reveal",
+    "ripple",
+    "shred",
+    "switch",
+    "vortex",
+    "warp",
+    "wheelReverse",
+    "window",
+    // [MS-PPTX] PowerPoint 2013 (p15:), PowerPoint 2019 (p159:)
+    "prstTrans",
+    "morph",
+];
+
+/// The presets of `p15:prstTrans` (its `prst` attribute; default `fallOver`).
+pub const PRESET_TRANSITIONS: &[&str] = &[
+    "airplane",
+    "crush",
+    "curtains",
+    "drape",
+    "fallOver",
+    "fracture",
+    "origami",
+    "pageCurlDouble",
+    "pageCurlSingle",
+    "peelOff",
+    "prestige",
+    "wind",
+];
 
 /// A transition (`p:transition`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -172,7 +346,20 @@ pub struct Transition {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Section {
     pub name: String,
+    /// The section's `{GUID}`.
+    pub id: String,
     pub slide_ids: Vec<u32>,
+}
+
+/// `p:custShow`: a named subset of the deck's slides, in its own order
+/// (Slide Show ▸ Custom Slide Show).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CustomShow {
+    pub name: String,
+    /// `id`, unique among the deck's custom shows.
+    pub id: u32,
+    /// The slide parts it plays, in order (a slide may appear twice).
+    pub slides: Vec<String>,
 }
 
 /// `p:embeddedFont`: one family and the font parts of its faces.
@@ -251,6 +438,50 @@ pub struct Sp {
     /// `dsp:txXfrm`: a SmartArt shape's text box, which need not be the
     /// shape's own box (same coordinate space as the shape's `xfrm`).
     pub text_xfrm: Option<Xfrm>,
+    /// A connector's `a:stCxn`: the shape and site its start is glued to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub st_cxn: Option<CxnRef>,
+    /// A connector's `a:endCxn`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_cxn: Option<CxnRef>,
+    /// A SmartArt drawing shape's `modelId`: the presentation point of the
+    /// diagram's data model it draws.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+}
+
+/// A SmartArt diagram's data model (`dgm:dataModel`), as far as its text
+/// goes. There is no layout engine: the drawing PowerPoint laid out is what
+/// is drawn, and an edit changes the text of points it already shows.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramModel {
+    /// The data part (`ppt/diagrams/data1.xml`).
+    pub data_part: String,
+    /// The text points (`node` and `asst`), in the outline's order: a
+    /// depth-first walk of the `parOf` connections from the document point.
+    pub points: Vec<DiagramPoint>,
+    /// Each drawing shape (by `modelId`) and the points whose text it shows,
+    /// in order, with the number of paragraphs each gives it.
+    pub shapes: std::collections::BTreeMap<String, Vec<(String, u32)>>,
+}
+
+/// One text point of a SmartArt data model.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramPoint {
+    /// `modelId`.
+    pub id: String,
+    /// 0 for a top-level point.
+    pub depth: u32,
+    /// Its text, one string per paragraph.
+    pub paragraphs: Vec<String>,
+}
+
+/// `a:stCxn` / `a:endCxn`: a shape on the same slide (its `cNvPr` id) and
+/// the index of one of its connection sites.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CxnRef {
+    pub id: u32,
+    pub idx: u32,
 }
 
 /// `p:spPr` / `p:grpSpPr`.
@@ -274,36 +505,10 @@ pub enum Geometry {
     Custom(CustomGeometry),
 }
 
-/// `a:custGeom`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct CustomGeometry {
-    pub adjust: Vec<(String, String)>,
-    pub guides: Vec<(String, String)>,
-    pub paths: Vec<GeomPath>,
-}
-
-/// One `a:path` of a custom geometry, in its own coordinate space.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct GeomPath {
-    pub w: Option<Emu>,
-    pub h: Option<Emu>,
-    /// `fill` (norm / none / lighten / …), `None` = norm.
-    pub fill: Option<String>,
-    pub stroke: bool,
-    pub commands: Vec<PathCmd>,
-}
-
-/// One path command; points are guide names or literal numbers, as authored.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum PathCmd {
-    MoveTo(String, String),
-    LineTo(String, String),
-    /// `arcTo wR hR stAng swAng`.
-    ArcTo(String, String, String, String),
-    QuadTo([(String, String); 2]),
-    CubicTo([(String, String); 3]),
-    Close,
-}
+// `a:custGeom` and its parts: the geometry program is the shared
+// DrawingML geometry model (`platform/shared/dml-geom`, PM-0014), which also
+// evaluates it.
+pub use slide_geom::{AdjustHandle, ConnectionSite, CustomGeometry, GeomPath, HandleRef, PathCmd};
 
 /// `p:style`: references into the theme's format scheme.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -329,21 +534,6 @@ pub struct Pic {
     pub props: ShapeProps,
     pub style: Option<ShapeStyle>,
     pub blip: Blip,
-}
-
-/// `a:blipFill`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Blip {
-    /// The image part (resolved from the `r:embed` relationship).
-    pub part: Option<String>,
-    /// An `r:link` to an external image.
-    pub link: Option<String>,
-    /// `a:srcRect` l, t, r, b in 1 000ths of a percent.
-    pub src_rect: Option<RelRect>,
-    /// `a:stretch` (true) or `a:tile` (false).
-    pub stretch: bool,
-    /// `a:alphaModFix amt`, 1 000ths of a percent.
-    pub alpha: Option<i32>,
 }
 
 /// `p:grpSp`.
@@ -462,108 +652,13 @@ pub struct TableBorders {
 
 // ─── paint ──────────────────────────────────────────────────────────
 
-/// A colour as authored: a base and its transform chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Color {
-    pub base: ColorBase,
-    /// In document order: (`lumMod`, 75000), (`alpha`, 50000), …
-    pub transforms: Vec<(String, i32)>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ColorBase {
-    /// `a:srgbClr val` as 0xRRGGBB.
-    Srgb(u32),
-    /// `a:schemeClr val` (bg1, tx1, accent1, phClr, …).
-    Scheme(String),
-    /// `a:sysClr val` + `lastClr`.
-    System { name: String, last: Option<u32> },
-    /// `a:prstClr val`.
-    Preset(String),
-    /// `a:hslClr`: hue in 60 000ths of a degree, sat/lum in 1 000ths of a percent.
-    Hsl(i32, i32, i32),
-    /// `a:scrgbClr`: linear r/g/b in 1 000ths of a percent.
-    ScRgb(i32, i32, i32),
-}
-
-/// A fill.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Fill {
-    None,
-    Solid(Color),
-    Gradient(Gradient),
-    Blip(Blip),
-    Pattern {
-        preset: String,
-        fg: Option<Color>,
-        bg: Option<Color>,
-    },
-    /// `a:grpFill` — use the group's fill.
-    Group,
-}
-
-/// `l t r b` in 1 000ths of a percent (`a:srcRect`, `a:fillToRect`).
-pub type RelRect = (i32, i32, i32, i32);
-
-/// `a:gradFill`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Gradient {
-    /// (position in 1 000ths of a percent, colour).
-    pub stops: Vec<(i32, Color)>,
-    /// `a:lin ang` (60 000ths of a degree) + `scaled`.
-    pub linear: Option<(i32, bool)>,
-    /// `a:path path` (circle / rect / shape) + `a:fillToRect` l, t, r, b.
-    pub path: Option<(String, Option<RelRect>)>,
-    pub rotate_with_shape: bool,
-}
-
-/// `a:ln`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Line {
-    pub width: Option<Emu>,
-    pub fill: Option<Fill>,
-    /// `a:prstDash val`.
-    pub dash: Option<String>,
-    /// `a:custDash` (dash, space) pairs in 1 000ths of a percent of the width.
-    pub custom_dash: Vec<(i32, i32)>,
-    /// `cap` (rnd / sq / flat).
-    pub cap: Option<String>,
-    /// round / bevel / miter.
-    pub join: Option<String>,
-    /// `cmpd` (sng / dbl / …).
-    pub compound: Option<String>,
-    pub head: Option<LineEnd>,
-    pub tail: Option<LineEnd>,
-}
-
-/// `a:headEnd` / `a:tailEnd`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct LineEnd {
-    pub kind: String,
-    pub w: Option<String>,
-    pub len: Option<String>,
-}
-
-/// `a:effectLst` — the effects the engine can carry; the rest go to diagnostics.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Effects {
-    pub outer_shadow: Option<Shadow>,
-    pub inner_shadow: Option<Shadow>,
-    /// `a:glow rad` + colour.
-    pub glow: Option<(Emu, Color)>,
-    /// `a:softEdge rad`.
-    pub soft_edge: Option<Emu>,
-}
-
-/// `a:outerShdw` / `a:innerShdw`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Shadow {
-    pub blur: Emu,
-    pub dist: Emu,
-    /// 60 000ths of a degree.
-    pub dir: i32,
-    pub color: Color,
-}
+// DrawingML paint is read once for doc, slide and sheet
+// (`paged_ooxml::drawingml`, slide ADR 722): the deck IR carries those
+// types as authored, in the file's units.
+pub use paged_ooxml::drawingml::{
+    Blip, BlipEffect, Blur, Color, ColorBase, Effects, Fill, FillOverlay, Glow, Gradient,
+    GradientStop, Line, LineEnd, Pattern, PresetShadow, Reflection, RelRect, Shade, Shadow, Tile,
+};
 
 // ─── text ───────────────────────────────────────────────────────────
 

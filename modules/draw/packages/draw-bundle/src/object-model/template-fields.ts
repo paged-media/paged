@@ -74,6 +74,11 @@ import {
   DEFAULT_SYMBOL_REGISTRATION,
   type SymbolDefinition,
 } from "../commands/symbols";
+import {
+  engineSymbols,
+  readEngineSymbols,
+  readInstanceStates,
+} from "../commands/symbols-engine";
 import { textOnPathOf } from "../commands/text-on-path";
 import { addressOf, coreAddressOf, DRAW_ID, treeItems } from "./shared";
 import { defineMessages, t } from "@paged-media/strings";
@@ -399,8 +404,21 @@ const textOnPathKind = (host: BundleHost): TemplateFieldKindContribution => ({
 // -------------------------------------------------------- symbolChoice
 
 async function symbolChoices(host: BundleHost, field: TemplateFieldRef) {
-  const library = await readSymbolLibrary(host);
-  return choicesOf(library.symbols, strings(defOf(field)["allowed"]));
+  // WP6.8 (draw ADR 365) — the engine's store when the host keeps symbols.
+  const entries: { id: string; name: string }[] = engineSymbols(host)
+    ? await readEngineSymbols(host)
+    : (await readSymbolLibrary(host)).symbols;
+  return choicesOf(entries, strings(defOf(field)["allowed"]));
+}
+
+/** The symbol an engine instance draws (null for anything else). */
+async function engineInstanceSymbol(
+  host: BundleHost,
+  el: ElementId,
+): Promise<string | null> {
+  if ((el as { kind: string }).kind !== "instance") return null;
+  const [state] = await readInstanceStates(host, [el]);
+  return state?.symbol ?? null;
 }
 
 /** The one batch that turns the instance leaf `el` into `symbol`, in
@@ -474,6 +492,7 @@ const symbolChoiceKind = (host: BundleHost): TemplateFieldKindContribution => ({
   },
   async read(_ctx, field) {
     const el = await itemOf(host, field.targetId);
+    if (engineSymbols(host)) return engineInstanceSymbol(host, el);
     return symbolInstanceOf(await envelopeOf(host, el))?.symbol ?? null;
   },
   async write(_ctx, field, value) {
@@ -481,12 +500,44 @@ const symbolChoiceKind = (host: BundleHost): TemplateFieldKindContribution => ({
     const pick = chosen(choices, value, "symbol");
     if (typeof pick === "string") return refused(pick);
     const el = await itemOf(host, field.targetId);
+    if (engineSymbols(host)) {
+      // Replace Symbol on the instance itself: its id, transform and
+      // overrides stay, one undo step.
+      if ((el as { kind: string }).kind !== "instance")
+        return refused(t(P.notInstance, { id: String(el.id) }));
+      if ((await engineInstanceSymbol(host, el)) === pick.id)
+        return { ok: true };
+      return writeProblem(
+        await host.document
+          .mutate({
+            op: "setElementProperty",
+            args: {
+              elementId: el,
+              path: "symbolInstanceSymbol",
+              value: { type: "text", value: pick.id },
+            },
+          } as never)
+          .then((o) =>
+            o.applied
+              ? { applied: true }
+              : {
+                  applied: false,
+                  reason:
+                    typeof o.error === "string"
+                      ? o.error
+                      : JSON.stringify({ error: o.error }),
+                },
+          ),
+      );
+    }
     const env = await envelopeOf(host, el);
     const current = symbolInstanceOf(env)?.symbol;
     if (current === pick.id) return { ok: true };
     const library = await readSymbolLibrary(host);
     const from = library.symbols.find((s) => s.id === current) ?? null;
-    const batch = await rePlaceBatch(host, el, env, from, pick);
+    const to = library.symbols.find((s) => s.id === pick.id);
+    if (!to) return refused(t(NOT_ONE.symbol, { value: pick.id }));
+    const batch = await rePlaceBatch(host, el, env, from, to);
     if (typeof batch === "string") return refused(batch);
     const out = await host.document.mutate(batch as never);
     return out.applied

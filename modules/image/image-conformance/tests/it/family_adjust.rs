@@ -124,7 +124,7 @@ fn lut3d_ref(a: Px, _b: Px, p: &AdjustLut3dParams) -> Px {
 }
 
 /// The gradient-map reference — Rec.709 luma into an interpolated ramp.
-fn gradient_map_ref(a: Px, _b: Px, p: &AdjustGradientMapParams) -> Px {
+pub(crate) fn gradient_map_ref(a: Px, _b: Px, p: &AdjustGradientMapParams) -> Px {
     let c = unpremul(a);
     let luma = (c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722).clamp(0.0, 1.0);
     let t = luma * 255.0;

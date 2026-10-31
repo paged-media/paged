@@ -167,7 +167,11 @@ async function dispatchVia(
  *  story). Empty when nothing is overset or a read fails. */
 async function oversetFrameIds(
   client: ReturnType<typeof useCanvasClient>,
-  handle: { pageIds: PageId[]; pageSizesPt?: [number, number][] } | null,
+  handle: {
+    pageIds: PageId[];
+    pageSizesPt?: [number, number][];
+    pageOriginsPt?: [number, number][];
+  } | null,
   geometry: readonly ElementGeometryItem[],
   hitFrame: (
     pageId: PageId,
@@ -186,7 +190,10 @@ async function oversetFrameIds(
       stories.filter((s) => s.overset).map((s) => s.selfId),
     );
     if (oversetStoryIds.size === 0) return new Set<string>();
-    const rects = layoutPageRects(handle?.pageSizesPt ?? []);
+    const rects = layoutPageRects(
+      handle?.pageSizesPt ?? [],
+      handle?.pageOriginsPt,
+    );
     const pageIds = handle?.pageIds ?? [];
     const next = new Set<string>();
     for (const g of geometry) {
@@ -284,7 +291,7 @@ export function ThreadingController() {
   );
   const currentLoaded = useEffectEvent(() => loaded);
   const pageLayout = useEffectEvent(() => ({
-    rects: layoutPageRects(handle?.pageSizesPt ?? []),
+    rects: layoutPageRects(handle?.pageSizesPt ?? [], handle?.pageOriginsPt),
     pageIds: handle?.pageIds ?? [],
   }));
 

@@ -39,6 +39,33 @@ export interface FitTransform {
 
 /** Aspect-fit an `imgW`×`imgH` image into the frame `bounds`
  *  `[top,left,bottom,right]` (page-local pt), centered. */
+/** The frame's box in its PAGE's coordinates. `bounds` are the frame's own
+ *  (inner) coordinates; `itemTransform` takes them to the page, and folds in
+ *  the page's origin inside its spread — on a verso that origin is a whole
+ *  page width to the left, so reading `bounds` as page-local put every
+ *  pointer a page off the image (a brush dab off the pixels paints nothing).
+ *  A host without the transform answers page-local bounds already. */
+function pageBounds(
+  b: [number, number, number, number],
+  m: [number, number, number, number, number, number] | null | undefined,
+): [number, number, number, number] {
+  if (!m) return b;
+  const [top, left, bottom, right] = b;
+  const [a, bb, c, d, tx, ty] = m;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const [x, y] of [
+    [left, top],
+    [right, top],
+    [left, bottom],
+    [right, bottom],
+  ] as const) {
+    xs.push(a * x + c * y + tx);
+    ys.push(bb * x + d * y + ty);
+  }
+  return [Math.min(...ys), Math.min(...xs), Math.max(...ys), Math.max(...xs)];
+}
+
 export function fitInto(
   geom: ElementGeometryItem,
   imgW: number,
@@ -52,7 +79,7 @@ export function fitInto(
   // the door omitted off-page frames entirely, so this path was reached
   // the same way — with a less honest reason.
   if (!geom.pageId) return null;
-  const [top, left, bottom, right] = b;
+  const [top, left, bottom, right] = pageBounds(b, geom.itemTransform);
   const boxW = Math.max(right - left, 1);
   const boxH = Math.max(bottom - top, 1);
   const scale = Math.min(boxW / imgW, boxH / imgH);

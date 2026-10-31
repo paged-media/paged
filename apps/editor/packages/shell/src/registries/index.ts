@@ -66,16 +66,42 @@ export {
 } from "./overlay";
 
 export {
+  createPresentationRegistry,
+  PRESENTATION_ATTR,
+  type PresentationContext,
+  type PresentationContribution,
+  type PresentationRegistry,
+  type PresentationRegistryOptions,
+} from "./presentation";
+
+export {
+  createViewRegistry,
+  type ViewContribution,
+  type ViewProps,
+  type ViewRegistry,
+} from "./view";
+
+export {
+  createSubContextRegistry,
+  type SubContextRegistry,
+  type SubContextSpec,
+  type SubContextState,
+} from "./sub-context";
+
+export {
   activeScopeContext,
   createControlBarGroupRegistry,
   createDocumentContextStore,
   createStatusItemRegistry,
+  createMarginBandRegistry,
   type ControlBarGroupContribution,
   type ControlBarGroupRegistry,
   type DocumentContextStore,
   type ScopedItemRegistry,
   type StatusItemContribution,
   type StatusItemRegistry,
+  type MarginBandContribution,
+  type MarginBandRegistry,
 } from "./context-bar";
 
 export {

@@ -32,25 +32,50 @@ pub struct Deck {
     /// Named theme colours (`accent1` …) of the first master's theme, in
     /// scheme order — written as a colour group.
     pub theme_colors: Vec<(String, Rgb)>,
-    /// One per used layout: the slide master's and the layout's own art.
+    /// That theme as data (slide ADR 713), and its part.
+    #[serde(default)]
+    pub theme: Option<crate::theme::ThemeIr>,
+    #[serde(default)]
+    pub theme_part: Option<String>,
+    /// Slide ADR 712: each slide master, then each of its layouts (based on
+    /// it), in the deck's order.
     pub masters: Vec<MasterPage>,
     pub slides: Vec<SlidePage>,
     /// Paragraph styles the text uses (`Title`, `Body L1` …), per master.
     pub paragraph_styles: Vec<ParagraphStyle>,
     /// Font families the text names, for the host to register.
     pub fonts: Vec<String>,
+    /// The deck's custom shows, by page id.
+    #[serde(default)]
+    pub custom_shows: Vec<CustomShowPages>,
     pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MasterPage {
-    /// Stable id derived from the layout part (`m1` …).
+    /// `M1` … for slide masters, `m1` … for layouts, in deck order.
     pub id: String,
     /// The layout's name (`Title Slide`, …).
     pub name: String,
+    /// The layout part; empty for a slide master.
     pub layout_part: String,
     pub master_part: String,
     pub items: Vec<Item>,
+    /// A slide master's own spread (else a layout).
+    #[serde(default)]
+    pub is_master: bool,
+    /// The spread a layout is based on: its slide master's.
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// Items of `parent` this spread hides (its `OverrideList`).
+    #[serde(default)]
+    pub overrides: Vec<String>,
+    /// A layout's `type` (`title`, `obj`, …).
+    #[serde(default)]
+    pub layout_type: Option<String>,
+    /// `preserve="1"`.
+    #[serde(default)]
+    pub preserve: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -59,12 +84,40 @@ pub struct SlidePage {
     pub index: usize,
     pub part: String,
     pub master: Option<String>,
+    /// The layout's items this slide hides (its `OverrideList`): every
+    /// placeholder of the layout.
+    #[serde(default)]
+    pub overrides: Vec<String>,
     pub show_master_items: bool,
     pub items: Vec<Item>,
     pub hidden: bool,
     pub notes: Option<String>,
     pub transition: Option<pptx_core::Transition>,
     pub timing_xml: Option<String>,
+    /// `p:timing` as a tree (slide ADR 714).
+    #[serde(default)]
+    pub timing: Option<pptx_core::anim::Timing>,
+    /// The section that starts at this slide (`p14:section`): its id and
+    /// name. A slide inside a section has none; its section is the last one
+    /// started before it.
+    #[serde(default)]
+    pub section: Option<SectionStart>,
+}
+
+/// A section's start (slide ADR 720).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SectionStart {
+    /// The section's `{GUID}`.
+    pub id: String,
+    pub name: String,
+}
+
+/// A custom show by the page ids of its slides (slide ADR 720).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CustomShowPages {
+    pub id: u32,
+    pub name: String,
+    pub pages: Vec<String>,
 }
 
 /// A page item, positioned by `transform` (its local box `(0,0)`–`(w,h)` →
@@ -80,7 +133,9 @@ pub struct Item {
     pub kind: ItemKind,
     /// 0–1; 1 is opaque.
     pub opacity: f64,
-    pub shadow: Option<Shadow>,
+    /// The item's DrawingML effects (shadows, glow, soft edge, …).
+    #[serde(default)]
+    pub effects: Effects,
     /// What export and editing need to know about where it came from.
     pub meta: ItemMeta,
 }
@@ -101,6 +156,9 @@ pub enum ItemKind {
         image_part: String,
         /// Crop in fractions of the image: l, t, r, b.
         crop: (f64, f64, f64, f64),
+        /// The blip's picture effects (`a:duotone`, `a:lum`, …).
+        #[serde(default)]
+        image_effects: Vec<ImageEffect>,
     },
     Group {
         children: Vec<Item>,
@@ -109,116 +167,12 @@ pub enum ItemKind {
     Table(Table),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Paint {
-    None,
-    Solid {
-        rgb: Rgb,
-        alpha: f64,
-        theme: Option<String>,
-    },
-    Linear {
-        stops: Vec<Stop>,
-        angle: f64,
-    },
-    Radial {
-        stops: Vec<Stop>,
-        /// The centre, as fractions of the box: the centre of
-        /// `a:fillToRect` (the box's centre when absent). The gradient
-        /// reaches its last stop at the farthest corner.
-        center: (f64, f64),
-    },
-    Image {
-        part: String,
-    },
-}
-
-/// One gradient stop: position (0–100 %), colour, alpha (0–1).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Stop {
-    pub pos: f64,
-    pub rgb: Rgb,
-    pub alpha: f64,
-}
-
-impl Paint {
-    /// The colour of a gradient at position `t` (0–1) along its axis, or of
-    /// a solid paint anywhere; stops interpolate in sRGB.
-    pub fn color_at(&self, t: f64) -> Option<(Rgb, f64)> {
-        match self {
-            Paint::Solid { rgb, alpha, .. } => Some((*rgb, *alpha)),
-            Paint::Linear { stops, .. } | Paint::Radial { stops, .. } => {
-                let t = t.clamp(0.0, 1.0) * 100.0;
-                let first = stops.first()?;
-                if t <= first.pos {
-                    return Some((first.rgb, first.alpha));
-                }
-                for w in stops.windows(2) {
-                    let (a, b) = (w[0], w[1]);
-                    if t <= b.pos {
-                        let k = if b.pos > a.pos {
-                            (t - a.pos) / (b.pos - a.pos)
-                        } else {
-                            1.0
-                        };
-                        let mix =
-                            |x: u8, y: u8| (x as f64 + (y as f64 - x as f64) * k).round() as u8;
-                        return Some((
-                            [
-                                mix(a.rgb[0], b.rgb[0]),
-                                mix(a.rgb[1], b.rgb[1]),
-                                mix(a.rgb[2], b.rgb[2]),
-                            ],
-                            a.alpha + (b.alpha - a.alpha) * k,
-                        ));
-                    }
-                }
-                let last = stops.last()?;
-                Some((last.rgb, last.alpha))
-            }
-            Paint::None | Paint::Image { .. } => None,
-        }
-    }
-
-    /// The paint's alpha when it is the same everywhere (a solid colour, or
-    /// a gradient whose stops share one), else `None`.
-    pub fn uniform_alpha(&self) -> Option<f64> {
-        match self {
-            Paint::Solid { alpha, .. } => Some(*alpha),
-            Paint::Linear { stops, .. } | Paint::Radial { stops, .. } => {
-                let first = stops.first()?.alpha;
-                stops
-                    .iter()
-                    .all(|s| (s.alpha - first).abs() < 1e-3)
-                    .then_some(first)
-            }
-            Paint::None | Paint::Image { .. } => Some(1.0),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Stroke {
-    pub width: f64,
-    pub paint: Paint,
-    pub dash: Option<String>,
-    /// `cmpd` other than a single line (`dbl`, `thickThin`, …).
-    #[serde(default)]
-    pub compound: Option<String>,
-    pub cap: Option<String>,
-    pub join: Option<String>,
-    pub head: Option<String>,
-    pub tail: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Shadow {
-    pub dx: f64,
-    pub dy: f64,
-    pub blur: f64,
-    pub rgb: Rgb,
-    pub alpha: f64,
-}
+// The resolved paint is the shared neutral IR (`paged_ooxml::drawingml::
+// resolved`, slide ADR 722): what doc lowers from too, and what the shared
+// mapper (`dml-native`) turns into the engine's model.
+pub use paged_ooxml::drawingml::resolved::{
+    radial_reach, Effects, ImageEffect, Paint, PatternPaint, Shadow, Stop, Stroke,
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ItemMeta {
@@ -232,9 +186,63 @@ pub struct ItemMeta {
     /// its members are a drawing of it, not shapes of the slide.
     #[serde(default)]
     pub frame: Option<String>,
+    /// The chart part a chart frame draws (ADR 715: its live workbook is
+    /// found by it).
+    #[serde(default)]
+    pub chart: Option<String>,
     /// The shape's click action (`a:hlinkClick` on `p:cNvPr`).
     #[serde(default)]
     pub link: Option<pptx_core::Hyperlink>,
+    /// The `a:xfrm` flips (`flipH`, `flipV`) a live preset keeps.
+    #[serde(default)]
+    pub flip: (bool, bool),
+    /// A connector's glued ends (slide ADR 717).
+    #[serde(default)]
+    pub connector: Option<Connector>,
+    /// A SmartArt drawing shape's `modelId` (its presentation point).
+    #[serde(default)]
+    pub model_id: Option<String>,
+    /// A SmartArt drawing shape: the data points whose text it shows, in
+    /// order, and how many paragraphs of its text each one is.
+    #[serde(default)]
+    pub dgm: Option<Vec<(String, u32)>>,
+    /// A SmartArt frame: its data model's text outline (the text pane).
+    #[serde(default)]
+    pub smartart: Option<pptx_core::DiagramModel>,
+    /// The shape's `p:style` (slide ADR 719): its references and the look
+    /// they give, for the object style it maps to.
+    #[serde(default)]
+    pub shape_style: Option<ShapeStyleLook>,
+}
+
+/// A shape style (`p:style`) as a document object style: the theme
+/// references (their text identifies the style), its name, and the fill and
+/// line they give a shape of its own.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShapeStyleLook {
+    /// `line2:accent1 shade50000 fill1:accent1 effect0:accent1 font:minor:lt1`.
+    pub refs: String,
+    pub name: String,
+    pub fill: Paint,
+    pub stroke: Option<Stroke>,
+}
+
+/// A connector's glued ends.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Connector {
+    pub st: Option<CxnEnd>,
+    pub end: Option<CxnEnd>,
+}
+
+/// One glued end: the shape (`cNvPr` id on the same slide), the index of
+/// its connection site, and where that site is on the page at import
+/// (`None` when the shape is not one whose sites the editor follows: a
+/// group, or a shape not drawn).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CxnEnd {
+    pub id: u32,
+    pub idx: u32,
+    pub at: Option<(f64, f64)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -309,6 +317,12 @@ pub struct TextRun {
     pub baseline: f64,
     pub rgb: Rgb,
     pub alpha: f64,
+    /// The theme colour the run's colour is (its key, slide ADR 713).
+    #[serde(default)]
+    pub theme: Option<String>,
+    /// The theme font the run's typeface is (`major`, `minor`).
+    #[serde(default)]
+    pub theme_font: Option<String>,
     /// The run's `a:hlinkClick`: a URL, a slide or a show action.
     pub link: Option<pptx_core::Hyperlink>,
     /// `a:fld type` (`slidenum`, `datetime1`, …); `text` holds the value
@@ -394,15 +408,20 @@ pub struct Cell {
     pub text: Option<TextFrame>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A paragraph style a placeholder's text maps to (slide ADR 719): `Title`,
+/// `Body`, `Body L1`–`L9`, `Other L1`–`L9`, as the first master's text
+/// styles give them.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ParagraphStyle {
     pub name: String,
-}
-
-/// How far a radial gradient centred at `center` (fractions of a `w` × `h`
-/// box) runs before its last stop: to the farthest corner.
-pub fn radial_reach(center: (f64, f64), w: f64, h: f64) -> f64 {
-    let dx = center.0.max(1.0 - center.0) * w;
-    let dy = center.1.max(1.0 - center.1) * h;
-    (dx * dx + dy * dy).sqrt()
+    /// The style it is based on (`Body` for the list levels).
+    #[serde(default)]
+    pub based_on: Option<String>,
+    /// The theme font it takes (`major`, `minor`): the root styles'.
+    #[serde(default)]
+    pub theme_font: Option<String>,
+    /// The level's own look, from the master's text style; `None` for the
+    /// root styles.
+    #[serde(default)]
+    pub level: Option<Para>,
 }

@@ -40,6 +40,7 @@ pub(super) fn frame_ref_self_id(spread: &Spread, r: FrameRef) -> Option<&str> {
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.as_deref(),
         FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.as_deref(),
         FrameRef::Group(i) => spread.groups.get(i)?.self_id.as_deref(),
+        FrameRef::Instance(i) => spread.instances.get(i)?.self_id.as_deref(),
     }
 }
 

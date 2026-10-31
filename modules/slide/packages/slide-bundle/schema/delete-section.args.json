@@ -1,0 +1,12 @@
+{
+  "kind": "struct",
+  "fields": {
+    "name": {
+      "kind": "text"
+    },
+    "withSlides": {
+      "kind": "bool",
+      "optional": true
+    }
+  }
+}

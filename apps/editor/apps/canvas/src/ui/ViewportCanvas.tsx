@@ -43,6 +43,7 @@ import {
   TEXT_TOOL_ID,
   useContentSelection,
   useEditContextEntry,
+  useSubContextEntry,
   useOptionalEditContextStack,
   useOptionalTool,
   useOverlaySignals,
@@ -106,6 +107,9 @@ export interface ViewportCanvasProps {
   docId: string;
   pageIds: ReadonlyArray<PageId>;
   pageSizesPt: ReadonlyArray<readonly [number, number]>;
+  /** Engine ADR 1011 — each page's top-left on the canvas, pt (absent:
+   *  the pages stack). */
+  pageOriginsPt?: ReadonlyArray<readonly [number, number]>;
   camera: Camera;
   onCameraChange: (cam: Camera) => void;
   /** Called when the user clicks (not drags) on a page, and when a
@@ -178,6 +182,10 @@ export interface ViewportCanvasProps {
     /** Per-position cursor refinement from the handler's `cursorAt`. */
     hoverCursor?: (e: CanvasPointerEvent) => string | undefined;
   } | null;
+  /** Editor ADR 311 — the tool in hand works on the frame an edit context
+   *  was entered on (Free Transform): a press over that frame goes to the
+   *  tool, not to the context's content pointer. */
+  toolSharedAcrossContexts?: boolean;
   /** Phase 3 — CSS cursor for the active tool. Overrides the default
    * pan affordance when set. */
   cursor?: string;
@@ -297,6 +305,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // consults this BEFORE group descent: a polygon enters the
   // vectorGraphic context, a webFrame enters its source context.
   const { tryEnterEditContext, tryEnterOwnedContent } = useEditContextEntry();
+  // Editor ADR 301 — headers, footers and notes edited in place.
+  const { trySubContext } = useSubContextEntry();
   const tool = useOptionalTool();
   const { activeGroup } = useSelection();
 
@@ -323,8 +333,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // Document-space layout — only used to compute initial fit-to-document.
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const rects = useMemo(
-    () => layoutPages(props.pageSizesPt),
-    [props.pageSizesPt],
+    () => layoutPages(props.pageSizesPt, props.pageOriginsPt),
+    [props.pageSizesPt, props.pageOriginsPt],
   );
 
   // Mount: transfer the canvas. Cleanup: nothing — once an
@@ -689,6 +699,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // handler skip this block entirely (unchanged tool behavior).
     if (
       e.button === 0 &&
+      !props.toolSharedAcrossContexts &&
       editContextStack?.active &&
       editContextStack.activeContribution?.onContentPointerDown
     ) {
@@ -1314,14 +1325,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         const rect = e.currentTarget.getBoundingClientRect();
         const cx = e.clientX - rect.left;
         const cy = e.clientY - rect.top;
-        const [docX, docY] = viewportToDoc(props.camera, cx, cy);
         const factor = e.altKey ? 1 / 1.25 : 1.25;
-        const scale = Math.min(64, Math.max(0.01, props.camera.scale * factor));
-        props.onCameraChange({
-          scale,
-          tx: cx - docX * scale,
-          ty: cy - docY * scale,
-        });
+        // About the clicked point; the same formula at any view rotation.
+        props.onCameraChange(zoomAt(props.camera, cx, cy, factor, 0.01, 64));
         return;
       }
       // GT-5 — the Hand (and its Space spring-load) only pans: a click
@@ -1581,13 +1587,6 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   };
 
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Phase H — double-click on a frame nested inside a group →
-    // select the whole outermost containing group as a unit.
-    if (!props.onDoubleClickGroup) return;
-    // W2.11 — with the Type tool, double-/triple-click is text
-    // granularity (handled in onPointerUp's click branch); skip the
-    // group-descent path so the two don't fight over the same click.
-    if ((props.activeTool ?? "select") === "text") return;
     // Path-edit mode — a double-click whose second click the session
     // took (on an anchor it converts corner ↔ smooth) is not ALSO a
     // request to enter whatever lies under that anchor.
@@ -1600,6 +1599,21 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (!containing) return;
     const [pageId, pageRect] = containing;
     const pagePoint: [number, number] = [docX - pageRect.x, docY - pageRect.y];
+    // W2.11 — with the Type tool, double-/triple-click is text
+    // granularity (handled in onPointerUp's click branch); skip the
+    // group-descent path so the two don't fight over the same click.
+    const typeTool = (props.activeTool ?? "select") === "text";
+    // Editor ADR 301 — FIRST, with any tool: the active context's (or the
+    // document context's) sub-context providers may take the double-click
+    // for a header, footer or note edited in place. None answering leaves
+    // it to what follows.
+    const offerFirst = async () => {
+      if (await trySubContext({ pageId, pagePoint })) return;
+      // Phase H — double-click on a frame nested inside a group →
+      // select the whole outermost containing group as a unit.
+      if (!props.onDoubleClickGroup || typeTool) return;
+      await resolveDoubleClick();
+    };
     // A promise chain, not a try (ADR 229).
     const resolveDoubleClick = async () => {
       const reply = await props.client.send({
@@ -1682,7 +1696,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       // context by kind) enters vectorGraphic.
       await (holdsImage ? tryEnterOwnedContent(at) : tryEnterEditContext(at));
     };
-    void resolveDoubleClick().catch((err: unknown) => {
+    void offerFirst().catch((err: unknown) => {
       // Same fail-quiet approach as the click hitTest.
       console.warn("doubleClick hitTest failed:", err);
     });
@@ -1731,6 +1745,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         elementGeometry={props.elementGeometry}
         hostRef={wrapperRef}
         hostSize={hostSize}
+        passThrough={props.toolSharedAcrossContexts}
       />
       {/* F-36 — where typed and composed text arrives while a caret is
           in a story (ADR 234). */}

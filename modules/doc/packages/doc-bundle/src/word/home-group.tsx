@@ -21,12 +21,16 @@
 // size, B/I/U/strike/sub/sup, text colour, bullets and numbering, the
 // indents, alignment and line spacing — every control reading the
 // selection's effective format from the word store and writing through the
-// same commands the shortcuts run. Highlight, shading and borders are not
-// here: the engine models none of them on text yet (wave 1's engine work).
+// same commands the shortcuts run. Amendment 1 (engine ADR 1018): the
+// Styles menu (Update to Match, Modify…, New Style, Apply Styles), highlight,
+// double underline, hidden text, shading, borders, the multilevel list
+// presets with Restart / Continue Numbering, Show ¶ (hidden text) and Clear
+// paragraph formatting.
 
 import type { ControlBarGroupProps } from "@paged-media/plugin-api";
 import { subscribeOf, useLive } from "@paged-media/react-live";
 import { useStrings } from "@paged-media/strings";
+import { useEffect, useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { WORD } from "../messages.js";
@@ -49,7 +53,19 @@ export interface HomeGroupActions {
   setFontFamily(family: string): void;
   setFontSize(size: number): void;
   setTextColor(swatchId: string): void;
+  setHighlight(swatchId: string): void;
+  setShading(swatchId: string): void;
 }
+
+/** The Styles menu's entries, by command. */
+const STYLE_ACTIONS = [
+  "styleUpdate",
+  "styleModify",
+  "styleNew",
+  "applyStyles",
+] as const satisfies readonly WordCommandName[];
+
+const NO_SWATCH = "Swatch/None";
 
 const MIXED = "__mixed__";
 
@@ -74,10 +90,35 @@ export function makeHomeGroup(store: WordStore, actions: HomeGroupActions) {
       typeof size === "number" && !WORD_SIZES.includes(size)
         ? [...WORD_SIZES, size].sort((a, b) => a - b)
         : WORD_SIZES;
+    const highlight = f.characterHighlightColor as Read<string>;
+    const highlighted =
+      typeof highlight === "string" &&
+      highlight !== "" &&
+      highlight !== "mixed" &&
+      highlight !== NO_SWATCH;
+    const border =
+      f.paragraphBorderOn === true
+        ? "box"
+        : (f.paragraphRuleBelow as { on?: unknown } | null)?.on === true
+          ? "bottom"
+          : "none";
+    const styleBox = useRef<HTMLSelectElement>(null);
+    // Apply Styles: the command asks for the style box's focus.
+    useEffect(() => {
+      if (snap.focusStyleBox > 0) styleBox.current?.focus();
+    }, [snap.focusStyleBox]);
+    const swatchOptions = snap.swatches
+      .filter((s) => s.selfId !== NO_SWATCH)
+      .map((s) => (
+        <option key={s.selfId} value={s.selfId}>
+          {s.name.replace(/^\$ID\//, "")}
+        </option>
+      ));
 
     return (
       <span data-word-home style={row}>
         <select
+          ref={styleBox}
           data-word-style
           aria-label={strings.t(WORD.paragraphStyle)}
           title={strings.t(WORD.paragraphStyle)}
@@ -105,6 +146,26 @@ export function makeHomeGroup(store: WordStore, actions: HomeGroupActions) {
           {typeof style === "string" && style !== "mixed" && !knownStyle && (
             <option value={style}>{style.replace(/^.*\//, "")}</option>
           )}
+        </select>
+        <select
+          data-word-styles-menu
+          aria-label={strings.t(WORD.stylesMenu)}
+          title={strings.t(WORD.stylesMenu)}
+          disabled={off}
+          value=""
+          onChange={(e) => {
+            const name = e.target.value as WordCommandName;
+            if (name) actions.run(name);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          style={{ ...select, width: 28, padding: 0 }}
+        >
+          <option value="">⋯</option>
+          {STYLE_ACTIONS.map((name) => (
+            <option key={name} value={name}>
+              {strings.t(WORD[name])}
+            </option>
+          ))}
         </select>
         <select
           data-word-font
@@ -191,6 +252,15 @@ export function makeHomeGroup(store: WordStore, actions: HomeGroupActions) {
           <u>U</u>
         </Toggle>
         <Toggle
+          id="doubleUnderline"
+          label={strings.t(WORD.doubleUnderline)}
+          on={f.characterUnderlineType === "double"}
+          off={off}
+          run={actions.run}
+        >
+          <span style={{ textDecoration: "underline double" }}>D</span>
+        </Toggle>
+        <Toggle
           id="strikethrough"
           label={strings.t(WORD.strikethrough)}
           on={f.characterStrikethru === true}
@@ -221,6 +291,44 @@ export function makeHomeGroup(store: WordStore, actions: HomeGroupActions) {
             x<sup>2</sup>
           </span>
         </Toggle>
+        <Toggle
+          id="hidden"
+          label={strings.t(WORD.hidden)}
+          on={f.characterHidden === true}
+          off={off}
+          run={actions.run}
+        >
+          <span style={{ textDecoration: "underline dotted" }}>ab</span>
+        </Toggle>
+        <Toggle
+          id="highlight"
+          label={strings.t(WORD.highlight)}
+          on={highlighted}
+          off={off}
+          run={actions.run}
+        >
+          <span
+            style={{ background: "#fde047", color: "#000", padding: "0 2px" }}
+          >
+            ab
+          </span>
+        </Toggle>
+        <select
+          data-word-highlight
+          aria-label={strings.t(WORD.highlightColor)}
+          title={strings.t(WORD.highlightColor)}
+          disabled={off}
+          value=""
+          onChange={(e) => {
+            if (e.target.value) actions.setHighlight(e.target.value);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          style={{ ...select, width: 28, padding: 0 }}
+        >
+          <option value="">▾</option>
+          <option value={NO_SWATCH}>{strings.t(WORD.noColor)}</option>
+          {swatchOptions}
+        </select>
         <select
           data-word-color
           aria-label={strings.t(WORD.textColor)}
@@ -263,6 +371,30 @@ export function makeHomeGroup(store: WordStore, actions: HomeGroupActions) {
         >
           <span>1≡</span>
         </Toggle>
+        <select
+          data-word-multilevel
+          aria-label={strings.t(WORD.multilevelList)}
+          title={strings.t(WORD.multilevelList)}
+          disabled={off}
+          value=""
+          onChange={(e) => {
+            const name = e.target.value as WordCommandName;
+            if (name) actions.run(name);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          style={{ ...select, width: 28, padding: 0 }}
+        >
+          <option value="">▾</option>
+          <option value="listOutline">1. a. i.</option>
+          <option value="listLegal">1. 1.1. 1.1.1.</option>
+          <option value="listBullets">• ◦ ▪</option>
+          <option value="restartNumbering">
+            {strings.t(WORD.restartNumbering)}
+          </option>
+          <option value="continueNumbering">
+            {strings.t(WORD.continueNumbering)}
+          </option>
+        </select>
         <Toggle
           id="decreaseIndent"
           label={strings.t(WORD.decreaseIndent)}
@@ -342,6 +474,74 @@ export function makeHomeGroup(store: WordStore, actions: HomeGroupActions) {
           <option value="1.5">{strings.t(WORD.oneAndHalf)}</option>
           <option value="2">{strings.t(WORD.double)}</option>
         </select>
+        <Sep />
+        <Toggle
+          id="shading"
+          label={strings.t(WORD.shading)}
+          on={f.paragraphShadingOn === true}
+          off={off}
+          run={actions.run}
+        >
+          <span aria-hidden style={{ fontSize: 15 }}>
+            ◧
+          </span>
+        </Toggle>
+        <select
+          data-word-shading
+          aria-label={strings.t(WORD.shadingColor)}
+          title={strings.t(WORD.shadingColor)}
+          disabled={off}
+          value=""
+          onChange={(e) => {
+            if (e.target.value) actions.setShading(e.target.value);
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          style={{ ...select, width: 28, padding: 0 }}
+        >
+          <option value="">▾</option>
+          {swatchOptions}
+        </select>
+        <select
+          data-word-borders
+          aria-label={strings.t(WORD.borders)}
+          title={strings.t(WORD.borders)}
+          disabled={off}
+          value={border}
+          onChange={(e) => {
+            const v = e.target.value;
+            actions.run(
+              v === "box"
+                ? "borderBox"
+                : v === "bottom"
+                  ? "borderBottom"
+                  : "borderNone",
+            );
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          style={{ ...select, width: 92 }}
+        >
+          <option value="none">{strings.t(WORD.borderNone)}</option>
+          <option value="bottom">{strings.t(WORD.borderBottom)}</option>
+          <option value="box">{strings.t(WORD.borderBox)}</option>
+        </select>
+        <Toggle
+          id="showHidden"
+          label={strings.t(WORD.showHidden)}
+          on={snap.showHidden}
+          off={false}
+          run={actions.run}
+        >
+          <span>¶</span>
+        </Toggle>
+        <Toggle
+          id="clearParagraph"
+          label={strings.t(WORD.clearParagraph)}
+          on={false}
+          off={off}
+          run={actions.run}
+        >
+          <span>¶̸</span>
+        </Toggle>
       </span>
     );
   }

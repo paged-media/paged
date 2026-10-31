@@ -1,0 +1,852 @@
+{
+  "fixture": "offset-compound",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/offset-compound.jsx",
+    "script_sha256": "910ed713dc1f6b15c91842b0564dc4e26ea96cac6decb756a4e683dc39905117",
+    "runner": "scripts/illustrator/run-probe.sh",
+    "recorded_at": "2026-10-25T03:14:05.410Z",
+    "host_os": "macOS 26.4",
+    "ruler_units": "RulerUnits.Points",
+    "artboard_rect_app": [
+      0,
+      792,
+      612,
+      0
+    ]
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down (mapped in and out of Illustrator's Y-up document coordinates through the scratch artboard's top-left corner)",
+  "operation": "inputs made one compound path (app.executeMenuCommand(\"compoundPath\")) when there are several, then PageItem.applyEffect(<LiveEffect name=\"Adobe Offset Path\"> with Dict \"R mlim <miterLimit> R ofst <delta> I jntp <0 round | 1 bevel | 2 miter>\") then app.executeMenuCommand(\"expandStyle\")",
+  "cases": [
+    {
+      "id": "ring-miter-out",
+      "parameters": {"delta":10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 1600,
+            "bounds": [180,180,220,220],
+            "winding": "ccw",
+            "areaSignedApp": -1600,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[220,220],"left":[220,220],"right":[220,220]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[180,220],"left":[180,220],"right":[180,220]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 48400,
+            "bounds": [90,90,310,310],
+            "winding": "cw",
+            "areaSignedApp": 48400,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[90,310],"left":[90,310],"right":[90,310]},
+              {"anchor":[90,90],"left":[90,90],"right":[90,90]},
+              {"anchor":[310,90],"left":[310,90],"right":[310,90]},
+              {"anchor":[310,310],"left":[310,310],"right":[310,310]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ring-miter-in",
+      "parameters": {"delta":-10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 6400,
+            "bounds": [160,160,240,240],
+            "winding": "ccw",
+            "areaSignedApp": -6400,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[160,240],"left":[160,240],"right":[160,240]},
+              {"anchor":[240,240],"left":[240,240],"right":[240,240]},
+              {"anchor":[240,160],"left":[240,160],"right":[240,160]},
+              {"anchor":[160,160],"left":[160,160],"right":[160,160]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 32400,
+            "bounds": [110,110,290,290],
+            "winding": "cw",
+            "areaSignedApp": 32400,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[110,290],"left":[110,290],"right":[110,290]},
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[290,110],"left":[290,110],"right":[290,110]},
+              {"anchor":[290,290],"left":[290,290],"right":[290,290]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ring-round-out",
+      "parameters": {"delta":10,"join":"round","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 1600,
+            "bounds": [180,180,220,220],
+            "winding": "ccw",
+            "areaSignedApp": -1600,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[220,220],"left":[220,220],"right":[220,220]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[180,220],"left":[180,220],"right":[180,220]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 48314.249,
+            "bounds": [90,90,310,310],
+            "winding": "cw",
+            "areaSignedApp": 48314.249,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,310],"left":[100,310],"right":[94.477051,310]},
+              {"anchor":[90,300],"left":[90,305.522949],"right":[90,300]},
+              {"anchor":[90,100],"left":[90,100],"right":[90,94.477051]},
+              {"anchor":[100,90],"left":[94.477051,90],"right":[100,90]},
+              {"anchor":[300,90],"left":[300,90],"right":[305.522949,90]},
+              {"anchor":[310,100],"left":[310,94.477051],"right":[310,100]},
+              {"anchor":[310,300],"left":[310,300],"right":[310,305.522949]},
+              {"anchor":[300,310],"left":[305.522949,310],"right":[300,310]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ring-round-in",
+      "parameters": {"delta":-10,"join":"round","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 6314.249,
+            "bounds": [160,160,240,240],
+            "winding": "ccw",
+            "areaSignedApp": -6314.249,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[170,160],"left":[170,160],"right":[164.477051,160]},
+              {"anchor":[160,170],"left":[160,164.477051],"right":[160,170]},
+              {"anchor":[160,230],"left":[160,230],"right":[160,235.522949]},
+              {"anchor":[170,240],"left":[164.477051,240],"right":[170,240]},
+              {"anchor":[230,240],"left":[230,240],"right":[235.522949,240]},
+              {"anchor":[240,230],"left":[240,235.522949],"right":[240,230]},
+              {"anchor":[240,170],"left":[240,170],"right":[240,164.477051]},
+              {"anchor":[230,160],"left":[235.522949,160],"right":[230,160]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 32400,
+            "bounds": [110,110,290,290],
+            "winding": "cw",
+            "areaSignedApp": 32400,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[110,290],"left":[110,290],"right":[110,290]},
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[290,110],"left":[290,110],"right":[290,110]},
+              {"anchor":[290,290],"left":[290,290],"right":[290,290]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ring-bevel-out",
+      "parameters": {"delta":10,"join":"bevel","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 1600,
+            "bounds": [180,180,220,220],
+            "winding": "ccw",
+            "areaSignedApp": -1600,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[220,220],"left":[220,220],"right":[220,220]},
+              {"anchor":[220,180],"left":[220,180],"right":[220,180]},
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[180,220],"left":[180,220],"right":[180,220]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 48200,
+            "bounds": [90,90,310,310],
+            "winding": "cw",
+            "areaSignedApp": 48200,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[100,310],"left":[100,310],"right":[100,310]},
+              {"anchor":[90,300],"left":[90,300],"right":[90,300]},
+              {"anchor":[90,100],"left":[90,100],"right":[90,100]},
+              {"anchor":[100,90],"left":[100,90],"right":[100,90]},
+              {"anchor":[300,90],"left":[300,90],"right":[300,90]},
+              {"anchor":[310,100],"left":[310,100],"right":[310,100]},
+              {"anchor":[310,300],"left":[310,300],"right":[310,300]},
+              {"anchor":[300,310],"left":[300,310],"right":[300,310]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ring-bevel-in",
+      "parameters": {"delta":-10,"join":"bevel","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 6200,
+            "bounds": [160,160,240,240],
+            "winding": "ccw",
+            "areaSignedApp": -6200,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[160,170],"left":[160,170],"right":[160,170]},
+              {"anchor":[160,230],"left":[160,230],"right":[160,230]},
+              {"anchor":[170,240],"left":[170,240],"right":[170,240]},
+              {"anchor":[230,240],"left":[230,240],"right":[230,240]},
+              {"anchor":[240,230],"left":[240,230],"right":[240,230]},
+              {"anchor":[240,170],"left":[240,170],"right":[240,170]},
+              {"anchor":[230,160],"left":[230,160],"right":[230,160]},
+              {"anchor":[170,160],"left":[170,160],"right":[170,160]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 32400,
+            "bounds": [110,110,290,290],
+            "winding": "cw",
+            "areaSignedApp": 32400,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[110,290],"left":[110,290],"right":[110,290]},
+              {"anchor":[110,110],"left":[110,110],"right":[110,110]},
+              {"anchor":[290,110],"left":[290,110],"right":[290,110]},
+              {"anchor":[290,290],"left":[290,290],"right":[290,290]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ring-hole-vanishes",
+      "parameters": {"delta":35,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 72900,
+            "bounds": [65,65,335,335],
+            "winding": "cw",
+            "areaSignedApp": 72900,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[65,335],"left":[65,335],"right":[65,335]},
+              {"anchor":[65,65],"left":[65,65],"right":[65,65]},
+              {"anchor":[335,65],"left":[335,65],"right":[335,65]},
+              {"anchor":[335,335],"left":[335,335],"right":[335,335]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ring-island-out",
+      "parameters": {"delta":4,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[190,190],"left":[190,190],"right":[190,190]},
+              {"anchor":[210,190],"left":[210,190],"right":[210,190]},
+              {"anchor":[210,210],"left":[210,210],"right":[210,210]},
+              {"anchor":[190,210],"left":[190,210],"right":[190,210]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 784,
+            "bounds": [186,186,214,214],
+            "winding": "cw",
+            "areaSignedApp": 784,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[186,214],"left":[186,214],"right":[186,214]},
+              {"anchor":[186,186],"left":[186,186],"right":[186,186]},
+              {"anchor":[214,186],"left":[214,186],"right":[214,186]},
+              {"anchor":[214,214],"left":[214,214],"right":[214,214]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 2704,
+            "bounds": [174,174,226,226],
+            "winding": "ccw",
+            "areaSignedApp": -2704,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[226,226],"left":[226,226],"right":[226,226]},
+              {"anchor":[226,174],"left":[226,174],"right":[226,174]},
+              {"anchor":[174,174],"left":[174,174],"right":[174,174]},
+              {"anchor":[174,226],"left":[174,226],"right":[174,226]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 43264,
+            "bounds": [96,96,304,304],
+            "winding": "cw",
+            "areaSignedApp": 43264,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[96,304],"left":[96,304],"right":[96,304]},
+              {"anchor":[96,96],"left":[96,96],"right":[96,96]},
+              {"anchor":[304,96],"left":[304,96],"right":[304,96]},
+              {"anchor":[304,304],"left":[304,304],"right":[304,304]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ring-island-in",
+      "parameters": {"delta":-4,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[170,170],"left":[170,170],"right":[170,170]},
+              {"anchor":[230,170],"left":[230,170],"right":[230,170]},
+              {"anchor":[230,230],"left":[230,230],"right":[230,230]},
+              {"anchor":[170,230],"left":[170,230],"right":[170,230]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[190,190],"left":[190,190],"right":[190,190]},
+              {"anchor":[210,190],"left":[210,190],"right":[210,190]},
+              {"anchor":[210,210],"left":[210,210],"right":[210,210]},
+              {"anchor":[190,210],"left":[190,210],"right":[190,210]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 144,
+            "bounds": [194,194,206,206],
+            "winding": "cw",
+            "areaSignedApp": 144,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[194,206],"left":[194,206],"right":[194,206]},
+              {"anchor":[194,194],"left":[194,194],"right":[194,194]},
+              {"anchor":[206,194],"left":[206,194],"right":[206,194]},
+              {"anchor":[206,206],"left":[206,206],"right":[206,206]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 4624,
+            "bounds": [166,166,234,234],
+            "winding": "ccw",
+            "areaSignedApp": -4624,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[166,234],"left":[166,234],"right":[166,234]},
+              {"anchor":[234,234],"left":[234,234],"right":[234,234]},
+              {"anchor":[234,166],"left":[234,166],"right":[234,166]},
+              {"anchor":[166,166],"left":[166,166],"right":[166,166]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 36864,
+            "bounds": [104,104,296,296],
+            "winding": "cw",
+            "areaSignedApp": 36864,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "compound": 0,
+            "anchors": [
+              {"anchor":[104,296],"left":[104,296],"right":[104,296]},
+              {"anchor":[104,104],"left":[104,104],"right":[104,104]},
+              {"anchor":[296,104],"left":[296,104],"right":[296,104]},
+              {"anchor":[296,296],"left":[296,296],"right":[296,296]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "pair-merge-out",
+      "parameters": {"delta":15,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[180,100],"left":[180,100],"right":[180,100]},
+              {"anchor":[180,180],"left":[180,180],"right":[180,180]},
+              {"anchor":[100,180],"left":[100,180],"right":[100,180]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[280,100],"left":[280,100],"right":[280,100]},
+              {"anchor":[280,180],"left":[280,180],"right":[280,180]},
+              {"anchor":[200,180],"left":[200,180],"right":[200,180]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 23100,
+            "bounds": [85,85,295,195],
+            "winding": "cw",
+            "areaSignedApp": 23100,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[85,195],"left":[85,195],"right":[85,195]},
+              {"anchor":[85,85],"left":[85,85],"right":[85,85]},
+              {"anchor":[295,85],"left":[295,85],"right":[295,85]},
+              {"anchor":[295,195],"left":[295,195],"right":[295,195]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "open-l-miter",
+      "parameters": {"delta":10,"join":"miter","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": false,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,250],"left":[300,250],"right":[300,250]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 7000,
+            "bounds": [100,90,310,250],
+            "winding": "cw",
+            "areaSignedApp": 7000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[310,250],"left":[310,250],"right":[310,250]},
+              {"anchor":[290,250],"left":[290,250],"right":[290,250]},
+              {"anchor":[290,110],"left":[290,110],"right":[290,110]},
+              {"anchor":[100,110],"left":[100,110],"right":[100,110]},
+              {"anchor":[100,90],"left":[100,90],"right":[100,90]},
+              {"anchor":[310,90],"left":[310,90],"right":[310,90]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "open-l-round",
+      "parameters": {"delta":10,"join":"round","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": false,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,250],"left":[300,250],"right":[300,250]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 7292.811251,
+            "bounds": [90,90,310,260],
+            "winding": "cw",
+            "areaSignedApp": 7292.811251,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[300,260],"left":[305.522949,260],"right":[294.477051,260]},
+              {"anchor":[290,250],"left":[290,255.522949],"right":[290,250]},
+              {"anchor":[290,110],"left":[290,110],"right":[290,110]},
+              {"anchor":[100,110],"left":[100,110],"right":[94.477051,110]},
+              {"anchor":[90,100],"left":[90,105.522949],"right":[90,94.477051]},
+              {"anchor":[100,90],"left":[94.477051,90],"right":[100,90]},
+              {"anchor":[300,90],"left":[300,90],"right":[305.522949,90]},
+              {"anchor":[310,100],"left":[310,94.477051],"right":[310,100]},
+              {"anchor":[310,250],"left":[310,250],"right":[310,255.522949]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "open-l-bevel",
+      "parameters": {"delta":10,"join":"bevel","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": false,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,250],"left":[300,250],"right":[300,250]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 6950,
+            "bounds": [100,90,310,250],
+            "winding": "cw",
+            "areaSignedApp": 6950,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[310,250],"left":[310,250],"right":[310,250]},
+              {"anchor":[290,250],"left":[290,250],"right":[290,250]},
+              {"anchor":[290,110],"left":[290,110],"right":[290,110]},
+              {"anchor":[100,110],"left":[100,110],"right":[100,110]},
+              {"anchor":[100,90],"left":[100,90],"right":[100,90]},
+              {"anchor":[300,90],"left":[300,90],"right":[300,90]},
+              {"anchor":[310,100],"left":[310,100],"right":[310,100]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "open-curve-round",
+      "parameters": {"delta":10,"join":"round","miterLimit":4},
+      "input": { "paths": [
+          {
+            "closed": false,
+            "anchors": [
+              {"anchor":[100,300],"left":[100,300],"right":[160,200]},
+              {"anchor":[300,300],"left":[240,400],"right":[300,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 5089.986783,
+            "bounds": [89.998486,261.123295,310.001437,338.876465],
+            "winding": "cw",
+            "areaSignedApp": 5089.986783,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[259.61377,338.876465],"left":[262.751953,338.876465],"right":[237.221191,338.878418]},
+              {"anchor":[194.1875,308.137207],"left":[215.389648,323.281738],"right":[173.51709,293.372559]},
+              {"anchor":[135.007324,281.668457],"left":[152.148438,278.104004],"right":[125.514648,283.643066]},
+              {"anchor":[108.574707,305.14502],"left":[116.868652,291.322266],"right":[105.733398,309.881348]},
+              {"anchor":[94.85498,308.574707],"left":[99.59082,311.417969],"right":[90.119141,305.733398]},
+              {"anchor":[91.425293,294.85498],"left":[88.583496,299.59082],"right":[102.75,275.97998]},
+              {"anchor":[130.93457,262.087891],"left":[115.673828,265.261719],"right":[156.641602,256.739746]},
+              {"anchor":[205.8125,291.862793],"left":[181.638672,274.595215],"right":[226.483398,306.62793]},
+              {"anchor":[264.992676,318.331543],"left":[247.856445,321.898438],"right":[274.485352,316.356934]},
+              {"anchor":[291.425293,294.85498],"left":[283.131348,308.677734],"right":[294.26709,290.119629]},
+              {"anchor":[305.14502,291.425293],"left":[300.411133,288.583496],"right":[309.880859,294.266602]},
+              {"anchor":[308.575195,305.14502],"left":[311.416016,300.40918],"right":[297.25,324.02002]},
+              {"anchor":[269.06543,337.912109],"left":[284.326172,334.738281],"right":[265.905273,338.569336]}
+            ]
+          }
+      ] }
+    }
+  ]
+}

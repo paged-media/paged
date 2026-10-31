@@ -204,6 +204,63 @@ impl TileJournal {
         self.budget
     }
 
+    /// Change the bounds (a user preference: History Options' depth and
+    /// memory). A tighter bound evicts at once, oldest first, exactly as
+    /// a record over the bound would; a looser one keeps everything.
+    /// A bound of zero is lifted to one, so a journal can always hold the
+    /// edit it is recording.
+    pub fn set_budget(&mut self, budget: JournalBudget) {
+        self.budget = JournalBudget {
+            max_entries: budget.max_entries.max(1),
+            max_bytes: budget.max_bytes.max(1),
+        };
+        self.enforce_bounds();
+    }
+
+    /// The scope of the `index`-th undo entry, OLDEST first (the order of
+    /// [`undo_labels`](Self::undo_labels)).
+    pub fn undo_scope_at(&self, index: usize) -> Option<u64> {
+        self.undo.get(index).map(|e| e.scope)
+    }
+
+    /// The scope of the `index`-th redo entry, NEXT first (the order of
+    /// [`redo_labels`](Self::redo_labels)).
+    pub fn redo_scope_at(&self, index: usize) -> Option<u64> {
+        let n = self.redo.len();
+        index
+            .checked_add(1)
+            .and_then(|i| n.checked_sub(i))
+            .map(|i| self.redo[i].scope)
+    }
+
+    /// Write the `index`-th undo entry's tiles (the state BEFORE that
+    /// edit) into `store` WITHOUT moving the journal: a read of a past
+    /// state, for the History brush's source. Applying the entries from
+    /// the newest down to `index` onto a copy of the buffer yields the
+    /// buffer as it was before edit `index`.
+    pub fn peek_undo_into<S: TileStore + ?Sized>(&self, index: usize, store: &mut S) -> bool {
+        let Some(entry) = self.undo.get(index) else {
+            return false;
+        };
+        for snap in &entry.tiles {
+            store.write_tile(snap.coord, snap.bytes.clone());
+        }
+        true
+    }
+
+    /// Write the `index`-th redo entry's tiles (NEXT first; the state
+    /// AFTER that edit) into `store` without moving the journal.
+    pub fn peek_redo_into<S: TileStore + ?Sized>(&self, index: usize, store: &mut S) -> bool {
+        let n = self.redo.len();
+        let Some(i) = index.checked_add(1).and_then(|i| n.checked_sub(i)) else {
+            return false;
+        };
+        for snap in &self.redo[i].tiles {
+            store.write_tile(snap.coord, snap.bytes.clone());
+        }
+        true
+    }
+
     /// The buffer's current edit marker (see the module docs).
     pub fn generation(&self) -> u64 {
         self.generation
@@ -765,6 +822,79 @@ mod tests {
         assert_eq!(j.undo_scope(), Some(7), "next comes A's");
         j.undo(&mut store(w, h, &mut a));
         assert_eq!(a, image(w, h, 1));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_tighter_budget_evicts_at_once_and_a_looser_one_lifts_the_32_cap__feat__image_editor_snapshots_presets(
+    ) {
+        let (w, h) = (64u32, 64u32);
+        let mut px = image(w, h, 0);
+        let mut j = TileJournal::new();
+        for i in 0..40u8 {
+            let d = Region::new(0, 0, 8, 8);
+            j.record(format!("edit {i}"), 0, &store(w, h, &mut px), d);
+            paint(w, &mut px, d, i + 1);
+        }
+        assert_eq!(j.depth(), DEFAULT_MAX_ENTRIES, "the default cap");
+        j.set_budget(JournalBudget {
+            max_entries: 100,
+            max_bytes: DEFAULT_MAX_BYTES,
+        });
+        for i in 40..80u8 {
+            let d = Region::new(0, 0, 8, 8);
+            j.record(format!("edit {i}"), 0, &store(w, h, &mut px), d);
+            paint(w, &mut px, d, i + 1);
+        }
+        assert_eq!(j.depth(), 32 + 40, "a raised depth keeps more than 32");
+        let dropped = j.dropped();
+        j.set_budget(JournalBudget {
+            max_entries: 10,
+            max_bytes: DEFAULT_MAX_BYTES,
+        });
+        assert_eq!(j.depth(), 10, "a tighter depth evicts at once");
+        assert_eq!(j.dropped(), dropped + 62);
+        assert_eq!(j.undo_label(), Some("edit 79"), "oldest first");
+        j.set_budget(JournalBudget {
+            max_entries: 0,
+            max_bytes: 0,
+        });
+        assert_eq!(j.budget().max_entries, 1, "never below one");
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn peeking_an_entry_reads_a_past_state_without_moving_the_journal__feat__image_editor_snapshots_presets(
+    ) {
+        let (w, h) = (64u32, 64u32);
+        let mut px = image(w, h, 0);
+        let mut j = TileJournal::new();
+        let mut states = vec![px.clone()];
+        for (i, v) in [1u8, 2, 3].into_iter().enumerate() {
+            let d = Region::new(0, 0, 8, 8);
+            j.record(format!("e{i}"), 7, &store(w, h, &mut px), d);
+            paint(w, &mut px, d, v);
+            states.push(px.clone());
+        }
+        // Before edit 1 = after edit 0: apply entries 2 then 1.
+        let mut copy = px.clone();
+        assert!(j.peek_undo_into(2, &mut store(w, h, &mut copy)));
+        assert!(j.peek_undo_into(1, &mut store(w, h, &mut copy)));
+        assert_eq!(copy, states[1]);
+        assert_eq!(j.depth(), 3, "nothing moved");
+        assert_eq!(j.undo_scope_at(0), Some(7));
+        assert!(!j.peek_undo_into(3, &mut store(w, h, &mut copy)));
+        // Redo entries read forward: undo twice, then peek the next redo.
+        j.undo(&mut store(w, h, &mut px));
+        j.undo(&mut store(w, h, &mut px));
+        assert_eq!(px, states[1]);
+        let mut fwd = px.clone();
+        assert!(j.peek_redo_into(0, &mut store(w, h, &mut fwd)));
+        assert_eq!(fwd, states[2]);
+        assert!(j.peek_redo_into(1, &mut store(w, h, &mut fwd)));
+        assert_eq!(fwd, states[3]);
+        assert_eq!(j.redo_scope_at(1), Some(7));
+        assert_eq!(j.redo_scope_at(2), None);
     }
 
     #[test]

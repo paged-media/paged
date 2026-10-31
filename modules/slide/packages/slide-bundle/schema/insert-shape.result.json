@@ -1,0 +1,6 @@
+{
+  "kind": "struct",
+  "fields": {
+    "shape": { "kind": "text" }
+  }
+}

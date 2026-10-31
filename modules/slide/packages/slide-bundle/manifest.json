@@ -11,6 +11,8 @@
       "readNative": true,
       "openNative": true
     },
+    "rendering": ["overlay"],
+    "editContext": ["slideDeck", "slideChart"],
     "clipboard": "none",
     "keybindings": true,
     "assets": ["fonts"],
@@ -25,6 +27,9 @@
     "documents": {
       "open": true,
       "export": true
+    },
+    "gpu": {
+      "realm": "bundle"
     }
   },
   "contributes": {
@@ -35,17 +40,73 @@
       "media.paged.slide.command.moveSlideUp",
       "media.paged.slide.command.moveSlideDown",
       "media.paged.slide.command.importPptx",
-      "media.paged.slide.command.exportPptx"
+      "media.paged.slide.command.exportPptx",
+      "media.paged.slide.command.previousSlide",
+      "media.paged.slide.command.nextSlide",
+      "media.paged.slide.command.addComment",
+      "media.paged.slide.command.slideShowFromBeginning",
+      "media.paged.slide.command.slideShowFromCurrent",
+      "media.paged.slide.command.presenterView",
+      "media.paged.slide.command.rehearseTimings",
+      "media.paged.slide.command.slideSorter",
+      "media.paged.slide.command.insertShapes",
+      "media.paged.slide.command.export",
+      "media.paged.slide.command.saveAsTemplate",
+      "media.paged.slide.command.customShows",
+      "media.paged.slide.command.addSection",
+      "media.paged.slide.command.animationPane",
+      "media.paged.slide.command.previewAnimations",
+      "media.paged.slide.command.animationPainter",
+      "media.paged.slide.command.insertPicture",
+      "media.paged.slide.command.insertIcon",
+      "media.paged.slide.command.copyFormat",
+      "media.paged.slide.command.pasteFormat",
+      "media.paged.slide.command.smartArtText",
+      "media.paged.slide.command.design",
+      "media.paged.slide.command.browseThemes",
+      "media.paged.slide.command.slideMaster",
+      "media.paged.slide.command.resetSlide"
     ],
     "importers": ["media.paged.slide.importer.pptx"],
-    "exporters": ["media.paged.slide.exporter.pptx"],
+    "exporters": [
+      "media.paged.slide.exporter.pptx",
+      "media.paged.slide.exporter.potx"
+    ],
+    "presentations": ["media.paged.slide.show"],
+    "views": [
+      "media.paged.slide.view.sorter",
+      "media.paged.slide.view.export",
+      "media.paged.slide.view.master"
+    ],
+    "editContexts": [
+      {
+        "type": "slideDeck",
+        "entry": "doubleClick"
+      },
+      {
+        "type": "slideChart",
+        "entry": "doubleClick"
+      }
+    ],
+    "objectTypes": [
+      {
+        "type": "slideChart",
+        "bakedFallback": "group"
+      }
+    ],
     "panels": [
       "media.paged.slide.panel.slides",
       "media.paged.slide.panel.notes",
       "media.paged.slide.panel.slide",
       "media.paged.slide.panel.transition",
       "media.paged.slide.panel.placeholder",
-      "media.paged.slide.panel.deck"
+      "media.paged.slide.panel.deck",
+      "media.paged.slide.panel.comments",
+      "media.paged.slide.panel.shapes",
+      "media.paged.slide.panel.customShows",
+      "media.paged.slide.panel.animations",
+      "media.paged.slide.panel.smartart",
+      "media.paged.slide.panel.design"
     ],
     "partTypes": [
       {
@@ -58,6 +119,12 @@
         "type": "slideImport",
         "role": "derived",
         "format": "json"
+      },
+      {
+        "type": "chartWorkbook",
+        "role": "source",
+        "format": "xlsx",
+        "linkable": false
       }
     ],
     "objectModel": {
@@ -107,6 +174,374 @@
           "title": "Export as a PowerPoint deck",
           "args": "schema/export-pptx.args.json",
           "result": "schema/export-pptx.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.addComment",
+          "title": "Add a comment",
+          "args": "schema/add-comment.args.json",
+          "result": "schema/add-comment.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.replyComment",
+          "title": "Reply to a comment",
+          "args": "schema/reply-comment.args.json",
+          "result": "schema/reply-comment.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.resolveComment",
+          "title": "Resolve or reopen a comment",
+          "args": "schema/resolve-comment.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.deleteComment",
+          "title": "Delete a comment",
+          "args": "schema/delete-comment.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.previousSlide",
+          "title": "Previous slide",
+          "args": "schema/empty.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.nextSlide",
+          "title": "Next slide",
+          "args": "schema/empty.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.slideShowFromBeginning",
+          "title": "Slide show from the beginning",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.slideShowFromCurrent",
+          "title": "Slide show from the current slide",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.presenterView",
+          "title": "Presenter view",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.rehearseTimings",
+          "title": "Rehearse timings",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.command.slideSorter",
+          "title": "Slide sorter",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "presented": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.slide.insertShape",
+          "title": "Insert a shape",
+          "args": "schema/insert-shape.args.json",
+          "result": "schema/insert-shape.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.export",
+          "title": "Export…",
+          "args": "schema/empty.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.saveAsTemplate",
+          "title": "Save as template",
+          "args": "schema/empty.json",
+          "result": "schema/export-template.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.customShows",
+          "title": "Custom shows",
+          "args": "schema/empty.json",
+          "result": "schema/custom-shows.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.addSection",
+          "title": "Add section",
+          "args": "schema/add-section.args.json",
+          "result": "schema/section.result.json"
+        },
+        {
+          "id": "media.paged.slide.exportPdf",
+          "title": "Export PDF (slides, handouts, notes pages)",
+          "args": "schema/export-pdf.args.json",
+          "result": "schema/export-pdf.result.json"
+        },
+        {
+          "id": "media.paged.slide.exportOutline",
+          "title": "Export the outline",
+          "args": "schema/export-outline.args.json",
+          "result": "schema/export-outline.result.json"
+        },
+        {
+          "id": "media.paged.slide.exportVideo",
+          "title": "Create a video (MP4)",
+          "args": "schema/export-video.args.json",
+          "result": "schema/export-video.result.json"
+        },
+        {
+          "id": "media.paged.slide.setCustomShow",
+          "title": "Set a custom show",
+          "args": "schema/custom-show.args.json",
+          "result": "schema/custom-show.result.json"
+        },
+        {
+          "id": "media.paged.slide.deleteCustomShow",
+          "title": "Delete a custom show",
+          "args": "schema/named.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.playCustomShow",
+          "title": "Play a custom show",
+          "args": "schema/named.args.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.sections",
+          "title": "List the sections",
+          "args": "schema/empty.json",
+          "result": "schema/sections.result.json"
+        },
+        {
+          "id": "media.paged.slide.renameSection",
+          "title": "Rename a section",
+          "args": "schema/rename-section.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.moveSection",
+          "title": "Move a section",
+          "args": "schema/move-section.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.deleteSection",
+          "title": "Remove a section",
+          "args": "schema/delete-section.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.addAnimation",
+          "title": "Add an animation",
+          "args": "schema/add-animation.args.json",
+          "result": "schema/add-animation.result.json"
+        },
+        {
+          "id": "media.paged.slide.removeAnimation",
+          "title": "Remove an animation",
+          "args": "schema/remove-animation.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.setAnimationTiming",
+          "title": "Set an animation's timing",
+          "args": "schema/set-animation-timing.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.moveAnimation",
+          "title": "Move an animation",
+          "args": "schema/move-animation.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.listAnimations",
+          "title": "List a slide's animations",
+          "args": "schema/list-animations.args.json",
+          "result": "schema/list-animations.result.json"
+        },
+        {
+          "id": "media.paged.slide.previewAnimations",
+          "title": "Preview a slide's animations",
+          "args": "schema/preview-animations.args.json",
+          "result": "schema/empty.json"
+        },
+        {
+          "id": "media.paged.slide.command.insertPicture",
+          "title": "Insert picture…",
+          "args": "schema/insert-picture.args.json",
+          "result": "schema/insert-picture.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.insertIcon",
+          "title": "Insert icon…",
+          "args": "schema/insert-picture.args.json",
+          "result": "schema/insert-picture.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.copyFormat",
+          "title": "Copy formatting",
+          "args": "schema/format.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.pasteFormat",
+          "title": "Paste formatting",
+          "args": "schema/format.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.smartArtText",
+          "title": "SmartArt text pane",
+          "args": "schema/empty.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.smartArtPoints",
+          "title": "Read a SmartArt diagram's text",
+          "args": "schema/smartart.args.json",
+          "result": "schema/smartart.result.json"
+        },
+        {
+          "id": "media.paged.slide.setSmartArtText",
+          "title": "Set a SmartArt point's text",
+          "args": "schema/set-smartart-text.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.design",
+          "title": "Design",
+          "args": "schema/empty.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.browseThemes",
+          "title": "Browse for Themes…",
+          "args": "schema/browse-themes.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.themes",
+          "title": "List the themes",
+          "args": "schema/empty.json",
+          "result": "schema/themes.result.json"
+        },
+        {
+          "id": "media.paged.slide.applyTheme",
+          "title": "Apply a theme",
+          "args": "schema/apply-theme.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.remapThemeReference",
+          "title": "Remap a theme reference",
+          "args": "schema/remap-theme-reference.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.slideMaster",
+          "title": "Slide master",
+          "args": "schema/empty.json",
+          "result": "schema/presented.result.json"
+        },
+        {
+          "id": "media.paged.slide.command.resetSlide",
+          "title": "Reset slide",
+          "args": "schema/slide-ref.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.layouts",
+          "title": "List the masters and layouts",
+          "args": "schema/empty.json",
+          "result": "schema/layouts.result.json"
+        },
+        {
+          "id": "media.paged.slide.renameLayout",
+          "title": "Rename a master or layout",
+          "args": "schema/rename-layout.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.setPreserve",
+          "title": "Preserve a master or layout",
+          "args": "schema/set-preserve.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.deleteLayout",
+          "title": "Delete a layout no slide uses",
+          "args": "schema/layout-ref.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.insertPlaceholder",
+          "title": "Insert a placeholder on a layout",
+          "args": "schema/insert-placeholder.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.setPlaceholderStyle",
+          "title": "Set a layout placeholder's text style",
+          "args": "schema/set-placeholder-style.args.json",
+          "result": "schema/applied.result.json"
+        },
+        {
+          "id": "media.paged.slide.changeLayout",
+          "title": "Change layout",
+          "args": "schema/change-layout.args.json",
+          "result": "schema/applied.result.json"
         }
       ],
       "templateFields": [

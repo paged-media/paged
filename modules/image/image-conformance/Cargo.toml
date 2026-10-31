@@ -20,6 +20,8 @@ image-gpu = { path = "../image-gpu", features = ["test-support"] }
 image-pipeline = { path = "../image-pipeline" }
 image-codecs = { path = "../image-codecs" }
 image-psd = { workspace = true }
+# The CPU resample, measured against the GPU resample kernels (ADR 467).
+paged-resample = { workspace = true }
 image-graph = { path = "../image-graph" }
 half = { workspace = true }
 pollster = { workspace = true }
@@ -40,6 +42,13 @@ proptest = { workspace = true }
 image-js = { path = "../image-js", features = ["reference-fold"] }
 # Colour-conversion properties (prop_colour.rs) round-trip both CMS backends.
 image-cms = { path = "../image-cms" }
+# Match Color's twin converts with the engine's own CIELAB.
+paged-color = { workspace = true }
+# `geom.warp_mesh`'s parity and behavioural rows build their meshes with
+# the envelope module the bundle uses (WP5.10).
+paged-warp = { workspace = true }
+# The Photoshop warp-text record (warp_text_photoshop.rs) is JSON.
+serde_json = "1"
 criterion = { workspace = true }
 # D-4 bench (png_d4): zune-png is the chosen adapter; image/png is the
 # loser kept here ONLY as the bench comparison baseline (dev-dep, never

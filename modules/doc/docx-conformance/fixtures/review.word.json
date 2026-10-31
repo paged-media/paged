@@ -1,0 +1,304 @@
+{
+ "word": "Microsoft Word 16.114 (macOS)",
+ "files": [
+  {
+   "file": "comments-first.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [],
+   "comments": [
+    {
+     "author": "Author A",
+     "text": "Check this"
+    }
+   ]
+  },
+  {
+   "file": "comments-remove.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [],
+   "comments": [
+    {
+     "author": "Author A",
+     "text": "First remark"
+    },
+    {
+     "author": "Author B",
+     "text": "Agreed"
+    }
+   ]
+  },
+  {
+   "file": "comments-reply-resolve.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [],
+   "comments": [
+    {
+     "author": "Author A",
+     "text": "First remark"
+    },
+    {
+     "author": "Author B",
+     "text": "Agreed"
+    },
+    {
+     "author": "Author B",
+     "text": "Done & dusted"
+    },
+    {
+     "author": "Author A",
+     "text": "Spans two"
+    }
+   ]
+  },
+  {
+   "file": "format-accept.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "inserted"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "deleted"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "moved "
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "moved"
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "new"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "Gone paragraph"
+    }
+   ],
+   "comments": []
+  },
+  {
+   "file": "format-reject.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "inserted"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "deleted"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "moved "
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "moved"
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "new"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "Gone paragraph"
+    },
+    {
+     "type": "revision paragraph property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    }
+   ],
+   "comments": []
+  },
+  {
+   "file": "review.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [],
+   "comments": [
+    {
+     "author": "Author A",
+     "text": "First remark"
+    },
+    {
+     "author": "Author B",
+     "text": "Agreed"
+    },
+    {
+     "author": "Author A",
+     "text": "Spans two"
+    }
+   ]
+  },
+  {
+   "file": "tracked-accept.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "moved "
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "moved"
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "new"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "Gone paragraph"
+    },
+    {
+     "type": "revision property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    },
+    {
+     "type": "revision paragraph property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    }
+   ],
+   "comments": []
+  },
+  {
+   "file": "tracked-join.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "inserted"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "deleted"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "moved "
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "moved"
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "new"
+    },
+    {
+     "type": "revision property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    },
+    {
+     "type": "revision paragraph property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    }
+   ],
+   "comments": []
+  },
+  {
+   "file": "tracked-recorded.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [
+    {
+     "type": "revision delete",
+     "author": "Author A",
+     "text": "First"
+    },
+    {
+     "type": "revision insert",
+     "author": "Author A",
+     "text": " new"
+    }
+   ],
+   "comments": []
+  },
+  {
+   "file": "tracked-reject.docx",
+   "opensWithoutPrompt": true,
+   "revisions": [
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "moved "
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "moved"
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "new"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "Gone paragraph"
+    },
+    {
+     "type": "revision property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    },
+    {
+     "type": "revision paragraph property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    }
+   ],
+   "comments": []
+  },
+  {
+   "file": "tracked-split.docx",
+   "opensWithoutPrompt": true,
+   "revisions": null,
+   "comments": [],
+   "revisionCount": 1,
+   "note": "opened on a clean session by the single-file probe (1 revision); in the full run it followed a blocked session and timed out twice"
+  },
+  {
+   "file": "tracked.docx",
+   "opensWithoutPrompt": true,
+   "revisions": null,
+   "comments": [],
+   "revisionCount": 8,
+   "note": "opened on a clean session by the single-file probe and in an earlier full run (8 revisions); in this run it followed a blocked session"
+  }
+ ],
+ "date": "2026-10-29",
+ "source": "scripts/word-review-probe.sh: the saves of docx-conformance tests/it/review.rs",
+ "notMeasured": "tracked_changes_docx() itself (a w:moveFrom and w:moveTo side by side in one paragraph): Word stops on it, so it is test input only"
+}

@@ -17,7 +17,7 @@ names=("$@")
 if [ ${#names[@]} -eq 0 ]; then
   for f in "$ROOT"/scripts/fixtures/*.applescript; do
     n="$(basename "$f" .applescript)"
-    case "$n" in resave | embed-resave) ;; *) names+=("$n") ;; esac
+    case "$n" in resave | embed-resave | *.post) ;; *) names+=("$n") ;; esac
   done
 fi
 TMP="$(mktemp -d)"
@@ -38,6 +38,12 @@ for name in "${names[@]}"; do
     case "$name" in fonts | fonts-full) RESAVE=embed-resave ;; esac
     osascript "$ROOT/scripts/fixtures/$RESAVE.applescript" "$STAGE/$name.seed.pptx" "$STAGE/$name.pptx" || true
     [ -s "$STAGE/$name.pptx" ] || { echo "PowerPoint did not re-save $name" >&2; exit 1; }
+  fi
+  # An edit PowerPoint makes to its own saved deck (connectors: move a glued
+  # shape, so the deck records the connectors PowerPoint re-routed).
+  if [ -f "$ROOT/scripts/fixtures/$name.post.applescript" ]; then
+    osascript "$ROOT/scripts/fixtures/$name.post.applescript" "$STAGE/$name.pptx" || true
+    [ -s "$STAGE/$name.pptx" ] || { echo "PowerPoint did not save $name after its edit" >&2; exit 1; }
   fi
   cp "$STAGE/$name.pptx" "$OUT/$name.pptx"
   bash "$ROOT/scripts/ppt-export-probe.sh" "$OUT/$name.pptx" "$TMP/$name" 48 >/dev/null

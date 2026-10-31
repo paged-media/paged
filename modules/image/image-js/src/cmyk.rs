@@ -31,8 +31,9 @@
 //!    (`ColorProfile::new_srgb`). This is the same
 //!    [`image_cms::CmsEngine::compile_cmyk_to_rgba8`] print lane the
 //!    conformance suite (`image-cms/tests/it/cmyk_lane.rs`) gates against
-//!    lcms2. Intent is Perceptual (the ingest default; the panel does not
-//!    yet surface an intent control — a follow-up, not a wrong result).
+//!    lcms2. Relative colorimetric with black-point compensation,
+//!    Photoshop's default view (see [`InkTransform`]); the panel does not
+//!    yet surface an intent control.
 //!
 //!  - **No embedded ICC** — the uncalibrated fallback. Many CMYK JPEGs
 //!    ship with no profile, and there is no free, redistributable
@@ -80,17 +81,13 @@ fn profile_from_bytes(bytes: Vec<u8>) -> Profile {
 /// with the Color Settings' defaults — is Adobe ACE, RELATIVE
 /// COLORIMETRIC, with BLACK-POINT COMPENSATION (read from the app's
 /// Color Settings by `scripts/photoshop/probes/cmyk-stacks.jsx`,
-/// "Europe General Purpose 3"). moxcms 0.8.1 has no BPC, and relative
-/// colorimetric WITHOUT it lands 28 levels from Photoshop on the
-/// recorded ink patches (the profile's black is lifted: L* ≈ 9 printed
-/// black has nowhere to go in sRGB but up). PERCEPTUAL — the profile's
-/// A2B0, whose black is already mapped to the PCS black — lands within
-/// 4 levels (mean 0.44) of Photoshop's relative colorimetric + BPC on
-/// the same patches, the same as lcms2's own relcol+BPC does. So the
-/// lane uses Perceptual, and the convention is stated: "Photoshop's
-/// default view, approximated by the profile's perceptual table" — the
-/// replay (`image-conformance/tests/it/psd_cmyk_photoshop.rs`) holds it to
-/// those numbers. Saturated greens outside sRGB are where ACE and the
+/// "Europe General Purpose 3"). The lane does exactly that: relative
+/// colorimetric with BPC through the engine's CMS (moxcms, with
+/// `paged_color::cms`'s implementation of Adobe's BPC algorithm). Until
+/// 2026-10 moxcms had no BPC and the lane approximated Photoshop's view
+/// with the profile's PERCEPTUAL table; the replay
+/// (`image-conformance/tests/it/psd_cmyk_photoshop.rs`) holds the new
+/// numbers. Saturated greens outside sRGB are where ACE and the
 /// ICC-standard CMMs clip differently (up to ~23 levels on one channel,
 /// identical for moxcms and lcms2).
 pub struct InkTransform {
@@ -106,7 +103,7 @@ impl InkTransform {
             let src = profile_from_bytes(bytes.to_vec());
             let dst = working_srgb_profile().ok()?;
             MoxcmsEngine
-                .compile_cmyk_to_rgba8(&src, &dst, Intent::Perceptual, false)
+                .compile_cmyk_to_rgba8(&src, &dst, Intent::RelativeColorimetric, true)
                 .ok()
         });
         InkTransform { compiled }

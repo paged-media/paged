@@ -51,6 +51,7 @@ blitz = [
     "dep:parley",
     "dep:peniko",
     "dep:skrifa",
+    "dep:stylo",
 ]
 # Work counters (parses, resolves, paint captures, painted commands,
 # run-match comparisons, font-context builds, wasm bytes in/out) for the
@@ -79,6 +80,11 @@ peniko = { version = "0.6", optional = true }
 # Reads a shaped run's face family from its `name` table (the version parley
 # 0.10 already builds — no new compile).
 skrifa = { version = "0.42", default-features = false, features = ["std"], optional = true }
+# The computed CSS effects an element carries (`mix-blend-mode`, `filter`,
+# `isolation`, `clip-path`, `mask-image`) for the effect groups a bake maps
+# onto native items — the exact version blitz-dom 0.3.0-alpha.6 resolves
+# styles with (no new compile; the crate's library is `style`).
+stylo = { version = "=0.18.0", optional = true }
 
 # The Chrome conformance replay (packages/web-conformance/chrome) needs the
 # engine; `cargo test` without `--features blitz` skips it.

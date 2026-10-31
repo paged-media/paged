@@ -60,7 +60,56 @@ export const CMD = {
   moveSlideDown: `${COMMAND_PREFIX}.moveSlideDown`,
   importPptx: `${COMMAND_PREFIX}.importPptx`,
   exportPptx: `${COMMAND_PREFIX}.exportPptx`,
+  previousSlide: `${COMMAND_PREFIX}.previousSlide`,
+  nextSlide: `${COMMAND_PREFIX}.nextSlide`,
+  addComment: `${COMMAND_PREFIX}.addComment`,
+  insertShapes: `${COMMAND_PREFIX}.insertShapes`,
 } as const;
+
+/** The edit context a deck holds as its document context (editor ADR 307):
+ *  the Normal-view keys below exist only inside it. */
+export const DECK_CONTEXT = "slideDeck";
+
+/**
+ * PowerPoint's Normal-view keys, scoped to the deck (extensions ADR 348,
+ * editor ADR 299): inside a deck they outrank the host's binding on the
+ * same key; outside one they do not exist. Each is a Cmd chord with its
+ * Ctrl twin, as the registry has no `mod`.
+ *
+ * - Cmd/Ctrl+M: New slide, in text too (PowerPoint's Ctrl+M is New slide
+ *   wherever the caret is). A browser keeps Cmd+M on macOS (minimise) and
+ *   never hands it to the page, so there Ctrl+M is the key that arrives,
+ *   as PowerPoint for Windows has it.
+ * - Cmd/Ctrl+D: Duplicate slide, only while nothing is selected on the
+ *   slide and no caret is active; otherwise the key stays the host's.
+ * - PageUp / PageDown: the previous / next slide, while no text caret is
+ *   active (in text they move the caret).
+ */
+export const SLIDE_NORMAL_VIEW_KEYS: ReadonlyArray<{
+  key: string;
+  command: string;
+  /** Bound only while nothing is selected. */
+  noSelection?: true;
+  /** Bound only while no text caret is active. */
+  noCaret?: true;
+}> = [
+  { key: "cmd+m", command: CMD.newSlide },
+  { key: "ctrl+m", command: CMD.newSlide },
+  {
+    key: "cmd+d",
+    command: CMD.duplicateSlide,
+    noSelection: true,
+    noCaret: true,
+  },
+  {
+    key: "ctrl+d",
+    command: CMD.duplicateSlide,
+    noSelection: true,
+    noCaret: true,
+  },
+  { key: "pageup", command: CMD.previousSlide, noCaret: true },
+  { key: "pagedown", command: CMD.nextSlide, noCaret: true },
+];
 
 /**
  * The slide verbs' keys, each a Cmd chord with its Ctrl twin (the registry
@@ -101,6 +150,8 @@ export interface SlideCommandDeps {
   store: SlidesStore | null;
   /** The typed commands are live (`host.objects` routes to them). */
   objectModel: boolean;
+  /** The Shapes panel's id, where it is contributed (Insert ▸ Shapes…). */
+  shapesPanel?: string;
   /** The importer's path. */
   openDeck(name: string, bytes: Uint8Array): Promise<ImportReport | null>;
   /** The exporter's path; null when there is no deck to write. */
@@ -109,6 +160,11 @@ export interface SlideCommandDeps {
     fileName: string;
     diagnostics: string[];
   } | null>;
+  /** The deck holds the `slideDeck` document context: the Normal-view
+   *  keys are bound, scoped to it. */
+  scopedKeys?: boolean;
+  /** Raise the Comments panel (New comment from the palette or the menu). */
+  openComments?: () => void;
 }
 
 /** Register the commands; one Disposable drops them all, and `ids` names
@@ -278,7 +334,64 @@ export function contributeSlideCommands(
             log("deleteSlide", "the last slide cannot be deleted");
             return;
           }
-          await mutate("deleteSlide", deleteMutation(slide.pageId));
+          await mutate(
+            "deleteSlide",
+            deleteMutation(slide.pageId, store.list()),
+          );
+        }),
+      }),
+    );
+
+    // Previous / next slide: the viewport goes there (PageUp / PageDown).
+    const step = (verb: string, by: -1 | 1) =>
+      guarded(verb, async () => {
+        const slide = need(verb);
+        if (!slide) return;
+        const target = store.list()[slide.number - 1 + by];
+        if (!target) {
+          log(
+            verb,
+            `slide ${slide.number} is the ${by < 0 ? "first" : "last"}`,
+          );
+          return;
+        }
+        await goTo(target.pageId);
+      });
+    handles.push(
+      command({
+        id: CMD.previousSlide,
+        title: t(COMMANDS.previousSlide),
+        category: CATEGORY,
+        when: () => (position()?.index ?? 0) > 0,
+        handler: step("previousSlide", -1),
+      }),
+      command({
+        id: CMD.nextSlide,
+        title: t(COMMANDS.nextSlide),
+        category: CATEGORY,
+        when: () => {
+          const p = position();
+          return p !== null && p.index < p.count - 1;
+        },
+        handler: step("nextSlide", 1),
+      }),
+    );
+    handles.push(
+      command({
+        id: CMD.addComment,
+        title: t(COMMANDS.addComment),
+        category: CATEGORY,
+        when: () => active() !== null,
+        // The Comments panel's new-comment box is where the text is
+        // written; a script adds one with the typed twin.
+        handler: guarded("addComment", () => {
+          if (!need("addComment")) return;
+          if (deps.openComments) deps.openComments();
+          else
+            log(
+              "addComment",
+              "this host keeps no comments or cannot raise a panel",
+            );
         }),
       }),
     );
@@ -317,6 +430,20 @@ export function contributeSlideCommands(
         handler: move("moveSlideDown", 1),
       }),
     );
+    // Insert ▸ Shapes…: the Shapes panel, where a click inserts a preset
+    // on the active slide (ADR 717).
+    if (deps.shapesPanel && host.supports("shell.openPanel@1")) {
+      const panel = deps.shapesPanel;
+      handles.push(
+        command({
+          id: CMD.insertShapes,
+          title: t(COMMANDS.insertShapes),
+          category: CATEGORY,
+          when: () => active() !== null,
+          handler: guarded("insertShapes", () => host.shell.openPanel(panel)),
+        }),
+      );
+    }
   }
 
   // The keys of the slide verbs this host got, offered where the command
@@ -332,6 +459,34 @@ export function contributeSlideCommands(
           key,
           command,
           when: (state) => !caretActive() && when(state),
+        }),
+      );
+    }
+  }
+
+  // The Normal-view keys, scoped to the deck's document context.
+  if (deps.scopedKeys && host.supports("contribute.keybinding.scope@1")) {
+    const caretActive = () =>
+      host.supports("text.caret@1") && host.text.caret() !== null;
+    const nothingSelected = () => {
+      try {
+        return host.selection.get().length === 0;
+      } catch {
+        return true;
+      }
+    };
+    for (const k of SLIDE_NORMAL_VIEW_KEYS) {
+      const when = whens.get(k.command);
+      if (!when) continue;
+      handles.push(
+        host.contribute.keybinding({
+          key: k.key,
+          command: k.command,
+          scope: { editContext: DECK_CONTEXT },
+          when: (state) =>
+            (!k.noCaret || !caretActive()) &&
+            (!k.noSelection || nothingSelected()) &&
+            when(state),
         }),
       );
     }

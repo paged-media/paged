@@ -32,7 +32,11 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 
-import { openCanvas, openPanel } from "../fidelity/canvas-driver";
+import {
+  openCanvas,
+  openPanel,
+  loadViaFileInput,
+} from "../fidelity/canvas-driver";
 
 const REPO_ROOT = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -53,16 +57,7 @@ type Canvas = {
 /** Opens the fixture the way a person does (the shell's file input), so the
  *  document handle, the save command and the library all see it. */
 async function load(page: Page): Promise<void> {
-  await page.setInputFiles('input[type="file"]', FIXTURE);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
-            .ready,
-      ),
-    )
-    .toBe(true);
+  await loadViaFileInput(page, FIXTURE);
 }
 
 async function edit(page: Page, text: string): Promise<void> {

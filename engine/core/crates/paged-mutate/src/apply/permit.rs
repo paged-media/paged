@@ -109,7 +109,8 @@ fn page_item(node: &NodeId) -> Option<&str> {
         | NodeId::Oval(s)
         | NodeId::Polygon(s)
         | NodeId::GraphicLine(s)
-        | NodeId::Group(s) => Some(s),
+        | NodeId::Group(s)
+        | NodeId::Instance(s) => Some(s),
         _ => None,
     }
 }
@@ -251,9 +252,13 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         O::Batch { ops } => ops.iter().flat_map(required).collect(),
         O::RemoveStory { story_id } => vec![story(P::TextEdit, story_id)],
         O::RestoreStory { .. } => vec![doc(P::DocumentAddItem)],
-        O::ReplaceStoryParagraphs { story_id, .. } | O::RestoreParagraphs { story_id, .. } => {
-            vec![story(P::TextEdit, story_id)]
-        }
+        O::ReplaceStoryParagraphs { story_id, .. }
+        | O::RestoreParagraphs { story_id, .. }
+        | O::InsertTextAnchor { story_id, .. }
+        | O::SetStoryDestinations { story_id, .. }
+        | O::InsertIndexMarker { story_id, .. }
+        | O::RestoreIndexMarkers { story_id, .. } => vec![story(P::TextEdit, story_id)],
+        O::DeleteTextAnchor { .. } => vec![doc(P::TextEdit)],
         // Removing or duplicating a page is asked of that page: its own
         // policy (an `x-paged:template` label keyed by the page's id) may
         // grant `document.pages` beyond the document's defaults, so a
@@ -294,6 +299,8 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::EditNumberingList { .. }
         | O::DeleteNumberingList { .. }
         | O::SetStyleProperty { .. }
+        | O::SetStyleBasedOn { .. }
+        | O::SetTocStyle { .. }
         | O::CreateTextVariable { .. }
         | O::DeleteTextVariable { .. }
         // Tag definitions are the document's vocabulary, like its styles
@@ -317,7 +324,24 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         O::RemoveDuplicates { .. } | O::InsertSnippet { .. } | O::RemoveSnippet { .. } => {
             vec![doc(P::DocumentAddItem)]
         }
+        // Engine ADR 1039 — a symbol definition is document vocabulary,
+        // like a style; making one from items (or breaking an instance)
+        // adds and removes page items.
+        O::CreateSymbol { sources, .. } | O::RedefineSymbol { sources, .. } => {
+            std::iter::once(doc(P::DocumentStyles))
+                .chain(sources.iter().map(|s| item(P::ItemDelete, s)))
+                .collect()
+        }
+        O::DeleteSymbol { .. } | O::RestoreSymbolState { .. } => vec![doc(P::DocumentStyles)],
+        O::PlaceSymbolInstance { .. } => vec![doc(P::DocumentAddItem)],
+        O::BreakSymbolLink { instance, .. } => vec![
+            doc(P::DocumentAddItem),
+            item(P::ItemDelete, &NodeId::Instance(instance.clone())),
+        ],
         O::SetGroupTransform { group, .. } => vec![req(P::ItemMove, Target::Item(group.clone()))],
+        // Engine ADR 1042 — the item's geometry is rewritten (an oval or a
+        // group is replaced by a polygon of the same id).
+        O::ExpandAppearance { node, .. } => vec![item(P::ItemResize, node), item(P::ItemDelete, node)],
         O::PathfinderBoolean { kept, others, .. } => std::iter::once(item(P::ItemResize, kept))
             .chain(others.iter().map(|o| item(P::ItemDelete, o)))
             .collect(),
@@ -354,7 +378,11 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
             r.or_allowed_style = Some(style.clone());
             vec![r]
         }
-        O::ApplyStyle { story_id, .. } | O::SetFlowGrowRule { story_id, .. } => {
+        O::ApplyStyle { story_id, .. }
+        | O::SetFlowGrowRule { story_id, .. }
+        | O::SetListLevel { story_id, .. }
+        | O::RestartNumbering { story_id, .. }
+        | O::SetParagraphListState { story_id, .. } => {
             vec![story(P::TextStyle, story_id)]
         }
         O::InsertField { story_id, .. }
@@ -387,6 +415,19 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         O::EditNote { .. } | O::DeleteNote { .. } | O::DeleteEndnote { .. } => {
             vec![doc(P::TextEdit)]
         }
+        // Engine ADRs 1040 / 1020 — reviewing is editing the text.
+        O::RecordChange { story_id, .. }
+        | O::InsertComment { story_id, .. }
+        | O::RestoreStoryReview { story_id, .. } => vec![story(P::TextEdit, story_id)],
+        O::AcceptChange { story_id, .. } | O::RejectChange { story_id, .. } => {
+            match story_id {
+                Some(s) => vec![story(P::TextEdit, s)],
+                None => vec![doc(P::TextEdit)],
+            }
+        }
+        O::ResolveComment { .. } | O::DeleteComment { .. } | O::EditComment { .. } => {
+            vec![doc(P::TextEdit)]
+        }
         O::CreateEndnoteStory { .. } => vec![doc(P::DocumentAddItem)],
         O::CreateBookmark { .. }
         | O::DeleteBookmark { .. }
@@ -394,6 +435,7 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::MoveBookmark { .. }
         | O::RestoreBookmarks { .. }
         | O::DeleteHyperlink { .. }
+        | O::InsertItemHyperlink { .. }
         | O::EditHyperlink { .. }
         | O::RestoreHyperlink { .. }
         | O::SetConditionVisible { .. }
@@ -410,6 +452,8 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::DeleteMaster { .. }
         | O::RestoreMaster { .. }
         | O::RenameMaster { .. }
+        | O::SetPageOverrides { .. }
+        | O::OverrideMasterItems { .. }
         // Anything on a parent page is page setup: its items are scenery
         // on every document page that uses it.
         | O::OnMaster { .. }

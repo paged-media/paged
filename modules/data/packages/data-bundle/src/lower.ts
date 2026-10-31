@@ -66,6 +66,7 @@ import {
   type RuleTarget,
 } from "../../data-host-model/src";
 import { objectsOf } from "./property-lane";
+import { transformBounds } from "./merge";
 import { t as tr } from "@paged-media/strings";
 import { STATUS } from "./messages";
 import { ownTextVariables, textVariablesOn } from "./text-variables";
@@ -926,6 +927,9 @@ export async function commitLoweredImage(
   /** Data ADR 563: an asset column's pipeline (fetch, keep, act) maps the
    *  reference to what is placed, or says why there is nothing to place. */
   resolveUri?: (uri: string) => Promise<{ uri: string } | { reason: string }>,
+  /** Data ADR 563 (amended 2026-10-28): an `asset:<id>` reference is read
+   *  from the bytes the document carries; without this, it is not placed. */
+  resolveAsset?: (id: string) => Promise<{ uri: string } | { reason: string }>,
 ): Promise<boolean> {
   if (image.status !== "present") {
     host.log.info(
@@ -933,12 +937,38 @@ export async function commitLoweredImage(
     );
     return false;
   }
+  if (image.reference.ref === "assetId") {
+    const id = image.reference.id;
+    const r = resolveAsset
+      ? await resolveAsset(id)
+      : { reason: "no asset store is wired to resolve it" };
+    if ("reason" in r) {
+      host.log.warn(
+        `image "${image.target}": asset:${id}: ${r.reason} — nothing placed`,
+      );
+      return false;
+    }
+    const fit = fitOverride ?? idmlFit(image.fit);
+    const outcome = await host.document.mutate(
+      placeImageMutation(elementId, r.uri, fit),
+    );
+    if (!outcome.applied) {
+      host.log.warn(
+        `image "${image.target}": placeImage rejected on ${elementId}`,
+      );
+      return false;
+    }
+    host.log.info(
+      `image "${image.target}" placed on ${elementId} (asset:${id}, fit ${fit})`,
+    );
+    return true;
+  }
   const uri = placeableUri(image.reference);
   if (!uri) {
     host.log.info(
       `image "${image.target}" resolved to ${describeRef(image.reference)} — ` +
-        "not a URI-addressable reference (inline bytes / assetId need the asset-store " +
-        "door); placement skipped, never faked",
+        "not a URI-addressable reference (inline bytes need the asset-store door); " +
+        "placement skipped, never faked",
     );
     return false;
   }
@@ -1015,7 +1045,13 @@ export async function commitLoweredBarcode(
     const bounds = geom[0]?.bounds as
       [number, number, number, number] | undefined;
     if (bounds) {
-      [topPt, leftPt] = bounds;
+      // The frame's own bounds through its item transform: page-local, the
+      // space `insertPath` takes. On a verso the bounds alone sit a page
+      // width into the spread, and the symbol landed beside its frame.
+      [topPt, leftPt] = transformBounds(
+        bounds,
+        geom[0]?.itemTransform as number[] | null | undefined,
+      );
     }
   }
 
@@ -1025,6 +1061,10 @@ export async function commitLoweredBarcode(
     kind: "barcode",
     target: barcode.target,
     symbology: barcode.symbology,
+    // The label lands on the LAST module only (one stamp per symbol keeps the
+    // batch small); the count lets a writer without this session's record —
+    // `paged data apply` — remove the unlabelled modules drawn just before it.
+    modules: barcode.modules.length,
   });
   // UPDATE IN PLACE (Wave 5): the previous symbol's modules are removed in
   // the same batch the new one is drawn in — one undo step, never a pile.

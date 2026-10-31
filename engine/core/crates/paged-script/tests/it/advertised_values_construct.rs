@@ -63,9 +63,12 @@ const STRUCTURED: &[(&str, &str)] = &[
     ("paragraphStartParagraph", "\"NextPage\""),
     ("paragraphSpanColumnType", "\"SpanColumns\""),
     ("frameStrokeDashArray", "[6, 3]"),
+    // Engine ADR 1039 — four numbers each.
+    ("symbolInstanceTint", "[1, 0, 0, 0.5]"),
+    ("symbolInstanceNineSlice", "[2, 2, 2, 2]"),
     // Engine ADR 1007 — the gradient's start point, [x, y].
     ("frameGradientFillStart", "[10, 20]"),
-    // Engine ADR 1040 — a mesh fill (a freeform gradient of one point).
+    // Engine ADR 1048 — a mesh fill (a freeform gradient of one point).
     (
         "frameFillMesh",
         "{ type: 'fillMesh', value: { kind: 'freeform', points: [{ point: [10, 10], color: { space: 'RGB', value: [255, 0, 0] } }], lines: [] } }",
@@ -93,6 +96,42 @@ const STRUCTURED: &[(&str, &str)] = &[
     ("paragraphRuleAbove", "{ type: 'paragraphRule', value: null }"),
     ("paragraphRuleBelow", "{ type: 'paragraphRule', value: null }"),
     ("paragraphTabStops", "{ type: 'tabStops', value: [] }"),
+    // Engine ADR 1008 — the effect stacks, whole.
+    (
+        "frameEffectStack",
+        "{ type: 'effectStack', value: { entries: [{ kind: 'gaussianBlur' }] } }",
+    ),
+    (
+        "frameFillEffectStack",
+        "{ type: 'effectStack', value: { entries: [] } }",
+    ),
+    (
+        "frameStrokeEffectStack",
+        "{ type: 'effectStack', value: { entries: [] } }",
+    ),
+    (
+        "frameContentEffectStack",
+        "{ type: 'effectStack', value: { entries: [] } }",
+    ),
+    // Engine ADR 1042 — a group's vector effects.
+    (
+        "groupEffectStack",
+        "{ type: 'effectStack', value: { entries: [{ kind: 'pathfinder' }] } }",
+    ),
+    // Engine ADR 1043 — the appearance, whole and by layer.
+    (
+        "frameAppearance",
+        "{ type: 'appearance', value: { layers: [{ kind: 'fill', color: 'Color/Black' }] } }",
+    ),
+    (
+        "frameAppearanceLayer",
+        "{ type: 'appearanceLayer', value: { index: 0, layer: { kind: 'fill', color: 'Color/Black' } } }",
+    ),
+    // Engine ADR 1037 — an image frame's filter stack, whole.
+    (
+        "frameImageAdjustments",
+        "{ type: 'imageAdjustments', value: [{ op: 'exposure', ev: 0.5 }] }",
+    ),
     (
         "pluginMetadata",
         "{ type: 'pluginMetadata', value: { key: 'x-paged:probe', value: '1' } }",
@@ -116,6 +155,9 @@ fn probe_nodes() -> Vec<(Document, NodeId)> {
         load(paged_gen::samples::tables::build()),
         load(paged_gen::samples::geometry_groups::build()),
         load(paged_gen::samples::anchored::build()),
+        // Engine ADR 1047 — an oval, for the paths only an oval takes (its
+        // pie angles).
+        load(paged_gen::samples::strokes_fills::build()),
     ];
     let spread_id = docs[0].spreads[0]
         .spread
@@ -141,6 +183,7 @@ fn probe_nodes() -> Vec<(Document, NodeId)> {
         },
     )
     .expect("mint a graphic line");
+    mint_instance(&mut docs[0]);
 
     let mut out = Vec::new();
     for doc in &docs {
@@ -185,6 +228,13 @@ fn probe_nodes() -> Vec<(Document, NodeId)> {
                 .flat_map(|s| &s.groups)
                 .find_map(|n| n.self_id.clone())
                 .map(NodeId::Group),
+        );
+        // Engine ADR 1039 — a symbol instance.
+        push(
+            spreads()
+                .flat_map(|s| &s.instances)
+                .find_map(|n| n.self_id.clone())
+                .map(NodeId::Instance),
         );
         for story in &doc.stories {
             if let Some(frame) = story
@@ -421,4 +471,33 @@ fn paged_set_writes_a_whole_path_from_its_anchors() {
         ),
     );
     assert!(r.error.is_none(), "{:?}", r.error);
+}
+
+/// Engine ADR 1039 — a symbol made from the minted line (kept) and one
+/// instance of it, so the instance paths have a node to land on.
+fn mint_instance(doc: &mut Document) {
+    let spread = doc.spreads[0].spread.self_id.clone().expect("spread id");
+    apply(
+        doc,
+        &Operation::CreateSymbol {
+            symbol_id: "Symbol/probe".into(),
+            name: "Probe".into(),
+            sources: vec![NodeId::GraphicLine("GraphicLine/probe".into())],
+            replace: false,
+            instance_id: None,
+            nine_slice: None,
+        },
+    )
+    .expect("a symbol");
+    apply(
+        doc,
+        &Operation::PlaceSymbolInstance {
+            symbol_id: "Symbol/probe".into(),
+            spread,
+            transform: [1.0, 0.0, 0.0, 1.0, 100.0, 100.0],
+            instance_id: Some("Instance/probe".into()),
+            nine_slice: None,
+        },
+    )
+    .expect("an instance");
 }

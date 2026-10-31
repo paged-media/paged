@@ -16,3 +16,6 @@ docx-lower.workspace = true
 paged-ooxml.workspace = true
 quick-xml.workspace = true
 serde.workspace = true
+# The new-package writer (doc ADR 616): zip through flate2, as everywhere.
+zip.workspace = true
+flate2.workspace = true

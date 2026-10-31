@@ -41,6 +41,7 @@ pub mod anchors;
 mod canonical;
 pub mod grow;
 pub mod layer;
+pub mod snippet;
 pub mod value;
 pub use anchors::{Anchor, AnchorId, AnchorKind, Field, FieldKind};
 pub use layer::{
@@ -101,6 +102,11 @@ pub struct Document {
     /// work as the parser emits the corresponding markers.
     #[serde(skip)]
     pub anchors: Vec<Anchor>,
+    /// Engine ADR 1039 — the document's symbol definitions, which
+    /// [`paged_model::SymbolInstance`]s on the spreads draw. Absent from the
+    /// native encoding when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbols: Vec<paged_model::SymbolDefinition>,
 }
 
 /// A spread plus the path it came from in the container.
@@ -132,6 +138,11 @@ pub struct ParsedMasterSpread {
     #[serde(default)]
     pub name: Option<String>,
 }
+
+/// Engine ADR 1026 — how many masters stack on one page: the page's own
+/// master and up to three it is based on (a PowerPoint slide's layout and
+/// slide master use two).
+pub const MAX_MASTER_DEPTH: usize = 4;
 
 /// Cap on the number of AUTHORED `NextTextFrame` links followed.
 /// Real chains are 1–10 frames; the cap exists so a malformed
@@ -192,6 +203,11 @@ fn content_box_geometry(
 }
 
 impl Document {
+    /// Engine ADR 1039 — the symbol definition `id` names.
+    pub fn symbol(&self, id: &str) -> Option<&paged_model::SymbolDefinition> {
+        self.symbols.iter().find(|d| d.id == id)
+    }
+
     /// Rebuild the derived caches (`frame_for_story`, `text_frame_index`,
     /// `anchors`) purely from the primary `spreads` / `stories` fields.
     ///
@@ -202,6 +218,22 @@ impl Document {
     /// is what keeps the caches true of a MUTATED document. Must reproduce
     /// exactly what `open` used to build inline.
     pub fn rebuild_indexes(&mut self) {
+        // Engine ADR 1039 — every instance carries its definition's bounds.
+        {
+            let bounds: HashMap<&str, paged_model::Bounds> = self
+                .symbols
+                .iter()
+                .map(|d| (d.id.as_str(), d.bounds))
+                .collect();
+            for parsed in &mut self.spreads {
+                for inst in &mut parsed.spread.instances {
+                    inst.bounds = bounds
+                        .get(inst.symbol.as_str())
+                        .copied()
+                        .unwrap_or(paged_model::Bounds::ZERO);
+                }
+            }
+        }
         self.rebuild_frame_indexes();
         self.rebuild_anchor_table();
     }
@@ -265,6 +297,51 @@ impl Document {
             .map(|(_, id)| id)
             .unwrap_or(reference);
         self.master_spreads.get(stripped)
+    }
+
+    /// Engine ADR 1026 — the master `reference` names, then the masters it
+    /// is based on, nearest first. A master is based on the master its
+    /// first page applies (`<MasterSpread>`'s pages carry `AppliedMaster`
+    /// as a page does: InDesign's "Based on Master", a PowerPoint layout's
+    /// slide master). At most [`MAX_MASTER_DEPTH`] masters; a master met
+    /// twice ends the chain, so a cycle draws each master once.
+    pub fn master_chain(&self, reference: &str) -> Vec<&ParsedMasterSpread> {
+        let mut out: Vec<&ParsedMasterSpread> = Vec::new();
+        let mut next = self.master_spread(reference);
+        while let Some(m) = next {
+            if out.len() == MAX_MASTER_DEPTH || out.iter().any(|o| o.self_id == m.self_id) {
+                break;
+            }
+            out.push(m);
+            next = m
+                .spread
+                .pages
+                .first()
+                .and_then(|p| p.applied_master.as_deref())
+                .and_then(|r| self.master_spread(r));
+        }
+        out
+    }
+
+    /// Engine ADR 1026 — whether master `master` may be based on `parent`:
+    /// both exist, the chain `parent` starts does not reach `master` (no
+    /// cycle), and `master` on top of it stays within [`MAX_MASTER_DEPTH`].
+    pub fn master_basis_allowed(&self, master: &str, parent: &str) -> bool {
+        let Some(m) = self.master_spread(master) else {
+            return false;
+        };
+        if self.master_spread(parent).is_none() {
+            return false;
+        }
+        let chain = self.master_chain(parent);
+        // A chain cut short by a cycle never reaches its own end.
+        let closed = chain
+            .last()
+            .and_then(|l| l.spread.pages.first())
+            .and_then(|p| p.applied_master.as_deref())
+            .and_then(|r| self.master_spread(r))
+            .is_none();
+        closed && chain.len() < MAX_MASTER_DEPTH && !chain.iter().any(|c| c.self_id == m.self_id)
     }
 
     /// The frame that hosts a story, looked up by the story's
@@ -523,6 +600,19 @@ impl Document {
                 .styles
                 .resolve_paragraph(applied_paragraph_style(paragraph)),
         );
+        // Engine ADR 1018 — a Word list with per-level definitions sets
+        // the paragraph's marker from the level it stands at.
+        if let Some(def) = acc
+            .applied_numbering_list
+            .as_deref()
+            .and_then(|id| self.styles.numbering_lists.get(id))
+            .and_then(|list| {
+                let level = acc.list_level.level.unwrap_or(1);
+                list.levels.iter().find(|l| l.level == level)
+            })
+        {
+            acc.apply_list_level(def, paragraph);
+        }
         acc
     }
 
@@ -1117,6 +1207,35 @@ pub struct IndexCrossRef {
 }
 
 impl ResolvedRunAttrs {
+    /// The underline this run draws, `None` for none (engine ADR 1018).
+    /// `Underline` is the switch and the kind its look: an explicit
+    /// `Underline="false"` draws nothing whatever kind a style names; with
+    /// the switch unset a kind other than `none` draws.
+    pub fn drawn_underline(&self) -> Option<paged_model::UnderlineKind> {
+        use paged_model::UnderlineKind as K;
+        let kind = self.decorations.underline_kind;
+        let on = match self.underline {
+            Some(on) => on,
+            None => kind.is_some_and(|k| k != K::None),
+        };
+        match (on, kind) {
+            (false, _) | (true, Some(K::None)) => None,
+            (true, Some(k)) => Some(k),
+            (true, None) => Some(K::Single),
+        }
+    }
+
+    /// Whether the run is underlined at all — the glyph flag the layout
+    /// carries.
+    pub fn draws_underline(&self) -> bool {
+        self.drawn_underline().is_some()
+    }
+
+    /// Whether the run is struck through, once or twice.
+    pub fn draws_strike(&self) -> bool {
+        self.strikethru == Some(true) || self.decorations.double_strikethrough == Some(true)
+    }
+
     /// Capture a run's directly-set fields into a fresh
     /// `ResolvedRunAttrs`. Style-cascade fallbacks apply via
     /// `merge_below_character` / `merge_below_paragraph`.
@@ -1153,6 +1272,7 @@ impl ResolvedRunAttrs {
             ligatures_on: run.ligatures_on,
             kerning_method: run.kerning_method.clone(),
             otf: run.otf.clone(),
+            decorations: run.decorations.clone(),
         }
     }
 
@@ -1204,6 +1324,7 @@ impl ResolvedRunAttrs {
             ligatures_on,
             kerning_method,
             otf,
+            decorations,
         } = r;
         fn fill<T: Clone>(slot: &mut Option<T>, below: &Option<T>) {
             if slot.is_none() {
@@ -1241,6 +1362,7 @@ impl ResolvedRunAttrs {
         fill(&mut self.ligatures_on, ligatures_on);
         fill(&mut self.kerning_method, kerning_method);
         self.otf.merge_below(otf);
+        self.decorations.fill_from(decorations);
     }
 
     /// Fill any unset field from a resolved character style.
@@ -1299,6 +1421,7 @@ impl ResolvedRunAttrs {
         // Discrete OTF toggles cascade per-field: any flag still unset
         // on the run inherits the character style's value.
         self.otf.merge_below(&c.otf);
+        self.decorations.fill_from(&c.decorations);
     }
 
     /// Fill any unset field from a resolved paragraph style.
@@ -1352,6 +1475,7 @@ impl ResolvedRunAttrs {
         self.otf.merge_below(&p.otf);
         self.overprint_fill = self.overprint_fill.or(p.overprint_fill);
         self.overprint_stroke = self.overprint_stroke.or(p.overprint_stroke);
+        self.decorations.fill_from(&p.decorations);
     }
 }
 
@@ -1437,10 +1561,10 @@ impl ResolvedParagraphAttrs {
             mojikumi_set: paragraph.mojikumi_set.clone(),
             overprint_fill: paragraph.overprint_fill,
             overprint_stroke: paragraph.overprint_stroke,
-            // Q-09: paragraph carries no per-paragraph shading
-            // override today; the cascade pulls everything from the
-            // applied paragraph style.
-            shading: Default::default(),
+            // Q-09 / engine ADR 1018: the paragraph's own shading and
+            // border (Word's direct `w:shd` / `w:pBdr`) win per field;
+            // `merge_below` fills the rest from the style cascade.
+            shading: paragraph.shading.clone(),
             // FINDING #7.3 — capture the paragraph's INSTANCE rule
             // structs (set directly on the ParagraphStyleRange, e.g. by
             // the `ParagraphRuleAbove` / `Below` mutation). `merge_below`
@@ -1449,13 +1573,118 @@ impl ResolvedParagraphAttrs {
             // instance-only rule (no style rule) painted nothing.
             rule_above: paragraph.rule_above.clone(),
             rule_below: paragraph.rule_below.clone(),
-            border: Default::default(),
+            border: paragraph.border.clone(),
             // A range's own lists (InDesign writes one when the
             // paragraph's list differs from its style's) win over the
             // style chain's; `merge_below` fills an empty one.
             nested_styles: paragraph.nested_styles.clone(),
             line_styles: paragraph.line_styles.clone(),
             grep_styles: paragraph.grep_styles.clone(),
+            list_marker_font: None,
+        }
+    }
+
+    /// Engine ADR 1018 — lay a Word list level over the cascaded list
+    /// attributes. Word's precedence: what the paragraph sets itself wins,
+    /// then the list level, then the paragraph style (InDesign's
+    /// style-borne lists, ADR 158, are the fallback). A Word list goes on
+    /// counting across paragraphs outside it, so `NumberingContinue`
+    /// defaults to true; `RestartNumbering` writes false on the paragraph.
+    pub fn apply_list_level(
+        &mut self,
+        def: &paged_model::NumberingLevelDef,
+        paragraph: &Paragraph,
+    ) {
+        if paragraph.bullets_list_type.is_none() {
+            if let Some(t) = &def.list_type {
+                self.bullets_list_type = Some(t.clone());
+            }
+        }
+        if paragraph.numbering_format.is_none() {
+            if let Some(f) = def.idml_format() {
+                self.numbering_format = Some(f);
+            }
+        }
+        if paragraph.numbering_expression.is_none() {
+            if let Some(e) = def.idml_expression() {
+                self.numbering_expression = Some(e.clone());
+                // A bullet's text after it is the same suffix.
+                if paragraph.bullets_text_after.is_none() {
+                    let after = match def.suffix {
+                        Some(paged_model::ListSuffix::Tab) => Some("^t"),
+                        Some(paged_model::ListSuffix::Space) => Some(" "),
+                        Some(paged_model::ListSuffix::Nothing) => Some(""),
+                        None => None,
+                    };
+                    if let Some(a) = after {
+                        self.bullets_text_after = Some(a.to_string());
+                    }
+                }
+            }
+        }
+        if paragraph.numbering_start_at.is_none() {
+            if let Some(n) = def.start_at {
+                self.numbering_start_at = Some(n);
+            }
+        }
+        if paragraph.numbering_continue.is_none() {
+            self.numbering_continue = Some(true);
+        }
+        if paragraph.bullet_character.is_none() {
+            if let Some(c) = def.bullet_character {
+                self.bullet_character = Some(c);
+            }
+        }
+        if paragraph
+            .bullets_and_numbering_digits_character_style
+            .is_none()
+            && paragraph.bullets_character_style.is_none()
+        {
+            if let Some(cs) = &def.marker_character_style {
+                self.bullets_and_numbering_digits_character_style = Some(cs.clone());
+                self.bullets_character_style = Some(cs.clone());
+            }
+        }
+        if let Some(font) = &def.bullet_font {
+            self.list_marker_font = Some(font.clone());
+        }
+        if paragraph.left_indent.is_none() {
+            if let Some(v) = def.left_indent {
+                self.left_indent = Some(v);
+            }
+        }
+        if paragraph.first_line_indent.is_none() {
+            if let Some(v) = def.first_line_indent {
+                self.first_line_indent = Some(v);
+            }
+        }
+        if let Some(at) = def.tab_position {
+            if !self.tab_list.iter().any(|t| (t.position - at).abs() < 0.01) {
+                self.tab_list.push(paged_model::TabStop {
+                    position: at,
+                    alignment: Some("LeftAlign".to_string()),
+                    alignment_character: None,
+                    leader: None,
+                });
+                self.tab_list
+                    .sort_by(|a, b| a.position.total_cmp(&b.position));
+            }
+        }
+        if paragraph.list_level.apply_restart.is_none()
+            && paragraph.list_level.restart_policy.is_none()
+        {
+            match def.restart_after {
+                Some(0) => self.list_level.apply_restart = Some(false),
+                Some(k) => {
+                    self.list_level.apply_restart = Some(true);
+                    self.list_level.restart_policy = Some(paged_model::RestartPolicy {
+                        kind: paged_model::RestartPolicyKind::RangeOfPreviousLevels,
+                        lower: 1,
+                        upper: k,
+                    });
+                }
+                None => {}
+            }
         }
     }
 
@@ -1758,6 +1987,9 @@ pub struct ResolvedRunAttrs {
     /// The renderer maps the resolved bag to OpenType feature tags via
     /// `paged_text::ShapingFeatures`.
     pub otf: paged_model::OtfFeatures,
+    /// Word's character additions (engine ADR 1018), cascaded direct >
+    /// character style > paragraph style.
+    pub decorations: paged_model::CharacterDecorations,
 }
 
 /// Effective paragraph-level attributes after walking the cascade
@@ -1931,6 +2163,9 @@ pub struct ResolvedParagraphAttrs {
     pub line_styles: Vec<paged_model::LineStyle>,
     /// Cascaded GREP styles (read and kept; not applied yet).
     pub grep_styles: Vec<paged_model::GrepStyle>,
+    /// The face a Word list level sets its marker in (engine ADR 1018,
+    /// `NumberingLevelDef::bullet_font`), over the marker's style.
+    pub list_marker_font: Option<String>,
 }
 
 /// IDML's `AppliedParagraphStyle` is OPTIONAL, and a range without one

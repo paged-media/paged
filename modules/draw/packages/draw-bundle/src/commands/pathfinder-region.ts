@@ -39,10 +39,11 @@
 // still runs rather than dropping operands.
 //
 // REFUSALS ARE SURFACED, NOT SWALLOWED: the engine caps the arrangement
-// at 12 inputs and 256 faces and REFUSES past either — it never
-// truncates. A refusal comes back as a non-applied `MutationOutcome`
-// whose error carries the engine's own sentence ("planar arrangement
-// takes at most 12 inputs (got 13)"); `regionRefusalReason` extracts it
+// at 1000 inputs and 100 000 faces behind a work budget (engine ADR 1019)
+// and REFUSES past any of them — it never truncates. A refusal comes back
+// as a non-applied `MutationOutcome` whose error carries the engine's own
+// sentence ("planar arrangement takes at most 1000 input paths (got
+// 1001)", "… is over its budget in the collision stage …"); `regionRefusalReason` extracts it
 // so a caller can put it in front of the user instead of showing an
 // empty result. The command lane logs it at WARN and publishes it on
 // the `media.paged.draw.pathfinderStatus` binding.

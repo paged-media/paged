@@ -361,3 +361,51 @@ fn a_page_table_carries_the_pictures_in_its_cells__feat__sheet_xlsx_pictures() {
     assert_eq!(sheet_js::core::annotations::base64(b"Ma"), "TWE=");
     assert_eq!(sheet_js::core::annotations::base64(b"M"), "TQ==");
 }
+
+/// Sheet ADR 527 — a drawing picture's `a:blip` alpha and its shape's
+/// effect list reach the page through the shared DrawingML mapper; a
+/// picture adjustment the engine cannot apply is reported.
+#[test]
+fn a_drawing_pictures_alpha_and_shadow_reach_the_page__feat__sheet_chart_native_effects() {
+    let bytes = fixture("16-structure.xlsx");
+    let drawing = part(&bytes, "xl/drawings/drawing1.xml").unwrap();
+    assert!(drawing.contains(r#"<a:blip r:embed="rId1"/>"#));
+    let styled = drawing
+        .replacen(
+            r#"<a:blip r:embed="rId1"/>"#,
+            r#"<a:blip r:embed="rId1"><a:alphaModFix amt="75000"/><a:grayscl/></a:blip>"#,
+            1,
+        )
+        .replacen(
+            r#"<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>"#,
+            r#"<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:effectLst><a:outerShdw blurRad="76200" dist="38100" dir="2700000" algn="tl" rotWithShape="0"><a:schemeClr val="tx1"><a:alpha val="40000"/></a:schemeClr></a:outerShdw></a:effectLst></xdr:spPr>"#,
+            1,
+        );
+    let bytes = rezip(&bytes, &[("xl/drawings/drawing1.xml", styled.into_bytes())]);
+    let s = SheetSession::load_xlsx(&bytes).unwrap();
+    let pics = s.list_pictures(0).unwrap();
+    let fx = pics[0].fx.as_ref().expect("the picture's look");
+    assert_eq!(fx.opacity, Some(75.0));
+    let sh = fx.drop_shadow.as_ref().unwrap();
+    assert_eq!(
+        (sh.size, sh.opacity, sh.color.as_str()),
+        (3.0, 40.0, "#000000")
+    );
+    assert!(
+        pics[0].losses[0].contains("a:grayscl"),
+        "{:?}",
+        pics[0].losses
+    );
+    let spec = sheet_js::core::TracksSpec {
+        rows: (0..6).collect(),
+        cols: (9..14).collect(),
+        ..Default::default()
+    };
+    let page = s.get_tracks_page(0, spec).unwrap();
+    let on_page = s.page_pictures(0, &page);
+    assert_eq!(on_page[0].fx, pics[0].fx);
+    // An unstyled picture carries none.
+    let plain = SheetSession::load_xlsx(&fixture("16-structure.xlsx")).unwrap();
+    let p = &plain.list_pictures(0).unwrap()[0];
+    assert!(p.fx.is_none() && p.losses.is_empty());
+}

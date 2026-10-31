@@ -62,6 +62,10 @@ fn the_grow_rule_reads_back_as_it_was_set() {
         grow: true,
         max_pages: Some(3),
         copy_frame_options: Some(true),
+        master: None,
+        first_master: None,
+        even_master: None,
+        section_start: None,
     })
     .expect("set");
     let rule = rule_of(&m, &story).expect("the rule reads back");
@@ -95,6 +99,10 @@ fn the_grow_rule_reads_back_as_it_was_set() {
         grow: true,
         max_pages: None,
         copy_frame_options: None,
+        master: None,
+        first_master: None,
+        even_master: None,
+        section_start: None,
     })
     .expect("set defaults");
     let rule = rule_of(&m, &story).expect("rule");
@@ -105,6 +113,10 @@ fn the_grow_rule_reads_back_as_it_was_set() {
         grow: false,
         max_pages: None,
         copy_frame_options: None,
+        master: None,
+        first_master: None,
+        even_master: None,
+        section_start: None,
     })
     .expect("clear");
     assert_eq!(rule_of(&m, &story), None, "grow: false clears");

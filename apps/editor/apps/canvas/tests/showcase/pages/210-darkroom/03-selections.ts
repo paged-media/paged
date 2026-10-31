@@ -143,14 +143,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
       // ── the pointer lane: marquee, then quick selection ──────────
       await fitPageForGesture(ctx, page);
-      await armTool(ctx, TOOL.marqueeRect);
+      // A gesture that lands no coverage is driven once more before the
+      // page falls back: on a loaded runner the first one can arrive
+      // while the tool is still arming.
+      const gesture = async (
+        tool: string,
+        points: Array<[number, number]>,
+      ): Promise<number | null> => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await armTool(ctx, tool);
+          await strokeOnPage(ctx, page, points);
+          const cov = await awaitCoverage(ctx, 10_000);
+          if (cov !== null) return cov;
+        }
+        return null;
+      };
       // A drag well inside the frame (page pt): the lower-left basket
       // of apples, roughly.
-      await strokeOnPage(ctx, page, [
+      const marqueeCov = await gesture(TOOL.marqueeRect, [
         [95, 200],
         [265, 320],
       ]);
-      const marqueeCov = await awaitCoverage(ctx, 10_000);
       const marqueeBounds = await selectionBounds(ctx);
       marqueeReport =
         marqueeCov !== null
@@ -159,14 +172,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
       // Quick selection REPLACES the marquee: paint a stroke and let
       // the region grow from the painted statistics.
-      await armTool(ctx, TOOL.quickSelect);
-      await strokeOnPage(ctx, page, [
+      const quickCov = await gesture(TOOL.quickSelect, [
         [120, 230],
         [170, 250],
         [220, 270],
         [260, 290],
       ]);
-      const quickCov = await awaitCoverage(ctx, 10_000);
       quickReport =
         quickCov !== null
           ? `quick selection grew to ${quickCov.toFixed(1)}%`

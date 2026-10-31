@@ -1,0 +1,16 @@
+{
+  "kind": "struct",
+  "fields": {
+    "name": {
+      "kind": "text",
+      "optional": true,
+      "summary": "Default: Untitled Section."
+    },
+    "slide": {
+      "kind": "number",
+      "integer": true,
+      "optional": true,
+      "summary": "The 1-based slide it starts at (default: the active slide)."
+    }
+  }
+}

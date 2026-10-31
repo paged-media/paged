@@ -51,6 +51,7 @@ fn text(p: &LoweredParagraph) -> String {
 /// The read-back the editor would hand save-back: the baseline, as poured.
 fn identity_content(ir: &LoweredDoc) -> StoryContentIn {
     StoryContentIn {
+        comments: Vec::new(),
         self_id: "Story/doc".into(),
         paragraphs: ir
             .story
@@ -61,6 +62,8 @@ fn identity_content(ir: &LoweredDoc) -> StoryContentIn {
                 LoweredBlock::Table(_) => None,
             })
             .map(|p| ParagraphContentIn {
+                mark_change: None,
+                props_change: None,
                 paragraph_style: p.para_style_id.clone(),
                 runs: p
                     .runs

@@ -1,0 +1,7 @@
+{
+  "kind": "struct",
+  "fields": {
+    "from": { "kind": "text" },
+    "to": { "kind": "text" }
+  }
+}

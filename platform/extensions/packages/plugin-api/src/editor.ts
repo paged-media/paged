@@ -162,6 +162,15 @@ export interface CanvasPointerEvent {
   /** Originating device class (Pointer Events `pointerType`). Lets a
    *  tool branch stylus-only behaviour. Defaults to `"mouse"`. */
   pointerType: "mouse" | "pen" | "touch";
+  /**
+   * Extensions ADR 339 — the handle this pointer is over, answered by the
+   * HOST from the bundle's live handle sets (`host.overlay.handles`): the
+   * set's id and the handle's id. Absent when the pointer is over none, on
+   * a host without the door (`supports("overlay.handles@1")` false), and
+   * on events of tools that are not the bundle's own. On a press it is the
+   * handle pressed; on a move or release, the one under the pointer now.
+   */
+  hitHandle?: { set: string; id: string };
 }
 
 /** Ephemeral overlay primitive published during a gesture. Kept
@@ -238,6 +247,13 @@ export interface ToolContribution {
   gesture?: () => GestureHandler;
   options?: ToolOptionsSpec;
   when?: VisibilityPredicate;
+  /**
+   * Extensions ADR 339 — the tool reads Cmd/Ctrl as a GESTURE modifier
+   * (a transform box's distort and shear), so holding Cmd while it is in
+   * hand does not spring-load Direct Selection, as it does for other
+   * tools. Absent = the host's spring-load applies.
+   */
+  cmdIsModifier?: boolean;
 }
 
 // --------------------------------------------------------------- panels
@@ -291,8 +307,11 @@ export interface OverlayPageRect {
 
 export interface OverlayProps {
   paged: unknown;
-  /** Camera snapshot at the current frame. */
-  camera: { scale: number; tx: number; ty: number };
+  /** Camera snapshot at the current frame. `rotation` (radians, clockwise
+   *  on screen; absent = 0) is the view's Rotate View turn: the host draws
+   *  overlays under `scale · R(rotation) · doc + (tx, ty)` already, so only
+   *  an overlay placing screen-space HTML needs it. */
+  camera: { scale: number; tx: number; ty: number; rotation?: number };
   /** Page rectangles in document space, in page-id order. */
   pageRects: ReadonlyMap<PageId, OverlayPageRect>;
 }
@@ -451,6 +470,319 @@ export interface StatusItemContribution {
 /** What the host hands a {@link StatusItemContribution}'s component. */
 export interface StatusItemProps {
   editContext: string;
+}
+
+// ------------------------------------------------------- presentation
+
+/**
+ * Extensions ADR 345 (C1) — where a presentation is shown:
+ *
+ * - `"screen"`: one surface filling the editor's window, in the browser's
+ *   full screen where it allows it (a slide show on one screen).
+ * - `"window"`: one surface in a window of its own; the editor stays as it
+ *   was.
+ * - `"secondary"`: two surfaces. The CONSOLE fills the editor's window (a
+ *   presenter view) and the AUDIENCE goes in a window of its own, placed
+ *   on another screen when the browser's Window Management permission is
+ *   granted. When the window cannot open (a blocked popup), the
+ *   presentation is shown on `"screen"` with the console role alone, and
+ *   `PresentResult.target` says so.
+ */
+export type PresentationTarget = "screen" | "window" | "secondary";
+
+/** Which surface of a presentation a render call fills: `"show"` the one
+ *  surface of a `screen` or `window` presentation, `"console"` and
+ *  `"audience"` the two of a `secondary` one. */
+export type PresentationRole = "show" | "console" | "audience";
+
+/**
+ * The message lane between the surfaces of one presentation: a
+ * `BroadcastChannel` named for the presentation, one end per surface, so
+ * a message posted by the console reaches the audience and back (a
+ * surface never receives its own messages). Messages are structured
+ * clones: plain data.
+ */
+export interface PresentationChannel {
+  post(message: unknown): void;
+  onMessage(handler: (message: unknown) => void): Disposable;
+}
+
+/** What the host hands a presentation's `render`. */
+export interface PresentationContext {
+  /** The presentation's id (the contribution's). */
+  id: string;
+  /** Where it is shown (`"screen"` after a refused secondary window). */
+  target: PresentationTarget;
+  role: PresentationRole;
+  /** The options `host.shell.present` was called with, as given. */
+  options: Readonly<Record<string, unknown>>;
+  /** The window the surface's element lives in: the editor's, or the one
+   *  the host opened. Listen for size changes here. */
+  window: Window;
+  channel: PresentationChannel;
+  /** End the presentation (every surface of it). */
+  exit(): void;
+}
+
+/**
+ * Extensions ADR 345 (C1) — a PRESENTATION: a full-screen surface a bundle
+ * draws into while it is shown (a slide show, a presenter view). The host
+ * owns the screen, the window and the chrome: it hides the editor's
+ * regions, gives the surface the whole window, and calls `render` once per
+ * surface with an empty element. `render` mounts whatever it wants (DOM,
+ * a canvas, WebGPU) and answers a cleanup the host calls when the
+ * presentation ends. Rendering is DOM, not React, because a surface can
+ * live in a window the bundle's React root does not reach.
+ *
+ * Keys pressed in a surface belong to it: the element is a key-owning
+ * container (`role="dialog"`, focused when shown), so the editor's own
+ * bindings leave plain keys alone, and a Cmd/Ctrl chord reaches the
+ * editor only if the surface's handler lets it bubble.
+ */
+export interface PresentationContribution {
+  /** `<namespace>.<presentation>`, namespace-checked at register. */
+  id: string;
+  title?: string;
+  render(
+    el: HTMLElement,
+    ctx: PresentationContext,
+  ): void | (() => void) | Disposable;
+}
+
+/** What `host.shell.present` asks for. */
+export interface PresentRequest {
+  /** One of THIS bundle's presentations. */
+  id: string;
+  target: PresentationTarget;
+  /** Handed to `render` as `ctx.options`. */
+  options?: Record<string, unknown>;
+}
+
+/** What `host.shell.present` answers. */
+export interface PresentResult {
+  presented: boolean;
+  /** Where it is shown; `"screen"` after a `"secondary"` request whose
+   *  window could not open. */
+  target?: PresentationTarget;
+  /** Why not (or why on another target), for the bundle's log. */
+  reason?: string;
+}
+
+/** The presentation being shown. */
+export interface PresentationState {
+  id: string;
+  target: PresentationTarget;
+  options: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Presentations (extensions ADR 345): the registry and the host's
+ * presenter. One presentation is shown at a time; presenting another ends
+ * the current one first.
+ */
+export interface PresentationRegistry {
+  register(contribution: PresentationContribution): Disposable;
+  present(request: PresentRequest): Promise<PresentResult>;
+  exit(): Promise<void>;
+  current(): PresentationState | null;
+  onChange(handler: () => void): Disposable;
+  /** False when the host can only present on its own window (no
+   *  `window.open`): `supports("shell.present.secondary@1")`. */
+  readonly secondary?: boolean;
+}
+
+// ------------------------------------------------------------- views
+
+/**
+ * Extensions ADR 345 (C5) — a module VIEW: a bundle's work surface that
+ * replaces the document canvas while it is shown (a slide sorter, an
+ * outline). The editor keeps everything else (menus, panels, the
+ * document), keeps the canvas alive behind it, and gives the canvas back
+ * when the view is closed. One view is shown at a time.
+ */
+export interface ViewContribution {
+  /** `<namespace>.<view>`, namespace-checked at register. */
+  id: string;
+  title: string;
+  render: ComponentType<ViewProps>;
+}
+
+/** What the host hands a {@link ViewContribution}'s component. */
+export interface ViewProps {
+  /** The view's id. */
+  id: string;
+  /** Give the canvas back (the same as `host.shell.showView(null)`). */
+  close(): void;
+}
+
+/** Views (extensions ADR 345): the registry and which one is shown. */
+export interface ViewRegistry {
+  register(contribution: ViewContribution): Disposable;
+  /** Show a registered view, or the canvas (`null`). False for an unknown
+   *  id. */
+  show(id: string | null): boolean;
+  /** The view shown, or null while the canvas is. */
+  active(): string | null;
+  onChange(handler: () => void): Disposable;
+}
+
+// -------------------------------------------------------- sub-contexts
+
+/**
+ * Extensions ADR 349 (C6) — what a SUB-CONTEXT edits: a page's header or
+ * footer, or a note, in place on the page (editor ADR 301). Word's
+ * headers live on masters (engine ADR 1022): their story is an ordinary
+ * story, so the text edits address `storyId` directly while the user
+ * sees them on `pageId`.
+ */
+export type SubContextKind = "header" | "footer" | "note";
+
+/** What a bundle asks the host to enter (`host.shell.enterSubContext`, or
+ *  the answer of a {@link SubContextProviderContribution}). */
+export interface SubContextSpec {
+  kind: SubContextKind;
+  /** The body page the user edits on. */
+  pageId: PageId;
+  /** The story the text edits address (a master frame's story). */
+  storyId: string;
+  /** The editable area on `pageId`, page-local points
+   *  `[top, left, bottom, right]`: the host leaves it clear, dims the
+   *  rest of the page, and puts its bar next to it. */
+  bounds: [number, number, number, number];
+  /** The master the story's frame is on, when it is a master's. */
+  masterId?: string;
+  /** The frame showing the story. */
+  frameId?: string;
+  /** The bar's label ("First Page Header -Section 2-"). Absent: the host
+   *  names the kind. */
+  label?: string;
+  /** THIS bundle's command ids the host offers on the bar, in order
+   *  (Different first page, Link to previous, Insert page number, …). */
+  commands?: readonly string[];
+  /** Where the caret starts, a UTF-8 byte offset into the story. Absent:
+   *  its end. */
+  offset?: number;
+}
+
+/** The sub-context the host shows, and whose it is. */
+export interface SubContextState extends SubContextSpec {
+  pluginId: string;
+}
+
+/** A double-click the host offers to the providers. */
+export interface SubContextHit {
+  /** The edit context the providers were asked for: the active one, else
+   *  the document context. */
+  editContext: string;
+  pageId: PageId;
+  /** Page-local points (origin = the page's top-left). */
+  pagePoint: [number, number];
+}
+
+/**
+ * A bundle's answer to "the user double-clicked this point of a page"
+ * while its edit context `editContext` is active (or is the document
+ * context): a sub-context to enter, or `null` to leave the double-click
+ * to the host (a word selection in the body). The host asks before it
+ * hit-tests, so `resolve` should answer from what the bundle already
+ * knows (the page's master and its header and footer frames).
+ */
+export interface SubContextProviderContribution {
+  editContext: string;
+  resolve(
+    hit: SubContextHit,
+  ): SubContextSpec | null | Promise<SubContextSpec | null>;
+}
+
+// ------------------------------------------------------- margin bands
+
+/**
+ * Extensions ADR 349 amendment 1 (C5) — where a margin-band item is
+ * anchored: a range of a story's text in CONTENT offsets (UTF-8 bytes,
+ * one synthetic `"\n"` per paragraph boundary: what the caret,
+ * `viewport.revealText` and `host.text.selection` count). An empty range
+ * anchors at a point. `host.text.contentRange` converts the story
+ * characters the engine's collections report.
+ */
+export interface MarginBandAnchor {
+  storyId: string;
+  start: number;
+  end: number;
+}
+
+/** One balloon of a margin band: a tracked change or a comment thread. */
+export interface MarginBandItem {
+  /** Unique within its band; the host keys layout and measurement on it. */
+  id: string;
+  anchor: MarginBandAnchor;
+  /** What the balloon is, for the host's a11y label and data attribute
+   *  (`"insert"`, `"delete"`, `"format"`, `"paraProps"`, `"comment"`, …).
+   *  Free text: the host draws every kind the same way. */
+  kind?: string;
+  /** A CSS colour for the leader line and the balloon's edge (Word draws
+   *  each author in a colour of their own). */
+  color?: string;
+}
+
+/** What the host hands a {@link MarginBandContribution}'s component, once
+ *  per item. */
+export interface MarginBalloonProps {
+  item: MarginBandItem;
+  editContext: string;
+  /** The caret or the selection touches the item's anchor: Word's
+   *  "current" balloon, drawn emphasised. */
+  active: boolean;
+}
+
+/**
+ * Extensions ADR 349 amendment 1 (C5) — a MARKUP MARGIN BAND: a column
+ * beside each page holding balloons anchored to text ranges (Word's
+ * tracked-change balloons and threaded comments), shown while the edit
+ * context `scope` names is active (editor ADR 300). The host owns the
+ * geometry: it places each balloon level with its anchor's first line,
+ * pushes overlapping balloons down, draws a leader line from the anchor
+ * and keeps them there as the view scrolls and zooms and as the text
+ * reflows. The bundle owns the content: `render` draws one balloon (React
+ * in the host realm, like a panel). `items` is read again after
+ * `onDidChange` fires.
+ */
+export interface MarginBandContribution {
+  /** `<namespace>.<band>`, namespace-checked at register. */
+  id: string;
+  scope: { editContext: string };
+  /** The band's accessible name ("Markup"). */
+  title?: string;
+  /** The balloons' width in screen pixels. Default 240. */
+  width?: number;
+  /** Lower bands sit nearer the page. Default 100. */
+  order?: number;
+  items(): readonly MarginBandItem[];
+  /** Subscribe to "the items changed". */
+  onDidChange(listener: () => void): Disposable;
+  render: ComponentType<MarginBalloonProps>;
+}
+
+/** Margin bands (extensions ADR 349 amendment 1, C5). */
+export interface MarginBandRegistry {
+  register(contribution: MarginBandContribution): Disposable;
+}
+
+/** Sub-contexts (extensions ADR 349): the providers and the one shown. */
+export interface SubContextRegistry {
+  register(
+    pluginId: string,
+    contribution: SubContextProviderContribution,
+  ): Disposable;
+  /** Ask the providers of `hit.editContext` in registration order; the
+   *  first answer enters. Resolves the state entered, or `null`. */
+  resolve(hit: SubContextHit): Promise<SubContextState | null>;
+  /** Enter `spec` for `pluginId` (replacing the one shown). */
+  enter(pluginId: string, spec: SubContextSpec): boolean;
+  /** Leave the one shown; with `pluginId`, only when it is that bundle's.
+   *  Answers whether one was left. */
+  exit(pluginId?: string): boolean;
+  current(): SubContextState | null;
+  onChange(handler: () => void): Disposable;
 }
 
 // ----------------------------------------------- importers + exporters
@@ -631,6 +963,19 @@ export interface ShellRegistries {
   /** Status-bar items (extensions ADR 348). Optional likewise
    *  (`statusBar.items@1`). */
   statusItems?: StatusItemRegistry;
+  /** Presentations (extensions ADR 345). Optional likewise: without it
+   *  `host.shell.present` answers `{ presented: false }` and
+   *  `supports("shell.present@1")` is false. */
+  presentations?: PresentationRegistry;
+  /** Module views that replace the canvas (extensions ADR 345, C5).
+   *  Optional likewise (`shell.views@1`). */
+  views?: ViewRegistry;
+  /** Sub-contexts: a header, footer or note edited in place (extensions
+   *  ADR 349, C6). Optional likewise (`shell.subContext@1`). */
+  subContexts?: SubContextRegistry;
+  /** Markup margin bands (extensions ADR 349 amendment 1, C5). Optional
+   *  likewise (`shell.marginBand@1`). */
+  marginBands?: MarginBandRegistry;
 }
 
 // ---------------------------------------------------- overlay signals
@@ -714,11 +1059,41 @@ export interface ToolPreviewText {
   background?: boolean;
 }
 
+/**
+ * Extensions ADR 339 — a HANDLE: a small marker drawn at a constant
+ * SCREEN size wherever the camera is, the handle primitive the shapes
+ * above lacked (a square drawn in page pt grows and shrinks with the
+ * zoom). `x`/`y` are its centre in page-local pt, like every other
+ * variant. `shape`:
+ *   - `"square"` — a resize handle (white fill, selection stroke);
+ *   - `"round"` — a round handle (a path point, a rotate knob);
+ *   - `"centre"` — a reference point (a ring with a cross);
+ *   - `"rotateZone"` — nothing visible: the band outside a corner that
+ *     rotates, drawn only as a hit area (and in debug overlays).
+ * `sizePx` is the visible side / diameter in screen px (host default 8).
+ * `active` draws it filled with the selection colour (the handle being
+ * dragged). Probe `supports("overlay.handles@1")`; a host without it
+ * draws nothing for this variant.
+ */
+export interface ToolPreviewHandle {
+  kind: "handle";
+  pageId: PageId;
+  /** Centre, page-local pt. */
+  x: number;
+  y: number;
+  shape: "square" | "round" | "centre" | "rotateZone";
+  /** Visible size in screen px (constant under zoom). Host default 8. */
+  sizePx?: number;
+  /** Draw it as the handle being dragged. */
+  active?: boolean;
+}
+
 export type ToolPreviewShape =
   | MarqueeRectPageLocal
   | ToolPreviewPolyline
   | ToolPreviewPath
-  | ToolPreviewText;
+  | ToolPreviewText
+  | ToolPreviewHandle;
 
 // ------------------------------------------------------------- client
 // The NARROW engine-client contract — what the SDK and real bundles
@@ -770,7 +1145,7 @@ export interface PagedEditor {
     setElementGeometry(items: ElementGeometryItem[]): void;
   };
   camera: {
-    camera: { scale: number; tx: number; ty: number };
+    camera: { scale: number; tx: number; ty: number; rotation?: number };
   };
   /** S-13 font measurement — the editor routes this to the canvas-wasm
    *  `CanvasWorker.measureText` query (async across the worker boundary).

@@ -417,6 +417,10 @@ impl Gate {
                     grow,
                     max_pages: None,
                     copy_frame_options: Some(true),
+                    master: None,
+                    first_master: None,
+                    even_master: None,
+                    section_start: None,
                 }),
             ));
         }

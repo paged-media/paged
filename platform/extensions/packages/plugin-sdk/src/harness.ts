@@ -86,6 +86,7 @@ import type {
   ExporterContribution,
   ControlBarGroupContribution,
   StatusItemContribution,
+  MarginBandContribution,
   TextSelection,
   ImporterContribution,
   KeybindingContribution,
@@ -98,6 +99,16 @@ import type {
   PanelContribution,
   PathAnchorsResult,
   PluginManifest,
+  PresentationContribution,
+  PresentationRegistry,
+  PresentationState,
+  ViewContribution,
+  ViewRegistry,
+  SubContextHit,
+  SubContextProviderContribution,
+  SubContextRegistry,
+  SubContextSpec,
+  SubContextState,
   SchemaPanelContribution,
   SelectionMode,
   ToolContribution,
@@ -163,7 +174,10 @@ export interface RecordedContribution {
     | "importer"
     | "exporter"
     | "controlBarGroup"
-    | "statusItem";
+    | "statusItem"
+    | "marginBand"
+    | "presentation"
+    | "view";
   id: string;
   value:
     | ToolContribution
@@ -177,7 +191,10 @@ export interface RecordedContribution {
     | ImporterContribution
     | ExporterContribution
     | ControlBarGroupContribution
-    | StatusItemContribution;
+    | StatusItemContribution
+    | MarginBandContribution
+    | PresentationContribution
+    | ViewContribution;
 }
 
 export interface HarnessOptions
@@ -200,6 +217,7 @@ export interface HarnessOptions
       | "willSave"
       | "toolSettings"
       | "pages"
+      | "shell"
     > {
   /** D-27 — back `host.text` with the ENGINE's shaper
    *  (`CanvasWorker.measureText`, the one the editor's worker calls)
@@ -323,6 +341,9 @@ export function inMemoryBlobStore(): BlobStore {
 export function inMemoryClipboard(): ClipboardBackend {
   let slot: ClipboardPayload | null = null;
   return {
+    // Carries the svg half (extensions ADR 341), so `clipboard.svg@1`
+    // holds headlessly.
+    svg: true,
     async read() {
       if (!slot) return null;
       // Clone so the reader can't mutate the stored grid.
@@ -331,6 +352,7 @@ export function inMemoryClipboard(): ClipboardBackend {
         ...(slot.tabular
           ? { tabular: { rows: slot.tabular.rows.map((r) => [...r]) } }
           : {}),
+        ...(slot.svg !== undefined ? { svg: slot.svg } : {}),
       };
     },
     async write(payload) {
@@ -345,6 +367,7 @@ export function inMemoryClipboard(): ClipboardBackend {
         ...(payload.tabular
           ? { tabular: { rows: payload.tabular.rows.map((r) => [...r]) } }
           : {}),
+        ...(payload.svg !== undefined ? { svg: payload.svg } : {}),
       };
     },
   };
@@ -419,6 +442,31 @@ export interface HeadlessHost {
   controlBarGroupsContributed(): ControlBarGroupContribution[];
   /** Status-bar items registered through `contribute.statusItem`. */
   statusItemsContributed(): StatusItemContribution[];
+  /** Margin bands registered through `contribute.marginBand` (extensions
+   *  ADR 349 amendment 1). */
+  marginBandsContributed(): MarginBandContribution[];
+  /** Presentations registered through `contribute.presentation`
+   *  (extensions ADR 345). The harness wires a presenter that keeps the
+   *  state and renders nothing (no DOM headlessly): `shell.present`
+   *  answers presented on `"screen"`/`"window"` and on `"secondary"`. */
+  presentationsContributed(): PresentationContribution[];
+  /** Module views registered through `contribute.view`. */
+  viewsContributed(): ViewContribution[];
+  /** Extensions ADR 349 (C6) — play the editor's double-click on a page:
+   *  the sub-context providers of `editContext` (default: the document
+   *  context a bundle holds) are asked, and the first answer is entered.
+   *  Resolves what was entered, or `null`. The harness wires the
+   *  registry, so `supports("shell.subContext@1")` is true. */
+  doubleClickPage(
+    pageId: string,
+    pagePoint: [number, number],
+    editContext?: string,
+  ): Promise<SubContextState | null>;
+  /** The sub-context shown (`host.shell.enterSubContext` or a provider's
+   *  answer), or `null`. */
+  subContext(): SubContextState | null;
+  /** Play Esc: leave the sub-context shown. */
+  exitSubContext(): boolean;
   /** Extensions ADR 348 (C4) — play the editor's caret: the text
    *  selection `host.text.selection()` answers (content offsets), or
    *  `null`. Notifies `onDidChangeSelection` listeners. The harness wires
@@ -827,6 +875,21 @@ function makeEngineEditor(
       statusItems: recordingRegistry<StatusItemContribution, "statusItem">(
         "statusItem",
       ),
+      marginBands: recordingRegistry<MarginBandContribution, "marginBand">(
+        "marginBand",
+      ),
+      // Extensions ADR 345 — a presenter and a view registry that keep
+      // state only: headlessly nothing is drawn.
+      presentations: recordingPresenter(
+        recordingRegistry<PresentationContribution, "presentation">(
+          "presentation",
+        ),
+      ),
+      views: recordingViews(
+        recordingRegistry<ViewContribution, "view">("view"),
+      ),
+      // Extensions ADR 349 — the editor's sub-context state, headlessly.
+      subContexts: createHeadlessSubContexts(),
     },
     selection: {
       get elementSelection() {
@@ -945,6 +1008,8 @@ export async function createHeadlessHost(
     options.engineShaper === true,
   );
 
+  const subContexts =
+    editor.registries.subContexts ?? createHeadlessSubContexts();
   /** Load bytes into the engine; the raw reply (documentLoaded or not). */
   const loadDirect = (bytes: Uint8Array): WorkerToMain => {
     const dropped = loads.begin();
@@ -1188,6 +1253,9 @@ export async function createHeadlessHost(
       // v70 — page navigation, when the test supplies a backend (absent:
       // `supports("viewport.pages@1")` is false, as before).
       pages: options.pages,
+      // Extensions ADR 348 amendment 1 — a test's shell backend (a
+      // recorder of `openPanel` with its target); absent, as before.
+      ...(options.shell ? { shell: options.shell } : {}),
       // Record the SCHEMA verbatim at registration — the panel registry
       // only ever sees the synthesized React panel, so the conformance
       // log gets the schema through this adapter seam (no host renderer
@@ -1335,6 +1403,32 @@ export async function createHeadlessHost(
       return contributions
         .filter((c) => c.kind === "statusItem")
         .map((c) => c.value as StatusItemContribution);
+    },
+    marginBandsContributed() {
+      return contributions
+        .filter((c) => c.kind === "marginBand")
+        .map((c) => c.value as MarginBandContribution);
+    },
+    presentationsContributed() {
+      return contributions
+        .filter((c) => c.kind === "presentation")
+        .map((c) => c.value as PresentationContribution);
+    },
+    viewsContributed() {
+      return contributions
+        .filter((c) => c.kind === "view")
+        .map((c) => c.value as ViewContribution);
+    },
+    async doubleClickPage(pageId, pagePoint, editContext) {
+      const type = editContext ?? docContext?.type;
+      if (!type) return null;
+      return subContexts.resolve({ editContext: type, pageId, pagePoint });
+    },
+    subContext() {
+      return subContexts.current();
+    },
+    exitSubContext() {
+      return subContexts.exit();
     },
     setTextSelection(sel) {
       textSel = sel ? { ...sel } : null;
@@ -1549,6 +1643,8 @@ export type ContributionCategory =
   | "objectTypes"
   | "importers"
   | "exporters"
+  | "presentations"
+  | "views"
   | "objectModelKinds"
   | "objectModelCommands";
 
@@ -1561,6 +1657,8 @@ export const CONTRIBUTION_CATEGORIES: readonly ContributionCategory[] = [
   "objectTypes",
   "importers",
   "exporters",
+  "presentations",
+  "views",
   "objectModelKinds",
   "objectModelCommands",
 ];
@@ -1656,6 +1754,8 @@ export function diffManifestContributions(
     objectTypes: (c.objectTypes ?? []).map((e) => e.type),
     importers: c.importers ?? [],
     exporters: c.exporters ?? [],
+    presentations: c.presentations ?? [],
+    views: c.views ?? [],
     objectModelKinds: (c.objectModel?.kinds ?? []).map((k) => k.kind),
     objectModelCommands: (c.objectModel?.commands ?? []).map((k) => k.id),
   };
@@ -1790,6 +1890,8 @@ export async function checkManifestConformance(
       objectTypes: ids("objectType"),
       importers: ids("importer"),
       exporters: ids("exporter"),
+      presentations: ids("presentation"),
+      views: ids("view"),
       objectModelKinds: [...new Set(kinds)],
       objectModelCommands: [...new Set(commands)],
     };
@@ -1802,4 +1904,156 @@ export async function checkManifestConformance(
     loaded?.dispose();
     if (!given) h.dispose();
   }
+}
+
+// ------------------------------------------- presentations and views
+
+/** Extensions ADR 345 — the harness presenter: the registry's recording
+ *  plus the presentation state, no surface. */
+function recordingPresenter(registry: {
+  register(c: PresentationContribution): Disposable;
+}): PresentationRegistry {
+  const ids = new Set<string>();
+  let current: PresentationState | null = null;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+  return {
+    secondary: true,
+    register(c) {
+      ids.add(c.id);
+      const d = registry.register(c);
+      return {
+        dispose() {
+          ids.delete(c.id);
+          if (current?.id === c.id) {
+            current = null;
+            emit();
+          }
+          d.dispose();
+        },
+      };
+    },
+    async present(request) {
+      if (!ids.has(request.id))
+        return { presented: false, reason: "unknown presentation" };
+      current = {
+        id: request.id,
+        target: request.target,
+        options: request.options ?? {},
+      };
+      emit();
+      return { presented: true, target: request.target };
+    },
+    async exit() {
+      if (!current) return;
+      current = null;
+      emit();
+    },
+    current: () => current,
+    onChange(handler) {
+      listeners.add(handler);
+      return { dispose: () => void listeners.delete(handler) };
+    },
+  };
+}
+
+/** Extensions ADR 345 (C5) — the harness view registry. */
+/**
+ * Extensions ADR 349 (C6) — the sub-context registry as the editor keeps
+ * it, without the chrome: providers per edit context in registration
+ * order, and the one sub-context shown.
+ */
+function createHeadlessSubContexts(): SubContextRegistry {
+  const providers: Array<{
+    pluginId: string;
+    c: SubContextProviderContribution;
+  }> = [];
+  let shown: SubContextState | null = null;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+  const enter = (pluginId: string, spec: SubContextSpec): boolean => {
+    shown = { ...spec, pluginId };
+    emit();
+    return true;
+  };
+  return {
+    register(pluginId, c) {
+      const entry = { pluginId, c };
+      providers.push(entry);
+      return {
+        dispose() {
+          const i = providers.indexOf(entry);
+          if (i >= 0) providers.splice(i, 1);
+        },
+      };
+    },
+    async resolve(hit: SubContextHit) {
+      for (const p of providers.filter(
+        (e) => e.c.editContext === hit.editContext,
+      )) {
+        const spec = await p.c.resolve({ ...hit });
+        if (spec) {
+          enter(p.pluginId, spec);
+          return shown;
+        }
+      }
+      return null;
+    },
+    enter,
+    exit(pluginId) {
+      if (!shown || (pluginId !== undefined && shown.pluginId !== pluginId))
+        return false;
+      shown = null;
+      emit();
+      return true;
+    },
+    current: () => shown,
+    onChange(handler) {
+      listeners.add(handler);
+      return { dispose: () => void listeners.delete(handler) };
+    },
+  };
+}
+
+function recordingViews(registry: {
+  register(c: ViewContribution): Disposable;
+}): ViewRegistry {
+  const ids = new Set<string>();
+  let active: string | null = null;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const l of [...listeners]) l();
+  };
+  return {
+    register(c) {
+      ids.add(c.id);
+      const d = registry.register(c);
+      return {
+        dispose() {
+          ids.delete(c.id);
+          if (active === c.id) {
+            active = null;
+            emit();
+          }
+          d.dispose();
+        },
+      };
+    },
+    show(id) {
+      if (id !== null && !ids.has(id)) return false;
+      if (active === id) return false;
+      active = id;
+      emit();
+      return true;
+    },
+    active: () => active,
+    onChange(handler) {
+      listeners.add(handler);
+      return { dispose: () => void listeners.delete(handler) };
+    },
+  };
 }

@@ -111,15 +111,17 @@ test.describe("journey · paged.image retouching", () => {
     await expect(caf).toBeDisabled();
     await expect(page.getByText("Select an area first.")).toBeVisible();
 
-    // What it does and its real limit are stated where a retoucher will
+    // What it does and how it searches are stated where a retoucher will
     // read them: the one-line note, then the collapsed About behind it.
     const note = page.locator("[data-image-caf-note]");
     await expect(note).toContainText(
       "texture copied from elsewhere in the image",
     );
     await note.locator("summary", { hasText: "About" }).click();
-    await expect(note.getByText("half resolution")).toBeVisible();
-    await expect(note).toContainText("limited to a window");
+    await expect(
+      note.getByText(/PatchMatch from coarse to fine/),
+    ).toBeVisible();
+    await expect(note).toContainText("the search reaches the whole image");
 
     // With a selection it becomes available — the CPU search needs no
     // device, so this holds on the lane that actually runs in CI.

@@ -77,9 +77,45 @@ pub(crate) fn diff(scene: &Document, twin: &Document, ctx: &LossContext) -> Vec<
     diff_conditions(scene, twin, &mut out);
     diff_stories(scene, twin, &mut out);
     diff_page_items(scene, twin, ctx, &mut out);
+    diff_canvas_placement(scene, twin, &mut out);
     out.sort();
     out.dedup();
     out
+}
+
+// ---- canvas placement (engine ADR 1011) -----------------------------------
+
+/// A page placed on the canvas (an artboard moved off the default stack)
+/// has no IDML spelling: InDesign stacks its spreads and keeps a spread's
+/// pages side by side. The export keeps the page order and every spread
+/// as it is — an artboard alone in its spread stays its own spread, pages
+/// that share one stay adjacent — and the page opens in its default slot.
+fn diff_canvas_placement(scene: &Document, twin: &Document, out: &mut Vec<String>) {
+    let twin_origin: HashMap<&str, Option<[f32; 2]>> = twin
+        .spreads
+        .iter()
+        .flat_map(|p| p.spread.pages.iter())
+        .filter_map(|p| Some((p.self_id.as_deref()?, p.canvas_origin)))
+        .collect();
+    for parsed in &scene.spreads {
+        let pages = &parsed.spread.pages;
+        for page in pages {
+            let (Some(id), Some([x, y])) = (page.self_id.as_deref(), page.canvas_origin) else {
+                continue;
+            };
+            if twin_origin.get(id).copied().flatten() == page.canvas_origin {
+                continue;
+            }
+            let shared = if pages.len() > 1 {
+                " and stays beside the other pages of its spread"
+            } else {
+                ""
+            };
+            out.push(format!(
+                "page `{id}` is placed at [{x}, {y}] pt on the canvas (an artboard position) —                  IDML has no free page placement: InDesign stacks the spreads, so the page                  keeps its place in the page order{shared} and opens in its default slot",
+            ));
+        }
+    }
 }
 
 // ---- sections -------------------------------------------------------------
@@ -831,6 +867,236 @@ pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
                 &l.subpath_starts,
                 &l.subpath_open,
             );
+        }
+    }
+    out
+}
+
+/// Engine ADR 1047 — the live shapes IDML cannot keep live. A pie oval
+/// exports its wedge as the `<Oval>`'s path, which InDesign draws, and its
+/// angles in the item's `paged:liveShape` label, which InDesign keeps and
+/// a paged reader lifts back; in InDesign it is a plain path. A live
+/// polygon is not listed: InDesign keeps no polygon's sides either, and
+/// its anchors are exact. Declared from the model, like the opacity masks.
+pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    for parsed in &scene.spreads {
+        for o in &parsed.spread.ovals {
+            if let Some(pie) = paged_model::live_shape::cut_pie(o) {
+                out.push(format!(
+                    "pie angles ({}° to {}°) on oval `{}` are a paged-native live shape — IDML \
+                     draws the wedge as the oval's path, and the angles ride its \
+                     `paged:liveShape` label: InDesign shows the pie but cannot edit its angles.",
+                    pie.start,
+                    pie.end,
+                    o.self_id.as_deref().unwrap_or("?")
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// Engine ADR 1042 — the live vector effects IDML cannot say. Every
+/// item with an enabled vector entry is written BAKED (its effected
+/// outline; an oval as a polygon, a group with a Pathfinder effect as one
+/// polygon), the source and the stack kept in labels a paged reader
+/// restores; InDesign shows the outline, not the effect. A group whose
+/// members a Pathfinder effect cannot be written over (a text frame, a
+/// nested group, a symbol instance) is written as its members.
+pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
+    use paged_model::effect_stack::{vector_entries, EffectEntry};
+    let mut out = Vec::new();
+    let mut unwritten = Vec::new();
+    let mut check = |kind: &str, id: Option<&str>, stack: &[EffectEntry]| {
+        let kinds: Vec<&str> = vector_entries(stack)
+            .map(|e| e.effect.kind_name())
+            .collect();
+        if kinds.is_empty() {
+            return;
+        }
+        out.push(format!(
+            "vector effect{} {} on {kind} `{}` has no IDML form — written baked (the \
+             effected outline{}), the source and the live stack kept in the item's \
+             `paged:vectorSource` and `paged:effectStack` labels, which a paged reader \
+             restores; InDesign shows the outline, not the effect.",
+            if kinds.len() > 1 { "s" } else { "" },
+            kinds
+                .iter()
+                .map(|k| format!("`{k}`"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            id.unwrap_or("?"),
+            match kind {
+                "oval" => ", as a polygon",
+                "group" => ", as one polygon in the group's place",
+                _ => "",
+            }
+        ));
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for f in &sp.text_frames {
+            check("text frame", f.self_id.as_deref(), &f.effect_stack);
+        }
+        for f in &sp.rectangles {
+            check("rectangle", f.self_id.as_deref(), &f.effect_stack);
+        }
+        for f in &sp.ovals {
+            check("oval", f.self_id.as_deref(), &f.effect_stack);
+        }
+        for f in &sp.polygons {
+            check("polygon", f.self_id.as_deref(), &f.effect_stack);
+        }
+        for g in &sp.groups {
+            let readable = g.members.iter().all(|m| {
+                matches!(
+                    m,
+                    paged_model::FrameRef::Rectangle(_)
+                        | paged_model::FrameRef::Oval(_)
+                        | paged_model::FrameRef::Polygon(_)
+                        | paged_model::FrameRef::GraphicLine(_)
+                )
+            });
+            if readable {
+                check("group", g.self_id.as_deref(), &g.effect_stack);
+            } else if vector_entries(&g.effect_stack).next().is_some() {
+                unwritten.push(format!(
+                    "the Pathfinder effect on group `{}` is not written — the group holds a \
+                     text frame, a group or a symbol instance, which IDML cannot replace by \
+                     one outline; it is written as its members, the stack kept in its label \
+                     is not (InDesign draws the members).",
+                    g.self_id.as_deref().unwrap_or("?")
+                ));
+            }
+        }
+    }
+    out.extend(unwritten);
+    out
+}
+
+/// Engine ADR 1008 — what an item's effect stack says that IDML cannot:
+/// an effect InDesign does not have (it rides the item's
+/// `paged:effectStack` label, which InDesign keeps and does not draw, so a
+/// paged reader restores it), and an order of InDesign's own effects that
+/// differs from the fixed one InDesign draws them in. Declared from the
+/// model: the twin reads the label back, so it cannot see the loss.
+pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
+    use paged_model::effect_stack::{EffectBearing, EffectTarget};
+    let mut out = Vec::new();
+    let mut check = |kind: &str, id: Option<&str>, item: &dyn EffectBearing| {
+        let id = id.unwrap_or("?");
+        for target in EffectTarget::ALL {
+            let slots = item.effect_slots(target);
+            let on = match target {
+                EffectTarget::Object => "",
+                EffectTarget::Fill => " (fill)",
+                EffectTarget::Stroke => " (stroke)",
+                EffectTarget::Content => " (content)",
+            };
+            for e in slots.stack.iter().filter(|e| e.enabled) {
+                // Vector effects are reported (and baked) by
+                // `vector_effect_losses`.
+                if e.effect.indesign().is_none() && !e.effect.is_vector() {
+                    out.push(format!(
+                        "effect `{}` on {kind} `{id}`{on} has no IDML form — InDesign has its \
+                         nine effects only; it is kept in the item's `paged:effectStack` label, \
+                         which InDesign preserves and does not draw. Save as `.paged` to keep \
+                         it visible everywhere.",
+                        e.effect.kind_name()
+                    ));
+                }
+            }
+            if slots.indesign_order_differs() {
+                out.push(format!(
+                    "the order of the InDesign effects on {kind} `{id}`{on} differs from \
+                     InDesign's fixed order — InDesign draws them in its own; the order is \
+                     kept in the item's `paged:effectStack` label."
+                ));
+            }
+        }
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for f in &sp.text_frames {
+            check("text frame", f.self_id.as_deref(), f);
+        }
+        for f in &sp.rectangles {
+            check("rectangle", f.self_id.as_deref(), f);
+        }
+        for f in &sp.ovals {
+            check("oval", f.self_id.as_deref(), f);
+        }
+        for f in &sp.polygons {
+            check("polygon", f.self_id.as_deref(), f);
+        }
+    }
+    // Engine ADR 1045 — an anchored frame carries the same stacks.
+    fn anchored<'a>(
+        frames: &'a [paged_model::AnchoredFrame],
+        out: &mut Vec<&'a paged_model::AnchoredFrame>,
+    ) {
+        for f in frames {
+            out.push(f);
+            anchored(&f.children, out);
+        }
+    }
+    let mut frames = Vec::new();
+    for parsed in &scene.stories {
+        for p in &parsed.story.paragraphs {
+            anchored(&p.anchored_frames, &mut frames);
+        }
+    }
+    for f in frames {
+        check("anchored frame", f.self_id.as_deref(), f);
+    }
+    out
+}
+
+/// Engine ADR 1043 — an item's appearance has no IDML form: the writer
+/// bakes it to a group of single-paint items and keeps the source in the
+/// carrier's `paged:appearance` label. Declared from the model: the twin
+/// reads the label back, so it cannot see the loss.
+pub(crate) fn appearance_losses(scene: &Document) -> Vec<String> {
+    scene
+        .spreads
+        .iter()
+        .flat_map(|p| paged_model::appearance::interchange::losses(&p.spread))
+        .collect()
+}
+
+/// Engine ADR 1037 — the image filter stacks IDML cannot carry. InDesign
+/// has no adjustment on a placed picture, so it shows the picture as it
+/// is; the export keeps each stack in the frame's label, which paged reads
+/// back on reopen. Declared from the model, like the opacity masks: the
+/// twin reads the label back and so cannot tell the loss.
+pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut check = |kind: &str, id: Option<&str>, ops: &[paged_model::RasterOp]| {
+        if ops.is_empty() {
+            return;
+        }
+        let names: Vec<&str> = ops.iter().map(|op| op.name()).collect();
+        out.push(format!(
+            "image filter stack on {kind} `{}` ({}) is a paged-native construct — IDML has \
+             no adjustment on a placed picture, so InDesign shows it unadjusted; the stack \
+             rides the frame's `{}` label and comes back when paged reopens the file. \
+             Save as `.paged` to keep it.",
+            id.unwrap_or("?"),
+            names.join(", "),
+            paged_model::image_adjust::IMAGE_ADJUSTMENTS_LABEL,
+        ));
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for r in &sp.rectangles {
+            check("rectangle", r.self_id.as_deref(), &r.image_adjustments);
+        }
+        for o in &sp.ovals {
+            check("oval", o.self_id.as_deref(), &o.image_adjustments);
+        }
+        for p in &sp.polygons {
+            check("polygon", p.self_id.as_deref(), &p.image_adjustments);
         }
     }
     out

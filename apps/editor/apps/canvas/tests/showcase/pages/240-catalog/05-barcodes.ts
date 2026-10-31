@@ -56,7 +56,7 @@ import {
   settleStableNew,
   spreadOffset,
   units,
-  unshiftSeam,
+  correctSeam,
 } from "./00-support";
 
 interface Symbology {
@@ -186,14 +186,15 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     // The seam correction (see unshiftSeam and the expression page's
     // finding): stored-geometry origins re-based a second time by the
     // page-local wire put every module one page width off here too.
-    if (
-      await unshiftSeam(
-        doc,
-        "polygon",
-        fresh.map((r) => r.id),
-        off,
-      )
-    ) {
+    const seam = await correctSeam(
+      page,
+      doc,
+      "polygon",
+      fresh,
+      off,
+      SYMBOLS.map((s) => s.slot),
+    );
+    if (seam.shifted) {
       notes.push(
         "SEAM FINDING — the four symbols (and the re-drawn expression " +
           `specimens) landed one page width off (stored offset ${off[0]},` +
@@ -201,12 +202,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           "before classification.",
       );
     }
-    // Geometry `bounds` report the item's UNTRANSFORMED anchors and the
-    // corrective translate lives in the transform, so module bounds sit
-    // at slot + 2×offset always: the plugin fed STORED rect geometry
-    // (local + offset) and the wire re-based it by the offset again.
-    // On a spread-origin page 2×0 = 0 and the same formula holds.
-    const boff: [number, number] = [off[0] * 2, off[1] * 2];
+    // Geometry `bounds` report the item's UNTRANSFORMED anchors and a
+    // corrective translate lives in the transform, so the modules' bounds
+    // sit at slot + 2×offset when the seam was corrected, at slot +
+    // offset when they landed in place.
+    const boff = seam.boff;
     const inSlot = (
       b: [number, number, number, number],
       slot: [number, number, number, number],

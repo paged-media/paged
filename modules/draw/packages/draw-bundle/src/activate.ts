@@ -79,6 +79,19 @@ import {
   STAR_FLARE_COMMAND_IDS,
 } from "./commands/star-flare";
 import {
+  contributeLiquifyCommands,
+  LIQUIFY_COMMAND_IDS,
+} from "./commands/liquify";
+import {
+  contributePuppetWarpCommands,
+  PUPPET_COMMAND_IDS,
+} from "./commands/puppet-warp";
+import {
+  contributePerspectiveCommands,
+  installPerspectiveLayer,
+  PERSPECTIVE_COMMAND_IDS,
+} from "./commands/perspective";
+import {
   contributeShaperCommand,
   SHAPER_STROKE_COMMAND_ID,
 } from "./commands/shaper";
@@ -98,6 +111,7 @@ import {
   contributeSymbolCommands,
   SYMBOLS_COMMAND_IDS,
 } from "./commands/symbols";
+import { installSymbolMigration } from "./commands/symbols-migrate";
 import {
   contributeLivePaintCommands,
   LIVE_PAINT_COMMAND_IDS,
@@ -234,6 +248,8 @@ import { makeImageTracePanel } from "./panels/image-trace-panel";
 import { makeRecolorPanel } from "./panels/recolor-panel";
 import { makeColorGuidePanel } from "./panels/color-guide-panel";
 import { contributeSvgIo } from "./io/svg";
+import { contributeDxfIo } from "./io/dxf";
+import { contributeVectorFileImporters } from "./io/vector-files";
 import { registerDrawActions } from "./actions";
 import { contributeDrawObjectModel } from "./object-model";
 import {
@@ -541,6 +557,9 @@ export function activate(host: BundleHost): BundleHandle {
   // the text refusal and everything v0 deliberately does not build (the
   // eight symbol-SET tools, nine-slice scaling, 3D mapping).
   const symbolCommandsSub = contributeSymbolCommands(host);
+  // WP6.8 (draw ADR 365) — a v0 library moves onto the engine's symbols
+  // when the host keeps them, once per document, on open.
+  const symbolMigrationSub = installSymbolMigration(host);
   // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0 (make
   // group / fill face / regenerate / select faces / delete face /
   // release). Faces come from the B-22 planar arrangement, which is a
@@ -578,6 +597,13 @@ export function activate(host: BundleHost): BundleHandle {
     star: () => lastUsedPayload(host, "star"),
     flare: () => lastUsedPayload(host, "flare"),
   });
+  // WP6.7 — the distortion tools as commands (their gestures as data),
+  // the perspective grid's View / Object verbs, and the retained layer
+  // that draws a visible grid whatever tool is active.
+  const liquifyCommandsSub = contributeLiquifyCommands(host);
+  const puppetWarpCommandsSub = contributePuppetWarpCommands(host);
+  const perspectiveCommandsSub = contributePerspectiveCommands(host);
+  const perspectiveLayerSub = installPerspectiveLayer(host);
   // The width profile as data, and the rebuild of the recipes a changed
   // source feeds (G4).
   const widthProfileCommandsSub = contributeWidthProfileCommands(host, () =>
@@ -672,11 +698,14 @@ export function activate(host: BundleHost): BundleHandle {
         layersProvider.provider,
       )
     : null;
-  // Phase 8 — SVG interchange (K-2): an `.svg` importer (parse → insert
-  // the shapes through the existing insertPath lane) + an `.svg` exporter
-  // (selection → SVG bytes). Capability-gated; degrades honestly when the
-  // host predates the importer/exporter doors.
+  // Interchange (K-2, draw ADR 364): `.svg` in and out through the
+  // engine's paged-svg doors, `.dxf` in and out through the same doors
+  // and the draw wasm's DXF reader/writer, `.ai` through paged.pdf's
+  // placement and `.eps` through the engine's PostScript interpreter.
+  // Capability-gated; degrades honestly when the host lacks a door.
   const svgIoSub = contributeSvgIo(host);
+  const dxfIoSub = contributeDxfIo(host);
+  const vectorFilesSub = contributeVectorFileImporters(host);
   // F1 — the menu bar.
   const menuSub = contributeMenu(host);
   // ADR 323 — the OBJECT MODEL: ten kinds (path geometry, appearance
@@ -732,6 +761,9 @@ export function activate(host: BundleHost): BundleHandle {
         CUT_COMMAND_IDS.length +
         PATH_TOOL_COMMAND_IDS.length +
         STAR_FLARE_COMMAND_IDS.length +
+        LIQUIFY_COMMAND_IDS.length +
+        PUPPET_COMMAND_IDS.length +
+        PERSPECTIVE_COMMAND_IDS.length +
         [SHAPER_STROKE_COMMAND_ID].length +
         WIDTH_PROFILE_COMMAND_IDS.length +
         RECIPE_UPDATE_COMMAND_IDS.length
@@ -756,6 +788,8 @@ export function activate(host: BundleHost): BundleHandle {
       propertyListsSub?.dispose();
       objectModelHandle?.dispose();
       svgIoSub.dispose();
+      dxfIoSub.dispose();
+      vectorFilesSub.dispose();
       menuSub.dispose();
       imageTraceCommandSub.dispose();
       liveRetraceSub.dispose();
@@ -770,12 +804,17 @@ export function activate(host: BundleHost): BundleHandle {
       pathToolCommandsSub.dispose();
       shaperCommandSub.dispose();
       starFlareCommandsSub.dispose();
+      liquifyCommandsSub.dispose();
+      puppetWarpCommandsSub.dispose();
+      perspectiveCommandsSub.dispose();
+      perspectiveLayerSub.dispose();
       widthProfileCommandsSub.dispose();
       recipeUpdateCommandsSub.dispose();
       recipeAutoUpdateSub.dispose();
       opacityMaskCommandsSub.dispose();
       livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();
+      symbolMigrationSub.dispose();
       graphicStyleCommandsSub.dispose();
       appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();

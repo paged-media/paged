@@ -58,8 +58,11 @@
 //   4. `media.paged.image.command.setType` is titled "Set type (image)"
 //      and its whole handler is `openPanel`.
 
+import { readFileSync } from "node:fs";
+
 import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
+import { covers } from "@paged-media/test-kit";
 
 import { Designer } from "../journey/driver/designer";
 
@@ -84,6 +87,7 @@ const COMMANDS = [
   "media.paged.image.command.setType",
   "media.paged.image.command.applyToFile",
   "media.paged.image.command.saveToFile",
+  "media.paged.image.command.exportAs",
   "media.paged.image.command.loadBrushLibrary",
   "media.paged.image.command.selectionToPath",
   "media.paged.image.command.pathToSelection",
@@ -119,6 +123,9 @@ const EXPORTERS = [
   "media.paged.image.exporter.psd",
   "media.paged.image.exporter.png",
   "media.paged.image.exporter.jpeg",
+  "media.paged.image.exporter.tiff",
+  "media.paged.image.exporter.tiffLayers",
+  "media.paged.image.exporter.webp",
 ] as const;
 const EDIT_CONTEXT = "rasterImage";
 
@@ -138,6 +145,17 @@ const SELECTION_TOOLS = [
 ] as const;
 
 const ACTIVATE = "paged.tool.activate.";
+
+/** WP5.7's tools (they join existing flyouts; history brush is a slot). */
+const BRUSH_ENGINE_TOOLS = [
+  "media.paged.image.tool.smudge",
+  "media.paged.image.tool.mixerBrush",
+  "media.paged.image.tool.colorReplacement",
+  "media.paged.image.tool.historyBrush",
+  "media.paged.image.tool.artHistoryBrush",
+  "media.paged.image.tool.backgroundEraser",
+  "media.paged.image.tool.magicEraser",
+] as const;
 const PLACE = "paged.insert.placeImage";
 
 // ── host-side probes (everything reads the LIVE registries) ─────────
@@ -348,6 +366,56 @@ test.describe("plugin surface · paged.image", () => {
     }
   });
 
+  test("the brush engine's seven tools are live flyout members that activate, and its two panels open @feat:image.editor.brush-engine @feat:editor-shell.plugin-bundles @level:gesture", async ({
+    page,
+  }) => {
+    covers(
+      "tool:media.paged.image.tool.smudge",
+      "tool:media.paged.image.tool.mixerBrush",
+      "tool:media.paged.image.tool.colorReplacement",
+      "tool:media.paged.image.tool.historyBrush",
+      "tool:media.paged.image.tool.artHistoryBrush",
+      "tool:media.paged.image.tool.backgroundEraser",
+      "tool:media.paged.image.tool.magicEraser",
+      "panel:media.paged.image.panel.brushSettings",
+      "panel:media.paged.image.panel.brushPresets",
+    );
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+    const registered = await page.evaluate(() =>
+      (globalThis as unknown as RegistryGlobal).__canvas.registries.tools
+        .list()
+        .map((t) => ({ id: t.id, shortcut: t.shortcut, status: t.status })),
+    );
+    for (const id of BRUSH_ENGINE_TOOLS) {
+      const row = registered.find((t) => t.id === id);
+      expect(row, `${id} is registered`).toBeTruthy();
+      expect(row?.status ?? "ready").toBe("ready");
+      // The shortcut registers are full: they join flyouts without keys.
+      expect(row?.shortcut ?? null, `${id} takes no shortcut`).toBeNull();
+    }
+    for (const id of BRUSH_ENGINE_TOOLS) {
+      await designer.runCommand(ACTIVATE + id);
+      await expect(
+        page.locator(`[data-tool="${id}"][data-active="true"]`),
+        `${id} is the live tool after activation`,
+      ).toHaveCount(1, { timeout: 10_000 });
+    }
+    await designer.runCommand("media.paged.image.command.openBrushSettings");
+    await expect(
+      page.locator('[data-brush-field="tip.angle"]').first(),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
+    await designer.runCommand("media.paged.image.command.openBrushPresets");
+    await expect(
+      page.locator("[data-brush-preset-define]").first(),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
+  });
+
   test("the healing brush's `j` collides with the shell's fill/stroke key, and the shell wins @feat:editor-shell.plugin-bundles @level:edge", async ({
     page,
   }) => {
@@ -488,18 +556,18 @@ test.describe("plugin surface · paged.image", () => {
     await designer.runCommand("media.paged.image.command.setType");
     await expect(page.locator("[data-image-type-text]")).toHaveCount(1);
     await expect(page.locator("[data-image-type-note]")).toContainText(
-      "baseline",
+      "point type",
     );
-    // …and the section states its own ceiling where the designer stands:
-    // this is a raster type tool, not a second text engine. The statement
-    // sits in the Type section's collapsed "About" block (2026-10-11 panel
-    // pass); opening it shows it.
+    // …and the section says what a type layer is where the designer
+    // stands (WP5.10): editable text, laid out by the document's text
+    // engine, rasterized on request. The statement sits in the Type
+    // section's collapsed "About" block; opening it shows it.
     const typeAbout = page.locator("[data-image-type-section] details", {
       has: page.locator("summary", { hasText: "About" }),
     });
     await typeAbout.locator("summary").click();
     await expect(
-      typeAbout.getByText("This paints pixels, not a text object."),
+      typeAbout.getByText("A type layer keeps its text", { exact: false }),
     ).toBeVisible();
     expect(
       await status(page),
@@ -695,6 +763,84 @@ test.describe("plugin surface · paged.image", () => {
       recovered,
       "Adjust image recovers the placed bytes into the engine (the workaround for the Place bypass)",
     ).toBe(true);
+  });
+
+  test("File ▸ Export as… writes the ingested image as a TIFF and downloads it @feat:image.codec.core-codecs @level:gesture", async ({
+    page,
+  }) => {
+    covers("command:media.paged.image.command.exportAs");
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+    await designer.openPanel(PANEL);
+
+    // Place a real PNG, then hand its frame to the image engine.
+    const rectsBefore = await designer.count("rectangle");
+    const chooser = page.waitForEvent("filechooser", { timeout: 30_000 });
+    const invoked = designer.runCommand(PLACE);
+    await (
+      await chooser
+    ).setFiles({
+      name: "export-sample.png",
+      mimeType: "image/png",
+      buffer: samplePng(),
+    });
+    await expect(
+      page.locator("[data-paged-editor][data-paged-placement='armed']"),
+    ).toHaveCount(1, { timeout: 15_000 });
+    const vp = (await page.locator("[data-paged-viewport]").boundingBox())!;
+    await page.mouse.click(
+      Math.round(vp.x + vp.width * 0.45),
+      Math.round(vp.y + vp.height * 0.4),
+    );
+    await invoked;
+    await expect
+      .poll(() => designer.count("rectangle"), { timeout: 20_000 })
+      .toBe(rectsBefore + 1);
+    const placed = await page.evaluate(async () => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              executeScript: (s: string) => Promise<{ output: string[] }>;
+            };
+          };
+        }
+      ).__canvas;
+      const r = await c.client.executeScript("paged.tree()");
+      const out: string[] = [];
+      const visit = (n: {
+        id?: { kind: string; id: string } | null;
+        children?: unknown[];
+      }) => {
+        if (n.id?.kind === "rectangle") out.push(n.id.id);
+        for (const ch of (n.children ?? []) as (typeof n)[]) visit(ch);
+      };
+      for (const root of JSON.parse(r.output[0] ?? "[]")) visit(root);
+      return out.at(-1) ?? "";
+    });
+    await designer.selectElement("rectangle", placed);
+    await designer.runCommand("media.paged.image.command.adjustSelected");
+    await expect
+      .poll(() => sourceReadout(page), { timeout: 30_000 })
+      .not.toBe("none");
+
+    // The dialog: TIFF, 16 bits, metadata kept.
+    await designer.runCommand("media.paged.image.command.exportAs");
+    const dialog = page.locator("[data-image-export-dialog]");
+    await expect(dialog).toBeVisible();
+    await dialog.locator("[data-export-format]").selectOption("tiff");
+    await dialog.locator("[data-export-bits]").selectOption("16");
+    const download = page.waitForEvent("download", { timeout: 30_000 });
+    await dialog.locator("[data-export-apply]").click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/\.tif$/);
+    const bytes = readFileSync((await file.path())!);
+    expect([...bytes.subarray(0, 4)]).toEqual([0x49, 0x49, 42, 0]);
+    await expect
+      .poll(() => status(page), { timeout: 10_000 })
+      .toMatch(/Exported .*\.tif/);
+    await expect(dialog).toHaveCount(0);
   });
 
   test("with a WebGPU device the GPU-only generators come alive @feat:image.editor.paint @feat:editor-shell.plugin-bundles @level:gesture", async ({

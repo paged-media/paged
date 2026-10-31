@@ -41,6 +41,17 @@ pub(super) fn apply_set_property(
     // bottom-of-function `invert_set_property` path. Each helper
     // returns a fully-formed AppliedOperation.
     match (node, path) {
+        // Engine ADR 1047 — live shapes. A polygon write redraws the
+        // anchors, so its inverse is a batch (see `live_shape`).
+        (
+            NodeId::Polygon(id),
+            PropertyPath::FrameShapeSides | PropertyPath::FrameShapeStarInset,
+        ) => {
+            return super::live_shape::apply_polygon_shape(doc, node, id, path, value);
+        }
+        (NodeId::Oval(id), PropertyPath::FrameShapePieStart | PropertyPath::FrameShapePieEnd) => {
+            return super::live_shape::apply_pie_angle(doc, node, id, path, value);
+        }
         // Track J fan-out — path-topology ops accept any path-bearing
         // page item kind (Polygon, TextFrame, Rectangle, GraphicLine).
         // The four kinds carry identical `anchors` + `subpath_starts`
@@ -136,13 +147,27 @@ pub(super) fn apply_set_property(
         }
         _ => {}
     }
-    // Engine ADR 1040 — a box move or resize carries a mesh fill with it
+    // Engine ADR 1048 — a box move or resize carries a mesh fill with it
     // on a frame drawn from its box (the translate gesture and the
     // resize handles commit `FrameBounds`).
     if path == PropertyPath::FrameBounds {
         if let Some(applied) = bounds_carrying_mesh(doc, node, value)? {
             return Ok(applied);
         }
+    }
+    // Engine ADR 1045 — an anchored frame's fill, stroke, tint and
+    // opacity (its other look paths reach it through the finders).
+    if let Some(result) = super::anchored_look::apply_paint(doc, node, path, value) {
+        let (previous, invalidation) = result?;
+        return Ok(AppliedOperation {
+            op: Operation::SetProperty {
+                node: node.clone(),
+                path,
+                value: value.clone(),
+            },
+            inverse: invert_set_property(node.clone(), path, previous),
+            invalidation,
+        });
     }
     let (previous, invalidation) = match (node, path) {
         (NodeId::TextFrame(id), PropertyPath::FrameBounds) => {
@@ -310,6 +335,172 @@ pub(super) fn apply_set_property(
         // composition; this arm just stores the Group's own
         // transform so reserialization preserves the grouped
         // structure.
+        // ---- Engine ADR 1039 — a symbol instance's own properties -----
+        (
+            NodeId::Instance(id),
+            PropertyPath::FrameTransform
+            | PropertyPath::FrameOpacity
+            | PropertyPath::FrameBlendMode
+            | PropertyPath::ElementVisible
+            | PropertyPath::ElementLocked
+            | PropertyPath::ItemLayer
+            | PropertyPath::SymbolInstanceTint
+            | PropertyPath::SymbolInstanceNineSlice
+            | PropertyPath::SymbolInstanceSymbol,
+        ) => {
+            // Replace Symbol (draw ADR 365): the target must be in the store.
+            let replacement = if path == PropertyPath::SymbolInstanceSymbol {
+                let next = expect_text(path, value)?;
+                if !doc.symbols.iter().any(|d| d.id == next) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason: format!("no symbol {next:?} in the document"),
+                    });
+                }
+                Some(next)
+            } else {
+                None
+            };
+            let inst = doc
+                .spreads
+                .iter_mut()
+                .flat_map(|p| p.spread.instances.iter_mut())
+                .find(|i| i.self_id.as_deref() == Some(id.as_str()))
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let lengths = |v: &Value| match v {
+                Value::Lengths(l) => Ok(l.clone()),
+                _ => Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Lengths".to_string(),
+                }),
+            };
+            let bad = |reason: &str| OperationError::InvalidValue {
+                node: node.clone(),
+                path,
+                reason: reason.to_string(),
+            };
+            match path {
+                PropertyPath::FrameTransform => {
+                    let next =
+                        expect_transform(path, value)?.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+                    let prev = std::mem::replace(&mut inst.item_transform, next);
+                    (
+                        Value::Transform(Some(prev)),
+                        InvalidationHint {
+                            frame_geometry: vec![node.clone()],
+                            ..Default::default()
+                        },
+                    )
+                }
+                PropertyPath::FrameOpacity => {
+                    let next = expect_length(path, value)?;
+                    let prev = std::mem::replace(&mut inst.overrides.opacity, next);
+                    (Value::Length(prev), frame_style_hint(node))
+                }
+                PropertyPath::FrameBlendMode => {
+                    let next = expect_text(path, value)?;
+                    let next = (!next.is_empty()).then_some(next);
+                    let prev = std::mem::replace(&mut inst.overrides.blend_mode, next);
+                    (
+                        Value::Text(prev.unwrap_or_default()),
+                        frame_style_hint(node),
+                    )
+                }
+                PropertyPath::ElementVisible => {
+                    let prev = std::mem::replace(&mut inst.visible, expect_bool(path, value)?);
+                    (
+                        Value::Bool(prev),
+                        InvalidationHint {
+                            structural: true,
+                            ..Default::default()
+                        },
+                    )
+                }
+                PropertyPath::ElementLocked => {
+                    let prev = std::mem::replace(&mut inst.locked, expect_bool(path, value)?);
+                    (Value::Bool(prev), InvalidationHint::default())
+                }
+                PropertyPath::ItemLayer => {
+                    let next = expect_text(path, value)?;
+                    let next = (!next.is_empty()).then_some(next);
+                    let prev = std::mem::replace(&mut inst.item_layer, next);
+                    (
+                        Value::Text(prev.unwrap_or_default()),
+                        InvalidationHint {
+                            structural: true,
+                            ..Default::default()
+                        },
+                    )
+                }
+                PropertyPath::SymbolInstanceTint => {
+                    let next = match lengths(value)?.as_slice() {
+                        [] => None,
+                        &[r, g, b, amount] => {
+                            if [r, g, b, amount]
+                                .iter()
+                                .any(|v| !v.is_finite() || !(0.0..=1.0).contains(v))
+                            {
+                                return Err(bad("a tint is [r, g, b, amount], each 0..1"));
+                            }
+                            Some(paged_model::SymbolTint {
+                                color: [r, g, b],
+                                amount,
+                            })
+                        }
+                        _ => return Err(bad("a tint is [r, g, b, amount], each 0..1")),
+                    };
+                    let prev = std::mem::replace(&mut inst.overrides.tint, next);
+                    (
+                        Value::Lengths(
+                            prev.map(|t| vec![t.color[0], t.color[1], t.color[2], t.amount])
+                                .unwrap_or_default(),
+                        ),
+                        frame_style_hint(node),
+                    )
+                }
+                PropertyPath::SymbolInstanceNineSlice => {
+                    let next = match lengths(value)?.as_slice() {
+                        [] => None,
+                        &[left, top, right, bottom] => {
+                            if [left, top, right, bottom]
+                                .iter()
+                                .any(|v| !v.is_finite() || *v < 0.0)
+                            {
+                                return Err(bad("9-slice guides are four insets ≥ 0"));
+                            }
+                            Some(paged_model::NineSlice {
+                                left,
+                                top,
+                                right,
+                                bottom,
+                            })
+                        }
+                        _ => return Err(bad("9-slice guides are [left, top, right, bottom]")),
+                    };
+                    let prev = std::mem::replace(&mut inst.nine_slice, next);
+                    (
+                        Value::Lengths(
+                            prev.map(|n| vec![n.left, n.top, n.right, n.bottom])
+                                .unwrap_or_default(),
+                        ),
+                        frame_style_hint(node),
+                    )
+                }
+                PropertyPath::SymbolInstanceSymbol => {
+                    let next = replacement.expect("validated above");
+                    let prev = std::mem::replace(&mut inst.symbol, next);
+                    (
+                        Value::Text(prev),
+                        InvalidationHint {
+                            frame_geometry: vec![node.clone()],
+                            ..Default::default()
+                        },
+                    )
+                }
+                _ => unreachable!("the arm lists the instance paths"),
+            }
+        }
         (NodeId::Group(id), PropertyPath::FrameTransform) => {
             let new_transform = expect_transform(path, value)?;
             let group = find_group_mut(doc, id)
@@ -1367,6 +1558,39 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // ---- Engine ADR 1011 — a page's place on the canvas -------
+        (NodeId::Page(id), PropertyPath::PageCanvasOrigin) => {
+            let Value::Lengths(xy) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Lengths".to_string(),
+                });
+            };
+            let new_origin = match xy.as_slice() {
+                [] => None,
+                [x, y] if x.is_finite() && y.is_finite() => Some([*x, *y]),
+                _ => {
+                    return Err(OperationError::TypeMismatch {
+                        path,
+                        expected: "Lengths([x, y]) of finite pt, or []".to_string(),
+                    });
+                }
+            };
+            let page =
+                find_page_mut(doc, id).ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = page.canvas_origin;
+            page.canvas_origin = new_origin;
+            (
+                Value::Lengths(prev.map(|p| p.to_vec()).unwrap_or_default()),
+                // The page list's geometry changed (where each page sits);
+                // no display list does, but the presenters read the
+                // origins off the build.
+                InvalidationHint {
+                    structural: true,
+                    ..Default::default()
+                },
+            )
+        }
         // ---- Editor-ops — Gradient Feather (whole-struct) ---------
         // Lines carry no fill, so the effect is meaningless there
         // (falls through to UnsupportedProperty).
@@ -1409,6 +1633,38 @@ pub(super) fn apply_set_property(
             *slot = new_val;
             (
                 Value::Length(prev),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
+        // ---- Engine ADR 1031 — the gradient fill's start ----------
+        // `[x, y]` in the item's inner coordinates; `[]` clears it.
+        (
+            NodeId::TextFrame(_) | NodeId::Rectangle(_) | NodeId::Polygon(_) | NodeId::Oval(_),
+            PropertyPath::FrameGradientFillStart,
+        ) => {
+            let new_val = match value {
+                Value::Lengths(v) if v.is_empty() => None,
+                Value::Lengths(v) if v.len() == 2 && v.iter().all(|x| x.is_finite()) => {
+                    Some([v[0], v[1]])
+                }
+                _ => {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason: "frameGradientFillStart takes lengths [x, y] (or [] to clear)"
+                            .into(),
+                    })
+                }
+            };
+            let slot = find_gradient_start_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = *slot;
+            *slot = new_val;
+            (
+                Value::Lengths(prev.map(|p| p.to_vec()).unwrap_or_default()),
                 InvalidationHint {
                     frame_style: vec![node.clone()],
                     ..Default::default()
@@ -2320,6 +2576,54 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // ---- Engine ADR 1042 — a group's vector effects ---------------
+        (NodeId::Group(id), PropertyPath::GroupEffectStack) => {
+            let Value::EffectStack { entries, prev } = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "EffectStack".to_string(),
+                });
+            };
+            let refuse = |reason: String| OperationError::InvalidValue {
+                node: node.clone(),
+                path,
+                reason,
+            };
+            let stack: Vec<paged_model::effect_stack::EffectEntry> = match prev {
+                Some(json) => serde_json::from_str(json)
+                    .map_err(|e| refuse(format!("not a group effect stack: {e}")))?,
+                None => {
+                    let stack = entries
+                        .iter()
+                        .map(crate::operation::EffectEntrySpec::to_model)
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(refuse)?;
+                    if let Some(e) = stack.iter().find(|e| !e.effect.is_vector()) {
+                        return Err(refuse(format!(
+                            "a group's stack holds vector effects only, not `{}`",
+                            e.effect.kind_name()
+                        )));
+                    }
+                    stack
+                }
+            };
+            let group = find_group_mut(doc, id)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let old = std::mem::replace(&mut group.effect_stack, stack);
+            (
+                Value::EffectStack {
+                    entries: old
+                        .iter()
+                        .map(crate::operation::EffectEntrySpec::from_model)
+                        .collect(),
+                    prev: serde_json::to_string(&old).ok(),
+                },
+                InvalidationHint {
+                    structural: true,
+                    ..frame_style_hint(node)
+                },
+            )
+        }
         // ---- R-11 — the drop shadow's remaining attributes ----------
         (
             NodeId::TextFrame(_)
@@ -2379,6 +2683,87 @@ pub(super) fn apply_set_property(
             let prev =
                 std::mem::replace(slot, (new_val != default).then_some(new_val)).unwrap_or(default);
             (Value::Bool(prev), frame_style_hint(node))
+        }
+        // ---- engine ADR 1018 — show hidden text ---------------------
+        (NodeId::Document(_), PropertyPath::DocumentShowHiddenText) => {
+            let Value::Bool(show) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Bool".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.show_hidden_text;
+            // Off is stored as unset, InDesign's way with defaults, so the
+            // undo of a toggle restores the slot exactly.
+            let prev = std::mem::replace(slot, show.then_some(true)).unwrap_or(false);
+            // Every story with hidden text reflows: the whole document.
+            (Value::Bool(prev), InvalidationHint::default())
+        }
+        // ---- engine ADR 1022 — show field codes ---------------------
+        (NodeId::Document(_), PropertyPath::DocumentShowFieldCodes) => {
+            let Value::Bool(show) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Bool".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.show_field_codes;
+            let prev = std::mem::replace(slot, show.then_some(true)).unwrap_or(false);
+            (Value::Bool(prev), InvalidationHint::default())
+        }
+        // ---- engine ADR 1040 — Track Changes and the markup view -----
+        (NodeId::Document(_), PropertyPath::DocumentTrackChanges) => {
+            let Value::Bool(on) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Bool".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.track_changes;
+            let prev = std::mem::replace(slot, on.then_some(true)).unwrap_or(false);
+            // Recording changes draws nothing: no reflow.
+            (Value::Bool(prev), InvalidationHint::default())
+        }
+        (NodeId::Document(_), PropertyPath::DocumentTrackChangesAuthor) => {
+            let Value::Text(author) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.track_changes_author;
+            let next = (!author.is_empty()).then(|| author.clone());
+            let prev = std::mem::replace(slot, next).unwrap_or_default();
+            (Value::Text(prev), InvalidationHint::default())
+        }
+        (NodeId::Document(_), PropertyPath::DocumentMarkupView) => {
+            let Value::Text(view) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            // Cleared (null): the default view.
+            let parsed = if view.is_empty() {
+                Some(paged_model::MarkupView::All)
+            } else {
+                paged_model::MarkupView::parse(view)
+            };
+            let Some(parsed) = parsed else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "simple, all, none or original".to_string(),
+                });
+            };
+            let slot = &mut doc.designmap.document_preference.markup_view;
+            // All Markup, the default, is stored as unset.
+            let next = (parsed != paged_model::MarkupView::All).then_some(parsed);
+            let prev = std::mem::replace(slot, next).unwrap_or_default();
+            // Every story with changes reflows: the whole document.
+            (
+                Value::Text(prev.as_str().to_string()),
+                InvalidationHint::default(),
+            )
         }
         // ---- R-11 — the document's global light ---------------------
         (
@@ -2619,8 +3004,23 @@ pub(super) fn apply_set_property(
             | PropertyPath::CharacterStrikethru
             | PropertyPath::CharacterNoBreak
             | PropertyPath::CharacterLigatures
-            | PropertyPath::CharacterOtfFeatures,
+            | PropertyPath::CharacterOtfFeatures
+            | PropertyPath::CharacterHighlightColor
+            | PropertyPath::CharacterHidden
+            | PropertyPath::CharacterUnderlineType
+            | PropertyPath::CharacterUnderlineColor
+            | PropertyPath::CharacterDoubleStrikethrough,
         ) => {
+            // An unknown underline kind is refused before any run splits.
+            if let (PropertyPath::CharacterUnderlineType, Value::Text(t)) = (path, value) {
+                if let Err(reason) = super::word::parse_underline_type(t) {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason,
+                    });
+                }
+            }
             return apply_character_property(doc, story_id, *start, *end, node, path, value);
         }
         // SDK Phase 5 (D3 completion) — applied object style on any
@@ -2743,7 +3143,13 @@ pub(super) fn apply_set_property(
             | PropertyPath::ParagraphSingleWordJustification
             | PropertyPath::ParagraphLastLineIndent
             | PropertyPath::ParagraphBalanceRaggedLines
-            | PropertyPath::ParagraphAppliedNumberingList,
+            | PropertyPath::ParagraphAppliedNumberingList
+            | PropertyPath::ParagraphShadingOn
+            | PropertyPath::ParagraphShadingColor
+            | PropertyPath::ParagraphShadingTint
+            | PropertyPath::ParagraphBorderOn
+            | PropertyPath::ParagraphBorderColor
+            | PropertyPath::ParagraphBorderWeight,
         ) => {
             return apply_paragraph_property(doc, story_id, *start, *end, node, path, value);
         }
@@ -3138,33 +3544,30 @@ pub(super) fn apply_set_property(
                 },
             )
         }
-        // Engine ADR 1007 — the gradient's start point; `[]` clears it.
+        // Engine ADR 1037 — the picture's filter stack, replaced whole. Every
+        // op is range-checked; the inverse carries the stack it replaced.
         (
-            NodeId::TextFrame(_) | NodeId::Rectangle(_) | NodeId::Oval(_) | NodeId::Polygon(_),
-            PropertyPath::FrameGradientFillStart,
+            NodeId::Rectangle(_) | NodeId::Oval(_) | NodeId::Polygon(_),
+            PropertyPath::FrameImageAdjustments,
         ) => {
-            let Value::Lengths(xy) = value else {
+            let Value::ImageAdjustments(ops) = value else {
                 return Err(OperationError::TypeMismatch {
                     path,
-                    expected: "Lengths".to_string(),
+                    expected: "ImageAdjustments".to_string(),
                 });
             };
-            let start = match xy.as_slice() {
-                [] => None,
-                [x, y] if x.is_finite() && y.is_finite() => Some([*x, *y]),
-                _ => {
-                    return Err(OperationError::InvalidValue {
-                        node: node.clone(),
-                        path,
-                        reason: "a gradient start is [x, y] (or [] to clear)".to_string(),
-                    })
-                }
-            };
-            let slot = find_gradient_fill_start_mut(doc, node)
+            if let Some(bad) = ops.iter().find(|op| !op.is_valid()) {
+                return Err(OperationError::InvalidValue {
+                    node: node.clone(),
+                    path,
+                    reason: format!("the {} op has a value out of its range", bad.name()),
+                });
+            }
+            let slot = find_image_adjustments_mut(doc, node)
                 .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
-            let prev = std::mem::replace(slot, start);
+            let prev = std::mem::replace(slot, ops.clone());
             (
-                Value::Lengths(prev.map(|p| p.to_vec()).unwrap_or_default()),
+                Value::ImageAdjustments(prev),
                 InvalidationHint {
                     frame_style: vec![node.clone()],
                     ..Default::default()
@@ -3211,7 +3614,7 @@ pub(super) fn apply_set_property(
                 },
             )
         }
-        // Engine ADR 1040 — the frame's gradient mesh or freeform
+        // Engine ADR 1048 — the frame's gradient mesh or freeform
         // gradient, whole. The inverse is the fill it replaced (`None`
         // when there was none), so undo restores it exactly.
         (
@@ -3966,7 +4369,7 @@ fn check_clip_member(
     Err(OperationError::NodeNotFound(node.clone()))
 }
 
-/// Engine ADR 1040 — `FrameBounds` on a frame that is drawn from its box
+/// Engine ADR 1048 — `FrameBounds` on a frame that is drawn from its box
 /// and carries a mesh fill: the bounds are set as ever, the mesh is
 /// mapped from the old box to the new one, and the inverse restores
 /// both exactly (the bounds, then the mesh as it was — a mapped-back

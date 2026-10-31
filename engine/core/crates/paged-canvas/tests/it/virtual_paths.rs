@@ -246,6 +246,7 @@ fn build() -> (CanvasModel, Targets) {
         &mut m,
         Mutation::CreateNumberingList {
             spec: paged_mutate::NumberingListSpec {
+                levels: Default::default(),
                 self_id: Some("NumberingList/probe".into()),
                 name: Some("Probe".into()),
                 continue_across_stories: None,
@@ -634,6 +635,8 @@ fn sample(row: &SchemaRow, current: &Value, t: &Targets) -> Value {
                 leader: None,
             }])
         }
+        // Engine ADR 1011 — a page's place on the canvas, `[x, y]` pt.
+        ValueType::List if row.path == "pageCanvasOrigin" => Value::Lengths(vec![900.0, 40.0]),
         ValueType::Transform => Value::Transform(Some([1.0, 0.0, 0.0, 1.0, 3.0, 4.0])),
         ValueType::Struct if row.wire == Wire::SwatchColor => {
             Value::SwatchColor(paged_mutate::SwatchColorSpec {
@@ -692,6 +695,21 @@ fn every_virtual_row_sets_reads_back_and_undoes() {
         let path = concrete(row.path);
         for target in targets_for(row, &t) {
             let label = format!("{} {} on {target:?}", row.address_kind, path);
+            // Editor ADR 309 — a mask's options need a mask to edit.
+            if row.address_kind == "frame"
+                && path.starts_with("opacityMask")
+                && path != "opacityMask"
+            {
+                let mask = Mutation::Set {
+                    address: target.clone().into(),
+                    path: "opacityMask".into(),
+                    value: Value::Ref(t.mask_item.clone()),
+                };
+                if let Err(e) = m.apply_mutation(&mask) {
+                    failures.push(format!("{label}: make the mask: {e:?}"));
+                    continue;
+                }
+            }
             let before = match m.get_property(&target, &path) {
                 Ok(v) => v,
                 Err(e) => {

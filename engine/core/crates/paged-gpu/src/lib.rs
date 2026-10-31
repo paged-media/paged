@@ -107,6 +107,9 @@ pub mod vcpu;
 pub(crate) mod vello_map;
 #[cfg(feature = "vello-backend")]
 pub mod vello_rs;
+pub mod view;
+
+pub use view::RasterView;
 
 #[cfg(feature = "cpu")]
 pub use separations::{
@@ -120,6 +123,8 @@ pub use vcpu::rasterize;
 pub use vcpu::rasterize_with_separation;
 #[cfg(feature = "cpu")]
 pub use vcpu::CpuRasterizer;
+#[cfg(feature = "cpu")]
+pub use vcpu::{rasterize_layer, LayerRaster};
 // Re-export vello::Scene so consumers (paged-canvas-wasm) don't need
 // vello as a direct dependency to hold cached scenes.
 #[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]
@@ -153,6 +158,17 @@ pub struct RasterOptions {
     /// list's glyph-run side channel (`collect_glyph_runs`); a list
     /// without one is drawn unchanged. CPU backend only.
     pub snap_glyph_origins: bool,
+    /// How the list is drawn on the editor's screen (editor ADR 287,
+    /// [`view`]): as built, with overprints as knockouts, or as hairline
+    /// outlines. Both lanes rewrite the list the same way before drawing
+    /// it. `Composite` — the default, and what every export, gate and
+    /// snapshot uses — draws the list unchanged.
+    pub view: RasterView,
+    /// Pixel Preview (editor ADR 287): draw the page at 72 ppi — one
+    /// pixel per point — and enlarge that raster to `pixel_size()` with
+    /// nearest-neighbour sampling, so the screen shows the pixels a
+    /// 72 ppi export would have. Off by default.
+    pub pixel_preview: bool,
 }
 
 impl RasterOptions {
@@ -163,6 +179,8 @@ impl RasterOptions {
             dpi: 96.0,
             background: Color::WHITE,
             snap_glyph_origins: false,
+            view: RasterView::Composite,
+            pixel_preview: false,
         }
     }
 

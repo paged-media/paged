@@ -1,6 +1,10 @@
 # ADR 124 — Opacity masks are a native construct; loss is reported on IDML export
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `9f933f1`.
+- **Amended 2026-10-29** by [editor ADR 309](../../../../apps/editor/docs/adr/309-effects-transparency-and-appearance-panels.md):
+  `OpacityMask::clip` (Illustrator's Clip; on by default, off draws the artwork over a white
+  backdrop), `applyOpacityMask.clip`, and the frame rows `opacityMaskType`,
+  `opacityMaskInvert` and `opacityMaskClip` (a write releases and re-applies, one step).
 - **Scope:** `crates/paged-model` (`Spread::opacity_masks`), the mask operations in
   `crates/paged-mutate` and `crates/paged-wire`, and the export-loss report in `crates/paged-canvas`
 

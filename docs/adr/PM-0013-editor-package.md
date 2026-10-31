@@ -90,7 +90,7 @@ worker, and it is useless without it.
 release version, React a peer, and the package's own `scripts/check-dist.mjs` over the packed
 `dist/` (no private `@paged-media/*` import, every named file present, workers in the bundler
 form, no engine wasm, no paged.data engine, no source map, no path of the build machine, and the
-size budget: 64 MiB for `dist/`, 16 KiB for the `.` entry and for `./iframe` with what it
+size budget: 72 MiB for `dist/` (amendment 3), 16 KiB for the `.` entry and for `./iframe` with what it
 imports). `consumer-test.sh` installs it with React in clean projects under npm and Bun,
 imports `.` and `./iframe`, finds the engine's wasm where the package points, type-checks an
 embedder under `nodenext` and `bundler` with TypeScript 7 and 5.9, and builds a host page with
@@ -180,3 +180,12 @@ panels, tools, menus, keybindings, chrome). An id leaves it only through a depre
    where a host finds them.
 
 Presets are the editor's own and never name an old id (`profile-presets-guard.mjs`).
+
+## Amendment 3 (2026-10-28): a 72 MiB budget for `dist/`
+
+The budget for `dist/` goes from 64 to 72 MiB. Two features of 2026-10-28 grew the module wasm the
+package carries: placing a PDF or Illustrator page as native vectors brings the engine's PDF
+interpreter into the PDF bundle (3.75 MB, from 0.56; publish ADR 658), and slide's output work
+brings MP4 export (5.5 MB, from 3.1; slide ADR 720). `dist/` measured 65.0 MiB. The budget catches
+an accidental gain, so it sits about a tenth above what the package measures; a feature that
+passes it raises it here, with its size. The entry budgets stay at 16 KiB.

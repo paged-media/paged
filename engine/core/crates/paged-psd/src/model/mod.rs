@@ -31,7 +31,7 @@ pub mod header;
 pub mod layers;
 pub mod resources;
 
-pub use addl::{AdditionalLayerInfo, AddlBody, LsctData, SectionKind};
+pub use addl::{AdditionalLayerInfo, AddlBody, AddlPad, LsctData, SectionKind};
 pub use channel::{ChannelData, Compression};
 pub use color_mode::ColorModeData;
 pub use header::{ColorMode, FileHeader};
@@ -40,7 +40,8 @@ pub use layers::{
     MaskParameters,
 };
 pub use resources::{
-    ImageResourceBlock, ImageResources, PascalString, ResolutionInfo, ResourceBody,
+    GridAndGuides, ImageResourceBlock, ImageResources, PascalString, PsdGuide, ResolutionInfo,
+    ResourceBody,
 };
 
 use crate::container::Container;

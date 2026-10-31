@@ -78,7 +78,7 @@ import {
   readRepeatLibrary,
   symbolInstanceOf,
 } from "../../src";
-import { openHost } from "../headless/host";
+import { openHost, withoutEngineSymbols } from "../headless/host";
 import { F4_OVERLAP, type CorpusFixture } from "../fixtures/corpus";
 
 // ------------------------------------------------------------- geometry
@@ -281,6 +281,9 @@ export async function openWorkload(
   const h = await openHost();
   await h.load(fixture.bytes());
   h.loadBundle(drawBundle);
+  // These specs pin the re-emitted symbols lane (draw ADR 356); the engine
+  // lane has its own (symbols-engine.spec.ts).
+  withoutEngineSymbols(h);
   return {
     h,
     pageId: fixture.pageId,
@@ -383,14 +386,15 @@ export async function addPlainShapes(
   return made;
 }
 
-/** The engine's planar-arrangement input cap. */
+/** The size of the arrangement scenario: the planar input cap before
+ *  engine ADR 1019 (it is 1000 now), kept so the budgets stay comparable. */
 export const ARRANGEMENT_INPUTS = 12;
 
 /** `inputs` mutually overlapping squares, each offset 5 pt down-right of
  *  the last: every pair of outlines crosses twice, so 12 of them divide
- *  into n(n-1)+1 = 133 faces — the largest arrangement the engine will
- *  ENUMERATE (12 inputs is its cap; 256 faces is the other one). ONE
- *  batch. */
+ *  into n(n-1)+1 = 133 faces — the largest arrangement the engine
+ *  enumerated before engine ADR 1019 (12 inputs and 256 faces were its
+ *  caps). ONE batch. */
 export async function addArrangement(
   w: Workload,
   inputs = ARRANGEMENT_INPUTS,

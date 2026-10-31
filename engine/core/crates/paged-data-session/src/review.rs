@@ -209,7 +209,7 @@ pub fn row_diffs(
 
 /// The first column whose values are present and unique in both results;
 /// none (the whole row) when no column qualifies.
-fn default_key(old: &RecordSet, new: &RecordSet) -> Vec<String> {
+pub(crate) fn default_key(old: &RecordSet, new: &RecordSet) -> Vec<String> {
     let unique = |rs: &RecordSet, name: &str| -> bool {
         let Some(c) = rs.schema.index_of(name) else {
             return rs.row_count == 0;
@@ -236,7 +236,7 @@ fn cell_key(v: &Value) -> String {
 
 /// Each row's key: the key columns' typed identities (every column when the
 /// key is empty), joined by U+001F.
-fn key_index(rs: &RecordSet, key: &[String]) -> Vec<String> {
+pub(crate) fn key_index(rs: &RecordSet, key: &[String]) -> Vec<String> {
     let cols: Vec<Option<usize>> = if key.is_empty() {
         (0..rs.columns.len()).map(Some).collect()
     } else {

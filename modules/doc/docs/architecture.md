@@ -73,9 +73,13 @@ swatches, styles, stories, tables, anchored frames, hyperlinks, laid out by the 
   `ParagraphStyle/docx-Default`. Word's layout rules are written as native property values:
   breaks as `paragraphStartParagraph`, keep rules as the `paragraphKeep…` properties,
   first-fit line breaking as `paragraphComposer`, line spacing as `characterLeading`.
-- **Not placed.** Footnotes, endnotes, headers and footers are parsed but not placed; a
-  floating picture is placed inline, without its position and wrap; a field other than a
-  hyperlink is placed as its last computed text. `LoweredDoc.diagnostics` reports each.
+- **Document structure** ([ADR 611](adr/611-headers-footers-and-notes-placed.md),
+  [ADR 612](adr/612-fields-and-toc.md)). On a standalone open, headers and footers sit on
+  section masters the skeleton writes and the grow rules name, notes at their references,
+  fields as live engine Word fields, bookmarks as text anchors, Word's TOC entries with live
+  page numbers. An inserted document leaves headers, footers and notes unplaced. A floating
+  picture is placed inline, without its position and wrap. `LoweredDoc.diagnostics` reports
+  what is not placed.
 - **The wasm boundary.** `DocEngine` has eleven methods besides its constructor. Byte arrays
   cross it (the `.docx` in; the skeleton and the saved `.docx` out) and JSON strings (the
   lowering, story ids, the read-back story, the skipped edits), with no version number.
@@ -130,6 +134,10 @@ is the subject of ADR 029, a proposal that is not published yet.
   vertical alignment, `setCellSpan` for merged cells. This is why a story is not one batch.
 - Two offsets run side by side: style, anchor and link ranges count characters, contiguous
   across paragraphs; `insertText` counts UTF-8 bytes including the separators.
+- Review markup (doc ADR 613) comes last, in a step of its own: `recordChange` for each
+  tracked run, cell run, paragraph mark and property change, then `insertComment` and
+  `replyComment` per thread; `open.ts` then turns `documentTrackChanges` on for a document
+  Word tracked changes in, so the pour is never recorded.
 
 ## One build, several engine versions
 
@@ -186,6 +194,22 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
   `paragraphs` read (`overlay_cells`); the
   tests in `docx-conformance/tests/it/save_back.rs` reach those through lowerings or edit sets
   built in the test, and no test of the read-back path adds or removes a paragraph.
+- Review markup ([ADR 613](adr/613-tracked-changes-and-comments.md), `docx-export/src/review.rs`).
+  The overlay also carries each read-back run's review markup (change, format change,
+  comments) and each paragraph's mark and property change. Before it, `review::prepare` lines
+  the read-back paragraphs up with the blocks: a tracked paragraph mark inserted in paged folds
+  two read-back paragraphs into one block, one removed takes a block's slot with that block
+  unchanged. After it, `dirty_blocks` picks the body paragraphs whose review markup changed (or
+  that hold some and were edited); the differ sees them as they were (`masked`). Before the run
+  patcher, `write_paragraphs` writes each of them whole: its `<w:p>` start tag and `<w:pPr>` (the
+  paragraph edit merged in, the mark's change and `w:pPrChange` rewritten), every run with the
+  `<w:rPr>` of the Word run its text came from, wrapped in `w:ins` / `w:del`, its `w:rPrChange`
+  kept or written, comment ranges and references where the read-back comments start and end,
+  bookmarks in place; a join's second `<w:p>` is marked and removed after the run patcher
+  (`remove_joined`). `save_comments` then rewrites `comments.xml`, `commentsExtended.xml` and
+  `commentsIds.xml` from the read-back threads, keeping unchanged comments byte for byte and
+  making missing parts with their relationship and content type. A paragraph holding a field,
+  note, picture, link, content control, move or page break is refused and named.
 
 ## Where data is stored
 
@@ -217,6 +241,8 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
 | `host.parts.write`, `host.document.setMetadata`                                        | store the original file and bind it to a frame                                                                              |
 | `host.diagnostics.set`                                                                 | lowering diagnostics on a place (`media.paged.doc`), and the `/styles`, `/open`, `/columns`, `/save-back` keys              |
 | `host.shell.pickFile`, `.openPanel`, `host.selection.set`, `host.supports`, `host.log` | pick a file; open the panel; the panel's "Select" button; probing optional doors; logging                                   |
+| `host.contribute.marginBand`, `.statusItem`, `.keybinding` (scoped)                    | doc ADR 613: the review balloons beside the page, the Track Changes status item, Cmd+Shift+E and Cmd+Alt+M                  |
+| `host.document.collection("trackedChanges" / "comments")`, `host.viewport.revealText`  | the Review panel's and the band's changes and threads; Next / Previous select the change or comment                         |
 
 After a standalone open the lowering's diagnostics are shown in the panel but not sent to
 `host.diagnostics`. The manifest declares `document` (read `broad`, write `scoped`,

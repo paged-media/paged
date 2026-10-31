@@ -241,9 +241,9 @@ describe("blur / sharpen brushes", () => {
           /GPU-only/,
         );
       }
-      expect(() => wasm.brush_stroke_begin(img.handle, "smudge", ...p)).toThrow(
-        /unknown paint tool/,
-      );
+      expect(() =>
+        wasm.brush_stroke_begin(img.handle, "airbrush", ...p),
+      ).toThrow(/unknown paint tool/);
     },
   );
 

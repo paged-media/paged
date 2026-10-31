@@ -30,11 +30,23 @@
 //! primitive. `paged-parse` re-exports everything moved here, so its dependents
 //! compile unchanged.
 
+pub mod appearance;
+pub mod effect_stack;
 pub mod fitting;
+pub mod image_adjust;
 pub mod image_bytes;
+pub mod live_shape;
 pub mod mesh;
 pub mod pattern;
+pub mod review;
+pub mod vector_effect;
 pub mod winding;
+pub mod word_field;
+pub use review::{
+    author_slot, review_color, review_color_id, review_highlight_id, Change, ChangeKind, Comment,
+    FormatChange, MarkupView, ParaPropsChange,
+};
+pub use word_field::{WordField, WordFieldKind};
 
 pub use mesh::{
     FreeformGradient, FreeformPoint, GradientMesh, MeshColor, MeshFill, MeshGrid, MeshHandle,
@@ -49,6 +61,8 @@ pub use pattern::{
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+
+pub use image_adjust::RasterOp;
 
 /// An axis-aligned bounding box in points: `top`, `left`, `bottom`, `right`.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -773,6 +787,11 @@ pub struct TargetTransparency {
     /// back; the renderer paints the object's effects only.
     #[serde(default)]
     pub effects: Option<FrameEffects>,
+    /// The target's effect stack (engine ADR 1008): the order and the
+    /// enabled flags of its InDesign effects. Empty in the canonical form.
+    /// Stack-only effects are applied to the object target only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
 }
 
 impl TargetTransparency {
@@ -813,6 +832,23 @@ pub struct ImageMetadata {
     /// threshold. `None` when absent (then the canvas may derive it
     /// from pixel-dims ÷ placed-size if it has the decode).
     pub effective_ppi: Option<f32>,
+    /// `ImageRenderingIntent` — the intent this picture's colours convert
+    /// with: `"Perceptual"`, `"Saturation"`, `"RelativeColorimetric"`,
+    /// `"AbsoluteColorimetric"`, or `"UseColorSettings"` (the document's
+    /// Color Settings intent, InDesign's default). `None` when the element
+    /// omits it, which means the same as `UseColorSettings`.
+    #[serde(default)]
+    pub rendering_intent: Option<String>,
+}
+
+impl ImageMetadata {
+    /// The picture's own intent name, `None` when it follows the
+    /// document (`UseColorSettings` or absent).
+    pub fn explicit_rendering_intent(&self) -> Option<&str> {
+        self.rendering_intent
+            .as_deref()
+            .filter(|i| !i.is_empty() && *i != "UseColorSettings")
+    }
 }
 
 /// IDML `<ClippingPathSettings ClippingType="...">` value. InDesign
@@ -1101,6 +1137,13 @@ pub struct Group {
     /// groups serialises (and hashes) as before the field existed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub clip: bool,
+    /// Engine ADR 1042 — the group's live vector effects: a Pathfinder
+    /// shape mode (Illustrator's compound shape) combining the members
+    /// into one outline, and the other vector effects acting on that
+    /// outline. Vector entries only; empty for every imported group, and
+    /// skipped when empty so documents serialise as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
 }
 
 impl Group {
@@ -1130,6 +1173,167 @@ pub enum FrameRef {
     /// Index into `Spread::groups` — sub-groups are first-class
     /// members so the renderer can bracket each one independently.
     Group(usize),
+    /// Engine ADR 1039 — index into `Spread::instances`: a placed
+    /// reference to a [`SymbolDefinition`] of the document.
+    Instance(usize),
+}
+
+// ---------------------------------------------------------------------------
+// Symbols (engine ADR 1039)
+// ---------------------------------------------------------------------------
+
+/// Engine ADR 1039 — a symbol DEFINITION: reusable artwork kept once in the
+/// document ([`SymbolDefinition::items`]) and drawn wherever a
+/// [`SymbolInstance`] names it. The items are ordinary page items (text
+/// frames with their stories, gradients, placed images, groups, nested
+/// instances) in DEFINITION SPACE, where the registration point (the centre
+/// of the artwork as it was captured) is the origin.
+///
+/// `revision` counts redefinitions; the renderer caches a definition's
+/// display list per `(id, revision)`. Native only: IDML has no symbol, so the
+/// writer expands every instance (and reports it) and keeps the definition
+/// in a label to restore it on reimport.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SymbolDefinition {
+    /// Document-unique id the instances name.
+    pub id: String,
+    /// The name the Symbols panel shows.
+    pub name: String,
+    /// Bumped by every redefinition.
+    #[serde(default)]
+    pub revision: u64,
+    /// The artwork: `frames_in_order` lists the roots back to front;
+    /// members, pasted-in children and mask items sit in the kind vecs
+    /// beside them, as in a page-item snippet. No pages.
+    pub items: Spread,
+    /// The stories the items' text frames and text paths name.
+    #[serde(default)]
+    pub stories: Vec<SymbolStory>,
+    /// The artwork's union box in definition space.
+    pub bounds: Bounds,
+    /// Default 9-slice guides for the definition's instances.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nine_slice: Option<NineSlice>,
+}
+
+/// A story held by a [`SymbolDefinition`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SymbolStory {
+    pub self_id: String,
+    pub story: Story,
+}
+
+/// Engine ADR 1039 — 9-slice scaling guides, as insets from the
+/// definition's bounds in definition space. When an instance is scaled, the
+/// four corners keep their size, the edges stretch along their own axis and
+/// the centre stretches in both.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct NineSlice {
+    pub left: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+}
+
+/// Engine ADR 1039 — a colour tint over an instance's artwork (Illustrator's
+/// Symbol Stainer): every solid paint and gradient stop moves `amount` of
+/// the way towards `color` (sRGB, `0..=1`). Images are not tinted.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct SymbolTint {
+    pub color: [f32; 3],
+    pub amount: f32,
+}
+
+/// Engine ADR 1039 — what one instance overrides of its definition.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct SymbolOverrides {
+    /// Instance opacity, `0..=100` (IDML's scale).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f32>,
+    /// Blend mode, in `Rectangle::blend_mode`'s value space.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<SymbolTint>,
+}
+
+impl SymbolOverrides {
+    pub fn is_empty(&self) -> bool {
+        self.opacity.is_none() && self.blend_mode.is_none() && self.tint.is_none()
+    }
+}
+
+fn symbol_instance_visible() -> bool {
+    true
+}
+
+/// Engine ADR 1039 — a page item that draws a [`SymbolDefinition`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SymbolInstance {
+    pub self_id: Option<String>,
+    /// The [`SymbolDefinition::id`] it draws.
+    pub symbol: String,
+    /// Definition space → spread space (`[a, b, c, d, tx, ty]`, the
+    /// `ItemTransform` convention): `(tx, ty)` is where the registration
+    /// point lands. Like every leaf's, spread-absolute when the instance is
+    /// a group member.
+    pub item_transform: [f32; 6],
+    #[serde(default)]
+    pub item_layer: Option<String>,
+    #[serde(default = "symbol_instance_visible")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default, skip_serializing_if = "SymbolOverrides::is_empty")]
+    pub overrides: SymbolOverrides,
+    /// This instance's 9-slice guides; `None` uses the definition's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nine_slice: Option<NineSlice>,
+    /// Its definition's bounds (definition space): a derived cache, so
+    /// what sees only a spread (hit testing, snapping, z-order, a group's
+    /// box) can measure the instance. Not serialised; refreshed from the
+    /// symbol store by `paged_scene::Document::rebuild_indexes` after every
+    /// load and mutation.
+    #[serde(skip, default = "instance_bounds_unset")]
+    pub bounds: Bounds,
+}
+
+fn instance_bounds_unset() -> Bounds {
+    Bounds::ZERO
+}
+
+impl SymbolInstance {
+    /// The instance's box in spread space: the axis-aligned hull of its
+    /// definition's bounds, mapped.
+    pub fn spread_box(&self) -> Bounds {
+        self.spread_bounds(self.bounds)
+    }
+
+    /// The instance's box in spread space, given its definition's bounds:
+    /// the axis-aligned hull of the mapped corners.
+    pub fn spread_bounds(&self, def_bounds: Bounds) -> Bounds {
+        let m = self.item_transform;
+        let mut b = Bounds {
+            top: f32::INFINITY,
+            left: f32::INFINITY,
+            bottom: f32::NEG_INFINITY,
+            right: f32::NEG_INFINITY,
+        };
+        for (x, y) in [
+            (def_bounds.left, def_bounds.top),
+            (def_bounds.right, def_bounds.top),
+            (def_bounds.left, def_bounds.bottom),
+            (def_bounds.right, def_bounds.bottom),
+        ] {
+            let px = m[0] * x + m[2] * y + m[4];
+            let py = m[1] * x + m[3] * y + m[5];
+            b.left = b.left.min(px);
+            b.right = b.right.max(px);
+            b.top = b.top.min(py);
+            b.bottom = b.bottom.max(py);
+        }
+        b
+    }
 }
 
 /// Group-level transparency block parsed from `<TransparencySetting>` /
@@ -1212,6 +1416,44 @@ pub struct Page {
     /// frames/lines/text onto the page; `None`/`Some(true)` ⇒ stamp as
     /// usual.
     pub show_master_items: Option<bool>,
+    /// Engine ADR 1011 — where the page sits on the editor's pasteboard
+    /// (the canvas), its top-left in document points: an artboard's
+    /// position. `None` (every imported page, every page made without a
+    /// placement) is the default slot of [`canvas_layout`]: pages stacked
+    /// down the canvas in document order with [`CANVAS_PAGE_GAP_PT`]
+    /// between them, the layout the editor always showed. Native: IDML
+    /// has no free page placement (its spreads stack), so the writer
+    /// reports a moved page as a loss. Not serialised when `None`, so a
+    /// document nobody arranged is byte- and hash-identical to before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas_origin: Option<[f32; 2]>,
+}
+
+/// Engine ADR 1011 — the gap between two pages in the default canvas
+/// layout, pt. The editor, the viewer session and the canvas presenter
+/// stacked pages with it before pages could be placed.
+pub const CANVAS_PAGE_GAP_PT: f32 = 24.0;
+
+/// Engine ADR 1011 — every page's top-left on the canvas, pt, in document
+/// order. `pages` yields each page's size `(width, height)` and its
+/// explicit [`Page::canvas_origin`]. A placed page sits where it was put;
+/// an unplaced one takes its DEFAULT SLOT: `x = 0`, `y` the sum of the
+/// heights of the pages before it plus one [`CANVAS_PAGE_GAP_PT`] each —
+/// the vertical stack, independent of where any other page was placed, so
+/// moving one page never moves another.
+pub fn canvas_layout(
+    pages: impl IntoIterator<Item = ((f32, f32), Option<[f32; 2]>)>,
+) -> Vec<(f32, f32)> {
+    let mut out = Vec::new();
+    let mut y = 0.0_f32;
+    for ((_, h), origin) in pages {
+        out.push(match origin {
+            Some([ox, oy]) => (ox, oy),
+            None => (0.0, y),
+        });
+        y += h + CANVAS_PAGE_GAP_PT;
+    }
+    out
 }
 
 impl Page {
@@ -1228,6 +1470,7 @@ impl Page {
             override_list: Vec::new(),
             name: None,
             show_master_items: None,
+            canvas_origin: None,
         }
     }
 }
@@ -1485,6 +1728,16 @@ pub struct TextFrame {
     pub fill_rule: FillRule,
     /// See [`Rectangle::effects`] (Q-04).
     pub effects: Option<FrameEffects>,
+    /// The ordered effect stack of the object target (engine ADR 1008).
+    /// Empty in the canonical form: the slots (`drop_shadow`, `effects`)
+    /// are on in InDesign's order and nothing else is stacked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -1520,7 +1773,7 @@ pub struct TextFrame {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
     /// shows instead of its fill swatch while set (native: kept in
     /// `.paged`; on IDML export the frame keeps its swatch, the fill
     /// is reported as a loss and kept in a label the import restores).
@@ -1661,6 +1914,8 @@ impl TextFrame {
             pattern_transform: None,
             fill_mesh: None,
             effects: None,
+            effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -1992,6 +2247,16 @@ pub struct Rectangle {
     /// renderer treats the field as "no effect"; when set it's
     /// surfaced for downstream tooling but visibly emits nothing.
     pub effects: Option<FrameEffects>,
+    /// The ordered effect stack of the object target (engine ADR 1008).
+    /// Empty in the canonical form: the slots (`drop_shadow`, `effects`)
+    /// are on in InDesign's order and nothing else is stacked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -2046,7 +2311,7 @@ pub struct Rectangle {
     /// reported as a loss on IDML export.
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
     /// shows instead of its fill swatch while set (native: kept in
     /// `.paged`; on IDML export the frame keeps its swatch, the fill
     /// is reported as a loss and kept in a label the import restores).
@@ -2090,6 +2355,12 @@ pub struct Rectangle {
     /// and re-wound or reported as lost on IDML export.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
 }
 
 impl Rectangle {
@@ -2159,6 +2430,8 @@ impl Rectangle {
             opacity: None,
             blend_mode: None,
             effects: None,
+            effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -2179,6 +2452,7 @@ impl Rectangle {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
+            image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
             pattern_transform: None,
             fill_mesh: None,
@@ -2470,6 +2744,16 @@ pub struct Oval {
     pub item_layer: Option<String>,
     /// See [`Rectangle::effects`] (Q-04).
     pub effects: Option<FrameEffects>,
+    /// The ordered effect stack of the object target (engine ADR 1008).
+    /// Empty in the canonical form: the slots (`drop_shadow`, `effects`)
+    /// are on in InDesign's order and nothing else is stacked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -2505,7 +2789,7 @@ pub struct Oval {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
     /// shows instead of its fill swatch while set (native: kept in
     /// `.paged`; on IDML export the frame keeps its swatch, the fill
     /// is reported as a loss and kept in a label the import restores).
@@ -2597,6 +2881,19 @@ pub struct Oval {
     /// field is here so every frame kind takes the same write.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1047 — the live pie: the wedge of the ellipse the oval
+    /// draws, as Illustrator's pie start and end angles. `None` is the
+    /// whole ellipse (and the only value IDML spells natively; the IDML
+    /// export writes a pie's outline and keeps the angles in the item's
+    /// label, [`crate::live_shape::label`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pie: Option<crate::live_shape::PieAngles>,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
 }
 
 impl Oval {
@@ -2624,6 +2921,8 @@ impl Oval {
             text_wrap: None,
             item_layer: None,
             effects: None,
+            effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -2654,6 +2953,8 @@ impl Oval {
             corners: Default::default(),
             end_cap: None,
             fill_rule: FillRule::NonZero,
+            pie: None,
+            image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
             pattern_transform: None,
             fill_mesh: None,
@@ -3232,6 +3533,12 @@ pub struct Polygon {
     /// and re-wound or reported as lost on IDML export.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1037 — the picture's filter stack, applied in order when
+    /// it is drawn and exported. Empty (the default, and every imported
+    /// frame without the label) draws the picture as it is; an empty stack
+    /// writes no key, so the `.paged` bytes and the state hash are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
     /// `<TextWrapPreference>` parsed off the polygon, if any.
     /// `None` ⇒ the polygon does not exclude text.
     pub text_wrap: Option<TextWrap>,
@@ -3242,6 +3549,16 @@ pub struct Polygon {
     pub drop_shadow: Option<DropShadowSetting>,
     /// See [`Rectangle::effects`] (Q-04).
     pub effects: Option<FrameEffects>,
+    /// The ordered effect stack of the object target (engine ADR 1008).
+    /// Empty in the canonical form: the slots (`drop_shadow`, `effects`)
+    /// are on in InDesign's order and nothing else is stacked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -3277,7 +3594,7 @@ pub struct Polygon {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
     /// shows instead of its fill swatch while set (native: kept in
     /// `.paged`; on IDML export the frame keeps its swatch, the fill
     /// is reported as a loss and kept in a label the import restores).
@@ -3388,6 +3705,13 @@ pub struct Polygon {
     /// C-62 — `RightArrowHeadScale` (percent, default 100).
     #[serde(default = "default_arrowhead_scale")]
     pub end_arrow_scale: f32,
+    /// Engine ADR 1047 — the live polygon or star the anchors were made
+    /// from: its side count and star inset. It is LIVE while the anchors
+    /// are still what these parameters make in their own bounding box
+    /// ([`crate::live_shape::live_polygon`]); an edit of the points ends
+    /// it without a write. `None` for every other path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_shape: Option<crate::live_shape::PolygonShape>,
 }
 
 impl Polygon {
@@ -3417,12 +3741,15 @@ impl Polygon {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
+            image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
             pattern_transform: None,
             fill_mesh: None,
             text_wrap: None,
             item_layer: None,
             effects: None,
+            effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -3457,6 +3784,7 @@ impl Polygon {
             end_arrow: ArrowheadType::None,
             start_arrow_scale: 100.0,
             end_arrow_scale: 100.0,
+            live_shape: None,
         }
     }
 }
@@ -4342,6 +4670,19 @@ pub struct Hyperlink {
     pub destination: Option<String>,
 }
 
+/// Engine ADR 1026 — IDML `<HyperlinkPageItemSource>`: the page item a
+/// hyperlink starts from. The whole item is the link (a click anywhere on
+/// it follows it); its destination is the hyperlink's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HyperlinkPageItemSource {
+    /// `Self` (`HyperlinkPageItemSource/<id>` as `Hyperlink::source` spells it).
+    pub self_id: String,
+    /// The source page item's `Self` (`SourcePageItem`).
+    pub source_page_item: String,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
 /// IDML `<Bookmark>` definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bookmark {
@@ -4673,6 +5014,37 @@ pub struct DocumentPreference {
     /// it: which side of a spread the first page binds on.
     #[serde(default)]
     pub page_binding: Option<String>,
+    /// Word's "show hidden text" (engine ADR 1018): when true, runs marked
+    /// hidden ([`CharacterDecorations::hidden`]) are set and drawn like any
+    /// other; when false or `None` (the default) they take no room. Not an
+    /// IDML attribute: the `.paged` model part carries it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_hidden_text: Option<bool>,
+    /// Word's "show field codes" (Alt+F9; engine ADR 1022): when true, every
+    /// Word field ([`CharacterRun::field`]) is set as its code in braces
+    /// (`{ PAGEREF _Ref1 \h }`) instead of its result. A view flag of the
+    /// document, carried by the `.paged` model part; not an IDML attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_field_codes: Option<bool>,
+    /// Word's Track Changes (engine ADR 1040): while true, text typed and
+    /// deleted and the character and paragraph formatting set on story
+    /// ranges are recorded as [`Change`]s instead of being applied
+    /// destructively. `None` / false: edits apply as they always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_changes: Option<bool>,
+    /// The author a recorded change carries (Word's user name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_changes_author: Option<String>,
+    /// How tracked changes and comments are shown (engine ADR 1040);
+    /// `None` is [`MarkupView::All`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markup_view: Option<MarkupView>,
+    /// Engine ADR 1040 — the date a tracked change recorded now carries
+    /// (ISO 8601), as the host's clock stamped it before the edit. The
+    /// engine reads no clock; `None` records changes without a date, as
+    /// Word allows. Session state: never saved.
+    #[serde(skip)]
+    pub review_clock: Option<String>,
 }
 
 /// `<GridPreference>` — the document's baseline-grid + document-grid
@@ -5382,6 +5754,13 @@ pub struct NumberingListDef {
     /// `ContinueNumbersAcrossDocuments="true|false"`. Round-trip only;
     /// see the struct doc. Default: false.
     pub continue_across_documents: Option<bool>,
+    /// Word's per-level list definitions (`w:abstractNum/w:lvl`, engine
+    /// ADR 1018), level 1 first. Empty for an InDesign list, whose levels
+    /// live on the paragraph styles (ADR 158). When a paragraph applies a
+    /// list with levels, the level matching its `NumberingLevel` supplies
+    /// the marker, format, start, restart and indents.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub levels: Vec<NumberingLevelDef>,
 }
 /// Custom stroke-style definition. The renderer consumes the
 /// `Dashed`/`Dotted` patterns directly, the `Striped` stripe table as
@@ -5946,6 +6325,12 @@ pub struct CharacterStyleDef {
     /// Cascades through `BasedOn` per-field. See
     /// [`OtfFeatures`].
     pub otf: OtfFeatures,
+    /// Word's character additions (engine ADR 1018): highlight, hidden,
+    /// underline kind and colour, double strikethrough. Each field `None`
+    /// inherits; skipped when unset so documents without them serialise
+    /// as before.
+    #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
+    pub decorations: CharacterDecorations,
 }
 /// Q-09: `ParagraphShading*` attributes parsed off a
 /// `<ParagraphStyle>` or `<ParagraphStyleRange>`. The renderer emits
@@ -6080,6 +6465,12 @@ pub struct ParagraphStyleDef {
     /// they reach every run whose character style leaves them unset.
     #[serde(default, skip_serializing_if = "OtfFeatures::is_unset")]
     pub otf: OtfFeatures,
+    /// Word's character additions (engine ADR 1018): highlight, hidden,
+    /// underline kind and colour, double strikethrough. Each field `None`
+    /// inherits; skipped when unset so documents without them serialise
+    /// as before.
+    #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
+    pub decorations: CharacterDecorations,
     /// `<TabList>` parsed from the style. Empty means "no
     /// declaration" — the cascade may inherit from `BasedOn`.
     pub tab_list: Vec<TabStop>,
@@ -6502,6 +6893,8 @@ pub struct ResolvedCharacter {
     /// Cascaded discrete OpenType feature toggles. See
     /// [`CharacterStyleDef::otf`].
     pub otf: OtfFeatures,
+    /// Cascaded Word character additions (engine ADR 1018).
+    pub decorations: CharacterDecorations,
 }
 /// Effective paragraph-level attributes after walking BasedOn.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -6540,6 +6933,8 @@ pub struct ResolvedParagraph {
     /// Cascaded `OTF*` toggles of the paragraph style chain. See
     /// [`ParagraphStyleDef::otf`].
     pub otf: OtfFeatures,
+    /// Cascaded Word character additions (engine ADR 1018).
+    pub decorations: CharacterDecorations,
     /// `<TabList>` from the cascade. Empty means inherited / none.
     pub tab_list: Vec<TabStop>,
     pub bullets_list_type: Option<String>,
@@ -6900,6 +7295,7 @@ impl ResolvedCharacter {
             self.kerning_method = def.kerning_method.clone();
         }
         self.otf.merge_below(&def.otf);
+        self.decorations.fill_from(&def.decorations);
     }
 }
 impl ResolvedParagraph {
@@ -6947,6 +7343,7 @@ impl ResolvedParagraph {
             self.kerning_method = def.kerning_method.clone();
         }
         self.otf.merge_below(&def.otf);
+        self.decorations.fill_from(&def.decorations);
         if self.tab_list.is_empty() && !def.tab_list.is_empty() {
             self.tab_list = def.tab_list.clone();
         }
@@ -7370,6 +7767,15 @@ pub struct Paragraph {
     /// `RuleBelow*` — the horizontal rule stroked below the last
     /// line. W0.2: see [`Paragraph::rule_above`].
     pub rule_below: ParagraphRule,
+    /// Paragraph shading set on the paragraph itself (Word's direct
+    /// `w:shd`, engine ADR 1018), over the style's per field. All-`None`
+    /// inherits; skipped when unset.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub shading: ParagraphShading,
+    /// Paragraph border set on the paragraph itself (Word's direct
+    /// `w:pBdr`), over the style's per field. All-`None` inherits.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub border: ParagraphBorder,
     /// A LOCAL nested-style list: `<Properties><AllNestedStyles>` on the
     /// `<ParagraphStyleRange>` itself (InDesign writes one when a
     /// paragraph's list differs from its style's). Non-empty replaces
@@ -7495,6 +7901,24 @@ pub struct Paragraph {
     /// The renderer's index pass collects these across all
     /// paragraphs and emits an alphabetized index story.
     pub index_markers: Vec<IndexMarker>,
+    /// Engine ADR 1022 — the TOC style (`TOCStyle/<id>`) whose table of
+    /// contents this paragraph belongs to, when a table of contents stands
+    /// INSIDE a story's text, as Word puts one (`insertTableOfContents`).
+    /// The run of consecutive paragraphs naming one style is that table;
+    /// `updateTableOfContents` rewrites it in place. `None` elsewhere (an
+    /// InDesign table of contents is a story of its own).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toc: Option<String>,
+    /// Engine ADR 1040 — the paragraph MARK (the break that ends this
+    /// paragraph) inserted or deleted by a tracked change. Accepting a
+    /// deleted mark, or rejecting an inserted one, joins this paragraph
+    /// with the next.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark_revision: Option<Change>,
+    /// Engine ADR 1040 — a tracked paragraph-formatting change (Word's
+    /// `w:pPrChange`): the paragraph's properties before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub props_change: Option<ParaPropsChange>,
 }
 impl Paragraph {
     /// Keep the anchors of [`Self::anchored_frame_offsets`], the
@@ -7711,7 +8135,15 @@ pub struct IndexMarker {
 /// frame carries its own geometry / transform and an
 /// `<AnchoredObjectSetting>` describing where it should land relative
 /// to the anchor character.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// An anchored frame paints as a free frame does (engine ADR 1045): its
+/// fill, outline, opacity, blend mode, InDesign's effects in their slots,
+/// the ordered effect stack (ADR 1008) and the three transparency targets
+/// are the free frames' own fields and types, read by the same renderer
+/// modules through the rectangle the anchored pass synthesises. Each is
+/// absent from the serialised form while unset, so an anchored frame
+/// without a look serialises and hashes as before.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AnchoredFrame {
     pub frame_kind: AnchoredFrameKind,
     pub self_id: Option<String>,
@@ -7747,10 +8179,88 @@ pub struct AnchoredFrame {
     /// Children of an anchored Group, in z-order. Empty for non-Group
     /// anchored frames.
     pub children: Vec<AnchoredFrame>,
+    /// `GradientFillLength`; see [`Rectangle::gradient_fill_length`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient_fill_length: Option<f32>,
+    /// `GradientFillStart`; see [`Rectangle::gradient_fill_start`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient_fill_start: Option<[f32; 2]>,
+    /// `StrokeType`; see [`Rectangle::stroke_type`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_type: Option<String>,
+    /// `StrokeDashAndGap`; see [`Rectangle::stroke_dash`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stroke_dash: Vec<f32>,
+    /// `StrokeAlignment`; see [`Rectangle::stroke_alignment`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_alignment: Option<String>,
+    /// `EndCap`; see [`Rectangle::end_cap`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_cap: Option<String>,
+    /// `EndJoin`; see [`Rectangle::end_join`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_join: Option<String>,
+    /// `MiterLimit`; see [`Rectangle::miter_limit`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub miter_limit: Option<f32>,
+    /// The object's `<BlendingSetting Opacity>`, 0–100; see
+    /// [`Rectangle::opacity`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f32>,
+    /// The object's `<BlendingSetting BlendMode>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_mode: Option<String>,
+    /// The object's `<DropShadowSetting>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drop_shadow: Option<DropShadowSetting>,
+    /// The object's other InDesign effects; see [`Rectangle::effects`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effects: Option<FrameEffects>,
+    /// The object target's ordered effect stack (engine ADR 1008), empty
+    /// in the canonical form.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// The fill, stroke and content targets (R-10); see
+    /// [`TargetTransparency`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_transparency: Option<TargetTransparency>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_transparency: Option<TargetTransparency>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_transparency: Option<TargetTransparency>,
+    /// The targets' own drop shadows (R-10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_drop_shadow: Option<DropShadowSetting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_drop_shadow: Option<DropShadowSetting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_drop_shadow: Option<DropShadowSetting>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+
+impl AnchoredFrame {
+    /// Whether the frame carries anything of a look beyond its fill and
+    /// stroke colours: an opacity, a blend mode, an effect in any slot or
+    /// stack, a target setting. Such a frame's picture is painted inside
+    /// its effect run (see the renderer's anchored pass).
+    pub fn has_transparency(&self) -> bool {
+        self.opacity.is_some()
+            || self.blend_mode.is_some()
+            || self.drop_shadow.is_some()
+            || self.effects.is_some()
+            || !self.effect_stack.is_empty()
+            || self.fill_transparency.is_some()
+            || self.stroke_transparency.is_some()
+            || self.content_transparency.is_some()
+            || self.fill_drop_shadow.is_some()
+            || self.stroke_drop_shadow.is_some()
+            || self.content_drop_shadow.is_some()
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnchoredFrameKind {
     TextFrame,
+    #[default]
     Rectangle,
     Group,
 }
@@ -8235,6 +8745,314 @@ impl MarkSettings {
     }
 }
 
+/// True when `v` is its type's default — the `skip_serializing_if` of
+/// the Word additions (engine ADR 1018), so a document without them
+/// serialises exactly as before.
+pub fn is_default<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+/// Word's underline kinds (`w:u/@w:val`), engine ADR 1018. InDesign has
+/// one underline whose look is a stroke style; Word names the look, so the
+/// model keeps Word's name and the IDML writer maps it onto a stroke style
+/// (`UnderlineType`). `Single` is what a plain `Underline="true"` draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnderlineKind {
+    /// Explicitly no underline (Word's `none`), over a style that has one.
+    None,
+    Single,
+    /// Under the words only: the spaces between them stay bare.
+    Words,
+    Double,
+    Thick,
+    Dotted,
+    Dashed,
+    DotDash,
+    DotDotDash,
+    Wave,
+    DoubleWave,
+}
+
+impl UnderlineKind {
+    /// Every kind, in declaration order.
+    pub const ALL: [UnderlineKind; 11] = [
+        Self::None,
+        Self::Single,
+        Self::Words,
+        Self::Double,
+        Self::Thick,
+        Self::Dotted,
+        Self::Dashed,
+        Self::DotDash,
+        Self::DotDotDash,
+        Self::Wave,
+        Self::DoubleWave,
+    ];
+
+    /// The wire / property-path spelling (camelCase, Word's own where
+    /// Word has one).
+    pub fn as_name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Single => "single",
+            Self::Words => "words",
+            Self::Double => "double",
+            Self::Thick => "thick",
+            Self::Dotted => "dotted",
+            Self::Dashed => "dashed",
+            Self::DotDash => "dotDash",
+            Self::DotDotDash => "dotDotDash",
+            Self::Wave => "wave",
+            Self::DoubleWave => "doubleWave",
+        }
+    }
+
+    /// Parse [`Self::as_name`], and Word's own `w:u` spellings that map onto
+    /// one of these (`dash` → dashed, `wavyDouble` → doubleWave, the heavy
+    /// variants → their plain kind).
+    pub fn from_name(s: &str) -> Option<Self> {
+        Some(match s {
+            "none" => Self::None,
+            "single" => Self::Single,
+            "words" => Self::Words,
+            "double" => Self::Double,
+            "thick" => Self::Thick,
+            "dotted" | "dottedHeavy" => Self::Dotted,
+            "dashed" | "dash" | "dashedHeavy" | "dashLong" | "dashLongHeavy" => Self::Dashed,
+            "dotDash" | "dashDotHeavy" => Self::DotDash,
+            "dotDotDash" | "dashDotDotHeavy" => Self::DotDotDash,
+            "wave" | "wavyHeavy" => Self::Wave,
+            "doubleWave" | "wavyDouble" => Self::DoubleWave,
+            _ => return None,
+        })
+    }
+
+    /// The InDesign stroke style that draws this kind (`UnderlineType`),
+    /// by the names InDesign's Graphic.xml declares. `None` for the plain
+    /// solid line (no `UnderlineType` needed) and for no underline.
+    pub fn idml_stroke_type(self) -> Option<&'static str> {
+        match self {
+            Self::None | Self::Single | Self::Words | Self::Thick => None,
+            Self::Double => Some("StrokeStyle/$ID/ThinThin"),
+            Self::Dotted => Some("StrokeStyle/$ID/Canned Dotted"),
+            Self::Dashed => Some("StrokeStyle/$ID/Canned Dashed 3x2"),
+            Self::DotDash | Self::DotDotDash => Some("StrokeStyle/$ID/Canned Dashed 4x4"),
+            Self::Wave | Self::DoubleWave => Some("StrokeStyle/$ID/Wavy"),
+        }
+    }
+
+    /// The kind an InDesign `UnderlineType` draws as, when it is one this
+    /// enum names (the reverse of [`Self::idml_stroke_type`]; `Solid` is
+    /// `Single`). `None` for a stroke style with no Word counterpart.
+    pub fn from_idml_stroke_type(s: &str) -> Option<Self> {
+        let suffix = s.strip_prefix("StrokeStyle/$ID/").unwrap_or(s);
+        Some(match suffix {
+            "Solid" => Self::Single,
+            "ThinThin" => Self::Double,
+            "Canned Dotted" | "Dotted" | "Japanese Dots" => Self::Dotted,
+            "Canned Dashed 3x2" | "Dashed" => Self::Dashed,
+            "Canned Dashed 4x4" => Self::DotDash,
+            "Wavy" => Self::Wave,
+            _ => return None,
+        })
+    }
+}
+
+/// The swatch reference that says "no highlight" over a style that sets
+/// one ([`CharacterDecorations::highlight_color`]).
+pub const NO_HIGHLIGHT: &str = "Swatch/None";
+
+/// Word's character additions the IDML model had no slot for (engine
+/// ADR 1018): highlight, hidden text, the underline's kind and colour,
+/// and double strikethrough. Carried on runs, character styles and
+/// paragraph styles; every field `None` inherits through the cascade.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CharacterDecorations {
+    /// Highlight (Word's `w:highlight` / run `w:shd`): a swatch reference
+    /// painted as a band behind the glyphs, ascent to descent. `Some`
+    /// of [`NO_HIGHLIGHT`] switches a style's highlight off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlight_color: Option<String>,
+    /// Hidden text (`w:vanish`). A hidden run takes no room and draws
+    /// nothing unless the document shows hidden text
+    /// ([`DocumentPreference::show_hidden_text`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    /// How the underline looks when the run is underlined. Setting a kind
+    /// through the property path also turns `underline` on (off for
+    /// [`UnderlineKind::None`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underline_kind: Option<UnderlineKind>,
+    /// The underline's colour (`w:u/@w:color`); `None` is the text's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underline_color: Option<String>,
+    /// Double strikethrough (`w:dstrike`): two lines through the text,
+    /// drawn instead of the single strike.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub double_strikethrough: Option<bool>,
+}
+
+impl CharacterDecorations {
+    /// True when no field is set.
+    pub fn is_unset(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Fill every unset field from the level below.
+    pub fn fill_from(&mut self, below: &CharacterDecorations) {
+        if self.highlight_color.is_none() {
+            self.highlight_color.clone_from(&below.highlight_color);
+        }
+        self.hidden = self.hidden.or(below.hidden);
+        self.underline_kind = self.underline_kind.or(below.underline_kind);
+        if self.underline_color.is_none() {
+            self.underline_color.clone_from(&below.underline_color);
+        }
+        self.double_strikethrough = self.double_strikethrough.or(below.double_strikethrough);
+    }
+
+    /// The highlight's swatch, `None` when there is none (unset or
+    /// [`NO_HIGHLIGHT`]).
+    pub fn effective_highlight(&self) -> Option<&str> {
+        self.highlight_color
+            .as_deref()
+            .filter(|c| !c.is_empty() && *c != NO_HIGHLIGHT)
+    }
+}
+
+/// What follows a list level's number (Word's `w:suff`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ListSuffix {
+    Tab,
+    Space,
+    Nothing,
+}
+
+impl ListSuffix {
+    pub fn as_name(self) -> &'static str {
+        match self {
+            Self::Tab => "tab",
+            Self::Space => "space",
+            Self::Nothing => "nothing",
+        }
+    }
+
+    pub fn from_name(s: &str) -> Option<Self> {
+        Some(match s {
+            "tab" => Self::Tab,
+            "space" => Self::Space,
+            "nothing" => Self::Nothing,
+            _ => return None,
+        })
+    }
+}
+
+/// One level of a Word list definition (`w:lvl`, engine ADR 1018). Every
+/// field `None` leaves the paragraph's own cascade in place.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NumberingLevelDef {
+    /// 1 to 9.
+    pub level: u32,
+    /// `NumberedList`, `BulletList` or `NoList` (the
+    /// `BulletsAndNumberingListType` vocabulary).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list_type: Option<String>,
+    /// The counter's format: an InDesign sample string (`"1, 2, 3, 4..."`)
+    /// or Word's `w:numFmt` name (`decimal`, `lowerRoman`, …), which
+    /// [`Self::idml_format`] translates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// The marker text: InDesign's `^1`…`^9` / `^#` or Word's `%1`…`%9`
+    /// (`"%1.%2."`), translated by [`Self::idml_expression`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expression: Option<String>,
+    /// What follows the marker; appended to the expression.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suffix: Option<ListSuffix>,
+    /// The level's first number (`w:start`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_at: Option<i32>,
+    /// Word's `w:lvlRestart`: the level restarts after a paragraph at
+    /// level `1..=k`; `0` never restarts. `None` restarts after any
+    /// higher level (Word's default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart_after: Option<u32>,
+    /// The text's left indent in pt.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left_indent: Option<f32>,
+    /// The first line's indent in pt; negative hangs the marker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_line_indent: Option<f32>,
+    /// A tab stop after the marker, in pt from the frame's left edge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tab_position: Option<f32>,
+    /// The bullet's code point, for a bullet level.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bullet_character: Option<u32>,
+    /// The face the bullet (or number) is set in (Word's `w:lvl/w:rPr`
+    /// font), over the marker's character style.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bullet_font: Option<String>,
+    /// The marker's character style (`CharacterStyle/<id>`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker_character_style: Option<String>,
+}
+
+impl NumberingLevelDef {
+    /// The level's format as an InDesign `NumberingFormat` sample string.
+    pub fn idml_format(&self) -> Option<String> {
+        let f = self.format.as_deref()?;
+        Some(
+            match f {
+                "decimal" => "1, 2, 3, 4...",
+                "decimalZero" => "01, 02, 03...",
+                "upperRoman" => "I, II, III, IV...",
+                "lowerRoman" => "i, ii, iii, iv...",
+                "upperLetter" => "A, B, C, D...",
+                "lowerLetter" => "a, b, c, d...",
+                other => other,
+            }
+            .to_string(),
+        )
+    }
+
+    /// The level's marker as an InDesign `NumberingExpression`: Word's
+    /// `%k` become `^k`, a literal `^` is escaped as `^^` when the source
+    /// is Word's spelling, and the suffix is appended (`^t` for a tab).
+    pub fn idml_expression(&self) -> Option<String> {
+        let suffix = match self.suffix {
+            Some(ListSuffix::Tab) => "^t",
+            Some(ListSuffix::Space) => " ",
+            Some(ListSuffix::Nothing) | None => "",
+        };
+        let base = self.expression.as_deref()?;
+        Some(format!("{}{suffix}", word_level_text_to_expression(base)))
+    }
+}
+
+/// Word's level text (`%1.%2.`) as an InDesign numbering expression
+/// (`^1.^2.`). A string without `%` is taken as InDesign's own spelling
+/// and returned unchanged.
+pub fn word_level_text_to_expression(text: &str) -> String {
+    if !text.contains('%') {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len() + 2);
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '%' if matches!(chars.peek(), Some('1'..='9')) => {
+                out.push('^');
+                out.push(chars.next().expect("peeked"));
+            }
+            '^' => out.push_str("^^"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CharacterRun {
     pub character_style: Option<String>,
@@ -8365,6 +9183,12 @@ pub struct CharacterRun {
     /// `OTFStylisticSets`, …) parsed off the `<CharacterStyleRange>`.
     /// Each field `None` ⇒ inherit from the cascade. See [`OtfFeatures`].
     pub otf: OtfFeatures,
+    /// Word's character additions (engine ADR 1018): highlight, hidden,
+    /// underline kind and colour, double strikethrough. Each field `None`
+    /// inherits; skipped when unset so documents without them serialise
+    /// as before.
+    #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
+    pub decorations: CharacterDecorations,
     /// Phase 5 — `AppliedConditions="Condition/A Condition/B"`.
     /// Space-separated list of `<Condition>` references. Empty
     /// means "no condition gating" (always visible). A run with
@@ -8400,8 +9224,37 @@ pub struct CharacterRun {
     /// `None` for ordinary text runs. The parser never sets this today;
     /// placeholders enter via the mutate API (`InsertField`).
     pub placeholder: Option<PlaceholderField>,
+    /// Engine ADR 1022 — the Word field this run IS (`DATE`, `NUMPAGES`,
+    /// `PAGEREF`, …): the run's `text` is the field's current result, the
+    /// way a variable run carries its `ResultText`. Page-dependent kinds
+    /// re-resolve at emit ([`WordField::is_live`]); the others change only
+    /// when the fields are updated (Word's F9). `None` for ordinary text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<WordField>,
+    /// Engine ADR 1040 — the tracked insertion or deletion this run's text
+    /// is ([`ChangeKind::Insert`] / [`ChangeKind::Delete`]). A deleted run
+    /// keeps its text, as Word keeps `w:delText`; the markup view decides
+    /// whether it shows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<Change>,
+    /// Engine ADR 1040 — a tracked formatting change (Word's `w:rPrChange`):
+    /// the run's properties before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_change: Option<FormatChange>,
+    /// Engine ADR 1020 — the comments whose range covers this run: the ids
+    /// of their threads' root [`Comment`]s in the story.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<String>,
     pub text: String,
 }
+impl CharacterRun {
+    /// Whether the run's text depends on the layout at emit: a text
+    /// variable, or a live Word field (engine ADR 1022).
+    pub fn reads_layout(&self) -> bool {
+        self.text_variable.is_some() || self.field.as_ref().is_some_and(WordField::is_live)
+    }
+}
+
 /// v43 (D-01) — a plugin-owned tagged placeholder: a named,
 /// edit-surviving anchor inside a story's run list. `(plugin, key)` is
 /// the identity the owning plugin re-finds it by; `value` is the
@@ -8467,6 +9320,10 @@ impl Graphic {
     /// one level if the id names a Swatch rather than a Color directly.
     pub fn resolve(&self, id: &str) -> Option<&ColorEntry> {
         if let Some(c) = self.colors.get(id) {
+            return Some(c);
+        }
+        // Engine ADR 1040 — the markup's reserved author colours.
+        if let Some(c) = review::review_color(id) {
             return Some(c);
         }
         let swatch = self.swatches.get(id)?;
@@ -8850,6 +9707,12 @@ pub struct Spread {
     /// that silently "round-trips" is worse than an honest loss.
     #[serde(default)]
     pub opacity_masks: std::collections::HashMap<String, OpacityMask>,
+    /// Engine ADR 1039 — the spread's symbol instances, listed in
+    /// [`Spread::frames_in_order`] (or a group's `members`) as
+    /// [`FrameRef::Instance`]. Absent from the native encoding when empty,
+    /// so a document without symbols serialises as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub instances: Vec<SymbolInstance>,
 }
 
 /// C-28 — how a mask item's artwork resolves to coverage. Mirrors
@@ -8878,6 +9741,21 @@ pub struct OpacityMask {
     /// Invert the resolved coverage — Illustrator's "Invert Mask".
     #[serde(default)]
     pub invert: bool,
+    /// Illustrator's "Clip": the area the artwork does not paint hides
+    /// the target (a black backdrop, PDF's default). Off, that area
+    /// SHOWS the target: the artwork is resolved over a white backdrop
+    /// (PDF's `/BC`). On by default, so a mask without the field reads
+    /// as before.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub clip: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 // ---------------------------------------------------------------------------
@@ -8941,6 +9819,11 @@ pub struct Story {
     /// `Self`) with the elements that tag its ranges as children.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub xml_elements: Vec<XmlElement>,
+    /// Engine ADR 1020 — the story's comment threads: each root comment
+    /// covers the runs that name its id ([`CharacterRun::comments`]), and
+    /// its replies name it as their `parent`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<Comment>,
 }
 
 /// D-02 — an `<XMLTag Self Name>` of `XML/Tags.xml`, as InDesign 20.0.1
@@ -9297,6 +10180,80 @@ pub struct FlowGrowRule {
     /// section (thoughts ADR 029; measured against Word's PDF export).
     #[serde(default)]
     pub copy_frame_options: bool,
+    /// Engine ADR 1022 — the master every page of the chain takes (Word's
+    /// section header and footer, "odd" when [`Self::even_master`] is set).
+    /// `None`: a generated page copies the master of the page it follows,
+    /// and authored pages keep theirs (ADR 026). Spelled as
+    /// [`Page::applied_master`] spells it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+    /// Engine ADR 1022 — the master the chain's FIRST page takes (Word's
+    /// "different first page", `w:titlePg`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_master: Option<String>,
+    /// Engine ADR 1022 — the master pages with an EVEN page number take
+    /// (Word's "different odd & even", `w:evenAndOddHeaders`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub even_master: Option<String>,
+    /// Engine ADR 1022 — where the chain's first page must fall (Word's
+    /// section break type): an odd- or even-page start that lands on the
+    /// wrong number gets a blank page in front of it.
+    #[serde(default, skip_serializing_if = "SectionStart::is_new_page")]
+    pub section_start: SectionStart,
+}
+
+/// Engine ADR 1022 — where a growing chain's first page must fall, as Word's
+/// section break types say (`w:sectPr/w:type`). Parity is the page NUMBER's
+/// (the section numbering's), as Word decides it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SectionStart {
+    /// Any page (Word's "next page").
+    #[default]
+    NewPage,
+    /// An odd-numbered page; a blank page is inserted before it otherwise.
+    OddPage,
+    /// An even-numbered page; a blank page is inserted before it otherwise.
+    EvenPage,
+}
+
+impl SectionStart {
+    pub fn is_new_page(&self) -> bool {
+        *self == SectionStart::NewPage
+    }
+
+    /// Whether a first page numbered `number` stands where this start wants it.
+    pub fn accepts(self, number: u32) -> bool {
+        match self {
+            SectionStart::NewPage => true,
+            SectionStart::OddPage => number % 2 == 1,
+            SectionStart::EvenPage => number.is_multiple_of(2),
+        }
+    }
+}
+
+impl FlowGrowRule {
+    /// Whether the rule picks the masters of its chain's pages.
+    pub fn names_masters(&self) -> bool {
+        self.master.is_some() || self.first_master.is_some() || self.even_master.is_some()
+    }
+
+    /// The master a page of the chain takes: the first page's when it is the
+    /// chain's first and the rule has one, else the even master on an
+    /// even-numbered page, else the rule's master. `None`: keep the page's.
+    pub fn master_for(&self, first_of_chain: bool, number: u32) -> Option<&str> {
+        if first_of_chain {
+            if let Some(m) = self.first_master.as_deref() {
+                return Some(m);
+            }
+        }
+        if number.is_multiple_of(2) {
+            if let Some(m) = self.even_master.as_deref() {
+                return Some(m);
+            }
+        }
+        self.master.as_deref()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -9383,6 +10340,13 @@ pub struct DesignMap {
     /// `<Hyperlink Destination="...">` resolves through this table to a
     /// concrete URL or page target.
     pub hyperlink_destinations: Vec<HyperlinkDestination>,
+    /// Engine ADR 1026 — `<HyperlinkPageItemSource>`s: page items that are
+    /// a hyperlink's source (a clickable shape; a PowerPoint shape's click
+    /// action). A [`Hyperlink::source`] names one by its `Self`.
+    /// Not written when empty, so a document without one keeps its bytes
+    /// and its state hash.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hyperlink_page_item_sources: Vec<HyperlinkPageItemSource>,
     /// SDK Phase 5 (v1 sweep) — `<Bookmark>` definitions. Each
     /// is a named anchor pointing at a destination (typically a
     /// hyperlink-page-destination or text-anchor).
@@ -9746,5 +10710,112 @@ mod numbering_style_tests {
             }
         }
         assert!(misses.is_empty(), "{misses:#?}");
+    }
+}
+
+#[cfg(test)]
+mod word_model_tests {
+    use super::*;
+
+    #[test]
+    fn underline_kinds_name_and_map_to_indesign_stroke_styles() {
+        for k in UnderlineKind::ALL {
+            assert_eq!(UnderlineKind::from_name(k.as_name()), Some(k));
+            if let Some(t) = k.idml_stroke_type() {
+                let back = UnderlineKind::from_idml_stroke_type(t).unwrap();
+                // Two Word kinds share InDesign's one wavy and one canned dash.
+                assert_eq!(back.idml_stroke_type(), Some(t));
+            }
+        }
+        assert_eq!(
+            UnderlineKind::from_name("wavyDouble"),
+            Some(UnderlineKind::DoubleWave)
+        );
+        assert_eq!(UnderlineKind::from_name("zigzag"), None);
+    }
+
+    #[test]
+    fn word_level_text_becomes_an_indesign_expression() {
+        assert_eq!(word_level_text_to_expression("%1.%2."), "^1.^2.");
+        assert_eq!(word_level_text_to_expression("(%3)^"), "(^3)^^");
+        assert_eq!(word_level_text_to_expression("^#.^t"), "^#.^t");
+        let level = NumberingLevelDef {
+            level: 2,
+            format: Some("upperLetter".into()),
+            expression: Some("%1.%2".into()),
+            suffix: Some(ListSuffix::Space),
+            ..Default::default()
+        };
+        assert_eq!(level.idml_expression().as_deref(), Some("^1.^2 "));
+        assert_eq!(level.idml_format().as_deref(), Some("A, B, C, D..."));
+    }
+
+    #[test]
+    fn decorations_cascade_and_skip_when_unset() {
+        let mut run = CharacterDecorations {
+            hidden: Some(false),
+            ..Default::default()
+        };
+        run.fill_from(&CharacterDecorations {
+            hidden: Some(true),
+            highlight_color: Some(NO_HIGHLIGHT.into()),
+            ..Default::default()
+        });
+        assert_eq!(run.hidden, Some(false), "the run's own value wins");
+        assert_eq!(
+            run.effective_highlight(),
+            None,
+            "Swatch/None is no highlight"
+        );
+        let json = serde_json::to_string(&CharacterRun::default()).unwrap();
+        assert!(
+            !json.contains("decorations"),
+            "unset decorations are not serialised"
+        );
+    }
+}
+
+#[cfg(test)]
+#[allow(non_snake_case)] // the `__feat__<id>` suffix links each test to its cockpit feature
+mod canvas_layout_tests {
+    use super::*;
+
+    #[test]
+    fn unplaced_pages_stack_down_the_canvas__feat__layout_model_artboards() {
+        let got = canvas_layout([((612.0, 792.0), None), ((400.0, 300.0), None)]);
+        assert_eq!(got, vec![(0.0, 0.0), (0.0, 792.0 + CANVAS_PAGE_GAP_PT)]);
+    }
+
+    #[test]
+    fn a_placed_page_moves_no_other_page__feat__layout_model_artboards() {
+        let got = canvas_layout([
+            ((612.0, 792.0), Some([900.0, -50.0])),
+            ((612.0, 792.0), None),
+            ((612.0, 792.0), None),
+        ]);
+        assert_eq!(got[0], (900.0, -50.0));
+        // The second and third keep their stacked slots.
+        assert_eq!(got[1], (0.0, 816.0));
+        assert_eq!(got[2], (0.0, 1632.0));
+    }
+
+    #[test]
+    fn an_unplaced_page_serialises_without_an_origin__feat__layout_model_artboards() {
+        let page = Page::new(
+            "p1",
+            Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: 10.0,
+                right: 10.0,
+            },
+        );
+        let json = serde_json::to_string(&page).unwrap();
+        assert!(!json.contains("canvas_origin"), "{json}");
+        let mut placed = page.clone();
+        placed.canvas_origin = Some([5.0, 6.0]);
+        let json = serde_json::to_string(&placed).unwrap();
+        let back: Page = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.canvas_origin, Some([5.0, 6.0]));
     }
 }

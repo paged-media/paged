@@ -57,10 +57,11 @@ mod wasm {
     use tsify_next::Tsify;
     use wasm_bindgen::prelude::*;
 
-    /// Vertical gap between pages in continuous layout, in pt — the
-    /// same constant the editor canvas uses, so `page_layout()`
+    /// Vertical gap between pages in the default canvas layout, in pt —
+    /// the model's constant, which the editor canvas uses too. Pages sit
+    /// at `BuiltPage::canvas_origin` (engine ADR 1011), so `page_layout()`
     /// offsets and `present()` placement always agree.
-    const PAGE_GAP_PT: f32 = 24.0;
+    const PAGE_GAP_PT: f32 = paged_model::CANVAS_PAGE_GAP_PT;
 
     /// Where the WebGPU presenter lives, shared with the futures that
     /// create it and read back through it.
@@ -147,9 +148,10 @@ mod wasm {
 
     /// Continuous-layout geometry for every page, so the TS wrapper
     /// computes fit / goToPage / currentPage / scroll extents without
-    /// wasm round-trips. `y_pt` is the page top in doc space (vertical
-    /// stack with `gap_pt` between pages — the same offsets
-    /// `present()` uses).
+    /// wasm round-trips. `x_pt` / `y_pt` are the page's top-left in doc
+    /// space — its place on the canvas (engine ADR 1011), by default the
+    /// vertical stack with `gap_pt` between pages — the same offsets
+    /// `present()` uses.
     #[derive(Serialize, Tsify)]
     #[tsify(into_wasm_abi)]
     #[serde(rename_all = "camelCase")]
@@ -162,6 +164,9 @@ mod wasm {
     #[serde(rename_all = "camelCase")]
     pub struct PageRect {
         pub index: u32,
+        /// v77 — the page's left edge on the canvas (0 in the default
+        /// stack).
+        pub x_pt: f32,
         pub y_pt: f32,
         pub width_pt: f32,
         pub height_pt: f32,
@@ -318,23 +323,23 @@ mod wasm {
             }
         }
 
-        /// Continuous-layout page geometry (doc-space pt, vertical
-        /// stack with `PAGE_GAP_PT` between pages). Empty until `load`
+        /// Continuous-layout page geometry (doc-space pt: each page's
+        /// place on the canvas, by default the vertical stack with
+        /// `PAGE_GAP_PT` between pages). Empty until `load`
         /// succeeds. The TS wrapper derives fit zoom, scroll extents,
         /// `goToPage` targets and the current page from this — no
         /// per-frame wasm round-trips.
         pub fn page_layout(&self) -> PagesLayout {
             let mut pages = Vec::new();
-            let mut y_pt = 0.0_f32;
             if let Some(built) = self.built.as_ref() {
                 for (index, page) in built.pages.iter().enumerate() {
                     pages.push(PageRect {
                         index: index as u32,
-                        y_pt,
+                        x_pt: page.canvas_origin.0,
+                        y_pt: page.canvas_origin.1,
                         width_pt: page.width_pt,
                         height_pt: page.height_pt,
                     });
-                    y_pt += page.height_pt + PAGE_GAP_PT;
                 }
             }
             PagesLayout {
@@ -411,19 +416,20 @@ mod wasm {
 
             // Pass 1: visibility-cull and make sure every visible page
             // has a cached scene (mut-borrows `self.scenes`).
-            let mut visible: Vec<(usize, f32)> = Vec::new();
-            let mut y_pt = 0.0_f32;
+            let mut visible: Vec<(usize, (f32, f32))> = Vec::new();
             for (idx, page) in built.pages.iter().enumerate() {
-                let (skip, y_here) = match only_page {
-                    Some(p) => (idx != p as usize, 0.0),
-                    None => (false, y_pt),
+                // `"single"` mode lays its one page out at the origin;
+                // continuous mode puts each page at its canvas place
+                // (engine ADR 1011).
+                let (skip, at) = match only_page {
+                    Some(p) => (idx != p as usize, (0.0, 0.0)),
+                    None => (false, page.canvas_origin),
                 };
-                y_pt += page.height_pt + PAGE_GAP_PT;
                 if skip {
                     continue;
                 }
-                let top = scroll_y * dpr + y_here * k;
-                let left = scroll_x * dpr;
+                let top = scroll_y * dpr + at.1 * k;
+                let left = scroll_x * dpr + at.0 * k;
                 let on_screen = left + page.width_pt * k > 0.0
                     && left < viewport_w
                     && top + page.height_pt * k > 0.0
@@ -434,18 +440,25 @@ mod wasm {
                 self.scenes.entry(idx).or_insert_with(|| {
                     SurfacePresenter::build_page_scene(&page.list, page.width_pt, page.height_pt)
                 });
-                visible.push((idx, y_here));
+                visible.push((idx, at));
             }
 
             // Pass 2: assemble (scene, transform) pairs from the cache
             // (shared borrows only) and present in one pass.
             let scene_list: Vec<(&VelloScene, [f32; 6])> = visible
                 .iter()
-                .filter_map(|(idx, y_here)| {
+                .filter_map(|(idx, (x_here, y_here))| {
                     self.scenes.get(idx).map(|scene| {
                         (
                             scene,
-                            [k, 0.0, 0.0, k, scroll_x * dpr, scroll_y * dpr + y_here * k],
+                            [
+                                k,
+                                0.0,
+                                0.0,
+                                k,
+                                scroll_x * dpr + x_here * k,
+                                scroll_y * dpr + y_here * k,
+                            ],
                         )
                     })
                 })

@@ -118,6 +118,9 @@
 // setXmlAttribute — each probed with real args on the `text` fixture as the
 // template's author (tagging is an author's write).
 //
+// 2026-10-25: protocol 77 (engine ADR 1011) named one new Mutation op —
+// placePage — probed with real args on the geometry fixture.
+//
 // 2026-10-17: the pin moved to canvas-wasm 0.71.13 (additive on protocol
 // 71). AC-E2E-CAPS-COVER named five new Mutation ops from core's v73 wire
 // (ADRs 163–165): insertFootnote, deleteFootnote, deleteHyperlink,
@@ -144,6 +147,24 @@
 // no op makes one, so their probes run on a copy of the `text` fixture
 // repackaged with one tracked deletion, and address it by the place the
 // trackedChanges collection lists. No editor UI issues either op yet.
+
+// 2026-10-25: the Word model (engine ADRs 1018, 1021) named four new
+// Mutation ops — setStyleBasedOn, setListLevel, restartNumbering and
+// findReplace. Each got a real-args probe: a scratch paragraph style
+// re-parented, a list level and a numbering restart on the first story's
+// first character, and a find and replace of a word the probe types first.
+
+// 2026-10-28: Word's document structure (engine ADR 1022) named six new
+// Mutation ops — insertTextAnchor, deleteTextAnchor, insertIndexMarker,
+// insertCrossReference, insertTableOfContents and updateFields. Each got a
+// real-args probe on the first story; deleteTextAnchor learns the id the
+// next mint takes from a scratch bookmark it undoes.
+
+// 2026-10-30: symbols (engine ADR 1039) named five new Mutation ops —
+// createSymbol, redefineSymbol, placeSymbolInstance, breakSymbolLink and
+// deleteSymbol. Each got a real-args probe on a scratch frame made a symbol.
+// 2026-10-30: live vector effects (engine ADR 1042) named expandAppearance,
+// probed on a scratch frame carrying a zig zag.
 
 export type CapabilityStatus = "supported" | "unsupported";
 
@@ -385,6 +406,11 @@ export const CAPABILITIES: Capability[] = [
     note: "proto 70; moves a page's single-page spread after `after` (null = to the front); wire-only, no editor UI",
   },
   {
+    op: "placePage",
+    status: "supported",
+    note: "proto 77 (engine ADR 1011); puts a page (an artboard) at originPt on the canvas, absent = its default stacked slot; the Artboard tool and the Artboards panel issue it",
+  },
+  {
     op: "setPageMetadata",
     status: "supported",
     note: "proto 70; a page's plugin label, read back on the pages collection's pluginMetadata; travels with movePage/duplicatePage; plugin-sdk gates the key namespace; no editor UI",
@@ -576,6 +602,89 @@ export const CAPABILITIES: Capability[] = [
     op: "rejectTrackedChange",
     status: "supported",
     note: "proto 74, ADR 184; {storyId, offset} of a tracked deletion's place; its text comes back where the place stood, one undo step; probed on a copy of the text fixture with one deletion; no editor UI",
+  },
+  // the Word model (protocol 76, engine ADRs 1018, 1021).
+  {
+    op: "setStyleBasedOn",
+    status: "supported",
+    note: "proto 76, ADR 1018; {collection, styleId, basedOn?}; probed re-parenting a scratch paragraph style",
+  },
+  {
+    op: "setListLevel",
+    status: "supported",
+    note: "proto 76, ADR 1018; {storyId, start, end, level? | delta?}; probed on the first story's first character",
+  },
+  {
+    op: "restartNumbering",
+    status: "supported",
+    note: "proto 76, ADR 1018; {storyId, start, end, startAt?, continueNumbering?}; probed on the first story's first character",
+  },
+  {
+    op: "findReplace",
+    status: "supported",
+    note: "proto 76, ADR 1021; {spec, replace, replaceAll?, paragraphStyle?, characterStyle?}; probed on a word typed into the first story",
+  },
+  // Word's document structure (protocol 77, engine ADR 1022).
+  {
+    op: "insertTextAnchor",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, name}; a Word bookmark; probed at the first story's start",
+  },
+  {
+    op: "deleteTextAnchor",
+    status: "supported",
+    note: "proto 77, ADR 1022; {anchorId}; probed on an anchor the probe inserts",
+  },
+  {
+    op: "insertIndexMarker",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, topic, sortOrder?}; probed at the first story's start",
+  },
+  {
+    op: "insertCrossReference",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, target, referTo, hyperlink?}; probed referring to the story's first paragraph",
+  },
+  {
+    op: "insertTableOfContents",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId, offset, contentOffset?, levels, title?, tocStyleName?, pageNumbers?, leader?, tabPosition?}; probed with one scratch paragraph style",
+  },
+  {
+    op: "updateFields",
+    status: "supported",
+    note: "proto 77, ADR 1022; {storyId?, offset?, now?}; probed on a DATE field the probe inserts",
+  },
+  // Symbols (protocol 78, engine ADR 1039).
+  {
+    op: "createSymbol",
+    status: "supported",
+    note: "proto 78, ADR 1039; {name, elementIds, symbolId?, replace?, nineSlice?}; probed on a scratch frame",
+  },
+  {
+    op: "redefineSymbol",
+    status: "supported",
+    note: "proto 78, ADR 1039; {symbolId, elementIds, name?, nineSlice?, replace?}; probed renaming a scratch symbol",
+  },
+  {
+    op: "placeSymbolInstance",
+    status: "supported",
+    note: "proto 78, ADR 1039; {symbolId, pageId, at?, linear?, nineSlice?}; probed placing a scratch symbol",
+  },
+  {
+    op: "breakSymbolLink",
+    status: "supported",
+    note: "proto 78, ADR 1039; {elementId}; probed on an instance of a scratch symbol",
+  },
+  {
+    op: "deleteSymbol",
+    status: "supported",
+    note: "proto 78, ADR 1039; {symbolId}; probed on a scratch symbol",
+  },
+  {
+    op: "expandAppearance",
+    status: "supported",
+    note: "proto 78, engine ADR 1042; {elementId}; probed on a scratch frame with a zig zag",
   },
 ];
 

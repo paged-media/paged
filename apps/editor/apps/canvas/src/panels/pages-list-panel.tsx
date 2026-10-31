@@ -93,7 +93,7 @@ export function PagesListPanel() {
     if (vw < 10 || vh < 10 || !handle) return;
     const idx = handle.pageIds.indexOf(pageId);
     if (idx < 0) return;
-    const rects = layoutPages(handle.pageSizesPt);
+    const rects = layoutPages(handle.pageSizesPt, handle.pageOriginsPt);
     const rect = rects[idx];
     if (rect) animateCamera(fitCamera(vw, vh, rect));
   };

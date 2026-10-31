@@ -41,6 +41,8 @@
  *  `"general"` is Excel's default (numbers right, text left), resolved
  *  in Rust; the lowered text is already the formatted value, so the
  *  translator treats alignment as an opaque tag it forwards. */
+import type { NativeFx } from "./chart";
+
 export type Align = "general" | "left" | "center" | "right";
 
 /** One column's geometry: its sparse model index + lowered width (pt). */
@@ -314,6 +316,11 @@ export interface LoweredPicture {
   inCell: boolean;
   /** The image (`data:<type>;base64,…`). */
   uri: string;
+  /** A drawing picture's opacity and effects, as the shared DrawingML
+   *  mapper lowered them (sheet ADR 527). */
+  fx?: NativeFx;
+  /** What the page cannot hold of its look, one line per kind. */
+  losses?: string[];
 }
 
 /** The `index` of a frame page's printed heading row and heading column

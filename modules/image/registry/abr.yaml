@@ -5,8 +5,8 @@
 # WHY A SIBLING REGISTRY. registry/psd-blocks.yaml tracks the
 # fidelity ladder of PSD/PSB *blocks* against the round-trip invariant
 # (state_row image.psd.roundtrip). `.abr` is a different container and a
-# different claim: it is a READER, it writes nothing, and its ladder
-# tops out at `parsed`. The two descriptor-family primitives it is built
+# different claim: it is a READER plus a separate WRITER row (image.abr.writer), and its
+# reader ladder tops out at `parsed`. The two descriptor-family primitives it is built
 # on — image.psd.descriptor and image.psd.vm-array-list — DO live in
 # psd-blocks.yaml, because they are `image-psd` structures that outlive
 # this lane (adjustment layers, layer effects, the text engine, and
@@ -224,24 +224,22 @@
     - "abr-brush-format-spec.md §0 — 'a sampled tip is literally the alpha bitmap a brush engine paints with'. image-gpu::dab::SampledTip makes it one, behind a TipCoverage trait that BrushTip also implements, so StrokeAccumulator::stamp is generic and there is no second paint path."
     - "abr-brush-format-spec.md §5.3 RESOLVED — Dmtr maps to the bitmap's LARGER dimension: Dmtr == max(w,h) in 3,176 of 3,202 tips, measured on 234 distinct w x h pairs in one fixture alone, which excludes width/height/diagonal. The 26 exceptions are authors having dragged the size slider, so max(w,h) is the DEFAULT, not an invariant — a reader must never derive one from the other, and painting the bitmap at native size would render some tips 4x too large. [OBS]"
     - "abr-brush-format-spec.md §2.5 — the coverage polarity the bridge relies on (255 = painted, no inversion); see image.abr.samp."
-  # DECLINED — ROTATION. Angl is in degrees (certain: the unit code says
-  # so, on 3,218/3,218 tips), but its SIGN CONVENTION and its
-  # composition order with flipX/flipY cannot be settled by parsing —
-  # they are rendering semantics that need a reference rendering of a
-  # known asymmetric tip from Photoshop (§5.1, §14.2 item 9, §14.3
-  # bucket B). SampledTip therefore does not rotate. Picking a
-  # handedness would be silently wrong on half the world's brushes.
+  # ROTATION AND WIRING (WP5.7). The brush engine now stamps sampled
+  # tips from `abr_tip` (image-js/src/brushes.rs `tip_bitmap`) and
+  # rotates them by Angl. Rotation convention: see oracle fixture
+  # brush-strokes (the Photoshop recording that settles the sign and the
+  # composition order with flipX/flipY) — the reader still only reports
+  # the degrees and resolves nothing about handedness.
   #
   # RECORDED DECISION — roundness squashes the VERTICAL axis at zero
   # rotation. Rndn was 100% on 3,205 of 3,205 corpus tips, so this is a
   # rendering choice with no field coverage, not a measured fact.
   #
-  # NOT WIRED — nothing in image-js calls this yet; the wasm surface is
-  # unchanged and the artifact is 1,276,293 B against the 8 MiB budget
-  # (400 B under the pre-change 1,276,693 B, since the reader is
-  # dead-code-eliminated from the wasm build). Exposing a "load .abr"
-  # door to the bundle is the next step and is deliberately not taken
-  # here.
+  # WIRED — `abr_presets` projects every parsed field (a nested
+  # `dynamics` object per preset; see image.abr.brush-options), `abr_tip`
+  # hands the glue a preset's bitmap, and glue/src/abr-preset.ts maps the
+  # projection onto the brush engine's settings, naming what it cannot
+  # apply.
   tests:
     rust:
       - "image-gpu/src/dab.rs (unit, all image_abr_engine_bridge_sampled_tip_*: _rejects_a_bitmap_whose_length_disagrees_with_its_bounds, _stored_values_are_coverage_and_are_never_inverted, _defaults_its_diameter_to_the_larger_dimension, _scales_the_bitmap_to_the_preset_diameter, _is_not_transposed_by_a_non_square_bitmap, _roundness_squashes_the_minor_axis, _flips_mirror_the_bitmap, _is_sub_pixel_positionable_like_the_round_tip, _rides_the_same_accumulation_rule_as_the_round_tip, _walks_a_stroke_through_plan_segment_unchanged, _outside_the_field_stamps_nothing)"
@@ -274,3 +272,35 @@
       - "image-conformance/src/abr_corpus/ (unit: image_abr_corpus_profile_loads_with_its_headline_totals, image_abr_corpus_ledger_loads_one_row_per_record, image_abr_corpus_json_* x4, image_abr_corpus_sha256_* x2 — the loader and its dependency-free JSON/SHA-256 primitives, the latter checked against the published FIPS 180-4 vectors)"
       - "image-conformance/tests/it/abr_lane_a.rs (LANE A, always on: image_abr_lane_a1_* x3, _a2_* x4, _a3_* x3, _a4_* x4, _a5_* x3, _a6_* x4, _a7_* x2)"
       - "image-conformance/tests/it/abr_corpus.rs (LANE B, #[ignore]d + PAGED_ABR_CORPUS=1: image_abr_corpus_b1_every_file_matches_its_profile_row, _b2_every_record_matches_the_ledger_including_its_digest, _b3_the_published_png_alpha_settles_the_polarity, _b4_the_aggregates_match_the_published_tables)"
+
+- id: image.abr.brush-options
+  state_row: image.psd.abr
+  tier: parsed
+  oracle: independent-emitter
+  provenance:
+    - "abr-brush-format-spec.md §7.1 — `Rpt ` (a FOUR-byte key with a trailing space: corpus profile `Rpt |bool`, 3,215/3,215) and `brushGroup` were on every brush and in no published vocabulary. `Rpt ` is typed as BUILD-UP: it is the one brush-level boolean Photoshop's Brush Settings panel shows that no other key accounts for once every key is named. [OBS] for presence; [UNSURE] for the meaning, recorded as such on BrushOptions::build_up. (The independent emitter used to write it as the 3-byte long-form `Rpt`; corrected to the profile's 4-byte form.)"
+    - "abr-brush-format-spec.md §7.2 — the smoothing group (`smoothing`, `smoothingValue` doub, `smoothingRadiusMode`, `smoothingCatchup`, `smoothingCatchupAtEnd`, `smoothingZoomCompensation`, `pressureSmoothing`, `Smoo` long), `protectTexture`, `usePressureOverridesSize`/`Opacity` and `useLegacy` each occur ONCE in the corpus — the same count as the one `toolOptions` descriptor — and the profile records keys without their parent. The reader reads each from the brush descriptor first and falls back to `toolOptions`, recording which answered (OptionSource). [OBS] count; parent [UNSURE]."
+    - "smoothingValue is a bare doub whose one observation cannot fix its scale; it is kept RAW and the projection reads it on the options bar's 0..100 scale (Smoothing::amount). `Smoo` is retained raw and not interpreted. `interpretation` (5 brushes) is preserved, not acted on."
+  tests:
+    rust:
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_brush_model_unmodelled_keys_survive_on_the_descriptor — now also asserts the typed Build-up / brushGroup / interpretation; image_abr_brush_model_tool_options_class_id_names_the_tool_and_unknown_ids_fall_back — smoothing typed FROM toolOptions; image_abr_brush_model_brush_level_options_are_typed_on_the_brush_first)"
+      - "image-js/src/brushes.rs (unit: image_abr_engine_bridge_exports_and_projects_every_dynamics_group, image_abr_engine_bridge_the_wire_shape_is_pinned_on_both_sides)"
+
+- id: image.abr.writer
+  state_row: image.psd.abr
+  tier: written
+  oracle: own-reader-round-trip
+  provenance:
+    - "paged-psd/src/abr/write.rs — a v6.2 emitter from the typed view: `samp` records are UNCOMPRESSED virtual memory array lists in the shape real files have (56 slots, the plane in slot 55, two empty slots after the pixels: §2.2), `desc` is version 16 with a `null` root and the `Brsh` list. Every group is written under its gate with the reader's per-key percent scales; a key of four bytes is a 4-character code, a longer one long-form (the corpus split, §4.1). toolOptions goes back verbatim."
+    - "Round trip: write → AbrFile::parse reproduces every typed field and the sampled coverage byte for byte; the independent emitter's files survive emitter → reader → writer → reader with no new warning."
+  # NOT WRITTEN: `patt` (patterns stay opaque, so a texture's Idnt is
+  # written as read and dangles the same way), `phry` (no folder tree),
+  # and from the glue's export door the texture group and a dual tip's
+  # bitmap (see brushes.rs EXPORT_KEYS). Whether PHOTOSHOP loads the
+  # output is a separate claim this row does not make until an oracle
+  # recording loads one.
+  tests:
+    rust:
+      - "paged-psd/src/abr/write.rs (unit: image_abr_write_round_trips_every_typed_field, _a_plain_round_brush_parses_with_no_warnings, _tool_options_go_back_verbatim_with_their_keys, _pads_every_section_to_four_bytes)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_write_the_independent_emitters_files_survive_a_rewrite)"
+      - "image-js/src/brushes.rs (unit: image_abr_engine_bridge_exports_and_projects_every_dynamics_group, image_abr_engine_bridge_export_refuses_a_mis_sized_value_list)"

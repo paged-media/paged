@@ -173,7 +173,9 @@ export type {
 export {
   ContentSelectionProvider,
   heldTypingStyle,
+  pinToPage,
   useContentSelection,
+  type PagePin,
   type TypingStyle,
 } from "./state/content-selection-context";
 
@@ -187,6 +189,8 @@ export {
   HAND_TOOL_ID,
   DIRECT_SELECT_TOOL_ID,
   ZOOM_TOOL_ID,
+  CONTEXT_SHARED_TOOL_IDS,
+  toolStaysInContext,
   type ActiveToolState,
   type ToolChangeReason,
   type ToolContextValue,
@@ -253,6 +257,7 @@ export {
   // K-9 — what the tool-preview slot holds: one shape or a list.
   type ToolPreviewSlot,
   type ToolPreviewText,
+  type ToolPreviewHandle,
   // W-20 — one retained plugin overlay layer.
   type OverlayLayerEntry,
 } from "./state/overlay-signals-context";
@@ -383,6 +388,20 @@ export {
   type DocumentContextStore,
   type StatusItemContribution,
   type StatusItemRegistry,
+  type MarginBandContribution,
+  type MarginBandRegistry,
+  createMarginBandRegistry,
+  createPresentationRegistry,
+  createViewRegistry,
+  PRESENTATION_ATTR,
+  type PresentationContribution,
+  type PresentationRegistry,
+  type ViewContribution,
+  type ViewRegistry,
+  createSubContextRegistry,
+  type SubContextRegistry,
+  type SubContextSpec,
+  type SubContextState,
 } from "./registries";
 
 // ── W3.2 — edit-context + object-type registries (B-02 / W-03) ──
@@ -430,6 +449,12 @@ export {
   useEditContextEntry,
   type DoubleClickHit,
 } from "./state/use-edit-context-entry";
+export {
+  SubContextController,
+  storyEndOffset,
+  useSubContextEntry,
+  type SubContextDoubleClick,
+} from "./state/sub-context-controller";
 export {
   useSelectionObjectType,
   useSelectionEditContext,
@@ -618,6 +643,10 @@ export {
   renderPreviewShape,
   pageDecorationsContribution,
   isolationDimContribution,
+  subContextContribution,
+  subContextHole,
+  marginBandContribution,
+  layoutBalloons,
   isolationScopeRoot,
   isolationOutline,
   isolationVeilPath,
@@ -637,6 +666,9 @@ export {
   type DataMarkerTone,
   tableCellOverlayContribution,
   snapLinesContribution,
+  gridOverlayContribution,
+  gridPath,
+  PIXEL_GRID_MIN_SCALE,
   applyAffine,
   type IdmlAffine,
   type OverlayHostProps,
@@ -717,7 +749,26 @@ export {
   type ProvidedProperty,
   type ProvidedWrite,
   type SelectionResolution,
+  useContextWorkspace,
+  useProvidedReadouts,
+  type ContextWorkspace,
+  type ShellWorkspace,
+  type ShellWorkspaceGuide,
+  type ShellWorkspaceResult,
+  type ShellWorkspaceView,
+  type ShellGuideEdit,
+  type ShellReadoutSection,
+  type ShellReadoutsResult,
 } from "./catalog/binding-providers";
+// Extensions ADR 340 — the geometry of an edit context's workspace.
+export {
+  workspaceDocRect,
+  ptPerRulerUnit,
+  pageToBase,
+  baseToPage,
+  snapToGuideStep,
+  workspaceGridEvery,
+} from "./state/context-workspace";
 // The tree arithmetic is pure and exported so a panel (or a future
 // virtualized primitive) can flatten the same way the renderer does.
 export {
@@ -972,8 +1023,25 @@ export {
   setViewToggle,
   subscribeViewToggles,
   toggleViewToggle,
+  viewModeOf,
+  type ViewModeName,
   type ViewToggle,
 } from "./state/view-toggles";
+export {
+  DEFAULT_VIEW_PREFERENCES,
+  gridStep,
+  resetViewPreferences,
+  setViewPreferences,
+  subscribeViewPreferences,
+  useViewPreferences,
+  viewPreferences,
+  type ViewPreferences,
+} from "./state/view-preferences";
+export {
+  snapSettingsOf,
+  workspaceViewOf,
+  ViewSettingsSync,
+} from "./state/view-settings-sync";
 
 export {
   chromeStorageScope,

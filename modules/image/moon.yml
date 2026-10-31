@@ -24,7 +24,7 @@ dependsOn:
     scope: "development"
 
 # The engine crates the Cargo workspace path-depends on (paged-pixel,
-# paged-psd) are inputs here too, so `moon ci` re-runs this project when one
+# paged-psd, paged-resample) are inputs here too, so `moon ci` re-runs this project when one
 # of them changes. (Project file groups replace the workspace ones, so the
 # defaults are restated.)
 fileGroups:
@@ -39,6 +39,8 @@ fileGroups:
     - "/engine/core/crates/paged-pixel/Cargo.toml"
     - "/engine/core/crates/paged-psd/**/*.rs"
     - "/engine/core/crates/paged-psd/Cargo.toml"
+    - "/engine/core/crates/paged-resample/**/*.rs"
+    - "/engine/core/crates/paged-resample/Cargo.toml"
   rust-tests:
     - "**/*"
     - "!docs/**"
@@ -47,6 +49,7 @@ fileGroups:
     - "/engine/core/Cargo.toml"
     - "/engine/core/crates/paged-pixel/**/*"
     - "/engine/core/crates/paged-psd/**/*"
+    - "/engine/core/crates/paged-resample/**/*"
 
 tasks:
   js-check:

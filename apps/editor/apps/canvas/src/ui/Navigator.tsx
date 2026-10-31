@@ -47,6 +47,9 @@ const M = defineMessages("app.uiNavigator", {
 export interface NavigatorProps {
   pageIds: ReadonlyArray<PageId>;
   pageSizesPt: ReadonlyArray<readonly [number, number]>;
+  /** Engine ADR 1011 — each page's top-left on the canvas, pt (absent:
+   *  the pages stack). */
+  pageOriginsPt?: ReadonlyArray<readonly [number, number]>;
   snapshots: ReadonlyMap<PageId, string>;
   viewportSize: readonly [number, number];
   onCameraChange: (cam: Camera) => void;
@@ -55,7 +58,7 @@ export interface NavigatorProps {
 const THUMB_WIDTH_PX = 120;
 
 export function Navigator(props: NavigatorProps) {
-  const rects = layoutPages(props.pageSizesPt);
+  const rects = layoutPages(props.pageSizesPt, props.pageOriginsPt);
   const strings = useStrings();
   const { observe: observeNear, has: isNear } = useNearViewport();
 

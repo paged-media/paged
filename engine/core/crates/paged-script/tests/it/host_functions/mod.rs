@@ -50,34 +50,42 @@ use serde_json::Value;
 
 mod console;
 mod document;
+mod effects;
 mod frames;
 mod history;
 mod layers;
 mod pages;
 mod paths;
 mod reads;
+mod review;
 mod selection;
 mod styles;
 mod swatches;
+mod symbols;
 mod tables;
 mod text;
+mod word_structure;
 mod xml;
 
 /// The row files, read for the enumeration gate.
 const ROW_SOURCES: &[&str] = &[
     include_str!("console.rs"),
     include_str!("document.rs"),
+    include_str!("effects.rs"),
     include_str!("frames.rs"),
     include_str!("history.rs"),
     include_str!("layers.rs"),
     include_str!("pages.rs"),
     include_str!("paths.rs"),
     include_str!("reads.rs"),
+    include_str!("review.rs"),
     include_str!("selection.rs"),
     include_str!("styles.rs"),
     include_str!("swatches.rs"),
+    include_str!("symbols.rs"),
     include_str!("tables.rs"),
     include_str!("text.rs"),
+    include_str!("word_structure.rs"),
     include_str!("xml.rs"),
 ];
 

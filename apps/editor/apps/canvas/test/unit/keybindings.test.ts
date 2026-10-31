@@ -38,18 +38,24 @@ import {
   type KeybindingContribution,
 } from "@paged-media/shell";
 
-import { SLIDE_KEYBINDINGS } from "@paged-media/slide";
+import {
+  DECK_CONTEXT,
+  SLIDE_KEYBINDINGS,
+  SLIDE_NORMAL_VIEW_KEYS,
+} from "@paged-media/slide";
 
 import { APP_KEYBINDINGS } from "../../src/app-commands";
 import { INSERT_KEYBINDINGS } from "../../src/insert-commands";
 import { OBJECT_KEYBINDINGS } from "../../src/object-commands";
 import { SELECT_ALL_KEYBINDINGS } from "../../src/select-all";
+import { VIEW_KEYBINDINGS } from "../../src/view-commands";
 
 const TABLES: KeybindingContribution[] = [
   ...APP_KEYBINDINGS,
   ...SELECT_ALL_KEYBINDINGS,
   ...OBJECT_KEYBINDINGS,
   ...INSERT_KEYBINDINGS,
+  ...VIEW_KEYBINDINGS,
 ];
 
 /** A key event from a registered combo. `cmd+shift+]` is reported with
@@ -391,6 +397,47 @@ describe("the tables as a whole", () => {
     ).not.toContain("media.paged.slide");
   });
 
+  // Editor ADR 307: inside a deck (the slide bundle's document context)
+  // PowerPoint's Normal-view keys outrank the host's binding on the same
+  // key; outside one the host's keys are untouched.
+  test("in a deck, Cmd/Ctrl+M, Cmd/Ctrl+D and PageUp/PageDown are the slide verbs; outside one they stay the host's", () => {
+    covers(
+      "keybinding:cmd+m→media.paged.slide.command.newSlide",
+      "keybinding:cmd+d→media.paged.slide.command.duplicateSlide",
+      "keybinding:pageup→media.paged.slide.command.previousSlide",
+      "keybinding:pagedown→media.paged.slide.command.nextSlide",
+    );
+    const deck: KeybindingContribution[] = SLIDE_NORMAL_VIEW_KEYS.map((k) => ({
+      key: k.key,
+      command: k.command,
+      scope: { editContext: DECK_CONTEXT },
+      when: () => true,
+    }));
+    const all = [...TABLES, ...deck];
+    const inDeck = at({ documentContext: DECK_CONTEXT } as never);
+    for (const k of deck)
+      expect(
+        resolveBinding(all, press(k.key), () => inDeck)?.command,
+        k.key,
+      ).toBe(k.command);
+    // Outside a deck: Place keeps Cmd+D, the page keys page.
+    expect(resolveBinding(all, press("cmd+d"), () => AT_ROOT)?.command).toBe(
+      "paged.insert.placeImage",
+    );
+    expect(
+      resolveBinding(all, press("pagedown"), () => AT_ROOT)?.command,
+    ).not.toContain("media.paged.slide");
+    // A frame-level context above the deck (a sheet entered on a slide)
+    // takes the scope away.
+    const inSheet = at({
+      documentContext: DECK_CONTEXT,
+      editContext: { type: "sheet" },
+    } as never);
+    expect(
+      resolveBinding(all, press("cmd+m"), () => inSheet)?.command,
+    ).not.toBe("media.paged.slide.command.newSlide");
+  });
+
   // Finding SH-9 (UX F-16), fixed: Cmd+0 and Cmd+1 (Zoom to 100%) worked
   // through a canvas hook, not the registry, so the View menu showed no
   // chord for them and a plugin could not see or rebind them. F-31 (ADR
@@ -442,5 +489,65 @@ describe("the tables as a whole", () => {
     expect(fires("pageup")).toBe("paged.view.previousPage");
     expect(fires("pagedown")).toBe("paged.view.nextPage");
     expect(fires("end")).toBe("paged.view.lastPage");
+  });
+});
+
+describe("the View menu's chords (editor ADR 287)", () => {
+  test("each fires its command, the Mac's Option and Shift glyphs included", () => {
+    covers(
+      "keybinding:cmd+y→paged.view.outline",
+      "keybinding:ctrl+y→paged.view.outline",
+      "keybinding:alt+shift+cmd+y→paged.view.overprintPreview",
+      "keybinding:alt+shift+ctrl+y→paged.view.overprintPreview",
+      "keybinding:alt+cmd+y→paged.view.pixelPreview",
+      "keybinding:alt+ctrl+y→paged.view.pixelPreview",
+      "keybinding:cmd+'→paged.view.showGrid",
+      "keybinding:ctrl+'→paged.view.showGrid",
+      "keybinding:shift+cmd+'→paged.view.snapToGrid",
+      "keybinding:shift+ctrl+'→paged.view.snapToGrid",
+      "keybinding:cmd+u→paged.view.smartGuides",
+      "keybinding:ctrl+u→paged.view.smartGuides",
+      "keybinding:shift+cmd+1→paged.view.resetRotation",
+      "keybinding:shift+ctrl+1→paged.view.resetRotation",
+    );
+    for (const k of VIEW_KEYBINDINGS) {
+      expect({ key: k.key, fired: fires(k.key) }).toEqual({
+        key: k.key,
+        fired: k.command,
+      });
+    }
+    // What a Mac reports: Option changes the letter, Shift the digit and
+    // the quote — the physical key still matches.
+    const real = (
+      key: string,
+      code: string,
+      mods: { meta?: boolean; alt?: boolean; shift?: boolean },
+    ) =>
+      resolveBinding(
+        TABLES,
+        {
+          key,
+          code,
+          metaKey: !!mods.meta,
+          ctrlKey: false,
+          altKey: !!mods.alt,
+          shiftKey: !!mods.shift,
+        } as ReturnType<typeof press>,
+        () => AT_ROOT,
+      )?.command ?? null;
+    expect(real("Á", "KeyY", { meta: true, alt: true, shift: true })).toBe(
+      "paged.view.overprintPreview",
+    );
+    expect(real("¥", "KeyY", { meta: true, alt: true })).toBe(
+      "paged.view.pixelPreview",
+    );
+    expect(real("!", "Digit1", { meta: true, shift: true })).toBe(
+      "paged.view.resetRotation",
+    );
+    expect(real('"', "Quote", { meta: true, shift: true })).toBe(
+      "paged.view.snapToGrid",
+    );
+    // Cmd+1 without Shift stays 100 %.
+    expect(real("1", "Digit1", { meta: true })).toBe("paged.view.zoom100");
   });
 });

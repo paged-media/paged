@@ -75,7 +75,70 @@ export interface LoweredRun {
    *  (`docx_core::MergeField`). The text pours as ordinary text; the bundle's
    *  object model addresses the field (`mergeField`). Absent otherwise. */
   mergeField?: LoweredMergeField | null;
+  /** Doc ADR 612 — a Word field the engine keeps live: the run's text is
+   *  (part of) its result; the runs of one field share `seq`. */
+  field?: LoweredField | null;
+  /** Doc ADR 611 — a footnote or endnote reference: the run's text is the
+   *  engine's marker character, which `insertFootnote` / `insertEndnote`
+   *  writes. */
+  note?: LoweredNoteRef | null;
+  /** Doc ADR 613 — the tracked insertion or deletion the run's text is. */
+  change?: LoweredChange | null;
+  /** Doc ADR 613 — the run's tracked format change. */
+  formatChange?: LoweredFormatChange | null;
+  /** Doc ADR 613 — the comments (`docx-c<w:id>`) whose range covers it. */
+  comments?: string[];
 }
+
+/** Doc ADR 613 — one tracked change, as `recordChange` records it. */
+export interface LoweredChange {
+  id: string;
+  /** `insert` / `delete` / `format` / `paraProps` / `insertMark` /
+   *  `deleteMark`. */
+  kind: string;
+  author?: string | null;
+  date?: string | null;
+}
+
+/** Doc ADR 613 — a run's format change and its look before. */
+export interface LoweredFormatChange {
+  change: LoweredChange;
+  beforeCharStyleId?: string | null;
+}
+
+/** Doc ADR 613 — a paragraph's property change and its style before. */
+export interface LoweredPropsChange {
+  change: LoweredChange;
+  beforeParaStyleId?: string | null;
+}
+
+/** Doc ADR 613 — one comment: a thread's first comment, or a reply. */
+export interface LoweredComment {
+  id: string;
+  parentId?: string | null;
+  author?: string | null;
+  initials?: string | null;
+  date?: string | null;
+  /** Paragraphs separated by `\n`. */
+  text: string;
+  resolved?: boolean;
+}
+
+export interface LoweredField {
+  /** The instruction (`PAGE \* roman`, `PAGEREF _Toc1 \h`). */
+  code: string;
+  /** Which field of its paragraph (0-based). */
+  seq: number;
+}
+
+export interface LoweredNoteRef {
+  id: number;
+  endnote: boolean;
+}
+
+/** The engine's note reference markers (paged-model). */
+export const FOOTNOTE_MARKER = "\u{E01C}";
+export const ENDNOTE_MARKER = "\u{E01D}";
 
 /** A Word `MERGEFIELD` (mail merge) as `docx-import` parsed it. */
 export interface LoweredMergeField {
@@ -112,6 +175,10 @@ export interface LoweredParagraph {
   /** The Word list this paragraph is an item of (`w:numId`) and its level.
    *  Absent when it is not a list item. */
   list?: LoweredListRef;
+  /** Doc ADR 613 — the paragraph mark's tracked insertion or deletion. */
+  markChange?: LoweredChange | null;
+  /** Doc ADR 613 — the tracked change of the paragraph's properties. */
+  propsChange?: LoweredPropsChange | null;
 }
 
 /** A list paragraph's list identity. */
@@ -142,7 +209,22 @@ export interface LoweredImage {
    *  engine can create a positioned, wrapped anchored object. Absent for an
    *  inline picture. */
   float?: LoweredFloat;
+  /** Doc ADR 614 — a float placed as an anchored object: the engine's
+   *  anchored-object settings, set on the frame `insertAnchoredFrame` makes. */
+  anchor?: LoweredAnchor;
+  /** Doc ADR 618 — the picture's DrawingML look as the shared mapper
+   *  (`dml-native`) lowered it: fill, outline, opacity and effects, colours
+   *  as `#RRGGBB`. Painted on the picture's anchored frame (doc ADR 619).
+   *  Absent for a plain picture. */
+  fx?: NativeFx;
+  /** What the engine cannot hold of the look, one line per kind. */
+  losses?: string[];
 }
+
+/** `dml_native::native::NativeFx` (doc ADR 618): the lowering kit's own
+ *  type (plugin-sdk), colours `#RRGGBB`; lengths pt; opacities 0–100. */
+import type { NativeFx } from "@paged-media/plugin-sdk";
+export type { NativeFx };
 
 /** A floating drawing's position and wrap, in points, Word's vocabulary. */
 export interface LoweredFloat {
@@ -163,6 +245,8 @@ export interface LoweredFloat {
   relativeHeight: number;
   /** `wp:simplePos` (x, y) from the page's top-left, when used. */
   simplePosPt?: [number, number];
+  /** `wp:wrapPolygon`, in the drawing's own points. */
+  wrapPolygonPt?: [number, number][];
 }
 
 /** One axis of a float's position. */
@@ -208,6 +292,10 @@ export interface LoweredTable {
   /** See `LoweredBlock`'s table: the paragraphs it pours as when it cannot
    *  be a native table. */
   flow?: LoweredParagraph[];
+  /** Doc ADR 614 — the table's own paragraph's style (Word's `w:jc`). */
+  paraStyleId?: string | null;
+  /** Doc ADR 614 — what the engine does not lay out yet, carried. */
+  layout?: LoweredTableLayout;
 }
 
 /** One table cell, addressed by its resolved grid position. */
@@ -222,6 +310,8 @@ export interface LoweredCell {
   insetsPt?: [number, number, number, number];
   /** `TopAlign` / `CenterAlign` / `BottomAlign` (Word's `w:vAlign`). */
   vAlign?: string;
+  /** Doc ADR 614 — Word's borders and shading on the cell's edges. */
+  look?: LoweredCellLook;
 }
 
 export interface LoweredSection {
@@ -254,6 +344,61 @@ export interface LoweredSection {
    *  else). Absent: Word's defaults. */
   footnoteNumbering?: LoweredNoteNumbering;
   endnoteNumbering?: LoweredNoteNumbering;
+  /** Doc ADR 611 — the masters this section's story's pages take. */
+  masters?: LoweredSectionMasters;
+  /** Doc ADR 611 — the grow rule's section start (`oddPage`/`evenPage`). */
+  sectionStart?: "newPage" | "oddPage" | "evenPage";
+}
+
+export interface LoweredSectionMasters {
+  master?: string;
+  firstMaster?: string;
+  evenMaster?: string;
+}
+
+/** Doc ADR 611 — a master the skeleton writes, with its header and footer
+ *  frames' stories. */
+export interface LoweredMaster {
+  id: string;
+  name: string;
+  section: number;
+  kind: "default" | "first" | "even";
+  pageWidthPt: number;
+  pageHeightPt: number;
+  header?: LoweredMasterFrame;
+  footer?: LoweredMasterFrame;
+}
+
+export interface LoweredMasterFrame {
+  /** Index into `LoweredDoc.headerFooterParts`. */
+  part: number;
+  storyId: string;
+  frameId: string;
+  bounds: [number, number, number, number];
+  bottomAligned?: boolean;
+}
+
+export interface LoweredHeaderFooterPart {
+  part: string;
+  footer: boolean;
+  paragraphs: LoweredParagraph[];
+}
+
+/** Doc ADR 611 — a footnote or endnote. */
+export interface LoweredNote {
+  id: number;
+  endnote: boolean;
+  paragraphs: LoweredParagraph[];
+  /** The text the engine's note holds (paragraphs joined by `\n`). */
+  text: string;
+}
+
+/** Doc ADR 612 — a Word table of contents in the body. */
+export interface LoweredToc {
+  instruction: string;
+  firstBlock: number;
+  endBlock: number;
+  levels: [number, number];
 }
 
 /** One section's headers and footers, by part name (`word/header1.xml`). */
@@ -306,6 +451,94 @@ export interface LoweredDoc {
   colorGroups?: LoweredColorGroup[];
   /** Doc ADR 609 — the theme's Latin heading and body faces. */
   themeFonts?: { major?: string; minor?: string };
+  /** Doc ADR 611 — every header and footer part, lowered. */
+  headerFooterParts?: LoweredHeaderFooterPart[];
+  /** Doc ADR 611 — the masters the standalone skeleton writes. */
+  masters?: LoweredMaster[];
+  /** Doc ADR 611 — the notes referenced from the body. */
+  notes?: LoweredNote[];
+  /** Doc ADR 612 — the tables of contents in the body. */
+  tocs?: LoweredToc[];
+  /** Doc ADR 613 — the comments, threads in order. */
+  comments?: LoweredComment[];
+  /** Doc ADR 613 — Word records changes in this document. */
+  trackChanges?: boolean;
+  /** Doc ADR 614 — floating pictures and text boxes placed as page items. */
+  pageItems?: LoweredPageItem[];
+}
+
+/** Doc ADR 614 — a float's anchored-object settings, the engine's names. */
+export interface LoweredAnchor {
+  /** `Anchored` (custom) or `AbovePosition`. */
+  position: string;
+  anchorPoint: string;
+  horizontalReference: string;
+  horizontalAlignment: string;
+  verticalReference: string;
+  verticalAlignment: string;
+  xOffsetPt: number;
+  yOffsetPt: number;
+}
+
+/** Doc ADR 614 — one cell edge as the engine strokes it. */
+export interface LoweredEdge {
+  weightPt: number;
+  /** A swatch token. */
+  color: string;
+}
+
+/** Doc ADR 614 — a cell's edges and fill. */
+export interface LoweredCellLook {
+  top: LoweredEdge;
+  left: LoweredEdge;
+  bottom: LoweredEdge;
+  right: LoweredEdge;
+  fill?: string;
+}
+
+/** Doc ADR 614 — table layout Word asks for that the engine does not do. */
+export interface LoweredTableLayout {
+  fixed?: boolean;
+  widthPt?: number;
+  widthPct?: number;
+  cellWidthsPt?: (number | null)[];
+  indentPt?: number;
+  cantSplit?: boolean[];
+  exactRows?: boolean[];
+}
+
+/** Doc ADR 614 — a page item's text wrap (the engine's `TextWrap`). */
+export interface LoweredWrap {
+  mode: string;
+  offsetsPt: [number, number, number, number];
+  side?: string;
+  contour?: string;
+  polygonPt?: [number, number][];
+}
+
+/** Doc ADR 614 — a float or text box placed as a page item, written into
+ *  the standalone skeleton; the bundle pours a text box's story. */
+export interface LoweredPageItem {
+  id: string;
+  host: { kind: "page"; pageId: string } | { kind: "master"; masterId: string };
+  bounds: [number, number, number, number];
+  item:
+    | { kind: "picture"; uri: string }
+    | {
+        kind: "textBox";
+        storyId: string;
+        paragraphs: LoweredParagraph[];
+        insetsPt: [number, number, number, number];
+      };
+  wrap?: LoweredWrap;
+  behind?: boolean;
+  fx?: NativeFx;
+  source: {
+    part: string;
+    ordinal?: number;
+    vml?: boolean;
+    editable?: boolean;
+  };
 }
 
 /** Parse the JSON string `docx-js` produces into a typed [`LoweredDoc`]. */

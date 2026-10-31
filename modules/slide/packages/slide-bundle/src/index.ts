@@ -32,9 +32,11 @@ export const slideBundle = defineBundle({
 export default slideBundle;
 export { slideEngine, SlideEngine } from "./engine.js";
 export type {
+  CommentReply,
   ImportReport,
   Imported,
   ItemReport,
+  SlideComment,
   SlideReport,
   Transition,
 } from "./engine.js";
@@ -56,4 +58,10 @@ export type {
 } from "./object-model.js";
 export { SLIDE_PANEL_FIELDS, type PanelFieldList } from "./panel-fields.js";
 export { slidePanels, addressFor } from "./panels.js";
-export { SLIDE_KEYBINDINGS } from "./commands.js";
+export {
+  CMD as SLIDE_COMMANDS,
+  DECK_CONTEXT,
+  SLIDE_KEYBINDINGS,
+  SLIDE_NORMAL_VIEW_KEYS,
+} from "./commands.js";
+export { COMMENTS_PANEL_ID } from "./activate.js";

@@ -18,7 +18,8 @@
 
 // The Slides panel: the deck's slides in order as thumbnails. Click goes to
 // a slide, dragging reorders (movePage), and each slide can be duplicated,
-// deleted or hidden from the slideshow. Every action is one engine
+// deleted (its buttons, or Delete on the focused thumbnail) or hidden from
+// the slideshow. Every action is one engine
 // mutation, so one undo step. Display glue only: what a slide is comes
 // from SlidesStore.
 
@@ -40,7 +41,8 @@ import {
 } from "../slides-model.js";
 import { color } from "@paged-media/panel-kit";
 
-import { SLIDES } from "../messages.js";
+import { changeLayout, resetSlide } from "../masters-commands.js";
+import { MASTERS, SLIDES } from "../messages.js";
 
 const list: React.CSSProperties = {
   display: "flex",
@@ -147,6 +149,38 @@ export function makeSlidesPanel(
         >
           {t(SLIDES.newSlide)}
         </button>
+        <button
+          type="button"
+          data-change-layout
+          disabled={busy || !store.activePage()}
+          title={t(MASTERS.changeLayout)}
+          onClick={() => {
+            const page = store.activePage();
+            if (!page) return;
+            setBusy(true);
+            void changeLayout(host, page, layout.masterId)
+              .catch((e) => host.log.warn(`paged.slide: ${String(e)}`))
+              .finally(() => setBusy(false));
+          }}
+        >
+          {t(MASTERS.changeLayout)}
+        </button>
+        <button
+          type="button"
+          data-reset-slide
+          disabled={busy || !store.activePage()}
+          title={t(MASTERS.resetSlide)}
+          onClick={() => {
+            const page = store.activePage();
+            if (!page) return;
+            setBusy(true);
+            void resetSlide(host, page)
+              .catch((e) => host.log.warn(`paged.slide: ${String(e)}`))
+              .finally(() => setBusy(false));
+          }}
+        >
+          ↺
+        </button>
       </div>
     );
   };
@@ -233,7 +267,21 @@ export function makeSlidesPanel(
                 <button
                   type="button"
                   title={t(SLIDES.goTo, { number: slide.number })}
+                  data-slide-thumb={slide.pageId}
                   onClick={() => void host.viewport.goToPage(slide.pageId)}
+                  // Delete or Backspace on the focused thumbnail deletes
+                  // its slide, as in PowerPoint's thumbnail pane; the
+                  // canvas's Delete (the selected object) never sees it.
+                  onKeyDown={(e) => {
+                    if (e.key !== "Delete" && e.key !== "Backspace") return;
+                    if (e.metaKey || e.ctrlKey || e.altKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (slides.length < 2) return;
+                    const next = slides[i + 1] ?? slides[i - 1];
+                    mutate(deleteMutation(slide.pageId, slides));
+                    if (next) void host.viewport.goToPage(next.pageId);
+                  }}
                   style={{
                     display: "block",
                     width: "100%",
@@ -262,7 +310,7 @@ export function makeSlidesPanel(
                     style={small}
                     title={t(SLIDES.deleteTitle)}
                     disabled={slides.length < 2}
-                    onClick={() => mutate(deleteMutation(slide.pageId))}
+                    onClick={() => mutate(deleteMutation(slide.pageId, slides))}
                   >
                     {t(SLIDES.delete)}
                   </button>

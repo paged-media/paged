@@ -897,10 +897,49 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             2,
         )
         .function(guarded(paged_move_page), js_string!("movePage"), 2)
+        .function(guarded(paged_place_page), js_string!("placePage"), 2)
+        .function(guarded(paged_create_symbol), js_string!("createSymbol"), 3)
+        .function(
+            guarded(paged_redefine_symbol),
+            js_string!("redefineSymbol"),
+            2,
+        )
+        .function(
+            guarded(paged_place_symbol_instance),
+            js_string!("placeSymbolInstance"),
+            4,
+        )
+        .function(
+            guarded(paged_break_symbol_link),
+            js_string!("breakSymbolLink"),
+            1,
+        )
+        .function(guarded(paged_delete_symbol), js_string!("deleteSymbol"), 1)
+        .function(
+            guarded(paged_expand_appearance),
+            js_string!("expandAppearance"),
+            1,
+        )
+        .function(guarded(paged_symbols), js_string!("symbols"), 0)
         .function(guarded(paged_on_master), js_string!("onMaster"), 2)
         .function(guarded(paged_create_master), js_string!("createMaster"), 2)
         .function(guarded(paged_delete_master), js_string!("deleteMaster"), 1)
         .function(guarded(paged_rename_master), js_string!("renameMaster"), 2)
+        .function(
+            guarded(paged_set_page_overrides),
+            js_string!("setPageOverrides"),
+            2,
+        )
+        .function(
+            guarded(paged_override_master_items),
+            js_string!("overrideMasterItems"),
+            3,
+        )
+        .function(
+            guarded(paged_insert_item_hyperlink),
+            js_string!("insertItemHyperlink"),
+            3,
+        )
         .function(
             guarded(paged_set_page_metadata),
             js_string!("setPageMetadata"),
@@ -948,7 +987,7 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("outlineStroke"),
             5,
         )
-        .function(guarded(paged_offset_path), js_string!("offsetPath"), 4)
+        .function(guarded(paged_offset_path), js_string!("offsetPath"), 5)
         .function(guarded(paged_simplify_path), js_string!("simplifyPath"), 2)
         .function(
             guarded(paged_pathfinder_boolean),
@@ -1366,6 +1405,68 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             guarded(paged_convert_note_to_text),
             js_string!("convertNoteToText"),
             1,
+        )
+        // Engine ADRs 1040 and 1020 — Word's review.
+        .function(guarded(paged_record_change), js_string!("recordChange"), 5)
+        .function(guarded(paged_accept_change), js_string!("acceptChange"), 1)
+        .function(guarded(paged_reject_change), js_string!("rejectChange"), 1)
+        .function(
+            guarded(paged_insert_comment),
+            js_string!("insertComment"),
+            4,
+        )
+        .function(guarded(paged_reply_comment), js_string!("replyComment"), 2)
+        .function(
+            guarded(paged_resolve_comment),
+            js_string!("resolveComment"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_comment),
+            js_string!("deleteComment"),
+            1,
+        )
+        .function(guarded(paged_edit_comment), js_string!("editComment"), 3)
+        // Engine ADRs 1018 and 1021.
+        .function(guarded(paged_find), js_string!("find"), 2)
+        .function(guarded(paged_find_replace), js_string!("findReplace"), 3)
+        .function(guarded(paged_set_list_level), js_string!("setListLevel"), 4)
+        .function(
+            guarded(paged_restart_numbering),
+            js_string!("restartNumbering"),
+            4,
+        )
+        .function(
+            guarded(paged_set_style_based_on),
+            js_string!("setStyleBasedOn"),
+            3,
+        )
+        // Engine ADR 1022.
+        .function(guarded(paged_update_fields), js_string!("updateFields"), 1)
+        .function(
+            guarded(paged_insert_text_anchor),
+            js_string!("insertTextAnchor"),
+            3,
+        )
+        .function(
+            guarded(paged_delete_text_anchor),
+            js_string!("deleteTextAnchor"),
+            1,
+        )
+        .function(
+            guarded(paged_insert_cross_reference),
+            js_string!("insertCrossReference"),
+            4,
+        )
+        .function(
+            guarded(paged_insert_table_of_contents),
+            js_string!("insertTableOfContents"),
+            4,
+        )
+        .function(
+            guarded(paged_insert_index_marker),
+            js_string!("insertIndexMarker"),
+            4,
         )
         .function(
             guarded(paged_create_bookmark),
@@ -2211,6 +2312,289 @@ fn paged_move_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRe
     }))
 }
 
+/// `paged.placePage(pageId, [x, y]?)` — put a page (an artboard) at
+/// `[x, y]` on the canvas, its top-left in pt; omitted/null returns it to
+/// its default slot (`Mutation::PlacePage`, v77, engine ADR 1011). A value
+/// that is not a pair of numbers refuses (`false`).
+fn paged_place_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at = args.get_or_undefined(1);
+    let origin_pt = if at.is_null_or_undefined() {
+        None
+    } else {
+        let Some(obj) = at.as_object() else {
+            return Ok(JsValue::from(false));
+        };
+        let len = obj
+            .get(js_string!("length"), ctx)
+            .ok()
+            .and_then(|v| v.as_number());
+        if len != Some(2.0) {
+            return Ok(JsValue::from(false));
+        }
+        let mut xy = [0.0f32; 2];
+        for (i, slot) in xy.iter_mut().enumerate() {
+            match obj.get(i as u32, ctx).ok().and_then(|v| v.as_number()) {
+                Some(n) => *slot = n as f32,
+                None => return Ok(JsValue::from(false)),
+            }
+        }
+        Some((xy[0], xy[1]))
+    };
+    Ok(apply_bool(&Mutation::PlacePage {
+        page: PageId(page),
+        origin_pt,
+    }))
+}
+
+/// `n` numbers from a JS array, or `None` when it is not one of that
+/// length.
+fn number_array<const N: usize>(value: &JsValue, ctx: &mut Context) -> Option<[f32; N]> {
+    let obj = value.as_object()?;
+    let len = obj
+        .get(js_string!("length"), ctx)
+        .ok()
+        .and_then(|v| v.as_number());
+    if len != Some(N as f64) {
+        return None;
+    }
+    let mut out = [0.0f32; N];
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = obj.get(i as u32, ctx).ok().and_then(|v| v.as_number())? as f32;
+    }
+    Some(out)
+}
+
+/// An optional string field of an options object.
+fn opt_field_string(
+    obj: Option<&JsObject>,
+    key: &str,
+    ctx: &mut Context,
+) -> JsResult<Option<String>> {
+    let Some(obj) = obj else { return Ok(None) };
+    let v = obj.get(js_string!(key), ctx)?;
+    if v.is_null_or_undefined() {
+        return Ok(None);
+    }
+    Ok(Some(v.to_string(ctx)?.to_std_string_escaped()))
+}
+
+/// `paged.createSymbol(name, [elementId, ...], { symbolId?, replace?,
+/// nineSlice? }?)` — make a symbol from page items (`Mutation::CreateSymbol`,
+/// v78, engine ADR 1039). With `replace` (the default) the items become an
+/// instance, which is selected. Returns the symbol's id, `null` when refused.
+fn paged_create_symbol(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let name = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_ids) =
+        strict_element_id_array(args.get_or_undefined(1), ctx).filter(|ids| !ids.is_empty())
+    else {
+        return Ok(JsValue::null());
+    };
+    let opts = args.get_or_undefined(2).as_object();
+    let symbol_id = opt_field_string(opts.as_ref(), "symbolId", ctx)?;
+    let replace = match &opts {
+        Some(o) => {
+            let v = o.get(js_string!("replace"), ctx)?;
+            (!v.is_null_or_undefined()).then(|| v.to_boolean())
+        }
+        None => None,
+    };
+    let nine_slice = match &opts {
+        Some(o) => {
+            let v = o.get(js_string!("nineSlice"), ctx)?;
+            if v.is_null_or_undefined() {
+                None
+            } else {
+                match number_array::<4>(&v, ctx) {
+                    Some(n) => Some(n),
+                    None => return Ok(JsValue::null()),
+                }
+            }
+        }
+        None => None,
+    };
+    let mutation = Mutation::CreateSymbol {
+        name,
+        element_ids,
+        symbol_id,
+        replace,
+        nine_slice,
+    };
+    let made = with_model(|m| match m.apply_mutation(&mutation) {
+        Ok(outcome) => {
+            if let Some(id) = &outcome.created_id {
+                m.element_selection.ids = vec![id.clone()];
+            }
+            m.symbols().last().map(|s| s.id.clone())
+        }
+        Err(_) => None,
+    });
+    Ok(match made {
+        Some(id) => JsValue::from(js_string!(id)),
+        None => JsValue::null(),
+    })
+}
+
+/// `paged.redefineSymbol(symbolId, { elementIds?, name?, nineSlice?,
+/// replace? })` — new artwork, name or 9-slice guides for a symbol
+/// (`Mutation::RedefineSymbol`); every instance follows. `nineSlice: []`
+/// removes the guides.
+fn paged_redefine_symbol(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let symbol_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let opts = args.get_or_undefined(1).as_object();
+    let name = opt_field_string(opts.as_ref(), "name", ctx)?;
+    let mut element_ids = Vec::new();
+    let mut nine_slice = None;
+    let mut replace = None;
+    if let Some(o) = &opts {
+        let ids = o.get(js_string!("elementIds"), ctx)?;
+        if !ids.is_null_or_undefined() {
+            match strict_element_id_array(&ids, ctx) {
+                Some(ids) => element_ids = ids,
+                None => return Ok(JsValue::from(false)),
+            }
+        }
+        let n = o.get(js_string!("nineSlice"), ctx)?;
+        if !n.is_null_or_undefined() {
+            let empty = n
+                .as_object()
+                .and_then(|a| a.get(js_string!("length"), ctx).ok())
+                .and_then(|l| l.as_number())
+                == Some(0.0);
+            nine_slice = if empty {
+                Some(Vec::new())
+            } else {
+                match number_array::<4>(&n, ctx) {
+                    Some(g) => Some(g.to_vec()),
+                    None => return Ok(JsValue::from(false)),
+                }
+            };
+        }
+        let r = o.get(js_string!("replace"), ctx)?;
+        if !r.is_null_or_undefined() {
+            replace = Some(r.to_boolean());
+        }
+    }
+    Ok(apply_bool(&Mutation::RedefineSymbol {
+        symbol_id,
+        element_ids,
+        name,
+        nine_slice,
+        replace,
+    }))
+}
+
+/// `paged.placeSymbolInstance(symbolId, pageId, [x, y]?, [a, b, c, d]?)`
+/// — place an instance, its registration point at `[x, y]` (page space;
+/// omitted: the page's centre), scaled / rotated by the linear part
+/// (`Mutation::PlaceSymbolInstance`). Selects it and returns its
+/// `instance:<id>` address, `null` when refused.
+fn paged_place_symbol_instance(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let symbol_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let page = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at_v = args.get_or_undefined(2);
+    let at = if at_v.is_null_or_undefined() {
+        None
+    } else {
+        match number_array::<2>(at_v, ctx) {
+            Some([x, y]) => Some((x, y)),
+            None => return Ok(JsValue::null()),
+        }
+    };
+    let lin_v = args.get_or_undefined(3);
+    let linear = if lin_v.is_null_or_undefined() {
+        None
+    } else {
+        match number_array::<4>(lin_v, ctx) {
+            Some(l) => Some(l),
+            None => return Ok(JsValue::null()),
+        }
+    };
+    Ok(apply_insert(&Mutation::PlaceSymbolInstance {
+        symbol_id,
+        page_id: PageId(page),
+        at,
+        linear,
+        nine_slice: None,
+    }))
+}
+
+/// `paged.breakSymbolLink(elementId)` — the instance becomes its symbol's
+/// artwork as ordinary items (`Mutation::BreakSymbolLink`). Selects and
+/// returns the new root's address, `null` when refused.
+fn paged_break_symbol_link(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&s) else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_insert(&Mutation::BreakSymbolLink { element_id }))
+}
+
+/// `paged.deleteSymbol(symbolId)` — remove a symbol; its instances become
+/// ordinary items first (`Mutation::DeleteSymbol`).
+fn paged_delete_symbol(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let symbol_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteSymbol { symbol_id }))
+}
+
+/// `paged.expandAppearance(elementId)` — the item becomes, for good, the
+/// item its live vector effects describe (engine ADR 1042,
+/// `Mutation::ExpandAppearance`). `false` when refused (no vector effects).
+fn paged_expand_appearance(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&s) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ExpandAppearance { element_id }))
+}
+
+/// `paged.symbols()` — the document's symbols (the `symbols` collection),
+/// as JSON.
+fn paged_symbols(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let json = with_model(|m| serde_json::to_string(&m.symbols()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(json)))
+}
+
 /// `paged.createMaster(masterId, { name?, widthPt?, heightPt?,
 /// duplicateOf? })` — create a master spread (`Mutation::CreateMaster`).
 fn paged_create_master(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -2250,6 +2634,79 @@ fn paged_rename_master(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         .to_std_string_escaped();
     let name = opt_string(args.get_or_undefined(1), ctx);
     Ok(apply_bool(&Mutation::RenameMaster { master, name }))
+}
+
+/// A wire mutation from `op` and a JSON `args` object; `None` when the
+/// arguments do not make one.
+fn wire_mutation(op: &str, args: serde_json::Value) -> Option<Mutation> {
+    serde_json::from_value::<Mutation>(serde_json::json!({ "op": op, "args": args })).ok()
+}
+
+/// `paged.setPageOverrides(pageId, itemIds)` — set a page's (or a master
+/// page's) override list: the master items it hides
+/// (`Mutation::SetPageOverrides`, engine ADR 1026).
+fn paged_set_page_overrides(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let overrides = to_json_value(args.get_or_undefined(1), ctx).unwrap_or(serde_json::json!([]));
+    let Some(m) = wire_mutation(
+        "setPageOverrides",
+        serde_json::json!({ "page": page, "overrides": overrides }),
+    ) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&m))
+}
+
+/// `paged.overrideMasterItems(pageId, itemIds, emptyText?)` — copy master
+/// items onto a page where the master draws them and hide the master's
+/// (`Mutation::OverrideMasterItems`, engine ADR 1026).
+fn paged_override_master_items(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let items = to_json_value(args.get_or_undefined(1), ctx).unwrap_or(serde_json::json!([]));
+    let empty_text = args.get_or_undefined(2).to_boolean();
+    let Some(m) = wire_mutation(
+        "overrideMasterItems",
+        serde_json::json!({ "page": page, "items": items, "emptyText": empty_text }),
+    ) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&m))
+}
+
+/// `paged.insertItemHyperlink(itemId, url, pageId?)` — make a page item a
+/// hyperlink's source, to `url` or to the page `pageId`
+/// (`Mutation::InsertItemHyperlink`, engine ADR 1026).
+fn paged_insert_item_hyperlink(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let item = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let url = opt_string(args.get_or_undefined(1), ctx).unwrap_or_default();
+    let page = opt_string(args.get_or_undefined(2), ctx).map(PageId);
+    Ok(apply_bool(&Mutation::InsertItemHyperlink {
+        item,
+        url,
+        page,
+        name: None,
+    }))
 }
 
 /// `paged.onMaster(masterId, mutation)` — apply a wire mutation (an
@@ -2761,8 +3218,9 @@ fn paged_outline_stroke(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
     }))
 }
 
-/// `paged.offsetPath(elemId, delta, join, miter)` — inset/outset a single
-/// closed contour (`Mutation::OffsetPath`).
+/// `paged.offsetPath(elemId, delta, join, miter, side?)` — inset/outset
+/// a path; `side` (`"both"` default, `"left"`, `"right"`) picks the side
+/// an OPEN contour is offset to (`Mutation::OffsetPath`, engine ADR 1019).
 fn paged_offset_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let id = args
         .get_or_undefined(0)
@@ -2777,11 +3235,18 @@ fn paged_offset_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
         .to_string(ctx)?
         .to_std_string_escaped();
     let miter_limit = args.get_or_undefined(3).to_number(ctx)? as f32;
+    let side = args.get_or_undefined(4);
+    let side = if side.is_undefined() || side.is_null() {
+        None
+    } else {
+        Some(side.to_string(ctx)?.to_std_string_escaped())
+    };
     Ok(apply_bool(&Mutation::OffsetPath {
         element_id,
         delta,
         join,
         miter_limit,
+        side,
     }))
 }
 
@@ -2999,18 +3464,20 @@ fn paged_apply_opacity_mask(
     else {
         return Ok(JsValue::from(false));
     };
-    let (mask_type, invert) = match args.get_or_undefined(2).as_object() {
+    let (mask_type, invert, clip) = match args.get_or_undefined(2).as_object() {
         Some(o) => (
             prop_string(&o, "maskType", ctx),
             prop_bool(&o, "invert", ctx),
+            prop_bool(&o, "clip", ctx),
         ),
-        None => (None, None),
+        None => (None, None, None),
     };
     Ok(apply_bool(&Mutation::ApplyOpacityMask {
         target_id,
         mask_id,
         mask_type,
         invert,
+        clip,
     }))
 }
 
@@ -3446,6 +3913,131 @@ fn paged_reject_tracked_change(
     Ok(apply_bool(&Mutation::RejectTrackedChange {
         story_id,
         offset,
+    }))
+}
+
+fn str_arg(args: &[JsValue], i: usize, ctx: &mut Context) -> JsResult<String> {
+    Ok(args
+        .get_or_undefined(i)
+        .to_string(ctx)?
+        .to_std_string_escaped())
+}
+
+/// `paged.recordChange(storyId, start, end, { kind, id?, author?, date?,
+/// beforeCharacterStyle?, beforeParagraphStyle? }, paragraph?)` — record a
+/// tracked change over story chars (engine ADR 1040).
+fn paged_record_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = str_arg(args, 0, ctx)?;
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let Some(change) = from_js::<paged_mutate::ChangeSpec>(args.get_or_undefined(3), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    let paragraph = match args.get_or_undefined(4) {
+        v if v.is_undefined() || v.is_null() => None,
+        v => Some(v.to_number(ctx)? as u32),
+    };
+    Ok(apply_bool(&Mutation::RecordChange {
+        story_id,
+        start,
+        end,
+        cell: None,
+        paragraph,
+        change,
+    }))
+}
+
+#[derive(Default, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct ChangeScope {
+    story_id: Option<String>,
+    id: Option<String>,
+    author: Option<String>,
+}
+
+/// `paged.acceptChange({ storyId?, id?, author? })` — accept one tracked
+/// change, an author's or all (engine ADR 1040).
+fn paged_accept_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let s = from_js::<ChangeScope>(args.get_or_undefined(0), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::AcceptChange {
+        story_id: s.story_id,
+        id: s.id,
+        author: s.author,
+    }))
+}
+
+/// `paged.rejectChange({ storyId?, id?, author? })` — reject them.
+fn paged_reject_change(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let s = from_js::<ChangeScope>(args.get_or_undefined(0), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::RejectChange {
+        story_id: s.story_id,
+        id: s.id,
+        author: s.author,
+    }))
+}
+
+/// `paged.insertComment(storyId, start, end, { text, id?, author?,
+/// initials?, date? })` — a comment on story chars (engine ADR 1020).
+fn paged_insert_comment(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = str_arg(args, 0, ctx)?;
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let Some(comment) = from_js::<paged_mutate::CommentSpec>(args.get_or_undefined(3), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::InsertComment {
+        story_id,
+        start,
+        end,
+        cell: None,
+        comment,
+    }))
+}
+
+/// `paged.replyComment(parentId, { text, id?, author?, initials?, date? })`.
+fn paged_reply_comment(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let parent_id = str_arg(args, 0, ctx)?;
+    let Some(comment) = from_js::<paged_mutate::CommentSpec>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ReplyComment { parent_id, comment }))
+}
+
+/// `paged.resolveComment(commentId, resolved = true)` — resolve a thread.
+fn paged_resolve_comment(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let comment_id = str_arg(args, 0, ctx)?;
+    let resolved = match args.get_or_undefined(1) {
+        v if v.is_undefined() => true,
+        v => v.to_boolean(),
+    };
+    Ok(apply_bool(&Mutation::ResolveComment {
+        comment_id,
+        resolved,
+    }))
+}
+
+/// `paged.deleteComment(commentId)` — a root takes its thread with it.
+fn paged_delete_comment(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let comment_id = str_arg(args, 0, ctx)?;
+    Ok(apply_bool(&Mutation::DeleteComment { comment_id }))
+}
+
+/// `paged.editComment(commentId, text, date?)` — rewrite a comment.
+fn paged_edit_comment(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let comment_id = str_arg(args, 0, ctx)?;
+    let text = str_arg(args, 1, ctx)?;
+    let date = match args.get_or_undefined(2) {
+        v if v.is_undefined() || v.is_null() => None,
+        v => Some(v.to_string(ctx)?.to_std_string_escaped()),
+    };
+    Ok(apply_bool(&Mutation::EditComment {
+        comment_id,
+        text,
+        date,
     }))
 }
 
@@ -4225,6 +4817,353 @@ fn paged_set_style_property(
     }))
 }
 
+// ---------------------------------------------------- Word editing (ADRs 1018, 1021)
+
+/// The find options a script passes: `paged_wire::FindSpec` without `find`.
+#[derive(Default, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct FindOptions {
+    story_id: Option<String>,
+    mode: paged_wire::FindMode,
+    match_case: bool,
+    whole_word: bool,
+    paragraph_style: Option<String>,
+    character_style: Option<String>,
+    limit: Option<u32>,
+    replace_all: bool,
+    replace_paragraph_style: Option<String>,
+    replace_character_style: Option<String>,
+}
+
+impl FindOptions {
+    fn spec(&self, find: String) -> paged_wire::FindSpec {
+        paged_wire::FindSpec {
+            find,
+            story_id: self.story_id.clone(),
+            mode: self.mode,
+            match_case: self.match_case,
+            whole_word: self.whole_word,
+            paragraph_style: self.paragraph_style.clone(),
+            character_style: self.character_style.clone(),
+            limit: self.limit,
+        }
+    }
+}
+
+/// `paged.find(text, options?)` — the hits of `text` as a JSON string
+/// (engine ADR 1021); options `{ storyId, mode: "literal"|"wildcards"|
+/// "regex", matchCase, wholeWord, paragraphStyle, characterStyle, limit }`.
+/// A bad pattern returns `"[]"` with a warning.
+fn paged_find(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let find = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let options = from_js::<FindOptions>(args.get_or_undefined(1), ctx).unwrap_or_default();
+    let spec = options.spec(find);
+    let s = with_model(|m| match m.find_text(&spec) {
+        Ok(hits) => serde_json::to_string(&hits).unwrap_or_default(),
+        Err(e) => {
+            push_output(format!("[warn] paged.find — {e}; returning []"));
+            "[]".to_string()
+        }
+    });
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// `paged.findReplace(text, replace, options?)` — replace the first hit, or
+/// every hit with `{ replaceAll: true }`, in one undo step (engine ADR
+/// 1021). The find options of `paged.find`, plus `replaceParagraphStyle`
+/// / `replaceCharacterStyle`.
+fn paged_find_replace(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let find = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let replace = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let options = from_js::<FindOptions>(args.get_or_undefined(2), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::FindReplace {
+        spec: options.spec(find),
+        replace,
+        replace_all: options.replace_all,
+        paragraph_style: options.replace_paragraph_style.clone(),
+        character_style: options.replace_character_style.clone(),
+    }))
+}
+
+/// `paged.setListLevel(storyId, start, end, { level } | { delta })` — the
+/// list level of the paragraphs touching story chars `[start, end)`
+/// (engine ADR 1018).
+fn paged_set_list_level(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default)]
+    struct Spec {
+        level: Option<u32>,
+        delta: Option<i32>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let spec = from_js::<Spec>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::SetListLevel {
+        story_id,
+        start,
+        end,
+        level: spec.level,
+        delta: spec.delta,
+    }))
+}
+
+/// `paged.updateFields({ storyId?, offset?, now? })` — Word's F9: the
+/// Word fields' results over the current layout (engine ADR 1022).
+fn paged_update_fields(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Spec {
+        story_id: Option<String>,
+        offset: Option<u32>,
+        now: Option<String>,
+    }
+    let spec = from_js::<Spec>(args.get_or_undefined(0), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::UpdateFields {
+        story_id: spec.story_id,
+        offset: spec.offset,
+        now: spec.now,
+    }))
+}
+
+/// The ids of every story's text destinations.
+fn text_anchor_ids() -> std::collections::HashSet<String> {
+    with_model(|m| {
+        m.scene()
+            .stories
+            .iter()
+            .flat_map(|s| s.story.destinations.iter().map(|d| d.self_id.clone()))
+            .collect()
+    })
+}
+
+/// `paged.insertTextAnchor(storyId, offset, name)` — Word's Insert ▸
+/// Bookmark at story char `offset`; returns the new destination's id, or
+/// `null` when refused (engine ADR 1022).
+fn paged_insert_text_anchor(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let name = args
+        .get_or_undefined(2)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let before = text_anchor_ids();
+    let ok = with_model(|m| {
+        m.apply_mutation(&Mutation::InsertTextAnchor {
+            story_id,
+            offset,
+            content_offset: None,
+            name,
+        })
+        .is_ok()
+    });
+    if !ok {
+        return Ok(JsValue::null());
+    }
+    Ok(text_anchor_ids()
+        .difference(&before)
+        .next()
+        .map(|id| JsValue::from(js_string!(id.as_str())))
+        .unwrap_or(JsValue::null()))
+}
+
+/// `paged.deleteTextAnchor(anchorId)` — delete a bookmark (engine ADR 1022).
+fn paged_delete_text_anchor(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let anchor_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteTextAnchor { anchor_id }))
+}
+
+/// `paged.insertCrossReference(storyId, offset, { bookmark } | { storyId,
+/// paragraph }, { referTo?: "text" | "pageNumber" | "aboveBelow",
+/// hyperlink? })` — Word's Insert Cross-reference (engine ADR 1022).
+fn paged_insert_cross_reference(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Options {
+        refer_to: paged_wire::CrossReferenceKind,
+        hyperlink: Option<bool>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let Some(target) = from_js::<paged_wire::CrossReferenceTarget>(args.get_or_undefined(2), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let opts = from_js::<Options>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::InsertCrossReference {
+        story_id,
+        offset,
+        content_offset: None,
+        target,
+        refer_to: opts.refer_to,
+        hyperlink: opts.hyperlink,
+    }))
+}
+
+/// `paged.insertTableOfContents(storyId, offset, [{ style, level }],
+/// { title?, tocStyleName?, pageNumbers?, leader?, tabPosition? })` —
+/// Word's Insert Table of Contents (engine ADR 1022).
+fn paged_insert_table_of_contents(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Options {
+        title: Option<String>,
+        toc_style_name: Option<String>,
+        page_numbers: Option<bool>,
+        leader: Option<String>,
+        tab_position: Option<f32>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let Some(levels) = from_js::<Vec<paged_wire::TocLevelSpec>>(args.get_or_undefined(2), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let o = from_js::<Options>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::InsertTableOfContents {
+        story_id,
+        offset,
+        content_offset: None,
+        levels,
+        title: o.title,
+        toc_style_name: o.toc_style_name,
+        page_numbers: o.page_numbers,
+        leader: o.leader,
+        tab_position: o.tab_position,
+    }))
+}
+
+/// `paged.insertIndexMarker(storyId, offset, topic | [topic, subtopic…],
+/// { sortOrder? })` — an index marker in the paragraph holding `offset`
+/// (engine ADR 1022).
+fn paged_insert_index_marker(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Options {
+        sort_order: Option<String>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let topic_arg = args.get_or_undefined(2);
+    let topic = match from_js::<Vec<String>>(topic_arg, ctx) {
+        Some(t) => t,
+        None => vec![topic_arg.to_string(ctx)?.to_std_string_escaped()],
+    };
+    let o = from_js::<Options>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::InsertIndexMarker {
+        story_id,
+        offset,
+        content_offset: None,
+        topic,
+        sort_order: o.sort_order,
+    }))
+}
+
+/// `paged.restartNumbering(storyId, start, end, { startAt?,
+/// continueNumbering? })` — Word's Restart / Continue Numbering (engine
+/// ADR 1018).
+fn paged_restart_numbering(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Spec {
+        start_at: Option<i32>,
+        continue_numbering: bool,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let spec = from_js::<Spec>(args.get_or_undefined(3), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::RestartNumbering {
+        story_id,
+        start,
+        end,
+        start_at: spec.start_at,
+        continue_numbering: spec.continue_numbering,
+    }))
+}
+
+/// `paged.setStyleBasedOn(collection, styleId, basedOn | null)` — re-parent
+/// a style; refused when it would inherit from itself (engine ADR 1018).
+fn paged_set_style_based_on(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let Some(collection) = from_js::<paged_mutate::StyleCollection>(args.get_or_undefined(0), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let style_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let parent = args.get_or_undefined(2);
+    let based_on = if parent.is_null_or_undefined() {
+        None
+    } else {
+        Some(parent.to_string(ctx)?.to_std_string_escaped())
+    };
+    Ok(apply_bool(&Mutation::SetStyleBasedOn {
+        collection,
+        style_id,
+        based_on,
+    }))
+}
+
 // ---------------------------------------------------- numbering lists
 
 /// `paged.createNumberingList(spec)` — create a `<NumberingList>`
@@ -4390,11 +5329,45 @@ fn paged_set_flow_grow_rule(
         v if v.is_undefined() || v.is_null() => None,
         v => Some(v.to_boolean()),
     };
+    // Engine ADR 1022 — an options object: `{ master, firstMaster,
+    // evenMaster, sectionStart }`.
+    let opts = args.get_or_undefined(4);
+    let opt_text = |name: &str, ctx: &mut Context| -> JsResult<Option<String>> {
+        let Some(obj) = opts.as_object() else {
+            return Ok(None);
+        };
+        let v = obj.get(js_string!(name), ctx)?;
+        if v.is_undefined() || v.is_null() {
+            Ok(None)
+        } else {
+            Ok(Some(v.to_string(ctx)?.to_std_string_escaped()))
+        }
+    };
+    let master = opt_text("master", ctx)?;
+    let first_master = opt_text("firstMaster", ctx)?;
+    let even_master = opt_text("evenMaster", ctx)?;
+    let section_start = match opt_text("sectionStart", ctx)?.as_deref() {
+        None => None,
+        Some("newPage") => Some(paged_wire::SectionStartSpec::NewPage),
+        Some("oddPage") => Some(paged_wire::SectionStartSpec::OddPage),
+        Some("evenPage") => Some(paged_wire::SectionStartSpec::EvenPage),
+        Some(other) => {
+            return Err(JsNativeError::typ()
+                .with_message(format!(
+                    "setFlowGrowRule: sectionStart is newPage, oddPage or evenPage, not {other:?}"
+                ))
+                .into())
+        }
+    };
     Ok(apply_bool(&Mutation::SetFlowGrowRule {
         story_id,
         grow,
         max_pages,
         copy_frame_options,
+        master,
+        first_master,
+        even_master,
+        section_start,
     }))
 }
 
@@ -5719,9 +6692,15 @@ fn js_value_to_wire(
         // `[6, 3]` as nothing and `[a, b, c, d]` as BOUNDS, and a bare
         // `{ anchors }` failed the wrapper's decode — `paged.set` returned
         // false on paths the catalog advertises as settable.
+        // Engine ADR 1039 — an instance's tint and 9-slice guides are
+        // number lists too (`[]` clears).
         if matches!(
             path,
-            P::FramePath | P::FrameStrokeDashArray | P::FrameGradientFillStart
+            P::FramePath
+                | P::FrameStrokeDashArray
+                | P::SymbolInstanceTint
+                | P::SymbolInstanceNineSlice
+                | P::FrameGradientFillStart
         ) {
             let json = value.to_json(ctx).ok()??;
             let is_wrapper = json.get("type").is_some() && json.get("value").is_some();

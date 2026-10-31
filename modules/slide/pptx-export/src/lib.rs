@@ -45,11 +45,18 @@ use paged_ooxml::rels::{part_dir, rels_part_name, resolve_target, Relationship, 
 use paged_ooxml::xml::{escape_attr as escape, unescape};
 use serde::Deserialize;
 
+pub mod comments;
 pub mod geom;
+pub mod masters;
 pub mod native;
+pub mod outline;
+pub mod presentation;
 pub mod probe;
 pub mod slide;
+pub mod smartart;
 pub mod text;
+pub mod theme;
+pub mod timing;
 pub mod xml;
 
 use slide::relative;
@@ -87,12 +94,55 @@ pub struct SlidePlan {
     /// The master spread of the layout a slide made in the editor uses.
     #[serde(default)]
     pub layout: Option<String>,
+    /// The slide's review comments (`None`: as the deck had them, byte for
+    /// byte). A list the same as the source slide's keeps its bytes too.
+    #[serde(default)]
+    pub comments: Option<Vec<pptx_core::Comment>>,
+    /// The slide's animation timing as the document holds it (slide ADR
+    /// 714), its shapes named by page element and shape key (`None`: as
+    /// the deck had it; an empty timing: none). A timing that names the
+    /// deck's shapes as the deck did keeps its bytes.
+    #[serde(default)]
+    pub timing: Option<pptx_core::anim::Timing>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportPlan {
     pub slides: Vec<SlidePlan>,
+    /// The package kind to write (slide ADR 720): `pptx`, `potx` (Save as
+    /// template) or `ppsx`. Absent: the deck's own.
+    #[serde(default)]
+    pub format: Option<presentation::Format>,
+    /// The document's sections, by the page each starts at (absent: as the
+    /// deck had them, kept contiguous over the written slides).
+    #[serde(default)]
+    pub sections: Option<Vec<presentation::SectionPlan>>,
+    /// The document's custom shows, by page (absent: as the deck had them).
+    #[serde(default)]
+    pub custom_shows: Option<Vec<presentation::CustomShowPlan>>,
+    /// The charts whose data the document changed (ADR 715); every other
+    /// chart part keeps its bytes.
+    #[serde(default)]
+    pub charts: Vec<ChartPlan>,
+    /// PNGs of pictures PowerPoint cannot hold as they are, by element id
+    /// (base64): what an export asked for in [`Exported::rasters_needed`],
+    /// rendered by the host.
+    #[serde(default)]
+    pub rasters: BTreeMap<String, String>,
+}
+
+/// A chart whose workbook the document edited.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartPlan {
+    /// The chart part (`ppt/charts/chart1.xml`).
+    pub part: String,
+    /// Where the workbook came from: the chart's embedded one, or one made
+    /// from its cached values.
+    pub origin: slide_sheet::Origin,
+    /// The workbook as the document holds it (`.xlsx`, base64).
+    pub workbook: String,
 }
 
 /// The written package and what it could not carry.
@@ -105,6 +155,10 @@ pub struct Exported {
     /// What is on the slides that could not round-trip, one line each
     /// (`slide 3: Title 1: …`).
     pub not_exported: Vec<String>,
+    /// Pictures written without the PNG they need (an SVG's fallback, a
+    /// format PowerPoint does not open): element id and resolution in dpi.
+    /// Render them and export again with [`ExportPlan::rasters`].
+    pub rasters_needed: Vec<(String, f64)>,
 }
 
 struct Original {
@@ -113,6 +167,8 @@ struct Original {
     slides: Vec<(String, u32, String)>,
     hidden: BTreeMap<String, bool>,
     notes: BTreeMap<String, Option<String>>,
+    comments: BTreeMap<String, Vec<pptx_core::Comment>>,
+    timings: BTreeMap<String, Option<pptx_core::anim::Timing>>,
 }
 
 fn rels(pkg: &OpcPackage, part: &str) -> Relationships {
@@ -147,8 +203,12 @@ fn read_original(pkg: &OpcPackage, bytes: &[u8]) -> Result<Original, String> {
     let ir = pptx_import::import_pptx(bytes).map_err(|e| e.to_string())?;
     let mut hidden = BTreeMap::new();
     let mut notes = BTreeMap::new();
+    let mut comments = BTreeMap::new();
+    let mut timings = BTreeMap::new();
     for s in &ir.slides {
+        timings.insert(s.part.clone(), s.timing.clone());
         hidden.insert(s.part.clone(), s.hidden);
+        comments.insert(s.part.clone(), s.comments.clone());
         notes.insert(
             s.part.clone(),
             s.notes
@@ -162,11 +222,13 @@ fn read_original(pkg: &OpcPackage, bytes: &[u8]) -> Result<Original, String> {
         slides,
         hidden,
         notes,
+        comments,
+        timings,
     })
 }
 
 /// Every start or empty tag named `name` in `xml`, as its text.
-fn tags<'a>(xml: &'a str, name: &str) -> Vec<&'a str> {
+pub(crate) fn tags<'a>(xml: &'a str, name: &str) -> Vec<&'a str> {
     let open = format!("<{name}");
     let mut out = Vec::new();
     let mut at = 0;
@@ -189,11 +251,30 @@ fn tags<'a>(xml: &'a str, name: &str) -> Vec<&'a str> {
 }
 
 /// An attribute's raw value in one tag.
-fn attr(tag: &str, name: &str) -> Option<String> {
+pub(crate) fn attr(tag: &str, name: &str) -> Option<String> {
     let key = format!(" {name}=\"");
     let i = tag.find(&key)? + key.len();
     let j = tag[i..].find('"')? + i;
     Some(unescape(&tag[i..j]))
+}
+
+/// The layout part the page of `spread` applies (slide ADR 712), when it
+/// is one of the deck's layouts.
+fn layout_part_of(
+    deck: &slide_resolve::model::Deck,
+    spread: &paged_model::Spread,
+) -> Option<String> {
+    let m = spread.pages.first()?.applied_master.as_deref()?;
+    let id = m.rsplit('/').next().unwrap_or(m);
+    deck.masters
+        .iter()
+        .find(|x| x.id == id && !x.is_master)
+        .map(|x| x.layout_part.clone())
+}
+
+/// A relationship part's bytes.
+pub(crate) fn write_rels_bytes(r: &Relationships) -> Vec<u8> {
+    write_rels(r)
 }
 
 fn write_rels(r: &Relationships) -> Vec<u8> {
@@ -343,10 +424,11 @@ fn add_defaults(xml: &str, parts: &[String]) -> String {
             continue;
         };
         let ct = match ext {
-            "png" => "image/png",
-            "jpeg" | "jpg" => "image/jpeg",
-            "gif" => "image/gif",
-            _ => continue,
+            "xlsx" => slide_sheet::CT_XLSX,
+            e => match pptx_core::media::content_type_of_extension(e) {
+                Some(ct) => ct,
+                None => continue,
+            },
         };
         let has = out
             .to_ascii_lowercase()
@@ -385,7 +467,7 @@ fn new_slide(
     let layout_part = deck
         .masters
         .iter()
-        .find(|m| m.id == layout_spread)
+        .find(|m| m.id == layout_spread && !m.is_master)
         .map(|m| m.layout_part.clone())
         .ok_or("its layout is not one of the deck's")?;
     let layout = ir
@@ -524,7 +606,10 @@ pub fn export_with(
     let images = |part: &str| pkg.part(part).map(|b| b.to_vec());
     let (deck, base) = match &model {
         Some(_) => {
-            let deck = slide_resolve::resolve(&ir);
+            // Charts are drawn as import drew them: a live chart that
+            // slide-chart does not lay out by paged.sheet (ADR 715).
+            let (charts, _) = slide_sheet::DeckCharts::open(&pkg, &ir);
+            let deck = slide_resolve::resolve_with(&ir, &|p, w, h| charts.draw(p, w, h));
             let base = slide_native::build(&deck, &images, "deck").document;
             (Some(deck), Some(base))
         }
@@ -571,12 +656,36 @@ pub fn export_with(
                 && orig.hidden.get(part).copied().unwrap_or(false) == s.hidden
                 && orig.notes.get(part).cloned().flatten()
                     == s.notes.clone().filter(|n| !n.trim().is_empty())
+                && s.comments.as_ref().is_none_or(|c| {
+                    pptx_core::same_comments(
+                        c,
+                        orig.comments.get(part).map(Vec::as_slice).unwrap_or(&[]),
+                    )
+                })
+                && s.timing.as_ref().is_none_or(|t| {
+                    let deck = orig.timings.get(part).cloned().flatten();
+                    let t = t.without_document_names();
+                    deck.as_ref() == Some(&t) || (deck.is_none() && t.nodes.is_empty())
+                })
         });
-    if same_plan && model.is_none() && !slides.iter().any(|s| s.content_edited) {
+    let pres_orig = text(&pkg, &orig.presentation)?;
+    let ct_orig = text(&pkg, "[Content_Types].xml")?;
+    // The deck-wide parts the plan names: unchanged when the deck's own.
+    let deck_wide_same = plan.format.is_none_or(|f| {
+        ct_orig.contains(&format!(
+            r#"PartName="/{}" ContentType="{}""#,
+            orig.presentation,
+            f.content_type()
+        ))
+    }) && plan.sections.is_none()
+        && plan.custom_shows.is_none()
+        && plan.charts.is_empty();
+    if same_plan && deck_wide_same && model.is_none() && !slides.iter().any(|s| s.content_edited) {
         return Ok(Exported {
             bytes: original.to_vec(),
             diagnostics,
             not_exported,
+            rasters_needed: Vec::new(),
         });
     }
 
@@ -673,6 +782,16 @@ pub fn export_with(
         .as_ref()
         .map(|d| d.theme_colors.clone())
         .unwrap_or_default();
+    let rasters: BTreeMap<String, Vec<u8>> = {
+        use base64::Engine;
+        plan.rasters
+            .iter()
+            .filter_map(|(id, b)| {
+                let png = base64::engine::general_purpose::STANDARD.decode(b).ok()?;
+                Some((id.clone(), png))
+            })
+            .collect()
+    };
     let shared = model.as_ref().map(|cur| slide::Shared {
         ir: &ir,
         cur,
@@ -689,10 +808,28 @@ pub fn export_with(
             .map(|(s, t)| (s.source_part.clone(), t.part.clone()))
             .collect(),
         media: std::cell::RefCell::new((BTreeMap::new(), next_media)),
+        live_charts: plan.charts.iter().map(|c| c.part.clone()).collect(),
+        rasters: &rasters,
+        needs: std::cell::RefCell::new(Vec::new()),
+        pkg: &pkg,
+        diagram_no: std::cell::RefCell::new(
+            pkg.file_names()
+                .filter_map(|n| {
+                    let f = n.strip_prefix("ppt/diagrams/")?;
+                    let f = f
+                        .strip_prefix("data")
+                        .or_else(|| f.strip_prefix("drawing"))?;
+                    f.strip_suffix(".xml")?.parse::<u32>().ok()
+                })
+                .max()
+                .unwrap_or(0),
+        ),
     });
 
     let mut out_parts: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     let mut media_parts: Vec<String> = Vec::new();
+    // The authors the written comments name.
+    let mut comment_authors: Vec<comments::AuthorRef> = Vec::new();
     // The written slides: (part, sldId id, r:id, source part).
     let mut written: Vec<(String, u32, String, String)> = Vec::new();
 
@@ -713,6 +850,10 @@ pub fn export_with(
             slide_xml = set_hidden(&slide_xml, s.hidden);
         }
 
+        // The page's shapes and the ids the writer gave them (animation
+        // targets follow them, slide ADR 714).
+        let mut page_shapes: Vec<native::NShape> = Vec::new();
+        let mut written_ids: BTreeMap<String, u32> = BTreeMap::new();
         // What is on the slide, from the document.
         if let (Some(sh), Some(deck), Some(base), Some(pid)) =
             (&shared, &deck, &base, s.page_id.as_deref())
@@ -720,6 +861,7 @@ pub fn export_with(
             let cur_spread = native::spread_of(sh.cur, pid);
             if let Some(cur_spread) = cur_spread {
                 let cur = native::page_shapes(cur_spread);
+                page_shapes = cur.clone();
                 if new {
                     let layout = s.layout.as_deref().unwrap_or("");
                     match new_slide(&ir, deck, &images, layout, cur) {
@@ -752,11 +894,20 @@ pub fn export_with(
                                     let out = out.unwrap_or(slide::Out {
                                         xml: ns.xml.clone(),
                                         media: Vec::new(),
+                                        parts: Vec::new(),
                                         lost: Vec::new(),
+                                        ids: BTreeMap::new(),
                                     });
+                                    written_ids = out.ids.clone();
                                     slide_xml = set_hidden(&out.xml, s.hidden);
                                     for (p, b) in out.media {
                                         media_parts.push(p.clone());
+                                        out_parts.insert(p, b);
+                                    }
+                                    for (p, b, ct) in out.parts {
+                                        if let Some(ct) = ct {
+                                            added_types.push((p.clone(), ct));
+                                        }
                                         out_parts.insert(p, b);
                                     }
                                     not_exported.extend(out.lost);
@@ -784,6 +935,20 @@ pub fn export_with(
                     let ir_slide = ir.slides.iter().find(|x| x.part == src);
                     let rs = deck.slides.iter().find(|x| x.part == src);
                     if let (Some(ir_slide), Some(rs)) = (ir_slide, rs) {
+                        // Slide ADR 712 — Change Layout: the slide's layout
+                        // relationship follows the layout its page applies.
+                        let now_layout = layout_part_of(deck, cur_spread);
+                        if now_layout.is_some() && now_layout != ir_slide.layout_part {
+                            let target = relative(&dir, now_layout.as_deref().unwrap_or(""));
+                            if let Some(rel) = srels
+                                .items
+                                .iter_mut()
+                                .find(|r| r.rel_type == slide::REL_LAYOUT)
+                            {
+                                rel.target = target;
+                                srels_changed = true;
+                            }
+                        }
                         let mut r = slide::rels_for(&part, srels.clone());
                         let job = slide::Job {
                             part: part.clone(),
@@ -795,13 +960,20 @@ pub fn export_with(
                             base: native::spread_of(base, &rs.id),
                             base_doc: base,
                             cur,
-                            layout: ir_slide.layout_part.clone(),
+                            layout: now_layout.or_else(|| ir_slide.layout_part.clone()),
                         };
                         match slide::write(sh, &job, &mut r) {
                             Ok(Some(out)) => {
+                                written_ids = out.ids.clone();
                                 slide_xml = out.xml;
                                 for (p, b) in out.media {
                                     media_parts.push(p.clone());
+                                    out_parts.insert(p, b);
+                                }
+                                for (p, b, ct) in out.parts {
+                                    if let Some(ct) = ct {
+                                        added_types.push((p.clone(), ct));
+                                    }
                                     out_parts.insert(p, b);
                                 }
                                 not_exported.extend(out.lost);
@@ -915,6 +1087,82 @@ pub fn export_with(
             },
             _ => {}
         }
+        // Comments: kept while the document has the slide's own, written
+        // as one modern part when they changed. A duplicate never shares
+        // its source's part.
+        let orig_comments: &[pptx_core::Comment] = if new {
+            &[]
+        } else {
+            orig.comments.get(src).map(Vec::as_slice).unwrap_or(&[])
+        };
+        let has_comment_rel = srels
+            .items
+            .iter()
+            .any(|r| comments::is_comment_rel(&r.rel_type));
+        let want_comments = match &s.comments {
+            Some(list) => Some(list.clone()),
+            None if !t.first && has_comment_rel => Some(orig_comments.to_vec()),
+            None => None,
+        };
+        if let Some(list) = want_comments {
+            if !(t.first && pptx_core::same_comments(&list, orig_comments)) {
+                let root_attrs = srels
+                    .items
+                    .iter()
+                    .filter(|r| r.rel_type == comments::REL_MODERN)
+                    .find_map(|r| {
+                        let p = resolve_target(&src_dir, &r.target);
+                        paged_ooxml::tree::parse(pkg.part(&p)?).ok()
+                    })
+                    .map(|el| el.raw_attrs)
+                    .unwrap_or_default();
+                srels
+                    .items
+                    .retain(|r| !comments::is_comment_rel(&r.rel_type));
+                slide_xml = comments::strip_comment_ext(&slide_xml);
+                if !list.is_empty() {
+                    let (xml, authors) = comments::write_part(
+                        &list,
+                        orig_comments,
+                        t.first,
+                        &root_attrs,
+                        &slide_xml,
+                        t.id,
+                    );
+                    let stem = format!(
+                        "{pres_dir}/comments/modernComment_{:X}_{}",
+                        t.id,
+                        comments::short_hash(&format!("{part}{xml}"))
+                    );
+                    let mut name = format!("{stem}.xml");
+                    let mut k = 1;
+                    while pkg.part(&name).is_some() || out_parts.contains_key(&name) {
+                        k += 1;
+                        name = format!("{stem}_{k}.xml");
+                    }
+                    let rid = (1..)
+                        .map(|n| format!("rId{n}"))
+                        .find(|id| srels.by_id(id).is_none())
+                        .expect("an unused id");
+                    srels.items.push(Relationship {
+                        id: rid.clone(),
+                        rel_type: comments::REL_MODERN.into(),
+                        target: relative(&dir, &name),
+                        target_mode: None,
+                    });
+                    slide_xml = comments::add_comment_ext(&slide_xml, &rid);
+                    added_types.push((name.clone(), comments::CT_COMMENTS));
+                    out_parts.insert(name, xml.into_bytes());
+                    for a in authors {
+                        if !comment_authors.contains(&a) {
+                            comment_authors.push(a);
+                        }
+                    }
+                }
+                srels_changed = true;
+            }
+        }
+
         // A duplicate's own relationships resolve from its own folder; its
         // folder is its source's, so targets stay as they are.
         let srels_bytes = match pkg.part(&rels_part_name(src)) {
@@ -922,6 +1170,35 @@ pub fn export_with(
             _ => write_rels(&srels),
         };
         out_parts.insert(rels_part_name(&part), srels_bytes);
+
+        // Animations (slide ADR 714): the document's timing, or the deck's,
+        // with its shapes named as this part names them; an effect whose
+        // shape is gone is dropped. Unchanged, the part keeps its bytes.
+        let deck_timing = if new {
+            None
+        } else {
+            ir.slides
+                .iter()
+                .find(|x| x.part == src)
+                .and_then(|x| x.timing.clone())
+        };
+        if let Some(want) = s.timing.as_ref().or(deck_timing.as_ref()) {
+            let names = timing::Names::new(&page_shapes, written_ids, &slide_xml);
+            let (resolved, dropped) = timing::resolve(want, &names);
+            for d in &dropped {
+                not_exported.push(format!(
+                    "slide {}: {d} of a shape that is no longer on the slide was dropped",
+                    n + 1
+                ));
+            }
+            let changed = match &s.timing {
+                Some(_) => resolved != deck_timing,
+                None => !dropped.is_empty(),
+            };
+            if changed {
+                slide_xml = timing::splice(&slide_xml, resolved.as_ref());
+            }
+        }
         out_parts.insert(part.clone(), slide_xml.into_bytes());
         written.push((part, t.id, t.rid.clone(), src.to_string()));
     }
@@ -953,6 +1230,87 @@ pub fn export_with(
             removed.insert(notes);
         }
         prels.items.retain(|r| &r.id != rid);
+    }
+
+    // Slide ADR 712 — the masters and layouts the document changed.
+    if let (Some(sh), Some(deck), Some(base)) = (&shared, &deck, &base) {
+        let used: BTreeSet<String> = sh
+            .cur
+            .spreads
+            .iter()
+            .filter_map(|s| layout_part_of(deck, &s.spread))
+            .collect();
+        let m = masters::write(sh, &pkg, &ir, deck, base, sh.cur, &used);
+        for p in &m.removed {
+            removed.insert(p.clone());
+        }
+        for (p, b) in m.media {
+            media_parts.push(p.clone());
+            out_parts.insert(p, b);
+        }
+        added_types.extend(m.added);
+        out_parts.extend(m.parts);
+        not_exported.extend(m.lost);
+        diagnostics.extend(m.diagnostics);
+    }
+
+    // Comment parts no written slide names any more go, with their
+    // content types.
+    let mut referenced: BTreeSet<String> = BTreeSet::new();
+    for (part, _, _, _) in &written {
+        if let Some(b) = out_parts.get(&rels_part_name(part)) {
+            for r in Relationships::parse(b).items {
+                if comments::is_comment_rel(&r.rel_type) {
+                    referenced.insert(resolve_target(part_dir(part), &r.target));
+                }
+            }
+        }
+    }
+    for (part, _, _) in &orig.slides {
+        for r in rels(&pkg, part).items {
+            if comments::is_comment_rel(&r.rel_type) {
+                let p = resolve_target(part_dir(part), &r.target);
+                if !referenced.contains(&p) {
+                    removed.insert(p);
+                }
+            }
+        }
+    }
+
+    // The authors the new comments name: added to the deck's authors list,
+    // or a new one.
+    let mut prels_changed = false;
+    if !comment_authors.is_empty() {
+        let existing = prels
+            .items
+            .iter()
+            .find(|r| r.rel_type == comments::REL_AUTHORS)
+            .map(|r| resolve_target(&pres_dir, &r.target));
+        let current = existing.as_deref().and_then(|p| text(&pkg, p).ok());
+        if let Some(xml) = comments::authors_xml(current.as_deref(), &comment_authors) {
+            match existing {
+                Some(p) if current.is_some() => {
+                    out_parts.insert(p, xml.into_bytes());
+                }
+                _ => {
+                    let p = format!("{pres_dir}/authors.xml");
+                    let rid = (next_rid + 1..)
+                        .map(|n| format!("rId{n}"))
+                        .find(|id| prels.by_id(id).is_none())
+                        .expect("an unused id");
+                    prels.items.retain(|r| r.rel_type != comments::REL_AUTHORS);
+                    prels.items.push(Relationship {
+                        id: rid,
+                        rel_type: comments::REL_AUTHORS.into(),
+                        target: relative(&pres_dir, &p),
+                        target_mode: None,
+                    });
+                    prels_changed = true;
+                    added_types.push((p.clone(), comments::CT_AUTHORS));
+                    out_parts.insert(p, xml.into_bytes());
+                }
+            }
+        }
     }
 
     // Links to a slide that is gone: the relationship and the links that
@@ -997,7 +1355,7 @@ pub fn export_with(
             .iter()
             .zip(&orig.slides)
             .all(|((p, id, rid, _), (op, oid, orid))| p == op && id == oid && rid == orid);
-    let mut pres = text(&pkg, &orig.presentation)?;
+    let mut pres = pres_orig.clone();
     let list: String = written
         .iter()
         .map(|(_, id, rid, _)| format!(r#"<p:sldId id="{id}" r:id="{rid}"/>"#))
@@ -1011,10 +1369,93 @@ pub fn export_with(
                 &format!("<p:sldIdLst>{list}</p:sldIdLst>"),
             );
         }
-        pres = rewrite_sections(&pres, &orig, &written);
+        if plan.sections.is_none() {
+            pres = rewrite_sections(&pres, &orig, &written);
+        }
+    }
+    // Sections and custom shows as the document holds them (slide ADR 720),
+    // written when they differ from what the list above leaves.
+    let page_of: BTreeMap<&str, &str> = slides
+        .iter()
+        .zip(&targets)
+        .filter_map(|(s, t)| Some((t.part.as_str(), s.page_id.as_deref()?)))
+        .collect();
+    if let Some(plan_sections) = &plan.sections {
+        let over: Vec<(Option<&str>, u32)> = written
+            .iter()
+            .map(|(p, id, _, _)| (page_of.get(p.as_str()).copied(), *id))
+            .collect();
+        let want = presentation::plan_sections(plan_sections, &over);
+        if want != presentation::read_sections(&pres) {
+            pres = presentation::write_sections(&pres, &want);
+        }
+    }
+    if let Some(plan_shows) = &plan.custom_shows {
+        let over: Vec<(Option<&str>, &str)> = written
+            .iter()
+            .map(|(p, _, rid, _)| (page_of.get(p.as_str()).copied(), rid.as_str()))
+            .collect();
+        let want = presentation::plan_custom_shows(plan_shows, &over);
+        if want != presentation::read_custom_shows(&pres) {
+            pres = presentation::write_custom_shows(&pres, &want);
+        }
+    } else if !same_list {
+        // The deck's own shows: a slide that is gone leaves them.
+        let kept: BTreeSet<&str> = written.iter().map(|w| w.2.as_str()).collect();
+        let shows = presentation::read_custom_shows(&pres);
+        let pruned: Vec<_> = shows
+            .iter()
+            .map(|(n, i, r)| {
+                (
+                    n.clone(),
+                    *i,
+                    r.iter()
+                        .filter(|x| kept.contains(x.as_str()))
+                        .cloned()
+                        .collect(),
+                )
+            })
+            .collect();
+        if pruned != shows {
+            pres = presentation::write_custom_shows(&pres, &pruned);
+        }
     }
 
-    let mut ct = text(&pkg, "[Content_Types].xml")?;
+    // Charts whose data changed (ADR 715): the chart part with its caches
+    // written from the workbook, and the workbook itself; a made workbook
+    // becomes the chart's embedded one.
+    for c in &plan.charts {
+        if pkg.part(&c.part).is_none() {
+            diagnostics.push(format!("chart {}: not in this deck; not exported", c.part));
+            continue;
+        }
+        match write_chart(&pkg, c, &mut out_parts) {
+            Ok(Some(new_part)) => media_parts.push(new_part),
+            Ok(None) => {}
+            Err(e) => not_exported.push(format!(
+                "chart {}: its data is written as the deck had it ({e})",
+                c.part
+            )),
+        }
+    }
+
+    // The theme the document shows (slide ADR 713), when it is not the
+    // deck's: every slide master's theme part.
+    if let (Some(cur), Some(d)) = (&model, &deck) {
+        theme::write_themes(
+            &pkg,
+            &ir,
+            cur,
+            d.theme_part.as_deref(),
+            &mut out_parts,
+            &mut diagnostics,
+        );
+    }
+
+    let mut ct = ct_orig.clone();
+    if let Some(f) = plan.format {
+        ct = presentation::set_main_content_type(&ct, &orig.presentation, f.content_type());
+    }
     let removed_parts: BTreeSet<String> = removed
         .iter()
         .filter(|p| !p.contains("/_rels/"))
@@ -1023,8 +1464,21 @@ pub fn export_with(
     ct = patch_content_types(&ct, &removed_parts, &added_types);
     ct = add_defaults(&ct, &media_parts);
 
+    let mut rasters_needed = shared
+        .as_ref()
+        .map(|sh| sh.needs.take())
+        .unwrap_or_default();
+    rasters_needed.sort_by(|a, b| a.0.cmp(&b.0));
+    rasters_needed.dedup_by(|a, b| a.0 == b.0);
+
     // Nothing changed at all: the original bytes.
-    if same_list && added_types.is_empty() && removed.is_empty() && media_parts.is_empty() {
+    if same_list
+        && pres == pres_orig
+        && ct == ct_orig
+        && added_types.is_empty()
+        && removed.is_empty()
+        && media_parts.is_empty()
+    {
         let identical = out_parts
             .iter()
             .all(|(n, b)| pkg.part(n).is_some_and(|o| o == b.as_slice()));
@@ -1033,6 +1487,7 @@ pub fn export_with(
                 bytes: original.to_vec(),
                 diagnostics,
                 not_exported,
+                rasters_needed,
             });
         }
     }
@@ -1048,7 +1503,7 @@ pub fn export_with(
         }
         let bytes = if name == orig.presentation {
             pres.clone().into_bytes()
-        } else if name == pres_rels && !same_list {
+        } else if name == pres_rels && (!same_list || prels_changed) {
             write_rels(&prels)
         } else if let Some(b) = out_parts.remove(name) {
             b
@@ -1067,7 +1522,61 @@ pub fn export_with(
         bytes,
         diagnostics,
         not_exported,
+        rasters_needed,
     })
+}
+
+/// Write an edited chart (ADR 715) into `out`: its part with the caches
+/// from the workbook, the workbook (an embedded one in place; a made one as
+/// a new embedding with its relationship). Answers the new workbook part.
+fn write_chart(
+    pkg: &OpcPackage,
+    c: &ChartPlan,
+    out: &mut BTreeMap<String, Vec<u8>>,
+) -> Result<Option<String>, String> {
+    use base64::Engine as _;
+    let xlsx = base64::engine::general_purpose::STANDARD
+        .decode(&c.workbook)
+        .map_err(|e| format!("workbook: {e}"))?;
+    let chart_xml = pkg
+        .part(&c.part)
+        .ok_or_else(|| format!("no part {}", c.part))?;
+    let book = slide_sheet::ChartBook::reopen(&xlsx, chart_xml, c.origin)?;
+    match slide_sheet::embedded_part(pkg, &c.part) {
+        Some((embedding, _)) => {
+            out.insert(c.part.clone(), book.chart_part(None)?);
+            out.insert(embedding, xlsx);
+            Ok(None)
+        }
+        None => {
+            let n = (1..)
+                .find(|n| {
+                    let p = format!("ppt/embeddings/Microsoft_Excel_Worksheet{n}.xlsx");
+                    pkg.part(&p).is_none() && !out.contains_key(&p)
+                })
+                .unwrap_or(1);
+            let embedding = format!("ppt/embeddings/Microsoft_Excel_Worksheet{n}.xlsx");
+            let rp = rels_part_name(&c.part);
+            let mut r = out
+                .get(&rp)
+                .map(|b| Relationships::parse(b))
+                .unwrap_or_else(|| rels(pkg, &c.part));
+            let rid = (1..)
+                .map(|i| format!("rId{i}"))
+                .find(|id| r.by_id(id).is_none())
+                .unwrap_or_else(|| "rId1".into());
+            r.items.push(paged_ooxml::Relationship {
+                id: rid.clone(),
+                rel_type: slide_sheet::REL_PACKAGE.into(),
+                target: format!("../embeddings/Microsoft_Excel_Worksheet{n}.xlsx"),
+                target_mode: None,
+            });
+            out.insert(c.part.clone(), book.chart_part(Some(&rid))?);
+            out.insert(rp, write_rels(&r));
+            out.insert(embedding.clone(), xlsx);
+            Ok(Some(embedding))
+        }
+    }
 }
 
 fn set_slide_count(xml: &str, n: usize) -> String {

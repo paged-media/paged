@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Engine ADR 1040 — gradient meshes and freeform gradients through the
+// Engine ADR 1048 — gradient meshes and freeform gradients through the
 // SDK's doors on the real engine: the feature flag, the vendored catalog
 // row, a mesh and a freeform gradient written, read back and undone in
 // one step each, and a malformed spec refused.
@@ -97,7 +97,7 @@ async function set(h: HeadlessHost, id: ElementId, spec: unknown) {
   });
 }
 
-describe("gradient mesh and freeform gradient (engine ADR 1040) [color-swatches.mesh-freeform-gradients]", () => {
+describe("gradient mesh and freeform gradient (engine ADR 1048) [color-swatches.mesh-freeform-gradients]", () => {
   it("is advertised, and the vendored catalog carries its row", () => {
     expect(HOST_FEATURES).toContain("document.meshFill@1");
     const rows = propertySchemas as ReadonlyArray<{

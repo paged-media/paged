@@ -38,16 +38,39 @@ import { defineMessages, t } from "@paged-media/strings";
 import importPdfArgs from "../schema/import-pdf.args.json";
 import importPdfResult from "../schema/import-pdf.result.json";
 
+import inspectArgs from "../schema/inspect-pdf.args.json";
+import inspectResult from "../schema/inspect-pdf.result.json";
+import placeArgs from "../schema/place-vectors.args.json";
+import placeResult from "../schema/place-vectors.result.json";
+import convertArgs from "../schema/convert-placed.args.json";
+
 import { openPdf, type PdfImportOptions } from "./io/pdf";
+import {
+  convertPlacedToVectors,
+  inspectPdf,
+  placeVectors,
+  type ConvertPlacedArgs,
+  type PlaceVectorsArgs,
+  type PlaceVectorsResult,
+} from "./vectors/place";
 import { pdfTemplateFields } from "./template-fields";
 
 const M = defineMessages("publish.pdfCommands", {
   openPdf: "Open PDF",
+  inspectPdf: "Inspect PDF or AI file",
+  placeVectors: "Place PDF or AI page as vectors",
+  convertPlaced: "Convert placed PDF to vectors",
   hostDeclined: "the host declined to open {name}",
   hostCannotOpen: "this host cannot open a document",
 });
 
 export const IMPORT_PDF_COMMAND = "media.paged.pdf.importPdf";
+/** Publish ADR 658 — place-as-vectors' typed commands: the host's File ▸
+ *  Import ▸ PDF or AI as Vectors… dialog drives the first two, the Object
+ *  menu entry the third. */
+export const INSPECT_PDF_COMMAND = "media.paged.pdf.inspectPdf";
+export const PLACE_VECTORS_COMMAND = "media.paged.pdf.placeVectors";
+export const CONVERT_PLACED_COMMAND = "media.paged.pdf.convertPlacedToVectors";
 export const IMPORT_PDF_ARGS_TYPE = importPdfArgs as ValueType;
 export const IMPORT_PDF_RESULT_TYPE = importPdfResult as ValueType;
 
@@ -95,9 +118,41 @@ export function contributePdfCommands(
       return openPdf(host, args.bytes, options, open);
     },
   };
+  const inspect: TypedCommandContribution<{ bytes: Uint8Array }, unknown> = {
+    id: INSPECT_PDF_COMMAND,
+    title: t(M.inspectPdf),
+    args: inspectArgs as ValueType,
+    result: inspectResult as ValueType,
+    handler: (_ctx, args) => inspectPdf(host, args.bytes),
+  };
+  /** The answer as the schema types it: no `root` when none is known. */
+  const answer = (r: PlaceVectorsResult) => {
+    const { root, ...rest } = r;
+    return root ? { ...rest, root } : rest;
+  };
+  const place: TypedCommandContribution<PlaceVectorsArgs, unknown> = {
+    id: PLACE_VECTORS_COMMAND,
+    title: t(M.placeVectors),
+    args: placeArgs as ValueType,
+    result: placeResult as ValueType,
+    handler: async (_ctx, args) => answer(await placeVectors(host, args)),
+  };
+  const convert: TypedCommandContribution<ConvertPlacedArgs, unknown> = {
+    id: CONVERT_PLACED_COMMAND,
+    title: t(M.convertPlaced),
+    args: convertArgs as ValueType,
+    result: placeResult as ValueType,
+    handler: async (_ctx, args) =>
+      answer(await convertPlacedToVectors(host, args)),
+  };
   return host.contribute.objectModel({
     kinds: [],
-    commands: [importPdf as TypedCommandContribution],
+    commands: [
+      importPdf as TypedCommandContribution,
+      inspect as TypedCommandContribution,
+      place as TypedCommandContribution,
+      convert as TypedCommandContribution,
+    ],
     templateFields: pdfTemplateFields(host),
   });
 }

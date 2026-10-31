@@ -61,6 +61,7 @@ import {
   parseInspected,
   type InspectedRender,
   type SceneLayer,
+  type SceneLayerEffects,
 } from "../../web-model/src";
 
 /** The minimal surface of the wasm-bindgen `--target web` glue we use —
@@ -101,6 +102,9 @@ export interface BlitzGlue {
   /** The shaped advance (pt) of each text item of the last render, one list
    *  per layer, as JSON. */
   take_text_advances?: () => string;
+  /** The CSS effect groups of the last render (ADR 415), one entry per
+   *  layer, as JSON. */
+  take_effects?: () => string;
 }
 
 /** A rendered flow: one C-1 layer per recipient frame (chain order) plus
@@ -150,6 +154,9 @@ export interface WebEngine {
   /** The shaped advance (points) of each text item of the last render, one
    *  list per layer in item order. */
   takeTextAdvances?(): number[][];
+  /** The CSS effect groups of the last render (ADR 415), one entry per
+   *  layer. Absent on an engine built before effect groups. */
+  takeEffects?(): SceneLayerEffects[];
 }
 
 /** The optional engine methods over a wasm-bindgen glue — shared by the
@@ -165,6 +172,7 @@ export function engineExtras(
   | "hasResource"
   | "takeResourceMisses"
   | "takeTextAdvances"
+  | "takeEffects"
 > {
   const json = <T>(f: (() => string) | undefined, fallback: T): T => {
     if (!f) return fallback;
@@ -207,6 +215,9 @@ export function engineExtras(
       : undefined,
     takeTextAdvances: glue.take_text_advances
       ? () => json(glue.take_text_advances, [] as number[][])
+      : undefined,
+    takeEffects: glue.take_effects
+      ? () => json(glue.take_effects, [] as SceneLayerEffects[])
       : undefined,
   };
 }

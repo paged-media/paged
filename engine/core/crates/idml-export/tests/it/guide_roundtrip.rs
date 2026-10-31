@@ -168,6 +168,7 @@ fn a_minted_spread_carries_its_guides() {
         override_list: Vec::new(),
         name: None,
         show_master_items: None,
+        canvas_origin: None,
     });
     spread.guides.push(RulerGuide {
         orientation: GuideOrientation::Vertical,

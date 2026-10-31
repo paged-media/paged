@@ -122,7 +122,7 @@ import {
 } from "../../src";
 import { symbolBatchFor, symbolHandle } from "../../src/commands/symbols";
 import { F6_RING_PAIR } from "../fixtures/corpus";
-import { openHost } from "./host";
+import { openHost, withoutEngineSymbols } from "./host";
 import { runThrough, type LaneName } from "./one-batch";
 
 /** Insert a plain 60 pt square at `x, y`. Answers its id. */
@@ -791,6 +791,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
     beforeAll(async () => {
       h = await openHost();
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
     });
     afterAll(() => h?.dispose());
 
@@ -806,7 +807,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       await h.host.selection.set([]);
     });
 
-    it("registers the seven commands + the right-docked panel", () => {
+    it("registers the nine commands + the right-docked panel", () => {
       expect(SYMBOLS_COMMAND_IDS).toEqual([
         DEFINE_SYMBOL_COMMAND_ID,
         PLACE_SYMBOL_COMMAND_ID,
@@ -815,6 +816,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         RESET_SYMBOL_TRANSFORM_COMMAND_ID,
         RENAME_SYMBOL_COMMAND_ID,
         DELETE_SYMBOL_COMMAND_ID,
+        // WP6.8 (draw ADR 365) — the engine lane's Replace and Options.
+        "media.paged.draw.command.replaceSymbol",
+        "media.paged.draw.command.symbolOptions",
       ]);
       for (const id of SYMBOLS_COMMAND_IDS) {
         expect(commandFor(h, id).category).toBe("Symbols");
@@ -1304,6 +1308,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
     beforeAll(async () => {
       h = await openHost();
       h.loadBundle(drawBundle);
+      withoutEngineSymbols(h);
     });
     afterAll(() => h?.dispose());
     beforeEach(async () => {

@@ -35,7 +35,11 @@ import { applicabilityOf, applicabilityStyle } from "./applicability";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { useEditContextStack } from "../state/edit-context-stack";
-import { VIEW_TOOL_IDS, useTool } from "../state/tool-context";
+import {
+  CONTEXT_SHARED_TOOL_IDS,
+  toolStaysInContext,
+  useTool,
+} from "../state/tool-context";
 import { Icon, hasIcon } from "../icons";
 import { ToolOptionsPopover } from "./ToolOptionsPopover";
 import { useRovingFocus } from "../focus/roving-focus";
@@ -394,7 +398,8 @@ export function ToolRail({
     // list restricts to it, and a declared EMPTY list restricts to
     // nothing — every tool greys, and picking one is still the exit.
     const ids = editContexts.active?.toolIds;
-    return ids ? new Set(ids) : null;
+    // The host tools that work on the frame being edited stay (ADR 311).
+    return ids ? new Set([...ids, ...CONTEXT_SHARED_TOOL_IDS]) : null;
   }, [editContexts.active]);
 
   const pick = (tool: ToolContribution) => {
@@ -402,11 +407,8 @@ export function ToolRail({
     // affordance, never by a tool switch that then does nothing.
     if (isPlanned(tool)) return;
     // Hand and Zoom look at the context's content; they never leave it.
-    if (
-      restrictedTools &&
-      !restrictedTools.has(tool.id) &&
-      !VIEW_TOOL_IDS.includes(tool.id)
-    ) {
+    const contextTools = editContexts.active?.toolIds;
+    if (contextTools && !toolStaysInContext(tool.id, contextTools)) {
       editContexts.commit();
     }
     setLastUsed((prev) => ({ ...prev, [tool.group]: tool.id }));

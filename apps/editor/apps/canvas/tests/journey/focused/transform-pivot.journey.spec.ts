@@ -101,6 +101,11 @@ test.describe("journey · rotate about a click-set pivot", () => {
     const before = await cornerAndAngle(page, ref);
 
     await activateTool(page, "transform");
+    // The slot faces Free Transform (its group default); Alt+click
+    // cycles to Rotate.
+    await page
+      .locator('[data-tool-slot="transform"]')
+      .click({ modifiers: ["Alt"] });
     await expect(
       page.locator(
         '[data-tool-slot="transform"][data-tool="paged.tool.rotate"][data-active="true"]',

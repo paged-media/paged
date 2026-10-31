@@ -107,23 +107,31 @@ describe("perf budgets — the tools that read as they move", () => {
   }, 120_000);
   afterAll(() => w?.h.dispose());
 
-  // COVERS: the FACE-CAP lane of `handlers/planar-regions.ts`. Two
-  // inputs that divide into ~300 faces: the engine refuses to enumerate
-  // past 256, the cache can never warm, and the hover is left with the
-  // point query.
+  // COVERS: what was the FACE-CAP lane of `handlers/planar-regions.ts`.
+  // Two inputs that divide into ~300 faces: the engine used to refuse to
+  // enumerate past 256, the cache could never warm, and the hover was left
+  // with a point query per move. Since engine ADR 1019 (100 000 faces)
+  // the enumeration is answered, the cache warms on the first move, and
+  // the hover is local: two queries, at either pacing.
   //
   // History (a budget only goes DOWN):
   //
   //                         pathAnchors   anchors read
   //   as found   paced          101          20 200
   //              burst            3             600
-  //   now        either           1             200
+  //   since      either           1             200
+  //
+  //                         planarRegions
+  //   as found   paced          101
+  //              burst            3
+  //   ADR 1019   either           2   (cold-start point query + the
+  //                                     enumeration, then local tests)
   //
   // As found, every point query re-read the frontmost input's whole
   // anchor table to learn the one matrix that maps the pointer into the
   // arrangement's space. It is read once per gesture scope now, and
   // dropped with the cache.
-  describe("Shape Builder — a 100-move hover over an arrangement past the 256-face cap", () => {
+  describe("Shape Builder — a 100-move hover over an arrangement past the old 256-face cap", () => {
     const MOVES = 100;
 
     /** The highlight standing when a stream ended must be the face UNDER
@@ -164,43 +172,46 @@ describe("perf budgets — the tools that read as they move", () => {
       return { work: counted, highlight };
     };
 
-    it("the scenario is what it says: the engine refuses the enumeration, in its own words", async () => {
+    it("the scenario is what it says: the old face cap's arrangement is enumerated now", async () => {
       expect(w.faceCap).toHaveLength(2);
-      const refused = await w.h.host.document.planarRegions(w.faceCap);
-      expect(refused.found).toBe(false);
-      expect(refused.reason).toBe(
-        "planar arrangement resolved more than 256 faces; refine the selection",
-      );
+      const all = await w.h.host.document.planarRegions(w.faceCap);
+      // Refused as "resolved more than 256 faces" before engine ADR 1019.
+      expect(all.found).toBe(true);
+      expect(all.complete).toBe(true);
+      expect(all.faces.length).toBeGreaterThan(256);
     });
 
-    it("paced: the engine keeps up, so every move is a point query — and the transform is read once", async () => {
+    it("paced: one cold-start point query and one enumeration, then every move is local — and the transform is read once", async () => {
       const { work, highlight } = await hover("paced");
       expect(work.mutations).toEqual([]);
       expect(work.count("document.hitTest")).toBe(0);
 
-      // One refused enumeration, then a point query per move: with no
-      // face list to test against locally, that is what a hover over
-      // this arrangement costs. The floor, short of an engine change.
-      expect(work.count("document.planarRegions")).toBe(101);
+      // The cold-start point query and the enumeration; every later move
+      // is tested against the cached faces. As found (the engine refused
+      // to enumerate past 256 faces): 101, a point query per move.
+      expect(work.count("document.planarRegions")).toBe(2);
       // As found: 101 — the frontmost input's anchor table, re-read for
       // every query, to learn a transform that cannot change mid-hover.
       expect(work.count("document.pathAnchors")).toBe(1);
       // As found: 101 × the comb's 200 anchors, for one matrix.
       expect(work.anchorsRead).toBe(FACE_CAP_ANCHORS);
-      // The machine's publish, then the answer's. TARGET 100.
-      expect(work.previews()).toBe(200);
+      // One publish per move, plus the cold start's answer: the local
+      // lane answers in the machine's own publish. As found (a point
+      // query per move, each answered with its own publish): 200.
+      expect(work.previews()).toBe(101);
 
       expectFaceUnder(highlight, FACE_CAP_SWEEP[1]);
     });
 
-    it("burst: the newest-wins guard holds here too — three queries, not a hundred", async () => {
+    it("burst: the same two queries — the cache serves the stream", async () => {
       const { work, highlight } = await hover("burst");
       expect(work.mutations).toEqual([]);
       expect(work.count("document.hitTest")).toBe(0);
 
-      // The refused enumeration, the first sample, the last one. As
-      // found on 01603ab, before the guard: 101.
-      expect(work.count("document.planarRegions")).toBe(3);
+      // The cold-start point query and the enumeration. Before engine
+      // ADR 1019 (the enumeration refused): 3 — the refusal, the first
+      // sample, the last one; before the newest-wins guard: 101.
+      expect(work.count("document.planarRegions")).toBe(2);
       // As found: 3, one table read per query.
       expect(work.count("document.pathAnchors")).toBe(1);
       expect(work.anchorsRead).toBe(FACE_CAP_ANCHORS);
@@ -267,7 +278,7 @@ describe("perf budgets — the tools that read as they move", () => {
   });
 
   // COVERS: `handlers/live-paint.ts` over the largest arrangement the
-  // engine will enumerate — 12 inputs, 133 faces — and the bucket's
+  // engine enumerated before engine ADR 1019 — 12 inputs, 133 faces — and the bucket's
   // click, which is `fillLivePaintFaces`: a link walk of the whole
   // document, the arrangement derived again, a tree diff, two batches.
   describe("Live Paint bucket — a 200-move hover across a 12-input arrangement, and a click", () => {
@@ -322,7 +333,7 @@ describe("perf budgets — the tools that read as they move", () => {
       return { work: counted, highlight, hovered };
     };
 
-    it("the arrangement is the largest the engine enumerates: 12 inputs, 133 faces", async () => {
+    it("the arrangement is the old caps' largest: 12 inputs, 133 faces", async () => {
       const all = await w.h.host.document.planarRegions(w.arrangement);
       expect(all.found).toBe(true);
       expect(all.complete).toBe(true);

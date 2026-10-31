@@ -233,6 +233,53 @@ impl AdditionalLayerInfo {
         })
     }
 
+    /// The block's data — after the signature, the key and the length
+    /// field (4 or 8 bytes, as [`parse`](Self::parse) decides), bounded by
+    /// the length, the pad left out. Empty for a constructed block.
+    pub fn payload(&self, container: Container) -> &[u8] {
+        let Some(raw) = self.raw_block.as_deref() else {
+            return &[];
+        };
+        let width = if self.sig == SIG_8B64 || container.addl_len_is_wide(self.key) {
+            LenWidth::U64
+        } else {
+            LenWidth::U32
+        };
+        let at = 8 + width.bytes();
+        let Some(len) = raw.get(8..at) else {
+            return &[];
+        };
+        let n = len.iter().fold(0u64, |acc, &b| (acc << 8) | u64::from(b)) as usize;
+        raw.get(at..at.saturating_add(n)).unwrap_or(&[])
+    }
+
+    /// A new opaque block of `data` under `key`, framed for `container`
+    /// (an 8-byte length where the container makes the key wide) and
+    /// padded for its context — what a writer of a modelled block
+    /// constructs; `raw_block` holds the framed bytes, so it emits as is.
+    pub fn opaque(key: [u8; 4], data: &[u8], container: Container, pad: AddlPad) -> Self {
+        let wide = container.addl_len_is_wide(key);
+        let mut raw = Vec::with_capacity(data.len() + 20);
+        raw.extend_from_slice(&SIG_8BIM);
+        raw.extend_from_slice(&key);
+        if wide {
+            raw.extend_from_slice(&(data.len() as u64).to_be_bytes());
+        } else {
+            raw.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        }
+        raw.extend_from_slice(data);
+        let rem = data.len() % pad.align();
+        if rem != 0 {
+            raw.extend(std::iter::repeat_n(0u8, pad.align() - rem));
+        }
+        AdditionalLayerInfo {
+            sig: SIG_8BIM,
+            key,
+            body: AddlBody::Opaque,
+            raw_block: Some(raw),
+        }
+    }
+
     /// Emit one block: verbatim if `raw_block` is present, else re-encode
     /// canonically (length-framed, then padded to the context boundary;
     /// the stored length excludes the pad).

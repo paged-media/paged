@@ -380,7 +380,9 @@ fn brush_stroke(ctx: &GpuContext, s: &LayerStack, samples: usize) -> usize {
         if pollster::block_on(session.extend(ctx, sample)).expect("extend") {
             painted += 1;
         }
-        let px: Arc<[u8]> = Arc::from(session.pixels().to_vec().into_boxed_slice());
+        let px = image_js::pixels::Pixels::from_rgba8(Arc::from(
+            session.pixels().to_vec().into_boxed_slice(),
+        ));
         let preview = pollster::block_on(s.composite(Some(ctx), Some(&px))).expect("preview");
         let _bytes = preview.to_vec();
     }

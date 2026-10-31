@@ -34,7 +34,7 @@
 //   offset 0:  scale       (f32)
 //   offset 4:  tx          (f32)
 //   offset 8:  ty          (f32)
-//   offset 12: unused
+//   offset 12: rotation    (f32, radians; v77, editor ADR 287)
 //   offset 16: generationLo (u32)
 //   offset 20: generationHi (u32)
 //   offset 24: unused
@@ -45,16 +45,29 @@ export const CAMERA_SAB_BYTES = 32;
 export const OFFSET_SCALE = 0;
 export const OFFSET_TX = 4;
 export const OFFSET_TY = 8;
+/** v77 — the view rotation (Rotate View), radians, clockwise on screen. */
+export const OFFSET_ROTATION = 12;
 export const OFFSET_GEN_LO = 16;
 export const OFFSET_GEN_HI = 20;
 
+/**
+ * Document space → viewport (CSS px):
+ * `viewport = scale · R(rotation) · doc + (tx, ty)`.
+ *
+ * `rotation` (v77, editor ADR 287 — Rotate View) is radians, clockwise on
+ * screen, about the document origin, so a pan (`tx`/`ty` += Δ) and a zoom
+ * about a viewport point (`t' = p + f · (t − p)`) are the same formulas
+ * at any rotation. Absent means 0 in every reader; a camera written
+ * without it keeps the view's rotation (`CameraProvider`).
+ */
 export interface Camera {
   scale: number;
   tx: number;
   ty: number;
+  rotation?: number;
 }
 
-export const IDENTITY_CAMERA: Camera = { scale: 1, tx: 0, ty: 0 };
+export const IDENTITY_CAMERA: Camera = { scale: 1, tx: 0, ty: 0, rotation: 0 };
 
 /**
  * Wraps a SharedArrayBuffer-backed camera transform. Constructed
@@ -83,8 +96,8 @@ export class CameraBuffer {
         `camera buffer must be ${CAMERA_SAB_BYTES} bytes, got ${buffer.byteLength}`,
       );
     }
-    this.f32 = new Float32Array(buffer, 0, 3);
-    this.f32AsU32 = new Uint32Array(buffer, 0, 3);
+    this.f32 = new Float32Array(buffer, 0, 4);
+    this.f32AsU32 = new Uint32Array(buffer, 0, 4);
     this.genU32 = new Uint32Array(buffer, OFFSET_GEN_LO, 2);
   }
 
@@ -104,6 +117,7 @@ export class CameraBuffer {
       scale: this.f32[0],
       tx: this.f32[1],
       ty: this.f32[2],
+      rotation: this.f32[3],
     };
   }
 
@@ -123,12 +137,14 @@ export class CameraBuffer {
       Atomics.store(this.f32AsU32, 0, floatBits(cam.scale));
       Atomics.store(this.f32AsU32, 1, floatBits(cam.tx));
       Atomics.store(this.f32AsU32, 2, floatBits(cam.ty));
+      Atomics.store(this.f32AsU32, 3, floatBits(cam.rotation ?? 0));
       Atomics.add(this.genU32, 0, 1);
     } else {
       // Non-SAB fallback: plain stores, no atomics.
       this.f32[0] = cam.scale;
       this.f32[1] = cam.tx;
       this.f32[2] = cam.ty;
+      this.f32[3] = cam.rotation ?? 0;
       this.genU32[0] = (this.genU32[0] + 1) >>> 0;
     }
   }
@@ -176,7 +192,14 @@ export function docToViewport(
   x: number,
   y: number,
 ): [number, number] {
-  return [x * cam.scale + cam.tx, y * cam.scale + cam.ty];
+  const r = cam.rotation ?? 0;
+  if (r === 0) return [x * cam.scale + cam.tx, y * cam.scale + cam.ty];
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  return [
+    cam.scale * (c * x - s * y) + cam.tx,
+    cam.scale * (s * x + c * y) + cam.ty,
+  ];
 }
 
 export function viewportToDoc(
@@ -185,5 +208,45 @@ export function viewportToDoc(
   y: number,
 ): [number, number] {
   const inv = 1 / cam.scale;
-  return [(x - cam.tx) * inv, (y - cam.ty) * inv];
+  const u = (x - cam.tx) * inv;
+  const v = (y - cam.ty) * inv;
+  const r = cam.rotation ?? 0;
+  if (r === 0) return [u, v];
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  return [c * u + s * v, -s * u + c * v];
+}
+
+/** The camera as an SVG / canvas `matrix(a, b, c, d, e, f)`. */
+export function cameraMatrix(
+  cam: Camera,
+): [number, number, number, number, number, number] {
+  const r = cam.rotation ?? 0;
+  const c = Math.cos(r) * cam.scale;
+  const s = Math.sin(r) * cam.scale;
+  return [c, s, -s, c, cam.tx, cam.ty];
+}
+
+/** `cam` turned by `delta` radians about the viewport point `(px, py)`:
+ *  the document point under it stays put (Rotate View). */
+export function rotateCameraAbout(
+  cam: Camera,
+  delta: number,
+  px: number,
+  py: number,
+): Camera {
+  const [dx, dy] = viewportToDoc(cam, px, py);
+  const rotation = normaliseRotation((cam.rotation ?? 0) + delta);
+  const turned = { scale: cam.scale, tx: 0, ty: 0, rotation };
+  const [ox, oy] = docToViewport(turned, dx, dy);
+  return { scale: cam.scale, tx: px - ox, ty: py - oy, rotation };
+}
+
+/** A rotation in (−π, π], and exactly 0 for a turn that came back. */
+export function normaliseRotation(r: number): number {
+  if (!Number.isFinite(r)) return 0;
+  const two = Math.PI * 2;
+  let n = ((r % two) + two) % two;
+  if (n > Math.PI) n -= two;
+  return Math.abs(n) < 1e-9 ? 0 : n;
 }

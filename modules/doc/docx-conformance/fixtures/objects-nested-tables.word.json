@@ -1,0 +1,88 @@
+{
+ "pages": [
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 83.0,
+     "height": 13.0,
+     "text": "Before the table. "
+    },
+    {
+     "top": 87.0,
+     "left": 78.0,
+     "width": 24.0,
+     "height": 13.0,
+     "text": "O11 "
+    },
+    {
+     "top": 87.0,
+     "left": 311.0,
+     "width": 18.0,
+     "height": 13.0,
+     "text": "N1 "
+    },
+    {
+     "top": 101.0,
+     "left": 317.0,
+     "width": 24.0,
+     "height": 13.0,
+     "text": "N11 "
+    },
+    {
+     "top": 101.0,
+     "left": 417.0,
+     "width": 24.0,
+     "height": 13.0,
+     "text": "N12 "
+    },
+    {
+     "top": 116.0,
+     "left": 317.0,
+     "width": 24.0,
+     "height": 13.0,
+     "text": "N21 "
+    },
+    {
+     "top": 116.0,
+     "left": 417.0,
+     "width": 24.0,
+     "height": 13.0,
+     "text": "N22 "
+    },
+    {
+     "top": 130.0,
+     "left": 311.0,
+     "width": 18.0,
+     "height": 13.0,
+     "text": "N2 "
+    },
+    {
+     "top": 144.0,
+     "left": 78.0,
+     "width": 24.0,
+     "height": 13.0,
+     "text": "O21 "
+    },
+    {
+     "top": 144.0,
+     "left": 311.0,
+     "width": 24.0,
+     "height": 13.0,
+     "text": "O22 "
+    },
+    {
+     "top": 158.0,
+     "left": 72.0,
+     "width": 75.0,
+     "height": 13.0,
+     "text": "After the table. "
+    }
+   ]
+  }
+ ]
+}

@@ -50,10 +50,23 @@ fn everything() -> CanvasModel {
         .self_id
         .clone()
         .expect("a spread id");
-    apply(
+    let frame = apply(
         &mut m,
         json!({"op":"insertFrame","args":{"pageId":page,"bounds":[10.0,10.0,40.0,40.0]}}),
+    )
+    .expect("a frame");
+    // Engine ADR 1039 — a symbol and an instance of it.
+    apply(
+        &mut m,
+        json!({"op":"createSymbol","args":{"name":"Probe","elementIds":[frame],
+        "symbolId":"Symbol/probe","replace":false}}),
     );
+    apply(
+        &mut m,
+        json!({"op":"placeSymbolInstance","args":{"symbolId":"Symbol/probe","pageId":page,
+        "at":[300.0,300.0]}}),
+    )
+    .expect("an instance");
     apply(
         &mut m,
         json!({"op":"insertOval","args":{"pageId":page,"bounds":[50.0,10.0,80.0,40.0]}}),

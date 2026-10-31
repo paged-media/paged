@@ -1,0 +1,161 @@
+{
+  "fixture": "mode-conversions",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/mode-conversions.jsx",
+    "script_sha256": "a248ed238dd8ee4d2869d43a09c4b527ce904dcd57e9a0eedac0b8dd4fa11306",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-28T22:24:51.617Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "findings": {
+    "cmyk_profile": "Coated FOGRA39 (ISO 12647-2:2004)",
+    "gray_profile": "Gray Gamma 2.2",
+    "rendering": "relative colorimetric, BPC, no dither"
+  },
+  "cases": [
+    {
+      "id": "identity",
+      "params": {},
+      "output": "mode-conversions/identity.png",
+      "profile": "none",
+      "bits": 16,
+      "files": []
+    },
+    {
+      "id": "cmyk-16",
+      "params": {
+        "mode": "cmyk",
+        "profile": "Coated FOGRA39 (ISO 12647-2:2004)"
+      },
+      "output": "mode-conversions/cmyk-16.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16,
+      "files": [
+        "mode-conversions/cmyk-16.cmyk.psd"
+      ],
+      "values": {
+        "mode_profile": "Coated FOGRA39 (ISO 12647-2:2004)"
+      }
+    },
+    {
+      "id": "cmyk-8",
+      "params": {
+        "mode": "cmyk",
+        "profile": "Coated FOGRA39 (ISO 12647-2:2004)"
+      },
+      "output": "mode-conversions/cmyk-8.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "mode-conversions/cmyk-8.cmyk.psd"
+      ],
+      "values": {
+        "mode_profile": "Coated FOGRA39 (ISO 12647-2:2004)"
+      }
+    },
+    {
+      "id": "gray-16",
+      "params": {
+        "mode": "gray",
+        "profile": "Gray Gamma 2.2"
+      },
+      "output": "mode-conversions/gray-16.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16,
+      "files": [
+        "mode-conversions/gray-16.gray.psd"
+      ],
+      "values": {
+        "mode_profile": "Gray Gamma 2.2"
+      }
+    },
+    {
+      "id": "gray-8",
+      "params": {
+        "mode": "gray",
+        "profile": "Gray Gamma 2.2"
+      },
+      "output": "mode-conversions/gray-8.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "mode-conversions/gray-8.gray.psd"
+      ],
+      "values": {
+        "mode_profile": "Gray Gamma 2.2"
+      }
+    },
+    {
+      "id": "lab-16",
+      "params": {
+        "mode": "lab"
+      },
+      "output": "mode-conversions/lab-16.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 16,
+      "files": [
+        "mode-conversions/lab-16.lab.psd"
+      ],
+      "values": {
+        "mode_profile": "none"
+      }
+    },
+    {
+      "id": "lab-8",
+      "params": {
+        "mode": "lab"
+      },
+      "output": "mode-conversions/lab-8.png",
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "mode-conversions/lab-8.lab.psd"
+      ],
+      "values": {
+        "mode_profile": "none"
+      }
+    },
+    {
+      "id": "ramp-identity",
+      "params": {},
+      "output": "mode-conversions/ramp-identity.png",
+      "profile": "none",
+      "bits": 16,
+      "files": []
+    },
+    {
+      "id": "ramp-levels-16",
+      "params": {
+        "in_black": 0,
+        "in_white": 255,
+        "gamma": 2.2,
+        "out_black": 0,
+        "out_white": 255
+      },
+      "output": "mode-conversions/ramp-levels-16.png",
+      "profile": "none",
+      "bits": 16,
+      "files": []
+    },
+    {
+      "id": "ramp-levels-8",
+      "params": {
+        "in_black": 0,
+        "in_white": 255,
+        "gamma": 2.2,
+        "out_black": 0,
+        "out_white": 255
+      },
+      "output": "mode-conversions/ramp-levels-8.png",
+      "profile": "none",
+      "bits": 8,
+      "files": []
+    }
+  ]
+}

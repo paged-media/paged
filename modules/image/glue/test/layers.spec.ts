@@ -350,6 +350,10 @@ describe("the panel's Layers section", () => {
     redoLabel: null,
     undoSteps: ["Paint"],
     redoSteps: [],
+    undoIds: [1],
+    redoIds: [],
+    snapshots: [],
+    snapshotBytes: 0,
     ...over,
   });
 
@@ -521,6 +525,10 @@ describe("the layer row's clip toggle", () => {
     redoLabel: null,
     undoSteps: [],
     redoSteps: [],
+    undoIds: [],
+    redoIds: [],
+    snapshots: [],
+    snapshotBytes: 0,
   });
   const render = (over: Partial<Parameters<typeof LayersSection>[0]> = {}) =>
     textOf(

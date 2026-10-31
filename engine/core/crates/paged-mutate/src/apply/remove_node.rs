@@ -120,7 +120,7 @@ pub(super) fn apply_remove_node(
 
 /// What removing `node` removes, leaf by leaf, in paint order: the
 /// node itself, or for a group every leaf under it.
-fn removal_leaves(doc: &Document, node: &NodeId) -> Vec<NodeId> {
+pub(super) fn removal_leaves(doc: &Document, node: &NodeId) -> Vec<NodeId> {
     let NodeId::Group(id) = node else {
         return vec![node.clone()];
     };
@@ -464,6 +464,23 @@ pub(super) fn remove_and_capture(
                     let (parent, z_slot, emptied) = release_home(parsed, FrameRef::Polygon(pos));
                     let image_bytes = poly.image_bytes.take();
                     let spec = capture(parsed, node, &poly, image_bytes, emptied);
+                    return Ok((parent, pos, spec, z_slot));
+                }
+            }
+            Err(OperationError::NodeNotFound(node.clone()))
+        }
+        // Engine ADR 1039 — a symbol instance.
+        NodeId::Instance(id) => {
+            for parsed in &mut doc.spreads {
+                if let Some(pos) = parsed
+                    .spread
+                    .instances
+                    .iter()
+                    .position(|p| p.self_id.as_deref() == Some(id.as_str()))
+                {
+                    let inst = parsed.spread.instances.remove(pos);
+                    let (parent, z_slot, emptied) = release_home(parsed, FrameRef::Instance(pos));
+                    let spec = capture(parsed, node, &inst, None, emptied);
                     return Ok((parent, pos, spec, z_slot));
                 }
             }

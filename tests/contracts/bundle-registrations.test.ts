@@ -39,12 +39,14 @@
 //    than as an unexplained missing id;
 //  · slide's Slides and Notes panels also need the page doors
 //    (`viewport.pages@1`), which no headless host has by default: the check
-//    DRIVES it by handing the harness a pages backend;
+//    DRIVES it by handing the harness a pages backend; its Insert ▸ Shapes…
+//    needs `shell.openPanel@1`, DRIVEN the same way with a shell backend;
 //  · nothing in the nine bundles registers a manifest category later than
 //    activation (sceneLayer surfaces, data providers and binding providers
 //    open lazily, but none of them is declared in `contributes`).
-// No bundle needs an allowance, so `allow` is empty for all nine; one, if it
-// is ever needed, must give its reason and is reported once it goes stale.
+// One allowance: doc's OpenDocument importer is declared but registered only
+// behind its flag (doc ADR 616). Every allowance gives its reason and is
+// reported once it goes stale.
 
 import { describe, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
@@ -73,7 +75,7 @@ interface BundleCheck {
   conditions: readonly Condition[];
   /** Harness options that drive a trigger (a capability no headless host
    *  has by default). */
-  options?: Pick<ManifestConformanceOptions, "pages">;
+  options?: Pick<ManifestConformanceOptions, "pages" | "shell">;
   allow?: readonly ManifestAllowance[];
 }
 
@@ -89,6 +91,15 @@ const PAGES: NonNullable<ManifestConformanceOptions["pages"]> = {
   goToPage: () => false,
   activePage: () => null,
   onDidChangeActivePage: () => () => {},
+};
+
+/** A shell backend for slide's Insert ▸ Shapes… (it opens the Shapes
+ *  panel through `shell.openPanel@1`, which a headless host serves only
+ *  when handed one). */
+const SHELL: NonNullable<ManifestConformanceOptions["shell"]> = {
+  openPanel: () => {},
+  closePanel: () => {},
+  pickFile: async () => [],
 };
 
 /** The nine built-ins, PINNED. The table is what the check iterates; this
@@ -178,6 +189,14 @@ const CHECKS: Record<string, BundleCheck> = {
         gates: "panel.properties (also needs the object model)",
       },
     ],
+    allow: [
+      {
+        category: "importers",
+        id: "media.paged.doc.importer.odt",
+        reason:
+          "OpenDocument import is behind a flag (docBundleWith({ odt: true }), doc ADR 616); the bundle the editor ships leaves it off",
+      },
+    ],
   },
   "media.paged.slide": {
     conditions: [
@@ -204,8 +223,13 @@ const CHECKS: Record<string, BundleCheck> = {
         gates:
           "panel.slides, panel.notes and the slide verbs (command.newSlide, …) — DRIVEN: the check passes a pages backend",
       },
+      {
+        feature: "shell.openPanel@1",
+        gates:
+          "command.insertShapes (Insert ▸ Shapes…) — DRIVEN: the check passes a shell backend",
+      },
     ],
-    options: { pages: PAGES },
+    options: { pages: PAGES, shell: SHELL },
   },
 };
 

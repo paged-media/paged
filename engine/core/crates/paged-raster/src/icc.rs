@@ -18,7 +18,7 @@
 
 //! Embedded ICC profiles, read from the headers only.
 
-use crate::sniff::{sniff, Format};
+use crate::{sniff, Format};
 
 /// The ICC profile embedded in a JPEG (APP2 `ICC_PROFILE` segments,
 /// reassembled in chunk order), a PNG (`iCCP`, inflated) or a TIFF (tag

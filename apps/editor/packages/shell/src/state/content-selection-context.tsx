@@ -67,6 +67,34 @@ interface ContentSelectionContextValue {
    *  plugin host's `host.text.onDidChangeSelection`). Returns the
    *  unsubscribe. */
   subscribeSelection: (listener: () => void) => () => void;
+
+  /** Editor ADR 301 — show the caret and range of `storyId` on `pageId`.
+   *  A master's story is laid out on every page that shows the master,
+   *  and the engine answers its geometry on the first of them; a header
+   *  edited in place is edited on the page it was entered on. `null`
+   *  drops the pin. */
+  pagePin: PagePin | null;
+  setPagePin: (pin: PagePin | null) => void;
+}
+
+/** Where a story's caret is shown (editor ADR 301). */
+export interface PagePin {
+  storyId: string;
+  pageId: string;
+}
+
+/** The caret and range geometry moved onto the pinned page when the
+ *  selection is in the pinned story (editor ADR 301). The geometry is
+ *  page-local, and a master's frame stands at the same place on every
+ *  page that shows the master, so only the page changes. */
+export function pinToPage<T extends { pageId: CaretGeometry["pageId"] }>(
+  geometry: T,
+  selection: ContentSelection | null,
+  pin: PagePin | null,
+): T {
+  if (!pin || !selection || selection.storyId !== pin.storyId) return geometry;
+  if (String(geometry.pageId) === pin.pageId) return geometry;
+  return { ...geometry, pageId: pin.pageId as T["pageId"] };
 }
 
 /** A character style held for a caret (see `typingStyle`). */
@@ -119,6 +147,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   // ADR 248).
   const newestSelection = useRef(0);
   const [typingStyle, setTypingStyleRaw] = useState<TypingStyle | null>(null);
+  const [pagePin, setPagePin] = useState<PagePin | null>(null);
   // The selection's listeners: one set for the provider's life.
   const [selectionListeners] = useState(() => new Set<() => void>());
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
@@ -189,14 +218,18 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
     () => ({
       contentSelection,
       setContentSelection,
-      caret,
+      caret: caret && pinToPage(caret, contentSelection, pagePin),
       setCaret,
-      selectionRects,
+      selectionRects: pagePin
+        ? selectionRects.map((r) => pinToPage(r, contentSelection, pagePin))
+        : selectionRects,
       setSelectionRects,
       contentSelectionRef,
       typingStyle,
       setTypingStyle,
       subscribeSelection,
+      pagePin,
+      setPagePin,
     }),
     [
       contentSelection,
@@ -206,6 +239,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
       typingStyle,
       setTypingStyle,
       subscribeSelection,
+      pagePin,
     ],
   );
 

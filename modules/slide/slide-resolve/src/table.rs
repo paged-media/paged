@@ -236,10 +236,7 @@ fn part_fill(p: &TableStylePart, ctx: &Ctx) -> Option<Paint> {
         return Some(paint(f, ctx, None));
     }
     let r = p.fill_ref.as_ref()?;
-    let ph = r
-        .color
-        .as_ref()
-        .map(|c| super::resolve_color(c, &ctx.colors(None)));
+    let ph = r.color.as_ref().map(|c| ctx.ph(c));
     let f = ctx
         .theme?
         .fill_styles
@@ -282,7 +279,7 @@ pub(super) fn table(t: &pptx_core::Table, ctx: &Ctx) -> Table {
                 .map(|f| paint(f, ctx, None))
                 .or_else(|| {
                     let r = s.background_ref.as_ref()?;
-                    let ph = r.color.as_ref().map(|c| super::resolve_color(c, &colors));
+                    let ph = r.color.as_ref().map(|c| ctx.ph(c));
                     let f = ctx
                         .theme?
                         .fill_styles

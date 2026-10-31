@@ -87,8 +87,9 @@ one undo step, and redo still lands on a revision whose parts exist.
   `smartObject.source` are `heavy`: `getAll` reads them only with
   `{ content: true }`.
 
-**The bake.** Compositing is a GPU kernel fold, and the constitution allows
-no CPU blend path.
+**The bake.** Compositing is a GPU kernel fold. (Since image ADR 480 the engine
+also folds on the CPU twins where no device exists; the object model's bake has
+not moved to it yet.)
 
 - A stack whose composite is the identity is baked in the same batch with
   `replaceImageBytes`. That covers nothing visible and a single plain
@@ -174,7 +175,7 @@ editor cannot start a list from null. The list below was the original survey.
 | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | No text layer: type is rasterised into pixels, so the text-replacement variable has no target                                        | not modelled (by design)                                                                 |
 | Non-identity composites are not baked headless; stored `pending`                                                                     | constitution (GPU-only); needs a GPU realm, for example the Node CLI on a WebGPU runtime |
-| Smart-object re-render and `scale` writes                                                                                            | GPU resample; `renderPending`, `scale` read-only                                         |
+| Smart-object re-render and `scale` writes (the engine draws a placement on the CPU since ADR 482; the manifest edit still defers it) | `renderPending`, `scale` read-only                                                       |
 | Pixel replacement only "as is" (no fit, fill or conform)                                                                             | GPU resample                                                                             |
 | `http(s)` pixel sources                                                                                                              | no fetch door (manifest `network: false`); the caller resolves                           |
 | A placed _layered_ PSD reads flat until opened in the editor                                                                         | engine door: no stateless PSD→manifest export                                            |

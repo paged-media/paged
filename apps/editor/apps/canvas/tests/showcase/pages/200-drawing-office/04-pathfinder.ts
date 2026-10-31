@@ -244,7 +244,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       page,
-      "the arrangement runs in raw path space and composes at most 12 inputs / 256 faces; past either cap the engine refuses rather than truncates → Appendix A",
+      "the arrangement runs in raw path space and composes at most 1000 inputs / 100 000 faces behind a work budget; past any of them the engine refuses rather than truncates → Appendix A",
     ),
   );
 

@@ -1,0 +1,837 @@
+{
+  "fixture": "layer-styles",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/layer-styles.jsx",
+    "script_sha256": "45d26f6e794f21e8c2dd8c959ecc0b7e28dd5fe9c3176ce7d708adf3daa6ecbe",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-25T03:05:53.338Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "ds-basic",
+      "params": {
+        "DrSh": "multiply black 75, 120 deg, distance 5, size 5"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-basic.psd",
+        "layer-styles/ds-basic.png"
+      ]
+    },
+    {
+      "id": "ds-hard",
+      "params": {
+        "DrSh": "normal black 100, 90 deg, distance 8, size 0"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-hard.psd",
+        "layer-styles/ds-hard.png"
+      ]
+    },
+    {
+      "id": "ds-size10",
+      "params": {
+        "DrSh": "normal black 100, distance 0, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-size10.psd",
+        "layer-styles/ds-size10.png"
+      ]
+    },
+    {
+      "id": "ds-size20",
+      "params": {
+        "DrSh": "normal black 100, distance 0, size 20"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-size20.psd",
+        "layer-styles/ds-size20.png"
+      ]
+    },
+    {
+      "id": "ds-spread50",
+      "params": {
+        "DrSh": "normal black 100, distance 0, size 10, spread 50"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-spread50.psd",
+        "layer-styles/ds-spread50.png"
+      ]
+    },
+    {
+      "id": "ds-spread100",
+      "params": {
+        "DrSh": "normal black 100, distance 0, size 10, spread 100"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-spread100.psd",
+        "layer-styles/ds-spread100.png"
+      ]
+    },
+    {
+      "id": "ds-contour-cone",
+      "params": {
+        "DrSh": "normal black 100, distance 0, size 12, cone contour"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-contour-cone.psd",
+        "layer-styles/ds-contour-cone.png"
+      ]
+    },
+    {
+      "id": "ds-screen-blue",
+      "params": {
+        "DrSh": "screen (0,120,255) 80, 45 deg, distance 6, size 4"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-screen-blue.psd",
+        "layer-styles/ds-screen-blue.png"
+      ]
+    },
+    {
+      "id": "ds-noise",
+      "params": {
+        "DrSh": "normal black 100, size 6, noise 40"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-noise.psd",
+        "layer-styles/ds-noise.png"
+      ]
+    },
+    {
+      "id": "ds-fill0-knocks",
+      "params": {
+        "DrSh": "normal black 100, size 4",
+        "fill": 0,
+        "knocks": true
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-fill0-knocks.psd",
+        "layer-styles/ds-fill0-knocks.png"
+      ]
+    },
+    {
+      "id": "ds-fill0-shows",
+      "params": {
+        "DrSh": "normal black 100, size 4",
+        "fill": 0,
+        "knocks": false
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-fill0-shows.psd",
+        "layer-styles/ds-fill0-shows.png"
+      ]
+    },
+    {
+      "id": "ds-global-light",
+      "params": {
+        "DrSh": "use global light (local angle 0), distance 8, size 3"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-global-light.psd",
+        "layer-styles/ds-global-light.png"
+      ]
+    },
+    {
+      "id": "ds-layer-opacity-50",
+      "params": {
+        "DrSh": "normal black 100, distance 6, size 4",
+        "opacity": 50
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ds-layer-opacity-50.psd",
+        "layer-styles/ds-layer-opacity-50.png"
+      ]
+    },
+    {
+      "id": "is-basic",
+      "params": {
+        "IrSh": "multiply black 75, 120 deg, distance 5, size 5"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/is-basic.psd",
+        "layer-styles/is-basic.png"
+      ]
+    },
+    {
+      "id": "is-choke50",
+      "params": {
+        "IrSh": "normal black 100, distance 0, size 10, choke 50"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/is-choke50.psd",
+        "layer-styles/is-choke50.png"
+      ]
+    },
+    {
+      "id": "is-hard",
+      "params": {
+        "IrSh": "normal black 100, 90 deg, distance 6, size 0"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/is-hard.psd",
+        "layer-styles/is-hard.png"
+      ]
+    },
+    {
+      "id": "og-softer",
+      "params": {
+        "OrGl": "screen (255,255,190) 75, softer, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/og-softer.psd",
+        "layer-styles/og-softer.png"
+      ]
+    },
+    {
+      "id": "og-softer-black",
+      "params": {
+        "OrGl": "normal black 100, softer, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/og-softer-black.psd",
+        "layer-styles/og-softer-black.png"
+      ]
+    },
+    {
+      "id": "og-precise-black",
+      "params": {
+        "OrGl": "normal black 100, precise, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/og-precise-black.psd",
+        "layer-styles/og-precise-black.png"
+      ]
+    },
+    {
+      "id": "og-spread50",
+      "params": {
+        "OrGl": "normal black 100, softer, size 12, spread 50"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/og-spread50.psd",
+        "layer-styles/og-spread50.png"
+      ]
+    },
+    {
+      "id": "og-range25",
+      "params": {
+        "OrGl": "normal black 100, softer, size 12, range 25"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/og-range25.psd",
+        "layer-styles/og-range25.png"
+      ]
+    },
+    {
+      "id": "og-gradient",
+      "params": {
+        "OrGl": "normal, gradient blue to red, size 12"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/og-gradient.psd",
+        "layer-styles/og-gradient.png"
+      ]
+    },
+    {
+      "id": "ig-edge",
+      "params": {
+        "IrGl": "screen (255,255,190) 75, softer, edge, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ig-edge.psd",
+        "layer-styles/ig-edge.png"
+      ]
+    },
+    {
+      "id": "ig-edge-black",
+      "params": {
+        "IrGl": "normal black 100, softer, edge, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ig-edge-black.psd",
+        "layer-styles/ig-edge-black.png"
+      ]
+    },
+    {
+      "id": "ig-center-black",
+      "params": {
+        "IrGl": "normal black 100, softer, center, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ig-center-black.psd",
+        "layer-styles/ig-center-black.png"
+      ]
+    },
+    {
+      "id": "ig-precise-choke",
+      "params": {
+        "IrGl": "normal black 100, precise, edge, size 12, choke 40"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/ig-precise-choke.psd",
+        "layer-styles/ig-precise-choke.png"
+      ]
+    },
+    {
+      "id": "bv-inner-smooth",
+      "params": {
+        "ebbl": "inner bevel, smooth, depth 100, size 5"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-inner-smooth.psd",
+        "layer-styles/bv-inner-smooth.png"
+      ]
+    },
+    {
+      "id": "bv-inner-smooth-10",
+      "params": {
+        "ebbl": "inner bevel, smooth, depth 100, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-inner-smooth-10.psd",
+        "layer-styles/bv-inner-smooth-10.png"
+      ]
+    },
+    {
+      "id": "bv-chisel-hard",
+      "params": {
+        "ebbl": "inner bevel, chisel hard, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-chisel-hard.psd",
+        "layer-styles/bv-chisel-hard.png"
+      ]
+    },
+    {
+      "id": "bv-chisel-soft",
+      "params": {
+        "ebbl": "inner bevel, chisel soft, size 10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-chisel-soft.psd",
+        "layer-styles/bv-chisel-soft.png"
+      ]
+    },
+    {
+      "id": "bv-outer",
+      "params": {
+        "ebbl": "outer bevel, smooth, size 8"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-outer.psd",
+        "layer-styles/bv-outer.png"
+      ]
+    },
+    {
+      "id": "bv-emboss",
+      "params": {
+        "ebbl": "emboss, smooth, size 8"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-emboss.psd",
+        "layer-styles/bv-emboss.png"
+      ]
+    },
+    {
+      "id": "bv-pillow",
+      "params": {
+        "ebbl": "pillow emboss, smooth, size 8"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-pillow.psd",
+        "layer-styles/bv-pillow.png"
+      ]
+    },
+    {
+      "id": "bv-down",
+      "params": {
+        "ebbl": "inner bevel, smooth, size 10, down"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-down.psd",
+        "layer-styles/bv-down.png"
+      ]
+    },
+    {
+      "id": "bv-soften",
+      "params": {
+        "ebbl": "inner bevel, chisel hard, size 10, soften 4"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-soften.psd",
+        "layer-styles/bv-soften.png"
+      ]
+    },
+    {
+      "id": "bv-altitude-60",
+      "params": {
+        "ebbl": "inner bevel, smooth, size 10, altitude 60"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-altitude-60.psd",
+        "layer-styles/bv-altitude-60.png"
+      ]
+    },
+    {
+      "id": "bv-depth-300",
+      "params": {
+        "ebbl": "inner bevel, smooth, size 10, depth 300"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-depth-300.psd",
+        "layer-styles/bv-depth-300.png"
+      ]
+    },
+    {
+      "id": "bv-gloss-cone",
+      "params": {
+        "ebbl": "inner bevel, smooth, size 10, gloss contour cone"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-gloss-cone.psd",
+        "layer-styles/bv-gloss-cone.png"
+      ]
+    },
+    {
+      "id": "bv-contour-cone",
+      "params": {
+        "ebbl": "inner bevel, smooth, size 10, contour cone"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-contour-cone.psd",
+        "layer-styles/bv-contour-cone.png"
+      ]
+    },
+    {
+      "id": "bv-angle-30-colours",
+      "params": {
+        "ebbl": "inner bevel, size 8, 30 deg, normal red / normal blue at 100"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-angle-30-colours.psd",
+        "layer-styles/bv-angle-30-colours.png"
+      ]
+    },
+    {
+      "id": "bv-stroke-emboss",
+      "params": {
+        "ebbl": "stroke emboss, size 6",
+        "FrFX": "outside 4"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bv-stroke-emboss.psd",
+        "layer-styles/bv-stroke-emboss.png"
+      ]
+    },
+    {
+      "id": "sa-invert",
+      "params": {
+        "ChFX": "multiply black 50, 19 deg, distance 11, size 14, invert"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/sa-invert.psd",
+        "layer-styles/sa-invert.png"
+      ]
+    },
+    {
+      "id": "sa-plain",
+      "params": {
+        "ChFX": "multiply black 50, 19 deg, distance 11, size 14"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/sa-plain.psd",
+        "layer-styles/sa-plain.png"
+      ]
+    },
+    {
+      "id": "sa-normal-cone",
+      "params": {
+        "ChFX": "normal black 100, 45 deg, distance 6, size 4, cone"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/sa-normal-cone.psd",
+        "layer-styles/sa-normal-cone.png"
+      ]
+    },
+    {
+      "id": "co-fill0",
+      "params": {
+        "SoFi": "normal 100",
+        "fill": 0
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/co-fill0.psd",
+        "layer-styles/co-fill0.png"
+      ]
+    },
+    {
+      "id": "go-linear",
+      "params": {
+        "GrFl": "linear black to white, 90 deg"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-linear.psd",
+        "layer-styles/go-linear.png"
+      ]
+    },
+    {
+      "id": "go-radial",
+      "params": {
+        "GrFl": "radial"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-radial.psd",
+        "layer-styles/go-radial.png"
+      ]
+    },
+    {
+      "id": "go-angle",
+      "params": {
+        "GrFl": "angle"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-angle.psd",
+        "layer-styles/go-angle.png"
+      ]
+    },
+    {
+      "id": "go-reflected",
+      "params": {
+        "GrFl": "reflected"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-reflected.psd",
+        "layer-styles/go-reflected.png"
+      ]
+    },
+    {
+      "id": "go-diamond",
+      "params": {
+        "GrFl": "diamond"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-diamond.psd",
+        "layer-styles/go-diamond.png"
+      ]
+    },
+    {
+      "id": "go-scale50-angle30",
+      "params": {
+        "GrFl": "linear, 30 deg, scale 50"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-scale50-angle30.psd",
+        "layer-styles/go-scale50-angle30.png"
+      ]
+    },
+    {
+      "id": "go-not-aligned",
+      "params": {
+        "GrFl": "linear, 0 deg, align off"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-not-aligned.psd",
+        "layer-styles/go-not-aligned.png"
+      ]
+    },
+    {
+      "id": "go-reverse-offset",
+      "params": {
+        "GrFl": "linear, reverse, offset 20/-10"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-reverse-offset.psd",
+        "layer-styles/go-reverse-offset.png"
+      ]
+    },
+    {
+      "id": "go-transparency",
+      "params": {
+        "GrFl": "blue opaque to transparent"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-transparency.psd",
+        "layer-styles/go-transparency.png"
+      ]
+    },
+    {
+      "id": "go-multiply-60",
+      "params": {
+        "GrFl": "multiply 60, red to yellow"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/go-multiply-60.psd",
+        "layer-styles/go-multiply-60.png"
+      ]
+    },
+    {
+      "id": "st-inside",
+      "params": {
+        "FrFX": "inside 4"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/st-inside.psd",
+        "layer-styles/st-inside.png"
+      ]
+    },
+    {
+      "id": "st-center",
+      "params": {
+        "FrFX": "center 6"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/st-center.psd",
+        "layer-styles/st-center.png"
+      ]
+    },
+    {
+      "id": "st-outside-square",
+      "params": {
+        "FrFX": "outside 5"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/st-outside-square.psd",
+        "layer-styles/st-outside-square.png"
+      ]
+    },
+    {
+      "id": "st-gradient",
+      "params": {
+        "FrFX": "outside 6, gradient red to blue"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/st-gradient.psd",
+        "layer-styles/st-gradient.png"
+      ]
+    },
+    {
+      "id": "st-multiply-50",
+      "params": {
+        "FrFX": "outside 4, multiply 50, blue"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/st-multiply-50.psd",
+        "layer-styles/st-multiply-50.png"
+      ]
+    },
+    {
+      "id": "bo-fill50-overlay",
+      "params": {
+        "SoFi": "normal 60",
+        "fill": 50
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bo-fill50-overlay.psd",
+        "layer-styles/bo-fill50-overlay.png"
+      ]
+    },
+    {
+      "id": "bo-fill50-overlay-interior",
+      "params": {
+        "SoFi": "normal 60",
+        "fill": 50,
+        "blendInterior": true
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bo-fill50-overlay-interior.psd",
+        "layer-styles/bo-fill50-overlay-interior.png"
+      ]
+    },
+    {
+      "id": "bo-fill0-inner-shadow",
+      "params": {
+        "IrSh": "multiply black 100, size 6",
+        "fill": 0
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bo-fill0-inner-shadow.psd",
+        "layer-styles/bo-fill0-inner-shadow.png"
+      ]
+    },
+    {
+      "id": "bo-mask-shapes-shadow",
+      "params": {
+        "DrSh": "normal black 100, distance 6, size 3",
+        "mask": "left half",
+        "hides": false
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bo-mask-shapes-shadow.psd",
+        "layer-styles/bo-mask-shapes-shadow.png"
+      ]
+    },
+    {
+      "id": "bo-mask-hides-shadow",
+      "params": {
+        "DrSh": "normal black 100, distance 6, size 3",
+        "mask": "left half",
+        "hides": true
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bo-mask-hides-shadow.psd",
+        "layer-styles/bo-mask-hides-shadow.png"
+      ]
+    },
+    {
+      "id": "bo-two-shadows",
+      "params": {
+        "dropShadowMulti": "red right, blue left"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bo-two-shadows.psd",
+        "layer-styles/bo-two-shadows.png"
+      ]
+    },
+    {
+      "id": "bo-everything",
+      "params": {
+        "all": "shadow, glow, bevel, satin, overlay, stroke"
+      },
+      "profile": "sRGB IEC61966-2.1",
+      "bits": 8,
+      "files": [
+        "layer-styles/bo-everything.psd",
+        "layer-styles/bo-everything.png"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,311 @@
+{
+  "fixture": "adjustment-layers-ext",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/adjustment-layers-ext.jsx",
+    "script_sha256": "dfd7a163a20ae243ea304cc64f41b63286b866b4435d2a35eeef00f7613f1931",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-28T16:00:43.404Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "vibrance",
+      "params": {
+        "vibrance": 40,
+        "saturation": -20
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/vibrance.psd",
+        "adjustment-layers-ext/vibrance.png"
+      ]
+    },
+    {
+      "id": "color-balance",
+      "params": {
+        "shadows": [
+          10,
+          -20,
+          30
+        ],
+        "midtones": [
+          -15,
+          25,
+          0
+        ],
+        "highlights": [
+          5,
+          0,
+          -40
+        ],
+        "preserve_luminosity": true
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/color-balance.psd",
+        "adjustment-layers-ext/color-balance.png"
+      ]
+    },
+    {
+      "id": "black-white",
+      "params": {
+        "weights": [
+          40,
+          60,
+          40,
+          60,
+          20,
+          80
+        ],
+        "tint": null
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/black-white.psd",
+        "adjustment-layers-ext/black-white.png"
+      ]
+    },
+    {
+      "id": "black-white-tint",
+      "params": {
+        "weights": [
+          30,
+          70,
+          50,
+          50,
+          10,
+          90
+        ],
+        "tint": [
+          225,
+          211,
+          179
+        ]
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/black-white-tint.psd",
+        "adjustment-layers-ext/black-white-tint.png"
+      ]
+    },
+    {
+      "id": "channel-mixer",
+      "params": {
+        "rows": [
+          [
+            80,
+            20,
+            0,
+            0
+          ],
+          [
+            10,
+            70,
+            20,
+            5
+          ],
+          [
+            0,
+            -10,
+            110,
+            -5
+          ]
+        ],
+        "monochrome": false
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/channel-mixer.psd",
+        "adjustment-layers-ext/channel-mixer.png"
+      ]
+    },
+    {
+      "id": "channel-mixer-mono",
+      "params": {
+        "rows": [
+          [
+            30,
+            59,
+            11,
+            0
+          ]
+        ],
+        "monochrome": true
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/channel-mixer-mono.psd",
+        "adjustment-layers-ext/channel-mixer-mono.png"
+      ]
+    },
+    {
+      "id": "posterize",
+      "params": {
+        "levels": 5
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/posterize.psd",
+        "adjustment-layers-ext/posterize.png"
+      ]
+    },
+    {
+      "id": "threshold",
+      "params": {
+        "level": 140
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/threshold.psd",
+        "adjustment-layers-ext/threshold.png"
+      ]
+    },
+    {
+      "id": "gradient-map",
+      "params": {
+        "stops": [
+          [
+            0,
+            [
+              20,
+              10,
+              80
+            ]
+          ],
+          [
+            2048,
+            [
+              200,
+              60,
+              40
+            ]
+          ],
+          [
+            4096,
+            [
+              250,
+              240,
+              200
+            ]
+          ]
+        ],
+        "reverse": false,
+        "dither": false
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/gradient-map.psd",
+        "adjustment-layers-ext/gradient-map.png"
+      ]
+    },
+    {
+      "id": "gradient-map-reversed",
+      "params": {
+        "stops": [
+          [
+            0,
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          [
+            4096,
+            [
+              255,
+              255,
+              255
+            ]
+          ]
+        ],
+        "reverse": true,
+        "dither": false
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/gradient-map-reversed.psd",
+        "adjustment-layers-ext/gradient-map-reversed.png"
+      ]
+    },
+    {
+      "id": "selective-color",
+      "params": {
+        "ranges": [
+          [
+            "Rds ",
+            10,
+            -20,
+            30,
+            0
+          ],
+          [
+            "Ntrl",
+            -5,
+            0,
+            15,
+            10
+          ],
+          [
+            "Blks",
+            0,
+            0,
+            0,
+            20
+          ]
+        ],
+        "absolute": false
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/selective-color.psd",
+        "adjustment-layers-ext/selective-color.png"
+      ]
+    },
+    {
+      "id": "selective-color-absolute",
+      "params": {
+        "ranges": [
+          [
+            "Bls ",
+            25,
+            0,
+            -25,
+            0
+          ],
+          [
+            "Whts",
+            0,
+            10,
+            0,
+            0
+          ]
+        ],
+        "absolute": true
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "adjustment-layers-ext/selective-color-absolute.psd",
+        "adjustment-layers-ext/selective-color-absolute.png"
+      ]
+    }
+  ]
+}

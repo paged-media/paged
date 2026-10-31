@@ -126,6 +126,12 @@ pub struct ApiCatalog {
     /// `paged.schema(kind)` answer, verbatim. Operation rows are absent.
     pub object_schemas:
         std::collections::BTreeMap<String, Vec<crate::object_schema::ObjectSchemaRow>>,
+    /// Editor ADR 309 / plan C16 — the effect kinds of the ordered stack
+    /// (engine ADR 1008): menu group, targets and parameter form of each,
+    /// which the Effects and Appearance panels and the Effect menu list.
+    pub effect_kinds: Vec<crate::effect_kinds::EffectKindRow>,
+    /// The Effect menu's groups, in menu order.
+    pub effect_categories: &'static [&'static str],
 }
 
 /// One settable path that answers to two names.
@@ -153,6 +159,8 @@ pub fn api_catalog() -> ApiCatalog {
         path_aliases: path_aliases(),
         property_schemas: crate::virtual_paths::property_schemas(),
         object_schemas: crate::object_schema::object_schemas(),
+        effect_kinds: crate::effect_kinds::effect_kinds(),
+        effect_categories: crate::effect_kinds::EFFECT_CATEGORIES,
     }
 }
 
@@ -311,9 +319,21 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.resizePage", "(pageId, [t,l,b,r])", "bool", "write", "Set a page's GeometricBounds in page-inner points."),
         f!("paged.applyMasterToPage", "(pageId, masterId?)", "bool", "write", "Apply a master to a page (omit/null detaches)."),
         f!("paged.movePage", "(pageId, afterPageId?)", "bool", "write", "Move a page to follow another (omit/null: to the front)."),
+        f!("paged.placePage", "(pageId, [x, y]?)", "bool", "write", "Put a page (an artboard) at [x, y] pt on the canvas (omit/null: its default slot)."),
+        // --- symbols (engine ADR 1039) ---
+        f!("paged.symbols", "()", "SymbolSummary[] JSON", "read", "The document's symbols: id, name, revision, bounds, 9-slice guides, instances."),
+        f!("paged.createSymbol", "(name, elementIds, { symbolId?, replace?, nineSlice? }?)", "string | null", "write", "Make a symbol from page items; with replace (default) they become an instance, which is selected. Returns the symbol id."),
+        f!("paged.redefineSymbol", "(symbolId, { elementIds?, name?, nineSlice?, replace? })", "bool", "write", "New artwork, name or 9-slice guides ([] removes) for a symbol; every instance follows."),
+        f!("paged.placeSymbolInstance", "(symbolId, pageId, [x, y]?, [a, b, c, d]?)", "string | null", "write", "Place an instance, its registration point at [x, y] page pt (omit: the page centre); returns its instance:<id> address."),
+        f!("paged.breakSymbolLink", "(elementId)", "string | null", "write", "Break Link to Symbol: the instance becomes ordinary items; returns the new root's address."),
+        f!("paged.deleteSymbol", "(symbolId)", "bool", "write", "Delete a symbol; its instances become ordinary items first."),
+        f!("paged.expandAppearance", "(elementId)", "bool", "write", "Expand Appearance: the item becomes what its live vector effects draw (engine ADR 1042)."),
         f!("paged.createMaster", "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })", "bool", "author", "Create a master spread: one page of the given size, or a copy of another master."),
         f!("paged.deleteMaster", "(masterId)", "bool", "author", "Delete a master no page applies."),
         f!("paged.renameMaster", "(masterId, name?)", "bool", "write", "Set (omit/null: clear) a master's name."),
+        f!("paged.setPageOverrides", "(pageId, itemIds)", "bool", "write", "Set a page's (or master page's) override list: the master items it hides."),
+        f!("paged.overrideMasterItems", "(pageId, itemIds, emptyText?)", "bool", "write", "Copy master items onto a page where the master draws them and hide the master's."),
+        f!("paged.insertItemHyperlink", "(itemId, url, pageId?)", "bool", "write", "Make a page item a hyperlink's source, to a URL or a page."),
         f!("paged.onMaster", "(masterId, mutation)", "bool", "write", "Apply a mutation ({ op, args }) to a master spread's items."),
         f!("paged.setPageMetadata", "(pageId, key, value?)", "bool", "write", "Set or delete one plugin-metadata entry on a page (value: the JSON envelope)."),
         // --- frames & groups ---
@@ -335,7 +355,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.pathPointSet", "(elemId, index, role, [x,y])", "bool", "write", "Write one Bezier handle (role = anchor|left|right)."),
         f!("paged.pathOpenAt", "(elemId, index)", "bool", "write", "Cut the path at the anchor at flat index."),
         f!("paged.outlineStroke", "(elemId, width, cap, join, miter)", "bool", "write", "Replace the path with its stroke-expansion outline."),
-        f!("paged.offsetPath", "(elemId, delta, join, miter)", "bool", "write", "Inset (delta<0) / outset (delta>0) a single closed contour."),
+        f!("paged.offsetPath", "(elemId, delta, join, miter, side?)", "bool", "write", "Inset (delta<0) / outset (delta>0) a path; compound paths keep their holes; side (both|left|right) offsets an open contour to one side."),
         f!("paged.simplifyPath", "(elemId, tolerance)", "bool", "write", "Re-express the path with fewer anchors within tolerance pt."),
         f!("paged.pathfinderBoolean", "(keptId, [otherIds], kind)", "bool", "author",
            "Pathfinder boolean (kind = union|intersect|subtract|exclude)."),
@@ -406,7 +426,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.deleteSection", "(sectionId)", "bool", "author", "Delete a <Section>."),
         // --- conditions ---
         f!("paged.setConditionVisible", "(conditionId, visible)", "bool", "write", "Flip a condition's visibility."),
-        f!("paged.setFlowGrowRule", "(storyId, grow, maxPages?, copyFrameOptions?)", "bool", "write", "Let a story's frame chain grow: generated pages are added after its last frame's page while it oversets (InDesign's Smart Text Reflow), and removed when empty. copyFrameOptions gives generated frames the chain's frame options (a Word section's mode) instead of InDesign's defaults. grow=false clears the rule."),
+        f!("paged.setFlowGrowRule", "(storyId, grow, maxPages?, copyFrameOptions?, {master?, firstMaster?, evenMaster?, sectionStart?})", "bool", "write", "Let a story's frame chain grow: generated pages are added after its last frame's page while it oversets (InDesign's Smart Text Reflow), and removed when empty. copyFrameOptions gives generated frames the chain's frame options (a Word section's mode) instead of InDesign's defaults. The options pick a Word section's first / odd / even masters and an odd- or even-page start (a blank page goes in front when it lands wrong). grow=false clears the rule."),
         f!("paged.activateConditionSet", "(setId)", "bool", "write", "Activate one <ConditionSet> (\"show only this set\")."),
         // --- layers ---
         f!("paged.layerInsert", "(position, name)", "bool", "author", "Append a layer at the zero-based stacking index."),
@@ -498,6 +518,44 @@ fn host_functions() -> Vec<HostFn> {
            "Accept a tracked deletion at its story offset (paged.collection(\"trackedChanges\")): the text stays deleted. Undoable."),
         f!("paged.rejectTrackedChange", "(storyId, offset)", "bool", "author",
            "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."),
+        f!("paged.recordChange", "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?}, paragraph?)", "bool", "author",
+           "Record a tracked change (insert, delete, format, paraProps, insertMark, deleteMark) over story chars [start, end), or on a paragraph for the paragraph kinds: what an importer writes for Word's revisions. Undoable."),
+        f!("paged.acceptChange", "({storyId?, id?, author?})", "bool", "author",
+           "Accept a tracked change by id, every change by an author, or all (in one story when storyId is set). One undo step."),
+        f!("paged.rejectChange", "({storyId?, id?, author?})", "bool", "author",
+           "Reject a tracked change by id, an author's, or all: insertions go, deletions stay, formatting goes back. One undo step."),
+        f!("paged.insertComment", "(storyId, start, end, {text, id?, author?, initials?, date?})", "bool", "author",
+           "A comment on story chars [start, end) (paged.collection(\"comments\")). Undoable."),
+        f!("paged.replyComment", "(parentId, {text, id?, author?, initials?, date?})", "bool", "author",
+           "Reply to a comment; the reply joins its thread. Undoable."),
+        f!("paged.resolveComment", "(commentId, resolved?)", "bool", "author",
+           "Resolve (or, with false, reopen) a comment's thread. Undoable."),
+        f!("paged.deleteComment", "(commentId)", "bool", "author",
+           "Delete a comment; a thread's first comment takes its replies and its range. Undoable."),
+        f!("paged.editComment", "(commentId, text, date?)", "bool", "author",
+           "Rewrite a comment's text. Undoable."),
+        f!("paged.find", "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})", "string", "read",
+           "Find text (literal, Word wildcards or a regex; ^p ^t ^l ^m work in every mode): a JSON array of hits with story, caret and character ranges and context."),
+        f!("paged.findReplace", "(text, replace, {replaceAll?, replaceParagraphStyle?, replaceCharacterStyle?, …find options})", "bool", "author",
+           "Replace the first hit, or every hit, of a find; ^p ^t ^l ^& and $1 work in the replacement. One undo step."),
+        f!("paged.setListLevel", "(storyId, start, end, {level} | {delta})", "bool", "author",
+           "Move the paragraphs touching story chars [start, end) to a list level 1–9, or by a delta (Tab / Shift+Tab). Undoable."),
+        f!("paged.restartNumbering", "(storyId, start, end, {startAt?, continueNumbering?})", "bool", "author",
+           "Restart the list count at the paragraphs touching [start, end) (or continue it). Undoable."),
+        f!("paged.setStyleBasedOn", "(collection, styleId, basedOn|null)", "bool", "author",
+           "Re-parent a style; refused when it would inherit from itself. Undoable."),
+        f!("paged.updateFields", "({storyId?, offset?, now?})", "bool", "author",
+           "Word's F9: recompute the Word fields' results (every story's, one story's, or the one field at a story offset) over the current layout; DATE and TIME read now (YYYY-MM-DDTHH:MM:SS). One undo step; refused when nothing changes."),
+        f!("paged.insertTextAnchor", "(storyId, offset, name)", "string|null", "author",
+           "Word's Insert Bookmark: a named text destination at a story offset, which REF and PAGEREF fields and cross-references name. Returns its id."),
+        f!("paged.deleteTextAnchor", "(anchorId)", "bool", "author",
+           "Delete a bookmark (a text destination). Undoable."),
+        f!("paged.insertCrossReference", "(storyId, offset, {bookmark} | {storyId, paragraph}, {referTo?: text|pageNumber|aboveBelow, hyperlink?})", "bool", "author",
+           "Word's Insert Cross-reference: a REF or PAGEREF field with its result, to a bookmark or to a paragraph (which gets a hidden _Ref bookmark). One undo step."),
+        f!("paged.insertTableOfContents", "(storyId, offset, [{style, level}], {title?, tocStyleName?, pageNumbers?, leader?, tabPosition?})", "bool", "author",
+           "Word's Insert Table of Contents: the TOC style and TOC 1… entry styles (right tab with a leader) when missing, and the entries with their page numbers in paragraphs of their own at the caret. paged.updateTableOfContents rewrites them in place. One undo step."),
+        f!("paged.insertIndexMarker", "(storyId, offset, topic | [topic, subtopic…], {sortOrder?})", "bool", "author",
+           "Word's Mark Entry: an index marker for a topic path in the paragraph at a story offset; missing topics are created. paged.generateIndex lists it. Undoable."),
         f!("paged.convertNoteToText", "(noteId)", "bool", "author",
            "Convert to Text: an editorial note's place becomes a space and the note's text, its paragraphs the story's."),
         f!("paged.createBookmark", "(name, {page?, destination?, parent?, index?})", "string|null", "author",
@@ -765,11 +823,19 @@ property_paths! {
         FramePdfPage => "framePdfPage" : count().min(1.0).default_num(1.0).idml(idml![attr(PDFAttribute, PageNumber)]),
         // Engine ADR 1006 — the outline's fill rule; IDML has no attribute.
         FrameFillRule => "frameFillRule" : enum_(FILL_RULES).default_text("NonZero"),
+        // Engine ADR 1037 — the placed picture's filter stack; IDML has none
+        // (the export keeps it in a label and reports it).
+        FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
         // Engine ADR 1007 — how a gradient stroke maps onto the stroke; IDML has no attribute.
         FrameGradientStrokeMode => "frameGradientStrokeMode" : enum_(STROKE_GRADIENT_MODES).default_text("Within"),
-        // Engine ADR 1007 — the gradient's start point, [x, y] in inner coordinates ([] = default).
+        // Engine ADRs 1007 and 1031 — the gradient fill's start, `[x, y]` in inner coordinates ([] = default).
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
-        // Engine ADR 1040 — the native mesh fill (no IDML attribute: a
+        // Engine ADR 1047 — live shapes; IDML has none (the outline is written, the parameters ride a label).
+        FrameShapeSides => "frameShapeSides" : count().range(3.0, 100.0),
+        FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
+        FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
+        FrameShapePieEnd => "frameShapePieEnd" : deg().default_num(360.0),
+        // Engine ADR 1048 — the native mesh fill (no IDML attribute: a
         // label carries it through an IDML round trip).
         FrameFillMesh => "frameFillMesh" : structure("MeshFillSpec", Wire::FillMesh),
         // Engine ADR 1041 — the frame's own placement of a pattern paint
@@ -868,6 +934,15 @@ property_paths! {
         GroupIsolateBlending => "groupIsolateBlending" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, IsolateBlending)]),
         GroupKnockout => "groupKnockout" : bool_().default_bool(false).idml(idml![attr(BlendingSetting, KnockoutGroup)]),
         GroupClip => "groupClip" : bool_().default_bool(false),
+        // Engine ADR 1042 — a group's vector effects (Pathfinder and the rest).
+        GroupEffectStack => "groupEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        // Engine ADR 1039 — a symbol instance's tint `[r, g, b, amount]`
+        // and 9-slice guides `[left, top, right, bottom]`; `[]` clears.
+        // Native: IDML has no symbol (the writer expands instances).
+        SymbolInstanceTint => "symbolInstanceTint" : lengths(),
+        SymbolInstanceNineSlice => "symbolInstanceNineSlice" : lengths(),
+        // Draw ADR 365 — the symbol an instance draws (Replace Symbol).
+        SymbolInstanceSymbol => "symbolInstanceSymbol" : text(),
         // R-11 — the drop shadow's remaining attributes.
         FrameDropShadowBlendMode => "frameDropShadowBlendMode" : enum_open(BLEND_MODES).default_text("Multiply").idml(idml![attr(DropShadowSetting, BlendMode)]),
         FrameDropShadowSpread => "frameDropShadowSpread" : pct().default_num(0.0).idml(idml![attr(DropShadowSetting, Spread)]),
@@ -879,6 +954,15 @@ property_paths! {
         // apply arm takes the same node kinds as the others and the
         // bridge already encodes its spec. PROMOTED 2026-09-09.
         FrameGradientFeather => "frameGradientFeather" : structure("GradientFeatherSpec", Wire::GradientFeather),
+        // Engine ADR 1008 — the ordered effect stack per target.
+        FrameEffectStack => "frameEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameFillEffectStack => "frameFillEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameStrokeEffectStack => "frameStrokeEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameContentEffectStack => "frameContentEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        // Engine ADR 1043 — native appearance: the whole layer list, and
+        // one layer by index.
+        FrameAppearance => "frameAppearance" : list_of("PaintLayerSpec", Wire::Appearance),
+        FrameAppearanceLayer => "frameAppearanceLayer" : operation("AppearanceLayerSpec", Wire::AppearanceLayer),
         CellFillColor => "cellFillColor" : color().idml(idml![attr(Cell | CellStyle, FillColor)]),
         CellFillTint => "cellFillTint" : pct().default_num(100.0).idml(idml![attr(Cell | CellStyle, FillTint)]),
         CellInsetTop => "cellInsetTop" : length_pos().idml(idml![attr(Cell, TextTopInset)]),
@@ -945,6 +1029,17 @@ property_paths! {
         CharacterNoBreak => "characterNoBreak" : bool_().default_bool(false).idml(idml![attr(CharacterStyleRange | CharacterStyle, NoBreak)]),
         CharacterLigatures => "characterLigatures" : bool_().default_bool(true).idml(idml![attr(CharacterStyleRange | CharacterStyle, Ligatures)]),
         CharacterOtfFeatures => "characterOtfFeatures" : text(),
+        CharacterHighlightColor => "characterHighlightColor" : color(),
+        CharacterHidden => "characterHidden" : bool_().default_bool(false),
+        CharacterUnderlineType => "characterUnderlineType" : enum_open(UNDERLINE_KINDS).default_text("single").idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, UnderlineType)]),
+        CharacterUnderlineColor => "characterUnderlineColor" : color().idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, UnderlineColor)]),
+        CharacterDoubleStrikethrough => "characterDoubleStrikethrough" : bool_().default_bool(false).idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, StrikeThroughType)]),
+        ParagraphShadingOn => "paragraphShadingOn" : bool_().default_bool(false).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingOn)]),
+        ParagraphShadingColor => "paragraphShadingColor" : color().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingColor)]),
+        ParagraphShadingTint => "paragraphShadingTint" : pct().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingTint)]),
+        ParagraphBorderOn => "paragraphBorderOn" : bool_().default_bool(false).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphBorderOn)]),
+        ParagraphBorderColor => "paragraphBorderColor" : color().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphBorderColor)]),
+        ParagraphBorderWeight => "paragraphBorderWeight" : length_pos().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphBorderWeight)]),
         ParagraphLeftIndent => "paragraphLeftIndent" : length().default_num(0.0).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, LeftIndent)]),
         ParagraphRightIndent => "paragraphRightIndent" : length().default_num(0.0).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, RightIndent)]),
         ParagraphDropCapCharacters => "paragraphDropCapCharacters" : count().range(0.0, 150.0).default_num(0.0).idml(idml![attr(ParagraphStyleRange, DropCapCharacters)]),
@@ -1000,6 +1095,10 @@ property_paths! {
         LayerPrintable => "layerPrintable" : bool_().default_bool(true).idml(idml![attr(Layer, Printable)]), "layer",
         LayerName => "layerName" : text().required().idml(idml![attr(Layer, Name)]), "layer",
         PageBounds => "pageBounds" : bounds().idml(idml![attr(Page, GeometricBounds)]), "page",
+        // Engine ADR 1011 — a page's place on the canvas (an artboard
+        // position), `[x, y]` pt; `[]` is the default slot. Native: IDML
+        // stacks its spreads (a loss on export).
+        PageCanvasOrigin => "pageCanvasOrigin" : lengths(), "page",
         PageMarginTop => "pageMarginTop" : length_pos().default_num(36.0).idml(idml![attr(MarginPreference, Top)]), "page",
         PageMarginBottom => "pageMarginBottom" : length_pos().default_num(36.0).idml(idml![attr(MarginPreference, Bottom)]), "page",
         PageMarginLeft => "pageMarginLeft" : length_pos().default_num(36.0).idml(idml![attr(MarginPreference, Left)]), "page",
@@ -1030,6 +1129,11 @@ property_paths! {
         DocumentFootnoteSpacer => "documentFootnoteSpacer" : length_pos().default_num(0.0).idml(idml![attr(FootnoteOption, Spacer)]), "doc",
         DocumentFootnoteRuleOn => "documentFootnoteRuleOn" : bool_().default_bool(true).idml(idml![attr(FootnoteOption, RuleOn)]), "doc",
         DocumentFootnoteContinuingRuleOn => "documentFootnoteContinuingRuleOn" : bool_().default_bool(true).idml(idml![attr(FootnoteOption, ContinuingRuleOn)]), "doc",
+        DocumentShowHiddenText => "documentShowHiddenText" : bool_().default_bool(false), "doc",
+        DocumentShowFieldCodes => "documentShowFieldCodes" : bool_().default_bool(false), "doc",
+        DocumentTrackChanges => "documentTrackChanges" : bool_().default_bool(false), "doc",
+        DocumentTrackChangesAuthor => "documentTrackChangesAuthor" : text(), "doc",
+        DocumentMarkupView => "documentMarkupView" : enum_(MARKUP_VIEWS).default_text("all"), "doc",
         TextVariableName => "textVariableName" : text().idml(idml![attr(TextVariable, Name)]), "textVariable",
         TextVariableType => "textVariableType" : enum_open(TEXT_VARIABLE_TYPES).idml(idml![attr(TextVariable, VariableType)]), "textVariable",
         TextVariableContents => "textVariableContents" : text().idml(idml![child(CustomTextVariablePreference, Contents)]), "textVariable",
@@ -1427,14 +1531,35 @@ mod tests {
         //
         // 245 -> 246: ADR 1010 — a group is a clip group.
         //
-        // 246 -> 248: ADR 1007 — a frame's stroke gradient mode and its
-        // gradient's start point.
+        // 246 -> 257: ADR 1018 — Word's character additions (five) and the
+        // paragraph's own shading and border (six).
         //
-        // 248 -> 249: ADR 1040 — a frame's gradient mesh or freeform
+        // 257 -> 258: ADR 1031 — where a frame's gradient fill starts.
+        //
+        // 258 -> 262: ADR 1008 — the effect stack of each transparency
+        // target.
+        //
+        // 262 -> 264: ADR 1039 — a symbol instance's tint and 9-slice guides.
+        //
+        // 264 -> 265: draw ADR 365 — the symbol an instance draws.
+        //
+        // 265 -> 266: ADR 1037 — an image frame's filter stack.
+        //
+        // 266 -> 268: ADR 1043 — an item's appearance, and one layer of it.
+        //
+        // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
+        // inset, an oval's pie angles).
+        //
+        // 272 -> 273: ADR 1042 — a group's vector effects.
+        //
+        // 273 -> 274: ADR 1007 — a frame's stroke gradient mode (its
+        // gradient's start point is ADR 1031's path).
+        //
+        // 274 -> 275: ADR 1048 — a frame's gradient mesh or freeform
         // gradient.
         //
-        // 249 -> 250: ADR 1041 — a frame's own pattern transform.
-        assert_eq!(cat.settable_paths.len(), 250, "settable path count drifted");
+        // 275 -> 276: ADR 1041 — a frame's own pattern transform.
+        assert_eq!(cat.settable_paths.len(), 276, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

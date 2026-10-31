@@ -61,6 +61,15 @@ const PAGES: NonNullable<ManifestConformanceOptions["pages"]> = {
   onDidChangeActivePage: () => () => {},
 };
 
+/** A shell backend for slide's Insert ▸ Shapes… (it opens the Shapes
+ *  panel through `shell.openPanel@1`, which a headless host serves only
+ *  when handed one). */
+const SHELL: NonNullable<ManifestConformanceOptions["shell"]> = {
+  openPanel: () => {},
+  closePanel: () => {},
+  pickFile: async () => [],
+};
+
 interface Recorded {
   menus: string[];
   keybindings: string[];
@@ -124,9 +133,21 @@ describe("the surface gate enumerates exactly what each bundle registers", () =>
         const seen: Recorded = { menus: [], keybindings: [], toolOptions: [] };
         await checkManifestConformance(recording(bundle, seen), {
           resolveFrom: ENGINE_ANCHOR,
-          ...(entry.id === "media.paged.slide" ? { pages: PAGES } : {}),
+          ...(entry.id === "media.paged.slide"
+            ? { pages: PAGES, shell: SHELL }
+            : {}),
         });
         const mine = surface.items.filter((i) => i.owner === entry.id);
+        // A binding the host registers too (doc's Cmd+F names the host's
+        // Find, editor ADR 303) is enumerated once, as the host's.
+        const elsewhere = new Set(
+          surface.items
+            .filter((i) => i.owner !== entry.id)
+            .map((i) => `${i.kind}:${i.id}`),
+        );
+        seen.keybindings = seen.keybindings.filter(
+          (k) => !elsewhere.has(`keybinding:${k}`),
+        );
         const statically: Recorded = {
           menus: mine
             .filter((i) => i.kind === "menu")

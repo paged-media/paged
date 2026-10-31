@@ -401,7 +401,10 @@ fn flow_layout(flow: &PaginatedFlow, cap: f64) -> Layout {
         let mut used = 0.0;
         let mut row = 0;
         for block in &frame.blocks {
-            if let FlowBlock::Record { cells, height_pt } = block {
+            if let FlowBlock::Record {
+                cells, height_pt, ..
+            } = block
+            {
                 used += height_pt;
                 placed.push(Placed {
                     page: p,
@@ -602,6 +605,7 @@ fn paginator_layout(fx: &Fixture) -> Layout {
         .map(|k| FlowRecord {
             cells: vec![fx.merged_text(k)],
             height_pt: h,
+            record: Some(k),
         })
         .collect();
     let groups = [FlowGroup {

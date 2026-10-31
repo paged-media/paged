@@ -1,0 +1,117 @@
+{
+  "fixture": "adjustments-ext",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/adjustments-ext.jsx",
+    "script_sha256": "79f99f656b978106863b1c97fe11b0ea027907b1e4b93f548c3a71ffe0bd5f7b",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-25T06:57:58.389Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "identity",
+      "params": {},
+      "output": "adjustments-ext/identity.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "desaturate",
+      "params": {},
+      "output": "adjustments-ext/desaturate.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "equalize",
+      "params": {},
+      "output": "adjustments-ext/equalize.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "shadows-highlights-defaults",
+      "params": {
+        "shadows": [
+          35,
+          50,
+          30
+        ],
+        "highlights": [
+          0,
+          50,
+          30
+        ],
+        "color_correction": 20,
+        "midtone_contrast": 0,
+        "clip": [
+          0.01,
+          0.01
+        ]
+      },
+      "output": "adjustments-ext/shadows-highlights-defaults.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "shadows-highlights-strong",
+      "params": {
+        "shadows": [
+          80,
+          70,
+          10
+        ],
+        "highlights": [
+          60,
+          40,
+          10
+        ],
+        "color_correction": 0,
+        "midtone_contrast": 30,
+        "clip": [
+          0.01,
+          0.01
+        ]
+      },
+      "output": "adjustments-ext/shadows-highlights-strong.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "replace-color-red-hue60",
+      "params": {
+        "colour_lab": [
+          54,
+          81,
+          70
+        ],
+        "fuzziness": 40,
+        "hue": 60,
+        "saturation": 0,
+        "lightness": 0
+      },
+      "output": "adjustments-ext/replace-color-red-hue60.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "match-color-self-neutralize",
+      "params": {
+        "source": "self",
+        "luminance": 100,
+        "intensity": 100,
+        "fade": 0,
+        "neutralize": true
+      },
+      "output": "adjustments-ext/match-color-self-neutralize.png",
+      "profile": "none",
+      "bits": 16
+    }
+  ]
+}

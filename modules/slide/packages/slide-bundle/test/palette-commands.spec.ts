@@ -41,11 +41,20 @@ import { activate } from "../src/activate";
 import {
   CMD,
   COMMAND_PREFIX,
+  DECK_CONTEXT,
   PPTX_ACCEPT,
   SLIDE_KEYBINDINGS,
+  SLIDE_NORMAL_VIEW_KEYS,
   contributeSlideCommands,
 } from "../src/commands";
 import { contributeMenu, MENU_ENTRIES } from "../src/menu";
+import { ANIM_CMD, ANIM_MENU } from "../src/anim/contribute";
+import { SHOW_CMD, SHOW_MENU } from "../src/show/contribute";
+import { OUTPUT_CMD, OUTPUT_MENU } from "../src/output/commands";
+import { CONTENT_CMD, CONTENT_MENU } from "../src/content-commands";
+import { DESIGN_CMD, DESIGN_MENU } from "../src/design";
+import { MASTER_CMD, MASTER_MENU } from "../src/masters-commands";
+import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
   DUPLICATE_SLIDE_COMMAND,
   NEW_SLIDE_COMMAND,
@@ -81,12 +90,14 @@ function recordingHost(
   const menus: MenuContribution[] = [];
   const keys: KeybindingContribution[] = [];
   let caret: unknown = null;
+  let selected: string[] = [];
   const logs: string[] = [];
   const mutations: MutationInput[] = [];
   const invoked: Array<{ command: string; args: unknown }> = [];
   const visited: string[] = [];
   const picks: unknown[] = [];
   const saves: Array<{ suggestedName: string; length: number }> = [];
+  const panels: string[] = [];
   let picked: Array<{ name: string; bytes: Uint8Array; mimeType: string }> = [];
   const host = {
     supports: (f: string) => features.includes(f),
@@ -111,6 +122,7 @@ function recordingHost(
       },
     },
     text: { caret: () => caret },
+    selection: { get: () => selected },
     document: {
       collection: async () => pageIds().map((selfId) => ({ selfId })),
       async mutate(m: MutationInput) {
@@ -139,6 +151,9 @@ function recordingHost(
         saves.push({ suggestedName: o.suggestedName, length: o.bytes.length });
         return true;
       },
+      openPanel(id: string) {
+        panels.push(id);
+      },
     },
   } as unknown as BundleHost;
   return {
@@ -149,12 +164,16 @@ function recordingHost(
     setCaret(c: unknown) {
       caret = c;
     },
+    select(ids: string[]) {
+      selected = ids;
+    },
     logs,
     mutations,
     invoked,
     visited,
     picks,
     saves,
+    panels,
     pick(files: typeof picked) {
       picked = files;
     },
@@ -170,6 +189,7 @@ const ALL = [
   "objects@1",
   "shell.pickFile@1",
   "shell.saveFile@1",
+  "shell.openPanel@1",
 ];
 
 function setup(
@@ -179,6 +199,8 @@ function setup(
     active?: number;
     features?: readonly string[];
     withStore?: boolean;
+    scopedKeys?: boolean;
+    openComments?: () => void;
     exportDeck?: () => Promise<{
       bytes: Uint8Array;
       fileName: string;
@@ -198,6 +220,9 @@ function setup(
   const handle = contributeSlideCommands(r.host, {
     store: opts.withStore === false ? null : store,
     objectModel: true,
+    ...(opts.scopedKeys ? { scopedKeys: true } : {}),
+    ...(opts.openComments ? { openComments: opts.openComments } : {}),
+    shapesPanel: SHAPES_PANEL_ID,
     async openDeck(name) {
       opened.push(name);
       return null;
@@ -222,16 +247,26 @@ function setup(
 describe("paged.slide palette commands", () => {
   it("registers every command the manifest declares, with a menu entry each", () => {
     const s = setup();
-    expect([...s.commands.keys()].sort()).toEqual(
-      [...MANIFEST.contributes.commands].sort(),
-    );
-    expect(s.menus.map((m) => m.command).sort()).toEqual(
-      [...MANIFEST.contributes.commands].sort(),
-    );
+    // The slide show's commands are the show's (show/contribute.ts, its
+    // own suite); these are the deck verbs.
+    // The outputs', the animations' and the content verbs' commands are
+    // their own suites' (output/commands.ts, anim/contribute.ts,
+    // test/content-commands).
+    const show = new Set<string>([
+      ...Object.values(SHOW_CMD),
+      ...Object.values(OUTPUT_CMD),
+      ...Object.values(ANIM_CMD),
+      ...Object.values(CONTENT_CMD),
+      ...Object.values(DESIGN_CMD),
+      ...Object.values(MASTER_CMD),
+    ]);
+    const verbs = MANIFEST.contributes.commands.filter((c) => !show.has(c));
+    expect([...s.commands.keys()].sort()).toEqual([...verbs].sort());
+    expect(s.menus.map((m) => m.command).sort()).toEqual([...verbs].sort());
     // The file verbs in the host's File menu, the slide verbs in Slide.
     expect(s.menus.map((m) => m.path)).toEqual(MENU_ENTRIES.map(([p]) => p));
     for (const [path] of MENU_ENTRIES)
-      expect(["File", "Slide"]).toContain(path.split("/")[0]);
+      expect(["File", "Slide", "Insert"]).toContain(path.split("/")[0]);
     s.menu.dispose();
     s.handle.dispose();
     expect(s.menus).toEqual([]);
@@ -295,6 +330,114 @@ describe("paged.slide palette commands", () => {
     expect(s.keys).toEqual([]);
   });
 
+  it("binds PowerPoint's Normal-view keys scoped to the deck: Cmd/Ctrl+M, Cmd/Ctrl+D with nothing selected, PageUp/PageDown", async () => {
+    covers(
+      "keybinding:cmd+m→media.paged.slide.command.newSlide",
+      "keybinding:ctrl+m→media.paged.slide.command.newSlide",
+      "keybinding:cmd+d→media.paged.slide.command.duplicateSlide",
+      "keybinding:ctrl+d→media.paged.slide.command.duplicateSlide",
+      "keybinding:pageup→media.paged.slide.command.previousSlide",
+      "keybinding:pagedown→media.paged.slide.command.nextSlide",
+    );
+    // Without the scope door (or without the deck context) none is bound.
+    const plain = setup({ scopedKeys: true });
+    expect(plain.keys.some((k) => k.scope)).toBe(false);
+    const noContext = setup({
+      features: [...ALL, "contribute.keybinding.scope@1"],
+    });
+    expect(noContext.keys.some((k) => k.scope)).toBe(false);
+
+    const s = setup({
+      slides: 3,
+      active: 2,
+      scopedKeys: true,
+      features: [...ALL, "contribute.keybinding.scope@1"],
+    });
+    const scoped = s.keys.filter((k) => k.scope);
+    expect(scoped.map((k) => `${k.key}→${k.command}`)).toEqual(
+      SLIDE_NORMAL_VIEW_KEYS.map((k) => `${k.key}→${k.command}`),
+    );
+    for (const k of scoped) {
+      expect(k.scope).toEqual({ editContext: DECK_CONTEXT });
+      expect(s.commands.has(k.command)).toBe(true);
+    }
+    const on = (key: string) => {
+      const k = scoped.find((x) => x.key === key)!;
+      return typeof k.when === "function" ? k.when(null) : true;
+    };
+    for (const k of scoped) expect(on(k.key), k.key).toBe(true);
+    // A selection keeps Cmd+D the host's (duplicate the object).
+    s.select(["u12"]);
+    expect(on("cmd+d")).toBe(false);
+    expect(on("ctrl+d")).toBe(false);
+    expect(on("cmd+m")).toBe(true);
+    s.select([]);
+    // A caret keeps PageUp/PageDown and Cmd+D the text's; Ctrl+M is still
+    // New slide, as in PowerPoint.
+    s.setCaret({ story: "u1", offset: 0 });
+    expect(on("pageup")).toBe(false);
+    expect(on("pagedown")).toBe(false);
+    expect(on("cmd+d")).toBe(false);
+    expect(on("ctrl+m")).toBe(true);
+    s.setCaret(null);
+    // They follow their commands: no previous slide on the first.
+    s.state.active = 1;
+    expect(on("pageup")).toBe(false);
+    expect(on("pagedown")).toBe(true);
+    // PageDown runs Next slide: the viewport goes to slide 2.
+    await s.commands
+      .get(scoped.find((k) => k.key === "pagedown")!.command)!
+      .handler(null);
+    expect(s.visited).toEqual(["p2"]);
+    s.handle.dispose();
+    expect(s.keys).toEqual([]);
+  });
+
+  it("Previous / Next slide go to the neighbouring slide; New comment raises the Comments panel", async () => {
+    covers(
+      "command:media.paged.slide.command.previousSlide",
+      "command:media.paged.slide.command.nextSlide",
+      "command:media.paged.slide.command.addComment",
+    );
+    let raised = 0;
+    const s = setup({ slides: 3, active: 2, openComments: () => raised++ });
+    expect(s.when(CMD.previousSlide)).toBe(true);
+    expect(s.when(CMD.nextSlide)).toBe(true);
+    await s.run(CMD.previousSlide);
+    await s.run(CMD.nextSlide);
+    expect(s.visited).toEqual(["p1", "p3"]);
+    s.state.active = 3;
+    expect(s.when(CMD.nextSlide)).toBe(false);
+    // At the end a bare invoke logs and stays.
+    await s.run(CMD.nextSlide);
+    expect(s.visited).toEqual(["p1", "p3"]);
+    expect(s.logs.some((l) => l.includes("nextSlide"))).toBe(true);
+    expect(s.when(CMD.addComment)).toBe(true);
+    await s.run(CMD.addComment);
+    expect(raised).toBe(1);
+    // Without a panel door New comment logs why.
+    const bare = setup({ slides: 2, active: 1 });
+    await bare.run(CMD.addComment);
+    expect(bare.logs.some((l) => l.includes("addComment"))).toBe(true);
+  });
+
+  it("Insert ▸ Shapes… opens the Shapes panel, offered where a slide is active", async () => {
+    covers("command:media.paged.slide.command.insertShapes");
+    const s = setup({ slides: 3, active: 2 });
+    expect(s.when(CMD.insertShapes)).toBe(true);
+    await s.run(CMD.insertShapes);
+    expect(s.panels).toEqual([SHAPES_PANEL_ID]);
+    // Opening the panel edits nothing.
+    expect(s.mutations).toEqual([]);
+    s.state.active = 0;
+    expect(s.when(CMD.insertShapes)).toBe(false);
+    // Without the panel door the command is not registered at all.
+    const bare = setup({
+      features: ALL.filter((f) => f !== "shell.openPanel@1"),
+    });
+    expect(bare.commands.has(CMD.insertShapes)).toBe(false);
+  });
+
   it("binds no keys on a host without the slide store", () => {
     const s = setup({ withStore: false });
     expect(s.keys).toEqual([]);
@@ -310,6 +453,7 @@ describe("paged.slide palette commands", () => {
       CMD.moveSlideDown,
       CMD.exportPptx,
       CMD.importPptx,
+      CMD.insertShapes,
     ])
       expect(s.when(id), id).toBe(true);
 
@@ -329,6 +473,7 @@ describe("paged.slide palette commands", () => {
       CMD.deleteSlide,
       CMD.moveSlideUp,
       CMD.moveSlideDown,
+      CMD.insertShapes,
     ])
       expect(s.when(id), id).toBe(false);
 
@@ -475,8 +620,20 @@ describe("paged.slide palette commands", () => {
       },
       parts: { read: async () => null },
     } as unknown as BundleHost);
-    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length);
-    expect(r.menus.length).toBe(MENU_ENTRIES.length);
+    // Every declared command but the Slide Sorter and the Slide Master view, which need the view
+    // door this host does not have, and Insert ▸ Shapes…, which opens the
+    // Shapes panel and needs the panel and snapshot doors this host lacks.
+    expect(r.commands.size).toBe(MANIFEST.contributes.commands.length - 3);
+    expect(r.menus.length).toBe(
+      MENU_ENTRIES.length +
+        SHOW_MENU.length +
+        OUTPUT_MENU.length +
+        ANIM_MENU.length +
+        CONTENT_MENU.length +
+        DESIGN_MENU.length +
+        MASTER_MENU.length -
+        3,
+    );
     h.dispose();
     expect(r.commands.size).toBe(0);
     expect(r.menus.length).toBe(0);

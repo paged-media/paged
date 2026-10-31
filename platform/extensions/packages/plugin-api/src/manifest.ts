@@ -155,10 +155,11 @@ export interface PluginCapabilities {
   actions?: ActionsCapability;
   /**
    * The clipboard door's grant (K-6 / S-14). Gates `host.clipboard`:
-   * `"full"` grants BOTH the text and the rich `tabular` (cell-grid)
-   * payload — the sheets range copy/paste interchange; `"vector"` grants
-   * the `text` half only (a vector plugin copies a textual representation,
-   * not a cell grid — a `tabular` write is dropped); `"none"` (the
+   * `"full"` grants the text, the rich `tabular` (cell-grid) and the
+   * `svg` payload — the sheets range copy/paste interchange; `"vector"`
+   * grants the `text` and `svg` halves (a vector plugin copies a textual
+   * and an SVG representation, not a cell grid — a `tabular` write is
+   * dropped); `"none"` (the
    * default) / absent DENIES the door (read → `null`, write refused). See
    * `clipboard.ts` for the surface + DESIGN.md for the trust line.
    */
@@ -411,6 +412,12 @@ export interface PluginContributions {
   /** Exporter ids the bundle registers (K-2 / S-06). Must be namespaced
    *  by `id`. */
   exporters?: string[];
+  /** Presentation ids the bundle registers (extensions ADR 345). Must be
+   *  namespaced by `id`. */
+  presentations?: string[];
+  /** Module view ids the bundle registers (extensions ADR 345, C5). Must
+   *  be namespaced by `id`. */
+  views?: string[];
   /** `.paged` CONTAINER part-types this plugin persists (file-format.md
    *  §4 / §8.1). Each extended object is stored in three ROLES: `spec` (the
    *  canonical JSON definition — small, diffable, must round-trip), `source`

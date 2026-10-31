@@ -308,3 +308,19 @@ impl RunEdit {
         }
     }
 }
+
+/// Something put INTO a body paragraph that is not text (doc ADRs 611 and
+/// 612): a new note reference, a new field or a new bookmark, as its
+/// pre-rendered WordprocessingML. It goes into run `run` of block `block`
+/// between `before` and `after` (the run's text split there), after the
+/// run when `after` is empty, or at the paragraph's start when `run` is
+/// `None`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AtomInsert {
+    pub block: usize,
+    pub run: Option<usize>,
+    pub before: String,
+    pub after: String,
+    pub xml: String,
+}

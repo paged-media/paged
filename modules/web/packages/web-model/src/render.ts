@@ -175,6 +175,22 @@ export interface SceneDropShadowItem {
   a: number;
 }
 
+/** An inset box shadow — the C-1 `innerShadow` item: the path is the
+ *  element's border box moved by the shadow's offset (the item's own offset
+ *  is 0), shadowed inside the box. Snake_case fields as on the wire. */
+export interface SceneInnerShadowItem {
+  kind: "innerShadow";
+  path: ScenePathSeg[];
+  offset_x: number;
+  offset_y: number;
+  blur_radius: number;
+  choke: number;
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
 /** One drawable in a {@link SceneLayer} — the subset of the C-1
  *  `SceneItem` union the web render lane lowers to: filled paths,
  *  (multi-run, transform-correct) single-line text runs, and axis-aligned
@@ -186,7 +202,8 @@ export type SceneItem =
   | SceneImageItem
   | SceneStrokeItem
   | SceneGradientItem
-  | SceneDropShadowItem;
+  | SceneDropShadowItem
+  | SceneInnerShadowItem;
 
 /** A plugin-submitted vector layer in frame-content coordinates — the
  *  C-1 `SceneLayer` IR (the wire.d.ts shape). The bundle lowers this to
@@ -195,6 +212,61 @@ export type SceneItem =
  *  content-box clip (ADR-011 Option B). */
 export interface SceneLayer {
   items: SceneItem[];
+}
+
+/** One function of a CSS `filter` list (ADR 415), lengths in points,
+ *  colours straight sRGB 0..1. `blur`'s radius is the Gaussian's standard
+ *  deviation; `dropShadow`'s `blur` the CSS blur radius. */
+export type SceneCssFilter =
+  | { kind: "blur"; radius: number }
+  | {
+      kind: "dropShadow";
+      dx: number;
+      dy: number;
+      blur: number;
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    }
+  | { kind: "opacity"; amount: number }
+  | {
+      kind: "color";
+      /** `brightness`, `contrast`, `grayscale`, `hue-rotate` (amount in
+       *  degrees), `invert`, `saturate` or `sepia`. */
+      function: string;
+      amount: number;
+    }
+  | { kind: "url" };
+
+/** An element's CSS effects over the layer items `[start, end)` (ADR 415):
+ *  what its compositing layer carries, for a bake to map onto native items.
+ *  `parent` is the enclosing group's index in the same list. Rides beside
+ *  the layer (the engine's `take_effects`), never in it. */
+export interface SceneEffectGroup {
+  start: number;
+  end: number;
+  parent?: number;
+  /** The element's opacity 0..1 (1: none). */
+  opacity: number;
+  /** `mix-blend-mode` in its IDML spelling (`Multiply`). */
+  blend?: string;
+  /** `isolation: isolate`. */
+  isolate?: boolean;
+  filters?: SceneCssFilter[];
+  /** The `clip-path` outline, frame-content points. */
+  clip?: ScenePathSeg[];
+  /** What the `mask-image` layers paint (the element's alpha). */
+  mask?: SceneItem[];
+  /** Effects with no native equivalent, by loss key. */
+  losses?: string[];
+}
+
+/** The effect channel of one layer: its groups and the effects no painted
+ *  item carries, counted by loss key. */
+export interface SceneLayerEffects {
+  groups: SceneEffectGroup[];
+  losses?: Record<string, number>;
 }
 
 /**

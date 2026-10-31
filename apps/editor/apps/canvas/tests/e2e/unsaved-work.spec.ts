@@ -98,11 +98,17 @@ test.describe("Phase A — unsaved work", () => {
     await expect
       .poll(
         () =>
-          page.evaluate(
-            () =>
-              (globalThis as unknown as { __canvas: { ready: boolean } })
-                .__canvas.ready,
-          ),
+          // The open is over once its pages are rendered: right after it,
+          // File > Open marks the importer's result saved (F-08), which
+          // would swallow an edit made sooner.
+          page.evaluate(() => {
+            const c = (
+              globalThis as unknown as {
+                __canvas: { ready: boolean; snapshotsReady: boolean };
+              }
+            ).__canvas;
+            return c.ready && c.snapshotsReady;
+          }),
         { timeout: 30_000 },
       )
       .toBe(true);
@@ -199,11 +205,17 @@ test.describe("B3 — the Pages panels stop being two halves", () => {
     await expect
       .poll(
         () =>
-          page.evaluate(
-            () =>
-              (globalThis as unknown as { __canvas: { ready: boolean } })
-                .__canvas.ready,
-          ),
+          // The open is over once its pages are rendered: right after it,
+          // File > Open marks the importer's result saved (F-08), which
+          // would swallow an edit made sooner.
+          page.evaluate(() => {
+            const c = (
+              globalThis as unknown as {
+                __canvas: { ready: boolean; snapshotsReady: boolean };
+              }
+            ).__canvas;
+            return c.ready && c.snapshotsReady;
+          }),
         { timeout: 30_000 },
       )
       .toBe(true);
@@ -270,11 +282,17 @@ test.describe("A5 — Save writes back to the file it opened", () => {
     await expect
       .poll(
         () =>
-          page.evaluate(
-            () =>
-              (globalThis as unknown as { __canvas: { ready: boolean } })
-                .__canvas.ready,
-          ),
+          // The open is over once its pages are rendered: right after it,
+          // File > Open marks the importer's result saved (F-08), which
+          // would swallow an edit made sooner.
+          page.evaluate(() => {
+            const c = (
+              globalThis as unknown as {
+                __canvas: { ready: boolean; snapshotsReady: boolean };
+              }
+            ).__canvas;
+            return c.ready && c.snapshotsReady;
+          }),
         { timeout: 30_000 },
       )
       .toBe(true);
@@ -331,11 +349,17 @@ test.describe("ED-4 — saving clears the edited flag", () => {
     await expect
       .poll(
         () =>
-          page.evaluate(
-            () =>
-              (globalThis as unknown as { __canvas: { ready: boolean } })
-                .__canvas.ready,
-          ),
+          // The open is over once its pages are rendered: right after it,
+          // File > Open marks the importer's result saved (F-08), which
+          // would swallow an edit made sooner.
+          page.evaluate(() => {
+            const c = (
+              globalThis as unknown as {
+                __canvas: { ready: boolean; snapshotsReady: boolean };
+              }
+            ).__canvas;
+            return c.ready && c.snapshotsReady;
+          }),
         { timeout: 30_000 },
       )
       .toBe(true);

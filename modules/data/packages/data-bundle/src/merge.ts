@@ -62,6 +62,7 @@ import type {
   Mutation,
   MutationOutcome,
   PageId,
+  StoryContent,
 } from "@paged-media/plugin-api";
 
 import {
@@ -234,6 +235,12 @@ export function isCopiedFramePath(path: string): boolean {
   );
 }
 
+/** An effect stack with no entries (engine ADR 1008). */
+const EMPTY_EFFECT_STACK = { entries: [], prev: null };
+
+/** An appearance with no layers (engine ADR 1043). */
+const EMPTY_APPEARANCE = { layers: [], prev: null };
+
 /** Values a frame property takes when nothing sets it — what a fresh frame
  *  already has, and what InDesign writes into every frame of a template
  *  (`[Normal Text Frame]`, no wrap, one column, zero gradient angles, …).
@@ -257,6 +264,9 @@ const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
   // Core ADR 1006: every frame with an outline reads its fill rule, and a
   // fresh one is non-zero (IDML has no other); only even-odd is worth a copy.
   frameFillRule: ["NonZero"],
+  // Engine ADR 1031: every frame reads its gradient fill's start, the origin
+  // on a fresh one; only a moved start is worth a copy.
+  frameGradientFillStart: [[0, 0]],
   textFrameColumnCount: [1],
   textFrameVerticalJustification: ["TopAlign"],
   textFrameFirstBaseline: ["AscentOffset"],
@@ -268,6 +278,15 @@ const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
   frameCornerOptionTopRight: ["None"],
   frameCornerOptionBottomLeft: ["None"],
   frameCornerOptionBottomRight: ["None"],
+  // Engine ADR 1008: every frame reads its four effect stacks, empty on a
+  // fresh one; only a stack with entries is worth a copy.
+  frameEffectStack: [EMPTY_EFFECT_STACK],
+  frameFillEffectStack: [EMPTY_EFFECT_STACK],
+  frameStrokeEffectStack: [EMPTY_EFFECT_STACK],
+  frameContentEffectStack: [EMPTY_EFFECT_STACK],
+  // Engine ADR 1043: every frame reads its appearance, no layers on a fresh
+  // one; only an appearance with layers is worth a copy.
+  frameAppearance: [EMPTY_APPEARANCE],
 };
 
 /** Whether a read property value says something a fresh frame does not:
@@ -283,7 +302,13 @@ export function isSetValue(
   if (!v) return false;
   const x = v.value;
   if (x === null || x === undefined) return false;
-  if (path && FRESH_FRAME_DEFAULTS[path]?.includes(x)) return false;
+  if (
+    path &&
+    FRESH_FRAME_DEFAULTS[path]?.some(
+      (d) => d === x || JSON.stringify(d) === JSON.stringify(x),
+    )
+  )
+    return false;
   if (typeof x === "boolean") return x;
   if (typeof x === "string") return x !== "" && !/\[None\]$/.test(x);
   if (Array.isArray(x))
@@ -354,7 +379,10 @@ export function pageElements(
 }
 
 /** Apply an IDML item transform `[a b c d e f]` to bounds (axis-aligned). */
-function transformBounds(b: Bounds, t: number[] | null | undefined): Bounds {
+export function transformBounds(
+  b: Bounds,
+  t: number[] | null | undefined,
+): Bounds {
   if (!t) return b;
   const [a, bb, c, d, e, f] = t;
   const pts = [
@@ -651,6 +679,120 @@ export async function storyFont(
   return fontOf(await copiedProperties(host, storyId, text));
 }
 
+/** A story's runs as the run-aware overset measure reads them (data ADR
+ *  564): each run's text with the face it is set in (an index into
+ *  `fonts`), its paragraphs ended by `\n`, the trailing breaks dropped. A
+ *  run's face is the font, style and size it sets directly, the story's
+ *  (`storyFont`) where it sets none; its leading is the story's where the
+ *  story sets one, else auto (120 %) of the run's size. */
+export async function storyFaces(
+  host: BundleHost,
+  storyId: string,
+  text: string,
+  content: StoryContent,
+): Promise<{
+  runs: { text: string; face: number }[];
+  fonts: TemplateFrameInfo["font"][];
+}> {
+  const format = await copiedProperties(host, storyId, text);
+  const base = fontOf(format);
+  const fixedLeading = format.some(
+    (f) =>
+      f.path === "characterLeading" &&
+      typeof (f.value as { value?: unknown }).value === "number",
+  );
+  // A run's size and face set by its character style, else its paragraph's
+  // style (not on the run itself), as the object model reads the style.
+  const styleFace = new Map<
+    string,
+    { sizePt?: number; family?: string; style?: string }
+  >();
+  const faceOfStyle = async (
+    family: "character" | "paragraph",
+    name: string | null | undefined,
+  ) => {
+    if (!name) return {};
+    // A run names its style by the style's id (`CharacterStyle/<id>`), which
+    // is the rest of the style's address.
+    const key = `${family}/${name}`;
+    const known = styleFace.get(key);
+    if (known) return known;
+    const read: { sizePt?: number; family?: string; style?: string } = {};
+    const objects = (
+      host as {
+        objects?: {
+          get(a: string, p: string): Promise<unknown>;
+        };
+      }
+    ).objects;
+    if (objects) {
+      const get = async (path: string) => {
+        try {
+          return (
+            (await objects.get(`style:${key}`, path)) as {
+              value?: unknown;
+            }
+          )?.value;
+        } catch {
+          return undefined;
+        }
+      };
+      const size = await get("characterFontSize");
+      if (typeof size === "number" && size > 0) read.sizePt = size;
+      const fam = await get("characterFontFamily");
+      if (typeof fam === "string" && fam !== "") read.family = fam;
+      const sty = await get("characterFontStyle");
+      if (typeof sty === "string" && sty !== "") read.style = sty;
+    }
+    styleFace.set(key, read);
+    return read;
+  };
+  const fonts: TemplateFrameInfo["font"][] = [];
+  const faceOf = new Map<string, number>();
+  const runs: { text: string; face: number }[] = [];
+  const last = content.paragraphs.length - 1;
+  for (const [i, p] of content.paragraphs.entries()) {
+    let face = runs.length > 0 ? runs[runs.length - 1]!.face : 0;
+    const para = await faceOfStyle("paragraph", p.paragraphStyle);
+    for (const r of p.runs) {
+      const char = await faceOfStyle("character", r.characterStyle);
+      const sizePt =
+        typeof r.pointSize === "number" && r.pointSize > 0
+          ? r.pointSize
+          : (char.sizePt ?? para.sizePt ?? base.sizePt);
+      const font = {
+        family: r.font ?? char.family ?? para.family ?? base.family,
+        style: r.fontStyle ?? char.style ?? para.style ?? base.style,
+        sizePt,
+        leadingPt: fixedLeading ? base.leadingPt : sizePt * AUTO_LEADING,
+      };
+      const key = JSON.stringify(font);
+      let at = faceOf.get(key);
+      if (at === undefined) {
+        at = fonts.length;
+        fonts.push(font);
+        faceOf.set(key, at);
+      }
+      face = at;
+      const t = r.text.replace(/[\r\u2028\u2029]/g, "\n");
+      if (t !== "") runs.push({ text: t, face });
+    }
+    if (i < last) runs.push({ text: "\n", face });
+  }
+  if (fonts.length === 0) fonts.push(base);
+  // The trailing breaks hold no line the story needs.
+  while (runs.length > 0) {
+    const r = runs[runs.length - 1]!;
+    const kept = r.text.replace(/\n+$/, "");
+    if (kept !== "") {
+      r.text = kept;
+      break;
+    }
+    runs.pop();
+  }
+  return { runs, fonts };
+}
+
 function fontOf(format: CopiedProperty[]): TemplateFrameInfo["font"] {
   const get = (p: string) =>
     (format.find((f) => f.path === p)?.value as { value?: unknown } | undefined)
@@ -690,6 +832,9 @@ export interface MergeWriteOptions {
   /** The id every merged element is labelled with, so a re-merge finds and
    *  replaces them (`relower.ts`). */
   mergeId: string;
+  /** The session query the records come from, named in each label so the
+   *  Data panel can mark and find a record's frames (editor ADR 291). */
+  dataQuery?: string;
   /** Mutations that clear a previous run of this merge (`relower.ts`); they
    *  ride the first batch, so a re-merge is no extra undo step. */
   clear?: Mutation[];
@@ -807,6 +952,7 @@ export function contentMutation(
       const label = makeEnvelope({
         kind: "merge",
         merge: opts.mergeId,
+        ...(opts.dataQuery ? { query: opts.dataQuery } : {}),
         record: rec.record,
         frame: f.template,
         ...(createdPage ? { createdPage } : {}),

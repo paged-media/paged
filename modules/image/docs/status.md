@@ -35,9 +35,24 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   box blur, surface blur, motion and radial blur, lens blur, add noise (uniform or
   gaussian, monochromatic), despeckle, dust and scratches, median (radius ≤ 10), reduce
   noise, high pass, maximum and minimum (radius ≤ 32, square or round), offset, smart
-  sharpen, emboss, find edges, glowing edges, mosaic, colour halftone, ten more gallery
-  effects, gradient map and selective colour; average (no dialog) fills the selection with
-  its average colour. Warp and glass have their own Distort section; colour lookup from a
+  sharpen, emboss, find edges, glowing edges, mosaic, ten gallery effects, gradient map
+  and selective colour; average (no dialog) fills the selection with its average colour.
+  WP5.2 adds ([ADR 473](adr/473-filter-families-and-galleries.md)): **Distort** (displace
+  with a map from the composite or a file, polar coordinates both ways, ripple, shear on a
+  five-point curve, zigzag), **Render** (clouds, difference clouds, fibers in the
+  foreground/background colours, lens flare in four lens types, lighting effects with one
+  spot, point or infinite light and a texture channel), **Stylize** (wind, extrude, tiles,
+  trace contour, solarize), **Pixelate** (crystallize, pointillize, mezzotint, facet, colour
+  halftone with a screen per channel), **Adjust** (shadows/highlights, HDR toning, match
+  colour, replace colour, equalize, desaturate, and Develop — white balance, tone, presence,
+  HSL in eight ranges, colour grading, a parametric tone curve, sharpening and noise
+  reduction, also as a Develop adjustment layer with its own panel in the layer's
+  Properties). The **Filter Gallery** workspace stacks effect layers (eye, reorder, add,
+  delete) over all 47 of Photoshop's gallery effects, applied as one undo step; the
+  **Blur Gallery** workspace runs field (pins), iris, tilt-shift, path and spin blur,
+  together if wanted, with its pins and handles on the canvas (any image tool's drag moves
+  them). **Curves' targeted adjustment**: armed, a drag on the image moves the curve at the
+  tone under the pointer. Warp and glass have their own Distort section; colour lookup from a
   `.cube` file, shape blur; gradient (foreground
   to background), noise, solid, pattern and content-aware fills; Define pattern; the paint
   bucket; a gradient tool (drag the line) in five geometries, linear, radial, angular,
@@ -59,13 +74,43 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   heal composite — source plus membrane tone correction — lands under the stroke); the patch
   tool (drag the selection onto the source; the selection is replaced by the region at that
   offset and healed to its surroundings); with size, hardness, opacity, flow, spacing, blend mode and pen pressure;
+  Content-Aware Move (move or extend the selection, structure 1–7, colour 0–10, a scale and
+  angle on drop, sample all layers: the hole is filled and the seam re-synthesised); the
+  Content-Aware Fill workspace (Edit ▸ Content-Aware Fill…: an automatic, rectangular or
+  painted sampling area shown on the canvas, colour and rotation adaptation, scale, mirror, a
+  preview, output to the layer, a new layer or a duplicate); the Remove tool (a stroke is filled
+  from its surroundings; an `ml.inpaint` provider is asked first when one is installed — none
+  ships); the Clone Source panel (five sources, each with an offset, width / height, angle and
+  flip; an overlay with opacity, clipped, auto hide and invert; sample current layer, current
+  and below, or all layers, also for the healing and spot healing brushes); healing diffusion
+  1–7; spot healing types content-aware, create texture and proximity match. All of these run
+  on a multi-resolution PatchMatch search ([ADR 469](adr/469-patchmatch-retouching.md)), with
+  the final vote on the GPU (`geom.patch_vote`) or its CPU twin;
   presets from an `.abr` brush library. The type tool paints a shaped run of text into the
   active layer with font bytes the host serves for the document's fonts.
+- **Transform and warp** ([ADR 483](adr/483-transform-and-warp-on-pixels.md)). Free Transform
+  of a layer or a selection, with Edit ▸ Transform ▸ Free distort and Perspective opening the box
+  in that mode; Warp… (the fifteen styles or a custom mesh dragged on the canvas,
+  `geom.warp_mesh`); Puppet Warp… (pins on an as-rigid-as-possible mesh, Rigid / Normal /
+  Distort); Filter ▸ Liquify… (Forward Warp, Reconstruct, Smooth, Twirl both ways, Pucker, Bloat,
+  Push Left, the freeze mask; `geom.warp_field`); Content-aware scale… (seam carving, Amount,
+  the selection as protection); the Perspective Crop tool over every layer. Each is one undo step
+  with a live preview.
 - **Layers.** Add, duplicate, remove, reorder; visibility, lock, opacity and 26 blend modes;
   a mask from the selection, Add layer mask (reveal all or hide all) and painting on a mask
   (a Pixels/Mask edit target: the brush and pencil paint the foreground's grey, the eraser
   reveals; each mask stroke is one undo step); groups; clipping; editable adjustment layers; smart objects
-  (convert, re-render at a scale); bake the chain into a layer. One undo list covers pixel
+  in full ([ADR 482](adr/482-smart-objects-in-full.md)): a smart object is its source (the
+  pixels it was converted from, an embedded or linked file, or page items), its placement (four
+  corners: scale, rotate, skew, flip, perspective — Layer ▸ Smart objects ▸ Transform…, the move
+  tool, every canvas op) and its smart filters with a filter mask, and its pixels are re-rendered
+  from the three whenever one changes (the placement drawn on the CPU, Lanczos-reduced then
+  bicubic; the filters on the GPU through the Filter dialog's catalogue); Edit Contents opens the
+  source as a nested document and saving it is one step in the parent; Replace Contents, Relink,
+  Update from file, Embed linked and Export contents; Place selected page items makes a vector
+  smart object drawn again at a higher resolution when it grows; the host Links panel lists the
+  smart objects' files while the image is open. Painting on a smart object is refused, as in
+  Photoshop; bake the chain into a layer. One undo list covers pixel
   edits and every change to the stack ([ADR 463](adr/463-one-undo-list.md)); in the
   `rasterImage` context, entered by double-clicking an ingested frame, the host's undo
   reaches it and the host's Layers panel shows this stack. The Image panel's history list
@@ -137,7 +182,8 @@ frame keeps its previous image until a GPU realm re-composites it.
   layer and mask at once, in one undo step (`object-model/canvas-ops.ts`; pixels move,
   none is computed). The typed `rotateCw`, `rotateCcw`, `rotate180`, `flipHorizontal` and
   `flipVertical` take an optional `image`; `cropImage` and `canvasSize` are new. A stack
-  holding a smart object is refused (its source re-renders on the GPU).
+  holding a smart object is refused (its placement moves with the op, which the headless
+  manifest edit does not draw; the editor's canvas ops do, ADR 482).
 - **A typed `replaceLayerPixels`** `{ layer, source }` replaces a pixel layer's pixels from
   an asset (a data: URL, or the address of a page item whose placed image supplies them),
   placed as is and centred, in one undo step; it is the layer kind's `pixelSource` row
@@ -237,6 +283,14 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   16 px, high pass σ 10 px); Photoshop's go further. There is no Reveal All: layers are
   stored within the canvas (ADR 464 clips their bounds to it), so nothing lies beyond it to
   reveal. Trim trims all four sides (no per-side choice).
+- **WP5.2 filter limits.** The Filter Gallery effects and the Sketch filters are recipes over
+  a dozen gallery operations, not Photoshop's algorithms; the Photoshop ledger records the
+  distance (mostly `convention`). Lighting Effects takes one light, not several; Match Colour
+  matches whole-image statistics (no source layer list inside a document); Replace Colour
+  samples one colour (no colour-range preview or eyedropper sampling); the Blur Gallery has no
+  per-pin focus ellipses beyond iris and spin, and Path Blur takes one polyline of up to eight
+  points. HDR Toning, Lighting Effects and both galleries have no Photoshop recording (not
+  scriptable).
 - **The preview on the page** is one scene-layer image, cleared when the frame leaves the
   selection and on Reset. It goes through the scene layer's image doors (`submitImage`,
   `submitImageTiles`), so a brush sample sends only the rectangle it changed. Edits reach
@@ -246,36 +300,69 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   announces saves (`document.onWillSave@1`), saving the document commits first.
 - **Tiles** are level 0 only, served only after the command, and cut from the held image
   without the panel's chain. The mip export `image_tile_rgba8_level` has no TypeScript caller.
-- **Colour.** Transforms run once, on the CPU, at decode: RGB with an embedded profile to
-  sRGB (perceptual, no black-point compensation). CMYK (JPEG, and a PSD's composite and
-  layer plates through one transform) goes to sRGB through its embedded profile with the
-  perceptual table, which is how the lane approximates Photoshop's default view of a CMYK
-  document (relative colorimetric with black-point compensation, which moxcms lacks): within
-  4 levels, mean 0.44, on Coated FOGRA39 ink patches, up to 23 levels on saturated greens
-  outside sRGB (`image-conformance/tests/it/psd_cmyk_photoshop.rs`). Without a profile, CMYK is
-  converted by the plain ink formula, and the panel says so ("CMYK, converted to sRGB without a
-  profile"); a converted CMYK source is stated as converted, not as managed RGB. The profile of
-  an RGB PSD and of a PNG kept at 16 bits is not applied ("sRGB assumed"). There is no
-  rendering-intent control. Kernels receive encoded values.
-- **Depth.** A 16-bit RGB or RGBA PNG decoded on the main thread is held at 16 bits. The
-  decode worker returns RGBA8, a 16-bit PSD is reduced to 8 bits, and a 16-bit greyscale
-  PNG is refused (`image-js/src/ingest.rs:812-831`; the PSD composite at `:745-765`).
-  `layers_open` (`image-js/src/lib.rs:3015`) and the panel's chain (`adjust_rgba8`,
-  `image-js/src/ingest.rs:1376`) take the held buffer as four bytes per pixel; `LayerStack::from_image_px`, which keeps the depth, is called only by tests.
-  The scene-layer item, tiles and PSD save-back are 8-bit. A curve is a 256-entry table.
-- **PSD.** The composite decode takes 8- and 16-bit RGB, greyscale or CMYK, raw or RLE (not
-  16-bit RLE); other modes and depths are refused, and a transparent document's white-matted
-  merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB
-  and CMYK files, each layer and its mask at its own bounds ([ADR 464](adr/464-layers-at-their-own-bounds.md);
+- **Colour.** Transforms run once, on the CPU, at decode, through the engine's CMS
+  (`paged_color::cms`, [ADR 457](adr/457-colour-management.md)): RGB with an embedded profile to
+  sRGB (qcms, perceptual, no black-point compensation). CMYK (JPEG, and a PSD's composite and
+  layer plates through one transform) goes to sRGB through its embedded profile with relative
+  colorimetric and black-point compensation, Photoshop's default view of a CMYK document: within
+  1 level, mean 0.06, on Coated FOGRA39 ink patches, 4 levels on the saturated green outside sRGB
+  that Photoshop clips differently (`image-conformance/tests/it/psd_cmyk_photoshop.rs`). Without
+  a profile, CMYK is converted by the plain ink formula, and the panel says so ("CMYK, converted
+  to sRGB without a profile"); a converted CMYK source is stated as converted, not as managed
+  RGB. The profile of an RGB PSD and of a PNG kept at 16 bits is not applied ("sRGB assumed").
+  There is no rendering-intent control. Kernels receive encoded values.
+- **Depth.** A 16-bit RGB or RGBA source (PNG, TIFF, a 16-bit RGB PSD's layers) is held at 16
+  bits, through the decode worker too ([ADR 479](adr/479-depth-and-colour-modes.md)). The layer
+  stack, the fold, the panel's adjustment chain and Bake, undo, persistence, the layered PSD save
+  and the 16-bit exporters keep the depth; an 8-bit tool's edit on a 16-bit layer lands at 16 bits
+  inside its damage. Image ▸ Mode ▸ 8/16 Bits/Channel converts every layer as one undo step. The
+  kernels compute in f32 and store f16, so a 16-bit document keeps about 11 bits in the highlights
+  through a kernel (2826 distinct levels on a 16384-level ramp under a Levels gamma of 2.2, where
+  Photoshop keeps 16259 and an 8-bit document 184). The scene-layer item and tiles are 8-bit (the
+  display view). A 16-bit CMYK PSD and a 16-bit RLE layer channel are reduced to 8 bits and say
+  so. A curve is a 256-entry table. **32 bits** ([ADR 484](adr/484-float-documents-and-the-single-image-modes.md)):
+  OpenEXR, Radiance HDR and 32-bit PSDs open as 32-bit float, linear light, and Image ▸ Mode ▸
+  32 Bits/Channel converts (one undo step); the fold blends the linear values and keeps values
+  above 1, the frame shows them at exposure 0, and the layered save writes 32 bits (`Lr32`).
+  Against Photoshop's own 32-bit document every offered separable blend is within 0.001; Linear
+  Dodge clips at 1 where Photoshop's Add does not, and Hue/Color/Luminosity differ (recorded).
+- **Colour modes.** Image ▸ Mode ▸ Greyscale, RGB colour, CMYK colour and Lab colour convert every
+  layer through the engine's CMS (Gray Gamma 2.2, the session's CMYK profile, CIE Lab) and keep the
+  document inside that mode: a pixel edit lands projected inside its damage. A CMYK document with
+  a profile composites in its INKS — every layer as two ink planes, a CMYK file's layers with the
+  file's own inks — so the separable blends and Hue, Saturation, Color and Luminosity (ADR 484)
+  agree with Photoshop's CMYK composite within 0.7 ΔE00 at the 95th percentile, where blending
+  the RGB conversions was 10–50 off; Darker/Lighter Color, Blend If, an adjustment layer or a
+  style composites in RGB ([ADR 481](adr/481-n-channel-planes-and-the-ink-fold.md)). Grayscale and Lab documents fold in
+  their stored numbers, Lab with Photoshop's chroma rule (ADR 484): within 1.9 ΔE p95 of
+  Photoshop's merged Lab composite at 8 bits and 0.25 at 16 (the RGB fold was up to 43), grey
+  within 1.1 and 0.1; Hue and Saturation fold a Lab document in RGB. Image ▸ Mode ▸ Indexed
+  Color… (Exact, Web, adaptive; no dither — our Web mapping is Photoshop's on every pixel of the
+  sweep) and Multichannel flatten the image into the mode as one undo step and save as the one
+  image Photoshop keeps; a Duotone file opens as its grey and keeps its specification (no Duotone
+  conversion). Against Photoshop: greyscale and 16-bit Lab within 0.05 of a level,
+  CMYK (Coated FOGRA39) and 8-bit Lab within 1.8 ΔE at the 99th percentile. CMYK without a profile
+  changes no colour, and the status says so. Image ▸ Proof shows Proof colours and the Gamut warning
+  (Gray Gamma 2.2 or the CMYK profile) on the preview without touching the document. The layered PSD
+  save writes the document's mode and depth (ADR 481): Photoshop reopens a converted Grayscale,
+  Lab, CMYK or 16-bit document with live layers; an adjustment layer or Blend If in a document
+  converted to another mode makes the save flatten, saying why.
+- **PSD.** The composite decode takes every mode but Bitmap at 8, 16 and 32 bits, raw or RLE (not
+  16-bit RLE; Lab and grey through the CMS, Indexed through its table, Multichannel through its
+  inks, Duotone as its grey), and a transparent document's white-matted
+  merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB,
+  CMYK (every blend but Darker/Lighter Color; ADR 484), Grayscale, Duotone and Lab files at 8 and 16 bits and RGB and
+  Grayscale files at 32, each layer and its mask at its own bounds ([ADR 464](adr/464-layers-at-their-own-bounds.md);
   the 384 MiB budget counts the rectangles): pixel layers, groups and their user masks (an
   isolated group blends through its mask, a pass-through group's members each go through it),
   clipping, user masks, vector masks (drawn from their paths the way Photoshop draws them — a
   17×15 sample grid per pixel, per-component combine / subtract / intersect / exclude, even-odd
   or non-zero, invert — and multiplied with the user mask; on a fill/shape layer the stored
   pixels already are the shape; `engine/core/crates/paged-psd/src/vector_mask.rs`), mask density and feather (a
-  Gaussian of that sigma), fill opacity; smart objects as their stored render, accepted only
-  where the file's merged composite agrees inside each one's footprint (a stale render, as on a
-  corpus mock-up, opens flattened); text layers blended in a gamma space as Photoshop's are
+  Gaussian of that sigma), fill opacity; smart objects as their stored render with their source, placement, smart
+  filters and filter mask kept live (ADR 482), accepted where the file's merged composite agrees
+  inside each one's footprint — a stale render (a corpus mock-up) is drawn from its source and
+  judged again before the file opens flattened; text layers blended in a gamma space as Photoshop's are
   (`compose.normal_gamma`, 1.55: anti-aliased edges within 1–7 levels, where a plain blend was
   19–40 off; RGB documents, Normal mode); Curves, Levels, Exposure, Invert and Hue/Saturation
   adjustment layers (curves exact, the others within 1–4 levels of Photoshop-written layers),
@@ -294,18 +381,24 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   file opens flattened when a layer, group or overlay uses a mode other than Normal or Multiply
   (measured 9.9–50 ΔE00 p95 off on synthetic tiles), when it has no real merged data, or when
   its RGB flatten is more than 8 levels off the converted composite on over 1 % of the pixels or
-  more than 2 levels off on over 5 % (a tint: Multiply over pale stock). Photo Filter and
-  Brightness/Contrast still open flattened: each fixture records one parameter set, which does
-  not determine Photoshop's formula; fill opacity on a special mode still declines (the in-app
-  model is unverified).
-  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are not imported, so such a
-  file opens flattened (paged-psd reads their records, `PsdFile::layer_list`, which the import
-  does not use yet). Across the 157-file private corpus, 76 files open as layers and are measured
+  more than 2 levels off on over 5 % (a tint: Multiply over pale stock). Every Photoshop
+  adjustment kind but Color Lookup is read; Black & White, Channel Mixer, Posterize and
+  Threshold are drawn, while Brightness/Contrast, Color Balance, Vibrance, Photo Filter, Gradient
+  Map and Selective Color still open flattened (measured 25–109 levels from Photoshop; image
+  ADR 478); fill opacity on a special mode still declines (the in-app model is unverified).
+  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are read into the layer list
+  at parse and import like any others (ADR 478). Across the 157-file private corpus, 76 files open as layers and are measured
   against Photoshop's composite (3 did on 2026-10-04), all but one within 1.5 % of pixels more
   than 2 levels off; the rest open flattened, the commonest reasons being smart objects the
   composite does not vouch for (26, most of them Multiply smart objects in CMYK documents, which
   need ink-space blending), effects (16), CMYK blending (12) and fill opacity on special blend
-  modes (8). Save-back is 8-bit RGB. "Apply to file" and
+  modes (8). The layered save writes 8- and 16-bit RGB and CMYK PSDs and PSBs: an unedited
+  layer as the record it was read from, an edited one with only its edits replaced (text
+  and vector masks stay live until their pixels change; a smart object stays live whatever is done
+  to it — transformed, re-filtered or with new contents it is written with its corners, filters,
+  filter mask and source, and Photoshop reopens it live, ADR 482), every adjustment kind
+  Photoshop has a layer for (not Color Lookup or Develop), fill layers and styles — Photoshop
+  reopens them as live layers ([ADR 478](adr/478-psd-write-depth.md)). "Apply to file" and
   the PNG and JPEG exporters encode the composite. The PSD exporter returns the retained file
   byte for byte only when the parameters are the identity and the pixels have not been edited since ingest; otherwise it
   runs the save-back, and when the save-back declines (a size change, a non-RGB or non-8-bit file) it exports nothing
@@ -314,22 +407,31 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   layer is ignored; a clipping base's blending options apply only to the base; a gradient fill
   is aligned with the canvas (Photoshop's "Align with layer") and has no transparency stops; a
   layer comp's position is the layer's pixels, so applying it puts back the pixels as recorded,
-  and a canvas operation drops the recorded positions; moving a smart object by whole pixels is
-  refused. The layered PSD save writes colour and gradient fills, Curves, Levels, Exposure,
+  and a canvas operation drops the recorded positions. The layered PSD save writes colour and gradient fills, Curves, Levels, Exposure,
   Invert and Hue/Saturation adjustment layers and the blending properties; a pattern fill is
   written as its render, and any other adjustment kind makes the save flatten, naming the layer.
 - **Layers and undo.** A layer is canvas-sized once edited (an imported layer keeps its bounds
-  until then); the layer fold keeps whole-canvas accumulator textures, so the largest image is the device's texture limit (16384 px on Apple silicon,
-  8192 on many others). A crop, resize or straighten keeps every layer and mask, is one undo
+  until then); past the device's texture limit (16384 px on Apple silicon, 8192 on many
+  others) or its readback buffer the fold runs tile by tile, byte-equal to the whole fold, and
+  refolds only the tiles an edit damaged; without a device it runs on the kernels' CPU twins
+  (no layer style there) ([ADR 480](adr/480-tiles-past-the-device-and-the-cpu-fold.md)). A crop, resize or straighten keeps every layer and mask, is one undo
   step that keeps the history, and drops the selection (a crop does in Photoshop too); a
   quarter turn or flip carries the selection with the pixels, and a canvas resize drops it.
   A selection is session state ([ADR 460](adr/460-document-is-not-the-store.md)): it is
   never written to the document, so a reopened document has none, as in Photoshop, where
   keeping one means saving it as a channel. The undo list keeps 200 structure steps; its pixel steps live in a tile
   journal of at most 32 entries and 256 MiB.
-- **Raster type** has no line wrapping. **Content-aware fill** searches a bounded window.
+- **Raster type** has no line wrapping.
+- **Retouching.** The PatchMatch search is CPU and single-threaded; a fill of a few hundred
+  thousand hole pixels takes seconds in wasm, and the workspace previews on a copy reduced to
+  512 px. Photoshop's content-aware results cannot be reproduced numerically, so they have no
+  oracle: quality is measured on synthetic stimuli (colour error and seam excess against a
+  known background). The Content-Aware Move transform is a scale and angle typed on drop, not
+  on-canvas handles. The Clone Source overlay replaces the frame's image while it shows. A
+  multi-layer image needs a GPU for the composite after a retouch, as every layer edit does.
 - **Called only by tests:** Engine B's op-node evaluation and the residency manager's third
-  tier (scratch storage), which returns an error.
+  tier (scratch storage), which returns an error. The tiled fold takes Engine B's model —
+  persistent tiles, damage, recompute only invalid ones — without its graph (ADR 480).
 - **Oracles.** Photoshop 2026's answers for 80 blend, adjustment and filter cases, seven
   layered RGB PSDs and six CMYK PSDs with Photoshop's own sRGB conversions are replayed in CI
   (`image-conformance/tests/it/oracle_photoshop.rs`, `psd_composite_photoshop.rs`,
@@ -343,7 +445,8 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   wasm built from the same commit; `glue/test/wasm-fresh.spec.ts` fails when the wasm was
   built from other sources.
 - **Manifest.** It declares `rendering: hitTest` and `workers.sharedMemory`, which the
-  bundle does not use, and caps the wasm at 8 MiB while the build script stops at 100 MB.
+  bundle does not use, and caps the wasm at 9 MiB (raised from 8 MiB by ADR 479, at 8.39 MB)
+  while the build script stops at 100 MB.
   The shipped `panels/image-adjustments.panel.json` is read by nothing.
 
 ## Not built
@@ -352,8 +455,14 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
 - A colour-transform kernel on the GPU ([ADR 457](adr/457-colour-management.md)).
 - Image formats other than PNG, JPEG and PSD/PSB. `registry/codecs.yaml` records AVIF and
   JPEG XL as planned, camera RAW and HEIC as out of scope ([ADR 456](adr/456-codecs.md)).
-- A writer for PSD descriptors, which are parsed read-only (`registry/psd-blocks.yaml`).
 - A runner for the GEGL oracle the registry names for some rows.
-- Rendering a smart object from its embedded source, layer effects other than Color Overlay, and reading PSD
-  adjustment layers other than Curves, Levels, Exposure, Invert and Hue/Saturation back as adjustment
-  layers.
+- Drawing the PSD adjustment kinds the import declines (above) as Photoshop does, and writing Color
+  Lookup layers, text (`TySh`, WP5.10), vector masks and shapes (WP5.11).
+- Transform and warp (ADR 483): the Warp styles are paged-warp's closed forms, not Photoshop's
+  (recorded, large distances on a square); Perspective Warp, Lens Correction, Adaptive Wide Angle,
+  Vanishing Point and Liquify's face-aware tools are not offered; Puppet Warp has no pin depth or
+  rotation; Content-Aware Scale has no Protect Skin Tones or interactive box.
+- Smart objects (ADR 482): a warp (`customEnvelopeWarp`) is read and kept, not drawn; smart
+  filters blend in Normal mode only and run at 8 bits; the filter mask is set from the selection,
+  inverted, cleared or switched, not painted; a linked file is read again only through a picker;
+  multi-page (PDF/AI) sources and the contents' layer comps are not offered.

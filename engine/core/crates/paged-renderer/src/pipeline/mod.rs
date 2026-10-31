@@ -44,6 +44,7 @@ use crate::module::{Geometry, ResolvedFrame};
 use crate::AssetResolver;
 
 mod anchored;
+mod appearance;
 mod auto_size;
 mod baseline_grid;
 mod blend_shadow;
@@ -57,13 +58,16 @@ mod deltas;
 mod font_table;
 mod footnotes;
 mod geom;
+pub mod image_adjust;
 mod image_convert;
 mod image_decode;
 mod images;
 mod keeps;
+mod placed_eps;
 mod placed_pdf;
 mod placed_svg;
 mod resume;
+mod review;
 mod ruby;
 /// C-26 — the inline-image cache key is shared with `paged-canvas`'s
 /// `placed_asset_bytes` door on purpose. Two copies of this format
@@ -81,13 +85,16 @@ mod pattern_paint;
 mod shapes;
 mod span_columns;
 mod stroke_geom;
+mod symbols;
+pub use symbols::{BuiltSymbol, SymbolCache};
 mod tables;
 mod text_frame;
 mod text_path;
 mod text_slots;
+pub mod word_fields;
 
 pub use anchored::AnchoredImageEmit;
-use anchored::{emit_anchored_frames_for_paragraph, emit_anchored_rect_image};
+use anchored::{emit_anchored_frames_for_paragraph, emit_anchored_rect_image, AnchoredLook};
 pub use datefmt::DateParts;
 // Doc-link-only imports: referenced from `///` comments in this file.
 #[cfg(doc)]
@@ -95,7 +102,7 @@ use anchored::{emit_anchored_textframe_story, MAX_ANCHORED_STORY_RECURSION};
 #[cfg(doc)]
 use tables::emit_cell_paragraph;
 
-use images::{emit_oval_image, emit_polygon_image, emit_rectangle_image};
+use images::{emit_oval_image, emit_polygon_image, emit_rectangle_image, image_rendering};
 use tables::emit_table_into_chain;
 
 pub(crate) use shapes::{
@@ -365,6 +372,13 @@ pub struct PipelineOptions<'a> {
     /// behaviour: a fresh local cache per call.
     pub image_decode_cache:
         Option<&'a std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>>>,
+    /// Engine ADR 1037 — the display density, in device pixels per point,
+    /// an image frame's filter stack is evaluated for: a picture larger
+    /// than that is reduced first (to a power-of-two share, so zooming
+    /// does not re-run the stack). `None`, the default and what an export
+    /// wants, evaluates at the picture's own pixels, so a PDF embeds the
+    /// adjusted picture at its effective ppi.
+    pub image_adjust_px_per_pt: Option<f32>,
     /// Perf-FontTable — pre-built shaping table. When `Some`,
     /// `build_document` skips its internal `FontTable::build` call
     /// (which walks every paragraph + resolver-fetches every font
@@ -487,6 +501,10 @@ pub struct PipelineOptions<'a> {
     /// resolution-independent: this is a *hint* for which level of detail
     /// to assemble, not a geometry scale.
     pub render_scale: f32,
+    /// Engine ADR 1039 — the caller's cache of built symbol definitions,
+    /// kept across builds (`None`: each build compiles the definitions its
+    /// instances name).
+    pub symbol_cache: Option<&'a SymbolCache>,
 }
 
 /// C-6 — one frame's claimed image-resource entry on [`PipelineOptions`]:
@@ -657,6 +675,7 @@ impl Default for PipelineOptions<'_> {
             break_story_filter: None,
             break_page_range: None,
             image_decode_cache: None,
+            image_adjust_px_per_pt: None,
             pre_built_font_table: None,
             cmyk_transform_cache: None,
             master_text_emit_cache: None,
@@ -674,6 +693,7 @@ impl Default for PipelineOptions<'_> {
             scene_fonts: None,
             resource_providers: None,
             render_scale: 1.0,
+            symbol_cache: None,
         }
     }
 }
@@ -724,6 +744,12 @@ pub struct BuiltPage {
     /// `IDENTITY` (the common case) makes the composition byte-identical
     /// to the pre-W1.9 `translate(-spread_origin) ∘ item_transform`.
     pub spread_transform: Transform,
+    /// Engine ADR 1011 — the page's top-left on the canvas (the editor's
+    /// pasteboard), pt: its [`paged_model::Page::canvas_origin`], else its
+    /// default slot in [`paged_model::canvas_layout`]'s vertical stack.
+    /// Presentation only: the display list stays page-relative, and every
+    /// presenter (the canvas, the viewer session) places the page here.
+    pub canvas_origin: (f32, f32),
     pub list: DisplayList,
     /// Bumped whenever any frame on this page is re-laid-out. The
     /// canvas combines `(id, layout_generation, numbering_generation)`
@@ -1604,7 +1630,10 @@ fn build_document_fixed(
         .text_variables
         .iter()
         .any(|v| v.variable_type.as_deref() == Some("XrefPageNumberType"));
-    let single = !has_running_header && !has_text_anchor_dest && !has_xref_page;
+    // Engine ADR 1022 — a PAGEREF or STYLEREF field reads the layout too.
+    let has_layout_fields = word_fields::document_needs_post_layout(document);
+    let single =
+        !has_running_header && !has_text_anchor_dest && !has_xref_page && !has_layout_fields;
     let first = build_document_inner(document, options, None, adopt && single)?;
     if single {
         return Ok(first);
@@ -1636,13 +1665,16 @@ fn build_post_layout_ctx(document: &Document, first: &BuiltDocument) -> PostLayo
     let mut running_headers = links::RunningHeaderIndex::default();
     let mut story_page: HashMap<String, u32> = HashMap::new();
 
-    // The styles the document's running headers match.
+    // The styles the document's running headers match, and those its Word
+    // STYLEREF fields name (engine ADR 1022).
+    let style_refs = word_fields::style_ref_styles(document);
     let styles: std::collections::BTreeSet<&str> = document
         .designmap
         .text_variables
         .iter()
         .filter(|v| links::is_running_header_type(v.variable_type.as_deref()))
         .filter_map(links::running_header_style)
+        .chain(style_refs.iter().map(String::as_str))
         .collect();
 
     // Story → style → its matches in story order: (paragraph, byte start,
@@ -1801,6 +1833,20 @@ fn build_post_layout_ctx(document: &Document, first: &BuiltDocument) -> PostLayo
 /// paragraph's first line was laid out on.
 fn xref_pages(document: &Document, first: &BuiltDocument) -> HashMap<String, usize> {
     let mut out: HashMap<String, usize> = HashMap::new();
+    // Engine ADR 1022 — each bookmark's page, for the PAGEREF fields.
+    if word_fields::document_needs_post_layout(document) {
+        let laid_out = first.paragraph_pages();
+        for s in &document.stories {
+            for d in &s.story.destinations {
+                if let Some(page) = laid_out
+                    .get(&s.self_id)
+                    .and_then(|m| m.get(&(d.paragraph as usize)).copied())
+                {
+                    out.insert(format!("{}{}", word_fields::BOOKMARK_KEY, d.self_id), page);
+                }
+            }
+        }
+    }
     let sources: Vec<&str> = document
         .stories
         .iter()
@@ -1979,6 +2025,7 @@ pub fn build(document: &Document, options: &PipelineOptions) -> anyhow::Result<B
         height_pt: page_h,
         spread_origin: (0.0, 0.0),
         spread_transform: Transform::IDENTITY,
+        canvas_origin: (0.0, 0.0),
         list,
         layout_generation: 0,
         numbering_generation: 0,

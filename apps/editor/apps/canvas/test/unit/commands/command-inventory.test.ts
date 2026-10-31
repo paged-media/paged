@@ -50,11 +50,17 @@ import { buildCoreCommandEntries } from "../../../src/core-command-entries";
 import { buildInsertCommands } from "../../../src/insert-commands";
 import { buildObjectCommands } from "../../../src/object-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
+import { buildSvgCommands } from "../../../src/svg-commands";
+import { buildAssetExportCommands } from "../../../src/asset-export/commands";
 import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
+import { buildEffectMenuCommands } from "../../../src/effect-menu";
+import { buildViewCommands } from "../../../src/view-commands";
 import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
+import { PDF_VECTORS_COMMANDS } from "../../../src/panels/pdf-vectors-dialog";
 import { buildBatchCommands } from "../../../src/panels/batch-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
+import { FIND_COMMANDS } from "../../../src/find/find-commands";
 import { hostCommands } from "../../../src/app/instance";
 import { AI_ASK_COMMAND } from "@paged-media/shell";
 
@@ -157,16 +163,22 @@ function tableIds(): string[] {
   return [
     ...buildAppCommands(noop),
     ...buildClipboardCommands(noop),
+    ...buildSvgCommands(noop),
+    ...buildAssetExportCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
     ...buildObjectCommands(noop),
     ...buildInsertCommands(noop),
     ...buildCoreCommandEntries(),
     ...buildTransformCommands(noop),
     ...GLOBAL_LIGHT_COMMANDS,
+    ...buildEffectMenuCommands(),
     ...buildTransformEachDialogCommands(() => []),
     ...buildBatchCommands(),
+    ...buildViewCommands(noop),
     ...OPEN_AS_TEMPLATE_COMMANDS,
+    ...PDF_VECTORS_COMMANDS,
     SELECT_ALL_COMMAND,
+    ...FIND_COMMANDS,
     // Registered only when an embedding host supplies the action.
     ...hostCommands({ submit: noop, close: noop, back: noop }),
   ].map((c) => c.id);
@@ -238,15 +250,21 @@ describe("the host command inventory", () => {
       "commands",
       "aiCommands",
       "clipboardCommands",
+      "svgCommands",
+      "buildAssetExportCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
       "objectCommands",
       "insertCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",
+      "buildEffectMenuCommands()",
       "transformEachDialogCommands",
       "buildBatchCommands()",
+      "viewCommands",
       "OPEN_AS_TEMPLATE_COMMANDS",
+      "PDF_VECTORS_COMMANDS",
       "SELECT_ALL_COMMAND",
+      "FIND_COMMANDS",
       "buildCoreCommandEntries()",
     ]);
   });
@@ -256,15 +274,25 @@ describe("the host command inventory", () => {
       pathToFileURL(at("scripts/surface/enumerate.mjs")).href
     )) as {
       enumerateSurface(root: string): {
-        items: Array<{ kind: string; id: string; origin: string }>;
+        items: Array<{
+          kind: string;
+          id: string;
+          origin: string;
+          family?: boolean;
+          members?: string[];
+        }>;
       };
     };
     const surface = enumerateSurface(
       fileURLToPath(new URL("../../../../../../../", import.meta.url)),
     );
+    // A family the app registers from data (the Effect menu's commands,
+    // one per core effect kind) counts as its members.
     const gate = surface.items
       .filter((i) => i.kind === "command" && i.origin === "host")
-      .map((i) => i.id)
+      .flatMap((i) =>
+        i.id === "paged.effect.add.*" && i.members ? i.members : [i.id],
+      )
       .sort();
     const host = [...hostIds()].sort();
     expect(host.length).toBeGreaterThanOrEqual(100);

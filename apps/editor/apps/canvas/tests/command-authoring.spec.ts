@@ -42,7 +42,11 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
 
-import { fitFirstPage, openCanvas } from "./fidelity/canvas-driver";
+import {
+  fitFirstPage,
+  openCanvas,
+  loadViaFileInput,
+} from "./fidelity/canvas-driver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -167,16 +171,7 @@ async function loadFixture(page: Page, fixture: string): Promise<void> {
   // The REACT door (file input → loadDocumentFile → setHandle): the
   // when-gate reads `paged.document.handle`, so the load must go
   // through the path that sets it.
-  await page.setInputFiles('input[type="file"]', fixture);
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
-            .ready,
-      ),
-    )
-    .toBe(true);
+  await loadViaFileInput(page, fixture);
 }
 
 /** Fit page 1 (the Home shortcut) so the viewport centre — the

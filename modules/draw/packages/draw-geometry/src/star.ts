@@ -131,8 +131,9 @@ export interface FlareParts {
   rings: AnchorTable[];
 }
 
-/** The Numerical Recipes LCG — deterministic "random". */
-function lcg(seed: number): () => number {
+/** The Numerical Recipes LCG — deterministic "random" in `[0, 1)`
+ *  (shared with the Symbol Sprayer's scatter, `symbolism.ts`). */
+export function lcg(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;

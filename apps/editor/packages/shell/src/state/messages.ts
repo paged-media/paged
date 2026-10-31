@@ -65,3 +65,11 @@ export const SCREEN_MODE = defineMessages("shell.screenMode", {
   slug: "Slug",
   presentation: "Presentation",
 });
+
+export const SUB_CONTEXT = defineMessages("shell.subContext", {
+  header: "Header",
+  footer: "Footer",
+  note: "Note",
+  close: "Close",
+  closeTitle: "Back to the document (Esc)",
+});

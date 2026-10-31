@@ -40,6 +40,8 @@ const ITEM_KINDS: Record<string, PageItemKind> = {
   polygon: "polygon",
   graphicLine: "graphicLine",
   group: "group",
+  // Engine ADR 1039 — a symbol instance.
+  instance: "instance",
   // aliases (parse, never emitted)
   textframe: "textFrame",
   rect: "rectangle",
@@ -52,6 +54,7 @@ export const PAGE_ITEM_KINDS: readonly PageItemKind[] = [
   "polygon",
   "graphicLine",
   "group",
+  "instance",
 ];
 const FAMILIES = new Set<StyleFamily>([
   "paragraph",

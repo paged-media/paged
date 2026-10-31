@@ -11,6 +11,12 @@ description = "paged.sheet chart model + pure geometry IR generator (spec §8.4,
 workspace = true
 
 [dependencies]
+# SpreadsheetML's `tint` (and the HSL arithmetic) from the shared OOXML
+# colour module, one definition for doc, slide and sheet.
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
+# The one DrawingML-to-engine mapper of slide, doc and sheet (slide ADR 722,
+# sheet ADR 527): chart fills and effects onto native page items.
+dml-native = { path = "../../../platform/shared/dml-native" }
 sheet-core = { path = "../sheet-core" }
 sheet-format = { path = "../sheet-format" }
 # Trendlines fit with the function library's least-squares solver (the one

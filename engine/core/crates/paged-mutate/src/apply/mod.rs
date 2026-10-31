@@ -132,7 +132,40 @@ pub(crate) fn apply_inner(
         // ADR 132 — the typed value forms (`Number`, `Enum`, `Ref`) fold into
         // the variants the arms match on, so one apply path serves both.
         Operation::SetProperty { node, path, value } => {
-            apply_set_property(doc, node, *path, &value.normalized())
+            let value = value.normalized();
+            // Engine ADR 1043 — the appearance.
+            if matches!(
+                path,
+                PropertyPath::FrameAppearance | PropertyPath::FrameAppearanceLayer
+            ) {
+                return appearance::apply_appearance(doc, node, *path, &value);
+            }
+            // Engine ADR 1008 — the effect stack, and the per-field
+            // effect paths on an item that stores one.
+            if effect_stack::stack_target(*path).is_some()
+                && matches!(
+                    node,
+                    NodeId::TextFrame(_)
+                        | NodeId::Rectangle(_)
+                        | NodeId::Oval(_)
+                        | NodeId::Polygon(_)
+                )
+            {
+                return effect_stack::apply_effect_stack(doc, node, *path, &value);
+            }
+            if let Some(result) =
+                effect_stack::apply_effect_field_on_stack(doc, node, *path, &value)
+            {
+                return result;
+            }
+            match review::format_scope(doc, op) {
+                // Engine ADR 1040 — a range's formatting, recorded while the
+                // document tracks changes.
+                Some(scope) => review::tracked_format(doc, scope, |doc| {
+                    apply_set_property(doc, node, *path, &value)
+                }),
+                None => apply_set_property(doc, node, *path, &value),
+            }
         }
         Operation::InsertNode {
             parent,
@@ -314,6 +347,62 @@ pub(crate) fn apply_inner(
             story_ids,
             added,
         } => apply_remove_snippet(doc, snippet, spread, *dx, *dy, ids, story_ids, added),
+        Operation::ExpandAppearance { node, restore } => {
+            expand_appearance::apply_expand_appearance(doc, node, restore.as_deref())
+        }
+        Operation::CreateSymbol {
+            symbol_id,
+            name,
+            sources,
+            replace,
+            instance_id,
+            nine_slice,
+        } => symbol::apply_create_symbol(
+            doc,
+            symbol_id,
+            name,
+            sources,
+            *replace,
+            instance_id.as_deref(),
+            *nine_slice,
+        ),
+        Operation::RedefineSymbol {
+            symbol_id,
+            sources,
+            name,
+            nine_slice,
+            replace,
+            instance_id,
+        } => symbol::apply_redefine_symbol(
+            doc,
+            symbol_id,
+            sources,
+            name.as_deref(),
+            nine_slice.as_deref(),
+            *replace,
+            instance_id.as_deref(),
+        ),
+        Operation::PlaceSymbolInstance {
+            symbol_id,
+            spread,
+            transform,
+            instance_id,
+            nine_slice,
+        } => symbol::apply_place_symbol_instance(
+            doc,
+            symbol_id,
+            spread,
+            *transform,
+            instance_id.as_deref(),
+            *nine_slice,
+        ),
+        Operation::BreakSymbolLink {
+            instance,
+            ids,
+            story_ids,
+        } => symbol::apply_break_symbol_link(doc, instance, ids, story_ids),
+        Operation::DeleteSymbol { symbol_id } => symbol::apply_delete_symbol(doc, symbol_id),
+        Operation::RestoreSymbolState { state } => symbol::apply_restore_symbol_state(doc, state),
         Operation::CreateGroup { spec } => apply_create_group(doc, spec),
         Operation::DissolveGroup {
             group_id,
@@ -338,6 +427,89 @@ pub(crate) fn apply_inner(
             apply_edit_numbering_list(doc, list_id, spec)
         }
         Operation::DeleteNumberingList { list_id } => apply_delete_numbering_list(doc, list_id),
+        Operation::SetListLevel {
+            story_id,
+            start,
+            end,
+            level,
+            delta,
+        } => list_ops::apply_set_list_level(doc, story_id, *start, *end, *level, *delta),
+        Operation::RestartNumbering {
+            story_id,
+            start,
+            end,
+            start_at,
+            continue_numbering,
+        } => list_ops::apply_restart_numbering(
+            doc,
+            story_id,
+            *start,
+            *end,
+            *start_at,
+            *continue_numbering,
+        ),
+        Operation::SetParagraphListState { story_id, entries } => {
+            list_ops::apply_list_state(doc, story_id, entries)
+        }
+        Operation::SetStyleBasedOn {
+            collection,
+            style_id,
+            based_on,
+        } => apply_set_style_based_on(doc, *collection, style_id, based_on.as_deref()),
+        // Engine ADR 1022 — Word document structure.
+        Operation::InsertTextAnchor {
+            story_id,
+            paragraph,
+            offset,
+            self_id,
+            name,
+            index,
+        } => word_structure::apply_insert_text_anchor(
+            doc,
+            story_id,
+            *paragraph,
+            *offset,
+            self_id,
+            name.as_deref(),
+            *index,
+        ),
+        Operation::DeleteTextAnchor { anchor_id } => {
+            word_structure::apply_delete_text_anchor(doc, anchor_id)
+        }
+        Operation::SetStoryDestinations {
+            story_id,
+            destinations_json,
+        } => word_structure::apply_set_story_destinations(doc, story_id, destinations_json),
+        Operation::InsertIndexMarker {
+            story_id,
+            paragraph,
+            topic,
+            sort_order,
+        } => word_structure::apply_insert_index_marker(
+            doc,
+            story_id,
+            *paragraph,
+            topic,
+            sort_order.as_deref(),
+        ),
+        Operation::RestoreIndexMarkers {
+            story_id,
+            paragraph,
+            markers_json,
+            topics_json,
+            parents_json,
+        } => word_structure::apply_restore_index_markers(
+            doc,
+            story_id,
+            *paragraph,
+            markers_json,
+            topics_json,
+            parents_json,
+        ),
+        Operation::SetTocStyle {
+            toc_style_id,
+            def_json,
+        } => word_structure::apply_set_toc_style(doc, toc_style_id, def_json.as_deref()),
         Operation::SetStyleProperty {
             collection,
             style_id,
@@ -376,7 +548,8 @@ pub(crate) fn apply_inner(
             mask,
             mask_type,
             invert,
-        } => apply_opacity_mask(doc, target, mask, mask_type.to_model(), *invert),
+            clip,
+        } => apply_opacity_mask(doc, target, mask, mask_type.to_model(), *invert, *clip),
         Operation::ReleaseOpacityMask {
             target,
             restore_slot,
@@ -406,16 +579,24 @@ pub(crate) fn apply_inner(
             scope,
             cell,
             paragraph,
-        } => apply_apply_style(
-            doc,
-            story_id,
-            *start,
-            *end,
-            style,
-            *scope,
-            cell.as_ref(),
-            *paragraph,
-        ),
+        } => {
+            let apply_fn = |doc: &mut Document| {
+                apply_apply_style(
+                    doc,
+                    story_id,
+                    *start,
+                    *end,
+                    style,
+                    *scope,
+                    cell.as_ref(),
+                    *paragraph,
+                )
+            };
+            match review::format_scope(doc, op) {
+                Some(tracked) => review::tracked_format(doc, tracked, apply_fn),
+                None => apply_fn(doc),
+            }
+        }
         Operation::InsertField {
             story_id,
             offset,
@@ -439,6 +620,7 @@ pub(crate) fn apply_inner(
             image_uri,
             self_id,
             paragraph,
+            restore,
         } => anchored_frame::apply_insert_anchored_frame(
             doc,
             story_id,
@@ -448,6 +630,7 @@ pub(crate) fn apply_inner(
             *height,
             image_uri.as_deref(),
             self_id,
+            restore.as_deref(),
         ),
         Operation::RemoveAnchoredFrame { story_id, self_id } => {
             anchored_frame::apply_remove_anchored_frame(doc, story_id, self_id)
@@ -512,6 +695,71 @@ pub(crate) fn apply_inner(
             remove,
             change,
         } => tracked_change::apply_restore(doc, story_id, *offset, *remove, change),
+        Operation::RecordChange {
+            story_id,
+            cell,
+            start,
+            end,
+            paragraph,
+            change,
+        } => review::apply_record_change(
+            doc,
+            story_id,
+            cell.as_ref(),
+            *start,
+            *end,
+            *paragraph,
+            change,
+        ),
+        Operation::AcceptChange {
+            story_id,
+            id,
+            author,
+        } => review::apply_resolve(
+            doc,
+            story_id.as_deref(),
+            id.as_deref(),
+            author.as_deref(),
+            true,
+        ),
+        Operation::RejectChange {
+            story_id,
+            id,
+            author,
+        } => review::apply_resolve(
+            doc,
+            story_id.as_deref(),
+            id.as_deref(),
+            author.as_deref(),
+            false,
+        ),
+        Operation::InsertComment {
+            story_id,
+            cell,
+            start,
+            end,
+            comment,
+        } => review::apply_insert_comment(doc, story_id, cell.as_ref(), *start, *end, comment),
+        Operation::ResolveComment {
+            comment_id,
+            resolved,
+        } => review::apply_resolve_comment(doc, comment_id, *resolved),
+        Operation::DeleteComment { comment_id } => review::apply_delete_comment(doc, comment_id),
+        Operation::EditComment {
+            comment_id,
+            text,
+            date,
+        } => review::apply_edit_comment(doc, comment_id, text, date.as_deref()),
+        Operation::RestoreStoryReview {
+            story_id,
+            paragraphs_json,
+            comments_json,
+        } => review::apply_restore_story_review(
+            doc,
+            story_id,
+            paragraphs_json.as_deref(),
+            comments_json,
+        ),
         Operation::CreateBookmark {
             bookmark_id,
             name,
@@ -620,6 +868,24 @@ pub(crate) fn apply_inner(
         Operation::DeleteHyperlink { hyperlink_id } => {
             hyperlink_edit::apply_delete_hyperlink(doc, hyperlink_id)
         }
+        Operation::InsertItemHyperlink {
+            item_id,
+            url,
+            page,
+            name,
+            source_id,
+            dest_id,
+            hyperlink_id,
+        } => hyperlink_edit::apply_insert_item_hyperlink(
+            doc,
+            item_id,
+            url,
+            page.as_deref(),
+            name.as_deref(),
+            source_id,
+            dest_id,
+            hyperlink_id,
+        ),
         Operation::EditHyperlink {
             hyperlink_id,
             name,
@@ -711,6 +977,16 @@ pub(crate) fn apply_inner(
         Operation::RenameMaster { master_id, name } => {
             master::apply_rename_master(doc, master_id, name.as_deref())
         }
+        Operation::SetPageOverrides { page, overrides } => {
+            master::apply_set_page_overrides(doc, page, overrides)
+        }
+        Operation::OverrideMasterItems {
+            page,
+            items,
+            ids,
+            story_ids,
+            empty_text,
+        } => master::apply_override_master_items(doc, page, items, ids, story_ids, *empty_text),
         Operation::SetSpreadOrder { spreads } => apply_set_spread_order(doc, spreads),
         Operation::ApplyMasterToPage { page, master } => {
             apply_master_to_page(doc, page, master.as_deref())
@@ -902,7 +1178,12 @@ fn apply_pathfinder(
         .iter()
         .map(PathAnchorSpec::from_parse)
         .collect();
-    let mut batch_children: Vec<Operation> = Vec::with_capacity(1 + others.len());
+    let mut batch_children: Vec<Operation> = Vec::with_capacity(2 + others.len());
+    // Engine ADR 1042 — the kept item's vector effects are spent: their
+    // outline went into the result.
+    if let Some(spend) = expand_appearance::spend_vector_entries(doc, kept) {
+        batch_children.push(spend);
+    }
     batch_children.push(Operation::SetProperty {
         node: kept.clone(),
         path: PropertyPath::FramePath,
@@ -948,6 +1229,10 @@ fn read_path(
     node: &NodeId,
 ) -> Result<(Vec<paged_model::PathAnchor>, Vec<usize>), OperationError> {
     use paged_model::PathAnchor;
+    // Engine ADR 1042 — a boolean reads the outline the item draws.
+    if let Some(path) = expand_appearance::effected_path(doc, node) {
+        return Ok(path);
+    }
     let raw = node.self_id();
     for parsed in &doc.spreads {
         match node {
@@ -1136,15 +1421,24 @@ fn cell_paragraphs_mut<'a>(
 }
 
 mod anchored_frame;
+mod anchored_look;
+pub(crate) mod appearance;
 mod batch_page;
 mod character;
 mod conditions;
 mod duplicate_nodes;
+pub(crate) mod effect_stack;
+mod expand_appearance;
 pub use duplicate_nodes::{duplicate_demand, duplicate_roots, DuplicateDemand};
 mod snippet;
+mod symbol;
 pub use snippet::{
     extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,
     SNIPPET_FORMAT,
+};
+pub use symbol::{
+    expand_symbols_for_interchange, restore_symbols_from_labels, symbol_break_demand,
+    symbol_break_root, SYMBOLS_LABEL, SYMBOL_INSTANCE_LABEL,
 };
 mod bookmark;
 mod duplicate_page;
@@ -1157,17 +1451,26 @@ mod hyperlink;
 mod hyperlink_edit;
 mod insert_node;
 mod layer;
+mod list_ops;
+mod live_shape;
 mod lock;
 mod note;
 pub mod permit;
+pub mod review;
 mod tracked_change;
+mod word;
+pub mod word_structure;
 pub mod xml;
 /// ADR 132 — model → wire-spec readers, for the `Set` resolver: a
 /// virtual path on a swatch, gradient or numbering list is an edit of the
 /// whole spec, read here, merged and written back.
-pub use layer::{gradient_spec_from_entry, numbering_list_spec_from_def, swatch_spec_from_entry};
+pub use layer::{
+    based_on_makes_cycle, gradient_spec_from_entry, numbering_list_spec_from_def,
+    swatch_spec_from_entry,
+};
 pub use lock::is_locked;
 mod master;
+pub use master::{override_copy, OverrideCopy};
 mod move_node;
 mod nested;
 mod opacity_mask;

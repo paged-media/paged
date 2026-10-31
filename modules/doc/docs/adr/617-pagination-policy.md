@@ -41,7 +41,8 @@ its spacing is exact).
    `first_fit_docx()`: Courier New 10 pt (every glyph 1229/2048 em), each measure a few tenths of
    a point either side of a word end, plus inline pictures under single, 1.5-line, at-least and
    exact spacing. `scripts/word-first-fit-probe.sh` writes the answer as
-   `docx-conformance/fixtures/first-fit.word.json` and the engine's copy.
+   `docx-conformance/fixtures/first-fit.word.json` and the engine's copy (committed 2026-10-25,
+   see the amendment).
 4. **The measurement runs headless.** `real-docx-measure.spec.ts` opens a document through the
    bundle's standalone open on the real engine and docx-js and writes the same JSON as the
    editor-driven `scripts/real-docx/measure.spec.ts`, so `compare.py` and `line_geometry.py`
@@ -63,5 +64,36 @@ its spacing is exact).
 - Line breaking is no longer what holds the page starts back: on both measured documents at
   least 97 % of paragraphs already take Word's line count. The next steps are vertical (line
   heights, spacing collapse, keeps, table rows, notes, headers).
-- Word's own answer to `first_fit_docx()` is not committed yet: Word stopped answering
-  AppleEvents during this work. Until it is, the engine tests hold Word's documented rules.
+- Word's own answer to `first_fit_docx()` is committed (amendment of 2026-10-25); the engine
+  tests and this module's hold it.
+
+## Amendment 2026-10-25 — Word answered the first-fit probe
+
+Word 16 set `first_fit_docx()` (`fixtures/first-fit.word.json`). Where it disagreed with the
+documented rules the engine's Word mode changed (engine ADR 1016, amendment of the same date):
+a justified line compresses by up to one word space in all, an en or em dash is a break, and a
+picture's line is the picture over the baseline and the rest of the auto-leaded line under it
+(43 pt for a 40 pt picture at single spacing, 48.7 at 1.5 lines, where the engine set 42).
+
+The lowering's part: a picture paragraph under **at-least** spacing above the face's single line
+takes auto leading at the single line (Word puts at-least's extra above the text, so under a
+picture only the descent remains: 43 pt at "at least 14 pt"), and its text runs carry the
+at-least pitch, so its text lines keep it. Single and multiple spacing keep auto leading at
+Word's pitch; exact spacing keeps the fixed leading (Word clips the picture).
+
+Evidence:
+
+- `docx-conformance/tests/it/first_fit.rs` — the answer is for the cases this crate builds (and
+  the engine's copy is the same file); every case reaches the engine as `"Word First-fit"` at
+  Word's measure and alignment; the picture paragraphs carry the leadings above.
+- `packages/doc-bundle/test/headless/first-fit.spec.ts` — `first_fit_docx()` (as
+  `test/fixtures/first-fit.docx`) through the bundle's standalone open on the real engine: every
+  paragraph's lines hold Word's words, and, where Courier New is installed, the picture cases'
+  line steps are Word's within 0.3 pt (steps into a picture on a paragraph's second line, and
+  from a picture's line into the next paragraph in the same spacing).
+- Not matched, and not a picture rule: the step INTO a paragraph from one in another line
+  spacing (Word: the previous line's share below the baseline plus the new line's above it; the
+  engine: the new paragraph's leading). Single → 1.5 lines differs by 5.67 pt. Next vertical
+  step.
+- The real-document measurement was not re-run: Word's PDFs of the measured documents are not
+  in the corpus.

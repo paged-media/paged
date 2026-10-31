@@ -129,6 +129,7 @@ fn id_of(spread: &paged_model::Spread, r: FrameRef) -> String {
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i).and_then(|f| f.self_id.clone()),
         FrameRef::Polygon(i) => spread.polygons.get(i).and_then(|f| f.self_id.clone()),
         FrameRef::Group(i) => spread.groups.get(i).and_then(|f| f.self_id.clone()),
+        FrameRef::Instance(i) => spread.instances.get(i).and_then(|f| f.self_id.clone()),
     }
     .unwrap_or_else(|| format!("<dangling {r:?}>"))
 }
@@ -667,6 +668,7 @@ fn dissolving_an_empty_group_from_a_file_is_undoable() {
             corner_option: Some("RoundedCorner".to_string()),
             corners: Default::default(),
             clip: false,
+            effect_stack: Vec::new(),
         });
         spread.frames_in_order.insert(1, FrameRef::Group(index));
     }

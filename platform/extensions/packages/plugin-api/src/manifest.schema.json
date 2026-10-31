@@ -296,6 +296,20 @@
             "type": "string"
           }
         },
+        "presentations": {
+          "description": "Extensions ADR 345 — presentation ids the bundle registers.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "views": {
+          "description": "Extensions ADR 345 (C5) — module view ids the bundle registers.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "exporters": {
           "type": "array",
           "items": {

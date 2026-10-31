@@ -426,3 +426,168 @@ describe("Object/Transform panel: findings", () => {
     ).not.toBeNull();
   });
 });
+
+// Editor ADR 310 — the Shape section: the live-shape parameters of the
+// one selected item (engine ADR 1047).
+describe("Object/Transform panel: the Shape section", () => {
+  const shapeOf = (h: H) => h.root.querySelector("[data-section='Shape']");
+  const select = (h: H, name: string) =>
+    h.root.querySelector<HTMLSelectElement>(`select[aria-label="${name}"]`)!;
+
+  /** A live pentagon, as the Polygon tool inserts it. */
+  async function livePentagon(h: H): Promise<{ kind: string; id: string }> {
+    const pts = Array.from({ length: 5 }, (_, i) => {
+      const t = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+      const p = [200 + 50 * Math.cos(t), 200 + 50 * Math.sin(t)];
+      return { anchor: p, left: p, right: p };
+    });
+    const reply = await h.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "insertPath",
+            args: {
+              pageId: h.scene.pageId,
+              anchors: pts,
+              open: false,
+              smooth: false,
+            },
+          },
+          {
+            op: "setElementProperty",
+            args: {
+              elementId: { kind: "polygon", id: "$created" },
+              path: "frameShapeSides",
+              value: len(5),
+            },
+          },
+        ],
+      },
+    } as never);
+    return (reply as { payload: { createdId: { kind: string; id: string } } })
+      .payload.createdId;
+  }
+
+  test("nothing selected, a group or two items: no Shape section", async () => {
+    covers("panel:paged.object-transform");
+    const h = await mount();
+    expect(shapeOf(h)).toBeNull();
+    await h.select([h.scene.group]);
+    expect(shapeOf(h)).toBeNull();
+    await h.select([h.scene.rect, h.scene.oval]);
+    expect(shapeOf(h)).toBeNull();
+  });
+
+  test("an oval: the pie angles read 0 and 360; typing the end cuts a pie, Invert pie swaps them in one step", async () => {
+    covers("panel:paged.object-transform");
+    const h = await mount();
+    await h.select([h.scene.oval]);
+    expect(shapeOf(h)?.getAttribute("data-shape-kind")).toBe("oval");
+    expect(byLabel(h, "Pie start").value).toBe("0 °");
+    expect(byLabel(h, "Pie end").value).toBe("360 °");
+    const from = h.mark();
+    await h.typeInto(byLabel(h, "Pie end"), "90");
+    expect(h.mutations(from)).toEqual([
+      set(addr(h.scene.oval), "frameShapePieEnd", len(90)),
+    ] as never);
+    expect(await h.get(addr(h.scene.oval), "frameShapePieEnd")).toEqual(
+      len(90),
+    );
+    expect(byLabel(h, "Pie end").value).toBe("90 °");
+    const inv = h.mark();
+    await h.click(h.root.querySelector("[data-invert-pie]")!);
+    expect(h.mutations(inv)).toEqual([
+      batch(
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: h.scene.oval,
+            path: "frameShapePieStart",
+            value: len(90),
+          },
+        },
+        {
+          op: "setElementProperty",
+          args: {
+            elementId: h.scene.oval,
+            path: "frameShapePieEnd",
+            value: len(360),
+          },
+        },
+      ),
+    ] as never);
+    expect(byLabel(h, "Pie start").value).toBe("90 °");
+    expect(byLabel(h, "Pie end").value).toBe("360 °");
+  });
+
+  test("a live polygon: sides and star inset read and write; a plain path shows no Shape section", async () => {
+    covers("panel:paged.object-transform");
+    const h = await mount();
+    const poly = await livePentagon(h);
+    await h.select([poly as never]);
+    expect(shapeOf(h)?.getAttribute("data-shape-kind")).toBe("polygon");
+    expect(byLabel(h, "Sides").value).toBe("5");
+    const from = h.mark();
+    await h.typeInto(byLabel(h, "Sides"), "8");
+    expect(h.mutations(from)).toEqual([
+      set(addr(poly), "frameShapeSides", len(8)),
+    ] as never);
+    expect(await h.get(addr(poly), "frameShapeSides")).toEqual(len(8));
+    await h.typeInto(byLabel(h, "Star inset"), "30");
+    expect(await h.get(addr(poly), "frameShapeStarInset")).toEqual(len(30));
+    // A star's sides are its points.
+    expect(byLabel(h, "Points").value).toBe("8");
+    // An edited path is no live polygon: the section goes away.
+    await h.mutate({
+      op: "setElementProperty",
+      args: { elementId: poly, path: "frameShapeSides", value: len(null) },
+    } as never);
+    await h.settle();
+    expect(shapeOf(h)).toBeNull();
+  });
+
+  test("a rectangle: the linked corners take a type and a radius in one batch; unlinked, one corner", async () => {
+    covers("panel:paged.object-transform");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    expect(shapeOf(h)?.getAttribute("data-shape-kind")).toBe("rectangle");
+    expect(select(h, "Top-left corner").value).toBe("None");
+    const from = h.mark();
+    await h.choose(select(h, "Top-left corner"), "BeveledCorner");
+    const suffixes = ["TopLeft", "TopRight", "BottomRight", "BottomLeft"];
+    expect(h.mutations(from)).toEqual([
+      batch(
+        ...suffixes.map((s) => ({
+          op: "setElementProperty",
+          args: {
+            elementId: h.scene.rect,
+            path: `frameCornerOption${s}`,
+            value: { type: "text", value: "BeveledCorner" },
+          },
+        })),
+      ),
+    ] as never);
+    expect(select(h, "Bottom-left corner").value).toBe("BeveledCorner");
+    // Unlink, then a radius on one corner.
+    await h.click(h.root.querySelector("[data-link-corners]")!);
+    const one = h.mark();
+    await h.typeInto(byLabel(h, "Bottom-right corner radius"), "20");
+    expect(h.mutations(one)).toEqual([
+      {
+        op: "setElementProperty",
+        args: {
+          elementId: h.scene.rect,
+          path: "frameCornerRadiusBottomRight",
+          value: len(20),
+        },
+      },
+    ] as never);
+    expect(
+      await h.get(addr(h.scene.rect), "frameCornerRadiusBottomRight"),
+    ).toEqual(len(20));
+    expect(
+      await h.get(addr(h.scene.rect), "frameCornerRadiusTopLeft"),
+    ).not.toEqual(len(20));
+  });
+});

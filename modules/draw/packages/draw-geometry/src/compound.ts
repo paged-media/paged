@@ -52,15 +52,12 @@
 // outside the depth rule's meaning (named on `contourDepths`); the
 // paint-order rule needs no nesting at all, crossing or not.
 //
-// A SOURCE THAT NAMES ITS FILL RULE picks between the depth rule and no
-// rule at all (`orientForFillRule`): an SVG `fill-rule="evenodd"` shape
-// gets the depth rule, because that is the region even-odd paints; a
-// `nonzero` one (SVG's default) keeps the winding it was authored with,
-// because the engine already fills by exactly that rule.
+// A SOURCE THAT NAMES ITS FILL RULE (an SVG's `fill-rule`) is no longer
+// re-wound here: the engine carries the rule on the element (engine ADR
+// 1006) and its SVG import writes it (draw ADR 364).
 
 import { flattenAnchorRun } from "./bezier";
 import { pointInPolygon } from "./polygon";
-import type { FillRule } from "./svg-doc";
 import type { AnchorTable, AnchorTriple, Vec2 } from "./types";
 
 /** One surviving contour: its `[from, to)` anchor range and the index it
@@ -244,34 +241,6 @@ export function orientForNonZeroHoles(table: AnchorTable): AnchorTable {
     );
   });
   return { anchors, subpathStarts, subpathOpen };
-}
-
-/**
- * Orient a compound shape's contours so the engine's NON-ZERO fill paints
- * the region `fillRule` names — the rule for contours that come from a
- * source which says how it is filled (SVG import's `fill-rule`):
- *
- *   · `"nonzero"` (and SVG's default): the table is returned AS AUTHORED.
- *     The source already describes a non-zero region; re-winding would
- *     change it — a ring drawn with both contours the same way round is a
- *     solid disc in every SVG renderer, and must stay one.
- *   · `"evenodd"`: {@link orientForNonZeroHoles}, the nesting-depth rule.
- *     For contours that do not cross, non-zero over alternately wound
- *     contours paints exactly the even-odd region, at any depth.
- *
- * WHAT IS NOT EXPRESSIBLE, until the engine carries an even-odd fill
- * rule: even-odd over contours that CROSS — each other, or themselves (a
- * five-point star drawn as one self-intersecting contour, whose centre
- * even-odd leaves empty). Direction cannot carve a hole there: the
- * crossing contour is one ring, and no reversal changes how often it
- * winds around a point. Such a shape is lowered with the depth rule and
- * paints its non-zero region; nothing here pretends otherwise.
- */
-export function orientForFillRule(
-  table: AnchorTable,
-  fillRule: FillRule = "nonzero",
-): AnchorTable {
-  return fillRule === "evenodd" ? orientForNonZeroHoles(table) : table;
 }
 
 /**

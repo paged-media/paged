@@ -132,6 +132,10 @@ pub enum Address {
     Group {
         id: String,
     },
+    /// Engine ADR 1039 — a symbol instance.
+    Instance {
+        id: String,
+    },
     /// A page item whose kind is not known yet (`frame:<id>`). Resolved
     /// against a document; never handed out by core.
     Frame {
@@ -250,6 +254,7 @@ pub enum AddressKind {
     Polygon,
     GraphicLine,
     Group,
+    Instance,
     Frame,
     Page,
     Spread,
@@ -287,7 +292,7 @@ pub struct AddressForm {
 
 impl AddressKind {
     /// Every kind, in the order the grammar is published.
-    pub const ALL: [AddressKind; 30] = [
+    pub const ALL: [AddressKind; 31] = [
         AddressKind::TextFrame,
         AddressKind::Rectangle,
         AddressKind::Oval,
@@ -318,6 +323,7 @@ impl AddressKind {
         AddressKind::TextVariable,
         AddressKind::Plugin,
         AddressKind::Handle,
+        AddressKind::Instance,
     ];
 
     /// The canonical prefix (before the `:`). `doc` has no `:`; a handle
@@ -331,6 +337,7 @@ impl AddressKind {
             AddressKind::Polygon => "polygon",
             AddressKind::GraphicLine => "graphicLine",
             AddressKind::Group => "group",
+            AddressKind::Instance => "instance",
             AddressKind::Frame => "frame",
             AddressKind::Page => "page",
             AddressKind::Spread => "spread",
@@ -375,6 +382,7 @@ impl AddressKind {
                 | AddressKind::Polygon
                 | AddressKind::GraphicLine
                 | AddressKind::Group
+                | AddressKind::Instance
         )
     }
 
@@ -396,6 +404,11 @@ impl AddressKind {
                 "group:<id>",
                 "group:u88",
                 "A group. `paged.set(\"group:<id>\", \"groupTransform\", [a,b,c,d,tx,ty])` moves it as a unit.",
+            ),
+            AddressKind::Instance => (
+                "instance:<id>",
+                "instance:u9a",
+                "A symbol instance (engine ADR 1039): a placed reference to a symbol definition.",
             ),
             AddressKind::Frame => (
                 "frame:<id>",
@@ -590,6 +603,7 @@ impl Address {
             Address::Polygon { .. } => AddressKind::Polygon,
             Address::GraphicLine { .. } => AddressKind::GraphicLine,
             Address::Group { .. } => AddressKind::Group,
+            Address::Instance { .. } => AddressKind::Instance,
             Address::Frame { .. } => AddressKind::Frame,
             Address::Page { .. } | Address::PageNumber { .. } => AddressKind::Page,
             Address::Spread { .. } => AddressKind::Spread,
@@ -629,6 +643,7 @@ impl Address {
             AddressKind::Polygon => Address::Polygon { id },
             AddressKind::GraphicLine => Address::GraphicLine { id },
             AddressKind::Group => Address::Group { id },
+            AddressKind::Instance => Address::Instance { id },
             AddressKind::Frame => Address::Frame { id },
             _ => return None,
         })
@@ -644,6 +659,7 @@ impl Address {
             | Address::Polygon { id }
             | Address::GraphicLine { id }
             | Address::Group { id }
+            | Address::Instance { id }
             | Address::Frame { id } => Some(id),
             Address::OnMaster { item, .. } => item.page_item_id(),
             _ => None,
@@ -681,6 +697,7 @@ impl Address {
             "polygon" => Address::Polygon { id },
             "graphicLine" | "graphicline" => Address::GraphicLine { id },
             "group" => Address::Group { id },
+            "instance" => Address::Instance { id },
             "frame" => Address::Frame { id },
             "spread" => Address::Spread { id },
             "layer" => Address::Layer { id },
@@ -842,6 +859,7 @@ impl Address {
             Address::Polygon { id } => ElementId::Polygon(id.clone()),
             Address::GraphicLine { id } => ElementId::GraphicLine(id.clone()),
             Address::Group { id } => ElementId::Group(id.clone()),
+            Address::Instance { id } => ElementId::Instance(id.clone()),
             Address::OnMaster { item, .. } => return item.to_element_id(),
             Address::StoryRange {
                 story_id,
@@ -869,6 +887,7 @@ impl From<ElementId> for Address {
             ElementId::Polygon(id) => Address::Polygon { id },
             ElementId::GraphicLine(id) => Address::GraphicLine { id },
             ElementId::Group(id) => Address::Group { id },
+            ElementId::Instance(id) => Address::Instance { id },
             ElementId::StoryRange {
                 story_id,
                 start,
@@ -905,6 +924,7 @@ impl std::fmt::Display for Address {
             | Address::Polygon { id }
             | Address::GraphicLine { id }
             | Address::Group { id }
+            | Address::Instance { id }
             | Address::Frame { id }
             | Address::Page { id }
             | Address::Spread { id }

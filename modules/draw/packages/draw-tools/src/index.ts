@@ -304,3 +304,55 @@ export {
   type FlareSnapshot,
   type ShapeModifiers,
 } from "./star-machine";
+
+// WP6.7 — the distortion tools' machines: the Liquify family (one machine,
+// the kernel an option), the Puppet Warp session (mesh, pins, ARAP), and
+// the Perspective Grid / Perspective Selection gestures with the plane
+// widget's layout.
+export {
+  LiquifyMachine,
+  LIQUIFY_DEFAULTS,
+  type LiquifyEvent,
+  type LiquifyOptions,
+  type LiquifySnapshot,
+  type LiquifyToolOptions,
+} from "./liquify-machine";
+export {
+  PuppetWarpMachine,
+  type PuppetPinView,
+  type PuppetWarpEvent,
+  type PuppetWarpOptions,
+  type PuppetWarpSnapshot,
+} from "./puppet-warp-machine";
+export {
+  PerspectiveGridMachine,
+  PerspectiveSelectMachine,
+  planeForKey,
+  planeWidgetHit,
+  planeWidgetLayout,
+  type GridEvent,
+  type GridMachineOptions,
+  type GridSnapshot,
+  type PerspectiveCommit,
+  type PerspectiveHit,
+  type PerspectiveSelectEvent,
+  type PerspectiveSelectOptions,
+  type PerspectiveSelectSnapshot,
+  type PlaneChoice,
+  type PlaneWidgetCell,
+} from "./perspective-machine";
+
+// WP6.8 — the Symbolism tools' machine (draw ADR 365): the Symbol Sprayer
+// and the six modifiers, one gesture one batch.
+export {
+  SymbolismMachine,
+  SYMBOLISM_DEFAULTS,
+  type SymbolismCommit,
+  type SymbolismEvent,
+  type SymbolismOptions,
+  type SymbolismSnapshot,
+  type SymbolismTarget,
+  type SymbolismToolKind,
+  type SymbolismToolOptions,
+  type SymbolismUpdate,
+} from "./symbolism-machine";
