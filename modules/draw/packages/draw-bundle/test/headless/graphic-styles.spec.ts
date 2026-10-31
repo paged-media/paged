@@ -99,7 +99,7 @@ import {
   type GraphicStyleLibrary,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "./host";
+import { openHost, withoutNativeAppearance } from "./host";
 
 const RECT = {
   kind: "rectangle",
@@ -565,6 +565,9 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
       h = await openHost();
       await h.load(F1_MULTI_SHAPE.bytes());
       h.loadBundle(drawBundle);
+      // The metadata lane (draw ADR 354); the native one is
+      // graphic-styles-native.spec.ts (draw ADR 367).
+      withoutNativeAppearance(h);
     });
     afterAll(() => h?.dispose());
 

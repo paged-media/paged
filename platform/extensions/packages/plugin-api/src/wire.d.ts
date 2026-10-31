@@ -1019,7 +1019,7 @@ export type ElementId = { kind: "textFrame"; id: string } | { kind: "rectangle";
  * Engine ADR 1008 — an effect kind on the stack: InDesign\'s nine, then
  * the stack-only ones, then (engine ADR 1042) the live vector effects.
  */
-export type EffectKind = "dropShadow" | "innerShadow" | "outerGlow" | "innerGlow" | "bevelEmboss" | "satin" | "feather" | "directionalFeather" | "gradientFeather" | "gaussianBlur" | "outlineStroke" | "colorOverlay" | "gradientOverlay" | "reflection" | "softEdge" | "noise" | "colorAdjust" | "roughen" | "zigZag" | "puckerBloat" | "twist" | "tweak" | "transformCopies" | "freeDistort" | "warp" | "offsetPath" | "outlinePath" | "roundCorners" | "scribble" | "convertToShape" | "pathfinder";
+export type EffectKind = "dropShadow" | "innerShadow" | "outerGlow" | "innerGlow" | "bevelEmboss" | "satin" | "feather" | "directionalFeather" | "gradientFeather" | "gaussianBlur" | "outlineStroke" | "colorOverlay" | "gradientOverlay" | "reflection" | "softEdge" | "noise" | "colorAdjust" | "roughen" | "zigZag" | "puckerBloat" | "twist" | "tweak" | "transformCopies" | "freeDistort" | "warp" | "offsetPath" | "outlinePath" | "roundCorners" | "scribble" | "convertToShape" | "pathfinder" | "envelope";
 
 /**
  * Engine ADR 1008 — one entry of an effect stack on the wire. Every
@@ -1056,6 +1056,7 @@ export type EffectKind = "dropShadow" | "innerShadow" | "outerGlow" | "innerGlow
  * | `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |
  * | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
  * | `pathfinder` | `op` (on a group\'s stack only) |
+ * | `envelope` | `rows`, `columns`, `mesh` (the patches\' control net, `(3·rows+1) × (3·columns+1)` `[x, y]` in the box\'s unit square, row-major) |
  *
  * InDesign\'s kinds carry no parameters here: theirs are the per-field
  * paths (`frameInnerShadowSize`, …), and the stack keeps them.
@@ -1127,6 +1128,9 @@ export interface EffectEntrySpec {
     height?: number | null;
     cornerRadius?: number | null;
     op?: string | null;
+    rows?: number | null;
+    columns?: number | null;
+    mesh?: [number, number][] | null;
 }
 
 /**

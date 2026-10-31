@@ -595,11 +595,17 @@ export function unitRig(
   });
   // The recording fake answers no engine symbol op: these specs run the
   // re-emitted lane (draw ADR 356), as a host without the flag does.
-  if (!options.engineSymbols) {
+  // Nor does it keep a native appearance (engine ADR 1043): these specs
+  // run the metadata lane (draw ADR 354), as a host without the flag does;
+  // the native lane is test/headless/appearance-native-commands.spec.ts.
+  {
     const supports = host.supports.bind(host);
+    const off = new Set<string>();
+    if (!options.engineSymbols) off.add("document.symbols@1");
+    off.add("document.appearance@1");
     (host as { supports: (feature: string) => boolean }).supports = (
       feature: string,
-    ) => feature !== "document.symbols@1" && supports(feature);
+    ) => !off.has(feature) && supports(feature);
   }
   // The automatic recipe update rebuilds in the background after a commit
   // (a timer, not the command's own promise), so in a rig that counts a

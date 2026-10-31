@@ -456,3 +456,76 @@ fn the_effects_survive_a_paged_round_trip() {
         EffectKind::Pathfinder
     );
 }
+
+/// Draw ADR 367 — an envelope (a Bézier patch mesh) is a stack entry like
+/// the others: written with its net, read back whole, expanded in one undo
+/// step, and kept live through an IDML this engine wrote.
+#[test]
+fn an_envelope_mesh_is_a_vector_entry__feat__effects_transparency_live_vector_effects() {
+    let mut m = load();
+    let h0 = m.current_state_hash();
+    let mut net = paged_model::vector_effect::EnvelopeParams::flat(1, 2);
+    // Pull the top edge's middle node (row 0, column 3 of 7) up by a
+    // third of the height.
+    net[3] = [0.5, -0.3333];
+    let env = EffectEntrySpec {
+        rows: Some(1),
+        columns: Some(2),
+        mesh: Some(net.clone()),
+        ..EffectEntrySpec::new(EffectKind::Envelope)
+    };
+    set(&mut m, &r1(), "frameEffectStack", vec![env]).unwrap();
+    let back = stack(&m, &r1(), "frameEffectStack");
+    assert_eq!(back.len(), 1);
+    assert_eq!(back[0].kind, EffectKind::Envelope);
+    assert_eq!(back[0].mesh.as_deref(), Some(&net[..]));
+    // A wrong net size is refused by name.
+    let bad = EffectEntrySpec {
+        rows: Some(3),
+        mesh: Some(net.clone()),
+        ..EffectEntrySpec::new(EffectKind::Envelope)
+    };
+    assert!(set(&mut m, &r1(), "frameEffectStack", vec![bad])
+        .unwrap_err()
+        .contains("mesh"));
+
+    // IDML: baked, the source in a label, live again on re-import.
+    let idml = m.export_idml().expect("export idml");
+    let again = CanvasModel::load("again", &idml, CanvasOptions::default()).expect("re-import");
+    let r = again.scene().spreads[0]
+        .spread
+        .rectangles
+        .iter()
+        .find(|r| r.self_id.as_deref() == Some("r1"))
+        .unwrap()
+        .clone();
+    assert_eq!(r.effect_stack.len(), 1, "the envelope is live again");
+
+    // Expand keeps the bent outline: more anchors than the four corners,
+    // the top reaching above the box.
+    let top0 = m.scene().spreads[0].spread.rectangles[0]
+        .anchors
+        .iter()
+        .map(|a| a.anchor.1)
+        .fold(f32::INFINITY, f32::min);
+    let h1 = m.current_state_hash();
+    m.apply_mutation(&Mutation::ExpandAppearance {
+        element_id: ElementId::Rectangle("r1".into()),
+    })
+    .expect("expand");
+    {
+        let r = &m.scene().spreads[0].spread.rectangles[0];
+        assert!(r.anchors.len() > 4, "{}", r.anchors.len());
+        assert!(r.effect_stack.is_empty());
+        let top = r
+            .anchors
+            .iter()
+            .map(|a| a.anchor.1)
+            .fold(f32::INFINITY, f32::min);
+        assert!(top < top0 - 1.0, "{top} vs {top0}");
+    }
+    m.undo().expect("undo expand");
+    assert_eq!(m.current_state_hash(), h1);
+    m.undo().expect("undo envelope");
+    assert_eq!(m.current_state_hash(), h0);
+}

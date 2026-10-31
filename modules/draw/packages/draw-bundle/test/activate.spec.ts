@@ -94,6 +94,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.crystallize",
       "media.paged.draw.tool.wrinkle",
       "media.paged.draw.tool.puppetWarp",
+      "media.paged.draw.tool.envelopeMesh",
       "media.paged.draw.tool.perspectiveGrid",
       "media.paged.draw.tool.perspectiveSelect",
       // WP6.8 — the Symbolism flyout (draw ADR 365).
@@ -207,6 +208,9 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.breakGraphicStyleLink",
       "media.paged.draw.command.renameGraphicStyle",
       "media.paged.draw.command.deleteGraphicStyle",
+      "media.paged.draw.command.importGraphicStyles",
+      "media.paged.draw.command.exportGraphicStyles",
+      "media.paged.draw.command.mergeGraphicStyles",
       // Illustrator Phase 2 (§16.1) — symbols v0 (a definition in a
       // container part; an instance is re-emitted artwork carrying a link).
       "media.paged.draw.command.defineSymbol",
@@ -251,6 +255,14 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.liquifyStroke",
       "media.paged.draw.command.puppetWarp",
       "media.paged.draw.command.puppetWarpTool",
+      // WP6.3 — Envelope distort and Expand appearance (draw ADR 367).
+      "media.paged.draw.command.envelopeMakeWithWarp",
+      "media.paged.draw.command.envelopeMakeWithMesh",
+      "media.paged.draw.command.envelopeMakeWithTopObject",
+      "media.paged.draw.command.envelopeEditContents",
+      "media.paged.draw.command.envelopeExpand",
+      "media.paged.draw.command.expandAppearance",
+      "media.paged.draw.command.envelopeMeshTool",
       "media.paged.draw.command.perspectiveShowGrid",
       "media.paged.draw.command.perspectiveHideGrid",
       "media.paged.draw.command.perspectiveLockGrid",
@@ -347,7 +359,6 @@ describe("drawBundle.activate", () => {
     // Vector stroke / Vector fill are not contributed any more: their
     // rows live in the host's Stroke, Object Options and Gradients panels.
     expect(fake.ids("panels")).toEqual([
-      "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",
       "media.paged.draw.panel.livePaint",

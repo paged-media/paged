@@ -113,6 +113,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [309](309-effects-transparency-and-appearance-panels.md) | The Effects, Transparency and Appearance panels and the Effect menu: kinds from core's catalog, the mask's options and Clip, every edit context | Accepted 2026-10-29 |
 | [310](310-live-shape-widgets.md) | Live-shape widgets on the canvas and the Transform panel's Shape section | Accepted 2026-10-30 |
 | [311](311-shared-host-surfaces-in-every-context.md) | Gradients, Picture adjustments, History and Free Transform in every edit context | Accepted 2026-10-30 |
+| [312](312-the-appearance-panel-lists-every-fill-and-stroke.md) | The Appearance panel lists every fill and stroke: the native appearance front to back, Illustrator's add, duplicate, move and clear, one write each | Accepted 2026-10-31 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

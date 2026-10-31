@@ -130,6 +130,13 @@ impl EffectEntrySpec {
                 self.corner_radius = Some(p.corner_radius);
             }
             Effect::Pathfinder(p) => self.op = Some(enum_name(p.op)),
+            Effect::Envelope(p) => {
+                // The whole net, the flat one included: a reader edits
+                // points, not an absence.
+                self.rows = Some(p.rows);
+                self.columns = Some(p.columns);
+                self.mesh = Some(p.net());
+            }
             _ => {}
         }
     }
@@ -308,6 +315,43 @@ impl EffectEntrySpec {
                     "`add`, `subtract`, `intersect` or `exclude`",
                 )?,
             }),
+            EffectKind::Envelope => {
+                let max = EnvelopeParams::MAX_CELLS;
+                let side = |name: &str, v: Option<u32>| match v {
+                    None => Ok(1),
+                    Some(n) if (1..=max).contains(&n) => Ok(n),
+                    Some(n) => Err(format!("`{name}` is 1 to {max}, not {n}")),
+                };
+                let rows = side("rows", self.rows)?;
+                let columns = side("columns", self.columns)?;
+                let mesh = match &self.mesh {
+                    None => Vec::new(),
+                    Some(m) if m.is_empty() => Vec::new(),
+                    Some(m) => {
+                        let want = EnvelopeParams::net_len(rows, columns);
+                        if m.len() != want {
+                            return Err(format!(
+                                "`mesh` of a {rows} × {columns} envelope holds {want} points ((3·rows+1) × (3·columns+1)), not {}",
+                                m.len()
+                            ));
+                        }
+                        if m.iter().flatten().any(|v| !v.is_finite()) {
+                            return Err("`mesh` must be finite".to_string());
+                        }
+                        // The flat net is stored as none (the canonical form).
+                        if *m == EnvelopeParams::flat(rows, columns) {
+                            Vec::new()
+                        } else {
+                            m.clone()
+                        }
+                    }
+                };
+                Effect::Envelope(EnvelopeParams {
+                    rows,
+                    columns,
+                    mesh,
+                })
+            }
             other => return Err(format!("`{}` is not a vector effect", other.name())),
         })
     }
@@ -344,5 +388,35 @@ mod tests {
         let mut spec = EffectEntrySpec::new(EffectKind::Roughen);
         spec.size = Some(f32::NAN);
         assert!(spec.to_model().is_err());
+        let mut spec = EffectEntrySpec::new(EffectKind::Envelope);
+        spec.rows = Some(2);
+        spec.mesh = Some(vec![[0.0, 0.0]; 16]);
+        assert!(spec.to_model().unwrap_err().contains("28 points"));
+        spec.rows = Some(51);
+        assert!(spec.to_model().unwrap_err().contains("rows"));
+    }
+
+    #[test]
+    fn an_envelope_reads_its_whole_net_and_stores_a_flat_one_as_none() {
+        let mut spec = EffectEntrySpec::new(EffectKind::Envelope);
+        spec.rows = Some(2);
+        spec.columns = Some(3);
+        spec.mesh = Some(EnvelopeParams::flat(2, 3));
+        let model = spec.to_model().unwrap();
+        let Effect::Envelope(p) = &model.effect else {
+            panic!("an envelope");
+        };
+        assert!(p.mesh.is_empty());
+        let back = EffectEntrySpec::from_model(&model);
+        assert_eq!(back.mesh.as_ref().map(Vec::len), Some(7 * 10));
+        let mut bent = EnvelopeParams::flat(1, 1);
+        bent[5] = [0.4, 0.2];
+        spec.rows = Some(1);
+        spec.columns = Some(1);
+        spec.mesh = Some(bent.clone());
+        let Effect::Envelope(p) = spec.to_model().unwrap().effect else {
+            panic!("an envelope");
+        };
+        assert_eq!(p.mesh, bent);
     }
 }

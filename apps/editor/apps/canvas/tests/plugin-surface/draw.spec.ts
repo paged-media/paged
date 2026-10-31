@@ -104,6 +104,7 @@ const TOOLS = [
   "media.paged.draw.tool.crystallize",
   "media.paged.draw.tool.wrinkle",
   "media.paged.draw.tool.puppetWarp",
+  "media.paged.draw.tool.envelopeMesh",
   "media.paged.draw.tool.perspectiveGrid",
   "media.paged.draw.tool.perspectiveSelect",
   // WP6.8 — keyless: the Symbolism flyout (Sprayer, six modifiers and the
@@ -122,13 +123,15 @@ const TOOLS = [
 // no longer contributed: every row they carried is a core frame property,
 // and the host's Stroke, Object Options and Gradients panels carry them
 // (asserted ABSENT below, driven in journey/plugins/draw-panels).
+// Draw's Appearance panel is retired too: the host's lists every fill and
+// stroke of the engine's native appearance (draw ADR 367, editor ADR 312).
 const RETIRED_PANELS = [
   "media.paged.draw.panel.stroke",
   "media.paged.draw.panel.fill",
+  "media.paged.draw.panel.appearance",
 ] as const;
 
 const PANELS = [
-  "media.paged.draw.panel.appearance",
   "media.paged.draw.panel.graphicStyles",
   "media.paged.draw.panel.symbols",
   "media.paged.draw.panel.livePaint",
@@ -199,6 +202,9 @@ const COMMANDS = [
   "media.paged.draw.command.breakGraphicStyleLink",
   "media.paged.draw.command.renameGraphicStyle",
   "media.paged.draw.command.deleteGraphicStyle",
+  "media.paged.draw.command.importGraphicStyles",
+  "media.paged.draw.command.exportGraphicStyles",
+  "media.paged.draw.command.mergeGraphicStyles",
   "media.paged.draw.command.defineSymbol",
   "media.paged.draw.command.placeSymbolInstance",
   "media.paged.draw.command.redefineSymbol",
@@ -298,6 +304,13 @@ const COMMANDS = [
   "media.paged.draw.command.liquifyStroke",
   "media.paged.draw.command.puppetWarp",
   "media.paged.draw.command.puppetWarpTool",
+  "media.paged.draw.command.envelopeMakeWithWarp",
+  "media.paged.draw.command.envelopeMakeWithMesh",
+  "media.paged.draw.command.envelopeMakeWithTopObject",
+  "media.paged.draw.command.envelopeEditContents",
+  "media.paged.draw.command.envelopeExpand",
+  "media.paged.draw.command.expandAppearance",
+  "media.paged.draw.command.envelopeMeshTool",
   "media.paged.draw.command.perspectiveShowGrid",
   "media.paged.draw.command.perspectiveHideGrid",
   "media.paged.draw.command.perspectiveLockGrid",
@@ -372,6 +385,7 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.crystallize": "liquify",
   "media.paged.draw.tool.wrinkle": "liquify",
   "media.paged.draw.tool.puppetWarp": "transform",
+  "media.paged.draw.tool.envelopeMesh": "transform",
   "media.paged.draw.tool.perspectiveGrid": "perspective",
   "media.paged.draw.tool.perspectiveSelect": "perspective",
   "media.paged.draw.tool.symbolSprayer": "symbolism",
@@ -388,7 +402,6 @@ const TOOL_SLOT: Record<string, string> = {
  *  settings") comes from the host catalog renderer; the nine React panels
  *  stamp their own. */
 const PANEL_MARKER: Record<string, string> = {
-  "media.paged.draw.panel.appearance": "[data-draw-appearance-panel]",
   "media.paged.draw.panel.graphicStyles": "[data-draw-graphic-styles-panel]",
   "media.paged.draw.panel.symbols": "[data-draw-symbols-panel]",
   "media.paged.draw.panel.livePaint": "[data-draw-live-paint-panel]",
@@ -681,7 +694,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 45 registered.
+    // TOOLS — all 46 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -701,7 +714,7 @@ test.describe("plugin surface · paged.draw", () => {
       "Vector stroke / Vector fill are no longer registered",
     ).toEqual([]);
 
-    // COMMANDS — all 151 registered.
+    // COMMANDS — all 161 registered.
     const missingCommands = COMMANDS.filter((id) => !reg.commands.includes(id));
     expect(
       missingCommands,
@@ -740,14 +753,14 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(45);
-    expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(151);
+    expect(TOOLS).toHaveLength(46);
+    expect(PANELS).toHaveLength(12);
+    expect(COMMANDS).toHaveLength(161);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 45 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 46 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);
@@ -948,7 +961,7 @@ test.describe("plugin surface · paged.draw", () => {
 
   // ── 6. the appearance stack ───────────────────────────────────────
 
-  test("the appearance stack adds, reorders, removes, bakes and releases @feat:plugin-draw.appearance @level:happy", async ({
+  test("the appearance commands write the native appearance the host panel lists @feat:plugin-draw.appearance @feat:frames-paths.native-appearance @level:happy", async ({
     page,
   }) => {
     const designer = new Designer(page);
@@ -964,65 +977,33 @@ test.describe("plugin surface · paged.draw", () => {
     await designer.applyFill("rectangle", id);
     await designer.applyStroke("rectangle", id, "Color/Black", 4);
     await designer.selectElement("rectangle", id);
-    await designer.openPanel("media.paged.draw.panel.appearance");
-    const panel = page.locator("[data-draw-appearance-panel]");
+    // The HOST's Appearance panel (editor ADR 312): draw contributes the
+    // commands, not a second panel (draw ADR 367).
+    await designer.openPanel("paged.appearance");
+    const panel = page.locator('[data-appearance-panel="ready"]');
     await expect(panel).toBeVisible({ timeout: 8_000 });
+    const layers = () =>
+      panel.locator('[data-appearance-section="layer"]').count();
 
-    /** The panel's root marker IS the layer count. */
-    const layers = async () =>
-      Number(
-        (await panel.first().getAttribute("data-draw-appearance-panel")) ?? "0",
-      );
-
-    // ADD two layers on top of the frame's own paint.
+    // ADD a fill and a stroke: two extra layers of the native appearance.
     await designer.runCommand("media.paged.draw.command.appearanceAddFill");
     await designer.runCommand("media.paged.draw.command.appearanceAddStroke");
-    await expect.poll(layers, { timeout: 8_000 }).toBeGreaterThanOrEqual(2);
-    const stacked = await layers();
+    await expect.poll(layers, { timeout: 8_000 }).toBe(2);
 
-    // REORDER — the stack survives a move (the row order is what the
-    // renderer paints in, so a move that silently no-ops is a defect).
+    // REORDER keeps both.
     await designer.runCommand("media.paged.draw.command.appearanceMoveLayer");
-    await expect.poll(layers, { timeout: 8_000 }).toBe(stacked);
+    await expect.poll(layers, { timeout: 8_000 }).toBe(2);
 
-    // BAKE → the stack becomes REAL stacked page items (a group of
-    // derived paths), then RELEASE takes them away again.
-    //
-    // THE ORACLE IS THE ITEM COUNT, NOT THE PIXELS. A bake is a lossless
-    // flatten: it renders identically by design, so `expectRenderChanged`
-    // here would assert that a correct implementation is broken.
-    // Measured: 2 page items → 5 on bake, back to 2 on release.
-    const itemsBeforeBake = await artworkCount(page);
+    // BAKE has nothing to bake on a native appearance: the item count
+    // stays (the engine draws every layer; IDML export bakes them).
+    const items = await artworkCount(page);
     await designer.runCommand("media.paged.draw.command.bakeAppearance");
-    await expect
-      .poll(
-        async () =>
-          (await panel.first().getAttribute("data-draw-appearance-baked")) ??
-          "false",
-        { timeout: 10_000 },
-      )
-      .toBe("true");
-    await expect
-      .poll(() => artworkCount(page), { timeout: 10_000 })
-      .toBeGreaterThan(itemsBeforeBake);
+    await page.waitForTimeout(500);
+    expect(await artworkCount(page)).toBe(items);
 
-    await designer.runCommand("media.paged.draw.command.releaseAppearance");
-    await expect
-      .poll(
-        async () =>
-          (await panel.first().getAttribute("data-draw-appearance-baked")) ??
-          "false",
-        { timeout: 10_000 },
-      )
-      .toBe("false");
-    await expect
-      .poll(() => artworkCount(page), { timeout: 10_000 })
-      .toBe(itemsBeforeBake);
-
-    // REMOVE + CLEAR bring the stack back to the frame's own paint.
-    await designer.runCommand("media.paged.draw.command.appearanceRemoveLayer");
+    // CLEAR brings it back to the frame's own fill and stroke.
     await designer.runCommand("media.paged.draw.command.appearanceClear");
-    await expect.poll(layers, { timeout: 8_000 }).toBeLessThan(stacked);
+    await expect.poll(layers, { timeout: 8_000 }).toBe(0);
   });
 
   // ── 7. graphic styles + symbols ───────────────────────────────────

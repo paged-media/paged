@@ -65,6 +65,7 @@
       "media.paged.draw.tool.crystallize",
       "media.paged.draw.tool.wrinkle",
       "media.paged.draw.tool.puppetWarp",
+      "media.paged.draw.tool.envelopeMesh",
       "media.paged.draw.tool.perspectiveGrid",
       "media.paged.draw.tool.perspectiveSelect",
       "media.paged.draw.tool.symbolSprayer",
@@ -77,7 +78,6 @@
       "media.paged.draw.tool.symbolNineSlice"
     ],
     "panels": [
-      "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",
       "media.paged.draw.panel.livePaint",
@@ -165,6 +165,9 @@
       "media.paged.draw.command.breakGraphicStyleLink",
       "media.paged.draw.command.renameGraphicStyle",
       "media.paged.draw.command.deleteGraphicStyle",
+      "media.paged.draw.command.importGraphicStyles",
+      "media.paged.draw.command.exportGraphicStyles",
+      "media.paged.draw.command.mergeGraphicStyles",
       "media.paged.draw.command.defineSymbol",
       "media.paged.draw.command.placeSymbolInstance",
       "media.paged.draw.command.redefineSymbol",
@@ -196,6 +199,13 @@
       "media.paged.draw.command.liquifyStroke",
       "media.paged.draw.command.puppetWarp",
       "media.paged.draw.command.puppetWarpTool",
+      "media.paged.draw.command.envelopeMakeWithWarp",
+      "media.paged.draw.command.envelopeMakeWithMesh",
+      "media.paged.draw.command.envelopeMakeWithTopObject",
+      "media.paged.draw.command.envelopeEditContents",
+      "media.paged.draw.command.envelopeExpand",
+      "media.paged.draw.command.expandAppearance",
+      "media.paged.draw.command.envelopeMeshTool",
       "media.paged.draw.command.perspectiveShowGrid",
       "media.paged.draw.command.perspectiveHideGrid",
       "media.paged.draw.command.perspectiveLockGrid",
@@ -2340,6 +2350,54 @@
           }
         },
         {
+          "id": "media.paged.draw.command.importGraphicStyles",
+          "title": "Import graphic styles",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "json": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.exportGraphicStyles",
+          "title": "Export graphic styles",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "styles": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              },
+              "save": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.mergeGraphicStyles",
+          "title": "Merge graphic styles",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "styles": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              },
+              "name": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
           "id": "media.paged.draw.command.defineSymbol",
           "title": "Define symbol",
           "args": {
@@ -4212,6 +4270,150 @@
         {
           "id": "media.paged.draw.command.puppetWarpTool",
           "title": "Puppet warp tool",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.draw.command.envelopeMakeWithWarp",
+          "title": "Envelope make with warp",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "style": {
+                "kind": "enum",
+                "members": [
+                  "arc",
+                  "arcLower",
+                  "arcUpper",
+                  "arch",
+                  "bulge",
+                  "shellLower",
+                  "shellUpper",
+                  "flag",
+                  "wave",
+                  "fish",
+                  "rise",
+                  "fisheye",
+                  "inflate",
+                  "squeeze",
+                  "twist"
+                ]
+              },
+              "horizontal": {
+                "kind": "bool"
+              },
+              "bendPct": {
+                "kind": "number"
+              },
+              "distortHPct": {
+                "kind": "number"
+              },
+              "distortVPct": {
+                "kind": "number"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.envelopeMakeWithMesh",
+          "title": "Envelope make with mesh",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "rows": {
+                "kind": "number",
+                "integer": true
+              },
+              "columns": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.envelopeMakeWithTopObject",
+          "title": "Envelope make with top object",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.envelopeEditContents",
+          "title": "Envelope edit contents",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.envelopeExpand",
+          "title": "Envelope expand",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.expandAppearance",
+          "title": "Expand appearance",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.envelopeMeshTool",
+          "title": "Envelope mesh tool",
           "args": {
             "kind": "struct",
             "fields": {}

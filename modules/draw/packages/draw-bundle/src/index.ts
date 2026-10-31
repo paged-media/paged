@@ -843,15 +843,36 @@ export {
   nativeAppearanceOf,
   migrateAppearanceMutations,
   type NativePaintLayer,
+  NATIVE_APPEARANCE_FEATURE,
+  APPEARANCE_KINDS,
+  nativeAppearanceOn,
+  layersOfValue,
+  readNativeAppearance,
+  explicitLayers,
+  appearanceMutation,
+  addNativeLayer,
+  extraLayerIndex,
+  removeNativeLayer,
+  moveNativeLayer,
 } from "./commands/appearance-native";
-// The APPEARANCE panel (React, the Layers-panel idiom) — the view over
-// that stack, with the one-fill/one-stroke engine limit stated inline.
 export {
-  makeAppearancePanel,
-  appearanceRowLabel,
-  APPEARANCE_PANEL_ID,
-  APPEARANCE_BAKE_NOTE,
-} from "./panels/appearance-panel";
+  graphicStyleFileOf,
+  parseGraphicStyleFile,
+  importStylesInto,
+  mergeGraphicStyles,
+  importGraphicStyles,
+  exportGraphicStyles,
+  mergeGraphicStylesIn,
+  IMPORT_GRAPHIC_STYLES_COMMAND_ID,
+  EXPORT_GRAPHIC_STYLES_COMMAND_ID,
+  MERGE_GRAPHIC_STYLES_COMMAND_ID,
+  GRAPHIC_STYLE_LIBRARY_COMMAND_IDS,
+} from "./commands/graphic-styles-native";
+export {
+  migrateAppearanceStacks,
+  installAppearanceMigration,
+  type AppearanceMigration,
+} from "./commands/appearance-migrate";
 // Illustrator Phase 2 — GRAPHIC STYLES: a named, LINKED complete
 // appearance. The library is a `.paged` CONTAINER part (document-
 // resident, so it travels with the file); the link is a reference on the
@@ -1698,6 +1719,7 @@ export { RESHAPE_OPTIONS, STAR_OPTIONS } from "./tool-options";
 // store and its overlay layer.
 export {
   DISTORTION_TOOL_IDS,
+  ENVELOPE_TOOL_IDS,
   LIQUIFY_TOOL_IDS,
   SYMBOLISM_TOOL_IDS,
 } from "./tools";
@@ -1725,6 +1747,32 @@ export {
   PUPPET_WARP_TOOL_ID,
   PUPPET_COMMAND_IDS,
 } from "./commands/puppet-warp";
+export {
+  makeWithWarp,
+  makeWithMesh,
+  makeWithTopObject,
+  expandEnvelope,
+  expandAppearance,
+  expandEnvelopeOps,
+  envelopeIndexOf,
+  meshEntry,
+  objectStackMutation,
+  readObjectStack,
+  readEnvelopeTargets,
+  DEFAULT_WARP,
+  DEFAULT_MESH,
+  ENVELOPE_COMMAND_IDS,
+  ENVELOPE_WARP_COMMAND_ID,
+  ENVELOPE_MESH_COMMAND_ID,
+  ENVELOPE_TOP_OBJECT_COMMAND_ID,
+  ENVELOPE_EDIT_CONTENTS_COMMAND_ID,
+  ENVELOPE_EXPAND_COMMAND_ID,
+  ENVELOPE_MESH_TOOL_COMMAND_ID,
+  ENVELOPE_MESH_TOOL_ID,
+  EXPAND_APPEARANCE_COMMAND_ID,
+  type EnvelopeTarget,
+  type StackEntry,
+} from "./commands/envelope";
 export {
   gridFor,
   saveGrid,
@@ -1757,6 +1805,16 @@ export {
   LIQUIFY_DWELL_MS,
 } from "./handlers/liquify";
 export { createPuppetWarpHandler } from "./handlers/puppet-warp";
+export {
+  createEnvelopeMeshHandler,
+  readMeshSessions,
+  pickControl,
+  meshWrite,
+  refineAt,
+  unitToPage,
+  pageToUnit,
+  type MeshSession,
+} from "./handlers/envelope-mesh";
 export {
   createPerspectiveGridHandler,
   createPerspectiveSelectHandler,

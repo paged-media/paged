@@ -922,6 +922,15 @@ STATIC: the protocol-78 handshake proves the engine has the op and the
 paths. paged.draw's effect UI (WP6.3) and the host Effects panel list the
 kinds from the schema's `EffectKind`.
 
+`envelope` (draw ADR 367, additive under the same flag) is Illustrator's
+Envelope Distort mesh: `rows` × `columns` bicubic Bézier patches over the
+item's tight source box, `mesh` their control net — `(3·rows+1) ×
+(3·columns+1)` `[x, y]` points, row-major, in the box's unit square (a
+flat net, or none, draws the item as drawn; 1 to 50 cells a side). A read
+answers the whole net. paged.draw's Object ▸ Envelope distort verbs and
+its Envelope Mesh tool write it; `expandAppearance` keeps it like any
+vector entry.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

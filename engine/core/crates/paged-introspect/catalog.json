@@ -28973,6 +28973,58 @@
         }
       ],
       "vector": true
+    },
+    {
+      "kind": "envelope",
+      "title": "Envelope mesh",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "rows",
+          "title": "Rows",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 50.0
+          },
+          "default": 1.0
+        },
+        {
+          "field": "columns",
+          "title": "Columns",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 50.0
+          },
+          "default": 1.0
+        },
+        {
+          "field": "mesh",
+          "title": "Mesh",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "list",
+              "of": {
+                "kind": "number"
+              }
+            }
+          }
+        }
+      ],
+      "vector": true
     }
   ],
   "effectCategories": [

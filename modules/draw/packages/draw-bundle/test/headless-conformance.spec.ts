@@ -126,6 +126,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.crystallize",
         "media.paged.draw.tool.wrinkle",
         "media.paged.draw.tool.puppetWarp",
+        "media.paged.draw.tool.envelopeMesh",
         "media.paged.draw.tool.perspectiveGrid",
         "media.paged.draw.tool.perspectiveSelect",
         // WP6.8 — the Symbolism flyout (draw ADR 365).
@@ -194,17 +195,17 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Star, Flare: twenty-seven tools.
         ...Array<string>(7).fill("tool"),
         // WP6.7 — the seven Liquify tools, Puppet Warp, Perspective Grid
-        // and Perspective Selection: thirty-seven.
-        ...Array<string>(10).fill("tool"),
+        // and Perspective Selection: thirty-seven; WP6.3 — the Envelope
+        // Mesh tool (draw ADR 367): thirty-eight.
+        ...Array<string>(11).fill("tool"),
         // (The stroke and fill schema panels were here; their rows moved
         // to the host's own panels.)
         // NO Layers panel — ADR 023 phase D retired it behind the
         // binding-provider seam. Its absence from this log IS the
         // assertion; the replacement's behaviour is pinned in
         // `headless/layers-provider.spec.ts`.
-        // The APPEARANCE panel (the metadata stack + its one-fill/
-        // one-stroke honesty note) — likewise expert-leaf React.
-        "panel",
+        // NO Appearance panel: the host's lists every fill and stroke of
+        // the engine's native appearance (draw ADR 367, editor ADR 312).
         // The GRAPHIC STYLES panel (the document-resident style library
         // + the selection's link into it) — likewise expert-leaf React.
         "panel",
@@ -245,8 +246,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Object ▸ Rasterize and its "…" raiser (extensions ADR 338);
         // WP6.7 — liquifyStroke, the two Puppet Warp commands and the
         // twelve perspective-grid commands; WP6.8 — Replace Symbol and
-        // Symbol Options (draw ADR 365).
-        ...Array<string>(27).fill("command"),
+        // Symbol Options (draw ADR 365); WP6.3 — the seven Envelope
+        // distort / Expand appearance commands and the graphic-style
+        // library's import / export / merge (draw ADR 367).
+        ...Array<string>(37).fill("command"),
         "command",
         "command",
         "command",
@@ -768,7 +771,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(45);
+    expect(harness.toolsContributed()).toHaveLength(46);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

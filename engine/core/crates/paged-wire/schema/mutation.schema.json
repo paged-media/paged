@@ -10074,7 +10074,7 @@
       ]
     },
     "EffectEntrySpec": {
-      "description": "Engine ADR 1008 — one entry of an effect stack on the wire. Every\nentry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`\nand `opacityPct`. The parameter fields are flat and optional; each\nkind reads its own and an absent one takes the kind's default:\n\n| kind | fields |\n| --- | --- |\n| `gaussianBlur` | `radiusPt` (σ, pt) |\n| `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |\n| `colorOverlay` | `color` |\n| `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |\n| `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |\n| `softEdge` | `sizePt` |\n| `noise` | `amountPct`, `monochromatic` |\n| `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |\n\nThe live vector effects (engine ADR 1042) and their fields:\n\n| kind | fields |\n| --- | --- |\n| `roughen` | `size`, `relative`, `detailPerInch`, `smooth`, `seed` |\n| `zigZag` | `size`, `relative`, `ridges`, `smooth` |\n| `puckerBloat` | `amountPct` (−200..200; positive bloats) |\n| `twist` | `angleDeg` |\n| `tweak` | `amountH`, `amountV`, `relative`, `anchors`, `inHandles`, `outHandles`, `seed` |\n| `transformCopies` | `scaleHPct`, `scaleVPct`, `moveH`, `moveV`, `rotateDeg`, `reflectX`, `reflectY`, `copies`, `origin` |\n| `freeDistort` | `corners` (four `[x, y]` in the box's unit square) |\n| `warp` | `style`, `horizontal`, `bendPct`, `distortHPct`, `distortVPct` |\n| `offsetPath` | `offset`, `join`, `miterLimit` |\n| `outlinePath` | — (the item's own stroke) |\n| `roundCorners` | `radius` |\n| `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |\n| `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |\n| `pathfinder` | `op` (on a group's stack only) |\n\nInDesign's kinds carry no parameters here: theirs are the per-field\npaths (`frameInnerShadowSize`, …), and the stack keeps them.",
+      "description": "Engine ADR 1008 — one entry of an effect stack on the wire. Every\nentry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`\nand `opacityPct`. The parameter fields are flat and optional; each\nkind reads its own and an absent one takes the kind's default:\n\n| kind | fields |\n| --- | --- |\n| `gaussianBlur` | `radiusPt` (σ, pt) |\n| `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |\n| `colorOverlay` | `color` |\n| `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |\n| `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |\n| `softEdge` | `sizePt` |\n| `noise` | `amountPct`, `monochromatic` |\n| `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |\n\nThe live vector effects (engine ADR 1042) and their fields:\n\n| kind | fields |\n| --- | --- |\n| `roughen` | `size`, `relative`, `detailPerInch`, `smooth`, `seed` |\n| `zigZag` | `size`, `relative`, `ridges`, `smooth` |\n| `puckerBloat` | `amountPct` (−200..200; positive bloats) |\n| `twist` | `angleDeg` |\n| `tweak` | `amountH`, `amountV`, `relative`, `anchors`, `inHandles`, `outHandles`, `seed` |\n| `transformCopies` | `scaleHPct`, `scaleVPct`, `moveH`, `moveV`, `rotateDeg`, `reflectX`, `reflectY`, `copies`, `origin` |\n| `freeDistort` | `corners` (four `[x, y]` in the box's unit square) |\n| `warp` | `style`, `horizontal`, `bendPct`, `distortHPct`, `distortVPct` |\n| `offsetPath` | `offset`, `join`, `miterLimit` |\n| `outlinePath` | — (the item's own stroke) |\n| `roundCorners` | `radius` |\n| `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |\n| `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |\n| `pathfinder` | `op` (on a group's stack only) |\n| `envelope` | `rows`, `columns`, `mesh` (the patches' control net, `(3·rows+1) × (3·columns+1)` `[x, y]` in the box's unit square, row-major) |\n\nInDesign's kinds carry no parameters here: theirs are the per-field\npaths (`frameInnerShadowSize`, …), and the stack keeps them.",
       "type": "object",
       "properties": {
         "kind": {
@@ -10587,6 +10587,40 @@
             "null"
           ],
           "default": null
+        },
+        "rows": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "columns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "mesh": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "default": null
         }
       },
       "required": [
@@ -10627,7 +10661,8 @@
         "roundCorners",
         "scribble",
         "convertToShape",
-        "pathfinder"
+        "pathfinder",
+        "envelope"
       ]
     },
     "PaintLayerSpec": {

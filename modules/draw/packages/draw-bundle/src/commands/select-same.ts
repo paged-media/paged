@@ -107,9 +107,12 @@ import { leafIdsOf, linkIndex } from "../link-index";
 import { registerCommand } from "../command-registry";
 import { defineMessages } from "@paged-media/strings";
 import { appearanceOf } from "./appearance";
+import { layersOfValue } from "./appearance-native";
+import { entriesOfValue } from "./envelope";
 import {
   canonicalGraphicAppearance,
   graphicStyleRefOf,
+  type GraphicStyleAppearance,
   type GraphicStyleBase,
 } from "./graphic-styles";
 import { symbolInstanceOf } from "./symbols";
@@ -301,6 +304,8 @@ function sameValue(
  *  plus the fill tint the appearance criterion's base paint needs. */
 type PaintFacts = Record<PaintCriterion, string | number | null> & {
   fillTint: number | null;
+  /** The native parts (draw ADR 367): layers, object effects, targets. */
+  native?: Pick<GraphicStyleAppearance, "layers" | "effects" | "targets">;
 };
 
 const NO_FACTS: PaintFacts = {
@@ -314,6 +319,16 @@ const NO_FACTS: PaintFacts = {
 
 const factsOf = (props: PropertyTable): PaintFacts => {
   const tint = rowValue(props, "frameFillTint");
+  const raw = (path: string) =>
+    props?.entries.find((e) => e.path === path)?.value ?? null;
+  const num = (path: PropertyPath) => {
+    const v = rowValue(props, path);
+    return typeof v === "number" ? v : null;
+  };
+  const txt = (path: PropertyPath) => {
+    const v = rowValue(props, path);
+    return typeof v === "string" && v.length > 0 ? v : null;
+  };
   return {
     fill: criterionValue(props, "fill"),
     stroke: criterionValue(props, "stroke"),
@@ -321,6 +336,16 @@ const factsOf = (props: PropertyTable): PaintFacts => {
     opacity: criterionValue(props, "opacity"),
     blendMode: criterionValue(props, "blendMode"),
     fillTint: typeof tint === "number" ? tint : null,
+    native: {
+      layers: layersOfValue(raw("frameAppearance")) ?? [],
+      effects: entriesOfValue(raw("frameEffectStack")) ?? [],
+      targets: {
+        fillOpacity: num("frameFillOpacity"),
+        fillBlendMode: txt("frameFillBlendMode"),
+        strokeOpacity: num("frameStrokeOpacity"),
+        strokeBlendMode: txt("frameStrokeBlendMode"),
+      },
+    },
   };
 };
 
@@ -349,7 +374,13 @@ function appearanceValue(
     opacity: typeof facts.opacity === "number" ? facts.opacity : null,
     blendMode: blend === null || blend === "normal" ? null : blend,
   };
-  return canonicalGraphicAppearance({ stack: appearanceOf(envelope), base });
+  // The native parts (draw ADR 367) too: two objects with the same
+  // fills, strokes and effects on the engine's appearance look the same.
+  return canonicalGraphicAppearance({
+    stack: appearanceOf(envelope),
+    base,
+    ...(facts.native ?? {}),
+  });
 }
 
 /** The value a LINK criterion reads off an envelope. */

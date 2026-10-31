@@ -314,11 +314,12 @@ film("developers", async (k) => {
     await expect(
       page.getByRole("menuitem", { name: /^Compound path/ }),
     ).toBeVisible({ timeout: 5000 });
-    // The submenu lists the plugin's commands, then its panels: the second
-    // "Appearance" is the panel. Into the submenu's column first, then down
-    // it: a diagonal would cross the main menu's other rows and close it.
+    // The submenu lists the plugin's commands, then its panels: "Graphic
+    // styles" is a panel (draw's Appearance panel is the host's now, draw
+    // ADR 367). Into the submenu's column first, then down it: a diagonal
+    // would cross the main menu's other rows and close it.
     const panelItem = page
-      .getByRole("menuitem", { name: /^Appearance$/ })
+      .getByRole("menuitem", { name: /^Graphic styles$/ })
       .last();
     await panelItem.waitFor({ state: "visible", timeout: 5000 });
     const column = (await panelItem.boundingBox())!;
@@ -329,7 +330,7 @@ film("developers", async (k) => {
     await k.hold(200);
     await press(k, panelItem);
     await expect(
-      page.locator('[data-dock-tab="media.paged.draw.panel.appearance"]'),
+      page.locator('[data-dock-tab="media.paged.draw.panel.graphicStyles"]'),
     ).toBeVisible();
     await k.hold(1200);
   });

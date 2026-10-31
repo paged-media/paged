@@ -34,7 +34,7 @@ fn yes() -> bool {
 }
 
 /// The vector effect kinds, by their serialised names.
-pub const VECTOR_KINDS: [&str; 14] = [
+pub const VECTOR_KINDS: [&str; 15] = [
     "roughen",
     "zigZag",
     "puckerBloat",
@@ -43,6 +43,7 @@ pub const VECTOR_KINDS: [&str; 14] = [
     "transformCopies",
     "freeDistort",
     "warp",
+    "envelope",
     "offsetPath",
     "outlinePath",
     "roundCorners",
@@ -272,6 +273,66 @@ impl Default for FreeDistortParams {
     fn default() -> Self {
         Self {
             corners: Self::identity(),
+        }
+    }
+}
+
+/// Illustrator's Envelope Distort (Make with Mesh, Make with Top Object,
+/// and a warp envelope reset with a mesh): the bounding box bent through a
+/// mesh of `rows` × `columns` bicubic Bézier patches. `mesh` is the
+/// patches' control net — `3 · rows + 1` rows of `3 · columns + 1`
+/// points, row-major, top to bottom — each point in the box's unit square
+/// (0,0 its top left, 1,1 its bottom right) like Free Distort's corners,
+/// so the envelope follows the item when it is moved or resized. Neighbour
+/// patches share their edge points. An empty net is the flat one: the
+/// item as drawn.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvelopeParams {
+    #[serde(default = "EnvelopeParams::one")]
+    pub rows: u32,
+    #[serde(default = "EnvelopeParams::one")]
+    pub columns: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mesh: Vec<[f32; 2]>,
+}
+impl EnvelopeParams {
+    /// Illustrator's limit on either side of an envelope mesh.
+    pub const MAX_CELLS: u32 = 50;
+    fn one() -> u32 {
+        1
+    }
+    /// The number of control points a `rows` × `columns` net holds.
+    pub fn net_len(rows: u32, columns: u32) -> usize {
+        (3 * rows as usize + 1) * (3 * columns as usize + 1)
+    }
+    /// The flat net of a `rows` × `columns` mesh: every point where it
+    /// lies in the unit square.
+    pub fn flat(rows: u32, columns: u32) -> Vec<[f32; 2]> {
+        let (nr, nc) = (3 * rows as usize, 3 * columns as usize);
+        let mut out = Vec::with_capacity((nr + 1) * (nc + 1));
+        for i in 0..=nr {
+            for j in 0..=nc {
+                out.push([j as f32 / nc as f32, i as f32 / nr as f32]);
+            }
+        }
+        out
+    }
+    /// The net, the flat one when none is stored.
+    pub fn net(&self) -> Vec<[f32; 2]> {
+        if self.mesh.len() == Self::net_len(self.rows, self.columns) {
+            self.mesh.clone()
+        } else {
+            Self::flat(self.rows, self.columns)
+        }
+    }
+}
+impl Default for EnvelopeParams {
+    fn default() -> Self {
+        Self {
+            rows: 1,
+            columns: 1,
+            mesh: Vec::new(),
         }
     }
 }

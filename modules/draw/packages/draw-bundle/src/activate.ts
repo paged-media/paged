@@ -87,6 +87,10 @@ import {
   PUPPET_COMMAND_IDS,
 } from "./commands/puppet-warp";
 import {
+  contributeEnvelopeCommands,
+  ENVELOPE_COMMAND_IDS,
+} from "./commands/envelope";
+import {
   contributePerspectiveCommands,
   installPerspectiveLayer,
   PERSPECTIVE_COMMAND_IDS,
@@ -112,6 +116,11 @@ import {
   SYMBOLS_COMMAND_IDS,
 } from "./commands/symbols";
 import { installSymbolMigration } from "./commands/symbols-migrate";
+import { installAppearanceMigration } from "./commands/appearance-migrate";
+import {
+  contributeGraphicStyleLibraryCommands,
+  GRAPHIC_STYLE_LIBRARY_COMMAND_IDS,
+} from "./commands/graphic-styles-native";
 import {
   contributeLivePaintCommands,
   LIVE_PAINT_COMMAND_IDS,
@@ -224,10 +233,6 @@ import {
 import { vectorGraphicEditContext } from "./edit-context";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import {
-  makeAppearancePanel,
-  APPEARANCE_PANEL_ID,
-} from "./panels/appearance-panel";
-import {
   makeGraphicStylesPanel,
   GRAPHIC_STYLES_PANEL_ID,
 } from "./panels/graphic-styles-panel";
@@ -297,22 +302,15 @@ export function activate(host: BundleHost): BundleHandle {
   // enforces the ordering: a provider on an unregistered context type
   // could never activate, so the door refuses it).
   const layersProvider = makeLayersBindingProvider(host);
-  // The APPEARANCE panel — the view over the metadata stack the
-  // appearance commands already model (add/remove/reorder fills +
-  // strokes), with the one-fill/one-stroke engine limit (gap B-24)
-  // stated inline instead of hidden behind a convincing stack. React
-  // for the same reason Layers is (a reorderable list is above the v1
-  // schema panel's scalar ceiling).
+  // There is no draw APPEARANCE panel: the host's Appearance panel lists
+  // every fill and stroke of the engine's native appearance (engine ADR
+  // 1043, editor ADR 312), and draw's commands write the same list
+  // (draw ADR 367).
   // PANEL ICONS. Every draw panel has a glyph of its own, and none is a
   // host panel's: two dock tabs with one icon read as one panel (the
   // 2026-10 panel review found `panel-stroke` three times and the host's
   // Effects / Object styles glyphs on draw panels). Each name must exist
   // in the host's glyph map, or the tab renders the dashed fallback.
-  host.contribute.panel({
-    id: APPEARANCE_PANEL_ID,
-    icon: "ui-sparkle",
-    ...makeAppearancePanel(host),
-  });
   // Illustrator Phase 2 — GRAPHIC STYLES: the named, LINKED complete
   // appearance. The library is a `.paged` CONTAINER part (it travels
   // with the file — `host.storage` is per-browser and plugin metadata is
@@ -547,6 +545,9 @@ export function activate(host: BundleHost): BundleHandle {
   // the link, and a redefine overwrites it. See commands/graphic-styles.ts
   // for the persistence shape, the kind projection and the honest limits.
   const graphicStyleCommandsSub = contributeGraphicStyleCommands(host);
+  // WP6.3 (draw ADR 367) — the library's import / export / merge.
+  const graphicStyleLibraryCommandsSub =
+    contributeGraphicStyleLibraryCommands(host);
   // Illustrator Phase 2 (§16.1) — SYMBOLS v0 (define / place / redefine /
   // break link / reset transform / rename / delete). Core has NO symbol
   // or instance model and IDML has no such primitive, and there is no
@@ -560,6 +561,10 @@ export function activate(host: BundleHost): BundleHandle {
   // WP6.8 (draw ADR 365) — a v0 library moves onto the engine's symbols
   // when the host keeps them, once per document, on open.
   const symbolMigrationSub = installSymbolMigration(host);
+  // WP6.3 (draw ADR 367) — metadata appearance stacks (ADR 354) move onto
+  // the engine's native appearance when the host draws it, on open, in
+  // one undo step; a migrated document has nothing left to move.
+  const appearanceMigrationSub = installAppearanceMigration(host);
   // Illustrator Phase 2 (the last unbuilt row) — LIVE PAINT v0 (make
   // group / fill face / regenerate / select faces / delete face /
   // release). Faces come from the B-22 planar arrangement, which is a
@@ -602,6 +607,10 @@ export function activate(host: BundleHost): BundleHandle {
   // that draws a visible grid whatever tool is active.
   const liquifyCommandsSub = contributeLiquifyCommands(host);
   const puppetWarpCommandsSub = contributePuppetWarpCommands(host);
+  // WP6.3 (draw ADR 367) — Object ▸ Envelope distort (make with warp /
+  // mesh / top object, edit contents, expand) and Object ▸ Expand
+  // appearance, over the engine's effect stack and `expandAppearance`.
+  const envelopeCommandsSub = contributeEnvelopeCommands(host);
   const perspectiveCommandsSub = contributePerspectiveCommands(host);
   const perspectiveLayerSub = installPerspectiveLayer(host);
   // The width profile as data, and the rebuild of the recipes a changed
@@ -747,6 +756,7 @@ export function activate(host: BundleHost): BundleHandle {
         APPEARANCE_COMMAND_IDS.length +
         APPEARANCE_BAKE_COMMAND_IDS.length +
         GRAPHIC_STYLES_COMMAND_IDS.length +
+        GRAPHIC_STYLE_LIBRARY_COMMAND_IDS.length +
         SYMBOLS_COMMAND_IDS.length +
         LIVE_PAINT_COMMAND_IDS.length +
         OPACITY_MASK_COMMAND_IDS.length +
@@ -763,6 +773,7 @@ export function activate(host: BundleHost): BundleHandle {
         STAR_FLARE_COMMAND_IDS.length +
         LIQUIFY_COMMAND_IDS.length +
         PUPPET_COMMAND_IDS.length +
+        ENVELOPE_COMMAND_IDS.length +
         PERSPECTIVE_COMMAND_IDS.length +
         [SHAPER_STROKE_COMMAND_ID].length +
         WIDTH_PROFILE_COMMAND_IDS.length +
@@ -806,6 +817,7 @@ export function activate(host: BundleHost): BundleHandle {
       starFlareCommandsSub.dispose();
       liquifyCommandsSub.dispose();
       puppetWarpCommandsSub.dispose();
+      envelopeCommandsSub.dispose();
       perspectiveCommandsSub.dispose();
       perspectiveLayerSub.dispose();
       widthProfileCommandsSub.dispose();
@@ -815,7 +827,9 @@ export function activate(host: BundleHost): BundleHandle {
       livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();
       symbolMigrationSub.dispose();
+      appearanceMigrationSub.dispose();
       graphicStyleCommandsSub.dispose();
+      graphicStyleLibraryCommandsSub.dispose();
       appearanceBakeCommandsSub.dispose();
       appearanceCommandsSub.dispose();
       liveCornerCommandsSub.dispose();

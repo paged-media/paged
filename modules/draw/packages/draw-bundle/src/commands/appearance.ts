@@ -68,6 +68,17 @@ import {
 } from "./appearance-bake";
 
 import { registerCommand } from "../command-registry";
+import {
+  addNativeLayer,
+  appearanceMutation,
+  explicitLayers,
+  extraLayerIndex,
+  moveNativeLayer,
+  nativeAppearanceOn,
+  readNativeAppearance,
+  removeNativeLayer,
+  type NativePaintLayer,
+} from "./appearance-native";
 import { oneBatchFor } from "./batch-handles";
 import { defineMessages } from "@paged-media/strings";
 
@@ -402,6 +413,29 @@ export async function applyAppearanceCommand(
     host.log.debug(`${commandId}: no selection — no-op`);
     return;
   }
+  if (nativeAppearanceOn(host)) {
+    await applyNative(host, commandId, async (id, layers) => {
+      if (kind === "clear") return [];
+      const seed = await frameFillStroke(host, id);
+      const all = explicitLayers(layers);
+      const top = (want: (l: NativePaintLayer) => boolean) =>
+        [...all].reverse().find(want);
+      if (kind === "fill") {
+        const t = top((l) => l.kind === "fill" || l.kind === "frameFill");
+        const color =
+          (t?.kind === "fill" ? t.color : seed.fill) ?? "Color/Black";
+        return addNativeLayer(layers, { kind: "fill", color, tint: 100 });
+      }
+      const t = top((l) => l.kind === "stroke" || l.kind === "frameStroke");
+      const own = t?.kind === "stroke";
+      return addNativeLayer(layers, {
+        kind: "stroke",
+        color: (own ? t.color : seed.stroke) ?? "Color/Black",
+        weight: (own ? t.weight : seed.weight) ?? 1,
+      });
+    });
+    return;
+  }
   const edits: Parameters<typeof commitAppearances>[1] = [];
   for (const selected of selection) {
     // A baked stack can be selected as its GROUP or as one of its
@@ -446,10 +480,15 @@ export async function applyAppearanceEdit(
   host: BundleHost,
   commandId: string,
   edit: (stack: AppearanceStack) => AppearanceStack,
+  native?: (layers: NativePaintLayer[]) => NativePaintLayer[],
 ): Promise<void> {
   const selection = host.selection.get();
   if (selection.length === 0) {
     host.log.debug(`${commandId}: no selection — no-op`);
+    return;
+  }
+  if (native && nativeAppearanceOn(host)) {
+    await applyNative(host, commandId, async (_id, layers) => native(layers));
     return;
   }
   const edits: Parameters<typeof commitAppearances>[1] = [];
@@ -459,6 +498,50 @@ export async function applyAppearanceEdit(
     edits.push({ id, stack: edit(appearanceOf(prev)), prev });
   }
   await commitAppearances(host, edits);
+}
+
+/** THE NATIVE LANE (draw ADR 367): when the engine draws native
+ *  appearance, every selected item's `frameAppearance` is edited and
+ *  written whole — all of them in ONE batch, one undo step. An item that
+ *  carries no appearance (a group, a line) is skipped. */
+async function applyNative(
+  host: BundleHost,
+  commandId: string,
+  edit: (
+    id: ElementId,
+    layers: NativePaintLayer[],
+  ) => Promise<NativePaintLayer[]>,
+): Promise<void> {
+  const ops: Mutation[] = [];
+  for (const id of host.selection.get()) {
+    const layers = await readNativeAppearance(host, id);
+    if (!layers) continue;
+    const next = await edit(id, layers);
+    if (JSON.stringify(next) === JSON.stringify(layers)) continue;
+    ops.push(appearanceMutation(id, next));
+  }
+  if (ops.length === 0) {
+    host.log.debug(`${commandId}: nothing to change`);
+    return;
+  }
+  const out = await host.document.mutate(oneBatchFor(ops));
+  if (!out.applied)
+    host.log.warn(
+      `appearance edit rejected by engine: ${JSON.stringify(out.error)}`,
+    );
+}
+
+/** The native list index a remove / move payload addresses: `layer` (the
+ *  list index, bottom to top) when given, else the `index`-th extra layer
+ *  of `kind` — the metadata lane's addressing. */
+function nativeIndexOf(
+  layers: readonly NativePaintLayer[],
+  p: Record<string, unknown> | undefined,
+): number {
+  const all = explicitLayers(layers);
+  const at = p?.layer;
+  if (typeof at === "number" && Number.isInteger(at)) return at;
+  return extraLayerIndex(all, layerKind(p?.kind), layerIndex(p?.index));
 }
 
 const layerKind = (v: unknown): AppearanceLayerKind =>
@@ -517,6 +600,7 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
           APPEARANCE_REMOVE_LAYER_COMMAND_ID,
           (s) =>
             removeAppearanceLayer(s, layerKind(p?.kind), layerIndex(p?.index)),
+          (layers) => removeNativeLayer(layers, nativeIndexOf(layers, p)),
         );
       },
     }),
@@ -536,6 +620,8 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
               layerIndex(p?.index),
               layerDelta(p),
             ),
+          (layers) =>
+            moveNativeLayer(layers, nativeIndexOf(layers, p), layerDelta(p)),
         );
       },
     }),

@@ -63,6 +63,11 @@ import {
   type GraphicStyle,
   type GraphicStyleRef,
 } from "../commands/graphic-styles";
+import {
+  exportGraphicStyles,
+  importGraphicStyles,
+  mergeGraphicStylesIn,
+} from "../commands/graphic-styles-native";
 import { resolveAppearanceCarrier } from "../commands/appearance-bake";
 import { usePanelReload } from "./use-panel-reload";
 import {
@@ -79,7 +84,7 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 const M = defineMessages("draw.graphicStylesPanel", {
   summary:
     "Save the selected object's complete look as a named style and apply it to other objects, which stay linked to it.",
-  note: "A graphic style holds the stacked fills and strokes plus the object's own fill, tint, stroke, weight, opacity and blend mode. Redefine updates every linked object. Editing a linked object directly keeps the link and marks the object overridden; the next Redefine replaces that change, so break the link first to keep it. Break link keeps the look and drops the link. The library is saved in the document. Saving, renaming and deleting a style cannot be undone. Lines have no fill, tint, opacity or blend mode, so those parts of a style are skipped on lines, and a baked appearance has to be released before a style can be saved from it or applied to it.",
+  note: "A graphic style holds the stacked fills and strokes plus the object's own fill, tint, stroke, weight, opacity and blend mode, and on this editor the object's effects too. Redefine updates every linked object. Editing a linked object directly keeps the link and marks the object overridden; the next Redefine replaces that change, so break the link first to keep it. Break link keeps the look and drops the link. The library is saved in the document. Saving, renaming and deleting a style cannot be undone. Lines have no fill, tint, opacity or blend mode, so those parts of a style are skipped on lines, and a baked appearance has to be released before a style can be saved from it or applied to it.",
   baseOnly: "base paint only",
   paints:
     "{fills, plural, one {# fill} other {# fills}} · {strokes, plural, one {# stroke} other {# strokes}}",
@@ -116,6 +121,14 @@ const M = defineMessages("draw.graphicStylesPanel", {
   deleteHint:
     "Delete the style and unlink the objects that used it (their look stays). Cannot be undone.",
   title: "Graphic styles",
+  importLibrary: "Import…",
+  importHint: "Add the styles of a graphic style library file to this document",
+  exportLibrary: "Export…",
+  exportHint: "Save this document's graphic styles as a library file",
+  merge: "Merge",
+  mergeHint: "Make a new style from the checked styles, in their order",
+  mergePick: "Check two styles or more to merge them",
+  pick: "Check to merge",
 });
 
 export const GRAPHIC_STYLES_PANEL_ID = "media.paged.draw.panel.graphicStyles";
@@ -224,6 +237,8 @@ export function makeGraphicStylesPanel(host: BundleHost): {
     const [counts, setCounts] = React.useState<Record<string, number>>({});
     const [link, setLink] = React.useState<SelectionLink>(NO_LINK);
     const [portable, setPortable] = React.useState(true);
+    // The rows checked for a merge (draw ADR 367), in the order checked.
+    const [picked, setPicked] = React.useState<string[]>([]);
 
     // WHAT A RELOAD COSTS (`test/panels/graphic-styles-panel.dom.test.tsx`,
     // and it may only go down): the library part once, and — once per
@@ -306,6 +321,43 @@ export function makeGraphicStylesPanel(host: BundleHost): {
             </button>
           </span>
         </div>
+        <div style={{ ...rowStyle, gap: 4 }}>
+          <button
+            type="button"
+            style={iconBtn}
+            title={s.t(M.importHint)}
+            data-draw-graphic-styles-import
+            disabled={!portable}
+            onClick={() => void run(() => importGraphicStyles(host))}
+          >
+            {s.t(M.importLibrary)}
+          </button>
+          <button
+            type="button"
+            style={iconBtn}
+            title={s.t(M.exportHint)}
+            data-draw-graphic-styles-export
+            disabled={styles.length === 0}
+            onClick={() => void run(() => exportGraphicStyles(host))}
+          >
+            {s.t(M.exportLibrary)}
+          </button>
+          <button
+            type="button"
+            style={iconBtn}
+            title={picked.length >= 2 ? s.t(M.mergeHint) : s.t(M.mergePick)}
+            data-draw-graphic-styles-merge={picked.length}
+            disabled={picked.length < 2}
+            onClick={() =>
+              void run(async () => {
+                await mergeGraphicStylesIn(host, picked);
+                setPicked([]);
+              })
+            }
+          >
+            {s.t(M.merge)}
+          </button>
+        </div>
 
         <Refusal text={refusal} />
 
@@ -346,6 +398,20 @@ export function makeGraphicStylesPanel(host: BundleHost): {
                 data-draw-graphic-style-row={style.id}
                 data-draw-graphic-style-linked-count={linked}
               >
+                <input
+                  type="checkbox"
+                  title={s.t(M.pick)}
+                  aria-label={s.t(M.pick)}
+                  data-draw-graphic-style-pick={style.id}
+                  checked={picked.includes(style.id)}
+                  onChange={(e) =>
+                    setPicked(
+                      e.currentTarget.checked
+                        ? [...picked, style.id]
+                        : picked.filter((x) => x !== style.id),
+                    )
+                  }
+                />
                 <span
                   style={{
                     flex: 1,

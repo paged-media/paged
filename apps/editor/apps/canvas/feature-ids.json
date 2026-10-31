@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 867,
+    "command": 877,
     "keybinding": 166,
-    "menu": 612,
-    "panel": 146,
-    "tool": 127
+    "menu": 621,
+    "panel": 145,
+    "tool": 128
   },
   "features": [
     {
@@ -821,6 +821,41 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.envelopeEditContents",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.envelopeExpand",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.envelopeMakeWithMesh",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.envelopeMakeWithTopObject",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.envelopeMakeWithWarp",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.envelopeMeshTool",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.expandAppearance",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.expandBlend",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -832,6 +867,11 @@
     },
     {
       "id": "command:media.paged.draw.command.expandRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.exportGraphicStyles",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -862,6 +902,11 @@
     },
     {
       "id": "command:media.paged.draw.command.imageTraceOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.importGraphicStyles",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -982,6 +1027,11 @@
     },
     {
       "id": "command:media.paged.draw.command.makeRadialRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.mergeGraphicStyles",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -5466,6 +5516,16 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Graphic style/Export library",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Graphic style/Import library",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Graphic style/Redefine",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -7496,6 +7556,41 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Envelope distort/Edit contents",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Envelope distort/Envelope mesh tool",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Envelope distort/Expand",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Envelope distort/Make with mesh",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Envelope distort/Make with top object",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Envelope distort/Make with warp",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Expand appearance",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Object/Group",
       "kind": "menu",
       "owner": "editor"
@@ -8311,11 +8406,6 @@
       "owner": "media.paged.doc"
     },
     {
-      "id": "panel:media.paged.draw.panel.appearance",
-      "kind": "panel",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "panel:media.paged.draw.panel.blend",
       "kind": "panel",
       "owner": "media.paged.draw"
@@ -9026,6 +9116,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.envelopeMesh",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.eraserBrush",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -9621,5 +9716,12 @@
       "owner": "editor"
     }
   ],
-  "deprecated": []
+  "deprecated": [
+    {
+      "id": "panel:media.paged.draw.panel.appearance",
+      "replacement": "panel:paged.appearance",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    }
+  ]
 }

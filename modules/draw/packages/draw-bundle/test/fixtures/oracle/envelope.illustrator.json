@@ -1,0 +1,229 @@
+{
+  "fixture": "envelope",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/envelope.jsx",
+    "script_sha256": "0fc176b5bb55e7a69282239bfb1a40ea6a551005d52e85f0a9aa823613da97d3",
+    "runner": "scripts/illustrator/run-probe.sh",
+    "recorded_at": "2026-10-31T12:16:32.572Z",
+    "host_os": "macOS 26.4",
+    "ruler_units": "RulerUnits.Points",
+    "artboard_rect_app": [
+      0,
+      792,
+      612,
+      0
+    ]
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down (mapped in and out of Illustrator's Y-up document coordinates through the scratch artboard's top-left corner)",
+  "operation": "select contents + front shape; executeMenuCommand('Make Envelope'); executeMenuCommand('Expand Envelope')",
+  "cases": [
+    {
+      "id": "top-trapezoid",
+      "parameters": {"contents":1,"paths_after":1},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[260,300],"left":[260,300],"right":[260,300]},
+              {"anchor":[140,300],"left":[140,300],"right":[140,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 32000,
+            "bounds": [100,100,300,300],
+            "winding": "cw",
+            "areaSignedApp": 32000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[100,100],"left":[113.333336,166.666687],"right":[166.666672,100]},
+              {"anchor":[300,100],"left":[233.333328,100],"right":[286.666656,166.666687]},
+              {"anchor":[260,300],"left":[273.333344,233.333313],"right":[220,300]},
+              {"anchor":[140,300],"left":[180,300],"right":[126.666664,233.333313]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "top-circle",
+      "parameters": {"contents":1,"paths_after":1},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[200,100],"left":[144.771525,100],"right":[255.228475,100]},
+              {"anchor":[300,200],"left":[300,144.771525],"right":[300,255.228475]},
+              {"anchor":[200,300],"left":[255.228475,300],"right":[144.771525,300]},
+              {"anchor":[100,200],"left":[100,255.228475],"right":[100,144.771525]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 30906.464421,
+            "bounds": [100.865996,100.865998,299.134014,299.134014],
+            "winding": "cw",
+            "areaSignedApp": 30906.464421,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[129.289322,129.289307],"left":[91.353462,172.353333],"right":[172.26683,91.429688]},
+              {"anchor":[270.710693,129.289307],"left":[227.646667,91.353455],"right":[308.646545,172.353333]},
+              {"anchor":[270.710693,270.710693],"left":[308.570343,227.733154],"right":[227.646667,308.646545]},
+              {"anchor":[129.289322,270.710693],"left":[172.26683,308.570343],"right":[91.429665,227.733154]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "top-wave",
+      "parameters": {"contents":1,"paths_after":1},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[166,60]},
+              {"anchor":[300,100],"left":[233,140],"right":[300,100]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[100,300],"left":[100,300],"right":[100,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 40014.603297,
+            "bounds": [100,90.33372,300,300],
+            "winding": "cw",
+            "areaSignedApp": 40014.603297,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,166.666687],"right":[167.719101,66.633484]},
+              {"anchor":[300,100],"left":[231.986328,133.043945],"right":[300,166.666687]},
+              {"anchor":[300,300],"left":[300,233.333313],"right":[233.333328,300]},
+              {"anchor":[100,300],"left":[166.666672,300],"right":[100,233.333313]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "two-contents-trapezoid",
+      "parameters": {"contents":2,"paths_after":2},
+      "input": { "paths": [
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[200,100],"left":[200,100],"right":[200,100]},
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[100,200],"left":[100,200],"right":[100,200]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,200],"right":[200,200]},
+              {"anchor":[300,200],"left":[300,200],"right":[300,200]},
+              {"anchor":[300,300],"left":[300,300],"right":[300,300]},
+              {"anchor":[200,300],"left":[200,300],"right":[200,300]}
+            ]
+          },
+          {
+            "closed": true,
+            "anchors": [
+              {"anchor":[100,100],"left":[100,100],"right":[100,100]},
+              {"anchor":[300,100],"left":[300,100],"right":[300,100]},
+              {"anchor":[260,300],"left":[260,300],"right":[260,300]},
+              {"anchor":[140,300],"left":[140,300],"right":[140,300]}
+            ]
+          }
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 7000,
+            "bounds": [200,200,280,300],
+            "winding": "cw",
+            "areaSignedApp": 7000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,200],"left":[200,233.333313],"right":[226.666672,200]},
+              {"anchor":[280,200],"left":[253.333328,200],"right":[273.333344,233.333313]},
+              {"anchor":[260,300],"left":[266.666656,266.666687],"right":[240,300]},
+              {"anchor":[200,300],"left":[220,300],"right":[200,266.666687]}
+            ]
+          },
+          {
+            "closed": true,
+            "area": 9000,
+            "bounds": [100,100,200,200],
+            "winding": "cw",
+            "areaSignedApp": 9000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": false,
+            "fill": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[100,100],"left":[106.666664,133.333313],"right":[133.333328,100]},
+              {"anchor":[200,100],"left":[166.666672,100],"right":[200,133.333313]},
+              {"anchor":[200,200],"left":[200,166.666687],"right":[173.333328,200]},
+              {"anchor":[120,200],"left":[146.666672,200],"right":[113.333336,166.666687]}
+            ]
+          }
+      ] }
+    }
+  ]
+}

@@ -117,9 +117,19 @@
 //   a base-paint write would put the model and the page out of step.
 //   Release first. (`bakeAppearance` refuses the mirror case the same
 //   way.)
-// · The catalog row also names MERGE, IMPORT, EXPORT, PREVIEW and
-//   ORGANIZE (folders/sort). None of those is built here; the panel note
-//   says so instead of implying them.
+// · ON NATIVE APPEARANCE (draw ADR 367, when the host's engine has
+//   `document.appearance@1`): a style also carries the item's native
+//   fills and strokes (`layers`, engine ADR 1043), its object effect
+//   stack (`effects`: drop shadows, live vector effects, envelopes) and
+//   its fill and stroke targets' opacity and blend (`targets`). Save and
+//   redefine read them, apply writes them (each only where the target's
+//   vocabulary has the path), and the digest covers them — an empty part
+//   digests as before, so a v1 style keeps its links' revisions. A v1
+//   library is converted when it is read on such a host (its stack
+//   becomes native layers, `graphic-styles-native.ts`), and written back
+//   as v2 by the appearance migration on open.
+// · IMPORT, EXPORT and MERGE are `graphic-styles-native.ts`. PREVIEW and
+//   ORGANIZE (folders/sort) are not built; the panel note says so.
 
 import type {
   BundleHost,
@@ -141,6 +151,18 @@ import {
   resolveAppearanceCarrier,
   stampDrawMetadata,
 } from "./appearance-bake";
+import {
+  appearanceMutation,
+  layersOfValue,
+  nativeAppearanceOf,
+  nativeAppearanceOn,
+  type NativePaintLayer,
+} from "./appearance-native";
+import {
+  entriesOfValue,
+  objectStackMutation,
+  type StackEntry,
+} from "./envelope";
 import {
   announceRecipeChange,
   linkIndex,
@@ -199,6 +221,8 @@ export const GRAPHIC_STYLES_PART = "graphic-styles.json";
 /** The library envelope version (bumped only on a breaking shape change;
  *  an unknown version reads as an EMPTY library rather than a crash). */
 export const GRAPHIC_STYLES_LIBRARY_VERSION = 1;
+/** The library version once a style carries native parts (draw ADR 367). */
+export const GRAPHIC_STYLES_LIBRARY_VERSION_NATIVE = 2;
 
 /** The capability this whole feature rides. */
 export const GRAPHIC_STYLES_FEATURE = "storage.parts@1";
@@ -216,11 +240,34 @@ export interface GraphicStyleBase {
   blendMode: string | null;
 }
 
-/** A COMPLETE appearance: the stacked fills/strokes plus the base paint. */
+/** The fill and stroke TARGETS' own transparency (engine ADR 1008) — on
+ *  a native appearance, the front-most fill's and stroke's opacity and
+ *  blend live there (draw ADR 367). */
+export interface GraphicStyleTargets {
+  fillOpacity: number | null;
+  fillBlendMode: string | null;
+  strokeOpacity: number | null;
+  strokeBlendMode: string | null;
+}
+
+/** A COMPLETE appearance: the stacked fills/strokes plus the base paint;
+ *  on a native appearance also its layers, object effects and targets
+ *  (absent on a style made without them — read as empty). */
 export interface GraphicStyleAppearance {
   stack: AppearanceStack;
   base: GraphicStyleBase;
+  layers?: NativePaintLayer[];
+  effects?: StackEntry[];
+  targets?: GraphicStyleTargets;
 }
+
+/** The target paths a style's `targets` occupy. */
+export const GRAPHIC_STYLE_TARGET_PATHS = {
+  fillOpacity: "frameFillOpacity",
+  fillBlendMode: "frameFillBlendMode",
+  strokeOpacity: "frameStrokeOpacity",
+  strokeBlendMode: "frameStrokeBlendMode",
+} as const;
 
 /** One named style in the library. */
 export interface GraphicStyle {
@@ -299,11 +346,55 @@ const stackOf = (raw: unknown): AppearanceStack => {
   };
 };
 
+/** Read targets out of any shape, tolerantly. */
+export function graphicStyleTargetsOf(raw: unknown): GraphicStyleTargets {
+  const t = (raw ?? {}) as Partial<Record<keyof GraphicStyleTargets, unknown>>;
+  return {
+    fillOpacity: numOrNull(t.fillOpacity),
+    fillBlendMode: strOrNull(t.fillBlendMode),
+    strokeOpacity: numOrNull(t.strokeOpacity),
+    strokeBlendMode: strOrNull(t.strokeBlendMode),
+  };
+}
+
 /** Read a complete appearance out of any shape, tolerantly. */
 export function graphicStyleAppearanceOf(raw: unknown): GraphicStyleAppearance {
-  const a = (raw ?? {}) as { stack?: unknown; base?: unknown };
-  return { stack: stackOf(a.stack), base: graphicStyleBaseOf(a.base) };
+  const a = (raw ?? {}) as {
+    stack?: unknown;
+    base?: unknown;
+    layers?: unknown;
+    effects?: unknown;
+    targets?: unknown;
+  };
+  return {
+    stack: stackOf(a.stack),
+    base: graphicStyleBaseOf(a.base),
+    ...(Array.isArray(a.layers)
+      ? { layers: (a.layers as NativePaintLayer[]).filter(isLayer) }
+      : {}),
+    ...(Array.isArray(a.effects)
+      ? { effects: (a.effects as StackEntry[]).filter(isEntry) }
+      : {}),
+    ...(a.targets && typeof a.targets === "object"
+      ? { targets: graphicStyleTargetsOf(a.targets) }
+      : {}),
+  };
 }
+
+const LAYER_KINDS = new Set(["fill", "stroke", "frameFill", "frameStroke"]);
+const isLayer = (l: unknown): l is NativePaintLayer =>
+  !!l &&
+  typeof l === "object" &&
+  LAYER_KINDS.has((l as { kind?: unknown }).kind as string);
+const isEntry = (e: unknown): e is StackEntry =>
+  !!e &&
+  typeof e === "object" &&
+  typeof (e as { kind?: unknown }).kind === "string";
+
+/** Whether a style carries the native parts (it was made on a host whose
+ *  engine has native appearance, or converted from v1 there). */
+export const isNativeStyleAppearance = (a: GraphicStyleAppearance) =>
+  a.layers !== undefined;
 
 /** Parse the library part's bytes. Anything unreadable — absent bytes,
  *  invalid JSON, a future `v` — reads as an EMPTY library: a style
@@ -320,7 +411,8 @@ export function parseGraphicStyleLibrary(
   }
   const lib = raw as Partial<GraphicStyleLibrary> | null;
   if (!lib || typeof lib !== "object") return emptyLibrary();
-  if (lib.v !== GRAPHIC_STYLES_LIBRARY_VERSION) return emptyLibrary();
+  if (lib.v !== 1 && lib.v !== GRAPHIC_STYLES_LIBRARY_VERSION_NATIVE)
+    return emptyLibrary();
   const styles: GraphicStyle[] = [];
   for (const entry of Array.isArray(lib.styles) ? lib.styles : []) {
     const s = entry as Partial<GraphicStyle>;
@@ -331,7 +423,7 @@ export function parseGraphicStyleLibrary(
       appearance: graphicStyleAppearanceOf(s.appearance),
     });
   }
-  return { v: GRAPHIC_STYLES_LIBRARY_VERSION, styles };
+  return { v: lib.v, styles };
 }
 
 /** Serialize the library to the part's bytes — indented, because the
@@ -339,12 +431,13 @@ export function parseGraphicStyleLibrary(
 export function serializeGraphicStyleLibrary(
   library: GraphicStyleLibrary,
 ): Uint8Array {
+  // v2 as soon as one style carries native parts; a v1 reader reads a v2
+  // library as empty rather than half.
+  const v = library.styles.some((st) => isNativeStyleAppearance(st.appearance))
+    ? GRAPHIC_STYLES_LIBRARY_VERSION_NATIVE
+    : GRAPHIC_STYLES_LIBRARY_VERSION;
   return new TextEncoder().encode(
-    `${JSON.stringify(
-      { v: GRAPHIC_STYLES_LIBRARY_VERSION, styles: library.styles },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify({ v, styles: library.styles }, null, 2)}\n`,
   );
 }
 
@@ -450,13 +543,28 @@ export function projectGraphicAppearance(
     base.stroke = topStroke.color;
     if (has.has("frameStrokeWeight")) base.strokeWeight = topStroke.weight;
   }
-  return {
+  const out: GraphicStyleAppearance = {
     stack: {
       fills: appearance.stack.fills.slice(),
       strokes: appearance.stack.strokes.slice(),
     },
     base,
   };
+  if (appearance.layers !== undefined && has.has("frameAppearance"))
+    out.layers = appearance.layers.map((l) => ({ ...l }));
+  if (appearance.effects !== undefined && has.has("frameEffectStack"))
+    out.effects = appearance.effects.map((e) => ({ ...e }));
+  if (appearance.targets !== undefined) {
+    const t = appearance.targets;
+    const P = GRAPHIC_STYLE_TARGET_PATHS;
+    out.targets = {
+      fillOpacity: has.has(P.fillOpacity) ? t.fillOpacity : null,
+      fillBlendMode: has.has(P.fillBlendMode) ? t.fillBlendMode : null,
+      strokeOpacity: has.has(P.strokeOpacity) ? t.strokeOpacity : null,
+      strokeBlendMode: has.has(P.strokeBlendMode) ? t.strokeBlendMode : null,
+    };
+  }
+  return out;
 }
 
 const round4 = (v: number): number => Math.round(v * 1e4) / 1e4 + 0;
@@ -489,7 +597,67 @@ export function canonicalGraphicAppearance(
     b.opacity == null ? null : round4(b.opacity),
     strOrNull(b.blendMode),
   ];
-  return JSON.stringify([fills, strokes, base]);
+  // The native parts (draw ADR 367), only when they say something: an
+  // appearance without them digests exactly as a v1 one did.
+  const native = canonicalNativeParts(appearance);
+  return JSON.stringify(
+    native === null ? [fills, strokes, base] : [fills, strokes, base, native],
+  );
+}
+
+/** A value with its keys sorted, numbers to 4 dp, and what the engine
+ *  reads back as "unset" dropped (null, an empty list, `enabled: true`),
+ *  so what was written and what reads back digest alike. */
+function canonicalValue(v: unknown): unknown {
+  if (typeof v === "number") return round4(v);
+  if (Array.isArray(v)) return v.map(canonicalValue);
+  if (!v || typeof v !== "object") return v;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(v).sort()) {
+    const x = (v as Record<string, unknown>)[k];
+    if (x === null || x === undefined) continue;
+    if (Array.isArray(x) && x.length === 0) continue;
+    if (k === "enabled" && x === true) continue;
+    out[k] = canonicalValue(x);
+  }
+  return out;
+}
+
+/** The native parts in canonical form, or null when they are empty. A
+ *  layer list of the two placeholders alone, switched on, in the implied
+ *  order is the frame as it always was: empty. */
+function canonicalLayerList(
+  list: readonly NativePaintLayer[],
+): Record<string, unknown>[] {
+  const layers = list.map(canonicalValue) as Record<string, unknown>[];
+  if (
+    layers.length > 0 &&
+    layers.length <= 2 &&
+    layers.every(
+      (l, i) =>
+        Object.keys(l).length === 1 &&
+        l.kind === (i === 0 ? "frameFill" : "frameStroke"),
+    )
+  )
+    return [];
+  return layers;
+}
+
+function canonicalNativeParts(a: GraphicStyleAppearance): unknown[] | null {
+  const layers = canonicalLayerList(a.layers ?? []);
+  const effects = (a.effects ?? []).map(canonicalValue);
+  const t = a.targets;
+  const targets =
+    t &&
+    (t.fillOpacity != null ||
+      t.fillBlendMode != null ||
+      t.strokeOpacity != null ||
+      t.strokeBlendMode != null)
+      ? canonicalValue(t)
+      : null;
+  if (layers.length === 0 && effects.length === 0 && targets === null)
+    return null;
+  return [layers, effects, targets];
 }
 
 const fnv1a = (text: string, seed: number): number => {
@@ -642,6 +810,9 @@ export function applyGraphicStyleBatchFor(args: {
   supported: Iterable<string>;
   /** The element's current envelope (every other draw key is preserved). */
   prev: PluginMetadataEnvelope | null;
+  /** The element's live appearance: a native part it already has is not
+   *  written again (no write a session policy has to permit for nothing). */
+  current?: GraphicStyleAppearance;
 }): Mutation {
   const projected = projectGraphicAppearance(
     args.style.appearance,
@@ -649,6 +820,15 @@ export function applyGraphicStyleBatchFor(args: {
   );
   const stack = args.style.appearance.stack;
   const ops: Mutation[] = [
+    // Draw ADR 367 — a native style replaces the item's native parts too.
+    ...nativeStyleMutations(args.elementId, projected).filter((m) =>
+      m.op === "setElementProperty"
+        ? (args.supported instanceof Set
+            ? args.supported
+            : new Set(args.supported)
+          ).has(m.args.path) && !alreadyThere(m, args.current)
+        : true,
+    ),
     ...graphicStyleBaseMutations(
       args.elementId,
       args.style.appearance.base,
@@ -673,6 +853,107 @@ export function applyGraphicStyleBatchFor(args: {
   return { op: "batch", args: { ops } };
 }
 
+/** Whether a native write would leave `current` as it is. */
+function alreadyThere(
+  m: Extract<Mutation, { op: "setElementProperty" }>,
+  current: GraphicStyleAppearance | undefined,
+): boolean {
+  if (!current) return false;
+  const path = m.args.path as string;
+  const v = (m.args.value as { value?: unknown }).value;
+  const same = (a: unknown, b: unknown) =>
+    JSON.stringify(canonicalValue(a)) === JSON.stringify(canonicalValue(b));
+  if (path === "frameAppearance")
+    return same(
+      canonicalLayerList((v as { layers?: NativePaintLayer[] }).layers ?? []),
+      canonicalLayerList(current.layers ?? []),
+    );
+  if (path === "frameEffectStack")
+    return same((v as { entries?: unknown }).entries, current.effects ?? []);
+  const P = GRAPHIC_STYLE_TARGET_PATHS;
+  const key = (Object.keys(P) as (keyof typeof P)[]).find((k) => P[k] === path);
+  if (key) {
+    const now = current.targets?.[key] ?? null;
+    const want = v === "" ? null : (v ?? null);
+    return now === want;
+  }
+  return false;
+}
+
+/** The native part of an apply: the layers, the object effect stack and
+ *  the targets, each only where the projection kept it (the target has
+ *  the path) — a full replacement, as the base is. Empty for a style
+ *  without native parts. Pure. */
+export function nativeStyleMutations(
+  elementId: ElementId,
+  projected: GraphicStyleAppearance,
+): Mutation[] {
+  if (!isNativeStyleAppearance(projected)) return [];
+  const ops: Mutation[] = [];
+  if (projected.layers !== undefined)
+    ops.push(appearanceMutation(elementId, projected.layers));
+  if (projected.effects !== undefined)
+    ops.push(objectStackMutation(elementId, projected.effects));
+  const t = projected.targets;
+  if (t) {
+    const P = GRAPHIC_STYLE_TARGET_PATHS;
+    const len = (path: string, value: number | null) =>
+      ({
+        op: "setElementProperty",
+        args: { elementId, path, value: { type: "length", value } },
+      }) as Mutation;
+    const txt = (path: string, value: string | null) =>
+      ({
+        op: "setElementProperty",
+        args: { elementId, path, value: { type: "text", value: value ?? "" } },
+      }) as Mutation;
+    ops.push(
+      len(P.fillOpacity, t.fillOpacity),
+      txt(P.fillBlendMode, t.fillBlendMode),
+      len(P.strokeOpacity, t.strokeOpacity),
+      txt(P.strokeBlendMode, t.strokeBlendMode),
+    );
+    // (The caller filters these by the target's vocabulary.)
+  }
+  return ops;
+}
+
+/** A style on native appearance (draw ADR 367): a v1 style's metadata
+ *  stack becomes native layers around the frame's own fill and stroke
+ *  (`nativeAppearanceOf`, the element migration's mapping), its top
+ *  layers' paint goes to the base and their opacity and blend to the
+ *  targets, and its effects are none. A native style is returned as is.
+ *  Pure. */
+export function nativeStyleOf(style: GraphicStyle): GraphicStyle {
+  const a = style.appearance;
+  if (isNativeStyleAppearance(a)) return style;
+  const projected = projectGraphicAppearance(a, [...GRAPHIC_STYLE_BASE_PATHS]);
+  const topFill = a.stack.fills.at(-1);
+  const topStroke = a.stack.strokes.at(-1);
+  return {
+    ...style,
+    appearance: {
+      stack: { fills: [], strokes: [] },
+      base: projected.base,
+      layers: nativeAppearanceOf(a.stack),
+      effects: [],
+      targets: {
+        fillOpacity: numOrNull(topFill?.opacity),
+        fillBlendMode: strOrNull(topFill?.blendMode),
+        strokeOpacity: numOrNull(topStroke?.opacity),
+        strokeBlendMode: strOrNull(topStroke?.blendMode),
+      },
+    },
+  };
+}
+
+/** The library with every style on native appearance. Pure. */
+export function nativeLibraryOf(
+  library: GraphicStyleLibrary,
+): GraphicStyleLibrary {
+  return { ...library, styles: library.styles.map(nativeStyleOf) };
+}
+
 // -------------------------------------------------------- host: the part
 
 type PartsHost = RecipeHost;
@@ -693,9 +974,14 @@ export async function readGraphicStyleLibrary(
     return emptyLibrary();
   }
   try {
-    return parseGraphicStyleLibrary(
+    const library = parseGraphicStyleLibrary(
       await readRecipeBytes(host, GRAPHIC_STYLES_PART),
     );
+    // On native appearance every style is read as a native one (draw ADR
+    // 367); the migration on open writes the converted library back.
+    return nativeAppearanceOn(host as BundleHost)
+      ? nativeLibraryOf(library)
+      : library;
   } catch (e) {
     host.log.warn(`graphic styles: library read failed (${String(e)})`);
     return emptyLibrary();
@@ -757,7 +1043,20 @@ export async function readGraphicAppearance(
   } catch {
     /* an unreadable element yields the empty base + no vocabulary */
   }
-  return graphicAppearanceFrom(envelope, props);
+  return graphicAppearanceFrom(envelope, props, nativeAppearanceOn(host));
+}
+
+/** One element's appearance read in a given lane — the migration
+ *  compares the metadata lane's view (before) with the native one
+ *  (after). */
+export async function readGraphicAppearanceAs(
+  host: BundleHost,
+  id: ElementId,
+  native: boolean,
+): Promise<GraphicAppearanceRead> {
+  const envelope = await host.document.getMetadata(id).catch(() => null);
+  const props = await host.document.elementProperties(id).catch(() => null);
+  return graphicAppearanceFrom(envelope, props, native);
 }
 
 /** The same read OUT OF THE LINK INDEX (`../link-index`): the envelope
@@ -772,7 +1071,7 @@ export async function graphicAppearanceOf(
   const index = linkIndex(host);
   const envelope = await index.envelopeOf(id);
   const props = await index.propertiesOf(id).catch(() => null);
-  return graphicAppearanceFrom(envelope, props);
+  return graphicAppearanceFrom(envelope, props, nativeAppearanceOn(host));
 }
 
 /** An appearance out of an envelope and a property table that have been
@@ -780,29 +1079,65 @@ export async function graphicAppearanceOf(
 function graphicAppearanceFrom(
   envelope: PluginMetadataEnvelope | null,
   props: ElementProperties,
+  native = false,
 ): GraphicAppearanceRead {
   const base: GraphicStyleBase = { ...EMPTY_GRAPHIC_STYLE_BASE };
   const supported: string[] = [];
+  const nat: Pick<GraphicStyleAppearance, "layers" | "effects" | "targets"> =
+    {};
+  const P = GRAPHIC_STYLE_TARGET_PATHS;
   for (const e of props?.entries ?? []) {
     supported.push(e.path);
-    const v = e.value;
+    const v = e.value as { type?: string; value?: unknown } | null;
     if (!v) continue;
-    if (e.path === "frameFillColor" && v.type === "colorRef")
-      base.fill = v.value;
-    else if (e.path === "frameFillTint" && v.type === "length") {
-      base.fillTint = v.value;
-    } else if (e.path === "frameStrokeColor" && v.type === "colorRef") {
-      base.stroke = v.value;
-    } else if (e.path === "frameStrokeWeight" && v.type === "length") {
-      base.strokeWeight = v.value;
-    } else if (e.path === "frameOpacity" && v.type === "length") {
-      base.opacity = v.value;
-    } else if (e.path === "frameBlendMode" && v.type === "text") {
-      base.blendMode = strOrNull(v.value);
+    if (native) {
+      if (e.path === "frameAppearance") {
+        nat.layers = layersOfValue(v) ?? [];
+        continue;
+      }
+      if (e.path === "frameEffectStack") {
+        nat.effects = entriesOfValue(v) ?? [];
+        continue;
+      }
+      const key = (Object.keys(P) as (keyof typeof P)[]).find(
+        (k) => P[k] === e.path,
+      );
+      if (key) {
+        nat.targets ??= {
+          fillOpacity: null,
+          fillBlendMode: null,
+          strokeOpacity: null,
+          strokeBlendMode: null,
+        };
+        if (key.endsWith("Opacity"))
+          (nat.targets as unknown as Record<string, unknown>)[key] = numOrNull(
+            v.value,
+          );
+        else
+          (nat.targets as unknown as Record<string, unknown>)[key] = strOrNull(
+            v.value,
+          );
+        continue;
+      }
+    }
+    const pv = e.value;
+    if (!pv) continue;
+    if (e.path === "frameFillColor" && pv.type === "colorRef")
+      base.fill = pv.value;
+    else if (e.path === "frameFillTint" && pv.type === "length") {
+      base.fillTint = pv.value;
+    } else if (e.path === "frameStrokeColor" && pv.type === "colorRef") {
+      base.stroke = pv.value;
+    } else if (e.path === "frameStrokeWeight" && pv.type === "length") {
+      base.strokeWeight = pv.value;
+    } else if (e.path === "frameOpacity" && pv.type === "length") {
+      base.opacity = pv.value;
+    } else if (e.path === "frameBlendMode" && pv.type === "text") {
+      base.blendMode = strOrNull(pv.value);
     }
   }
   return {
-    appearance: { stack: appearanceOf(envelope), base },
+    appearance: { stack: appearanceOf(envelope), base, ...nat },
     supported,
     envelope,
   };
@@ -944,6 +1279,7 @@ async function planGraphicStyleLink(
     style,
     supported: read.supported,
     prev: read.envelope,
+    current: read.appearance,
   });
 }
 
