@@ -503,9 +503,12 @@ async function walk(
   );
   for (const row of rows) {
     if (row.submenu) {
-      const trigger = content
-        .locator(`[data-menu-submenu="${row.submenu}"]`)
-        .first();
+      // This level's own trigger: a submenu's content is nested in its
+      // parent, so a deeper "Path" (Object ▸ Effects ▸ Path) would match
+      // a descendant search before Object ▸ Path does.
+      const trigger = content.locator(
+        `:scope > [data-menu-submenu="${row.submenu.replace(/"/g, '\\"')}"]`,
+      );
       await openSubmenu(trigger);
       const sub = page.locator(
         `[id="${await trigger.getAttribute("aria-controls")}"]`,

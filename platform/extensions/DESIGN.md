@@ -931,6 +931,13 @@ answers the whole net. paged.draw's Object ▸ Envelope distort verbs and
 its Envelope Mesh tool write it; `expandAppearance` keeps it like any
 vector entry.
 
+`"document.paint2@1"` (engine ADR 1007) is another property flag: the
+vendored wire carries a gradient stop's opacity (`opacityPct`) and inline
+colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`
+("Within" / "Along" / "Across") and `frameGradientFillStart`. Additive at
+protocol 76 like the fill rule; the SVG importer asks it before
+lowering an SVG gradient with `stop-opacity` natively.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

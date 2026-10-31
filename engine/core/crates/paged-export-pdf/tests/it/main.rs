@@ -16,6 +16,7 @@ mod fill_rule;
 mod image_adjustments;
 mod links;
 mod opacity_mask;
+mod paint_v2;
 mod pdf_fragments;
 mod placed_eps;
 mod placed_svg;

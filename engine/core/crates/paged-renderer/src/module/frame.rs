@@ -116,6 +116,9 @@ pub(crate) struct ResolvedFrame<'a> {
     /// by, carried on the outline's `PathData`. Only a path geometry can
     /// tell the rules apart; a box or an ellipse is one simple contour.
     pub fill_rule: paged_compose::FillRule,
+    /// Engine ADR 1007 — how a gradient stroke maps onto the stroke
+    /// (`module::stroke_gradient`).
+    pub gradient_stroke_mode: paged_model::StrokeGradientMode,
     pub geometry: Geometry<'a>,
 }
 
@@ -383,6 +386,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_fill: frame.overprint_fill,
             overprint_stroke: frame.overprint_stroke,
             fill_rule: list_fill_rule(frame.fill_rule),
+            gradient_stroke_mode: frame.gradient_stroke_mode,
             geometry,
         }
     }
@@ -438,6 +442,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_fill: rect.overprint_fill,
             overprint_stroke: rect.overprint_stroke,
             fill_rule: list_fill_rule(rect.fill_rule),
+            gradient_stroke_mode: rect.gradient_stroke_mode,
             geometry,
         }
     }
@@ -484,6 +489,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_fill: oval.overprint_fill,
             overprint_stroke: oval.overprint_stroke,
             fill_rule: list_fill_rule(oval.fill_rule),
+            gradient_stroke_mode: oval.gradient_stroke_mode,
             geometry: Geometry::Oval {
                 rect: rect_from_bounds(oval.bounds),
             },
@@ -545,6 +551,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_fill: poly.overprint_fill,
             overprint_stroke: poly.overprint_stroke,
             fill_rule: list_fill_rule(poly.fill_rule),
+            gradient_stroke_mode: poly.gradient_stroke_mode,
             geometry,
         }
     }
@@ -600,6 +607,7 @@ impl<'a> ResolvedFrame<'a> {
             overprint_fill: false,
             overprint_stroke: line.overprint_stroke,
             fill_rule: list_fill_rule(line.fill_rule),
+            gradient_stroke_mode: line.gradient_stroke_mode,
             geometry: Geometry::Line {
                 p0: (bounds.left, bounds.top),
                 p1: (bounds.right, bounds.bottom),
@@ -679,6 +687,7 @@ mod tests {
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
             image_adjustments: Vec::new(),
+            gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         }
     }
 
@@ -746,6 +755,7 @@ mod tests {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
+            gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
             effects: None,
             effect_stack: Vec::new(),
             appearance: Vec::new(),
