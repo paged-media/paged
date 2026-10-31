@@ -150,6 +150,10 @@ enum TablePlace {
     Nested { left: f32, top: f32, page: usize },
 }
 
+/// Engine ADR 1025 — one cell's content window in a piece of a split row:
+/// `((col, row), from, to)` in block coordinates.
+type CellWindow = ((u32, u32), f32, f32);
+
 // Range-loops over `row_heights` carry the row index (`r`) as data
 // — it doubles as a template index into `table.rows` / `table.cells`
 // — so the `needless_range_loop` lint is a false positive here.
@@ -394,8 +398,8 @@ fn emit_table(
         .unwrap_or(false);
     let mut overset_at: Option<usize> = None;
     // Engine ADR 1025 — Word's rows split across frames: each piece's cell
-    // windows `((col, row), from, to)` in block coordinates.
-    let mut segments: Vec<Vec<((u32, u32), f32, f32)>> = Vec::new();
+    // windows in block coordinates.
+    let mut segments: Vec<Vec<CellWindow>> = Vec::new();
     let row_cells: Vec<Vec<(u32, u32)>> = (0..total_rows)
         .map(|r| {
             table
@@ -2864,9 +2868,7 @@ fn cell_paragraph_layout(
     // Per-run bytes with per-paragraph fallback for any run whose
     // (family, style) doesn't resolve — keeps height-measurement
     // honest even when one cell run references an absent font.
-    let Some(resolved_fonts) = em.font_table.resolve_paragraph_bytes(&resolved_runs) else {
-        return None;
-    };
+    let resolved_fonts = em.font_table.resolve_paragraph_bytes(&resolved_runs)?;
     let (bytes_pool, substituted_flags): (Vec<Bytes>, Vec<bool>) =
         resolved_fonts.into_iter().unzip();
     let wghts: Vec<f32> = resolved_runs
@@ -2900,9 +2902,7 @@ fn cell_paragraph_layout(
             .face(bytes_font_ids[i], wghts[i].to_bits())
             .is_none()
         {
-            let Some(mut rf) = paged_text::Face::from_bytes(&bytes_pool[i], 0) else {
-                return None;
-            };
+            let mut rf = paged_text::Face::from_bytes(&bytes_pool[i], 0)?;
             let has_wght_axis = rf
                 .variation_axes()
                 .into_iter()
