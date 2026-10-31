@@ -73,6 +73,10 @@ pub(super) fn moves_geometry(path: PropertyPath) -> bool {
             | P::SimplifyPath
             | P::ClosePath
             | P::ImageContentTransform
+            | P::FrameShapeSides
+            | P::FrameShapeStarInset
+            | P::FrameShapePieStart
+            | P::FrameShapePieEnd
     )
 }
 

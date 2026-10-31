@@ -559,6 +559,67 @@ pub fn filter_masked_cpu(
     Ok(())
 }
 
+/// The adjustment chain on the CPU over a straight rgba16float window,
+/// as [`crate::ingest::adjust_f16`] runs it on the device: every stage
+/// mixed with its input by `selection` (full coverage when `None`), the
+/// f16 store between stages, the curves last. The layer fold's CPU path
+/// (image ADR 480) folds an adjustment layer through it.
+pub(crate) fn adjust_f16_cpu(
+    width: u32,
+    height: u32,
+    straight_f16: &[u8],
+    params: &AdjustParams,
+    selection: Option<&SelectionCoverage>,
+) -> Vec<u8> {
+    if params.is_identity() {
+        return straight_f16.to_vec();
+    }
+    let full;
+    let cov = match selection {
+        Some(c) => c,
+        None => {
+            full = SelectionCoverage::full(width, height);
+            &full
+        }
+    };
+    let mut work = Work {
+        x0: 0,
+        y0: 0,
+        w: width,
+        h: height,
+        px: straight_f16
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|t| {
+                Px(std::array::from_fn(|c| {
+                    f16::from_le_bytes([t[c * 2], t[c * 2 + 1]]).to_f32()
+                }))
+            })
+            .collect(),
+    };
+    if let Some(bounds) = bounds_of(cov) {
+        let mask = Mask {
+            bounds,
+            cov,
+            weight: mask_weights(),
+        };
+        for stage in &adjust_stages(params) {
+            work = run_stage(work, &mask, stage);
+        }
+    }
+    let mut out = Vec::with_capacity(straight_f16.len());
+    for p in &work.px {
+        for c in 0..4 {
+            out.extend_from_slice(&f16::from_f32(p.0[c]).to_le_bytes());
+        }
+    }
+    if let Some(luts) = params.effective_curves() {
+        crate::ingest::apply_curve_lut_f16(&mut out, &luts, selection, width, height);
+    }
+    out
+}
+
 /// Apply one stage under the mask.
 fn run_stage(mut work: Work, mask: &Mask, stage: &AdjustStage) -> Work {
     use AdjustStage as S;

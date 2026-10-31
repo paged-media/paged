@@ -375,31 +375,32 @@ export function useTextEditing(ctx: TextEditingContext) {
       if (key === "Delete") {
         e.preventDefault();
         anchorRef.current = null;
-        enqueue((sel, c) => {
+        enqueue(async (sel, c) => {
           const cell = sel.cell ?? undefined;
-          if (sel.start === sel.end) {
-            // Forward delete — defer correct end-of-story handling
-            // (worker will reject if out of range).
-            void c.mutate({
-              op: "deleteRange",
-              args: {
-                storyId: sel.storyId,
-                start: sel.start,
-                end: sel.start + 1,
-                cell,
-              },
-            });
-          } else {
-            void c.mutate({
-              op: "deleteRange",
-              args: {
-                storyId: sel.storyId,
-                start: sel.start,
-                end: sel.end,
-                cell,
-              },
-            });
+          const [start, end] =
+            sel.start === sel.end
+              ? // Forward delete — defer correct end-of-story handling
+                // (worker will reject if out of range).
+                [sel.start, sel.start + 1]
+              : [sel.start, sel.end];
+          if (sel.start !== sel.end) {
             setSel({ ...sel, end: sel.start, affinity: false });
+          }
+          // Editor ADR 300 — with Track Changes on (engine ADR 1040) the
+          // deleted text stays in the story, struck through: the caret
+          // then steps PAST it, as Word's does, so the next Delete takes
+          // the next character instead of the struck one again.
+          const stayed = await textStays(c, sel, () =>
+            c.mutate({
+              op: "deleteRange",
+              args: { storyId: sel.storyId, start, end, cell },
+            }),
+          );
+          if (
+            stayed &&
+            (selRef.current === sel || selRef.current?.start === start)
+          ) {
+            setSel({ ...sel, start: end, end, affinity: false });
           }
         });
         return;
@@ -710,6 +711,22 @@ export function insertAt(
 }
 
 /** The selection spanning the whole story (or cell) `sel` is in. */
+/** Run a delete and answer whether the story kept its length: the text
+ *  was marked deleted (Track Changes) instead of removed. False when the
+ *  story cannot be measured. */
+export async function textStays(
+  client: CanvasClient,
+  sel: ContentSelection,
+  run: () => Promise<unknown>,
+): Promise<boolean> {
+  const before = await wholeStorySelection(client, sel);
+  const reply = (await run()) as { kind?: string } | undefined;
+  // A refused delete (past the story's end) changed nothing either.
+  if (reply?.kind !== "mutationApplied") return false;
+  const after = await wholeStorySelection(client, sel);
+  return !!before && !!after && before.end === after.end;
+}
+
 export async function wholeStorySelection(
   client: CanvasClient,
   sel: ContentSelection,

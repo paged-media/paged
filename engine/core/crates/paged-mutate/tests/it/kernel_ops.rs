@@ -1565,6 +1565,7 @@ fn apply_opacity_mask_consumes_the_artwork_and_one_undo_restores_the_z_slot() {
             mask: NodeId::Rectangle("c23Mask".to_string()),
             mask_type: paged_mutate::OpacityMaskMode::Alpha,
             invert: true,
+            clip: true,
         },
     )
     .expect("apply opacity mask");
@@ -1612,6 +1613,7 @@ fn release_opacity_mask_pops_the_artwork_and_undo_reapplies_the_same_mode() {
             mask: NodeId::Rectangle("c23M".to_string()),
             mask_type: paged_mutate::OpacityMaskMode::Luminosity,
             invert: false,
+            clip: true,
         },
     )
     .expect("apply");
@@ -1665,6 +1667,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
                 mask: NodeId::Rectangle("c23A".to_string()),
                 mask_type: Default::default(),
                 invert: false,
+                clip: true,
             },
         )
         .is_err());
@@ -1675,6 +1678,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
                 mask: NodeId::TextFrame(tf),
                 mask_type: Default::default(),
                 invert: false,
+                clip: true,
             },
         )
         .is_err());
@@ -1688,6 +1692,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
             mask: NodeId::Rectangle("c23A".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .is_err());
@@ -1713,6 +1718,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
             mask: NodeId::Rectangle("c23B".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .expect("first mask");
@@ -1723,6 +1729,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
             mask: NodeId::Rectangle("c23C".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .is_err());
@@ -1734,6 +1741,7 @@ fn opacity_mask_rejects_the_cases_it_cannot_render_faithfully() {
             mask: NodeId::Rectangle("c23B".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .is_err());
@@ -1754,6 +1762,7 @@ fn remove_node_refuses_to_delete_a_live_mask_or_its_target() {
             mask: NodeId::Rectangle("c23DelM".to_string()),
             mask_type: Default::default(),
             invert: false,
+            clip: true,
         },
     )
     .expect("apply");

@@ -872,6 +872,31 @@ pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 1047 — the live shapes IDML cannot keep live. A pie oval
+/// exports its wedge as the `<Oval>`'s path, which InDesign draws, and its
+/// angles in the item's `paged:liveShape` label, which InDesign keeps and
+/// a paged reader lifts back; in InDesign it is a plain path. A live
+/// polygon is not listed: InDesign keeps no polygon's sides either, and
+/// its anchors are exact. Declared from the model, like the opacity masks.
+pub(crate) fn live_shape_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    for parsed in &scene.spreads {
+        for o in &parsed.spread.ovals {
+            if let Some(pie) = paged_model::live_shape::cut_pie(o) {
+                out.push(format!(
+                    "pie angles ({}° to {}°) on oval `{}` are a paged-native live shape — IDML \
+                     draws the wedge as the oval's path, and the angles ride its \
+                     `paged:liveShape` label: InDesign shows the pie but cannot edit its angles.",
+                    pie.start,
+                    pie.end,
+                    o.self_id.as_deref().unwrap_or("?")
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// Engine ADR 1042 — the live vector effects IDML cannot say. Every
 /// item with an enabled vector entry is written BAKED (its effected
 /// outline; an oval as a polygon, a group with a Pathfinder effect as one
@@ -1005,6 +1030,25 @@ pub(crate) fn effect_stack_losses(scene: &Document) -> Vec<String> {
         for f in &sp.polygons {
             check("polygon", f.self_id.as_deref(), f);
         }
+    }
+    // Engine ADR 1045 — an anchored frame carries the same stacks.
+    fn anchored<'a>(
+        frames: &'a [paged_model::AnchoredFrame],
+        out: &mut Vec<&'a paged_model::AnchoredFrame>,
+    ) {
+        for f in frames {
+            out.push(f);
+            anchored(&f.children, out);
+        }
+    }
+    let mut frames = Vec::new();
+    for parsed in &scene.stories {
+        for p in &parsed.story.paragraphs {
+            anchored(&p.anchored_frames, &mut frames);
+        }
+    }
+    for f in frames {
+        check("anchored frame", f.self_id.as_deref(), f);
     }
     out
 }

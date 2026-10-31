@@ -315,6 +315,9 @@ fn every_advertised_schema_names_the_wire_apply_takes() {
         fixture("tables.idml"),
         fixture("geometry-groups.idml"),
         fixture("anchored.idml"),
+        // Engine ADR 1047 — an oval, for the paths only an oval takes
+        // (its pie angles).
+        fixture("strokes-fills.idml"),
     ];
     let line = mint_graphic_line(&mut docs[0]);
     // Engine ADR 1039 — a symbol of the line, and an instance of it.

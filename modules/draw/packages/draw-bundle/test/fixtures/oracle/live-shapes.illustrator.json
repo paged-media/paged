@@ -1,0 +1,210 @@
+{
+  "fixture": "live-shapes",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/live-shapes.jsx",
+    "script_sha256": "6450deae26cd8efe726e999f628f72f5bcdce437b037301dfd14e69da6b78cc3",
+    "runner": "scripts/illustrator/run-probe.sh",
+    "recorded_at": "2026-10-30T17:39:47.694Z",
+    "host_os": "macOS 26.4",
+    "ruler_units": "RulerUnits.Points",
+    "artboard_rect_app": [
+      0,
+      792,
+      612,
+      0
+    ]
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down (mapped in and out of Illustrator's Y-up document coordinates through the scratch artboard's top-left corner)",
+  "operation": "PathItems.polygon(cx, cy, r, sides); PathItems.star(cx, cy, r, ri, points); PathItems.ellipse(top, left, w, h).reflect.properties",
+  "cases": [
+    {
+      "id": "polygon-3",
+      "parameters": {"kind":"polygon","centre":[200,200],"radius":50,"sides":3,"innerRadius":0},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 3247.595264,
+            "bounds": [156.69873,150,243.30127,225],
+            "winding": "ccw",
+            "areaSignedApp": -3247.595264,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": true,
+            "fill": [255,255,255],
+            "strokeWidth": 1,
+            "stroke": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,150],"left":[200,150],"right":[200,150]},
+              {"anchor":[156.69873,225],"left":[156.69873,225],"right":[156.69873,225]},
+              {"anchor":[243.30127,225],"left":[243.30127,225],"right":[243.30127,225]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "polygon-5",
+      "parameters": {"kind":"polygon","centre":[200,200],"radius":50,"sides":5,"innerRadius":0},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 5944.103227,
+            "bounds": [152.447174,150,247.552826,240.45085],
+            "winding": "ccw",
+            "areaSignedApp": -5944.103227,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": true,
+            "fill": [255,255,255],
+            "strokeWidth": 1,
+            "stroke": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,150],"left":[200,150],"right":[200,150]},
+              {"anchor":[152.447174,184.54915],"left":[152.447174,184.54915],"right":[152.447174,184.54915]},
+              {"anchor":[170.610737,240.45085],"left":[170.610737,240.45085],"right":[170.610737,240.45085]},
+              {"anchor":[229.389263,240.45085],"left":[229.389263,240.45085],"right":[229.389263,240.45085]},
+              {"anchor":[247.552826,184.54915],"left":[247.552826,184.54915],"right":[247.552826,184.54915]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "polygon-6",
+      "parameters": {"kind":"polygon","centre":[200,200],"radius":50,"sides":6,"innerRadius":0},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 6495.190528,
+            "bounds": [150,156.69873,250,243.30127],
+            "winding": "ccw",
+            "areaSignedApp": -6495.190528,
+            "polarity": "negative",
+            "filled": true,
+            "stroked": true,
+            "fill": [255,255,255],
+            "strokeWidth": 1,
+            "stroke": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[225,156.69873],"left":[225,156.69873],"right":[225,156.69873]},
+              {"anchor":[175,156.69873],"left":[175,156.69873],"right":[175,156.69873]},
+              {"anchor":[150,200],"left":[150,200],"right":[150,200]},
+              {"anchor":[175,243.30127],"left":[175,243.30127],"right":[175,243.30127]},
+              {"anchor":[225,243.30127],"left":[225,243.30127],"right":[225,243.30127]},
+              {"anchor":[250,200],"left":[250,200],"right":[250,200]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "star-5",
+      "parameters": {"kind":"star","centre":[200,200],"radius":50,"sides":5,"innerRadius":25},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 3673.657827,
+            "bounds": [152.447174,150,247.552826,240.45085],
+            "winding": "cw",
+            "areaSignedApp": 3673.657827,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": true,
+            "fill": [255,255,255],
+            "strokeWidth": 1,
+            "stroke": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,150],"left":[200,150],"right":[200,150]},
+              {"anchor":[214.694631,179.774575],"left":[214.694631,179.774575],"right":[214.694631,179.774575]},
+              {"anchor":[247.552826,184.54915],"left":[247.552826,184.54915],"right":[247.552826,184.54915]},
+              {"anchor":[223.776413,207.725425],"left":[223.776413,207.725425],"right":[223.776413,207.725425]},
+              {"anchor":[229.389263,240.45085],"left":[229.389263,240.45085],"right":[229.389263,240.45085]},
+              {"anchor":[200,225],"left":[200,225],"right":[200,225]},
+              {"anchor":[170.610737,240.45085],"left":[170.610737,240.45085],"right":[170.610737,240.45085]},
+              {"anchor":[176.223587,207.725425],"left":[176.223587,207.725425],"right":[176.223587,207.725425]},
+              {"anchor":[152.447174,184.54915],"left":[152.447174,184.54915],"right":[152.447174,184.54915]},
+              {"anchor":[185.305369,179.774575],"left":[185.305369,179.774575],"right":[185.305369,179.774575]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "star-6",
+      "parameters": {"kind":"star","centre":[200,200],"radius":50,"sides":6,"innerRadius":20},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 3000,
+            "bounds": [156.69873,150,243.30127,250],
+            "winding": "cw",
+            "areaSignedApp": 3000,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": true,
+            "fill": [255,255,255],
+            "strokeWidth": 1,
+            "stroke": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[200,150],"left":[200,150],"right":[200,150]},
+              {"anchor":[210,182.679492],"left":[210,182.679492],"right":[210,182.679492]},
+              {"anchor":[243.30127,175],"left":[243.30127,175],"right":[243.30127,175]},
+              {"anchor":[220,200],"left":[220,200],"right":[220,200]},
+              {"anchor":[243.30127,225],"left":[243.30127,225],"right":[243.30127,225]},
+              {"anchor":[210,217.320508],"left":[210,217.320508],"right":[210,217.320508]},
+              {"anchor":[200,250],"left":[200,250],"right":[200,250]},
+              {"anchor":[190,217.320508],"left":[190,217.320508],"right":[190,217.320508]},
+              {"anchor":[156.69873,225],"left":[156.69873,225],"right":[156.69873,225]},
+              {"anchor":[180,200],"left":[180,200],"right":[180,200]},
+              {"anchor":[156.69873,175],"left":[156.69873,175],"right":[156.69873,175]},
+              {"anchor":[190,182.679492],"left":[190,182.679492],"right":[190,182.679492]}
+            ]
+          }
+      ] }
+    },
+    {
+      "id": "ellipse",
+      "parameters": {"kind":"ellipse","centre":[200,200],"radius":50,"sides":0,"innerRadius":0,"reflected_shape_properties":[],"reflected_property_count":55},
+      "input": { "paths": [
+      ] },
+      "measured": { "paths": [
+          {
+            "closed": true,
+            "area": 7856.180832,
+            "bounds": [150,150,250,250],
+            "winding": "cw",
+            "areaSignedApp": 7856.180832,
+            "polarity": "positive",
+            "filled": true,
+            "stroked": true,
+            "fill": [255,255,255],
+            "strokeWidth": 1,
+            "stroke": [0,0,0],
+            "evenodd": false,
+            "anchors": [
+              {"anchor":[150,200],"left":[150,227.614237],"right":[150,172.385763]},
+              {"anchor":[200,150],"left":[172.385763,150],"right":[227.614237,150]},
+              {"anchor":[250,200],"left":[250,172.385763],"right":[250,227.614237]},
+              {"anchor":[200,250],"left":[227.614237,250],"right":[172.385763,250]}
+            ]
+          }
+      ] }
+    }
+  ]
+}

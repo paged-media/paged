@@ -5,6 +5,7 @@
 
 mod address_grammar;
 mod amend_mutation;
+mod anchored_effects;
 mod appearance;
 mod apply_style_caret;
 mod artboards;
@@ -73,6 +74,7 @@ mod late_fonts;
 mod layers_wire;
 mod layout_cache;
 mod line_setting_paths;
+mod live_shapes;
 mod load_sniff;
 mod master_crud;
 mod minted_page_names;
@@ -104,6 +106,7 @@ mod property_sweep;
 mod render_effect_sweep;
 mod reorder_wire;
 mod resource_provider;
+mod review_ops;
 mod rotate_scale_gesture;
 mod rotated_scale_gesture;
 mod ruler_guides_handle;

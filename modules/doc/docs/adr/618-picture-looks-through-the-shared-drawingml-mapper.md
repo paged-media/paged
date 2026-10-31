@@ -1,7 +1,8 @@
 # ADR 618 — Pictures' DrawingML looks through the shared reader and mapper
 
 - **Status:** Accepted 2026-10-28. Amends [ADR 606](606-skeleton-is-a-native-document.md)
-  (which crates reach the engine).
+  (which crates reach the engine). Completed by [ADR 619](619-picture-looks-drawn-on-their-anchored-frames.md)
+  (2026-10-29): the look is drawn on the picture's anchored frame; decision 4's warning is gone.
 - **Scope:** `docx-core` (`Image::look`, `PictureLook`, `Theme::drawingml_slots`, the theme
   tint and shade on the shared HSL), `docx-import` (`picture_looks`), `docx-lower`
   (`Lowering::lower_look`, `LoweredImage::fx` / `losses`, the diagnostics),

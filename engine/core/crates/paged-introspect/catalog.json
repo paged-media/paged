@@ -1212,6 +1212,62 @@
       "summary": "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."
     },
     {
+      "name": "paged.recordChange",
+      "params": "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?}, paragraph?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Record a tracked change (insert, delete, format, paraProps, insertMark, deleteMark) over story chars [start, end), or on a paragraph for the paragraph kinds: what an importer writes for Word's revisions. Undoable."
+    },
+    {
+      "name": "paged.acceptChange",
+      "params": "({storyId?, id?, author?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Accept a tracked change by id, every change by an author, or all (in one story when storyId is set). One undo step."
+    },
+    {
+      "name": "paged.rejectChange",
+      "params": "({storyId?, id?, author?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Reject a tracked change by id, an author's, or all: insertions go, deletions stay, formatting goes back. One undo step."
+    },
+    {
+      "name": "paged.insertComment",
+      "params": "(storyId, start, end, {text, id?, author?, initials?, date?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "A comment on story chars [start, end) (paged.collection(\"comments\")). Undoable."
+    },
+    {
+      "name": "paged.replyComment",
+      "params": "(parentId, {text, id?, author?, initials?, date?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Reply to a comment; the reply joins its thread. Undoable."
+    },
+    {
+      "name": "paged.resolveComment",
+      "params": "(commentId, resolved?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Resolve (or, with false, reopen) a comment's thread. Undoable."
+    },
+    {
+      "name": "paged.deleteComment",
+      "params": "(commentId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Delete a comment; a thread's first comment takes its replies and its range. Undoable."
+    },
+    {
+      "name": "paged.editComment",
+      "params": "(commentId, text, date?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Rewrite a comment's text. Undoable."
+    },
+    {
       "name": "paged.find",
       "params": "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})",
       "returns": "string",
@@ -1687,6 +1743,10 @@
     "frameFillRule",
     "frameImageAdjustments",
     "frameGradientFillStart",
+    "frameShapeSides",
+    "frameShapeStarInset",
+    "frameShapePieStart",
+    "frameShapePieEnd",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -2040,6 +2100,14 @@
     "insertCrossReference",
     "insertTableOfContents",
     "insertIndexMarker",
+    "recordChange",
+    "acceptChange",
+    "rejectChange",
+    "insertComment",
+    "replyComment",
+    "resolveComment",
+    "deleteComment",
+    "editComment",
     "insertOval",
     "insertGuide",
     "moveGuide",
@@ -4097,6 +4165,73 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapeSides",
+      "type": {
+        "kind": "number",
+        "unit": "count"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 3.0,
+        "max": 100.0
+      },
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapeStarInset",
+      "type": {
+        "kind": "number",
+        "unit": "percent"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0,
+        "max": 99.0
+      },
+      "default": 0.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePieStart",
+      "type": {
+        "kind": "number",
+        "unit": "degrees"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": -360.0,
+        "max": 360.0
+      },
+      "default": 0.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePieEnd",
+      "type": {
+        "kind": "number",
+        "unit": "degrees"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": -360.0,
+        "max": 360.0
+      },
+      "default": 360.0,
+      "access": "readWrite",
+      "bindable": true
     },
     {
       "addressKind": "frame",
@@ -9816,6 +9951,59 @@
       "bindable": true
     },
     {
+      "addressKind": "doc",
+      "path": "documentTrackChanges",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentTrackChangesAuthor",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentMarkupView",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "simple",
+          "all",
+          "none",
+          "original"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "all",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
       "addressKind": "textVariable",
       "path": "textVariableName",
       "type": {
@@ -14760,6 +14948,58 @@
     },
     {
       "addressKind": "frame",
+      "path": "opacityMaskType",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "luminosity",
+          "alpha"
+        ]
+      },
+      "wire": "text",
+      "nullable": false,
+      "default": "luminosity",
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "maskType"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "opacityMaskInvert",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "invert"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "opacityMaskClip",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "applyOpacityMask",
+        "field": "clip"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
       "path": "points[i].anchor",
       "type": {
         "kind": "list",
@@ -16304,6 +16544,59 @@
       },
       {
         "addressKind": "doc",
+        "path": "documentTrackChanges",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentTrackChangesAuthor",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentMarkupView",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "simple",
+            "all",
+            "none",
+            "original"
+          ]
+        },
+        "nullable": true,
+        "default": "all",
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "doc",
         "path": "defaultFillColor",
         "type": {
           "kind": "color"
@@ -17810,6 +18103,73 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapeSides",
+        "type": {
+          "kind": "number",
+          "integer": true
+        },
+        "nullable": true,
+        "range": {
+          "min": 3.0,
+          "max": 100.0
+        },
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapeStarInset",
+        "type": {
+          "kind": "number",
+          "unit": "percent"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0,
+          "max": 99.0
+        },
+        "default": 0.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePieStart",
+        "type": {
+          "kind": "number",
+          "unit": "deg"
+        },
+        "nullable": true,
+        "range": {
+          "min": -360.0,
+          "max": 360.0
+        },
+        "default": 0.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePieEnd",
+        "type": {
+          "kind": "number",
+          "unit": "deg"
+        },
+        "nullable": true,
+        "range": {
+          "min": -360.0,
+          "max": 360.0
+        },
+        "default": 360.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
       },
       {
         "addressKind": "frame",
@@ -20987,6 +21347,58 @@
         },
         "bindable": true,
         "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "opacityMaskType",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "luminosity",
+            "alpha"
+          ]
+        },
+        "nullable": false,
+        "default": "luminosity",
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "maskType"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "opacityMaskInvert",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "invert"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "frame",
+        "path": "opacityMaskClip",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "applyOpacityMask",
+          "field": "clip"
+        },
+        "bindable": true,
+        "wire": "bool"
       },
       {
         "addressKind": "frame",
@@ -27193,5 +27605,1362 @@
         ]
       }
     ]
-  }
+  },
+  "effectKinds": [
+    {
+      "kind": "dropShadow",
+      "title": "Drop shadow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameDropShadow",
+      "fieldPaths": [
+        "frameDropShadowMode",
+        "frameDropShadowXOffset",
+        "frameDropShadowYOffset",
+        "frameDropShadowSize",
+        "frameDropShadowOpacity",
+        "frameDropShadowColor",
+        "frameDropShadowBlendMode",
+        "frameDropShadowSpread",
+        "frameDropShadowNoise",
+        "frameDropShadowKnockedOut",
+        "frameDropShadowUseGlobalLight"
+      ]
+    },
+    {
+      "kind": "innerShadow",
+      "title": "Inner shadow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameInnerShadowEnabled",
+      "fieldPaths": [
+        "frameInnerShadowBlendMode",
+        "frameInnerShadowColor",
+        "frameInnerShadowOpacity",
+        "frameInnerShadowAngle",
+        "frameInnerShadowDistance",
+        "frameInnerShadowSize",
+        "frameInnerShadowChoke",
+        "frameInnerShadowNoise"
+      ]
+    },
+    {
+      "kind": "outerGlow",
+      "title": "Outer glow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameOuterGlowEnabled",
+      "fieldPaths": [
+        "frameOuterGlowBlendMode",
+        "frameOuterGlowColor",
+        "frameOuterGlowOpacity",
+        "frameOuterGlowSpread",
+        "frameOuterGlowSize",
+        "frameOuterGlowNoise"
+      ]
+    },
+    {
+      "kind": "innerGlow",
+      "title": "Inner glow",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameInnerGlowEnabled",
+      "fieldPaths": [
+        "frameInnerGlowBlendMode",
+        "frameInnerGlowColor",
+        "frameInnerGlowOpacity",
+        "frameInnerGlowChoke",
+        "frameInnerGlowSize",
+        "frameInnerGlowSource",
+        "frameInnerGlowNoise"
+      ]
+    },
+    {
+      "kind": "bevelEmboss",
+      "title": "Bevel and emboss",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameBevelEnabled",
+      "fieldPaths": [
+        "frameBevelStyle",
+        "frameBevelTechnique",
+        "frameBevelDepth",
+        "frameBevelDirection",
+        "frameBevelSize",
+        "frameBevelSoften",
+        "frameBevelAngle",
+        "frameBevelAltitude",
+        "frameBevelHighlightColor",
+        "frameBevelShadowColor",
+        "frameBevelHighlightOpacity",
+        "frameBevelShadowOpacity"
+      ]
+    },
+    {
+      "kind": "satin",
+      "title": "Satin",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameSatinEnabled",
+      "fieldPaths": [
+        "frameSatinBlendMode",
+        "frameSatinColor",
+        "frameSatinOpacity",
+        "frameSatinAngle",
+        "frameSatinDistance",
+        "frameSatinSize",
+        "frameSatinInvert"
+      ]
+    },
+    {
+      "kind": "feather",
+      "title": "Feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameFeatherEnabled",
+      "fieldPaths": [
+        "frameFeatherWidth",
+        "frameFeatherCornerType",
+        "frameFeatherNoise",
+        "frameFeatherChoke"
+      ]
+    },
+    {
+      "kind": "directionalFeather",
+      "title": "Directional feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "enablePath": "frameDirectionalFeatherEnabled",
+      "fieldPaths": [
+        "frameDirectionalFeatherLeftWidth",
+        "frameDirectionalFeatherRightWidth",
+        "frameDirectionalFeatherTopWidth",
+        "frameDirectionalFeatherBottomWidth",
+        "frameDirectionalFeatherAngle",
+        "frameDirectionalFeatherNoise",
+        "frameDirectionalFeatherChoke"
+      ]
+    },
+    {
+      "kind": "gradientFeather",
+      "title": "Gradient feather",
+      "category": "stylize",
+      "indesign": true,
+      "targets": [
+        "object",
+        "fill",
+        "stroke",
+        "content"
+      ],
+      "maxPerStack": 1,
+      "blend": false,
+      "params": [],
+      "fieldPaths": [
+        "frameGradientFeather"
+      ]
+    },
+    {
+      "kind": "gaussianBlur",
+      "title": "Gaussian blur",
+      "category": "blur",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "radiusPt",
+          "title": "Radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 2.0
+        }
+      ]
+    },
+    {
+      "kind": "outlineStroke",
+      "title": "Stroke (layer style)",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "sizePt",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 3.0
+        },
+        {
+          "field": "position",
+          "title": "Position",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "Outside",
+              "Inside",
+              "Center"
+            ]
+          },
+          "default": "Outside"
+        },
+        {
+          "field": "color",
+          "title": "Color",
+          "type": {
+            "kind": "color"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "colorOverlay",
+      "title": "Color overlay",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "color",
+          "title": "Color",
+          "type": {
+            "kind": "color"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "gradientOverlay",
+      "title": "Gradient overlay",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "gradient",
+          "title": "Gradient",
+          "type": {
+            "kind": "ref",
+            "to": "gradient"
+          }
+        },
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "reverse",
+          "title": "Reverse",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        }
+      ]
+    },
+    {
+      "kind": "reflection",
+      "title": "Reflection",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "distancePt",
+          "title": "Distance",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "sizePct",
+          "title": "Size",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "startOpacityPct",
+          "title": "Start opacity",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "endOpacityPct",
+          "title": "End opacity",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "blurPt",
+          "title": "Blur",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        }
+      ]
+    },
+    {
+      "kind": "softEdge",
+      "title": "Soft edge",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "sizePt",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        }
+      ]
+    },
+    {
+      "kind": "noise",
+      "title": "Add noise",
+      "category": "noise",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "amountPct",
+          "title": "Amount",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "monochromatic",
+          "title": "Monochromatic",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        }
+      ]
+    },
+    {
+      "kind": "colorAdjust",
+      "title": "Color adjustment",
+      "category": "color",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": true,
+      "params": [
+        {
+          "field": "brightness",
+          "title": "Brightness",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "contrast",
+          "title": "Contrast",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "saturation",
+          "title": "Saturation",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "hueDeg",
+          "title": "Hue",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -180.0,
+            "max": 180.0
+          },
+          "default": 0.0
+        }
+      ]
+    },
+    {
+      "kind": "roughen",
+      "title": "Roughen",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "size",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "detailPerInch",
+          "title": "Detail",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "smooth",
+          "title": "Smooth",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "zigZag",
+      "title": "Zig zag",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "size",
+          "title": "Size",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "ridges",
+          "title": "Ridges per segment",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 4.0
+        },
+        {
+          "field": "smooth",
+          "title": "Smooth",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "puckerBloat",
+      "title": "Pucker & bloat",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "amountPct",
+          "title": "Amount",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -200.0,
+            "max": 200.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "twist",
+      "title": "Twist",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -3600.0,
+            "max": 3600.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "tweak",
+      "title": "Tweak",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "amountH",
+          "title": "Horizontal",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "amountV",
+          "title": "Vertical",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "anchors",
+          "title": "Anchor points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "inHandles",
+          "title": "In control points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "outHandles",
+          "title": "Out control points",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "transformCopies",
+      "title": "Transform",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "scaleHPct",
+          "title": "Scale horizontal",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -10000.0,
+            "max": 10000.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "scaleVPct",
+          "title": "Scale vertical",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -10000.0,
+            "max": 10000.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "moveH",
+          "title": "Move horizontal",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "moveV",
+          "title": "Move vertical",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "rotateDeg",
+          "title": "Rotate",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "reflectX",
+          "title": "Reflect X",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "reflectY",
+          "title": "Reflect Y",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "copies",
+          "title": "Copies",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "origin",
+          "title": "Origin",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "topLeft",
+              "top",
+              "topRight",
+              "left",
+              "center",
+              "right",
+              "bottomLeft",
+              "bottom",
+              "bottomRight"
+            ]
+          },
+          "default": "center"
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "freeDistort",
+      "title": "Free distort",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "corners",
+          "title": "Corners",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "list",
+              "of": {
+                "kind": "number"
+              }
+            }
+          }
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "warp",
+      "title": "Warp",
+      "category": "warp",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "style",
+          "title": "Style",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "arc",
+              "arcLower",
+              "arcUpper",
+              "arch",
+              "bulge",
+              "shellLower",
+              "shellUpper",
+              "flag",
+              "wave",
+              "fish",
+              "rise",
+              "fisheye",
+              "inflate",
+              "squeeze",
+              "twist"
+            ]
+          },
+          "default": "arc"
+        },
+        {
+          "field": "horizontal",
+          "title": "Horizontal",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "bendPct",
+          "title": "Bend",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 50.0
+        },
+        {
+          "field": "distortHPct",
+          "title": "Horizontal distortion",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "distortVPct",
+          "title": "Vertical distortion",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": -100.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "offsetPath",
+      "title": "Offset path",
+      "category": "path",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "offset",
+          "title": "Offset",
+          "type": {
+            "kind": "length"
+          },
+          "default": 10.0
+        },
+        {
+          "field": "join",
+          "title": "Joins",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "miter",
+              "round",
+              "bevel"
+            ]
+          },
+          "default": "miter"
+        },
+        {
+          "field": "miterLimit",
+          "title": "Miter limit",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": 1.0,
+            "max": 500.0
+          },
+          "default": 4.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "outlinePath",
+      "title": "Outline stroke",
+      "category": "path",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [],
+      "vector": true
+    },
+    {
+      "kind": "roundCorners",
+      "title": "Round corners",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "radius",
+          "title": "Radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 10.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "scribble",
+      "title": "Scribble",
+      "category": "stylize",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "angleDeg",
+          "title": "Angle",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 30.0
+        },
+        {
+          "field": "pathOverlap",
+          "title": "Path overlap",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "pathOverlapVariation",
+          "title": "Overlap variation",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "strokeWidth",
+          "title": "Stroke width",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 3.0
+        },
+        {
+          "field": "curvinessPct",
+          "title": "Curviness",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "curvinessVariationPct",
+          "title": "Curviness variation",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "spacing",
+          "title": "Spacing",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 5.0
+        },
+        {
+          "field": "spacingVariation",
+          "title": "Spacing variation",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "convertToShape",
+      "title": "Convert to shape",
+      "category": "convertToShape",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "shape",
+          "title": "Shape",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "rectangle",
+              "roundedRectangle",
+              "ellipse"
+            ]
+          },
+          "default": "rectangle"
+        },
+        {
+          "field": "relative",
+          "title": "Relative",
+          "type": {
+            "kind": "bool"
+          },
+          "default": true
+        },
+        {
+          "field": "extraWidth",
+          "title": "Extra width",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "extraHeight",
+          "title": "Extra height",
+          "type": {
+            "kind": "length"
+          },
+          "default": 0.0
+        },
+        {
+          "field": "width",
+          "title": "Width",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 36.0
+        },
+        {
+          "field": "height",
+          "title": "Height",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 36.0
+        },
+        {
+          "field": "cornerRadius",
+          "title": "Corner radius",
+          "type": {
+            "kind": "length"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 1000.0
+          },
+          "default": 9.0
+        }
+      ],
+      "vector": true
+    },
+    {
+      "kind": "pathfinder",
+      "title": "Pathfinder",
+      "category": "pathfinder",
+      "indesign": false,
+      "targets": [
+        "group"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "op",
+          "title": "Shape mode",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "add",
+              "subtract",
+              "intersect",
+              "exclude"
+            ]
+          },
+          "default": "add"
+        }
+      ],
+      "vector": true
+    }
+  ],
+  "effectCategories": [
+    "stylize",
+    "blur",
+    "noise",
+    "color",
+    "distortAndTransform",
+    "path",
+    "pathfinder",
+    "warp",
+    "convertToShape",
+    "rasterize"
+  ]
 }

@@ -728,9 +728,60 @@ pub fn moxcms_srgb_icc() -> Result<Vec<u8>, CmsError> {
         .map_err(|e| CmsError::BadProfile(format!("could not encode the sRGB profile: {e:?}")))
 }
 
+/// The ICC bytes of a grey space with a pure gamma TRC and D50 white —
+/// "Gray Gamma 2.2" at `gamma` 2.2, the grey [`ProfileRef::Gray`] names: what
+/// a Grayscale document written by the image module embeds, so a reader
+/// takes its greys as they were made.
+#[cfg(feature = "moxcms")]
+pub fn moxcms_gray_icc(gamma: f32) -> Result<Vec<u8>, CmsError> {
+    let mut p = moxcms::ColorProfile::new_gray_with_gamma(gamma);
+    // A profile without a description is not a valid ICC profile, and
+    // Photoshop ignores one (it then reads the greys in its working grey).
+    p.description = Some(moxcms::ProfileText::Localizable(vec![
+        moxcms::LocalizableString::new(
+            "en".to_string(),
+            "US".to_string(),
+            format!("Gray Gamma {gamma}"),
+        ),
+    ]));
+    p.encode()
+        .map(stable_icc)
+        .map_err(|e| CmsError::BadProfile(format!("could not encode the grey profile: {e:?}")))
+}
+
+/// The same profile whatever the day it was made: the creation date and
+/// the profile ID (a digest that covers it) zeroed — an all-zero ID means
+/// "not computed" (ICC.1:2010 7.2.18) — so a file that embeds it is the
+/// same bytes every time it is written.
+#[cfg(feature = "moxcms")]
+fn stable_icc(mut icc: Vec<u8>) -> Vec<u8> {
+    if icc.len() >= 100 {
+        icc[24..36].fill(0);
+        icc[84..100].fill(0);
+    }
+    icc
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "moxcms")]
+    #[test]
+    fn the_gray_profile_encodes_and_reads_back_as_grey() {
+        let icc = moxcms_gray_icc(2.2).expect("encode");
+        assert_eq!(&icc[36..40], b"acsp", "an ICC profile");
+        assert_eq!(&icc[16..20], b"GRAY", "a grey colour space");
+        let tags = u32::from_be_bytes(icc[128..132].try_into().expect("count"));
+        let has =
+            |sig: &[u8; 4]| (0..tags as usize).any(|i| &icc[132 + 12 * i..136 + 12 * i] == sig);
+        assert!(has(b"desc") && has(b"kTRC"), "a description and a grey TRC");
+        assert_eq!(
+            icc,
+            moxcms_gray_icc(2.2).expect("again"),
+            "the same bytes every time"
+        );
+    }
 
     #[test]
     fn layouts_count_their_samples() {

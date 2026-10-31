@@ -415,6 +415,19 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         O::EditNote { .. } | O::DeleteNote { .. } | O::DeleteEndnote { .. } => {
             vec![doc(P::TextEdit)]
         }
+        // Engine ADRs 1040 / 1020 — reviewing is editing the text.
+        O::RecordChange { story_id, .. }
+        | O::InsertComment { story_id, .. }
+        | O::RestoreStoryReview { story_id, .. } => vec![story(P::TextEdit, story_id)],
+        O::AcceptChange { story_id, .. } | O::RejectChange { story_id, .. } => {
+            match story_id {
+                Some(s) => vec![story(P::TextEdit, s)],
+                None => vec![doc(P::TextEdit)],
+            }
+        }
+        O::ResolveComment { .. } | O::DeleteComment { .. } | O::EditComment { .. } => {
+            vec![doc(P::TextEdit)]
+        }
         O::CreateEndnoteStory { .. } => vec![doc(P::DocumentAddItem)],
         O::CreateBookmark { .. }
         | O::DeleteBookmark { .. }

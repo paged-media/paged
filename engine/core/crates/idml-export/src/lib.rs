@@ -285,17 +285,23 @@ pub fn write_idml_with(
         doc
     };
     // Engine ADR 1008: IDML carries InDesign's effects in their slots
-    // and nothing else; an item's effect stacks ride its label.
+    // and nothing else; an item's effect stacks ride its label. Engine
+    // ADR 1047: so do its live-shape parameters (the outline itself is
+    // written as its path).
     use paged_model::effect_stack::label;
-    if doc.spreads.iter().any(|p| label::any(&p.spread))
-        || doc.master_spreads.values().any(|p| label::any(&p.spread))
+    use paged_model::live_shape::label as shape_label;
+    let needs = |s: &paged_model::Spread| label::any(s) || shape_label::any(s);
+    if doc.spreads.iter().any(|p| needs(&p.spread))
+        || doc.master_spreads.values().any(|p| needs(&p.spread))
     {
         let mut stamped = doc.clone();
         for p in stamped.spreads.iter_mut() {
             label::stamp(&mut p.spread);
+            shape_label::stamp(&mut p.spread);
         }
         for p in stamped.master_spreads.values_mut() {
             label::stamp(&mut p.spread);
+            shape_label::stamp(&mut p.spread);
         }
         return write_package(&stamped, original, false, opts);
     }

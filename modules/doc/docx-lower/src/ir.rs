@@ -82,9 +82,74 @@ pub struct LoweredDoc {
     /// instruction and the blocks that hold its cached entries.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tocs: Vec<LoweredToc>,
+    /// Doc ADR 613 — the document's comments, threads in order: the pour
+    /// inserts each first comment over its range and its replies after it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<LoweredComment>,
+    /// Doc ADR 613 — `w:trackRevisions`: the pour turns the engine's
+    /// change tracking on once the document is poured.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub track_changes: bool,
     /// Floating pictures and text boxes placed as page items (doc ADR 614).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub page_items: Vec<LoweredPageItem>,
+}
+
+/// Doc ADR 613 — one tracked change as the engine records it
+/// (`recordChange`'s `change`): its id (`docx-r<w:id>`), what it did, who
+/// and when.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredChange {
+    pub id: String,
+    /// `insert` / `delete` (a run's text), `format` (its look),
+    /// `paraProps` (a paragraph's properties), `insertMark` /
+    /// `deleteMark` (a paragraph mark).
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+}
+
+/// Doc ADR 613 — a run's tracked format change: the change and the
+/// character style token of the run's look before it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredFormatChange {
+    pub change: LoweredChange,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_char_style_id: Option<String>,
+}
+
+/// Doc ADR 613 — a paragraph's tracked property change: the change and
+/// the paragraph style token of its properties before it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredPropsChange {
+    pub change: LoweredChange,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_para_style_id: Option<String>,
+}
+
+/// Doc ADR 613 — one comment (`insertComment` / `replyComment`): its id
+/// (`docx-c<w:id>`), the thread it answers, its text (paragraphs separated
+/// by `\n`), and whether its thread is resolved.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredComment {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initials: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub resolved: bool,
 }
 
 /// A header or footer part's content (doc ADR 611).
@@ -315,6 +380,9 @@ pub struct LoweredStory {
 }
 
 /// One top-level story block.
+// Nearly every block is a paragraph: boxing it would cost an allocation per
+// paragraph to save a few hundred bytes on the rare table.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LoweredBlock {
@@ -428,6 +496,12 @@ pub struct LoweredParagraph {
     /// The Word list this paragraph is an item of, when it is one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub list: Option<LoweredListRef>,
+    /// Doc ADR 613 — the paragraph mark's tracked insertion or deletion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark_change: Option<LoweredChange>,
+    /// Doc ADR 613 — the tracked change of the paragraph's properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub props_change: Option<LoweredPropsChange>,
 }
 
 /// A list paragraph's list identity: the `w:numId` its items share and its
@@ -481,9 +555,11 @@ pub struct LoweredImage {
     pub anchor: Option<LoweredAnchor>,
     /// The picture's DrawingML look as the shared mapper lowers it (doc
     /// ADR 618): fill, outline, opacity (`a:alphaModFix`) and effects,
-    /// colours as `#RRGGBB`, a gradient's start in the picture's box.
-    /// Carried for the host model, which applies it once the engine's
-    /// anchored frames hold it. Absent for a plain picture.
+    /// colours as `#RRGGBB` (each also a document swatch,
+    /// `Color/docx-RRGGBB`), a gradient's start in the picture's box. The
+    /// host model paints it on the picture's anchored frame through the
+    /// lowering kit (engine ADR 1045, doc ADR 619). Absent for a plain
+    /// picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fx: Option<dml_native::native::NativeFx>,
     /// What the engine cannot hold of the look, one line per kind.
@@ -574,6 +650,15 @@ pub struct LoweredRun {
     /// engine's marker character.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<LoweredNoteRef>,
+    /// Doc ADR 613 — the tracked insertion or deletion the run's text is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<LoweredChange>,
+    /// Doc ADR 613 — the run's tracked format change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_change: Option<LoweredFormatChange>,
+    /// Doc ADR 613 — the comments (`docx-c<w:id>`) whose range covers it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<String>,
 }
 
 /// Page geometry for the first section, in points.

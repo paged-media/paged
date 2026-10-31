@@ -695,22 +695,29 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
 
     // W0 — what the import shows simplified rather than drops.
     let held = doc.held;
+    // Doc ADR 613 — tracked changes are read as the engine's changes.
+    let moves = doc
+        .body
+        .iter()
+        .filter_map(|b| match b {
+            Block::Paragraph(p) => Some(p),
+            Block::Table(_) => None,
+        })
+        .flat_map(|p| p.runs.iter())
+        .filter(|r| r.change.as_ref().is_some_and(|c| c.revision.moved))
+        .count();
     if held.tracked_changes > 0 {
         let mut msg = format!(
-            "{} tracked change(s) shown as accepted; review them in Word. Insertions \
-             show as plain text, deletions are not shown, formatting changes show \
-             the new formatting; the markup is kept in the .docx on save, and an \
-             edit that reaches it is refused",
+            "{} tracked change(s) read: accept or reject them in the Review panel",
             held.tracked_changes
         );
-        if held.deleted_marks_kept > 0 {
+        if moves > 0 {
             msg.push_str(&format!(
-                ". {} paragraph(s) whose mark is a tracked deletion stay paragraphs of \
-                 their own (accepting would join each to the next)",
-                held.deleted_marks_kept
+                "; {moves} moved run(s) read as an insertion and a deletion, saved as \
+                 Word's move while unchanged"
             ));
         }
-        ctx.diagnostics.push(Diagnostic::warning(msg, 3));
+        ctx.diagnostics.push(Diagnostic::info(msg, 3));
     }
     if held.hidden_runs > 0 {
         ctx.diagnostics.push(Diagnostic::info(
@@ -930,19 +937,19 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
     // Pictures' DrawingML looks (doc ADR 618): lowered through the shared
-    // mapper and carried in the IR, but the engine's anchored frames, where
-    // pictures are placed, hold no fill, outline, opacity or effects yet.
+    // mapper, carried in the IR and painted on the pictures' anchored frames
+    // (engine ADR 1045, doc ADR 619). What the engine cannot hold is listed
+    // per kind below.
     if ctx.looked_pictures > 0 {
         let kinds: Vec<&str> = ctx.look_kinds.iter().map(String::as_str).collect();
-        ctx.diagnostics.push(Diagnostic::warning(
+        ctx.diagnostics.push(Diagnostic::info(
             format!(
-                "{} picture(s) carry a DrawingML look ({}) that is NOT shown: pictures are \
-                 placed as anchored frames, which hold no fill, outline, opacity or effects \
-                 yet; the look is kept in the document and lowered for when they do",
+                "{} picture(s) carry a DrawingML look ({}), drawn natively on their \
+                 anchored frames",
                 ctx.looked_pictures,
                 kinds.join(", ")
             ),
-            2,
+            3,
         ));
     }
     for (loss, n) in &ctx.look_losses {
@@ -1151,8 +1158,47 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         masters,
         notes,
         tocs,
+        comments: lower_comments(doc),
+        track_changes: doc.track_revisions,
         page_items,
     }
+}
+
+/// Doc ADR 613 — a run's (or, with `mark`, a paragraph mark's) tracked
+/// insertion or deletion as the engine records it.
+fn lowered_change(c: &docx_core::RunChange, mark: bool) -> ir::LoweredChange {
+    let kind = match (c.kind, mark) {
+        (docx_core::ChangeKind::Insert, false) => "insert",
+        (docx_core::ChangeKind::Delete, false) => "delete",
+        (docx_core::ChangeKind::Insert, true) => "insertMark",
+        (docx_core::ChangeKind::Delete, true) => "deleteMark",
+    };
+    ir::LoweredChange {
+        id: docx_core::review::change_token(&c.revision.id),
+        kind: kind.into(),
+        author: c.revision.author.clone(),
+        date: c.revision.date.clone(),
+    }
+}
+
+/// Doc ADR 613 — the document's comments as the pour inserts them.
+pub fn lower_comments(doc: &DocxDocument) -> Vec<ir::LoweredComment> {
+    doc.comments
+        .iter()
+        .map(|c| ir::LoweredComment {
+            id: docx_core::review::comment_token(c.id),
+            parent_id: c.parent.map(docx_core::review::comment_token),
+            author: c.author.clone(),
+            initials: c.initials.clone(),
+            date: c.date.clone(),
+            text: c.text.clone(),
+            resolved: match c.parent {
+                // A reply's thread is resolved when its first comment is.
+                Some(root) => doc.comments.iter().any(|r| r.id == root && r.done) || c.done,
+                None => c.done,
+            },
+        })
+        .collect()
 }
 
 /// The swatch token of a theme colour reference (doc ADR 609):
@@ -1316,6 +1362,12 @@ impl Lowering {
                 self.looked_pictures += 1;
                 self.look_kinds
                     .extend(fx.describe().split(", ").map(str::to_string));
+                // Engine ADR 1045: the host model paints the look on the
+                // picture's anchored frame, each colour a document swatch
+                // (`Color/docx-RRGGBB`, the host model's mapping).
+                for c in fx.colors() {
+                    self.swatch_for(c.trim_start_matches('#'));
+                }
             }
         }
         li.fx = (!fx.is_empty()).then_some(fx);
@@ -1885,6 +1937,13 @@ impl Lowering {
                         run.char_style_id.take(),
                         vec![len("characterLeading", pt)],
                     ));
+                    if let Some(f) = run.format_change.as_mut() {
+                        f.before_char_style_id = Some(self.synthesize(
+                            StyleCollection::Character,
+                            f.before_char_style_id.take(),
+                            vec![len("characterLeading", pt)],
+                        ));
+                    }
                 }
                 run
             })
@@ -1985,6 +2044,28 @@ impl Lowering {
                     num_id: l.num_id,
                     level: l.level,
                 }),
+                mark_change: p.review.mark.as_ref().map(|c| lowered_change(c, true)),
+                props_change: p.review.props.as_ref().map(|c| {
+                    let explicit = c
+                        .old_style_id
+                        .as_ref()
+                        .map(|id| format!("{PARA_PREFIX}{}", sanitize(id)));
+                    let base = self.para_base(explicit);
+                    let props = self.para_props(&c.old_props);
+                    ir::LoweredPropsChange {
+                        change: ir::LoweredChange {
+                            id: docx_core::review::change_token(&c.revision.id),
+                            kind: "paraProps".into(),
+                            author: c.revision.author.clone(),
+                            date: c.revision.date.clone(),
+                        },
+                        before_para_style_id: if props.is_empty() {
+                            base
+                        } else {
+                            Some(self.synthesize(StyleCollection::Paragraph, base, props))
+                        },
+                    }
+                }),
             },
             tail,
         )
@@ -2062,6 +2143,30 @@ impl Lowering {
         if field.is_some() {
             self.live_fields += 1;
         }
+        // Doc ADR 613 — the run's tracked changes and comments.
+        let change = r.change.as_ref().map(|c| lowered_change(c, false));
+        let format_change = r.format_change.as_ref().map(|f| {
+            let base = f
+                .old_style_id
+                .as_ref()
+                .map(|id| format!("{CHAR_PREFIX}{}", sanitize(id)));
+            let props = self.run_props(&f.old_props, size);
+            ir::LoweredFormatChange {
+                change: ir::LoweredChange {
+                    id: docx_core::review::change_token(&f.revision.id),
+                    kind: "format".into(),
+                    author: f.revision.author.clone(),
+                    date: f.revision.date.clone(),
+                },
+                // A look with nothing set is still a style of its own, so
+                // the engine's rejection puts the run's look back to it.
+                before_char_style_id: Some(self.synthesize(
+                    StyleCollection::Character,
+                    base,
+                    props,
+                )),
+            }
+        });
         LoweredRun {
             text,
             char_style_id,
@@ -2069,6 +2174,13 @@ impl Lowering {
             merge_field: r.merge_field.clone(),
             field,
             note,
+            change,
+            format_change,
+            comments: r
+                .comments
+                .iter()
+                .map(|id| docx_core::review::comment_token(*id))
+                .collect(),
         }
     }
 
@@ -3252,6 +3364,7 @@ mod tests {
                 held: Default::default(),
                 bookmarks: Vec::new(),
                 toc_field: None,
+                review: Default::default(),
             }));
         }
         let lowered = lower(&doc);
@@ -3310,6 +3423,7 @@ mod tests {
                 held: Default::default(),
                 bookmarks: Vec::new(),
                 toc_field: None,
+                review: Default::default(),
             })
         };
         // Body, a 24 pt heading, body, body.
@@ -3380,6 +3494,7 @@ mod tests {
                 held: Default::default(),
                 bookmarks: Vec::new(),
                 toc_field: None,
+                review: Default::default(),
             }));
         }
         let lowered = lower(&doc);
@@ -3422,6 +3537,7 @@ mod tests {
                     held: Default::default(),
                     bookmarks: Vec::new(),
                     toc_field: None,
+                    review: Default::default(),
                 }],
                 grid_span: 1,
                 v_merge: VMerge::None,
@@ -3470,6 +3586,7 @@ mod tests {
                 held: Default::default(),
                 bookmarks: Vec::new(),
                 toc_field: None,
+                review: Default::default(),
             }));
         }
         let lowered = lower(&doc);
@@ -3555,6 +3672,7 @@ mod tests {
             held: Default::default(),
             bookmarks: Vec::new(),
             toc_field: None,
+            review: Default::default(),
         }));
 
         let lowered = lower(&doc);

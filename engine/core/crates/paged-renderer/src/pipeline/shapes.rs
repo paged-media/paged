@@ -67,6 +67,13 @@ pub(super) fn emit_oval_into(
     content: ContentPainter<'_>,
     module: ModulePainter<'_>,
 ) {
+    // Engine ADR 1047 — a pie is drawn as the polygon of its wedge, with
+    // the oval's paint, effects and picture.
+    if let Some(twin) = paged_model::live_shape::pie_polygon(oval) {
+        return super::text_path::emit_polygon_into(
+            page, &twin, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     // Engine ADR 1042 — an oval under vector effects is the polygon its
     // effected outline describes.
     if let Some(poly) = paged_vector_fx::bake::bake_oval(oval) {

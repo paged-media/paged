@@ -1848,6 +1848,10 @@ pub enum Mutation {
         mask_type: Option<String>,
         #[serde(default)]
         invert: Option<bool>,
+        /// Illustrator's Clip: `false` lets the area the artwork does not
+        /// paint show the target. Absent is `true`. Additive (no bump).
+        #[serde(default)]
+        clip: Option<bool>,
     },
     /// v58 (C-28) — **Release Opacity Mask**: drop the relation; the
     /// artwork returns to top level, geometry untouched. Rides
@@ -2502,6 +2506,76 @@ pub enum Mutation {
         #[serde(default)]
         sort_order: Option<String>,
     },
+    /// Engine ADR 1040 — record tracked change `change` over story chars
+    /// `[start, end)` (contiguous, as `applyStyle` counts them; of `cell`
+    /// when set), or on paragraph `paragraph` for the paragraph kinds
+    /// (`paraProps`, `insertMark`, `deleteMark`). What an importer writes
+    /// for Word's `w:ins`, `w:del`, `w:rPrChange` and `w:pPrChange`. The
+    /// reply's `createdId` is the change's id. Undoable.
+    RecordChange {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        #[serde(default)]
+        paragraph: Option<u32>,
+        change: paged_mutate::operation::ChangeSpec,
+    },
+    /// Engine ADR 1040 — Accept: tracked change `id`, every change by
+    /// `author`, or every change (in story `storyId` only when set). One
+    /// undo step.
+    AcceptChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1040 — Reject, scoped as `acceptChange`. One undo step.
+    RejectChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1020 — New Comment on story chars `[start, end)` (not
+    /// empty). The reply's `createdId` is the comment's id. Undoable.
+    InsertComment {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        comment: paged_mutate::operation::CommentSpec,
+    },
+    /// Engine ADR 1020 — Reply to comment `parentId` (a root, or a reply,
+    /// whose root the reply joins). `createdId` is the reply's id. Undoable.
+    ReplyComment {
+        parent_id: String,
+        comment: paged_mutate::operation::CommentSpec,
+    },
+    /// Engine ADR 1020 — Resolve (or reopen, `resolved: false`) the thread
+    /// of comment `commentId`. Undoable.
+    ResolveComment {
+        comment_id: String,
+        resolved: bool,
+    },
+    /// Engine ADR 1020 — delete comment `commentId`; a thread's root takes
+    /// its replies and its range with it. Undoable.
+    DeleteComment {
+        comment_id: String,
+    },
+    /// Engine ADR 1020 — rewrite comment `commentId`'s text. Undoable.
+    EditComment {
+        comment_id: String,
+        text: String,
+        #[serde(default)]
+        date: Option<String>,
+    },
     // ── W0.5 wire-expansion ─────────────────────────────────────────
     /// W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local
     /// `bounds` `(top, left, bottom, right)`; the model resolves the
@@ -3100,6 +3174,14 @@ mutation_vocabulary! {
     InsertCrossReference,
     InsertTableOfContents,
     InsertIndexMarker,
+    RecordChange,
+    AcceptChange,
+    RejectChange,
+    InsertComment,
+    ReplyComment,
+    ResolveComment,
+    DeleteComment,
+    EditComment,
     InsertOval,
     InsertGuide,
     MoveGuide,

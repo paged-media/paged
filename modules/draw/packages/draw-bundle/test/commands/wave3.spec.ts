@@ -164,11 +164,67 @@ describe("paged.draw commands, no engine — WP6.1 part 2 [plugin-draw.tool-wave
       points: 6,
     });
     expect(r.sent()).toHaveLength(1);
+    // Engine ADR 1047: an upright star is a LIVE star — the hexagon on
+    // Radius 1, then its points and its inset (1 − 10 ÷ 40 = 75 %), in
+    // the same batch; the engine draws the 12 points.
     const insert = r.leaves().find((m) => m.op === "insertPath") as {
       args: { anchors: { anchor: number[] }[] };
     };
-    expect(insert.args.anchors).toHaveLength(12);
+    expect(insert.args.anchors).toHaveLength(6);
     expect(insert.args.anchors[0]!.anchor[1]).toBeCloseTo(60, 9);
+    const shape = r
+      .leaves()
+      .filter(
+        (m) =>
+          m.op === "setElementProperty" &&
+          String((m.args as { path: string }).path).startsWith("frameShape"),
+      )
+      .map((m) => {
+        const a = m.args as {
+          elementId: { id: string };
+          path: string;
+          value: { value: number };
+        };
+        return [a.elementId.id, a.path, a.value.value];
+      });
+    expect(shape).toEqual([
+      ["$created", "frameShapeSides", 6],
+      ["$created", "frameShapeStarInset", 75],
+    ]);
+  });
+
+  it("insertStar: a turned star, or one whose Radius 2 is the larger, is a plain 2·points path", async () => {
+    const r = unitRig([], { selection: [] });
+    await r.run(`${C}.insertStar`, {
+      page: "page-1",
+      cx: 100,
+      cy: 100,
+      radius1: 40,
+      radius2: 10,
+      points: 6,
+      rotationDeg: 15,
+    });
+    await r.run(`${C}.insertStar`, {
+      page: "page-1",
+      cx: 100,
+      cy: 100,
+      radius1: 10,
+      radius2: 40,
+      points: 6,
+    });
+    const inserts = r.leaves().filter((m) => m.op === "insertPath") as Array<{
+      args: { anchors: unknown[] };
+    }>;
+    expect(inserts.map((m) => m.args.anchors.length)).toEqual([12, 12]);
+    expect(
+      r
+        .leaves()
+        .some((m) =>
+          String((m.args as { path?: string }).path ?? "").startsWith(
+            "frameShape",
+          ),
+        ),
+    ).toBe(false);
   });
 
   it("insertFlare: every part inserted, named and grouped in ONE batch", async () => {

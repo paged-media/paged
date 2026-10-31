@@ -59,6 +59,7 @@ mod prop_colour;
 mod prop_journal;
 mod prop_layer_cache;
 mod prop_selection;
+mod prop_tiled_fold;
 mod psd_adjustment_blocks_photoshop;
 mod psd_adjustment_layers;
 mod psd_cmyk_photoshop;

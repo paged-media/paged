@@ -1353,6 +1353,8 @@ effect_bearing!(crate::TextFrame, yes);
 effect_bearing!(crate::Rectangle, yes);
 effect_bearing!(crate::Oval, yes);
 effect_bearing!(crate::Polygon, no);
+// Engine ADR 1045 — an anchored frame carries the free frames' slots.
+effect_bearing!(crate::AnchoredFrame, yes);
 
 /// The IDML label that carries a page item's effect stacks through an
 /// IDML round trip (engine ADR 1008): IDML has InDesign's nine effects in
