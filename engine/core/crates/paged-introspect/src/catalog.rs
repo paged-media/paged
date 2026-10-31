@@ -126,6 +126,12 @@ pub struct ApiCatalog {
     /// `paged.schema(kind)` answer, verbatim. Operation rows are absent.
     pub object_schemas:
         std::collections::BTreeMap<String, Vec<crate::object_schema::ObjectSchemaRow>>,
+    /// Editor ADR 309 / plan C16 — the effect kinds of the ordered stack
+    /// (engine ADR 1008): menu group, targets and parameter form of each,
+    /// which the Effects and Appearance panels and the Effect menu list.
+    pub effect_kinds: Vec<crate::effect_kinds::EffectKindRow>,
+    /// The Effect menu's groups, in menu order.
+    pub effect_categories: &'static [&'static str],
 }
 
 /// One settable path that answers to two names.
@@ -153,6 +159,8 @@ pub fn api_catalog() -> ApiCatalog {
         path_aliases: path_aliases(),
         property_schemas: crate::virtual_paths::property_schemas(),
         object_schemas: crate::object_schema::object_schemas(),
+        effect_kinds: crate::effect_kinds::effect_kinds(),
+        effect_categories: crate::effect_kinds::EFFECT_CATEGORIES,
     }
 }
 

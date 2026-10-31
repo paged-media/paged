@@ -235,3 +235,70 @@ fn a_conic_gradient_is_written_as_its_mean_colour_and_reported() {
     );
     assert!(!min.trim_end().contains('\n'));
 }
+
+// ------------------------------------------------------------- limits
+
+/// A file over the byte limit is refused before it is parsed.
+#[test]
+fn an_oversize_file_is_refused_with_its_reason() {
+    let pad = paged_svg::limits::MAX_SVG_BYTES;
+    let svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><!--{}--><rect width="5" height="5"/></svg>"#,
+        " ".repeat(pad)
+    );
+    let p = plan(&svg);
+    assert!(p.mutation.is_none());
+    let e = p.error.expect("an error");
+    assert!(e.contains("too large"), "{e}");
+}
+
+/// More paths than the node limit allows: refused, not planned.
+#[test]
+fn a_file_of_too_many_paths_is_refused() {
+    let n = paged_svg::limits::MAX_SVG_NODES as usize + 1;
+    let mut svg =
+        String::from(r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">"#);
+    for i in 0..n {
+        svg.push_str(&format!(r#"<path d="M{} 0h1v1z"/>"#, i % 10));
+    }
+    svg.push_str("</svg>");
+    let p = plan(&svg);
+    assert!(p.mutation.is_none());
+    let e = p.error.expect("an error");
+    assert!(e.contains("XML nodes"), "{e}");
+}
+
+fn nested(depth: usize) -> String {
+    format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">{}<rect width="5" height="5"/>{}</svg>"#,
+        "<g>".repeat(depth),
+        "</g>".repeat(depth)
+    )
+}
+
+/// Nesting far past the depth limit is refused without recursing into it.
+#[test]
+fn a_deeply_nested_file_is_refused() {
+    let p = plan(&nested(100_000));
+    assert!(p.mutation.is_none());
+    let e = p.error.expect("an error");
+    assert!(e.contains("nest"), "{e}");
+}
+
+/// The deepest file the limit admits imports on a 1 MiB stack, the wasm
+/// worker's.
+#[test]
+fn the_deepest_admitted_file_imports_on_a_small_stack() {
+    // The root `<svg>` and the rect are two of the levels.
+    let depth = paged_svg::limits::MAX_SVG_DEPTH as usize - 2;
+    let p = std::thread::Builder::new()
+        .stack_size(1 << 20)
+        .spawn(move || plan(&nested(depth)))
+        .unwrap()
+        .join()
+        .expect("no stack overflow");
+    assert!(p.error.is_none(), "{:?}", p.error);
+    assert!(p.mutation.is_some());
+    let p = plan(&nested(depth + 1));
+    assert!(p.error.expect("an error").contains("nest"));
+}

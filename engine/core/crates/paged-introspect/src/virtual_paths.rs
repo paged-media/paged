@@ -94,6 +94,7 @@ const RENDERING_INTENTS: &[&str] = &[
     "AbsoluteColorimetric",
 ];
 const RGB_POLICIES: &[&str] = &["PreserveEmbedded", "ConvertToWorking", "Off"];
+const OPACITY_MASK_TYPES: &[&str] = &["luminosity", "alpha"];
 
 /// The op-backed rows. Generated cockpit tables (`object-model`) count
 /// these; `every_virtual_row_names_a_real_op` (catalog_apply_parity)
@@ -541,6 +542,32 @@ pub const VIRTUAL_PATHS: &[VirtualPath] = &[
         "maskId",
     )
     .clears_with("releaseOpacityMask"),
+    // Editor ADR 309 — the mask's options (Illustrator's Transparency
+    // panel). A write releases and re-applies the mask with the new
+    // option, as one step; on an item without a mask it is refused.
+    v(
+        "frame",
+        "opacityMaskType",
+        enum_(OPACITY_MASK_TYPES)
+            .default_text("luminosity")
+            .required(),
+        "applyOpacityMask",
+        "maskType",
+    ),
+    v(
+        "frame",
+        "opacityMaskInvert",
+        bool_().default_bool(false),
+        "applyOpacityMask",
+        "invert",
+    ),
+    v(
+        "frame",
+        "opacityMaskClip",
+        bool_().default_bool(true),
+        "applyOpacityMask",
+        "clip",
+    ),
     v(
         "frame",
         "points[i].anchor",

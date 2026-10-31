@@ -232,6 +232,9 @@ fn build() -> (CanvasModel, Targets) {
             footer_rows: 0,
             column_widths: vec![],
             row_heights: vec![],
+            cell: None,
+            word: None,
+            paragraph: None,
         },
     );
     let table_id = m
@@ -690,6 +693,21 @@ fn every_virtual_row_sets_reads_back_and_undoes() {
         let path = concrete(row.path);
         for target in targets_for(row, &t) {
             let label = format!("{} {} on {target:?}", row.address_kind, path);
+            // Editor ADR 309 — a mask's options need a mask to edit.
+            if row.address_kind == "frame"
+                && path.starts_with("opacityMask")
+                && path != "opacityMask"
+            {
+                let mask = Mutation::Set {
+                    address: target.clone().into(),
+                    path: "opacityMask".into(),
+                    value: Value::Ref(t.mask_item.clone()),
+                };
+                if let Err(e) = m.apply_mutation(&mask) {
+                    failures.push(format!("{label}: make the mask: {e:?}"));
+                    continue;
+                }
+            }
             let before = match m.get_property(&target, &path) {
                 Ok(v) => v,
                 Err(e) => {

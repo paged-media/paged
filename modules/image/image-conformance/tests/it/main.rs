@@ -90,5 +90,6 @@ mod residency_load;
 mod selection_mask;
 mod selection_pipeline;
 mod smart_objects_photoshop;
+mod transform_warps_photoshop;
 mod warp_text_photoshop;
 mod zz_layerdump;

@@ -84,7 +84,12 @@ import type { CompositionNode } from "@paged-media/catalog";
 import type { PropertyPath, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
-import { EffectStackSection, type BlendOption } from "./effect-stack-section";
+import { effectKinds } from "./effect-stack";
+import {
+  EffectStackSection,
+  effectName,
+  type BlendOption,
+} from "./effect-stack-section";
 import {
   blendModes,
   bevelComposition,
@@ -99,14 +104,6 @@ import {
 import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
 
 const M = defineMessages("app.effectsPanel", {
-  dropShadow: "Drop shadow",
-  innerShadow: "Inner shadow",
-  outerGlow: "Outer glow",
-  innerGlow: "Inner glow",
-  bevelAndEmboss: "Bevel and emboss",
-  satin: "Satin",
-  feather: "Feather",
-  directionalFeather: "Directional feather",
   object: "Object",
   stroke: "Stroke",
   fill: "Fill",
@@ -127,67 +124,37 @@ function elementProp(path: PropertyPath): { path: string; scope: "element" } {
   return { path, scope: "element" };
 }
 
-// One row per effect family. `enable` is the stable bindings map the
-// pill's `useBindings` reads (a module-level object so the hook never
-// re-fetches on identity churn); `fields` is the per-field composition
-// rendered inside the violet rail when the effect is on. Drop shadow's
-// enable rides the legacy `frameDropShadow` bool (not `*Enabled`).
+// One row per InDesign effect family, from core's catalog (editor ADR
+// 309): each kind core describes as InDesign's with a switch path is a
+// disclosure — the pill writes `enablePath`, the expanded composition the
+// per-field `frame{Family}{Field}` paths. The compositions are this
+// panel's layout of those paths; a family without one shows its pill only
+// (its stack row says where it is edited). `name` is the stable test hook
+// (core's English title); `title` the message shown.
+const COMPOSITIONS: Record<string, (strings: Strings) => CompositionNode> = {
+  dropShadow: dropShadowComposition,
+  innerShadow: innerShadowComposition,
+  outerGlow: outerGlowComposition,
+  innerGlow: innerGlowComposition,
+  bevelEmboss: bevelComposition,
+  satin: satinComposition,
+  feather: featherComposition,
+  directionalFeather: directionalFeatherComposition,
+};
+
 const EFFECT_FAMILIES: {
-  /** The family's stable id (test hooks); `title` is what it shows. */
   name: string;
-  title: string;
+  kind: string;
   enable: { enabled: { path: string; scope: "element" } };
-  fields: (strings: Strings) => CompositionNode;
-}[] = [
-  {
-    name: "Drop shadow",
-    title: M.dropShadow,
-    enable: { enabled: elementProp("frameDropShadow") },
-    fields: dropShadowComposition,
-  },
-  {
-    name: "Inner shadow",
-    title: M.innerShadow,
-    enable: { enabled: elementProp("frameInnerShadowEnabled") },
-    fields: innerShadowComposition,
-  },
-  {
-    name: "Outer glow",
-    title: M.outerGlow,
-    enable: { enabled: elementProp("frameOuterGlowEnabled") },
-    fields: outerGlowComposition,
-  },
-  {
-    name: "Inner glow",
-    title: M.innerGlow,
-    enable: { enabled: elementProp("frameInnerGlowEnabled") },
-    fields: innerGlowComposition,
-  },
-  {
-    name: "Bevel and emboss",
-    title: M.bevelAndEmboss,
-    enable: { enabled: elementProp("frameBevelEnabled") },
-    fields: bevelComposition,
-  },
-  {
-    name: "Satin",
-    title: M.satin,
-    enable: { enabled: elementProp("frameSatinEnabled") },
-    fields: satinComposition,
-  },
-  {
-    name: "Feather",
-    title: M.feather,
-    enable: { enabled: elementProp("frameFeatherEnabled") },
-    fields: featherComposition,
-  },
-  {
-    name: "Directional feather",
-    title: M.directionalFeather,
-    enable: { enabled: elementProp("frameDirectionalFeatherEnabled") },
-    fields: directionalFeatherComposition,
-  },
-];
+  fields?: (strings: Strings) => CompositionNode;
+}[] = effectKinds()
+  .filter((k) => k.indesign && k.enablePath)
+  .map((k) => ({
+    name: k.title,
+    kind: k.kind,
+    enable: { enabled: { path: k.enablePath!, scope: "element" as const } },
+    fields: COMPOSITIONS[k.kind],
+  }));
 
 type TargetId = "object" | "stroke" | "fill" | "content";
 
@@ -259,7 +226,7 @@ function EffectDisclosure({
   name: string;
   title: string;
   enable: { enabled: { path: string; scope: "element" } };
-  fields: CompositionNode;
+  fields: CompositionNode | null;
 }) {
   const resolved = useObjectBindings(enable);
   const checked = unwrapBool(resolved.enabled.value);
@@ -286,7 +253,7 @@ function EffectDisclosure({
         >
           {title}
         </span>
-        {on && (
+        {on && fields && (
           <Icon
             name="ui-chevron-down"
             size={13}
@@ -294,7 +261,7 @@ function EffectDisclosure({
           />
         )}
       </ObjectFieldFrame>
-      {on && (
+      {on && fields && (
         <div
           className="mb-[6px] ml-1 py-2 pl-3"
           data-effect-fields={name}
@@ -311,7 +278,7 @@ function EffectDisclosure({
  *  the engine's, not hand-kept here), labelled from the panel's
  *  messages; a mode without a label shows its IDML name. Without a row
  *  (no selection yet) the panel's own list stands in. */
-function schemaBlendModes(
+export function schemaBlendModes(
   strings: Strings,
   row: ObjectField["row"],
 ): BlendOption[] {
@@ -530,9 +497,9 @@ export function EffectsPanel() {
               <EffectDisclosure
                 key={fam.name}
                 name={fam.name}
-                title={strings.t(fam.title)}
+                title={effectName(strings, fam.kind)}
                 enable={fam.enable}
-                fields={fam.fields(strings)}
+                fields={fam.fields?.(strings) ?? null}
               />
             ))}
           </div>

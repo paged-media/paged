@@ -51,6 +51,7 @@
 // they stay reachable by passing a raw wire `Value` (`{ type, value }`).
 
 import type {
+  EffectKindDescriptor,
   PropertyPath,
   PropertySchema,
   ValueType,
@@ -58,6 +59,8 @@ import type {
 
 // Named imports, so the bundler keeps only these keys of the catalog.
 import {
+  effectCategories,
+  effectKinds,
   objectSchemas,
   propertySchemas,
 } from "../../plugin-api/src/catalog.json";
@@ -1250,6 +1253,15 @@ export const CORE_OBJECT_SCHEMAS: Readonly<
   string,
   readonly (PropertySchema & { wire: string })[]
 >;
+
+/** Editor ADR 309 / plan C16 — the effect kinds of the ordered stack, as
+ *  core's catalog describes them (menu group, targets, parameter form), in
+ *  the wire's order. A kind core adds is listed here by the catalog sync. */
+export const CORE_EFFECT_KINDS: readonly EffectKindDescriptor[] =
+  effectKinds as unknown as EffectKindDescriptor[];
+
+/** The Effect menu's groups, in menu order. */
+export const CORE_EFFECT_CATEGORIES: readonly string[] = effectCategories;
 
 const STYLE_FAMILIES = [
   "paragraph",

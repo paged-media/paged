@@ -60,7 +60,9 @@ import { IndexPanel } from "./index-panel";
 import { InfoPanel } from "./info-panel";
 import { ZoomNavigatorPanel } from "./zoom-navigator-panel";
 import { LinksPanel } from "./links-panel";
+import { AppearancePanel } from "./appearance-panel";
 import { EffectsPanel } from "./effects-panel";
+import { TransparencyPanel } from "./transparency-panel";
 import { FrameFittingPanel } from "./frame-fitting-panel";
 import { GradientsPanel } from "./gradients-panel";
 import { ObjectStylesPanel } from "./object-styles-panel";
@@ -200,6 +202,8 @@ const M = defineMessages("app.builtInPanels", {
   textWrap: "Text Wrap",
   frameFitting: "Frame Fitting",
   effects: "Effects",
+  transparency: "Transparency",
+  appearance: "Appearance",
   layers: "Layers",
   info: "Info",
   navigator: "Navigator",
@@ -1032,6 +1036,30 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: EffectsPanel,
     defaultDock: "right",
     defaultGroup: "properties",
+  },
+  // Editor ADR 309 — Illustrator's Transparency panel (blend, opacity, the
+  // opacity mask with Clip, Invert and Edit Mask) and Appearance panel
+  // (stroke, fill, the object's effect stack, opacity). Host panels: no
+  // edit context claims them, so they are offered in every one.
+  {
+    id: "paged.transparency",
+    get title() {
+      return t(M.transparency);
+    },
+    component: TransparencyPanel,
+    defaultDock: "right",
+    defaultGroup: "properties",
+    icon: "panel-transparency",
+  },
+  {
+    id: "paged.appearance",
+    get title() {
+      return t(M.appearance);
+    },
+    component: AppearancePanel,
+    defaultDock: "right",
+    defaultGroup: "properties",
+    icon: "panel-appearance",
   },
   {
     id: "paged.layers",

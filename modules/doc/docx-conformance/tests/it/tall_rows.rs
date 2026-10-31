@@ -16,12 +16,13 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! ADR 029 — a table row taller than its page flows as text. Word splits
-//! such a row across pages; a native table row never splits (InDesign's
-//! rule), so the whole row is overset and its text gone. Found on a real
-//! document (`docs/reference/acceptance-real-docx.md`, round 14): a web page saved as
-//! Word keeps its article, 46,409 characters, in one cell of a layout table,
-//! and 12 of Word's 52 pages were missing.
+//! ADR 029, amended by engine ADR 1025 — a table row taller than its page.
+//! Word splits such a row across pages. The lowering used to pour such a
+//! table as plain paragraphs, a native row never splitting; a native Word
+//! table now splits its rows as Word does, so the table is built natively.
+//! Found on a real document (`docs/reference/acceptance-real-docx.md`, round
+//! 14): a web page saved as Word keeps its article, 46,409 characters, in
+//! one cell of a layout table.
 
 // `__feat__<id>` names link these tests to the Cockpit feature row.
 #![allow(non_snake_case)]
@@ -36,7 +37,7 @@ fn lowered() -> LoweredDoc {
 }
 
 #[test]
-fn a_row_taller_than_the_page_flows_as_text__feat__plugin_doc_word_pagination() {
+fn a_row_taller_than_the_page_is_a_native_row_that_splits__feat__plugin_doc_word_pagination() {
     let lowered = lowered();
     // before, the tall table, after, the small table, end: blocks stay 1:1
     // with Word's body blocks.
@@ -44,32 +45,29 @@ fn a_row_taller_than_the_page_flows_as_text__feat__plugin_doc_word_pagination() 
     let LoweredBlock::Table(tall) = &lowered.story.blocks[1] else {
         panic!("block 1 is the tall table");
     };
-    assert_eq!(
-        tall.flow.len(),
-        TALL_ROW_PARAGRAPHS,
-        "every cell paragraph flows"
-    );
-    assert!(
-        tall.cells.is_empty() && tall.rows == 0,
-        "and no native table is built"
-    );
-    assert_eq!(tall.flow[0].runs[0].text, "Row text 001");
+    assert!(tall.flow.is_empty(), "no table pours as text any more");
+    assert_eq!((tall.rows, tall.cols), (1, 1));
+    assert_eq!(tall.cells[0].paragraphs.len(), TALL_ROW_PARAGRAPHS);
+    assert_eq!(tall.cells[0].paragraphs[0].runs[0].text, "Row text 001");
+    // The host model lays it out by Word's rules (engine ADR 1025): the row
+    // may split.
+    let layout = tall.layout.as_ref().expect("Word's layout is carried");
+    assert!(!layout.cant_split.iter().any(|c| *c));
     let LoweredBlock::Table(small) = &lowered.story.blocks[3] else {
         panic!("block 3 is the small table");
     };
-    assert!(small.flow.is_empty(), "a row that fits stays a table row");
     assert_eq!((small.rows, small.cols), (1, 1));
     assert!(
-        lowered
+        !lowered
             .diagnostics
             .iter()
             .any(|d| d.message.contains("flow as text")),
-        "the user is told"
+        "nothing is flowed"
     );
 }
 
 #[test]
-fn save_back_steps_over_a_flowed_table__feat__plugin_doc_word_pagination() {
+fn save_back_steps_over_a_tall_native_table__feat__plugin_doc_word_pagination() {
     let baseline = lowered();
     let para = |text: &str| ParagraphContentIn {
         mark_change: None,
@@ -81,10 +79,9 @@ fn save_back_steps_over_a_flowed_table__feat__plugin_doc_word_pagination() {
             ..Default::default()
         }],
     };
-    // What the editor reads back: before, the flowed paragraphs, after
-    // (edited), end. The small table is not among the paragraphs.
+    // What the editor reads back: before, after (edited), end. Neither
+    // table is among the paragraphs.
     let mut paragraphs = vec![para("before")];
-    paragraphs.extend((1..=TALL_ROW_PARAGRAPHS).map(|n| para(&format!("Row text {n:03}"))));
     paragraphs.push(para("after, edited"));
     paragraphs.push(para("end"));
     let edited = overlay_story_content(

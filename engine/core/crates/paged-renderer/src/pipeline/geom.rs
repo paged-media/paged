@@ -526,6 +526,37 @@ impl WrapShape {
         }
     }
 
+    /// Engine ADR 1050 — the contour zone of a closed polygon given in
+    /// spread coords (a float's `wrap_polygon`): its edges sampled as an
+    /// item's outline is, grown by `reach`. `None` for fewer than three
+    /// points.
+    pub(super) fn from_polygon(points: &[(f32, f32)], reach: f32, side: WrapSide) -> Option<Self> {
+        if points.len() < 3 {
+            return None;
+        }
+        let mut sampled = Vec::with_capacity(points.len() * 4);
+        sampled.push(points[0]);
+        for k in 0..points.len() {
+            let a = points[k];
+            let b = points[(k + 1) % points.len()];
+            let n = ((b.0 - a.0).hypot(b.1 - a.1) / CONTOUR_STEP_PT)
+                .ceil()
+                .max(1.0);
+            for i in 1..=n as usize {
+                let t = i as f32 / n;
+                sampled.push((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t));
+            }
+        }
+        Some(Self::from_contour(
+            WrapContour {
+                points: sampled,
+                reach,
+            },
+            WrapKind::Around,
+            side,
+        ))
+    }
+
     /// A contour wrap's zone: its bounds are the outline's grown by the
     /// reach.
     fn from_contour(contour: WrapContour, kind: WrapKind, side: WrapSide) -> Self {

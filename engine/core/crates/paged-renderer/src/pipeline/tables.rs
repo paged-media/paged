@@ -169,11 +169,17 @@ fn emit_table(
         TablePlace::Chain { .. } => None,
     };
     let chain_len = if nested.is_some() { 1 } else { em.chain.len() };
-    let col_widths: Vec<f32> = table
-        .columns
-        .iter()
-        .map(|c| c.single_column_width.unwrap_or(0.0))
-        .collect();
+    // Engine ADR 1025 — a Word table's columns fit their content.
+    let room = match place {
+        TablePlace::Chain { .. } => em
+            .region_widths
+            .get(em.frame_idx)
+            .copied()
+            .or(em.column_width_pt)
+            .map(|w| w - table.word.as_ref().map_or(0.0, |t| t.indent)),
+        TablePlace::Nested { .. } => None,
+    };
+    let col_widths: Vec<f32> = word_column_widths(em, table, room);
     let mut col_x: Vec<f32> = Vec::with_capacity(col_widths.len() + 1);
     let mut acc = 0.0f32;
     col_x.push(0.0);
@@ -240,6 +246,9 @@ fn emit_table(
         /// original header dividers). Not read by current emission.
         #[allow(dead_code)]
         kind: RowKind,
+        /// Engine ADR 1025 — a piece of a split row: its index into
+        /// `segments`, which holds each cell's content window.
+        seg: Option<usize>,
     }
     let frame_basis_for = |chain_idx: usize, x_shift: f32| -> (f32, f32, f32, f32, usize) {
         if let Some((left, top, page)) = nested {
@@ -276,7 +285,14 @@ fn emit_table(
             .or(em.column_width_pt)
             .unwrap_or(0.0);
         let extent = total_w + border_off_left + outer_border_right_offset(table);
-        ((column - extent) * line_align).max(0.0)
+        // Engine ADR 1025 — a Word table stands `w:tblInd` in from its
+        // column's start when it is left-aligned (Word ignores the indent
+        // of a centred or right-aligned table).
+        let indent = match &table.word {
+            Some(w) if line_align == 0.0 => w.indent,
+            _ => 0.0,
+        };
+        ((column - extent) * line_align).max(0.0) + indent
     } else {
         0.0
     };
@@ -354,6 +370,7 @@ fn emit_table(
             table_left_pt: tab_left,
             row_top_in_page: frame_top_in_page + row_top_y_in_frame,
             kind: RowKind::Original,
+            seg: None,
         });
         row_top_y_in_frame += h;
         current_frame_last_bottom = frame_top_in_page + row_top_y_in_frame;
@@ -376,10 +393,95 @@ fn emit_table(
         .map(|a| a.grows_height())
         .unwrap_or(false);
     let mut overset_at: Option<usize> = None;
+    // Engine ADR 1025 — Word's rows split across frames: each piece's cell
+    // windows `((col, row), from, to)` in block coordinates.
+    let mut segments: Vec<Vec<((u32, u32), f32, f32)>> = Vec::new();
+    let row_cells: Vec<Vec<(u32, u32)>> = (0..total_rows)
+        .map(|r| {
+            table
+                .cells
+                .iter()
+                .filter_map(|c| c.coords())
+                .filter(|&(c, cr)| cr as usize == r && !covered.contains(&(c, cr)))
+                .collect()
+        })
+        .collect();
+    let splittable = |r: usize| -> bool {
+        nested.is_none()
+            && table.word.as_ref().is_some_and(|w| w.row_splits(r))
+            && table
+                .rows
+                .get(r)
+                .is_none_or(|row| row.auto_grow != Some(false))
+            && !table.cells.iter().any(|c| {
+                let Some((_, sr)) = c.coords() else {
+                    return false;
+                };
+                let span = c.row_span.max(1) as usize;
+                span > 1 && (sr as usize) <= r && r < sr as usize + span
+            })
+    };
     // How many BODY rows this frame took. A frame that holds none draws
     // nothing at all, headers included — see `body_placed_in_frame`
     // below.
     let mut body_placed_in_frame = 0usize;
+    // Close this frame (replayed footers, its extent) and open the next
+    // chain frame (replayed headers) — the split row's frame advance.
+    macro_rules! advance_frame {
+        () => {{
+            body_placed_in_frame = 0;
+            if repeating_footer {
+                for fr in (total_rows - footer_count)..total_rows {
+                    let fh = row_heights[fr];
+                    physical_rows.push(PhysicalRow {
+                        template_idx: fr,
+                        height: fh,
+                        chain_idx,
+                        target_page,
+                        table_left_pt: tab_left,
+                        row_top_in_page: frame_top_in_page + row_top_y_in_frame,
+                        kind: RowKind::FooterReplay,
+                        seg: None,
+                    });
+                    row_top_y_in_frame += fh;
+                    current_frame_last_bottom = frame_top_in_page + row_top_y_in_frame;
+                }
+            }
+            frame_extents.push((
+                chain_idx,
+                target_page,
+                tab_left,
+                current_frame_first_top,
+                current_frame_last_bottom,
+            ));
+            chain_idx += 1;
+            let (l, ftop, h_next, ti, tp) = frame_basis_for(chain_idx, line_shift);
+            tab_left = l + border_off_left;
+            frame_top_in_page = ftop;
+            frame_height = h_next;
+            target_page = tp;
+            row_top_y_in_frame = ti + border_off_top;
+            current_frame_first_top = frame_top_in_page + row_top_y_in_frame;
+            placed_in_frame = 0;
+            if repeating_header {
+                for hr in 0..header_count {
+                    let hh = row_heights[hr];
+                    physical_rows.push(PhysicalRow {
+                        template_idx: hr,
+                        height: hh,
+                        chain_idx,
+                        target_page,
+                        table_left_pt: tab_left,
+                        row_top_in_page: frame_top_in_page + row_top_y_in_frame,
+                        kind: RowKind::HeaderReplay,
+                        seg: None,
+                    });
+                    row_top_y_in_frame += hh;
+                    placed_in_frame += 1;
+                }
+            }
+        }};
+    }
     for r in body_range.clone() {
         let h = row_heights[r];
         // `KeepWithNextRow`: a row that starts a run of kept rows (it
@@ -448,6 +550,80 @@ fn emit_table(
                 }
             }
         }
+        // Engine ADR 1025 — a Word row that does not fit the rest of its
+        // frame splits there: each cell keeps the lines that fit, and
+        // continues with the next in the next frame, under the replayed
+        // headers. A row whose cells have nothing that fits waits for the
+        // next frame (an empty frame takes at least one line of each).
+        if start_to.is_none()
+            && splittable(r)
+            && row_top_y_in_frame + h + footer_reserved_h + under(r) > frame_height
+        {
+            let mut cuts: Vec<((u32, u32), f32)> = row_cells[r].iter().map(|k| (*k, 0.0)).collect();
+            let floor = table.rows.get(r).map_or(0.0, row_floor_pt);
+            let mut used = 0.0f32;
+            loop {
+                let room = frame_height - row_top_y_in_frame - footer_reserved_h - under(r);
+                let force = placed_in_frame == 0;
+                let mut pieces = Vec::with_capacity(cuts.len());
+                let (mut seg_h, mut any, mut more) = (0.0f32, false, false);
+                for (k, cut) in cuts.iter_mut() {
+                    let Some((block, ins)) = cell_blocks.get(k) else {
+                        continue;
+                    };
+                    let (next, rest) = block.advance(*cut, room - ins.top - ins.bottom, force);
+                    if next > *cut {
+                        any = true;
+                        seg_h = seg_h.max(ins.top + (next - *cut) + ins.bottom);
+                    }
+                    more |= rest;
+                    pieces.push((*k, *cut, next));
+                    *cut = next;
+                }
+                let can_advance = chain_idx + 1 < chain_len;
+                if !any && more {
+                    if can_advance {
+                        advance_frame!();
+                        continue;
+                    }
+                    overset_at = Some(r);
+                    break;
+                }
+                if !more {
+                    seg_h = seg_h.max(floor - used);
+                }
+                segments.push(pieces);
+                physical_rows.push(PhysicalRow {
+                    template_idx: r,
+                    height: seg_h,
+                    chain_idx,
+                    target_page,
+                    table_left_pt: tab_left,
+                    row_top_in_page: frame_top_in_page + row_top_y_in_frame,
+                    kind: RowKind::Original,
+                    seg: Some(segments.len() - 1),
+                });
+                row_top_y_in_frame += seg_h;
+                current_frame_last_bottom = frame_top_in_page + row_top_y_in_frame;
+                placed_in_frame += 1;
+                body_placed_in_frame += 1;
+                used += seg_h;
+                if !more {
+                    break;
+                }
+                if !can_advance {
+                    if !last_frame_grows_height {
+                        overset_at = Some(r);
+                    }
+                    break;
+                }
+                advance_frame!();
+            }
+            if overset_at.is_some() {
+                break;
+            }
+            continue;
+        }
         // A row never splits: one that does not fit moves to the next
         // frame, and one that fits no frame is overset with everything
         // after it (InDesign, 2026-10-02, `tables-rows` page 9: a 179 pt
@@ -504,6 +680,7 @@ fn emit_table(
                             table_left_pt: tab_left,
                             row_top_in_page: frame_top_in_page + row_top_y_in_frame,
                             kind: RowKind::FooterReplay,
+                            seg: None,
                         });
                         row_top_y_in_frame += fh;
                         current_frame_last_bottom = frame_top_in_page + row_top_y_in_frame;
@@ -542,6 +719,7 @@ fn emit_table(
                         table_left_pt: tab_left,
                         row_top_in_page: frame_top_in_page + row_top_y_in_frame,
                         kind: RowKind::HeaderReplay,
+                        seg: None,
                     });
                     row_top_y_in_frame += hh;
                     placed_in_frame += 1;
@@ -562,6 +740,7 @@ fn emit_table(
             table_left_pt: tab_left,
             row_top_in_page: frame_top_in_page + row_top_y_in_frame,
             kind: RowKind::Original,
+            seg: None,
         });
         row_top_y_in_frame += h;
         current_frame_last_bottom = frame_top_in_page + row_top_y_in_frame;
@@ -612,6 +791,7 @@ fn emit_table(
             table_left_pt: tab_left,
             row_top_in_page: frame_top_in_page + row_top_y_in_frame,
             kind: RowKind::Original,
+            seg: None,
         });
         row_top_y_in_frame += h;
         current_frame_last_bottom = frame_top_in_page + row_top_y_in_frame;
@@ -1131,7 +1311,17 @@ fn emit_table(
             //     inside a paragraph — that would distort leading); with
             //     fewer than two there is nothing to distribute: Top.
             //   * TopAlign / absent → no shift.
-            let (used_h, overset) = block.fitted(inner_h);
+            // Engine ADR 1025 — a piece of a split row draws the window of
+            // the cell's content it holds.
+            let window = prow
+                .seg
+                .and_then(|s| segments.get(s))
+                .and_then(|pieces| pieces.iter().find(|(k, _, _)| *k == (c as u32, r as u32)))
+                .map(|&(_, lo, hi)| (lo, hi));
+            let (used_h, overset) = match window {
+                Some(_) => (0.0, false),
+                None => block.fitted(inner_h),
+            };
             if overset {
                 cell_overset = true;
                 if let Some(a) = &cell_addr_base {
@@ -1141,7 +1331,10 @@ fn emit_table(
                     }
                 }
             }
-            let fitting_items = block.fitting_items(inner_h);
+            let fitting_items = match window {
+                Some(_) => block.items.len(),
+                None => block.fitting_items(inner_h),
+            };
             let cell_vjust = cell
                 .vertical_justification
                 .as_deref()
@@ -1169,8 +1362,15 @@ fn emit_table(
                         index,
                         origin,
                         by_leading,
-                        ..
+                        baselines,
                     } => {
+                        let (lo, hi) = window.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
+                        if !baselines.iter().any(|b| {
+                            *b > lo + CELL_FIT_EPSILON_PT && *b <= hi + CELL_FIT_EPSILON_PT
+                        }) {
+                            continue;
+                        }
+                        let up = if window.is_some() { lo } else { 0.0 };
                         // ADR 182 — a tagged PDF sets the cell's paragraphs
                         // as the cells of a table (top-level tables only).
                         if nested.is_none() {
@@ -1190,12 +1390,17 @@ fn emit_table(
                             target_page,
                             (inner_left, inner_top),
                             inner_w,
-                            origin + shift,
+                            origin + shift - up,
                             pages,
                             total_stats,
                             cell_addr_base.as_ref().map(|addr| (addr, *index as u32)),
                             *by_leading,
-                            inner_h - origin,
+                            if window.is_some() {
+                                hi - origin
+                            } else {
+                                inner_h - origin
+                            },
+                            lo - origin,
                             block.first_baseline,
                         );
                         if nested.is_none() {
@@ -1204,7 +1409,14 @@ fn emit_table(
                     }
                     // A table nested in the cell, at its measured top (ADR
                     // 176); further nesting recurses.
-                    CellItem::Table { table, top, .. } => {
+                    CellItem::Table { table, top, height } => {
+                        let (lo, hi) = window.unwrap_or((f32::NEG_INFINITY, f32::INFINITY));
+                        if *top < lo - CELL_FIT_EPSILON_PT
+                            || top + height > hi + CELL_FIT_EPSILON_PT
+                        {
+                            continue;
+                        }
+                        let top = &(top - if window.is_some() { lo } else { 0.0 });
                         emit_nested_table(
                             em,
                             table,
@@ -2201,8 +2413,8 @@ fn measure_nested_table_height(em: &StoryEmitter, table: &paged_model::Table) ->
         return 0.0;
     }
     let mut col_x = vec![0.0f32];
-    for c in &table.columns {
-        col_x.push(col_x.last().copied().unwrap_or(0.0) + c.single_column_width.unwrap_or(0.0));
+    for w in word_column_widths(em, table, None) {
+        col_x.push(col_x.last().copied().unwrap_or(0.0) + w);
     }
     let resolved_table = table
         .applied_table_style
@@ -2335,6 +2547,33 @@ impl CellBlock<'_> {
         (bottom, false)
     }
 
+    /// Engine ADR 1025 — where a piece of a split row ends in this cell:
+    /// from `cut` (block coordinates, the last baseline the piece before
+    /// drew), the lines (and whole nested tables) that fit in `avail`, in
+    /// order; with `force`, at least the first. Returns the new cut and
+    /// whether anything is left after it.
+    fn advance(&self, cut: f32, avail: f32, force: bool) -> (f32, bool) {
+        let marks = self.items.iter().flat_map(|item| match item {
+            CellItem::Text { baselines, .. } => baselines.clone(),
+            CellItem::Table { top, height, .. } => vec![top + height],
+        });
+        let mut next = cut;
+        let mut stopped = false;
+        let mut more = false;
+        for m in marks {
+            if m <= cut + CELL_FIT_EPSILON_PT {
+                continue;
+            }
+            if !stopped && (m - cut <= avail + CELL_FIT_EPSILON_PT || (force && next == cut)) {
+                next = m;
+            } else {
+                stopped = true;
+                more = true;
+            }
+        }
+        (next, more)
+    }
+
     /// The items whose first line (or whole table) fits in `avail`.
     fn fitting_items(&self, avail: f32) -> usize {
         self.items
@@ -2399,7 +2638,9 @@ fn plan_cell_block<'t>(
         let blank = !paragraph
             .runs
             .iter()
-            .any(|r| r.text.chars().any(|c| c != ' ' && c != '\n'));
+            .any(|r| r.text.chars().any(|c| c != ' ' && c != '\n'))
+            // Engine ADR 1050: a picture alone in its paragraph is its line.
+            && !paragraph.anchored_frames.iter().any(anchored::sits_in_line);
         let stand_in;
         let measured = if blank {
             let mut run = paragraph.runs.first().cloned().unwrap_or_default();
@@ -2587,10 +2828,33 @@ fn measure_cell_paragraph(
     by_leading: bool,
     first_baseline: CellFirstBaseline,
 ) -> Vec<f32> {
+    cell_paragraph_layout(em, paragraph, column_width_pt, by_leading, first_baseline)
+        .map(|(laid_out, _)| {
+            laid_out
+                .lines
+                .iter()
+                .map(|l| l.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A cell paragraph laid out as [`emit_cell_paragraph`] lays it out, and
+/// the text its glyphs' clusters index (pictures as placeholders).
+fn cell_paragraph_layout(
+    em: &StoryEmitter,
+    paragraph: &paged_model::Paragraph,
+    column_width_pt: f32,
+    by_leading: bool,
+    first_baseline: CellFirstBaseline,
+) -> Option<(paged_text::layout::LaidOutParagraph, String)> {
+    // Engine ADR 1050 — a picture in the cell is a character of its line.
+    let with_objects = cell_with_objects(paragraph);
+    let paragraph = with_objects.as_ref().map_or(paragraph, |(p, _, _)| p);
     // A cell paragraph takes its nested styles as a body one does.
     let paragraph = &*with_nested_styles(em.document, paragraph);
     if column_width_pt <= 0.0 || paragraph.runs.is_empty() {
-        return Vec::new();
+        return None;
     }
     let resolved_runs: Vec<paged_scene::ResolvedRunAttrs> = paragraph
         .runs
@@ -2601,7 +2865,7 @@ fn measure_cell_paragraph(
     // (family, style) doesn't resolve — keeps height-measurement
     // honest even when one cell run references an absent font.
     let Some(resolved_fonts) = em.font_table.resolve_paragraph_bytes(&resolved_runs) else {
-        return Vec::new();
+        return None;
     };
     let (bytes_pool, substituted_flags): (Vec<Bytes>, Vec<bool>) =
         resolved_fonts.into_iter().unzip();
@@ -2637,7 +2901,7 @@ fn measure_cell_paragraph(
             .is_none()
         {
             let Some(mut rf) = paged_text::Face::from_bytes(&bytes_pool[i], 0) else {
-                return Vec::new();
+                return None;
             };
             let has_wght_axis = rf
                 .variation_axes()
@@ -2758,12 +3022,22 @@ fn measure_cell_paragraph(
         by_leading,
         first_baseline,
     );
-    let laid_out = paged_text::cache::layout_runs_cached(&styled_runs, &lopts);
-    laid_out
-        .lines
-        .iter()
-        .map(|l| l.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION)
-        .collect()
+    if let Some((_, objects, _)) = &with_objects {
+        lopts.object_advances = object_advances_64(objects);
+    }
+    let mut laid_out = paged_text::cache::layout_runs_cached(&styled_runs, &lopts);
+    if let Some((_, objects, bytes)) = &with_objects {
+        shift_cell_object_lines(
+            &mut laid_out.lines,
+            bytes,
+            objects,
+            cell_lines_grow(&resolved_runs, &resolved_paragraph),
+            paragraph_size,
+            by_leading,
+        );
+    }
+    let text: String = styled_runs.iter().map(|r| r.text).collect();
+    Some((laid_out, text))
 }
 
 /// Lay out and emit a single cell paragraph at `(origin_pt.0,
@@ -2798,9 +3072,39 @@ pub(super) fn emit_cell_paragraph(
     // line below it is overset and not drawn, as InDesign draws none of
     // a cell's overset text.
     max_baseline_pt: f32,
+    // Engine ADR 1025 — the lines at or above it (below the origin) were
+    // drawn in the piece of the row before; `NEG_INFINITY` for none.
+    min_baseline_pt: f32,
     // The cell's first-baseline settings.
     first_baseline: CellFirstBaseline,
 ) {
+    // Engine ADR 1050 — a float in the cell stands against the cell (Word's
+    // layout in the cell); a paragraph holding nothing else draws it too.
+    let floats_here = paragraph
+        .anchored_frames
+        .iter()
+        .any(|af| !anchored::sits_in_line(af));
+    let cell_box = (origin_pt.0, origin_pt.1, column_width_pt);
+    if floats_here && !paragraph.runs.iter().any(|r| !r.text.trim().is_empty()) {
+        let size = paragraph
+            .runs
+            .first()
+            .and_then(|r| em.document.resolved_run_attrs(paragraph, r).point_size)
+            .unwrap_or(em.options.default_point_size);
+        anchored::emit_cell_floats(
+            em,
+            paragraph,
+            target_page,
+            cell_box,
+            origin_pt.1 + paragraph_y + size * 0.8,
+            size,
+            pages,
+        );
+    }
+    // Engine ADR 1050 — a picture in the cell is a character of its line.
+    let with_objects = cell_with_objects(paragraph);
+    let source_paragraph = paragraph;
+    let paragraph = with_objects.as_ref().map_or(paragraph, |(p, _, _)| p);
     // A cell paragraph takes its nested styles as a body one does.
     let paragraph = &*with_nested_styles(em.document, paragraph);
     if column_width_pt <= 0.0 || paragraph.runs.is_empty() {
@@ -3012,6 +3316,9 @@ pub(super) fn emit_cell_paragraph(
         by_leading,
         first_baseline,
     );
+    if let Some((_, objects, _)) = &with_objects {
+        lopts.object_advances = object_advances_64(objects);
+    }
 
     // Engine ADR 1051 — a stated direction, set as in body text.
     let stated_bidi = super::direction::stated_bidi(
@@ -3023,6 +3330,16 @@ pub(super) fn emit_cell_paragraph(
     );
     lopts.bidi = stated_bidi.clone();
     let mut laid_out = paged_text::cache::layout_runs_cached(&styled_runs, &lopts);
+    if let Some((_, objects, bytes)) = &with_objects {
+        shift_cell_object_lines(
+            &mut laid_out.lines,
+            bytes,
+            objects,
+            cell_lines_grow(&resolved_runs, &resolved_paragraph),
+            paragraph_size,
+            by_leading,
+        );
+    }
     let left_64 = to_64(left_indent_pt);
     if left_64 != 0 || first_64 != 0 {
         for (i, line) in laid_out.lines.iter_mut().enumerate() {
@@ -3046,7 +3363,38 @@ pub(super) fn emit_cell_paragraph(
                 <= max_baseline_pt + CELL_FIT_EPSILON_PT
         })
         .count();
-    let lines = &laid_out.lines[..fitting];
+    // Engine ADR 1050 — the cell's pictures where their characters landed
+    // (an overset line's are not drawn), and their characters out of the
+    // lines: the model's text has none.
+    let skip = laid_out.lines[..fitting]
+        .iter()
+        .take_while(|l| {
+            l.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION
+                <= min_baseline_pt + CELL_FIT_EPSILON_PT
+        })
+        .count();
+    let mut placed_objects: Vec<(usize, f32, f32)> = Vec::new();
+    let placeholder_bytes: &[u32] = with_objects.as_ref().map_or(&[], |(_, _, b)| b);
+    if let Some((_, objects, bytes)) = &with_objects {
+        for line in laid_out.lines.iter_mut().take(fitting).skip(skip) {
+            for (k, b) in bytes.iter().enumerate() {
+                if let Some(g) = line.glyphs.iter().find(|g| g.cluster == *b) {
+                    let Some(o) = objects.objects.get(k) else {
+                        continue;
+                    };
+                    let x = g.x as f32 / paged_text::shape::ADVANCE_PRECISION;
+                    let baseline = line.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION;
+                    placed_objects.push((
+                        o.frame,
+                        x + o.stroke_half,
+                        baseline - o.y_offset - o.height + o.stroke_half,
+                    ));
+                }
+            }
+            line.glyphs.retain(|g| !bytes.contains(&g.cluster));
+        }
+    }
+    let lines = &laid_out.lines[skip..fitting];
     if lines.is_empty() {
         return;
     }
@@ -3134,7 +3482,7 @@ pub(super) fn emit_cell_paragraph(
                 last_cluster = Some(g.cluster);
                 let x_pt_page = cell_origin.0 + g.x as f32 / paged_text::shape::ADVANCE_PRECISION;
                 clusters.push(ClusterPos {
-                    byte: g.cluster,
+                    byte: model_byte(placeholder_bytes, g.cluster),
                     x_pt: x_pt_page,
                     advance_pt: adv,
                 });
@@ -3149,11 +3497,36 @@ pub(super) fn emit_cell_paragraph(
                 baseline_y_pt: cell_origin.1 + baseline_pt_local,
                 ascent_pt: 0.8 * line_h_pt,
                 descent_pt: 0.2 * line_h_pt,
-                byte_range: line.byte_range.start as u32..line.byte_range.end as u32,
+                byte_range: model_byte(placeholder_bytes, line.byte_range.start as u32)
+                    ..model_byte(placeholder_bytes, line.byte_range.end as u32),
                 clusters,
                 marker: Vec::new(),
             });
         }
+    }
+
+    for &(frame, x, y) in &placed_objects {
+        if let Some(af) = source_paragraph.anchored_frames.get(frame) {
+            anchored::emit_one_anchored_frame(
+                em,
+                af,
+                target_page,
+                cell_origin.0 + x,
+                cell_origin.1 + y,
+                pages,
+            );
+        }
+    }
+    if floats_here && skip == 0 {
+        anchored::emit_cell_floats(
+            em,
+            source_paragraph,
+            target_page,
+            cell_box,
+            cell_origin.1 + lines[0].baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION,
+            paragraph_size,
+            pages,
+        );
     }
 
     let list = &mut pages[target_page].list;
@@ -3216,4 +3589,240 @@ pub(super) fn emit_cell_paragraph(
     pages[target_page].stats.runs += paragraph.runs.len();
     pages[target_page].stats.glyphs += glyph_count;
     pages[target_page].stats.lines += lines.len();
+}
+
+/// Engine ADR 1025 — a table's column widths. InDesign's (and a fixed Word
+/// table's) are its columns' own; a column without one takes its cells'
+/// preferred width. An autofit Word table fits them to its content: the
+/// table's width is `w:tblW` (points, or a percentage of `room`, scaling
+/// the columns), and a column narrower than its content's longest
+/// unbreakable piece (a word, a picture; the cell's insets added) grows to
+/// it, the room coming from the columns with some to spare. Word saved its
+/// own autofit result in the grid, so a table that fits keeps it.
+fn word_column_widths(
+    em: &StoryEmitter,
+    table: &paged_model::Table,
+    room: Option<f32>,
+) -> Vec<f32> {
+    let declared: Vec<f32> = table
+        .columns
+        .iter()
+        .map(|c| c.single_column_width.unwrap_or(0.0))
+        .collect();
+    let Some(word) = &table.word else {
+        return declared;
+    };
+    let n = declared.len();
+    let total_room = room.unwrap_or_else(|| declared.iter().sum());
+    let resolve = |w: paged_model::TableWidth, of: f32| match w {
+        paged_model::TableWidth::Points(p) => Some(p),
+        paged_model::TableWidth::Percent(p) => Some(of * p / 100.0),
+        paged_model::TableWidth::Auto => None,
+    };
+    let table_w = word.width.and_then(|w| resolve(w, total_room));
+    let mut widths = declared.clone();
+    for (c, w) in widths.iter_mut().enumerate() {
+        if *w <= 0.0 {
+            *w = word
+                .cell_widths
+                .iter()
+                .filter(|cw| cw.col as usize == c)
+                .filter_map(|cw| resolve(cw.width, table_w.unwrap_or(total_room)))
+                .fold(0.0, f32::max);
+        }
+    }
+    if !word.autofit {
+        return widths;
+    }
+    // Content: the longest unbreakable piece and the whole line, per column.
+    let mut mins = vec![0.0f32; n];
+    let mut maxs = vec![0.0f32; n];
+    for cell in &table.cells {
+        let Some((c, _)) = cell.coords() else {
+            continue;
+        };
+        if cell.column_span.max(1) != 1 || c as usize >= n {
+            continue;
+        }
+        let pad = cell.text_left_inset + cell.text_right_inset;
+        for p in &cell.paragraphs {
+            if p.table.is_some() {
+                continue;
+            }
+            if let Some((min, max)) = cell_paragraph_widths(em, p) {
+                mins[c as usize] = mins[c as usize].max(min + pad);
+                maxs[c as usize] = maxs[c as usize].max(max + pad);
+            }
+        }
+    }
+    // A column with no width of any kind takes its content's whole line.
+    for c in 0..n {
+        if widths[c] <= 0.0 {
+            widths[c] = maxs[c].max(mins[c]);
+        }
+    }
+    let sum: f32 = widths.iter().sum();
+    if let Some(target) = table_w.filter(|t| *t > 0.0 && sum > 0.0) {
+        let k = target / sum;
+        for w in &mut widths {
+            *w *= k;
+        }
+    }
+    // Columns narrower than their content grow; the others give way, down
+    // to their own content.
+    let deficit: f32 = (0..n).map(|c| (mins[c] - widths[c]).max(0.0)).sum();
+    if deficit > 0.0 {
+        let spare: f32 = (0..n)
+            .filter(|&c| widths[c] > mins[c])
+            .map(|c| widths[c] - mins[c])
+            .sum();
+        let take = deficit.min(spare);
+        for c in 0..n {
+            if widths[c] < mins[c] {
+                widths[c] = mins[c];
+            } else if spare > 0.0 {
+                widths[c] -= (widths[c] - mins[c]) * take / spare;
+            }
+        }
+    }
+    widths
+}
+
+/// The width of a cell paragraph's longest unbreakable piece (a word, a
+/// picture) and of its text set on one line, in pt.
+fn cell_paragraph_widths(
+    em: &StoryEmitter,
+    paragraph: &paged_model::Paragraph,
+) -> Option<(f32, f32)> {
+    let (laid_out, text) = cell_paragraph_layout(
+        em,
+        paragraph,
+        100_000.0,
+        false,
+        CellFirstBaseline::default(),
+    )?;
+    let to_pt = |v: i32| v as f32 / paged_text::shape::ADVANCE_PRECISION;
+    let mut min = 0.0f32;
+    let mut max = 0.0f32;
+    for line in &laid_out.lines {
+        max = max.max(to_pt(line.width));
+        let mut start: Option<i32> = None;
+        let mut end = 0i32;
+        for g in &line.glyphs {
+            let space = text[g.cluster as usize..]
+                .chars()
+                .next()
+                .is_some_and(char::is_whitespace);
+            if space {
+                if let Some(s) = start.take() {
+                    min = min.max(to_pt(end - s));
+                }
+            } else {
+                start.get_or_insert(g.x);
+                end = g.x + g.x_advance;
+            }
+        }
+        if let Some(s) = start {
+            min = min.max(to_pt(end - s));
+        }
+    }
+    Some((min, max))
+}
+
+/// Engine ADR 1050 — a cell paragraph with one placeholder character per
+/// in-line object (a picture in a table cell), the objects, and each
+/// placeholder's byte in the placeholder text. `None` without one.
+fn cell_with_objects(
+    paragraph: &paged_model::Paragraph,
+) -> Option<(paged_model::Paragraph, anchored::InlineObjects, Vec<u32>)> {
+    let (with, objects) = anchored::with_object_placeholders(paragraph)?;
+    let mut bytes = Vec::with_capacity(objects.objects.len());
+    let mut at = 0u32;
+    for run in &with.runs {
+        for (i, c) in run.text.char_indices() {
+            if c == paged_text::layout::OBJECT_REPLACEMENT {
+                bytes.push(at + i as u32);
+            }
+        }
+        at += run.text.len() as u32;
+    }
+    Some((with, objects, bytes))
+}
+
+/// The width each in-line object takes in its line, 1/64 pt.
+fn object_advances_64(objects: &anchored::InlineObjects) -> Vec<i32> {
+    objects
+        .objects
+        .iter()
+        .map(|o| (o.width * paged_text::shape::ADVANCE_PRECISION).round() as i32)
+        .collect()
+}
+
+/// A byte of the placeholder text as a byte of the model's: every
+/// placeholder before it is a character the model does not hold.
+fn model_byte(placeholders: &[u32], byte: u32) -> u32 {
+    let before = placeholders.iter().filter(|&&p| p < byte).count() as u32;
+    byte.saturating_sub(before * paged_text::layout::OBJECT_REPLACEMENT.len_utf8() as u32)
+}
+
+/// Whether a cell paragraph's lines grow to hold a picture: under auto
+/// leading (InDesign) and under Word's first-fit, whose lines always make
+/// room for a picture; a fixed InDesign leading holds and the picture
+/// overlaps the line above.
+fn cell_lines_grow(
+    resolved_runs: &[paged_scene::ResolvedRunAttrs],
+    resolved_paragraph: &paged_scene::ResolvedParagraphAttrs,
+) -> bool {
+    resolved_runs.first().and_then(|r| r.leading).is_none()
+        || resolved_paragraph
+            .composer
+            .as_ref()
+            .is_some_and(|c| c.is_word_first_fit())
+}
+
+/// Engine ADR 1050 — move a cell paragraph's lines down to make room for
+/// their pictures, as a body line does (`anchored::line_object_shift`): a
+/// paragraph's first line set from its ascent stands at least the picture's
+/// rise below the paragraph's top; a later line (or a first one set one
+/// leading below the paragraph before) at least the rise and a fifth of the
+/// size below the line above, when its lines grow (`grow`). Every line after
+/// a moved one moves with it.
+fn shift_cell_object_lines(
+    lines: &mut [paged_text::layout::LaidOutLine],
+    bytes: &[u32],
+    objects: &anchored::InlineObjects,
+    grow: bool,
+    point_size: f32,
+    by_leading: bool,
+) {
+    let to_64 = |pt: f32| (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+    let original: Vec<i32> = lines.iter().map(|l| l.baseline_y).collect();
+    let mut moved = 0i32;
+    for (k, line) in lines.iter_mut().enumerate() {
+        let rise = bytes
+            .iter()
+            .zip(&objects.objects)
+            .filter(|(b, _)| line.byte_range.contains(&(**b as usize)))
+            .map(|(_, o)| to_64(o.rise()))
+            .max();
+        if let Some(rise) = rise {
+            let below = to_64(0.2 * point_size);
+            let (need, have) = match k {
+                0 if !by_leading => (rise, original[0]),
+                0 => (if grow { rise + below } else { 0 }, original[0]),
+                _ => (
+                    if grow { rise + below } else { 0 },
+                    original[k] - original[k - 1],
+                ),
+            };
+            moved += (need - have).max(0);
+        }
+        if moved != 0 {
+            line.baseline_y += moved;
+            line.baseline_exact += moved as f64;
+            for g in &mut line.glyphs {
+                g.y += moved;
+            }
+        }
+    }
 }

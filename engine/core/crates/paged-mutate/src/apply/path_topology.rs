@@ -1701,8 +1701,10 @@ pub(super) fn find_table_mut<'a>(
     story_id: &str,
     table_id: &str,
 ) -> Option<&'a mut paged_model::Table> {
-    let (si, pi) = find_table_pos(doc, story_id, table_id)?;
-    doc.stories[si].story.paragraphs[pi].table.as_mut()
+    // Engine ADR 1050: a table nested in a cell is addressed by its own
+    // id as a top-level one is.
+    let si = doc.stories.iter().position(|s| s.self_id == story_id)?;
+    paged_model::table_in_mut(&mut doc.stories[si].story.paragraphs, table_id)
 }
 
 /// S-03 — create a `<Table>` inside a story. The table-CREATE op
@@ -1735,7 +1737,13 @@ pub(super) fn apply_insert_table(
             child_kind: "Table".to_string(),
         });
     };
-    let NodeSpec::Table { self_id, .. } = spec else {
+    let NodeSpec::Table {
+        self_id,
+        cell,
+        cell_paragraph,
+        ..
+    } = spec
+    else {
         unreachable!("apply_insert_table dispatched on a non-Table NodeSpec");
     };
     let table_id = self_id.clone();
@@ -1746,17 +1754,16 @@ pub(super) fn apply_insert_table(
 
     // Table ids must be unique within the document (the IDML `Self`
     // invariant). Reject a collision rather than silently shadowing.
-    if find_table_pos(doc, story_id, &table_id).is_some() {
-        return Err(OperationError::DuplicateNodeId {
-            id: table_id.clone(),
-        });
-    }
-
     let si = doc
         .stories
         .iter()
         .position(|s| s.self_id == *story_id)
         .ok_or_else(|| OperationError::NodeNotFound(parent.clone()))?;
+    if paged_model::table_in(&doc.stories[si].story.paragraphs, &table_id).is_some() {
+        return Err(OperationError::DuplicateNodeId {
+            id: table_id.clone(),
+        });
+    }
 
     let table = spec.to_parse_table();
     let op = Operation::InsertNode {
@@ -1765,6 +1772,57 @@ pub(super) fn apply_insert_table(
         node: spec.clone(),
         z_slot: None,
     };
+    // Engine ADR 1050 — a table nested in a cell: it takes the cell's last
+    // paragraph when that is empty (a fresh cell's), else a fresh paragraph
+    // after the cell's content. The inverse puts the whole story back.
+    if let Some(addr) = cell {
+        let before = serde_json::to_string(&doc.stories[si]).expect("a parsed story serializes");
+        let paragraphs = paged_model::cell_paragraphs_in_mut(
+            &mut doc.stories[si].story.paragraphs,
+            &addr.table_id,
+            addr.col,
+            addr.row,
+        )
+        .ok_or_else(|| {
+            OperationError::NodeNotFound(NodeId::Table {
+                story_id: story_id.clone(),
+                table_id: addr.table_id.clone(),
+            })
+        })?;
+        let fresh = |table| paged_model::Paragraph {
+            table: Some(table),
+            ..Default::default()
+        };
+        match cell_paragraph {
+            Some(i) => {
+                let i = (*i as usize).min(paragraphs.len());
+                match paragraphs.get_mut(i).filter(|p| is_empty_paragraph(p)) {
+                    Some(p) => p.table = Some(table),
+                    None => paragraphs.insert(i, fresh(table)),
+                }
+            }
+            None => match paragraphs.last_mut().filter(|p| is_empty_paragraph(p)) {
+                Some(last) => last.table = Some(table),
+                None => paragraphs.push(fresh(table)),
+            },
+        }
+        let invalidation = reflow_hint_for_story(doc, story_id);
+        return Ok(AppliedOperation {
+            op,
+            inverse: Operation::Batch {
+                ops: vec![
+                    Operation::RemoveStory {
+                        story_id: story_id.clone(),
+                    },
+                    Operation::RestoreStory {
+                        position: si,
+                        story_json: before,
+                    },
+                ],
+            },
+            invalidation,
+        });
+    }
     // The table goes where the insertion point at the story's end is.
     // When the last paragraph is empty — a fresh frame's story is one
     // empty paragraph — that is its line, and InDesign sets the table
@@ -2109,6 +2167,8 @@ pub(super) fn apply_set_row_height(
     table_id: &str,
     row: u32,
     height: Option<f32>,
+    auto_grow: Option<bool>,
+    clear_auto_grow: bool,
 ) -> Result<AppliedOperation, OperationError> {
     let node = NodeId::Table {
         story_id: story_id.to_string(),
@@ -2127,6 +2187,14 @@ pub(super) fn apply_set_row_height(
         })?;
     let prev = tr.single_row_height;
     tr.single_row_height = height;
+    // Engine ADR 1025 — whether the row grows from that height.
+    let prev_grow = tr.auto_grow;
+    if clear_auto_grow {
+        tr.auto_grow = None;
+    } else if auto_grow.is_some() {
+        tr.auto_grow = auto_grow;
+    }
+    let touched_grow = clear_auto_grow || auto_grow.is_some();
 
     let invalidation = reflow_hint_for_story(doc, story_id);
     Ok(AppliedOperation {
@@ -2135,12 +2203,16 @@ pub(super) fn apply_set_row_height(
             table_id: table_id.to_string(),
             row,
             height,
+            auto_grow,
+            clear_auto_grow,
         },
         inverse: Operation::SetRowHeight {
             story_id: story_id.to_string(),
             table_id: table_id.to_string(),
             row,
             height: prev,
+            auto_grow: prev_grow.filter(|_| touched_grow),
+            clear_auto_grow: touched_grow && prev_grow.is_none(),
         },
         invalidation,
     })

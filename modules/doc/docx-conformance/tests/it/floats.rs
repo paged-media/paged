@@ -129,15 +129,22 @@ fn the_lowered_ir_carries_the_float_in_points_and_places_it__feat__plugin_doc_re
     assert_eq!(wrap.side.as_deref(), Some("BothSides"));
     assert!(matches!(f1.item, LoweredItemKind::Picture { .. }));
 
-    // F2, top and bottom: a band of its own above its anchor line, centred
-    // as Word centres it on the margin, Word's distance below it.
+    // F2, top and bottom: custom at Word's position, centred as Word centres
+    // it on the margin, and the text jumps it (engine ADR 1050), Word's
+    // distance below it.
     let f2 = &p[1].images[0];
     let a2 = f2.anchor.as_ref().expect("anchored");
     assert_eq!(
         (a2.position.as_str(), a2.horizontal_alignment.as_str()),
-        ("AbovePosition", "CenterAlign")
+        ("Anchored", "CenterAlign")
     );
-    assert_eq!(a2.y_offset_pt, 4.0);
+    let w2 = f2
+        .layout
+        .as_ref()
+        .and_then(|l| l.wrap.as_ref())
+        .expect("wraps");
+    assert_eq!(w2.mode, "JumpObjectTextWrap");
+    assert_eq!(w2.offsets_pt[2], 4.0);
     assert_eq!(f2.at, 0, "at its paragraph's start");
     let f = f2.float.as_ref().expect("the float is carried");
     assert_eq!(f.wrap, "wrapTopAndBottom");
@@ -226,19 +233,22 @@ fn every_floating_picture_is_counted_in_a_diagnostic__feat__plugin_doc_read_path
             .find(|m| m.contains(needle))
             .unwrap_or_else(|| panic!("no diagnostic with {needle:?}: {msgs:#?}"))
     };
-    // F1 is a page item; F3, F4 and F5's float custom (F4 and F5 wrap in
-    // Word, which the anchored objects do not yet); F2 above its line.
+    // F1 is a page item; F2 to F5 and the float in a cell are anchored
+    // objects at Word's position, and four of them wrap the text as Word
+    // does (engine ADR 1050).
     assert!(find("placed as page items").contains("1 floating picture(s) and 0 text box(es)"));
     let custom = find("as anchored objects");
-    assert!(custom.contains("3 floating picture(s)"), "{custom}");
-    assert!(custom.contains("2 of them wrap text in Word"), "{custom}");
-    assert!(find("band of their own").starts_with("1 floating picture(s)"));
+    assert!(custom.contains("5 floating picture(s)"), "{custom}");
+    assert!(
+        custom.contains("4 of them wrap the text as Word does"),
+        "{custom}"
+    );
     let cell = msgs
         .iter()
         .find(|m| m.contains("table cells"))
         .expect("the cell-picture diagnostic");
     assert!(
-        cell.contains("1 picture(s) in table cells (1 of them floating) are NOT shown"),
+        cell.contains("1 picture(s) in table cells shown in their cells (1 of them floating"),
         "{cell}"
     );
     let chart = msgs

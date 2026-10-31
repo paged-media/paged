@@ -256,6 +256,42 @@
                   "format": "uint32",
                   "minimum": 0,
                   "default": null
+                },
+                "kind": {
+                  "description": "Engine ADR 1050 (additive) — `text` makes an anchored TEXT frame\nwith a story of its own, minted with the frame (a batch handle\nbound to the frame names that story in a `storyId` position);\nabsent or `graphic`: the v52 graphic frame.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/AnchoredFrameInsertKind"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "layout": {
+                  "description": "Engine ADR 1050 (additive) — the object's text wrap (a\ncustom-positioned object wraps the lines of its story set after\nit), behind-text z-order, overlap and a text frame's insets.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/AnchoredLayoutSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "cell": {
+                  "description": "Engine ADR 1050 (additive) — anchor the frame in this table\ncell's paragraphs (a picture in a cell): `paragraph` and `offset`\nthen count the cell's paragraphs and characters. The cell's\n`tableId` may name a nested table.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextCellAddr"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -2189,6 +2225,14 @@
                   "default": null
                 },
                 "invert": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "clip": {
+                  "description": "Illustrator's Clip: `false` lets the area the artwork does not\npaint show the target. Absent is `true`. Additive (no bump).",
                   "type": [
                     "boolean",
                     "null"
@@ -6109,6 +6153,14 @@
                   ],
                   "format": "float",
                   "default": null
+                },
+                "autoGrow": {
+                  "description": "Engine ADR 1025 (additive) — `false` holds the row at exactly\n`height` (Word's `hRule=\"exact\"`), `true` lets it grow from it;\nabsent leaves it as it is.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -6526,6 +6578,40 @@
                     "format": "float"
                   },
                   "default": []
+                },
+                "cell": {
+                  "description": "Engine ADR 1050 (additive) — make the table in this cell (a\nnested table) instead of at the story's end: in the cell's last\nparagraph when that is empty, else in a new one after its\ncontent. The cell's `tableId` may itself name a nested table,\nas every cell address may.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextCellAddr"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "paragraph": {
+                  "description": "Engine ADR 1050 (additive) — with `cell`: the cell paragraph\n(0-based) the table takes when it is empty, else a new paragraph\ninserted at that index.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "word": {
+                  "description": "Engine ADR 1025 (additive) — lay the table out by Word's rules:\nrows split across frames, autofit columns, an indent.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/WordTableSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -6794,6 +6880,125 @@
           ],
           "additionalProperties": false
         }
+      ]
+    },
+    "AnchoredFrameInsertKind": {
+      "description": "Engine ADR 1050 — what [`Operation::InsertAnchoredFrame`] makes.",
+      "oneOf": [
+        {
+          "description": "A graphic frame (a rectangle, with the image when one is named).",
+          "type": "string",
+          "const": "graphic"
+        },
+        {
+          "description": "A text frame with its own story: a Word text box.",
+          "type": "string",
+          "const": "text"
+        }
+      ]
+    },
+    "AnchoredLayoutSpec": {
+      "description": "Engine ADR 1050 — how an anchored object stands among its story's\ntext (`paged_model::AnchoredLayout` on the wire).",
+      "type": "object",
+      "properties": {
+        "wrap": {
+          "description": "The wrap the object makes; a custom-positioned object only.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnchoredWrapSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "behindText": {
+          "description": "Drawn under its story's text (Word's `behindDoc`).",
+          "type": "boolean",
+          "default": false
+        },
+        "allowOverlap": {
+          "description": "`false`: moved down clear of the story's objects already on the\npage (Word's `allowOverlap=\"0\"`). Absent: may overlap.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "insets": {
+          "description": "A text frame's insets, `[top, left, bottom, right]` pt.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": null
+        },
+        "verticalJustification": {
+          "description": "A text frame's `VerticalJustification` (`TopAlign`,\n`CenterAlign`, `BottomAlign`).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "AnchoredWrapSpec": {
+      "description": "Engine ADR 1050 — the text wrap an anchored object makes.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "IDML's `TextWrapMode`: `BoundingBoxTextWrap`, `ContourTextWrap`,\n`JumpObjectTextWrap`, `NextColumnTextWrap` or `None`.",
+          "type": "string"
+        },
+        "offsets": {
+          "description": "`[top, left, bottom, right]` in pt: how far the text keeps away.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "side": {
+          "description": "IDML's `TextWrapSide` (`BothSides`, `LeftSide`, `RightSide`,\n`LargestArea`, …); absent: both sides.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "polygon": {
+          "description": "A contour wrap's outline, points in pt from the frame's top-left\n(Word's `wp:wrapPolygon`); empty: the frame's box.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "mode"
       ]
     },
     "PageId": {
@@ -11531,6 +11736,125 @@
           "type": "string",
           "const": "evenPage"
         }
+      ]
+    },
+    "WordTableSpec": {
+      "description": "Engine ADR 1025 — a table laid out by Word's rules\n(`paged_model::WordTableLayout` on the wire): rows split across frames\nunless listed in `cant_split_rows`, columns autofit their content when\n`autofit`, the table indented by `indent` pt.",
+      "type": "object",
+      "properties": {
+        "indent": {
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
+        "autofit": {
+          "type": "boolean",
+          "default": false
+        },
+        "width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TableWidthSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cellWidths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CellWidthSpec"
+          },
+          "default": []
+        },
+        "cantSplitRows": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "default": []
+        }
+      }
+    },
+    "TableWidthSpec": {
+      "description": "Engine ADR 1025 — a preferred width as Word states it (`w:tblW`, `w:tcW`).",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "type": "string",
+              "const": "auto"
+            }
+          },
+          "required": [
+            "unit"
+          ]
+        },
+        {
+          "description": "pt.",
+          "type": "object",
+          "properties": {
+            "unit": {
+              "type": "string",
+              "const": "points"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "unit",
+            "value"
+          ]
+        },
+        {
+          "description": "Percent of the room the table stands in (of the table, for a cell).",
+          "type": "object",
+          "properties": {
+            "unit": {
+              "type": "string",
+              "const": "percent"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "unit",
+            "value"
+          ]
+        }
+      ]
+    },
+    "CellWidthSpec": {
+      "description": "Engine ADR 1025 — one cell's preferred width.",
+      "type": "object",
+      "properties": {
+        "row": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "col": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "width": {
+          "$ref": "#/$defs/TableWidthSpec"
+        }
+      },
+      "required": [
+        "row",
+        "col",
+        "width"
       ]
     }
   }

@@ -1,7 +1,8 @@
 # ADR 614 — Floating objects and content controls
 
-- **Status:** Floating objects accepted 2026-10-29 (wave W4a). Content controls accepted
-  2026-10-30 (wave W4b, on engine ADR 1052).
+- **Status:** Floating objects accepted 2026-10-29 (wave W4a); amendment 1 accepted 2026-10-30
+  (wave W4, engine ADRs 1025 and 1050). Content controls accepted 2026-10-30 (wave W4b, on
+  engine ADR 1052).
 - **Scope:** `docx-core` (`objects.rs`: `TextBox`, `Language`, `Borders`, `TableLook`,
   `CellLook`, `NestedTable`, `HeightRule`; `Float::wrap_polygon`), `docx-import`
   (`objects.rs`), `docx-lower` (`objects.rs`, `ir_objects.rs`: `LoweredAnchor`,
@@ -164,6 +165,40 @@ name so it is not hyphenated as English; `x-none` → `[No Language]`). `rFonts`
   opened the saved file with changed values without a repair prompt (2026-10-31).
 - `docx-conformance/tests/it/floats.rs` (the earlier float fixture, now placed).
 - `doc-host-model/test/objects.spec.ts`; `doc-bundle/test/headless/objects.spec.ts`.
+
+## Amendment 1 (2026-10-30): the engine work
+
+Engine ADR 1050 (anchored objects that wrap, anchored text frames, tables and objects in table
+cells) and engine ADR 1025 (Word tables: rows split across pages, autofit, indent, exact rows)
+closed the residuals above, and the lowering uses them:
+
+- **Floats.** Every float that is not a page item is an anchored object at Word's position
+  (`Anchored`), with its layout (`LoweredImage::layout`, `insertAnchoredFrame { layout }`):
+  square → bounding box, tight / through → contour on `wp:wrapPolygon`, top and bottom →
+  jump object (a square, tight or through float with less than 36 pt of room beside it jumps
+  the text too), `behindDoc` → behind the text, `allowOverlap="0"` → kept clear of the
+  story's other floats. The band above the line (`AbovePosition`) is no longer used: the
+  engine places a wrapping float before its paragraph's lines, so a top-and-bottom float keeps
+  Word's vertical offset and the text resumes below it.
+- **Text boxes** that are not page items are anchored text frames of their paragraph
+  (`LoweredParagraph::text_boxes`): one batch inserts the frame (`kind: "text"`, its insets,
+  wrap and z-order), sets its anchoring and look, and pours its paragraphs into its story
+  through the frame's handle. Edits to their text are not saved back yet (the boxes
+  round-trip unchanged; a diagnostic says so). Boxes in table cells are still not shown.
+- **Nested tables** are native tables in their cells. The import keeps one empty held
+  paragraph where a nested table stands (it no longer pours the table's text into the cell);
+  the pour makes the table on that paragraph (`insertTable { cell, paragraph }`) and fills
+  its cells through its handle. Edits inside a nested table are not saved back yet; the
+  cell's own paragraphs keep their patcher ordinals and an unedited save is byte-identical.
+- **Pictures in cells** are anchored frames in the cell's paragraphs
+  (`insertAnchoredFrame { cell }`): inline ones characters of their lines (the row grows),
+  floats standing against the cell.
+- **Tables** are laid out by Word's rules (`insertTable { word }`, from
+  `LoweredTable::layout`): `tblLayout` fixed or autofit, `tblW` and `tcW` (points or
+  percentages), `tblInd`, `cantSplit`; rows with `hRule="exact"` are held at their height
+  (`setRowHeight { autoGrow: false }`). A table with a row taller than its page is a native
+  table whose rows split as Word's do; the earlier fallback that poured it as plain
+  paragraphs (`flow_table`, a table with a row taller than its page) is gone.
 
 ## Content controls
 

@@ -498,7 +498,36 @@ pub(super) fn remove_and_capture(
         // nothing but the table — see `apply_insert_table`).
         NodeId::Table { story_id, table_id } => {
             let Some((si, pi)) = find_table_pos(doc, story_id, table_id) else {
-                return Err(OperationError::NodeNotFound(node.clone()));
+                // Engine ADR 1050 — a table nested in a cell: its host
+                // paragraph leaves the cell, captured with the cell's
+                // address so the inverse puts it back there.
+                let si = doc
+                    .stories
+                    .iter()
+                    .position(|s| s.self_id == *story_id)
+                    .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+                let ((host, col, row), pi) =
+                    paged_model::nested_table_host(&doc.stories[si].story.paragraphs, table_id)
+                        .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+                let cell = paged_model::cell_paragraphs_in_mut(
+                    &mut doc.stories[si].story.paragraphs,
+                    &host,
+                    col,
+                    row,
+                )
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+                let para = cell.remove(pi);
+                let json = serde_json::json!({
+                    "paragraph": para,
+                    "cell": { "tableId": host, "col": col, "row": row },
+                })
+                .to_string();
+                let spec = NodeSpec::Captured {
+                    node: node.clone(),
+                    json,
+                    image_bytes: None,
+                };
+                return Ok((NodeId::Story(story_id.clone()), pi, spec, None));
             };
             // The host paragraph is captured WHOLE — every cell's text,
             // styling and spans — so the inverse puts back the table that

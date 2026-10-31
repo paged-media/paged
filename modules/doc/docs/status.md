@@ -7,6 +7,7 @@ then `wasm-opt -Oz`):
 
 |                       | bytes                |
 | --------------------- | -------------------- |
+| raw (2026-10-30, W4)  | 7,721,704 (7.36 MiB) |
 | raw (2026-10-29, W4a) | 7,686,229 (7.33 MiB) |
 | raw (2026-10-25, W5)  | 7,321,347 (6.98 MiB) |
 | raw                   | 6,879,227 (6.56 MiB) |
@@ -61,6 +62,30 @@ prompt (their PDFs are the evidence). Tests: `w4b.rs`
 Not yet: a paragraph's own `w:bidi` changed on the canvas is written back only through its
 style; Word's `w:b`-not-for-complex-script rule; mirrored neutral glyphs; controls in headers,
 footers, notes and text boxes edited; data-bound controls; PDF form fields.
+
+## W4: the engine's floats, text boxes, nested tables and Word tables (2026-10-30)
+
+Doc ADR [614](adr/614-floating-objects-and-content-controls.md) amendment 1, on engine ADRs
+1050 (anchored objects that wrap, anchored text frames, tables and objects in cells) and 1025
+(Word tables), riding protocol 78.
+
+| Area          | Built                                                                                                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Floats        | Every float that is not a page item is an anchored object at Word's position with Word's wrap (bounding box, contour on `wp:wrapPolygon`, jump object), behind the text, kept clear of other floats; no band |
+| Text boxes    | A box with no known page is an anchored text frame of its paragraph with its own story, poured in the same batch; its edits are not saved back yet                                                           |
+| Nested tables | Native tables in their cells, on the one empty held paragraph that stands for each; unedited saves are byte-identical; edits inside them are not saved back yet                                              |
+| Cells         | Pictures in cells are shown (inline ones grow their row; floats stand against the cell)                                                                                                                      |
+| Tables        | Word's layout on every table: rows split across pages (`cantSplit` holds), autofit columns from `tblW` / `tcW`, `tblInd`, exact rows; the tall-row fallback that poured a table as paragraphs is gone        |
+
+Tests: `docx-conformance/tests/it/{objects,floats,tall_rows}.rs` (updated to the new contract),
+`doc-host-model/test/mutations.spec.ts` (Word layout, exact rows),
+`doc-bundle/test/headless/objects.spec.ts` (an anchored text box's story, a nested table in its
+cell, unedited saves byte-identical).
+
+Pagination acceptance: not re-measured in this wave. Word 16 on the probe machine did not open
+the three documents through `scripts/word-pagination-probe.sh` (an AppleScript "missing value"
+error before the PDF), so no fresh Word page map exists; the W4a figures below (13.1 %, 2.0 %,
+3.8 % of page starts) are the last measured ones.
 
 ## W3 (files): tracked changes and comments read and saved back (2026-10-29)
 

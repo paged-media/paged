@@ -54,6 +54,45 @@ pub struct LoweredAnchor {
     pub y_offset_pt: f32,
 }
 
+/// A float's layout among its story's text (engine ADR 1050): the
+/// `layout` of `insertAnchoredFrame`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredFloatLayout {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrap: Option<LoweredWrap>,
+    /// Word's `behindDoc`.
+    #[serde(default)]
+    pub behind: bool,
+    /// Word's `allowOverlap="0"`: kept clear of the story's other floats.
+    #[serde(default)]
+    pub no_overlap: bool,
+}
+
+/// A text box anchored in its paragraph (engine ADR 1050): an anchored text
+/// frame with a story of its own, which the pour fills.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredTextBox {
+    /// Where it is anchored: the paragraph's start (a float) or its
+    /// character offset (an inline box).
+    #[serde(default)]
+    pub at: u32,
+    pub width_pt: f32,
+    pub height_pt: f32,
+    /// Its settings; `None` for an inline box (a character of its line).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<LoweredAnchor>,
+    #[serde(default)]
+    pub layout: LoweredFloatLayout,
+    /// Internal margins, top, left, bottom, right, pt.
+    pub insets_pt: [f32; 4],
+    pub paragraphs: Vec<LoweredParagraph>,
+    /// The shape's look (fill, outline, effects).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fx: Option<dml_native::native::NativeFx>,
+}
+
 /// How text wraps around a page item: the engine's `TextWrap`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

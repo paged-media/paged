@@ -1,6 +1,10 @@
 # ADR 1008 — An item's effects are an ordered stack
 
 - **Status:** Accepted 2026-10-25.
+- **Note 2026-10-29:** the catalog describes every kind (`effectKinds`: menu group, targets,
+  parameter forms; `paged-introspect` `effect_kinds.rs`), which the editor's panels and Effect
+  menu list from ([editor ADR 309](../../../../apps/editor/docs/adr/309-effects-transparency-and-appearance-panels.md));
+  a Photoshop layer style maps onto the stack through `paged-psd-fx` ([ADR 1044](1044-a-photoshop-layer-style-maps-onto-the-effect-stack.md)).
 - **Scope:** protocol v76 (additive; no bump). `paged-model` (`effect_stack`: `Effect`,
   `EffectEntry`, the slots view `SlotsRef` / `SlotsMut`, `EffectBearing`, the IDML label;
   the `effect_stack` field of `TextFrame`, `Rectangle`, `Oval`, `Polygon` and

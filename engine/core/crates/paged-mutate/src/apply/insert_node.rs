@@ -397,7 +397,12 @@ fn insert_captured_table(
             child_kind: "Table".to_string(),
         }));
     }
-    if find_table_pos(doc, story_id, table_id).is_some() {
+    if doc
+        .stories
+        .iter()
+        .find(|s| s.self_id == story_id)
+        .is_some_and(|s| paged_model::table_in(&s.story.paragraphs, table_id).is_some())
+    {
         return Err(Some(OperationError::DuplicateNodeId {
             id: table_id.to_string(),
         }));
@@ -408,12 +413,29 @@ fn insert_captured_table(
         .map(serde_json::Value::take)
         .and_then(|v| serde_json::from_value(v).ok())
         .ok_or(None)?;
+    // Engine ADR 1050 — a nested table's capture names its cell.
+    let cell = envelope.get("cell").and_then(|c| {
+        Some((
+            c.get("tableId")?.as_str()?.to_string(),
+            u32::try_from(c.get("col")?.as_u64()?).ok()?,
+            u32::try_from(c.get("row")?.as_u64()?).ok()?,
+        ))
+    });
     let si = doc
         .stories
         .iter()
         .position(|s| s.self_id == story_id)
         .ok_or_else(|| Some(OperationError::NodeNotFound(parent.clone())))?;
-    let paragraphs = &mut doc.stories[si].story.paragraphs;
+    let paragraphs = match &cell {
+        Some((host, col, row)) => paged_model::cell_paragraphs_in_mut(
+            &mut doc.stories[si].story.paragraphs,
+            host,
+            *col,
+            *row,
+        )
+        .ok_or_else(|| Some(OperationError::NodeNotFound(parent.clone())))?,
+        None => &mut doc.stories[si].story.paragraphs,
+    };
     let at = position.min(paragraphs.len());
     paragraphs.insert(at, para);
     let invalidation = reflow_hint_for_story(doc, story_id);

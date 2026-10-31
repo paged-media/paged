@@ -3369,18 +3369,20 @@ fn paged_apply_opacity_mask(
     else {
         return Ok(JsValue::from(false));
     };
-    let (mask_type, invert) = match args.get_or_undefined(2).as_object() {
+    let (mask_type, invert, clip) = match args.get_or_undefined(2).as_object() {
         Some(o) => (
             prop_string(&o, "maskType", ctx),
             prop_bool(&o, "invert", ctx),
+            prop_bool(&o, "clip", ctx),
         ),
-        None => (None, None),
+        None => (None, None, None),
     };
     Ok(apply_bool(&Mutation::ApplyOpacityMask {
         target_id,
         mask_id,
         mask_type,
         invert,
+        clip,
     }))
 }
 
@@ -3556,6 +3558,9 @@ fn paged_insert_anchored_frame(
         width,
         height,
         image_uri,
+        kind: None,
+        layout: None,
+        cell: None,
     }))
 }
 
@@ -4153,6 +4158,9 @@ fn paged_insert_table(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> J
         footer_rows: spec.footer_rows,
         column_widths: spec.column_widths,
         row_heights: spec.row_heights,
+        cell: None,
+        word: None,
+        paragraph: None,
     }))
 }
 
@@ -4174,6 +4182,7 @@ fn paged_set_row_height(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
         table_id,
         row,
         height,
+        auto_grow: None,
     }))
 }
 

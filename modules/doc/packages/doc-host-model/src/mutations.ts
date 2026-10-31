@@ -17,6 +17,8 @@ import {
 
 import type {
   LoweredAnchor,
+  LoweredFloatLayout,
+  LoweredTextBox,
   LoweredBlock,
   LoweredCell,
   LoweredChange,
@@ -180,6 +182,10 @@ interface ImageAt {
   anchor?: LoweredAnchor;
   /** Doc ADR 618 — the picture's look, painted on its frame (doc ADR 619). */
   fx?: NativeFx;
+  /** Engine ADR 1050 — a float's wrap, z-order and overlap. */
+  layout?: LoweredFloatLayout;
+  /** Engine ADR 1050 — a text box (an anchored text frame); `uri` unused. */
+  box?: LoweredTextBox;
 }
 
 /** A hyperlink span: the `[start, end)` story offsets of a linked run + target. */
@@ -520,6 +526,25 @@ function poured(
         uri: img.uri,
         ...(img.anchor ? { anchor: img.anchor } : {}),
         ...(img.fx ? { fx: img.fx } : {}),
+        ...(img.layout ? { layout: img.layout } : {}),
+      });
+    }
+    // Engine ADR 1050 — the paragraph's text boxes, anchored text frames.
+    for (const box of para.textBoxes ?? []) {
+      const at = box.at ?? 0;
+      const inSeg = segs.filter((s) => splits(s.at) && s.at <= at).length;
+      images.push({
+        offset: paraStart + at,
+        ...(paraBase !== undefined
+          ? { paragraph: paraBase + firstIndex + inSeg }
+          : {}),
+        widthPt: box.widthPt,
+        heightPt: box.heightPt,
+        uri: "",
+        ...(box.anchor ? { anchor: box.anchor } : {}),
+        ...(box.fx ? { fx: box.fx } : {}),
+        ...(box.layout ? { layout: box.layout } : {}),
+        box,
       });
     }
     // Separator text for insertText, but NOT an offset advance (contiguous).
@@ -724,6 +749,10 @@ export function buildTextPour(
     ops.push(applyStyleOp(storyId, r.start, r.end, r.style, "character"));
   }
   for (const [k, img] of images.entries()) {
+    if (img.box) {
+      ops.push(textBoxOps(img, storyId, k));
+      continue;
+    }
     // `insertAnchoredFrame` is a v52 wire op (core protocol 52); it postdates the
     // published plugin-api Mutation union, so cast via `unknown`. The host applies
     // it once running the v52+ canvas-wasm; older hosts reject it (honest degrade).
@@ -736,6 +765,8 @@ export function buildTextPour(
         height: img.heightPt,
         imageUri: img.uri,
         ...(img.paragraph !== undefined ? { paragraph: img.paragraph } : {}),
+        // Engine ADR 1050 — the float's wrap, z-order and overlap.
+        ...(img.layout ? { layout: layoutSpec(img.layout) } : {}),
       },
     } as unknown as Mutation;
     // Doc ADR 619 — the picture's look on the frame just minted, named by
@@ -821,6 +852,103 @@ export function buildTextPour(
     comments: body.comments,
     changes,
   };
+}
+
+/** Engine ADR 1050 — a float's layout as `insertAnchoredFrame` takes it
+ *  (`AnchoredLayoutSpec`): its wrap (a custom contour from Word's
+ *  `wp:wrapPolygon`), behind-text z-order, overlap and a text box's insets. */
+export function layoutSpec(
+  layout: LoweredFloatLayout | undefined,
+  insets?: [number, number, number, number],
+): Record<string, unknown> {
+  const w = layout?.wrap;
+  return {
+    wrap: w
+      ? {
+          mode: w.mode,
+          offsets: w.offsetsPt,
+          side: w.side ?? null,
+          polygon: w.polygonPt ?? [],
+        }
+      : null,
+    behindText: layout?.behind ?? false,
+    allowOverlap: layout?.noOverlap ? false : null,
+    insets: insets ?? null,
+    verticalJustification: null,
+  };
+}
+
+/** Child batches inlined: a batch that binds handles resolves every
+ *  `$h:` reference in its children, a nested batch's own handles included,
+ *  so a nested batch's names must live at the outer batch's level. */
+function flattened(ops: readonly Mutation[]): Mutation[] {
+  const out: Mutation[] = [];
+  for (const op of ops) {
+    const m = op as unknown as { op: string; args: { ops?: Mutation[] } };
+    if (m.op === "batch" && Array.isArray(m.args.ops))
+      out.push(...flattened(m.args.ops));
+    else out.push(op);
+  }
+  return out;
+}
+
+/** Engine ADR 1050 — a text box as an anchored TEXT frame of its paragraph
+ *  with a story of its own: the frame (its insets, wrap and z-order), its
+ *  anchored-object settings and look, and its paragraphs poured into its
+ *  story through the frame's handle — one batch, one undo step. */
+function textBoxOps(img: ImageAt, storyId: string, n: number): Mutation {
+  const box = img.box!;
+  const handle = `docBox${n}`;
+  const insert = {
+    op: "insertAnchoredFrame",
+    args: {
+      storyId,
+      offset: img.offset,
+      width: img.widthPt,
+      height: img.heightPt,
+      imageUri: null,
+      kind: "text",
+      ...(img.paragraph !== undefined ? { paragraph: img.paragraph } : {}),
+      layout: layoutSpec(box.layout, box.insetsPt),
+    },
+  } as unknown as Mutation;
+  const pour = buildTextPour(box.paragraphs, `$h:${handle}`, 0, 0, {
+    paraBase: 0,
+  });
+  return {
+    op: "batch",
+    args: {
+      ops: [
+        insert,
+        { op: "bindCreated", args: { handle } },
+        ...(box.anchor ? anchorSets(box.anchor, handle) : []),
+        ...(box.fx ? pictureLookOps(box.fx, handle) : []),
+        ...flattened(pour.mutations),
+      ],
+    },
+  } as unknown as Mutation;
+}
+
+/** The anchored-object settings of the frame `handle` names. */
+function anchorSets(anchor: LoweredAnchor, handle: string): Mutation[] {
+  const elementId = { kind: "rectangle", id: `$h:${handle}` };
+  const set = (path: string, value: unknown): Mutation =>
+    ({
+      op: "setElementProperty",
+      args: { elementId, path, value },
+    }) as unknown as Mutation;
+  const text = (value: string) => ({ type: "text", value });
+  const length = (value: number) => ({ type: "length", value });
+  return [
+    set("anchoredPosition", text(anchor.position)),
+    set("anchorPoint", text(anchor.anchorPoint)),
+    set("anchoredHorizontalReference", text(anchor.horizontalReference)),
+    set("anchoredHorizontalAlignment", text(anchor.horizontalAlignment)),
+    set("anchoredVerticalReference", text(anchor.verticalReference)),
+    set("anchoredVerticalAlignment", text(anchor.verticalAlignment)),
+    set("anchoredXOffset", length(anchor.xOffsetPt)),
+    set("anchoredYOffset", length(anchor.yOffsetPt)),
+  ];
 }
 
 /** Doc ADR 614 — a float as an anchored object: the frame and its
@@ -1044,8 +1172,37 @@ export function buildTableInsert(
       columnWidths: table.columnWidthsPt,
       // A row is never shorter than Word's `w:trHeight`.
       rowHeights: table.rowHeightsPt ?? [],
+      // Engine ADR 1025 — Word's rules: rows split across pages, autofit
+      // columns, the indent.
+      word: wordTableSpec(table),
     },
-  } as Mutation;
+  } as unknown as Mutation;
+}
+
+/** Engine ADR 1025 — a table's Word layout (`WordTableSpec`) from what the
+ *  lowering carries (`w:tblLayout`, `w:tblW`, `w:tcW`, `w:tblInd`,
+ *  `w:cantSplit`). */
+export function wordTableSpec(table: LoweredTable): Record<string, unknown> {
+  const l = table.layout ?? {};
+  const width =
+    l.widthPt != null
+      ? { unit: "points", value: l.widthPt }
+      : l.widthPct != null
+        ? { unit: "percent", value: l.widthPct }
+        : null;
+  const cellWidths = (l.cellWidthsPt ?? []).flatMap((w, i) => {
+    const c = table.cells[i];
+    return w == null || !c
+      ? []
+      : [{ row: c.row, col: c.col, width: { unit: "points", value: w } }];
+  });
+  return {
+    indent: l.indentPt ?? 0,
+    autofit: !l.fixed,
+    width,
+    cellWidths,
+    cantSplitRows: (l.cantSplit ?? []).flatMap((c, r) => (c ? [r] : [])),
+  };
 }
 
 /** One flattened cell's text (paragraphs joined by newline). NOTE: cell-internal
@@ -1179,6 +1336,54 @@ export function buildTableCells(
       } as Mutation);
     }
     if (cell.look) ops.push(...cellLookOps(cell.look, elementId));
+    // Engine ADR 1050 — the cell's pictures, characters of their lines (a
+    // float stands against the cell), addressed in the cell's own paragraphs
+    // and characters.
+    const addr = { tableId, row: cell.row, col: cell.col };
+    let cellOffset = 0;
+    cell.paragraphs.forEach((para, pIdx) => {
+      for (const img of para.images ?? []) {
+        const insert = {
+          op: "insertAnchoredFrame",
+          args: {
+            storyId,
+            offset: cellOffset + (img.at ?? 0),
+            paragraph: pIdx,
+            cell: addr,
+            width: img.widthPt,
+            height: img.heightPt,
+            imageUri: img.uri,
+            ...(img.layout ? { layout: layoutSpec(img.layout) } : {}),
+          },
+        } as unknown as Mutation;
+        if (img.anchor) {
+          const handle = `docCellFloat${cell.row}_${cell.col}_${pIdx}_${ops.length}`;
+          ops.push(
+            insert,
+            { op: "bindCreated", args: { handle } } as unknown as Mutation,
+            ...anchorSets(img.anchor, handle),
+          );
+        } else ops.push(insert);
+      }
+      for (const r of para.runs) cellOffset += codePointLen(r.text);
+    });
+    // Engine ADR 1050 — the tables nested in the cell, each on the empty
+    // paragraph that stands for it, filled through its handle.
+    for (const [k, nested] of (cell.nested ?? []).entries()) {
+      const handle = `docNested${cell.row}_${cell.col}_${k}_${ops.length}`;
+      const insert = buildTableInsert(nested.table, storyId) as unknown as {
+        op: string;
+        args: Record<string, unknown>;
+      };
+      ops.push(
+        {
+          op: "insertTable",
+          args: { ...insert.args, cell: addr, paragraph: nested.paragraph },
+        } as unknown as Mutation,
+        { op: "bindCreated", args: { handle } } as unknown as Mutation,
+        ...flattened([buildTableCells(nested.table, storyId, `$h:${handle}`)]),
+      );
+    }
     if (cell.rowSpan > 1 || cell.colSpan > 1) {
       ops.push({
         op: "setCellSpan",
@@ -1193,6 +1398,20 @@ export function buildTableCells(
       } as Mutation);
     }
   }
+  // Engine ADR 1025 — rows Word holds at an exact height.
+  (table.layout?.exactRows ?? []).forEach((exact, row) => {
+    if (!exact) return;
+    ops.push({
+      op: "setRowHeight",
+      args: {
+        storyId,
+        tableId,
+        row,
+        height: table.rowHeightsPt?.[row] ?? null,
+        autoGrow: false,
+      },
+    } as unknown as Mutation);
+  });
   return { op: "batch", args: { ops } } as Mutation;
 }
 

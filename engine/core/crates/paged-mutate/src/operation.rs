@@ -3565,6 +3565,19 @@ pub enum NodeSpec {
         column_widths: Vec<f32>,
         #[serde(default)]
         row_heights: Vec<f32>,
+        /// Engine ADR 1050 — the cell the table goes into (a nested
+        /// table); `None`: the story's end, as before.
+        #[serde(default)]
+        cell: Option<CellAddr>,
+        /// Engine ADR 1050 — with `cell`: the cell paragraph the table
+        /// takes when it is empty, else a new paragraph inserted there.
+        /// `None`: the cell's last paragraph when empty, else a new one at
+        /// its end.
+        #[serde(default)]
+        cell_paragraph: Option<u32>,
+        /// Engine ADR 1025 — lay the table out by Word's rules.
+        #[serde(default)]
+        word: Option<WordTableSpec>,
     },
 }
 
@@ -3634,6 +3647,8 @@ impl NodeSpec {
             footer_rows,
             column_widths,
             row_heights,
+            word,
+            ..
         } = self
         else {
             unreachable!("to_parse_table called on a non-Table NodeSpec");
@@ -3672,6 +3687,7 @@ impl NodeSpec {
             }
         }
         paged_model::Table {
+            word: word.as_ref().map(WordTableSpec::to_model),
             self_id: Some(self_id.clone()),
             header_row_count: header,
             footer_row_count: footer,
@@ -4960,6 +4976,10 @@ pub enum Operation {
         mask_type: OpacityMaskMode,
         #[serde(default)]
         invert: bool,
+        /// Illustrator's Clip (`paged_model::OpacityMask::clip`); on by
+        /// default.
+        #[serde(default = "crate::operation::default_true")]
+        clip: bool,
     },
     /// C-28 — the inverse gesture: drop the mask relation and pop the
     /// artwork back to top level, world transform preserved (the
@@ -5122,12 +5142,31 @@ pub enum Operation {
         /// picture alone on its line) has no offset of its own otherwise.
         #[serde(default)]
         paragraph: Option<u32>,
-        /// Engine ADR 1045 — the frame whole, as JSON, when this insert is
-        /// a `RemoveAnchoredFrame`'s inverse: undo puts back the frame that
-        /// was removed (its look, its setting, its children), not a bare
-        /// picture box. A forward insert carries none.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        /// Engine ADR 1050 — a graphic frame (the v52 default) or a TEXT
+        /// frame holding its own story, `frame_story`.
+        #[serde(default)]
+        frame_kind: AnchoredFrameInsertKind,
+        /// Engine ADR 1050 — the story a text frame holds, minted by the
+        /// wire layer. Created empty when it does not exist (the insert's
+        /// inverse then removes it again); an existing story is attached,
+        /// which is how the undo of a removal gets its text back.
+        #[serde(default)]
+        frame_story: Option<String>,
+        /// Engine ADR 1050 — wrap, z-order, overlap and a text frame's
+        /// insets. `None`: none of them (the v52 frame).
+        #[serde(default)]
+        layout: Option<AnchoredLayoutSpec>,
+        /// Inverse-only: the whole frame a `RemoveAnchoredFrame` took out
+        /// (JSON of `paged_model::AnchoredFrame`), put back verbatim — its
+        /// anchoring settings, look and layout included. Wins over the
+        /// fields above.
+        #[serde(default)]
         restore: Option<String>,
+        /// Engine ADR 1050 — the table cell whose paragraphs `paragraph`
+        /// and `offset` address (a picture in a cell); `None`: the story's
+        /// body.
+        #[serde(default)]
+        cell: Option<CellAddr>,
     },
     /// v52 — inverse-only companion to `InsertAnchoredFrame`: remove the
     /// anchored frame `self_id` from whichever paragraph of `story_id` holds
@@ -5809,6 +5848,14 @@ pub enum Operation {
         row: u32,
         #[serde(default)]
         height: Option<f32>,
+        /// Engine ADR 1025 — `Some(false)` holds the row at exactly
+        /// `height` (InDesign's `AutoGrow="false"`, Word's `hRule="exact"`),
+        /// `Some(true)` lets it grow from it; `None` leaves it.
+        #[serde(default)]
+        auto_grow: Option<bool>,
+        /// Inverse-only: put `AutoGrow` back to unset.
+        #[serde(default)]
+        clear_auto_grow: bool,
     },
     /// W3.A1 — set column `col`'s `SingleColumnWidth` to `width` pt.
     /// `None` clears the override. Inverse carries the prior width.
@@ -5938,6 +5985,185 @@ pub struct CellAddr {
     pub table_id: String,
     pub row: u32,
     pub col: u32,
+}
+
+/// Engine ADR 1025 — a preferred width as Word states it (`w:tblW`, `w:tcW`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "unit", content = "value", rename_all = "camelCase")]
+pub enum TableWidthSpec {
+    Auto,
+    /// pt.
+    Points(f32),
+    /// Percent of the room the table stands in (of the table, for a cell).
+    Percent(f32),
+}
+
+impl TableWidthSpec {
+    fn to_model(self) -> paged_model::TableWidth {
+        match self {
+            Self::Auto => paged_model::TableWidth::Auto,
+            Self::Points(v) => paged_model::TableWidth::Points(v),
+            Self::Percent(v) => paged_model::TableWidth::Percent(v),
+        }
+    }
+}
+
+/// Engine ADR 1025 — one cell's preferred width.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct CellWidthSpec {
+    pub row: u32,
+    pub col: u32,
+    pub width: TableWidthSpec,
+}
+
+/// Engine ADR 1025 — a table laid out by Word's rules
+/// (`paged_model::WordTableLayout` on the wire): rows split across frames
+/// unless listed in `cant_split_rows`, columns autofit their content when
+/// `autofit`, the table indented by `indent` pt.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct WordTableSpec {
+    #[serde(default)]
+    pub indent: f32,
+    #[serde(default)]
+    pub autofit: bool,
+    #[serde(default)]
+    pub width: Option<TableWidthSpec>,
+    #[serde(default)]
+    pub cell_widths: Vec<CellWidthSpec>,
+    #[serde(default)]
+    pub cant_split_rows: Vec<u32>,
+}
+
+impl WordTableSpec {
+    /// The model's layout this spec describes.
+    pub fn to_model(&self) -> paged_model::WordTableLayout {
+        paged_model::WordTableLayout {
+            indent: self.indent,
+            autofit: self.autofit,
+            width: self.width.map(TableWidthSpec::to_model),
+            cell_widths: self
+                .cell_widths
+                .iter()
+                .map(|c| paged_model::CellWidth {
+                    row: c.row,
+                    col: c.col,
+                    width: c.width.to_model(),
+                })
+                .collect(),
+            cant_split_rows: self.cant_split_rows.clone(),
+        }
+    }
+}
+
+/// Engine ADR 1050 — what [`Operation::InsertAnchoredFrame`] makes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum AnchoredFrameInsertKind {
+    /// A graphic frame (a rectangle, with the image when one is named).
+    #[default]
+    Graphic,
+    /// A text frame with its own story: a Word text box.
+    Text,
+}
+
+/// Engine ADR 1050 — the text wrap an anchored object makes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct AnchoredWrapSpec {
+    /// IDML's `TextWrapMode`: `BoundingBoxTextWrap`, `ContourTextWrap`,
+    /// `JumpObjectTextWrap`, `NextColumnTextWrap` or `None`.
+    pub mode: String,
+    /// `[top, left, bottom, right]` in pt: how far the text keeps away.
+    #[serde(default)]
+    pub offsets: [f32; 4],
+    /// IDML's `TextWrapSide` (`BothSides`, `LeftSide`, `RightSide`,
+    /// `LargestArea`, …); absent: both sides.
+    #[serde(default)]
+    pub side: Option<String>,
+    /// A contour wrap's outline, points in pt from the frame's top-left
+    /// (Word's `wp:wrapPolygon`); empty: the frame's box.
+    #[serde(default)]
+    pub polygon: Vec<[f32; 2]>,
+}
+
+/// Engine ADR 1050 — how an anchored object stands among its story's
+/// text (`paged_model::AnchoredLayout` on the wire).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct AnchoredLayoutSpec {
+    /// The wrap the object makes; a custom-positioned object only.
+    #[serde(default)]
+    pub wrap: Option<AnchoredWrapSpec>,
+    /// Drawn under its story's text (Word's `behindDoc`).
+    #[serde(default)]
+    pub behind_text: bool,
+    /// `false`: moved down clear of the story's objects already on the
+    /// page (Word's `allowOverlap="0"`). Absent: may overlap.
+    #[serde(default)]
+    pub allow_overlap: Option<bool>,
+    /// A text frame's insets, `[top, left, bottom, right]` pt.
+    #[serde(default)]
+    pub insets: Option<[f32; 4]>,
+    /// A text frame's `VerticalJustification` (`TopAlign`,
+    /// `CenterAlign`, `BottomAlign`).
+    #[serde(default)]
+    pub vertical_justification: Option<String>,
+}
+
+impl AnchoredLayoutSpec {
+    /// The model's layout this spec describes.
+    pub fn to_model(&self) -> paged_model::AnchoredLayout {
+        let wrap = self.wrap.as_ref();
+        paged_model::AnchoredLayout {
+            text_wrap: wrap.map(|w| paged_model::TextWrap {
+                mode: paged_model::TextWrapMode::from_idml(&w.mode),
+                offsets: w.offsets,
+                invert: None,
+                contour_type: None,
+                include_inside_edges: None,
+                side: w
+                    .side
+                    .as_deref()
+                    .and_then(paged_model::TextWrapSide::from_idml),
+                apply_to_master_page_only: None,
+            }),
+            wrap_polygon: wrap.map(|w| w.polygon.clone()).unwrap_or_default(),
+            behind_text: self.behind_text,
+            allow_overlap: self.allow_overlap,
+            inset_spacing: self.insets,
+            vertical_justification: self.vertical_justification.clone(),
+        }
+    }
+
+    /// The spec of a model layout (what an inverse carries).
+    pub fn from_model(layout: &paged_model::AnchoredLayout) -> Self {
+        Self {
+            wrap: layout.text_wrap.map(|w| AnchoredWrapSpec {
+                mode: w.mode.as_idml().to_string(),
+                offsets: w.offsets,
+                side: w.side.map(|s| s.as_idml().to_string()),
+                polygon: layout.wrap_polygon.clone(),
+            }),
+            behind_text: layout.behind_text,
+            allow_overlap: layout.allow_overlap,
+            insets: layout.inset_spacing,
+            vertical_justification: layout.vertical_justification.clone(),
+        }
+    }
 }
 
 /// Engine ADR 1040 — what [`Operation::RecordChange`] records.
@@ -6384,6 +6610,11 @@ pub fn recompose_transform(t: &TransformDecomp) -> [f32; 6] {
     let c = cos * pre_cx - sin * sy;
     let d = sin * pre_cx + cos * sy;
     [a, b, c, d, t.translate[0], t.translate[1]]
+}
+
+/// Serde default for a switch that is on unless a payload says otherwise.
+pub(crate) fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]

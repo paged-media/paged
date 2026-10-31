@@ -511,6 +511,372 @@ pub(super) struct PageMarginBox {
     pub bottom: f32,
 }
 
+/// One object [`place_wrapping_objects`] placed before its paragraph's
+/// lines: the index into the paragraph's `anchored_frames`, the page and
+/// chain frame it stands in, and its page-local top-left.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct PlacedFloat {
+    pub index: usize,
+    pub page: usize,
+    pub frame: usize,
+    pub x: f32,
+    pub y: f32,
+}
+
+/// Engine ADR 1050 — a story's floats: the objects whose
+/// [`paged_model::AnchoredLayout`] is set (a Word float), laid out by
+/// Word's rules rather than InDesign's.
+#[derive(Debug, Default)]
+pub(super) struct FloatState {
+    /// The paragraph about to be laid out has wrapping objects to place
+    /// before its first line is composed.
+    pub pending: bool,
+    /// Where the current paragraph's wrapping objects were placed.
+    pub placed: Vec<PlacedFloat>,
+    /// The page-local boxes of the story's floats placed so far, by page,
+    /// for an object that may not overlap them.
+    pub boxes: Vec<(usize, paged_model::Bounds)>,
+    /// Behind-text objects' commands, `(page, start, end, chain frame)`,
+    /// moved under their frame's text once the story is emitted.
+    pub behind: Vec<(usize, usize, usize, usize)>,
+}
+
+impl FloatState {
+    fn placed_at(&self, index: usize) -> Option<PlacedFloat> {
+        self.placed.iter().find(|p| p.index == index).copied()
+    }
+
+    /// `(x, y)` moved down, clear of the floats already on `page`, when
+    /// `af` may not overlap them (Word's `allowOverlap="0"`: Word moves
+    /// the later float below the earlier one); the box is recorded either
+    /// way, so a later non-overlapping float clears this one.
+    fn clear_overlap(
+        &mut self,
+        af: &paged_model::AnchoredFrame,
+        page: usize,
+        x: f32,
+        mut y: f32,
+    ) -> (f32, f32) {
+        let (w, h) = af
+            .bounds
+            .map(|b| (b.width(), b.height()))
+            .unwrap_or((0.0, 0.0));
+        if af.layout.allow_overlap == Some(false) {
+            for _ in 0..64 {
+                let hit = self.boxes.iter().find(|(p, b)| {
+                    *p == page && x < b.right && x + w > b.left && y < b.bottom && y + h > b.top
+                });
+                match hit {
+                    Some((_, b)) => y = b.bottom,
+                    None => break,
+                }
+            }
+        }
+        self.boxes.push((
+            page,
+            paged_model::Bounds {
+                top: y,
+                left: x,
+                bottom: y + h,
+                right: x + w,
+            },
+        ));
+        (x, y)
+    }
+}
+
+/// Engine ADR 1050 — whether `paragraph` holds a custom-positioned object
+/// that wraps text: such objects are placed before its lines are
+/// composed ([`place_wrapping_objects`]).
+pub(super) fn has_wrapping_objects(paragraph: &paged_model::Paragraph) -> bool {
+    paragraph
+        .anchored_frames
+        .iter()
+        .any(|af| !sits_in_line(af) && af.layout.active_wrap().is_some())
+}
+
+/// Engine ADR 1050 — place `paragraph`'s wrapping objects before its
+/// lines are composed, so the lines set after them — its own included —
+/// wrap around them as Word wraps a float: each is placed against the
+/// paragraph's FIRST line (`first_baseline_64`, frame-inner 1/64 pt) in
+/// the frame the paragraph starts in, and its zone joins that frame's
+/// wrap obstacles for the rest of the story. Its drawing waits for the
+/// paragraph's end ([`emit_anchored_frames_for_paragraph`]), at the same
+/// place. Runs once per paragraph ([`FloatState::pending`]).
+pub(super) fn place_wrapping_objects(
+    em: &mut StoryEmitter,
+    paragraph: &paged_model::Paragraph,
+    pages: &[BuiltPage],
+    first_baseline_64: i32,
+    paragraph_size: f32,
+    leading_pt: f32,
+    metrics: Option<&FontMetrics>,
+) {
+    if !std::mem::take(&mut em.floats.pending) {
+        return;
+    }
+    let Some(&target_page) = em.chain_pages.get(em.frame_idx) else {
+        return;
+    };
+    let frame = em.chain[em.frame_idx];
+    let (ox, oy) = pages[target_page].spread_origin;
+    let (_sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+    let baseline = sy - oy + first_baseline_64.max(0) as f32 / paged_text::shape::ADVANCE_PRECISION;
+    let line_metrics = LineRefMetrics::resolve(baseline, paragraph_size, leading_pt, metrics);
+    let margin_box = resolve_page_margin_box(em.document, &pages[target_page]);
+    for (i, af) in paragraph.anchored_frames.iter().enumerate() {
+        if sits_in_line(af) {
+            continue;
+        }
+        let Some(wrap) = af.layout.active_wrap() else {
+            continue;
+        };
+        let (x, y) = custom_top_left(
+            em,
+            af,
+            pages,
+            target_page,
+            baseline,
+            line_metrics,
+            margin_box,
+        );
+        let (x, y) = em.floats.clear_overlap(af, target_page, x, y);
+        em.floats.placed.push(PlacedFloat {
+            index: i,
+            page: target_page,
+            frame: em.frame_idx,
+            x,
+            y,
+        });
+        let (w, h) = af
+            .bounds
+            .map(|b| (b.width(), b.height()))
+            .unwrap_or((0.0, 0.0));
+        let spread = paged_model::Bounds {
+            top: y + oy,
+            left: x + ox,
+            bottom: y + oy + h,
+            right: x + ox + w,
+        };
+        if let Some(shape) = float_wrap_shape(af, wrap, spread) {
+            if let Some(wraps) = em.chain_wrap_rects.get_mut(em.frame_idx) {
+                wraps.push(shape);
+            }
+        }
+    }
+}
+
+/// The wrap zone of a float standing at `spread` (spread coords): its
+/// custom contour (`wrap_polygon`) under a contour wrap, else the zone a
+/// page item of that box would make.
+fn float_wrap_shape(
+    af: &paged_model::AnchoredFrame,
+    wrap: paged_model::TextWrap,
+    spread: paged_model::Bounds,
+) -> Option<WrapShape> {
+    let side = WrapSide::resolve(wrap.side, false);
+    if wrap.mode == paged_model::TextWrapMode::ContourTextWrap && af.layout.wrap_polygon.len() >= 3
+    {
+        let points: Vec<(f32, f32)> = af
+            .layout
+            .wrap_polygon
+            .iter()
+            .map(|p| (spread.left + p[0], spread.top + p[1]))
+            .collect();
+        if let Some(shape) = WrapShape::from_polygon(&points, wrap.offsets[0].max(0.0), side) {
+            return Some(shape);
+        }
+    }
+    WrapSource {
+        bounds: spread,
+        item_transform: None,
+        anchors: &[],
+        subpath_starts: &[],
+        subpath_open: &[],
+        oval: false,
+        stroke_color: af.stroke_color.as_deref(),
+        stroke_weight: af.stroke_weight,
+    }
+    .shape(wrap, false)
+}
+
+/// Where a custom-positioned object's top-left stands, page-local pt, in
+/// the current chain frame, its anchor line's baseline at `baseline_y_pt`
+/// with `line_metrics`.
+fn custom_top_left(
+    em: &StoryEmitter,
+    af: &paged_model::AnchoredFrame,
+    pages: &[BuiltPage],
+    target_page: usize,
+    baseline_y_pt: f32,
+    line_metrics: LineRefMetrics,
+    margin_box: Option<PageMarginBox>,
+) -> (f32, f32) {
+    let frame = em.chain[em.frame_idx];
+    let (ox, oy) = pages[target_page].spread_origin;
+    let frame_insets = frame.inset_spacing.unwrap_or([0.0; 4]);
+    let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+    let para_origin_x = sx - ox + frame_insets[1] + em.column_x_shift_pt;
+    let para_origin_y = sy - oy;
+    let setting = af.setting.as_ref();
+    let (offset_x, offset_y) = setting
+        .map(|s| (s.anchor_x_offset, s.anchor_y_offset))
+        .unwrap_or((0.0, 0.0));
+    let frame_w = af.bounds.map(|b| b.width()).unwrap_or(0.0);
+    let frame_h = af.bounds.map(|b| b.height()).unwrap_or(0.0);
+    let anchor_point = setting
+        .and_then(|s| s.anchor_point.as_deref())
+        .unwrap_or("BottomLeftAnchor");
+    let ref_x = horizontal_reference_x(
+        setting,
+        para_origin_x,
+        frame,
+        &pages[target_page],
+        em.column_x_shift_pt,
+        margin_box,
+    );
+    let ref_y = vertical_reference_y(
+        setting,
+        baseline_y_pt,
+        frame,
+        &pages[target_page],
+        para_origin_y,
+        line_metrics,
+        margin_box,
+    );
+    resolve_custom_anchor_pos(
+        ref_x,
+        ref_y,
+        anchor_point,
+        frame_w,
+        frame_h,
+        offset_x,
+        offset_y,
+    )
+}
+
+impl StoryEmitter<'_> {
+    /// Engine ADR 1050 — move each behind-text float's commands to the
+    /// start of its frame's command range, under the frame's text. Runs
+    /// once the story is emitted, beside the other splicing post-passes;
+    /// the latest range first, so an earlier one stays where it was.
+    pub(super) fn apply_behind_text(&mut self, pages: &mut [BuiltPage]) {
+        let mut behind = std::mem::take(&mut self.floats.behind);
+        behind.sort_by_key(|&(_, s, _, _)| std::cmp::Reverse(s));
+        for (page_idx, s, e, owner) in behind {
+            let Some(Some((fs, _))) = self.frame_cmd_ranges.get(owner).copied() else {
+                continue;
+            };
+            let n = e.saturating_sub(s);
+            let Some(page) = pages.get_mut(page_idx) else {
+                continue;
+            };
+            if n == 0 || fs >= s || e > page.list.commands.len() {
+                continue;
+            }
+            // `[s, e)` to `fs`: the tail from `e` goes to `s`, which leaves
+            // the block at the tail, and the block then goes to `fs`.
+            let len = page.list.commands.len();
+            page.list.move_tail_to(e, s);
+            page.list.move_tail_to(s + (len - e), fs);
+            for (j, range) in self.frame_cmd_ranges.iter_mut().enumerate() {
+                if self.chain_pages.get(j).copied() != Some(page_idx) {
+                    continue;
+                }
+                if let Some((start, end)) = range {
+                    if j != owner && *start >= fs && *start < s {
+                        *start += n;
+                    }
+                    if *end > fs && *end <= s {
+                        *end += n;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Engine ADR 1050 — the custom-positioned objects of a table cell's
+/// paragraph, placed against the cell as Word lays a float out in its cell
+/// (`layoutInCell`): the cell's inner box (`(left, top, width)`, page-local)
+/// stands for the column and the text frame, the page and its margins stay
+/// the page's, and the line references are the paragraph's first line
+/// (`baseline_y_pt`, page-local). A float in a cell takes no wrap and does
+/// not grow its row, as in Word.
+pub(super) fn emit_cell_floats(
+    em: &mut StoryEmitter,
+    paragraph: &paged_model::Paragraph,
+    target_page: usize,
+    (left, top, width): (f32, f32, f32),
+    baseline_y_pt: f32,
+    point_size: f32,
+    pages: &mut [BuiltPage],
+) {
+    let page_w = pages[target_page].width_pt;
+    let page_h = pages[target_page].height_pt;
+    let margin_box = resolve_page_margin_box(em.document, &pages[target_page]);
+    let line = LineRefMetrics::resolve(baseline_y_pt, point_size, point_size * 1.2, None);
+    for af in &paragraph.anchored_frames {
+        if sits_in_line(af) {
+            continue;
+        }
+        let setting = af.setting.as_ref();
+        let (w, h) = af
+            .bounds
+            .map(|b| (b.width(), b.height()))
+            .unwrap_or((0.0, 0.0));
+        let anchor_point = setting
+            .and_then(|s| s.anchor_point.as_deref())
+            .unwrap_or("BottomLeftAnchor");
+        let (near_x, far_x) = match setting.and_then(|s| s.horizontal_reference_point.as_deref()) {
+            Some("PageEdge") => (0.0, page_w),
+            Some("PageMargins") => page_margin_span_h(margin_box, page_w),
+            _ => (left, left + width),
+        };
+        let h_align = setting
+            .and_then(|s| s.horizontal_alignment.as_deref())
+            .unwrap_or("LeftAlign");
+        let ref_x = align_in_span(near_x, far_x, h_align);
+        let ref_y = match setting.and_then(|s| s.vertical_reference_point.as_deref()) {
+            Some("PageEdge") => align_in_span(
+                0.0,
+                page_h,
+                setting
+                    .and_then(|s| s.vertical_alignment.as_deref())
+                    .unwrap_or("TopAlign"),
+            ),
+            Some("PageMargins") => {
+                let (t, b) = page_margin_span_v(margin_box, page_h);
+                align_in_span(
+                    t,
+                    b,
+                    setting
+                        .and_then(|s| s.vertical_alignment.as_deref())
+                        .unwrap_or("TopAlign"),
+                )
+            }
+            Some("ColumnEdge") | Some("Column") | Some("TextFrame") => top,
+            Some("LineXHeight") => line.x_height_y,
+            Some("LineCapHeight") => line.cap_height_y,
+            Some("TopOfLeading") => line.top_of_leading_y,
+            _ => baseline_y_pt,
+        };
+        let (offset_x, offset_y) = setting
+            .map(|s| (s.anchor_x_offset, s.anchor_y_offset))
+            .unwrap_or((0.0, 0.0));
+        let (x, y) =
+            resolve_custom_anchor_pos(ref_x, ref_y, anchor_point, w, h, offset_x, offset_y);
+        let before = pages[target_page].list.commands.len();
+        emit_one_anchored_frame(em, af, target_page, x, y, pages);
+        if af.layout.behind_text {
+            let after = pages[target_page].list.commands.len();
+            em.floats
+                .behind
+                .push((target_page, before, after, em.frame_idx));
+        }
+    }
+}
+
 /// Emit the paragraph's CUSTOM-positioned anchored frames (`Custom` /
 /// `Anchored`), against the references their `AnchoredObjectSetting`
 /// names. Inline and above-line objects sit in their lines instead and
@@ -529,10 +895,8 @@ pub(super) fn emit_anchored_frames_for_paragraph(
 ) {
     let target_page = em.chain_pages[em.frame_idx];
     let frame = em.chain[em.frame_idx];
-    let (ox, oy) = pages[target_page].spread_origin;
-    let frame_insets = frame.inset_spacing.unwrap_or([0.0; 4]);
-    let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
-    let para_origin_x = sx - ox + frame_insets[1] + em.column_x_shift_pt;
+    let (_ox, oy) = pages[target_page].spread_origin;
+    let (_sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
     let para_origin_y = sy - oy;
     // Paragraph baseline (page-local pt). y_cursor is in 1/64 pt
     // relative to the host frame's inner origin, so convert + add
@@ -547,66 +911,53 @@ pub(super) fn emit_anchored_frames_for_paragraph(
         if sits_in_line(af) {
             continue;
         }
-        // An object is placed against the line holding its anchor
-        // (`object-style-options` case 7, InDesign 20.0.1: its top at the
-        // first line's baseline + 6 pt in a two-line paragraph), not
-        // against where the paragraph ends.
-        let anchor_baseline =
-            anchor_line_baseline(em, pages, paragraph, i).unwrap_or(baseline_y_pt);
-        let shift = anchor_baseline - baseline_y_pt;
-        let baseline_y_pt = anchor_baseline;
-        let line_metrics = LineRefMetrics {
-            x_height_y: line_metrics.x_height_y + shift,
-            cap_height_y: line_metrics.cap_height_y + shift,
-            top_of_leading_y: line_metrics.top_of_leading_y + shift,
+        // Engine ADR 1050 — a wrapping object was placed before the
+        // paragraph's lines; it is drawn where they wrapped around it.
+        let (page, frame_idx, place_x, place_y) = match em.floats.placed_at(i) {
+            Some(p) => (p.page, p.frame, p.x, p.y),
+            None => {
+                // An object is placed against the line holding its anchor
+                // (`object-style-options` case 7, InDesign 20.0.1: its top at
+                // the first line's baseline + 6 pt in a two-line paragraph),
+                // not against where the paragraph ends.
+                let anchor_baseline =
+                    anchor_line_baseline(em, pages, paragraph, i).unwrap_or(baseline_y_pt);
+                let shift = anchor_baseline - baseline_y_pt;
+                let line_metrics = LineRefMetrics {
+                    x_height_y: line_metrics.x_height_y + shift,
+                    cap_height_y: line_metrics.cap_height_y + shift,
+                    top_of_leading_y: line_metrics.top_of_leading_y + shift,
+                };
+                // `Custom` / `Anchored` — honour HorizontalReferencePoint
+                // and VerticalReferencePoint with their alignments so the
+                // frame anchors against the column / text-frame / page-
+                // edge rectangles the IDML declares. IDML 14+ writes
+                // `Anchored`; older docs write `Custom`.
+                let (x, y) = custom_top_left(
+                    em,
+                    af,
+                    pages,
+                    target_page,
+                    anchor_baseline,
+                    line_metrics,
+                    margin_box,
+                );
+                // A float (ADR 1050) keeps clear of the story's other
+                // floats when it may not overlap them.
+                let (x, y) = if af.layout.is_unset() {
+                    (x, y)
+                } else {
+                    em.floats.clear_overlap(af, target_page, x, y)
+                };
+                (target_page, em.frame_idx, x, y)
+            }
         };
-        let setting = af.setting.as_ref();
-        let (offset_x, offset_y) = setting
-            .map(|s| (s.anchor_x_offset, s.anchor_y_offset))
-            .unwrap_or((0.0, 0.0));
-        let frame_w = af.bounds.map(|b| b.width()).unwrap_or(0.0);
-        let frame_h = af.bounds.map(|b| b.height()).unwrap_or(0.0);
-        // The corner / edge of the frame the reference point attaches
-        // to (`TopLeftAnchor`, `TopRightAnchor`, `CenterAnchor`, …).
-        let anchor_point = setting
-            .and_then(|s| s.anchor_point.as_deref())
-            .unwrap_or("BottomLeftAnchor");
-        // `Custom` / `Anchored` — honour HorizontalReferencePoint
-        // and VerticalReferencePoint with their alignments so the
-        // frame anchors against the column / text-frame / page-
-        // edge rectangles the IDML declares. IDML 14+ writes
-        // `Anchored`; older docs write `Custom`.
-        let ref_x = horizontal_reference_x(
-            setting,
-            para_origin_x,
-            frame,
-            &pages[target_page],
-            em.column_x_shift_pt,
-            margin_box,
-        );
-        let ref_y = vertical_reference_y(
-            setting,
-            baseline_y_pt,
-            frame,
-            &pages[target_page],
-            para_origin_y,
-            line_metrics,
-            margin_box,
-        );
-        // A real reference span makes both corner components
-        // meaningful: a `RightAlign` reference x with a `*RightAnchor`
-        // corner snaps the frame's right edge to the reference's right
-        // edge.
-        let (place_x, place_y) = resolve_custom_anchor_pos(
-            ref_x,
-            ref_y,
-            anchor_point,
-            frame_w,
-            frame_h,
-            offset_x,
-            offset_y,
-        );
-        emit_one_anchored_frame(em, af, target_page, place_x, place_y, pages);
+        let before = pages[page].list.commands.len();
+        emit_one_anchored_frame(em, af, page, place_x, place_y, pages);
+        if af.layout.behind_text {
+            let after = pages[page].list.commands.len();
+            em.floats.behind.push((page, before, after, frame_idx));
+        }
     }
 }
 
@@ -841,7 +1192,7 @@ fn resolve_custom_anchor_pos(
 /// frame's top-left as resolved from the AnchoredObjectSetting
 /// (InlinePosition / AbovePosition / Custom). For Group children, the
 /// caller offsets these by the child's bounds delta within the group.
-fn emit_one_anchored_frame(
+pub(super) fn emit_one_anchored_frame(
     em: &mut StoryEmitter,
     af: &paged_model::AnchoredFrame,
     target_page: usize,
@@ -1286,10 +1637,16 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         fill_drop_shadow: None,
         content_drop_shadow: None,
         next_text_frame: None,
-        vertical_justification: None,
+        // Engine ADR 1050 — a Word text box's own insets and vertical
+        // alignment; an IDML anchored frame states none here.
+        vertical_justification: af
+            .layout
+            .vertical_justification
+            .as_deref()
+            .and_then(paged_model::VerticalJustification::from_idml),
         first_baseline_offset: None,
         minimum_first_baseline_offset: None,
-        inset_spacing: None,
+        inset_spacing: af.layout.inset_spacing,
         auto_sizing: None,
         auto_sizing_reference_point: None,
         minimum_width_for_auto_sizing: None,
@@ -1368,6 +1725,11 @@ pub(super) fn emit_anchored_textframe_story<'a>(
             parsed.story.optical_margin_size,
         )
         .with_anchored_recursion_depth(em.anchored_recursion_depth + 1);
+    // Engine ADR 1050 — a Word text box's lines are its story's, so a caret
+    // and a selection can stand in them.
+    if !af.layout.is_unset() {
+        sub = sub.with_story_id(story_id);
+    }
     // The story-pass entry point uses a fresh PipelineStats per call
     // for stat aggregation; we accumulate into a discard local rather
     // than the document-wide `total_stats` because anchored stories
@@ -1380,6 +1742,7 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         sub.emit_paragraph(paragraph, pages, &mut sub_stats);
     }
     sub.apply_vertical_justification(pages);
+    sub.apply_behind_text(pages);
     sub.apply_column_rules(pages);
     sub.apply_blend_groups(pages);
 }
