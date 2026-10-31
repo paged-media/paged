@@ -536,11 +536,15 @@ fn sample(row: &SchemaRow, current: &Value, t: &Targets) -> Value {
                     stop_color: "Color/Black".into(),
                     location_pct: 0.0,
                     midpoint_pct: None,
+                    opacity_pct: None,
+                    color: None,
                 },
                 GradientStopSpec {
                     stop_color: t.swatch.clone(),
                     location_pct: 100.0,
                     midpoint_pct: None,
+                    opacity_pct: None,
+                    color: None,
                 },
             ])
         }

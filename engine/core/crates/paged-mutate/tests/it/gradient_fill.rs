@@ -95,6 +95,8 @@ fn gradient_assignment_round_trips_to_a_gradient_paint() {
                         stop_color: "Color/Black".to_string(),
                         location_pct: 0.0,
                         midpoint_pct: None,
+                        opacity_pct: None,
+                        color: None,
                     },
                     // Same swatch on both stops: paged-gen fixtures
                     // carry ONLY the colors they use, and a stop
@@ -106,6 +108,8 @@ fn gradient_assignment_round_trips_to_a_gradient_paint() {
                         stop_color: "Color/Black".to_string(),
                         location_pct: 100.0,
                         midpoint_pct: None,
+                        opacity_pct: None,
+                        color: None,
                     },
                 ],
             },

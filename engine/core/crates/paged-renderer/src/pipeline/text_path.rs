@@ -178,6 +178,12 @@ pub(super) fn emit_polygon_into(
     content: super::shapes::ContentPainter<'_>,
     module: super::shapes::ModulePainter<'_>,
 ) {
+    // Engine ADR 1042 — draw the polygon its vector effects describe.
+    if let Some(baked) = paged_vector_fx::bake::bake_polygon(poly) {
+        return emit_polygon_into(
+            page, &baked, document, palette, fallback, color_ctx, content, module,
+        );
+    }
     if !poly.appearance.is_empty() {
         return super::appearance::emit_polygon(
             page, poly, document, palette, fallback, color_ctx, content, module,

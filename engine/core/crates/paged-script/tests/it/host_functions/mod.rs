@@ -50,6 +50,7 @@ use serde_json::Value;
 
 mod console;
 mod document;
+mod effects;
 mod frames;
 mod history;
 mod layers;
@@ -70,6 +71,7 @@ mod xml;
 const ROW_SOURCES: &[&str] = &[
     include_str!("console.rs"),
     include_str!("document.rs"),
+    include_str!("effects.rs"),
     include_str!("frames.rs"),
     include_str!("history.rs"),
     include_str!("layers.rs"),

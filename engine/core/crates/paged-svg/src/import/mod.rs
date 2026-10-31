@@ -526,6 +526,10 @@ impl<'a> Lower<'a> {
                 stop_color: self.swatch(s.color()),
                 location_pct: (s.offset().get() * 100.0).clamp(0.0, 100.0),
                 midpoint_pct: None,
+                // Stop opacity rides the gradient feather (engine ADR 1031);
+                // paint v2's own stop opacity (ADR 1007) is a follow-up.
+                opacity_pct: None,
+                color: None,
             })
             .collect();
         let key = format!(

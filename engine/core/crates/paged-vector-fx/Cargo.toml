@@ -1,0 +1,25 @@
+[package]
+name = "paged-vector-fx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Live vector effects (engine ADR 1042): Roughen, Zig Zag, Pucker & Bloat, Twist, Tweak, Transform copies, Free Distort, Warp, Offset Path, Outline Stroke, Round Corners, Scribble, Convert to Shape and Pathfinder, computed from an item's source path and its effect stack and cached by hash. Pure Rust, wasm-safe; the build pipeline, export, hit testing and the editor read the effected geometry through it."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-model = { path = "../paged-model" }
+# The path algebra (outline, offset, booleans) the editor's operations run.
+paged-geom = { path = "../paged-geom" }
+# The 3x3 homography behind Free Distort.
+paged-warp = { path = "../paged-warp" }
+# Held at 0.11 with paged-geom (docs/migration/rust-majors.md).
+kurbo = "0.11.3"
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = "1"
+proptest = { version = "1", default-features = false, features = ["std"] }

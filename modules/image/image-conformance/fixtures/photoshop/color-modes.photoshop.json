@@ -1,0 +1,1022 @@
+{
+  "fixture": "color-modes",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/color-modes.jsx",
+    "script_sha256": "3eba51f0f71cb0c31d10979876e8afb935cb28c4dcba0a6343e4798754caeff5",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-30T16:50:23.018Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "findings": {
+    "gray_profile": "Gray Gamma 2.2",
+    "rendering": "relative colorimetric, BPC, no dither"
+  },
+  "cases": [
+    {
+      "id": "lab-8",
+      "params": {
+        "mode": "lab",
+        "bits": 8,
+        "tiles": [
+          {
+            "id": "normal-100",
+            "x": 0,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "normal-50",
+            "x": 32,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "multiply",
+            "x": 64,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          },
+          {
+            "id": "screen",
+            "x": 96,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SCREEN"
+          },
+          {
+            "id": "overlay",
+            "x": 128,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.OVERLAY"
+          },
+          {
+            "id": "darken",
+            "x": 0,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "lighten",
+            "x": 32,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "color-burn",
+            "x": 64,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "color-dodge",
+            "x": 96,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "soft-light",
+            "x": 128,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SOFTLIGHT"
+          },
+          {
+            "id": "hard-light",
+            "x": 0,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.HARDLIGHT"
+          },
+          {
+            "id": "difference",
+            "x": 32,
+            "y": 64,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "exclusion",
+            "x": 64,
+            "y": 64,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "linear-burn",
+            "x": 96,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARBURN"
+          },
+          {
+            "id": "linear-dodge",
+            "x": 128,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARDODGE"
+          },
+          {
+            "id": "hue",
+            "x": 0,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.HUE"
+          },
+          {
+            "id": "saturation",
+            "x": 32,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SATURATION"
+          },
+          {
+            "id": "color",
+            "x": 64,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.COLORBLEND"
+          },
+          {
+            "id": "luminosity",
+            "x": 96,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LUMINOSITY"
+          },
+          {
+            "id": "multiply-50",
+            "x": 128,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          }
+        ],
+        "what": "5x4 tiles of 32 px: a three-colour background under one feathered layer per blend mode"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "color-modes/lab-8.psd"
+      ],
+      "values": {
+        "channels": [
+          "Helligkeit",
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "lab-16",
+      "params": {
+        "mode": "lab",
+        "bits": 16,
+        "tiles": [
+          {
+            "id": "normal-100",
+            "x": 0,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "normal-50",
+            "x": 32,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "multiply",
+            "x": 64,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          },
+          {
+            "id": "screen",
+            "x": 96,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SCREEN"
+          },
+          {
+            "id": "overlay",
+            "x": 128,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.OVERLAY"
+          },
+          {
+            "id": "darken",
+            "x": 0,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "lighten",
+            "x": 32,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "color-burn",
+            "x": 64,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "color-dodge",
+            "x": 96,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "soft-light",
+            "x": 128,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SOFTLIGHT"
+          },
+          {
+            "id": "hard-light",
+            "x": 0,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.HARDLIGHT"
+          },
+          {
+            "id": "difference",
+            "x": 32,
+            "y": 64,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "exclusion",
+            "x": 64,
+            "y": 64,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "linear-burn",
+            "x": 96,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARBURN"
+          },
+          {
+            "id": "linear-dodge",
+            "x": 128,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARDODGE"
+          },
+          {
+            "id": "hue",
+            "x": 0,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.HUE"
+          },
+          {
+            "id": "saturation",
+            "x": 32,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SATURATION"
+          },
+          {
+            "id": "color",
+            "x": 64,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.COLORBLEND"
+          },
+          {
+            "id": "luminosity",
+            "x": 96,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LUMINOSITY"
+          },
+          {
+            "id": "multiply-50",
+            "x": 128,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          }
+        ],
+        "what": "5x4 tiles of 32 px: a three-colour background under one feathered layer per blend mode"
+      },
+      "profile": "none",
+      "bits": 16,
+      "files": [
+        "color-modes/lab-16.psd"
+      ],
+      "values": {
+        "channels": [
+          "Helligkeit",
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "gray-8",
+      "params": {
+        "mode": "gray",
+        "bits": 8,
+        "tiles": [
+          {
+            "id": "normal-100",
+            "x": 0,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "normal-50",
+            "x": 32,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "multiply",
+            "x": 64,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          },
+          {
+            "id": "screen",
+            "x": 96,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SCREEN"
+          },
+          {
+            "id": "overlay",
+            "x": 128,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.OVERLAY"
+          },
+          {
+            "id": "darken",
+            "x": 0,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.DARKEN"
+          },
+          {
+            "id": "lighten",
+            "x": 32,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LIGHTEN"
+          },
+          {
+            "id": "color-burn",
+            "x": 64,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.COLORBURN"
+          },
+          {
+            "id": "color-dodge",
+            "x": 96,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.COLORDODGE"
+          },
+          {
+            "id": "soft-light",
+            "x": 128,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SOFTLIGHT"
+          },
+          {
+            "id": "hard-light",
+            "x": 0,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.HARDLIGHT"
+          },
+          {
+            "id": "difference",
+            "x": 32,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.DIFFERENCE"
+          },
+          {
+            "id": "exclusion",
+            "x": 64,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.EXCLUSION"
+          },
+          {
+            "id": "linear-burn",
+            "x": 96,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARBURN"
+          },
+          {
+            "id": "linear-dodge",
+            "x": 128,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARDODGE"
+          },
+          {
+            "id": "hue",
+            "x": 0,
+            "y": 96,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "saturation",
+            "x": 32,
+            "y": 96,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "color",
+            "x": 64,
+            "y": 96,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "luminosity",
+            "x": 96,
+            "y": 96,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "multiply-50",
+            "x": 128,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          }
+        ],
+        "what": "5x4 tiles of 32 px: a three-colour background under one feathered layer per blend mode"
+      },
+      "profile": "Gray Gamma 2.2",
+      "bits": 8,
+      "files": [
+        "color-modes/gray-8.psd"
+      ],
+      "values": {
+        "channels": [
+          "Grau"
+        ]
+      }
+    },
+    {
+      "id": "gray-16",
+      "params": {
+        "mode": "gray",
+        "bits": 16,
+        "tiles": [
+          {
+            "id": "normal-100",
+            "x": 0,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "normal-50",
+            "x": 32,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "multiply",
+            "x": 64,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          },
+          {
+            "id": "screen",
+            "x": 96,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SCREEN"
+          },
+          {
+            "id": "overlay",
+            "x": 128,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.OVERLAY"
+          },
+          {
+            "id": "darken",
+            "x": 0,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.DARKEN"
+          },
+          {
+            "id": "lighten",
+            "x": 32,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LIGHTEN"
+          },
+          {
+            "id": "color-burn",
+            "x": 64,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.COLORBURN"
+          },
+          {
+            "id": "color-dodge",
+            "x": 96,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.COLORDODGE"
+          },
+          {
+            "id": "soft-light",
+            "x": 128,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SOFTLIGHT"
+          },
+          {
+            "id": "hard-light",
+            "x": 0,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.HARDLIGHT"
+          },
+          {
+            "id": "difference",
+            "x": 32,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.DIFFERENCE"
+          },
+          {
+            "id": "exclusion",
+            "x": 64,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.EXCLUSION"
+          },
+          {
+            "id": "linear-burn",
+            "x": 96,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARBURN"
+          },
+          {
+            "id": "linear-dodge",
+            "x": 128,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARDODGE"
+          },
+          {
+            "id": "hue",
+            "x": 0,
+            "y": 96,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "saturation",
+            "x": 32,
+            "y": 96,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "color",
+            "x": 64,
+            "y": 96,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "luminosity",
+            "x": 96,
+            "y": 96,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "multiply-50",
+            "x": 128,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          }
+        ],
+        "what": "5x4 tiles of 32 px: a three-colour background under one feathered layer per blend mode"
+      },
+      "profile": "Gray Gamma 2.2",
+      "bits": 16,
+      "files": [
+        "color-modes/gray-16.psd"
+      ],
+      "values": {
+        "channels": [
+          "Grau"
+        ]
+      }
+    },
+    {
+      "id": "float-32",
+      "params": {
+        "mode": "rgb",
+        "bits": 32,
+        "tiles": [
+          {
+            "id": "normal-100",
+            "x": 0,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "normal-50",
+            "x": 32,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "multiply",
+            "x": 64,
+            "y": 0,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          },
+          {
+            "id": "screen",
+            "x": 96,
+            "y": 0,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "overlay",
+            "x": 128,
+            "y": 0,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "darken",
+            "x": 0,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.DARKEN"
+          },
+          {
+            "id": "lighten",
+            "x": 32,
+            "y": 32,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LIGHTEN"
+          },
+          {
+            "id": "color-burn",
+            "x": 64,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "color-dodge",
+            "x": 96,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "soft-light",
+            "x": 128,
+            "y": 32,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "hard-light",
+            "x": 0,
+            "y": 64,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "difference",
+            "x": 32,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.DIFFERENCE"
+          },
+          {
+            "id": "exclusion",
+            "x": 64,
+            "y": 64,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "linear-burn",
+            "x": 96,
+            "y": 64,
+            "size": 32,
+            "available": false,
+            "why": "Fehler: Allgemeiner Photoshop-Fehler. Die Funktion steht in dieser Version von Photoshop möglicherweise nicht zur Verfügung.\n- Der Befehl \"festlegen\" ist momentan nicht verfügbar.",
+            "blend": "BlendMode.NORMAL"
+          },
+          {
+            "id": "linear-dodge",
+            "x": 128,
+            "y": 64,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LINEARDODGE"
+          },
+          {
+            "id": "hue",
+            "x": 0,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.HUE"
+          },
+          {
+            "id": "saturation",
+            "x": 32,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.SATURATION"
+          },
+          {
+            "id": "color",
+            "x": 64,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.COLORBLEND"
+          },
+          {
+            "id": "luminosity",
+            "x": 96,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.LUMINOSITY"
+          },
+          {
+            "id": "multiply-50",
+            "x": 128,
+            "y": 96,
+            "size": 32,
+            "available": true,
+            "blend": "BlendMode.MULTIPLY"
+          }
+        ],
+        "what": "5x4 tiles of 32 px: a three-colour background under one feathered layer per blend mode"
+      },
+      "profile": "sRGB IEC61966-2.1 (Lineares RGB-Profil)",
+      "bits": 32,
+      "files": [
+        "color-modes/float-32.psd"
+      ],
+      "values": {
+        "channels": [
+          "Rot",
+          "Grün",
+          "Blau"
+        ]
+      }
+    },
+    {
+      "id": "float-from-16",
+      "params": {
+        "from_bits": 16
+      },
+      "profile": "sRGB IEC61966-2.1 (Lineares RGB-Profil)",
+      "bits": 32,
+      "files": [
+        "color-modes/float-from-16.psd"
+      ]
+    },
+    {
+      "id": "float-from-8",
+      "params": {
+        "from_bits": 8
+      },
+      "profile": "sRGB IEC61966-2.1 (Lineares RGB-Profil)",
+      "bits": 32,
+      "files": [
+        "color-modes/float-from-8.psd"
+      ]
+    },
+    {
+      "id": "indexed-web",
+      "params": {
+        "palette": "web",
+        "dither": "none"
+      },
+      "output": "color-modes/indexed-web.png",
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "color-modes/indexed-web.psd"
+      ]
+    },
+    {
+      "id": "indexed-exact",
+      "params": {
+        "palette": "exact",
+        "dither": "none"
+      },
+      "output": "color-modes/indexed-exact.png",
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "color-modes/indexed-exact.psd"
+      ]
+    },
+    {
+      "id": "multichannel-8",
+      "params": {
+        "from": "rgb"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "color-modes/multichannel-8.psd"
+      ],
+      "values": {
+        "channels": [
+          "Cyan",
+          "Magenta",
+          "Gelb"
+        ]
+      }
+    }
+  ]
+}

@@ -23,7 +23,8 @@ use crate::error::OperationError;
 use crate::invert::invert_batch;
 use crate::operation::{
     AppliedOperation, ColorGroupSpec, GradientSpec, GradientStopSpec, GroupSpec, InvalidationHint,
-    NodeId, NumberingListSpec, Operation, PropertyPath, StyleCollection, SwatchSpec, Value,
+    NodeId, NumberingListSpec, Operation, PropertyPath, StopColorSpec, StyleCollection, SwatchSpec,
+    Value,
 };
 
 // ---------------------------------------------------------------------------
@@ -344,6 +345,7 @@ pub(super) fn gradient_kind_from_attr(s: &str) -> paged_model::GradientKind {
     match s {
         "Linear" => paged_model::GradientKind::Linear,
         "Radial" => paged_model::GradientKind::Radial,
+        "Conic" => paged_model::GradientKind::Conic,
         _ => paged_model::GradientKind::Unknown,
     }
 }
@@ -352,6 +354,7 @@ pub(super) fn gradient_kind_as_attr(k: paged_model::GradientKind) -> &'static st
     match k {
         paged_model::GradientKind::Linear => "Linear",
         paged_model::GradientKind::Radial => "Radial",
+        paged_model::GradientKind::Conic => "Conic",
         paged_model::GradientKind::Unknown => "Unknown",
     }
 }
@@ -371,6 +374,18 @@ pub(super) fn gradient_entry_from_spec(
                 stop_color: s.stop_color.clone(),
                 location_pct: s.location_pct,
                 midpoint_pct: s.midpoint_pct,
+                // Engine ADR 1007 — an opacity outside 0..=100 is clamped;
+                // 100 is the default and stored as absent, so a stop the
+                // panel set back to opaque serialises as it did before.
+                opacity_pct: s
+                    .opacity_pct
+                    .filter(|o| o.is_finite())
+                    .map(|o| o.clamp(0.0, 100.0))
+                    .filter(|o| *o < 100.0),
+                inline_color: s.color.as_ref().map(|c| paged_model::InlineStopColor {
+                    space: paged_model::ColorSpace::from_attr(&c.space),
+                    value: c.value.clone(),
+                }),
             })
             .collect(),
     }
@@ -388,6 +403,11 @@ pub fn gradient_spec_from_entry(entry: &paged_model::GradientEntry) -> GradientS
                 stop_color: s.stop_color.clone(),
                 location_pct: s.location_pct,
                 midpoint_pct: s.midpoint_pct,
+                opacity_pct: s.opacity_pct,
+                color: s.inline_color.as_ref().map(|c| StopColorSpec {
+                    space: c.space.as_attr().to_string(),
+                    value: c.value.clone(),
+                }),
             })
             .collect(),
     }
@@ -1046,6 +1066,7 @@ pub(super) fn apply_create_group(
             corner_option: None,
             corners: Default::default(),
             clip: spec.clip,
+            effect_stack: Vec::new(),
         });
         // The recorded slot is where `FrameRef::Group(new_group_idx)`
         // goes in the parent's members. Remove the member entries (may
@@ -1094,6 +1115,7 @@ pub(super) fn apply_create_group(
             corner_option: None,
             corners: Default::default(),
             clip: spec.clip,
+            effect_stack: Vec::new(),
         });
         // Remove the member entries (which MAY be `FrameRef::Group`s in
         // v2 nested create), THEN re-insert the new group ref at the

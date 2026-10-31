@@ -192,8 +192,9 @@ test.describe("journey · paged.slide plugin", () => {
     });
 
     // New slide from a layout: inserted right after the current slide
-    // (slide 4) and brought into view.
-    await panel.locator("[data-new-slide] button").click();
+    // (slide 4) and brought into view. The row's first button is New
+    // slide; Change layout and Reset slide follow it (slide ADR 712).
+    await panel.locator("[data-new-slide] button").first().click();
     await expect(panel.locator("[data-slide]")).toHaveCount(11, {
       timeout: 20_000,
     });
