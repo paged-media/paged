@@ -2568,6 +2568,54 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // ---- Engine ADR 1042 — a group's vector effects ---------------
+        (NodeId::Group(id), PropertyPath::GroupEffectStack) => {
+            let Value::EffectStack { entries, prev } = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "EffectStack".to_string(),
+                });
+            };
+            let refuse = |reason: String| OperationError::InvalidValue {
+                node: node.clone(),
+                path,
+                reason,
+            };
+            let stack: Vec<paged_model::effect_stack::EffectEntry> = match prev {
+                Some(json) => serde_json::from_str(json)
+                    .map_err(|e| refuse(format!("not a group effect stack: {e}")))?,
+                None => {
+                    let stack = entries
+                        .iter()
+                        .map(crate::operation::EffectEntrySpec::to_model)
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(refuse)?;
+                    if let Some(e) = stack.iter().find(|e| !e.effect.is_vector()) {
+                        return Err(refuse(format!(
+                            "a group's stack holds vector effects only, not `{}`",
+                            e.effect.kind_name()
+                        )));
+                    }
+                    stack
+                }
+            };
+            let group = find_group_mut(doc, id)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let old = std::mem::replace(&mut group.effect_stack, stack);
+            (
+                Value::EffectStack {
+                    entries: old
+                        .iter()
+                        .map(crate::operation::EffectEntrySpec::from_model)
+                        .collect(),
+                    prev: serde_json::to_string(&old).ok(),
+                },
+                InvalidationHint {
+                    structural: true,
+                    ..frame_style_hint(node)
+                },
+            )
+        }
         // ---- R-11 — the drop shadow's remaining attributes ----------
         (
             NodeId::TextFrame(_)
@@ -3512,6 +3560,40 @@ pub(super) fn apply_set_property(
             let prev = std::mem::replace(slot, ops.clone());
             (
                 Value::ImageAdjustments(prev),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
+        // Engine ADR 1007 — how a gradient stroke maps onto the stroke.
+        // The inverse names the mode it replaced (an unset mode reads
+        // "Within", the value it stood for), so undo restores it exactly.
+        (
+            NodeId::TextFrame(_)
+            | NodeId::Rectangle(_)
+            | NodeId::Oval(_)
+            | NodeId::Polygon(_)
+            | NodeId::GraphicLine(_),
+            PropertyPath::FrameGradientStrokeMode,
+        ) => {
+            let new_val = expect_text(path, value)?;
+            let mode = paged_model::StrokeGradientMode::parse(&new_val).ok_or_else(|| {
+                OperationError::InvalidValue {
+                    node: node.clone(),
+                    path,
+                    reason: format!(
+                        "a stroke gradient mode is \"Within\", \"Along\" or \"Across\", not \
+                         {new_val:?}"
+                    ),
+                }
+            })?;
+            let slot = find_gradient_stroke_mode_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = *slot;
+            *slot = mode;
+            (
+                Value::Text(prev.as_str().into()),
                 InvalidationHint {
                     frame_style: vec![node.clone()],
                     ..Default::default()

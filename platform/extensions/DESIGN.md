@@ -901,6 +901,34 @@ protocol 78's handshake proves the engine has them.
 paged.draw's Symbols panel uses them when the flag is up and keeps its
 re-emitted artwork (draw ADR 356) as the fallback for a host without it.
 
+`"document.vectorEffects@1"` (engine ADR 1042, protocol 78) says the
+engine draws LIVE VECTOR EFFECTS: entries of the same effect stack
+(`frameEffectStack`) of kind `roughen`, `zigZag`, `puckerBloat`, `twist`,
+`tweak`, `transformCopies`, `freeDistort`, `warp` (Illustrator's fifteen
+styles), `offsetPath`, `outlinePath` (Outline Stroke), `roundCorners`,
+`scribble` and `convertToShape`, each with its flat parameters on
+`EffectEntrySpec` (the table on the wire type). They change the item's
+geometry before anything paints it, in their order among themselves; the
+paint and raster entries act on the result. Editing stays on the source
+path; hit testing, point snapping and the Pathfinder operations see the
+effected outline. A group takes `groupEffectStack` (vector kinds only):
+a `pathfinder` entry (`op`: `add`, `subtract` (Minus Front), `intersect`,
+`exclude`) draws its members as one outline — Illustrator's compound
+shape. `expandAppearance { elementId }` keeps the effected outline for
+good (an oval becomes a polygon, a group with a Pathfinder effect one
+polygon of its id), one undo step. IDML export writes the outline baked,
+reports it, and keeps the source in labels a paged reader restores.
+STATIC: the protocol-78 handshake proves the engine has the op and the
+paths. paged.draw's effect UI (WP6.3) and the host Effects panel list the
+kinds from the schema's `EffectKind`.
+
+`"document.paint2@1"` (engine ADR 1007) is another property flag: the
+vendored wire carries a gradient stop's opacity (`opacityPct`) and inline
+colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`
+("Within" / "Along" / "Across") and `frameGradientFillStart`. Additive at
+protocol 76 like the fill rule; the SVG importer asks it before
+lowering an SVG gradient with `stop-opacity` natively.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

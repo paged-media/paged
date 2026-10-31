@@ -271,7 +271,7 @@ impl CanvasModel {
                 if !selectability.allows(c.element_id.raw_id()) {
                     continue;
                 }
-                if !point_in_oriented_frame(spread_point, c.bounds, c.item_transform) {
+                if !point_in_oriented_frame(spread_point, c.hit_bounds, c.item_transform) {
                     continue;
                 }
 
@@ -391,6 +391,10 @@ fn table_cell_at_point(
 pub(crate) struct Candidate {
     pub element_id: ElementId,
     pub bounds: Bounds,
+    /// Engine ADR 1042 — where the item can be hit: its bounds, grown to
+    /// what its live vector effects draw (a Zig Zag past the edge, a
+    /// Transform copy beside it). Selection still reports `bounds`.
+    pub hit_bounds: Bounds,
     pub item_transform: Option<[f32; 6]>,
     pub item_layer: Option<String>,
     pub is_text: bool,
@@ -439,6 +443,22 @@ pub(crate) fn collect_candidates(
     out
 }
 
+/// `bounds` grown to an effected outline's box, if there is one.
+fn effected_bounds(
+    bounds: Bounds,
+    fx: Option<std::sync::Arc<paged_vector_fx::Effected>>,
+) -> Bounds {
+    let Some(b) = fx.and_then(|fx| fx.shape.bounds()) else {
+        return bounds;
+    };
+    Bounds {
+        top: bounds.top.min(b.y0 as f32),
+        left: bounds.left.min(b.x0 as f32),
+        bottom: bounds.bottom.max(b.y1 as f32),
+        right: bounds.right.max(b.x1 as f32),
+    }
+}
+
 fn push_frame_ref(
     spread: &Spread,
     fr: FrameRef,
@@ -462,6 +482,10 @@ fn push_frame_ref(
                 out.push(Candidate {
                     element_id: ElementId::TextFrame(id.clone()),
                     bounds: f.bounds,
+                    hit_bounds: effected_bounds(
+                        f.bounds,
+                        paged_vector_fx::bake::text_frame_effected(f),
+                    ),
                     item_transform: f.item_transform,
                     item_layer: f.item_layer.clone(),
                     is_text: f.parent_story.is_some(),
@@ -487,6 +511,10 @@ fn push_frame_ref(
                 out.push(Candidate {
                     element_id: ElementId::Rectangle(id.clone()),
                     bounds: f.bounds,
+                    hit_bounds: effected_bounds(
+                        f.bounds,
+                        paged_vector_fx::bake::rectangle_effected(f),
+                    ),
                     item_transform: f.item_transform,
                     item_layer: f.item_layer.clone(),
                     is_text: false,
@@ -512,6 +540,7 @@ fn push_frame_ref(
                 out.push(Candidate {
                     element_id: ElementId::Oval(id.clone()),
                     bounds: f.bounds,
+                    hit_bounds: effected_bounds(f.bounds, paged_vector_fx::bake::oval_effected(f)),
                     item_transform: f.item_transform,
                     item_layer: f.item_layer.clone(),
                     is_text: false,
@@ -537,6 +566,7 @@ fn push_frame_ref(
                 out.push(Candidate {
                     element_id: ElementId::GraphicLine(id.clone()),
                     bounds: f.bounds,
+                    hit_bounds: f.bounds,
                     item_transform: f.item_transform,
                     item_layer: f.item_layer.clone(),
                     is_text: false,
@@ -562,6 +592,10 @@ fn push_frame_ref(
                 out.push(Candidate {
                     element_id: ElementId::Polygon(id.clone()),
                     bounds: f.bounds,
+                    hit_bounds: effected_bounds(
+                        f.bounds,
+                        paged_vector_fx::bake::polygon_effected(f),
+                    ),
                     item_transform: f.item_transform,
                     item_layer: f.item_layer.clone(),
                     is_text: false,
@@ -592,6 +626,7 @@ fn push_frame_ref(
                 out.push(Candidate {
                     element_id: ElementId::Instance(id.clone()),
                     bounds: f.bounds,
+                    hit_bounds: f.bounds,
                     item_transform: Some(f.item_transform),
                     item_layer: f.item_layer.clone(),
                     is_text: false,

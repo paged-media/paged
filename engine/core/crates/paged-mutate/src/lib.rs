@@ -50,23 +50,23 @@ use paged_scene::Document;
 
 pub mod appearance_wire;
 pub mod apply;
-pub mod bezier_conv;
+pub use paged_geom::bezier_conv;
 pub mod error;
 pub mod group_frame;
 pub mod history;
 pub mod ids;
 pub mod invert;
-pub mod kurbo_kernel;
+pub use paged_geom::kurbo_kernel;
 pub mod notify;
 pub mod operation;
-pub mod orientation;
+pub use paged_geom::orientation;
 pub mod path_math;
-pub mod pathfinder;
-pub mod planar;
-mod planar_dcel;
+pub use paged_geom::pathfinder;
+pub use paged_geom::planar;
 #[cfg(feature = "schema")]
 pub mod schema;
-pub mod stroke_kernel;
+pub use paged_geom::stroke_kernel;
+mod vector_effect_spec;
 
 pub use apply::apply;
 pub use apply::apply_checked;
@@ -90,8 +90,8 @@ pub use operation::{
     FieldKind, GradientSpec, GradientStopSpec, GroupSpec, GuideOrientationSpec, InvalidationHint,
     NestedParent, NodeId, NodeSpec, NumberingLevelSpec, NumberingListSpec, OpacityMaskMode,
     Operation, ParagraphListState, PathPointAddress, PathPointRole, PathfinderKind,
-    PathfinderRegionVerb, PropertyPath, StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec,
-    TextPathSpec, Value, ZOrderTarget,
+    PathfinderRegionVerb, PropertyPath, StopColorSpec, StyleCollection, StyleScope,
+    SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 
@@ -278,6 +278,7 @@ mod tests {
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
+            gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
             effects: None,
             effect_stack: Vec::new(),
             appearance: Vec::new(),
@@ -1051,11 +1052,15 @@ mod tests {
                     stop_color: "Color/Red".into(),
                     location_pct: 0.0,
                     midpoint_pct: Some(40.0),
+                    opacity_pct: None,
+                    color: None,
                 },
                 GradientStopSpec {
                     stop_color: "Color/Yellow".into(),
                     location_pct: 100.0,
                     midpoint_pct: None,
+                    opacity_pct: None,
+                    color: None,
                 },
             ],
         };
@@ -1078,6 +1083,8 @@ mod tests {
                         stop_color: "Color/Blue".into(),
                         location_pct: 0.0,
                         midpoint_pct: None,
+                        opacity_pct: None,
+                        color: None,
                     }],
                 },
             })
@@ -2115,6 +2122,7 @@ mod tests {
             corner_option: None,
             corners: Default::default(),
             clip: false,
+            effect_stack: Vec::new(),
         });
         Document {
             designmap: DesignMap::default(),

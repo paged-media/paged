@@ -2794,6 +2794,38 @@ fn symbol_cases(c: &mut Vec<Case>) {
             symbol_id: "Symbol/sweep".into(),
         }
     }));
+    // Engine ADR 1042 — Expand Appearance keeps what the item drew: the
+    // renderer already drew the effected outline, now the path is it.
+    c.push(inert(
+        "ExpandAppearance",
+        "geometry",
+        "expanding draws the outline the live effect already drew; only the model changes",
+        |m| {
+            let id = add_quad(m, 120.0, 120.0, 160.0, 120.0);
+            let zig = paged_mutate::operation::EffectEntrySpec {
+                size: Some(8.0),
+                ridges: Some(3),
+                ..paged_mutate::operation::EffectEntrySpec::new(
+                    paged_mutate::operation::EffectKind::ZigZag,
+                )
+            };
+            m.apply_mutation(&Mutation::Set {
+                address: paged_wire::VirtualTarget::Element {
+                    element_id: ElementId::Polygon(id.clone()),
+                }
+                .into(),
+                path: "frameEffectStack".into(),
+                value: Value::EffectStack {
+                    entries: vec![zig],
+                    prev: None,
+                },
+            })
+            .expect("a zig zag");
+            Mutation::ExpandAppearance {
+                element_id: ElementId::Polygon(id),
+            }
+        },
+    ));
 }
 
 // ── pathfinder ──────────────────────────────────────────────────────
@@ -3207,11 +3239,15 @@ fn palette_cases(c: &mut Vec<Case>) {
                             stop_color: a,
                             location_pct: 0.0,
                             midpoint_pct: None,
+                            opacity_pct: None,
+                            color: None,
                         },
                         GradientStopSpec {
                             stop_color: b,
                             location_pct: 100.0,
                             midpoint_pct: None,
+                            opacity_pct: None,
+                            color: None,
                         },
                     ],
                 },
@@ -3243,11 +3279,15 @@ fn palette_cases(c: &mut Vec<Case>) {
                         stop_color: a.clone(),
                         location_pct: 0.0,
                         midpoint_pct: None,
+                        opacity_pct: None,
+                        color: None,
                     },
                     GradientStopSpec {
                         stop_color: a,
                         location_pct: 100.0,
                         midpoint_pct: None,
+                        opacity_pct: None,
+                        color: None,
                     },
                 ],
             },
