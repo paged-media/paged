@@ -3337,6 +3337,185 @@ const TRACKED_PROBES: Probe[] = [
   },
 ];
 
+// ── review: comments and recorded changes (doc ADR 613) ─────────
+// On the `text` fixture. Each edit/reply/resolve/delete probe inserts a
+// scratch comment first, each accept/reject probe records a scratch
+// change first (setupUndo 1), so the classification is the engine's.
+const PROBE_COMMENT = "9001";
+const PROBE_CHANGE = "probe-change";
+
+const scratchComment = (fx: LoadedFixture) =>
+  fx.firstStory && {
+    op: "insertComment",
+    args: {
+      storyId: fx.firstStory.selfId,
+      start: 0,
+      end: 3,
+      comment: { id: PROBE_COMMENT, author: "Probe", text: "Probe comment" },
+    },
+  };
+
+const scratchChange = (fx: LoadedFixture) =>
+  fx.firstStory && {
+    op: "recordChange",
+    args: {
+      storyId: fx.firstStory.selfId,
+      start: 0,
+      end: 3,
+      change: { kind: "insert", id: PROBE_CHANGE, author: "Probe" },
+    },
+  };
+
+/** The probe op after a scratch setup op; null when the setup is refused. */
+async function after(
+  page: Page,
+  setup: unknown,
+  m: unknown,
+): Promise<unknown | null> {
+  return setup && (await tryMutate(page, setup)).ok ? m : null;
+}
+
+const REVIEW_PROBES: Probe[] = [
+  { op: "insertComment", build: async ({ fx }) => scratchComment(fx) },
+  {
+    op: "replyComment",
+    build: async ({ page, fx }) =>
+      after(page, scratchComment(fx), {
+        op: "replyComment",
+        args: {
+          parentId: PROBE_COMMENT,
+          comment: { id: "9002", author: "Probe", text: "Probe reply" },
+        },
+      }),
+    setupUndo: 1,
+  },
+  {
+    op: "editComment",
+    build: async ({ page, fx }) =>
+      after(page, scratchComment(fx), {
+        op: "editComment",
+        args: { commentId: PROBE_COMMENT, text: "Edited by the probe" },
+      }),
+    setupUndo: 1,
+  },
+  {
+    op: "resolveComment",
+    build: async ({ page, fx }) =>
+      after(page, scratchComment(fx), {
+        op: "resolveComment",
+        args: { commentId: PROBE_COMMENT, resolved: true },
+      }),
+    setupUndo: 1,
+  },
+  {
+    op: "deleteComment",
+    build: async ({ page, fx }) =>
+      after(page, scratchComment(fx), {
+        op: "deleteComment",
+        args: { commentId: PROBE_COMMENT },
+      }),
+    setupUndo: 1,
+  },
+  { op: "recordChange", build: async ({ fx }) => scratchChange(fx) },
+  {
+    op: "acceptChange",
+    build: async ({ page, fx }) =>
+      after(page, scratchChange(fx), {
+        op: "acceptChange",
+        args: { storyId: fx.firstStory?.selfId, id: PROBE_CHANGE },
+      }),
+    setupUndo: 1,
+  },
+  {
+    op: "rejectChange",
+    build: async ({ page, fx }) =>
+      after(page, scratchChange(fx), {
+        op: "rejectChange",
+        args: { storyId: fx.firstStory?.selfId, id: PROBE_CHANGE },
+      }),
+    setupUndo: 1,
+  },
+];
+
+// ── a page item's hyperlink (engine ADR 1026), on `geometry` ─────
+const ITEM_LINK_PROBES: Probe[] = [
+  {
+    op: "insertItemHyperlink",
+    build: async ({ page, fx }) => {
+      const frames = await newFrames(page, fx.pages[0].pageId, [
+        [10, 10, 40, 40],
+      ]);
+      return frames
+        ? {
+            op: "insertItemHyperlink",
+            args: { item: frames[0]!.id, url: "https://paged.media" },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+];
+
+// ── masters based on masters, override lists (engine ADR 1026) ───
+// On the `masters` fixture: its first page applies a master with a
+// rectangle; the probe overrides that rectangle onto the page, or
+// records it in the page's override list. The ids come from the
+// fixture's own XML, the way the engine's script tests find them.
+
+/** The first page's id and the first rectangle of the master it applies. */
+function firstPageMasterRect(
+  path: string,
+  pageId: string,
+): { pageId: string; rect: string } | null {
+  const src = readFileSync(path);
+  const names = zipEntries(src).map((e) => e.name);
+  let master: string | null = null;
+  for (const n of names.filter((n) => n.startsWith("Spreads/"))) {
+    const xml = readZipText(src, n) ?? "";
+    const m = new RegExp(
+      `<Page [^>]*Self="${pageId}"[^>]*AppliedMaster="([^"]+)"`,
+    ).exec(xml);
+    if (m) master = m[1]!;
+  }
+  if (!master) return null;
+  const xml = readZipText(src, `MasterSpreads/MasterSpread_${master}.xml`);
+  const rect = xml ? /<Rectangle [^>]*Self="([^"]+)"/.exec(xml) : null;
+  return rect ? { pageId, rect: rect[1]! } : null;
+}
+
+const MASTER_PROBES: Probe[] = [
+  {
+    op: "overrideMasterItems",
+    build: async ({ fx }) => {
+      const at = firstPageMasterRect(
+        fixturePath("masters"),
+        fx.pages[0].pageId,
+      );
+      return at
+        ? {
+            op: "overrideMasterItems",
+            args: { page: at.pageId, items: [at.rect] },
+          }
+        : null;
+    },
+  },
+  {
+    op: "setPageOverrides",
+    build: async ({ fx }) => {
+      const at = firstPageMasterRect(
+        fixturePath("masters"),
+        fx.pages[0].pageId,
+      );
+      return at
+        ? {
+            op: "setPageOverrides",
+            args: { page: at.pageId, overrides: [at.rect] },
+          }
+        : null;
+    },
+  },
+];
+
 async function runProbes(
   page: Page,
   probes: Probe[],
@@ -3403,6 +3582,7 @@ test("AC-E2E-CAPS — every wire op's engine support matches the table", async (
   const geoFx = await loadFixture(page, "geometry");
   await runProbes(page, GEOMETRY_PROBES, geoFx, results);
   await runProbes(page, SYMBOL_PROBES, geoFx, results);
+  await runProbes(page, ITEM_LINK_PROBES, geoFx, results);
 
   const condFx = await loadFixture(page, "conditions");
   await runProbes(page, CONDITION_PROBES, condFx, results);
@@ -3429,6 +3609,12 @@ test("AC-E2E-CAPS — every wire op's engine support matches the table", async (
     absPath: trackedPath,
   });
   await runProbes(page, TRACKED_PROBES, trackedFx, results);
+
+  const reviewFx = await loadFixture(page, "text");
+  await runProbes(page, REVIEW_PROBES, reviewFx, results);
+
+  const mastersFx = await loadFixture(page, "masters");
+  await runProbes(page, MASTER_PROBES, mastersFx, results);
 
   // ── report ────────────────────────────────────────────────────
   const table = results

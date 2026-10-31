@@ -149,6 +149,7 @@ mod wasm {
                 ("pipelineImageDecodes", c.pipeline_image_decodes),
                 ("sceneImageDecodes", c.scene_image_decodes),
                 ("pageScenesBuilt", c.page_scenes_built),
+                ("blendCpuComposites", c.blend_cpu_composites),
                 ("growPasses", c.grow_passes),
                 ("storyEmits", c.story_emits),
             ] {

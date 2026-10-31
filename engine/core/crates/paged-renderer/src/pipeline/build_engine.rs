@@ -4167,6 +4167,8 @@ pub(super) fn build_document_inner(
 
     for (page, adopted) in pages.iter_mut().zip(&adopted) {
         if !adopted {
+            // Photoshop's blend modes travel on groups (ADR 1034).
+            paged_compose::lift_photoshop_fill_blends(&mut page.list);
             paged_compose::fit_transparency_group_bounds(&mut page.list);
         }
     }

@@ -132,6 +132,55 @@ pub struct ApiCatalog {
     pub effect_kinds: Vec<crate::effect_kinds::EffectKindRow>,
     /// The Effect menu's groups, in menu order.
     pub effect_categories: &'static [&'static str],
+    /// Engine ADR 1034 — the 27 blend modes, in Photoshop's menu order,
+    /// with every spelling a surface needs: the one list the editor's
+    /// menus and the modules' schemas read instead of keeping their own.
+    pub blend_modes: Vec<BlendModeRow>,
+}
+
+/// One blend mode as the catalog publishes it (`paged_blend::BlendMode`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlendModeRow {
+    /// The model spelling — the value of `frameBlendMode` and its kin.
+    pub name: &'static str,
+    /// The canonical snake_case id (paged.image's `compose.<id>`).
+    pub id: &'static str,
+    /// English display name (Photoshop's).
+    pub label: &'static str,
+    /// Photoshop's menu group, 0–5.
+    pub group: usize,
+    /// One of the sixteen PDF / InDesign modes.
+    pub native: bool,
+    /// What an IDML export writes for it (itself, or the nearest).
+    pub idml: &'static str,
+    /// The PDF `/BM` name, when PDF has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pdf: Option<&'static str>,
+    /// The CSS `mix-blend-mode` keyword, when CSS has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub css: Option<&'static str>,
+    /// The PSD layer-record key.
+    pub psd: &'static str,
+    pub separable: bool,
+}
+
+fn blend_modes() -> Vec<BlendModeRow> {
+    paged_blend::BlendMode::MENU
+        .into_iter()
+        .map(|m| BlendModeRow {
+            name: m.name(),
+            id: m.id(),
+            label: m.display_name(),
+            group: m.menu_group(),
+            native: m.is_native(),
+            idml: m.idml_name(),
+            pdf: m.pdf_name(),
+            css: m.css_name(),
+            psd: std::str::from_utf8(m.psd_key()).unwrap_or("norm"),
+            separable: !m.is_non_separable(),
+        })
+        .collect()
 }
 
 /// One settable path that answers to two names.
@@ -159,6 +208,7 @@ pub fn api_catalog() -> ApiCatalog {
         path_aliases: path_aliases(),
         property_schemas: crate::virtual_paths::property_schemas(),
         object_schemas: crate::object_schema::object_schemas(),
+        blend_modes: blend_modes(),
         effect_kinds: crate::effect_kinds::effect_kinds(),
         effect_categories: crate::effect_kinds::EFFECT_CATEGORIES,
     }

@@ -1102,6 +1102,62 @@ pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 1034 — a blend mode IDML cannot store. InDesign has the
+/// sixteen PDF modes; Photoshop's eleven are written as the nearest of
+/// them (`idml-export`'s `idml_blend`), so the picture changes on reopen.
+/// Declared from the model, as the fill rule's line is: one line per
+/// item (object, target or effect) naming the mode, what was written and
+/// `.paged`, which keeps it.
+pub(crate) fn blend_mode_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    for parsed in &scene.spreads {
+        let Ok(tree) = serde_json::to_value(&parsed.spread) else {
+            continue;
+        };
+        walk_blend_modes(&tree, None, &mut out);
+    }
+    out
+}
+
+/// Walk a serialised spread: every `*blend_mode` string the engine reads
+/// as one of Photoshop's modes is a line, attributed to the nearest
+/// enclosing object's `self_id`.
+fn walk_blend_modes(v: &serde_json::Value, owner: Option<&str>, out: &mut Vec<String>) {
+    match v {
+        serde_json::Value::Object(map) => {
+            let owner = map
+                .get("self_id")
+                .and_then(serde_json::Value::as_str)
+                .or(owner);
+            for (key, value) in map {
+                if key.ends_with("blend_mode") {
+                    if let Some(mode) = value
+                        .as_str()
+                        .and_then(paged_blend::BlendMode::from_name)
+                        .filter(|m| !m.is_native())
+                    {
+                        out.push(format!(
+                            "blend mode {} on `{}` ({key}) is a Photoshop mode InDesign cannot \
+                             store — IDML gets {}. Save as `.paged` to keep it.",
+                            mode.name(),
+                            owner.unwrap_or("?"),
+                            mode.idml_name(),
+                        ));
+                        continue;
+                    }
+                }
+                walk_blend_modes(value, owner, out);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                walk_blend_modes(item, owner, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

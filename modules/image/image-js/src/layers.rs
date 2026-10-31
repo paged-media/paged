@@ -3003,7 +3003,7 @@ impl LayerStack {
                 TileInput { f16_bytes: &stack },
                 TileInput { f16_bytes: &inner },
             ],
-            ComposeParams::new(g.opacity).as_bytes(),
+            &image_kernels::families::compose::layer_params(g.blend, g.opacity, (0, 0)),
             mask.as_deref(),
             w,
             h,
@@ -4314,7 +4314,11 @@ impl LayerStack {
                 ),
                 None => (
                     layer.blend,
-                    ComposeParams::new(layer.opacity).as_bytes().to_vec(),
+                    image_kernels::families::compose::layer_params(
+                        layer.blend,
+                        layer.opacity,
+                        (0, 0),
+                    ),
                 ),
             };
             acc = image_gpu::execute_tile_once_async(
@@ -4493,7 +4497,7 @@ async fn ref_clip_close(
             },
             TileInput { f16_bytes: &group },
         ],
-        ComposeParams::new(g.opacity).as_bytes(),
+        &image_kernels::families::compose::layer_params(g.blend, g.opacity, (0, 0)),
         None,
         w,
         h,
@@ -4504,47 +4508,20 @@ async fn ref_clip_close(
 
 /// The `compose.*` kernel for a PSD blend-mode fourcc.
 ///
-/// All 26 registered blend modes have a PSD key and all 26 are mapped;
-/// keys outside that set (`diss` dissolve, `pass` group pass-through,
-/// and Photoshop's own additions) fall back to `normal` — the honest
-/// approximation, and one the panel makes visible because the layer's
-/// blend then READS as "normal" rather than silently claiming otherwise.
+/// The key resolves through the engine's one blend-mode table
+/// (`paged_blend::BlendMode::from_psd_key`, engine ADR 1034): all 27
+/// modes, Dissolve's `diss` included. Keys outside it (`pass` group
+/// pass-through, and Photoshop's own additions) fall back to `normal` —
+/// the honest approximation, and one the panel makes visible because the
+/// layer's blend then READS as "normal" rather than silently claiming
+/// otherwise.
 ///
 /// Provenance: Adobe Photoshop File Format specification — Layer
-/// Records, "Blend mode key"; the operator semantics are W3C
-/// Compositing and Blending Level 1, which is what the `compose.*`
-/// kernels implement.
+/// Records, "Blend mode key".
 pub fn psd_blend_kernel(key: &[u8; 4]) -> &'static KernelDef {
-    let name = match key {
-        b"norm" => "normal",
-        b"mul " => "multiply",
-        b"scrn" => "screen",
-        b"over" => "overlay",
-        b"dark" => "darken",
-        b"lite" => "lighten",
-        b"div " => "color_dodge",
-        b"idiv" => "color_burn",
-        b"hLit" => "hard_light",
-        b"sLit" => "soft_light",
-        b"diff" => "difference",
-        b"smud" => "exclusion",
-        b"hue " => "hue",
-        b"sat " => "saturation",
-        b"colr" => "color",
-        b"lum " => "luminosity",
-        b"lbrn" => "linear_burn",
-        b"lddg" => "linear_dodge",
-        b"dkCl" => "darker_color",
-        b"lgCl" => "lighter_color",
-        b"vLit" => "vivid_light",
-        b"lLit" => "linear_light",
-        b"pLit" => "pin_light",
-        b"hMix" => "hard_mix",
-        b"fsub" => "subtract",
-        b"fdiv" => "divide",
-        _ => return &COMPOSE_NORMAL,
-    };
-    blend_kernel(name).unwrap_or(&COMPOSE_NORMAL)
+    paged_blend::BlendMode::from_psd_key(key)
+        .and_then(|m| blend_kernel(m.id()))
+        .unwrap_or(&COMPOSE_NORMAL)
 }
 
 /// One whole-image UNARY dispatch (the `cast.*` bracket steps) — the
@@ -6513,8 +6490,11 @@ mod tests {
         s.set_blend(0, "compose.screen")
             .expect("qualified id works");
         assert_eq!(s.layers()[0].blend_name(), "screen");
+        s.set_blend(0, "dissolve")
+            .expect("Dissolve is registered (ADR 1034)");
+        assert_eq!(s.layers()[0].blend.id, "compose.dissolve");
         assert!(
-            s.set_blend(0, "dissolve").is_err(),
+            s.set_blend(0, "pass_through").is_err(),
             "an unregistered mode is a clean error, never a silent normal"
         );
     }
@@ -6558,7 +6538,7 @@ mod tests {
         assert_eq!(seen.len(), 26, "every key maps to a DISTINCT kernel");
         // An unmodeled key (dissolve, group pass-through) falls back to
         // normal — the honest approximation, and a visible one.
-        assert_eq!(psd_blend_kernel(b"diss").id, "compose.normal");
+        assert_eq!(psd_blend_kernel(b"diss").id, "compose.dissolve");
         assert_eq!(psd_blend_kernel(b"pass").id, "compose.normal");
     }
 
