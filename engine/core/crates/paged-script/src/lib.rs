@@ -926,6 +926,21 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
         .function(guarded(paged_delete_master), js_string!("deleteMaster"), 1)
         .function(guarded(paged_rename_master), js_string!("renameMaster"), 2)
         .function(
+            guarded(paged_set_page_overrides),
+            js_string!("setPageOverrides"),
+            2,
+        )
+        .function(
+            guarded(paged_override_master_items),
+            js_string!("overrideMasterItems"),
+            3,
+        )
+        .function(
+            guarded(paged_insert_item_hyperlink),
+            js_string!("insertItemHyperlink"),
+            3,
+        )
+        .function(
             guarded(paged_set_page_metadata),
             js_string!("setPageMetadata"),
             3,
@@ -2619,6 +2634,79 @@ fn paged_rename_master(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         .to_std_string_escaped();
     let name = opt_string(args.get_or_undefined(1), ctx);
     Ok(apply_bool(&Mutation::RenameMaster { master, name }))
+}
+
+/// A wire mutation from `op` and a JSON `args` object; `None` when the
+/// arguments do not make one.
+fn wire_mutation(op: &str, args: serde_json::Value) -> Option<Mutation> {
+    serde_json::from_value::<Mutation>(serde_json::json!({ "op": op, "args": args })).ok()
+}
+
+/// `paged.setPageOverrides(pageId, itemIds)` — set a page's (or a master
+/// page's) override list: the master items it hides
+/// (`Mutation::SetPageOverrides`, engine ADR 1026).
+fn paged_set_page_overrides(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let overrides = to_json_value(args.get_or_undefined(1), ctx).unwrap_or(serde_json::json!([]));
+    let Some(m) = wire_mutation(
+        "setPageOverrides",
+        serde_json::json!({ "page": page, "overrides": overrides }),
+    ) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&m))
+}
+
+/// `paged.overrideMasterItems(pageId, itemIds, emptyText?)` — copy master
+/// items onto a page where the master draws them and hide the master's
+/// (`Mutation::OverrideMasterItems`, engine ADR 1026).
+fn paged_override_master_items(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let items = to_json_value(args.get_or_undefined(1), ctx).unwrap_or(serde_json::json!([]));
+    let empty_text = args.get_or_undefined(2).to_boolean();
+    let Some(m) = wire_mutation(
+        "overrideMasterItems",
+        serde_json::json!({ "page": page, "items": items, "emptyText": empty_text }),
+    ) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&m))
+}
+
+/// `paged.insertItemHyperlink(itemId, url, pageId?)` — make a page item a
+/// hyperlink's source, to `url` or to the page `pageId`
+/// (`Mutation::InsertItemHyperlink`, engine ADR 1026).
+fn paged_insert_item_hyperlink(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let item = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let url = opt_string(args.get_or_undefined(1), ctx).unwrap_or_default();
+    let page = opt_string(args.get_or_undefined(2), ctx).map(PageId);
+    Ok(apply_bool(&Mutation::InsertItemHyperlink {
+        item,
+        url,
+        page,
+        name: None,
+    }))
 }
 
 /// `paged.onMaster(masterId, mutation)` — apply a wire mutation (an

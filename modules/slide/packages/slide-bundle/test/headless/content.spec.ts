@@ -135,12 +135,12 @@ describe("the format painter (slide W4)", () => {
     // The source: a rectangle with text, given a line and a text size of
     // its own; the target: another such shape.
     const [srcOutline, srcText] = [
-      el("polygon", "u3p"),
-      el("textFrame", "u3t"),
+      el("polygon", "u42p"),
+      el("textFrame", "u42t"),
     ];
     const [dstOutline, dstText] = [
-      el("polygon", "u5p"),
-      el("textFrame", "u5t"),
+      el("polygon", "u44p"),
+      el("textFrame", "u44t"),
     ];
     const swatches = await host.document.collection<{ selfId: string }>(
       "swatches",
@@ -148,7 +148,7 @@ describe("the format painter (slide W4)", () => {
     const other = swatches
       .map((s) => s.selfId)
       .find((s) => /Color\/(accent2|accent4|Black)/.test(s))!;
-    const st = (await storiesOf(host, [srcText])).get("u3t")!;
+    const st = (await storiesOf(host, [srcText])).get("u42t")!;
     await host.document.mutate({
       op: "batch",
       args: {
@@ -214,14 +214,14 @@ describe("the format painter (slide W4)", () => {
     const { host } = await open(fixture("geometry"), "geometry");
     await expect(
       host.objects.invoke(CONTENT_CMD.pasteFormat, {
-        element: fromElementId(el("polygon", "u5p")),
+        element: fromElementId(el("polygon", "u44p")),
       }),
     ).rejects.toThrow(/no formatting was copied/);
-    await host.selection.set([el("polygon", "u3p")]);
+    await host.selection.set([el("polygon", "u42p")]);
     expect(await host.objects.invoke(CONTENT_CMD.copyFormat, {})).toEqual({
       applied: true,
     });
-    await host.selection.set([el("polygon", "u5p")]);
+    await host.selection.set([el("polygon", "u44p")]);
     expect(await host.objects.invoke(CONTENT_CMD.pasteFormat, {})).toEqual({
       applied: true,
     });
@@ -234,7 +234,7 @@ describe("the SmartArt text pane (slide W4)", () => {
     covers("command:media.paged.slide.setSmartArtText");
     const bytes = fixture("smartart");
     const { host, exporter } = await open(bytes, "smartart");
-    const diagram = fromElementId(el("group", "u7"));
+    const diagram = fromElementId(el("group", "u46"));
     const read = async () =>
       (
         (await host.objects.invoke(CONTENT_TYPED.smartArtPoints, {
@@ -254,7 +254,7 @@ describe("the SmartArt text pane (slide W4)", () => {
     expect(points.every((p) => p.shown && p.depth === 0)).toBe(true);
     // A member shape's address names the diagram too.
     const viaMember = (await host.objects.invoke(CONTENT_TYPED.smartArtPoints, {
-      diagram: fromElementId(el("textFrame", "u4t")),
+      diagram: fromElementId(el("textFrame", "u43t")),
     })) as { points: SmartArtPoint[] };
     expect(viaMember.points.length).toBe(5);
 
@@ -273,7 +273,7 @@ describe("the SmartArt text pane (slide W4)", () => {
       "Epsilon",
     ]);
     // The new text keeps the size PowerPoint drew the old one at.
-    const sizes = await fontSize(host, el("textFrame", "u4t"));
+    const sizes = await fontSize(host, el("textFrame", "u43t"));
     expect(sizes.length).toBeGreaterThan(0);
     expect(sizes.every((s) => s === 55)).toBe(true);
 
@@ -348,7 +348,7 @@ describe("the SmartArt text pane (slide W4)", () => {
     const { host } = await open(fixture("geometry"), "geometry");
     await expect(
       host.objects.invoke(CONTENT_TYPED.smartArtPoints, {
-        diagram: fromElementId(el("polygon", "u3p")),
+        diagram: fromElementId(el("polygon", "u42p")),
       }),
     ).rejects.toThrow(/no SmartArt diagram/);
   }, 120_000);

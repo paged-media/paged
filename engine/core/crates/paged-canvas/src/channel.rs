@@ -3859,6 +3859,11 @@ pub struct PageSummary {
     /// edges it means. Absent for a generated page and from older workers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bounds_pt: Option<[f32; 4]>,
+    /// v78 rider (engine ADR 1026) — the master items the page hides
+    /// (`Page@OverrideList`): those it holds its own copies of, or does not
+    /// show. Empty when none; older workers omit it.
+    #[serde(default)]
+    pub override_list: Vec<String>,
 }
 
 /// panels.md gaps 9/10/19 — one `<Section>` definition. Backs
@@ -3902,6 +3907,36 @@ pub struct MasterPageSummary {
     pub self_id: String,
     pub label: String,
     pub page_count: u32,
+    /// v78 rider (engine ADR 1026) — the master's pages: each page's id,
+    /// size, the master it is based on (its `AppliedMaster`), its override
+    /// list and its plugin metadata. Older workers omit it.
+    #[serde(default)]
+    pub pages: Vec<MasterPageEntry>,
+    /// v78 rider (engine ADR 1026) — the master's items as scene-tree rows,
+    /// in stacking order, with their plugin metadata: what `tree` gives
+    /// for a page. Older workers omit it.
+    #[serde(default)]
+    pub items: Vec<SceneTreeNode>,
+}
+
+/// v78 rider (engine ADR 1026) — one page of a master spread.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MasterPageEntry {
+    pub self_id: String,
+    /// `[width, height]` in points.
+    pub size_pt: [f32; 2],
+    /// The master this master is based on (the page's `AppliedMaster`).
+    #[serde(default)]
+    pub applied_master: Option<String>,
+    /// The items of the masters below it that this master hides.
+    #[serde(default)]
+    pub override_list: Vec<String>,
+    /// The page's `x-paged:` plugin metadata (a layout's name, type and
+    /// preserve flag in a deck).
+    #[serde(default)]
+    pub plugin_metadata: Vec<PluginMetadataEntry>,
 }
 
 /// SDK Phase 5 (v1 sweep) — one cell-style summary. Backs
@@ -4082,6 +4117,10 @@ pub struct HyperlinkSummary {
     pub destination_url: Option<String>,
     #[serde(default)]
     pub destination_page: Option<String>,
+    /// v78 rider (engine ADR 1026) — the page item the link starts from,
+    /// when its source is an item (`insertItemHyperlink`) rather than text.
+    #[serde(default)]
+    pub source_item: Option<String>,
 }
 
 /// SDK Phase 5 (v1 sweep) — one `<Bookmark>` summary. Backs
