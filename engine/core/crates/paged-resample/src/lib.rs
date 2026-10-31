@@ -31,7 +31,9 @@
 //!   bilinear.
 //! - [`warp_projective_rgba8`] — a picture drawn through a projective
 //!   map (a smart object into its placement), bilinear or bicubic,
-//!   transparent outside the picture.
+//!   transparent outside the picture; [`warp_map_rgba8`] the same through
+//!   any backward map (a mesh warp, a displacement field — image ADR 483).
+//! - [`seam_carve_rgba8`] — Content-Aware Scale by seam carving.
 //!
 //! # Coordinate model
 //!
@@ -60,6 +62,9 @@
 //! GPU kernels filter them.
 
 #![forbid(unsafe_code)]
+
+pub mod seam;
+pub use seam::seam_carve_rgba8;
 
 use std::fmt;
 
@@ -526,11 +531,43 @@ pub fn warp_projective_rgba8(
     window: Window,
     filter: WarpFilter,
 ) -> Result<Vec<u8>, ResampleError> {
-    check_source(src, width, height)?;
-    check_target(window.w, window.h)?;
     if inverse.iter().any(|v| !v.is_finite()) {
         return Err(ResampleError::Angle);
     }
+    let m = inverse;
+    warp_map_rgba8(src, width, height, window, filter, |dx, dy| {
+        let sw = m[6] * dx + m[7] * dy + m[8];
+        if sw <= 1e-12 {
+            return None;
+        }
+        Some((
+            (m[0] * dx + m[1] * dy + m[2]) / sw - 0.5,
+            (m[3] * dx + m[4] * dy + m[5]) / sw - 0.5,
+        ))
+    })
+}
+
+/// Draw a straight-alpha RGBA8 picture through ANY backward map onto the
+/// destination `window` (image ADR 483: the CPU twin of the image
+/// module's `geom.warp_mesh` and `geom.warp_field`, and the lane of
+/// headless warps).
+///
+/// `map` takes an output pixel's CENTRE in canvas coordinates
+/// (`window.x + ox + 0.5`, …) and answers the source position to sample
+/// in TAP coordinates (pixel `i`'s centre is `i`), or `None` for no
+/// source (the pixel stays transparent). Sampling is
+/// [`warp_projective_rgba8`]'s: transparent taps outside the picture,
+/// premultiplied filtering, the bicubic's overshoot clamped.
+pub fn warp_map_rgba8(
+    src: &[u8],
+    width: u32,
+    height: u32,
+    window: Window,
+    filter: WarpFilter,
+    map: impl Fn(f64, f64) -> Option<(f64, f64)>,
+) -> Result<Vec<u8>, ResampleError> {
+    check_source(src, width, height)?;
+    check_target(window.w, window.h)?;
     let (w, h) = (width as i64, height as i64);
     let (ow, oh) = (window.w as usize, window.h as usize);
     let tap = |x: i64, y: i64| -> [f32; 4] {
@@ -541,17 +578,16 @@ pub fn warp_projective_rgba8(
         premultiply(&src[i..i + 4])
     };
     let mut out = vec![0u8; ow * oh * 4];
-    let m = inverse;
     for oy in 0..oh {
         let dy = window.y as f64 + oy as f64 + 0.5;
         for ox in 0..ow {
             let dx = window.x as f64 + ox as f64 + 0.5;
-            let sw = m[6] * dx + m[7] * dy + m[8];
-            if sw <= 1e-12 {
+            let Some((sx, sy)) = map(dx, dy) else {
+                continue;
+            };
+            if !sx.is_finite() || !sy.is_finite() {
                 continue;
             }
-            let sx = (m[0] * dx + m[1] * dy + m[2]) / sw - 0.5;
-            let sy = (m[3] * dx + m[4] * dy + m[5]) / sw - 0.5;
             // Wholly outside (with the widest footprint's reach): nothing.
             if sx < -2.0 || sy < -2.0 || sx > w as f64 + 1.0 || sy > h as f64 + 1.0 {
                 continue;
@@ -983,5 +1019,57 @@ mod tests {
         )
         .unwrap();
         assert!(none.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn warp_map_is_the_projective_warp_through_a_closure() {
+        let src = noise(13, 9, false);
+        let win = Window {
+            x: -2,
+            y: 1,
+            w: 15,
+            h: 8,
+        };
+        let h = [0.9, 0.1, 1.5, -0.05, 1.1, -0.5, 0.001, -0.002, 1.0];
+        let a = warp_projective_rgba8(&src, 13, 9, h, win, WarpFilter::Bicubic).unwrap();
+        let b = warp_map_rgba8(&src, 13, 9, win, WarpFilter::Bicubic, |x, y| {
+            let w = h[6] * x + h[7] * y + h[8];
+            Some((
+                (h[0] * x + h[1] * y + h[2]) / w - 0.5,
+                (h[3] * x + h[4] * y + h[5]) / w - 0.5,
+            ))
+        })
+        .unwrap();
+        assert_eq!(a, b);
+        let id = warp_map_rgba8(
+            &src,
+            13,
+            9,
+            Window {
+                x: 0,
+                y: 0,
+                w: 13,
+                h: 9,
+            },
+            WarpFilter::Bilinear,
+            |x, y| Some((x - 0.5, y - 0.5)),
+        )
+        .unwrap();
+        assert_eq!(id, src);
+        let none = warp_map_rgba8(
+            &src,
+            13,
+            9,
+            Window {
+                x: 0,
+                y: 0,
+                w: 4,
+                h: 4,
+            },
+            WarpFilter::Bilinear,
+            |_, _| None,
+        )
+        .unwrap();
+        assert!(none.iter().all(|&v| v == 0));
     }
 }

@@ -35,7 +35,17 @@ const M = defineMessages("image.filterDialog", {
   removePin: "Remove pin {n}",
   points: "{count, plural, one {# point} other {# points}}",
   addPoint: "Add point",
+  reset: "Reset",
   removePoint: "Remove last point",
+  warpOnCanvas:
+    "Drag a point of the mesh on the canvas to bend it freely (the warp " +
+    "becomes Custom).",
+  puppetOnCanvas:
+    "Click the image to add a pin, drag a pin to bend the layer around " +
+    "the others, Alt-click a pin to remove it.",
+  liquifyOnCanvas:
+    "Drag on the image with the chosen tool and brush; Freeze mask " +
+    "protects an area from the other tools. Reset restores the image.",
   onCanvas:
     "Drag the pins and handles on the canvas; with Field blur on, a click " +
     "on the image adds a pin and Alt-click removes one.",
@@ -256,6 +266,27 @@ function Param({
       );
     case "image":
       return null;
+    case "data": {
+      // Geometry made on the canvas (WP5.6): its count and a reset.
+      const list = Array.isArray(value) ? value : p.default;
+      if (!p.count || !p.countLabel) return null;
+      return (
+        <div style={row}>
+          {label}
+          <span id={id} data-filter-data={p.key} style={mono}>
+            {t(p.countLabel, { count: p.count(list) })}
+          </span>
+          <button
+            type="button"
+            data-filter-data-reset={p.key}
+            disabled={list.length === 0}
+            onClick={() => onChange([...p.default])}
+          >
+            {t(M.reset)}
+          </button>
+        </div>
+      );
+    }
   }
 }
 
@@ -521,6 +552,9 @@ export function FilterDialog({
         />
       )}
       {def.id === "blurGallery" && <div style={note}>{t(M.onCanvas)}</div>}
+      {def.id === "warp" && <div style={note}>{t(M.warpOnCanvas)}</div>}
+      {def.id === "puppetWarp" && <div style={note}>{t(M.puppetOnCanvas)}</div>}
+      {def.id === "liquify" && <div style={note}>{t(M.liquifyOnCanvas)}</div>}
       <div style={{ ...row, borderBottom: "none", flexWrap: "wrap" }}>
         <label style={{ font: `12px ${font.sans}` }}>
           <input

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Warp maths shared by the engine and the modules: the 3x3 homography (from four point pairs, inverse, point map). One API maps points (vectors) and feeds the backward samplers (pixels). Leaf crate: depends on nothing."
+description = "Warp maths shared by the engine and the modules: the 3x3 homography (from four point pairs, inverse, point map), the Bezier envelope and Photoshop's warp styles, displacement fields with the Liquify brushes, and the as-rigid-as-possible Puppet Warp mesh. One API maps points (vectors) and feeds the backward samplers (pixels). Leaf crate: depends on nothing."
 
 [lints]
 workspace = true
