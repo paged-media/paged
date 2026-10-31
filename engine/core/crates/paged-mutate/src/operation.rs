@@ -5355,6 +5355,21 @@ pub enum Operation {
         #[serde(default)]
         page: Option<String>,
     },
+    /// Engine ADR 1026 — make page item `item_id` the source of a new
+    /// hyperlink (a `HyperlinkPageItemSource`) to `url`, or to page `page`
+    /// when given: a clickable shape, a PowerPoint shape's click action.
+    /// Inverse: `DeleteHyperlink`, which removes the source with the link.
+    InsertItemHyperlink {
+        item_id: String,
+        url: String,
+        #[serde(default)]
+        page: Option<String>,
+        #[serde(default)]
+        name: Option<String>,
+        source_id: String,
+        dest_id: String,
+        hyperlink_id: String,
+    },
     /// v0.71.13 — delete hyperlink `hyperlink_id` of any origin (ADR 164):
     /// every run its source tags stops linking, the record goes, and so
     /// does its URL or page destination when nothing else points at it.
@@ -5540,6 +5555,34 @@ pub enum Operation {
         master_id: String,
         #[serde(default)]
         name: Option<String>,
+    },
+    /// Engine ADR 1026 — set page `page`'s `OverrideList` (a body page's or
+    /// a master page's): the master items it hides, because the page holds
+    /// its own copies of them or does not show them. Duplicates are
+    /// dropped. Inverse: the previous list.
+    SetPageOverrides {
+        page: String,
+        overrides: Vec<String>,
+    },
+    /// Engine ADR 1026 — override master items on body page `page`
+    /// (InDesign's Override; a PowerPoint slide's placeholder): copy
+    /// `items`, all on one master the page shows, onto the page's spread
+    /// where the master draws them, with their stories, labels and styles,
+    /// and add them to the page's `OverrideList`. `ids` / `story_ids` are
+    /// the copies' ids as `InsertSnippet` takes them (both empty: minted).
+    /// `empty_text` empties the copies' stories, keeping the first
+    /// paragraph's and first run's formatting (a new slide's placeholders,
+    /// whose master text is a prompt). Inverse: the paste's
+    /// `RemoveSnippet` and the previous list.
+    OverrideMasterItems {
+        page: String,
+        items: Vec<String>,
+        #[serde(default)]
+        ids: Vec<String>,
+        #[serde(default)]
+        story_ids: Vec<String>,
+        #[serde(default)]
+        empty_text: bool,
     },
     /// v70 — apply `op` to the items of master spread `master_id` (its
     /// `Self` id): the master is the only spread `op` sees, so every item,

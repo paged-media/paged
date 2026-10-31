@@ -1,0 +1,25 @@
+{
+  "kind": "struct",
+  "fields": {
+    "layout": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/layout"
+    },
+    "type": {
+      "kind": "text"
+    },
+    "idx": {
+      "kind": "number",
+      "integer": true,
+      "optional": true
+    },
+    "size": {
+      "kind": "number",
+      "optional": true
+    },
+    "fontStyle": {
+      "kind": "text",
+      "optional": true
+    }
+  }
+}

@@ -865,6 +865,24 @@ pub(crate) fn apply_inner(
         Operation::DeleteHyperlink { hyperlink_id } => {
             hyperlink_edit::apply_delete_hyperlink(doc, hyperlink_id)
         }
+        Operation::InsertItemHyperlink {
+            item_id,
+            url,
+            page,
+            name,
+            source_id,
+            dest_id,
+            hyperlink_id,
+        } => hyperlink_edit::apply_insert_item_hyperlink(
+            doc,
+            item_id,
+            url,
+            page.as_deref(),
+            name.as_deref(),
+            source_id,
+            dest_id,
+            hyperlink_id,
+        ),
         Operation::EditHyperlink {
             hyperlink_id,
             name,
@@ -956,6 +974,16 @@ pub(crate) fn apply_inner(
         Operation::RenameMaster { master_id, name } => {
             master::apply_rename_master(doc, master_id, name.as_deref())
         }
+        Operation::SetPageOverrides { page, overrides } => {
+            master::apply_set_page_overrides(doc, page, overrides)
+        }
+        Operation::OverrideMasterItems {
+            page,
+            items,
+            ids,
+            story_ids,
+            empty_text,
+        } => master::apply_override_master_items(doc, page, items, ids, story_ids, *empty_text),
         Operation::SetSpreadOrder { spreads } => apply_set_spread_order(doc, spreads),
         Operation::ApplyMasterToPage { page, master } => {
             apply_master_to_page(doc, page, master.as_deref())
@@ -1429,6 +1457,7 @@ pub use layer::{
 };
 pub use lock::is_locked;
 mod master;
+pub use master::{override_copy, OverrideCopy};
 mod move_node;
 mod nested;
 mod opacity_mask;
