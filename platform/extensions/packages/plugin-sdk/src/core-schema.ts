@@ -803,6 +803,8 @@ export const CORE_PATHS: Record<
   frameShapeStarInset: V71,
   frameShapePieStart: V71,
   frameShapePieEnd: V71,
+  // A movie or sound frame's medium is protocol 78 (engine ADR 1027).
+  frameMedia: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",

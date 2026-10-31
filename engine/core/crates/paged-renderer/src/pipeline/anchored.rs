@@ -1195,6 +1195,7 @@ fn synthetic_rectangle(
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         image_adjustments: Vec::new(),
+        media: None,
     }
 }
 

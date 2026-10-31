@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 866,
+    "command": 868,
     "keybinding": 167,
-    "menu": 610,
+    "menu": 612,
     "panel": 147,
     "tool": 127
   },
@@ -3251,6 +3251,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.insertAudio",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.insertIcon",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -3262,6 +3267,11 @@
     },
     {
       "id": "command:media.paged.slide.command.insertShapes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertVideo",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -7331,6 +7341,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Insert/Audio…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Insert/Icons…",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -7342,6 +7357,11 @@
     },
     {
       "id": "menu:Insert/Shapes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Insert/Video…",
       "kind": "menu",
       "owner": "media.paged.slide"
     },

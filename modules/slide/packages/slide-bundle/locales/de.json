@@ -116,6 +116,8 @@
   "slide.content.formatPainterOff": "Format übertragen beenden",
   "slide.content.formatPainterArmed": "Klicken Sie auf eine Form, um ihr diese Formatierung zu geben (zweimal schnell: weiter übertragen; Esc beendet).",
   "slide.content.insertIcon": "Piktogramm einfügen …",
+  "slide.content.insertVideo": "Video einfügen …",
+  "slide.content.insertAudio": "Audio einfügen …",
   "slide.content.insertPicture": "Bild einfügen …",
   "slide.content.pasteFormat": "Format einfügen",
   "slide.content.setSmartArtText": "Text eines SmartArt-Punkts festlegen",

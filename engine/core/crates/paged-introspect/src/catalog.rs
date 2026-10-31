@@ -825,6 +825,9 @@ property_paths! {
         // Engine ADR 1037 — the placed picture's filter stack; IDML has none
         // (the export keeps it in a label and reports it).
         FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
+        // Engine ADR 1027 — the medium a frame is a movie or sound of; IDML has
+        // none here (the export keeps it in a label and reports it).
+        FrameMedia => "frameMedia" : structure("MediaItem", Wire::Media),
         // Engine ADR 1031 — the gradient fill's start, `[x, y]` in inner coordinates.
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
         // Engine ADR 1047 — live shapes; IDML has none (the outline is written, the parameters ride a label).
@@ -1538,7 +1541,9 @@ mod tests {
         //
         // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
         // inset, an oval's pie angles).
-        assert_eq!(cat.settable_paths.len(), 272, "settable path count drifted");
+        //
+        // 272 -> 273: ADR 1027 — a frame's medium (movie and sound items).
+        assert_eq!(cat.settable_paths.len(), 273, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

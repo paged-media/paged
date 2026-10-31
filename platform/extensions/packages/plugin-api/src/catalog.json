@@ -1756,6 +1756,7 @@
     "framePdfPage",
     "frameFillRule",
     "frameImageAdjustments",
+    "frameMedia",
     "frameGradientFillStart",
     "frameShapeSides",
     "frameShapeStarInset",
@@ -4143,6 +4144,18 @@
       },
       "wire": "imageAdjustments",
       "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameMedia",
+      "type": {
+        "kind": "struct",
+        "shape": "MediaItem"
+      },
+      "wire": "media",
+      "nullable": true,
       "access": "readWrite",
       "bindable": true
     },
@@ -18069,6 +18082,20 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "imageAdjustments"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameMedia",
+        "type": {
+          "kind": "struct",
+          "fields": {},
+          "shape": "MediaItem",
+          "open": true
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "media"
       },
       {
         "addressKind": "frame",

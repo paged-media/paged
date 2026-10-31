@@ -7,4 +7,5 @@ mod appearance;
 mod c62_line_ends_load;
 mod effect_stack;
 mod fill_rule;
+mod media;
 mod round_trip_render;

@@ -421,6 +421,8 @@ export const CONTENT = defineMessages("slide.content", {
   formatPainterOff: "Put the Format Painter down",
   formatPainterArmed:
     "Click a shape to give it this formatting (twice quickly: keep painting; Esc stops).",
+  insertVideo: "Insert video…",
+  insertAudio: "Insert audio…",
   copyFormat: "Copy formatting",
   pasteFormat: "Paste formatting",
   smartArtText: "SmartArt text pane",

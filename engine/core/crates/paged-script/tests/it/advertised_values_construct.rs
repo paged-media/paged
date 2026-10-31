@@ -120,6 +120,11 @@ const STRUCTURED: &[(&str, &str)] = &[
         "frameImageAdjustments",
         "{ type: 'imageAdjustments', value: [{ op: 'exposure', ev: 0.5 }] }",
     ),
+    // Engine ADR 1027 — a movie or sound frame's medium, whole.
+    (
+        "frameMedia",
+        "{ type: 'media', value: { kind: 'movie', source: { type: 'link', uri: 'https://example.com/clip.mp4' }, play: 'auto' } }",
+    ),
     (
         "pluginMetadata",
         "{ type: 'pluginMetadata', value: { key: 'x-paged:probe', value: '1' } }",
