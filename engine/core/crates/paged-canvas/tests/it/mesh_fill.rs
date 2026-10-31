@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — a frame's gradient mesh or freeform gradient
+//! Engine ADR 1048 — a frame's gradient mesh or freeform gradient
 //! through the canvas model: set, read back and undone as one step;
 //! refused when malformed or on a line; drawn; kept by `.paged`; and on
 //! IDML export carried in the frame's label, which the import restores,

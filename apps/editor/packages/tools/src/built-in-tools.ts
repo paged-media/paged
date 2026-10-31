@@ -522,14 +522,14 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     isGroupDefault: true,
     order: 0,
     // Editor-ops — drag → batched gradient angle+length (v24). WP7.2 —
-    // the `mode` option adds the freeform modes (engine ADR 1040).
+    // the `mode` option adds the freeform modes (engine ADR 1048).
     gesture: createGradientSwatchHandler,
     options: {
       toolId: GRADIENT_SWATCH_TOOL_ID,
       fields: GRADIENT_OPTION_FIELDS,
     },
   },
-  // WP7.2 — the Mesh tool (engine ADR 1040): click a shape to give it a
+  // WP7.2 — the Mesh tool (engine ADR 1048): click a shape to give it a
   // gradient mesh and add mesh points, drag points and handles, colour
   // the selected points in the Color panel. In the Gradient Swatch slot,
   // as Illustrator keeps it beside its Gradient tool. No shortcut: the

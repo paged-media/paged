@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Mesh tool (`paged.tool.mesh`, engine ADR 1040) — Illustrator's
+// The Mesh tool (`paged.tool.mesh`, engine ADR 1048) — Illustrator's
 // gradient-mesh tool over the frame's `frameFillMesh`.
 //
 //   - Click inside a filled shape without a mesh: the shape gets a 1×1

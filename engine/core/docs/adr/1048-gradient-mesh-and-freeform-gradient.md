@@ -1,4 +1,4 @@
-# ADR 1040 — Gradient meshes and freeform gradients are native fills, drawn as a cached raster
+# ADR 1048 — Gradient meshes and freeform gradients are native fills, drawn as a cached raster
 
 - **Status:** Accepted 2026-10-29.
 - **Scope:** protocol v76 (additive; no bump). `paged-model` (`mesh.rs`: `MeshFill`,

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — a frame's gradient mesh or freeform gradient rides
+//! Engine ADR 1048 — a frame's gradient mesh or freeform gradient rides
 //! the native model as written, and a document without one writes no key
 //! (its bytes and state hash are those of a document saved before meshes).
 

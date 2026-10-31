@@ -796,7 +796,7 @@ export const CORE_PATHS: Record<
   frameImageAdjustments: V71,
   // Engine ADR 1007: "Within" / "Along" / "Across".
   frameGradientStrokeMode: V71,
-  // Engine ADR 1040: the frame's gradient mesh or freeform
+  // Engine ADR 1048: the frame's gradient mesh or freeform
   // gradient, whole (`{ type: "fillMesh", value: MeshFillSpec | null }`).
   frameFillMesh: V71,
   nextTextFrame: {

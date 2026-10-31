@@ -36,7 +36,7 @@
 //!   stops are translucent paints its colour shading under a
 //!   luminosity soft mask of the same geometry in DeviceGray, whose
 //!   value is the stops' alpha ([`ShadeChannels::Alpha`]).
-//! - Mesh shadings (engine ADR 1040) → a type-6 (Coons) or type-7
+//! - Mesh shadings (engine ADR 1048) → a type-6 (Coons) or type-7
 //!   (tensor-product) patch shading, its colours sRGB-encoded; a freeform
 //!   gradient as the type-6 grid `FreeformShading::to_patches` samples
 //!   from the evaluator the rasterisers draw; translucent colours under
@@ -766,10 +766,10 @@ fn write_shading(
 }
 
 /// How many patches a freeform gradient's type-6 grid has along each
-/// side (engine ADR 1040).
+/// side (engine ADR 1048).
 pub const FREEFORM_PDF_GRID: usize = 32;
 
-/// Engine ADR 1040 — a mesh shading as a PDF patch shading in the
+/// Engine ADR 1048 — a mesh shading as a PDF patch shading in the
 /// shading's own (local) space: type 7 when any patch has its own
 /// interior points, type 6 otherwise. `None` when it paints nothing.
 pub fn write_mesh_shading(

@@ -18,7 +18,7 @@
  */
 
 // The wire shape of a gradient mesh / freeform gradient fill (engine ADR
-// 1040, `PropertyPath::FrameFillMesh`, value `{ type: "fillMesh", value }`),
+// 1048, `PropertyPath::FrameFillMesh`, value `{ type: "fillMesh", value }`),
 // written out here so the editing maths of this folder is a pure module:
 // it compiles and tests without the engine's generated types, and the
 // handlers hand these objects to the wire unchanged (the shapes are the
@@ -50,7 +50,7 @@ export interface MeshNodeSpec {
 /** `rows × cols` patches over `(rows+1) × (cols+1)` nodes, row-major from
  *  the top-left node. `tensor` holds imported type-7 interiors (per patch,
  *  row-major: p11 p12 p21 p22); an edit through the Mesh tool clears it,
- *  the patches becoming Coons patches (engine ADR 1040). The engine may
+ *  the patches becoming Coons patches (engine ADR 1048). The engine may
  *  leave it out; `normalizeFill` puts it back as `[]`. */
 export interface MeshGridSpec {
   rows: number;

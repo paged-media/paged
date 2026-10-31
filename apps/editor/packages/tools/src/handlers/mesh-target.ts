@@ -21,7 +21,7 @@
 // frame a click is about (its inner box, its inner → page map and the
 // mesh fill it holds now), its fill colour as a mesh colour, the one
 // whole-value `frameFillMesh` write every gesture commits (engine ADR
-// 1040: one write, one undo step), the overlay markers, and the Color
+// 1048: one write, one undo step), the overlay markers, and the Color
 // panel's paint target (`PAINT_TARGET`, shell `tools/paint-target.ts`).
 
 import type { ElementId, Mutation } from "@paged-media/client";

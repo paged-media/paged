@@ -1747,7 +1747,7 @@ pub struct TextFrame {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
     /// shows instead of its fill swatch while set (native: kept in
     /// `.paged`; on IDML export the frame keeps its swatch, the fill
     /// is reported as a loss and kept in a label the import restores).
@@ -2272,7 +2272,7 @@ pub struct Rectangle {
     /// reported as a loss on IDML export.
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
     /// shows instead of its fill swatch while set (native: kept in
     /// `.paged`; on IDML export the frame keeps its swatch, the fill
     /// is reported as a loss and kept in a label the import restores).
@@ -2737,7 +2737,7 @@ pub struct Oval {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
     /// shows instead of its fill swatch while set (native: kept in
     /// `.paged`; on IDML export the frame keeps its swatch, the fill
     /// is reported as a loss and kept in a label the import restores).
@@ -3514,7 +3514,7 @@ pub struct Polygon {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient the frame
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
     /// shows instead of its fill swatch while set (native: kept in
     /// `.paged`; on IDML export the frame keeps its swatch, the fill
     /// is reported as a loss and kept in a label the import restores).

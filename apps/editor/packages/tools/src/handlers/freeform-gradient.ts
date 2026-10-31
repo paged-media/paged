@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Gradient tool's FREEFORM modes (engine ADR 1040): colour points
+// The Gradient tool's FREEFORM modes (engine ADR 1048): colour points
 // placed anywhere on a frame, and lines through them, written to the
 // frame's `frameFillMesh` as a freeform gradient.
 //

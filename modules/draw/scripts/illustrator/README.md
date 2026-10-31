@@ -62,7 +62,7 @@ it opens the engine's PDF patch shadings (`PAGED_PROBE_INPUTS`), exports
 Illustrator's rendering as a PNG (1 px = 1 pt) and its own PDF into the
 stage (`PROBE_STAGE`), and `lib/write-render-fixture.mjs` copies both beside
 the fixture with their sha256. It is replayed by the ENGINE (engine ADR
-1040), not by draw-bundle:
+1048), not by draw-bundle:
 
 ```bash
 (cd ../../engine/core && cargo test -p paged-export-pdf --test it \

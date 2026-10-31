@@ -136,7 +136,7 @@ pub(super) fn apply_set_property(
         }
         _ => {}
     }
-    // Engine ADR 1040 — a box move or resize carries a mesh fill with it
+    // Engine ADR 1048 — a box move or resize carries a mesh fill with it
     // on a frame drawn from its box (the translate gesture and the
     // resize handles commit `FrameBounds`).
     if path == PropertyPath::FrameBounds {
@@ -3447,7 +3447,7 @@ pub(super) fn apply_set_property(
                 },
             )
         }
-        // Engine ADR 1040 — the frame's gradient mesh or freeform
+        // Engine ADR 1048 — the frame's gradient mesh or freeform
         // gradient, whole. The inverse is the fill it replaced (`None`
         // when there was none), so undo restores it exactly.
         (
@@ -4202,7 +4202,7 @@ fn check_clip_member(
     Err(OperationError::NodeNotFound(node.clone()))
 }
 
-/// Engine ADR 1040 — `FrameBounds` on a frame that is drawn from its box
+/// Engine ADR 1048 — `FrameBounds` on a frame that is drawn from its box
 /// and carries a mesh fill: the bounds are set as ever, the mesh is
 /// mapped from the old box to the new one, and the inverse restores
 /// both exactly (the bounds, then the mesh as it was — a mapped-back

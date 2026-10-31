@@ -1946,7 +1946,7 @@ fn image_sampler() -> ImageSampler {
 type MeshPixmap = ((u64, i32), Arc<Pixmap>);
 
 thread_local! {
-    /// Engine ADR 1040 — the last mesh rasters as pixmaps, so a redraw at
+    /// Engine ADR 1048 — the last mesh rasters as pixmaps, so a redraw at
     /// the same scale copies nothing.
     static MESH_PIXMAPS: std::cell::RefCell<Vec<MeshPixmap>> =
         const { std::cell::RefCell::new(Vec::new()) };

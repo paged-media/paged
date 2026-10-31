@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — mesh shadings: the gradient mesh and the freeform
+//! Engine ADR 1048 — mesh shadings: the gradient mesh and the freeform
 //! gradient in the display list, and the one CPU rasteriser both
 //! back ends draw them with.
 //!

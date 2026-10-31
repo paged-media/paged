@@ -1289,7 +1289,7 @@ impl<'a, 'b> Walker<'a, 'b> {
         name
     }
 
-    /// Engine ADR 1040 — a mesh shading, painted with `sh` in its local
+    /// Engine ADR 1048 — a mesh shading, painted with `sh` in its local
     /// space under the clips in force (the renderer's `PushClip` of the
     /// frame outline); translucent colours under a luminosity soft mask
     /// of the same patches' alpha, set in page space as the ramps' are.

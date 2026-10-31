@@ -1095,7 +1095,7 @@ pub enum DisplayCommand {
         image_id: ImageId,
         transform: Transform,
     },
-    /// Engine ADR 1040 — paint the mesh shading `mesh_id` (a gradient
+    /// Engine ADR 1048 — paint the mesh shading `mesh_id` (a gradient
     /// mesh or a freeform gradient, in local coordinates `transform`
     /// takes to the page) under the clips in force; the renderer
     /// brackets it in a `PushClip` of the frame's outline. `bounds` is
@@ -1767,7 +1767,7 @@ pub struct DisplayList {
     pub radial_gradients: Vec<RadialGradient>,
     pub sweep_gradients: Vec<SweepGradient>,
     pub images: Vec<DecodedImage>,
-    /// Engine ADR 1040 — the mesh shadings [`DisplayCommand::MeshShade`]
+    /// Engine ADR 1048 — the mesh shadings [`DisplayCommand::MeshShade`]
     /// draws, indexed by [`crate::mesh::MeshId`].
     pub meshes: Vec<crate::mesh::MeshShading>,
     /// Named spot inks the document references. Indexed by

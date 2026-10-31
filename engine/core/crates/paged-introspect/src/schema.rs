@@ -1018,7 +1018,7 @@ pub fn from_json(schema: &PropertySchema, json: &serde_json::Value) -> Result<Va
                 .map_err(|e| format!("a colour is {{ space, value, model?, tint? }}: {e}"))?;
             validate(schema, &Value::SwatchColor(spec))
         }
-        // Engine ADR 1040 — a mesh fill as its own object.
+        // Engine ADR 1048 — a mesh fill as its own object.
         J::Object(_) if schema.wire == Wire::FillMesh => {
             let spec: paged_mutate::MeshFillSpec =
                 serde_json::from_value(json.clone()).map_err(|e| {

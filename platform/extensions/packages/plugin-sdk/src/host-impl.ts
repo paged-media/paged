@@ -555,7 +555,7 @@ export const HOST_FEATURES: readonly string[] = [
   // ramp) and refuses the paths. paged.draw's SVG importer asks it before
   // writing a gradient with inline, translucent stops.
   "document.paint2@1",
-  // Engine ADR 1040 — gradient meshes and freeform gradients. The vendored
+  // Engine ADR 1048 — gradient meshes and freeform gradients. The vendored
   // wire carries `frameFillMesh` (`Value` `fillMesh`: a `MeshFillSpec`, a
   // grid of Coons/tensor patches or freeform points and lines, points in
   // the frame's inner coordinates; `null` clears it back to the swatch).

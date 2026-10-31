@@ -231,7 +231,7 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 265: draw ADR 365 added the symbol an instance draws.
         // 266: ADR 1037 added an image frame's filter stack.
         // 267: ADR 1007 added a frame's stroke gradient mode.
-        // 268: ADR 1040 added a frame's gradient mesh or freeform gradient.
+        // 268: ADR 1048 added a frame's gradient mesh or freeform gradient.
         268,
         "the advertised roster changed; move the count with the decision"
     );

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — gradient meshes and freeform gradients on IDML
+//! Engine ADR 1048 — gradient meshes and freeform gradients on IDML
 //! export.
 //!
 //! IDML has neither. [`lower_for_idml`] moves each frame's fill into the

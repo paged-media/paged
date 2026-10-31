@@ -119,7 +119,7 @@ pub(crate) struct ResolvedFrame<'a> {
     /// Engine ADR 1007 — how a gradient stroke maps onto the stroke
     /// (`module::stroke_gradient`).
     pub gradient_stroke_mode: paged_model::StrokeGradientMode,
-    /// Engine ADR 1040 — the gradient mesh or freeform gradient the
+    /// Engine ADR 1048 — the gradient mesh or freeform gradient the
     /// frame fills with instead of its swatch.
     pub fill_mesh: Option<&'a paged_model::MeshFill>,
     pub geometry: Geometry<'a>,

@@ -3468,7 +3468,7 @@ fn effective_item_transform(
     }
 }
 
-/// Engine ADR 1040 — a frame's gradient mesh or freeform gradient comes
+/// Engine ADR 1048 — a frame's gradient mesh or freeform gradient comes
 /// back from the label the IDML export kept it in
 /// ([`paged_model::MESH_FILL_LABEL_KEY`]); the entry is dropped, so a
 /// round trip leaves the labels as they were. A label that does not

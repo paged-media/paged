@@ -7337,7 +7337,7 @@ impl CanvasModel {
         // Engine ADR 1007 — IDML says paint v2 only as unnamed stop
         // colours and gradient feathers; the rest is reported lost.
         crate::paint_v2_export::lower_for_idml(&mut scene);
-        // Engine ADR 1040 — a mesh fill rides in its frame's label.
+        // Engine ADR 1048 — a mesh fill rides in its frame's label.
         crate::mesh_fill_export::lower_for_idml(&mut scene);
         let out = idml_export::write_idml_with(
             &scene,
@@ -8112,7 +8112,7 @@ impl CanvasModel {
                                     f.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
                                 )),
                             },
-                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
                             PropertyEntry {
                                 path: PropertyPath::FrameFillMesh,
                                 value: Some(Value::FillMesh(
@@ -8499,7 +8499,7 @@ impl CanvasModel {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(f.gradient_stroke_mode.as_str().into())),
                             },
-                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
                             PropertyEntry {
                                 path: PropertyPath::FrameFillMesh,
                                 value: Some(Value::FillMesh(
@@ -9034,7 +9034,7 @@ impl CanvasModel {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(p.gradient_stroke_mode.as_str().into())),
                             },
-                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
                             PropertyEntry {
                                 path: PropertyPath::FrameFillMesh,
                                 value: Some(Value::FillMesh(
@@ -9426,7 +9426,7 @@ impl CanvasModel {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(o.gradient_stroke_mode.as_str().into())),
                             },
-                            // Engine ADR 1040 — the gradient mesh or freeform gradient.
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
                             PropertyEntry {
                                 path: PropertyPath::FrameFillMesh,
                                 value: Some(Value::FillMesh(

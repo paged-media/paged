@@ -29,7 +29,7 @@
 // Shift constrains the axis to 45° increments.
 //
 // WP7.2 — the tool's `mode` option (double-click the slot) adds the two
-// FREEFORM modes of engine ADR 1040, "Freeform points" and "Freeform
+// FREEFORM modes of engine ADR 1048, "Freeform points" and "Freeform
 // lines", with a "Spread" option for new points; in them every pointer
 // event goes to `freeform-gradient.ts` instead. "Linear" — the default,
 // and what an unset option reads as — is the axis drag above, unchanged.

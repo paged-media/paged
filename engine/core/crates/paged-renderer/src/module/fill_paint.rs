@@ -51,7 +51,7 @@ pub(crate) fn fill_paint_module(
     outer: Transform,
     fill_path: Option<PathId>,
 ) {
-    // Engine ADR 1040 — a gradient mesh or freeform gradient paints
+    // Engine ADR 1048 — a gradient mesh or freeform gradient paints
     // instead of the swatch, whatever the swatch is.
     if super::mesh_fill::emit_mesh_fill(frame, page, color_ctx, outer, fill_path) {
         return;

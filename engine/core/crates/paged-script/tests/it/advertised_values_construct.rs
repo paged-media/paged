@@ -68,7 +68,7 @@ const STRUCTURED: &[(&str, &str)] = &[
     ("symbolInstanceNineSlice", "[2, 2, 2, 2]"),
     // Engine ADR 1007 — the gradient's start point, [x, y].
     ("frameGradientFillStart", "[10, 20]"),
-    // Engine ADR 1040 — a mesh fill (a freeform gradient of one point).
+    // Engine ADR 1048 — a mesh fill (a freeform gradient of one point).
     (
         "frameFillMesh",
         "{ type: 'fillMesh', value: { kind: 'freeform', points: [{ point: [10, 10], color: { space: 'RGB', value: [255, 0, 0] } }], lines: [] } }",

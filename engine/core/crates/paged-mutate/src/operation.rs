@@ -1708,7 +1708,7 @@ pub enum PropertyPath {
     /// it: the IDML export writes the stroke `Within` and reports the
     /// loss. Paint-only (`frame_style`).
     FrameGradientStrokeMode,
-    // ---- engine ADR 1040 — gradient mesh and freeform gradient -------
+    // ---- engine ADR 1048 — gradient mesh and freeform gradient -------
     /// The frame's native mesh fill, a gradient mesh or a freeform
     /// gradient (`Value::FillMesh`), shown instead of its fill swatch;
     /// `Value::FillMesh(None)` clears it back to the swatch. Points are in
@@ -3157,7 +3157,7 @@ pub enum Value {
         #[serde(default)]
         prev: Option<String>,
     },
-    /// Engine ADR 1040 — a frame's gradient mesh or freeform gradient
+    /// Engine ADR 1048 — a frame's gradient mesh or freeform gradient
     /// (`PropertyPath::FrameFillMesh`); `None` clears it.
     FillMesh(Option<MeshFillSpec>),
     /// W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).
@@ -3663,7 +3663,7 @@ pub struct GradientStopSpec {
     pub color: Option<StopColorSpec>,
 }
 
-/// Engine ADR 1040 — a frame's native mesh fill on the wire: the
+/// Engine ADR 1048 — a frame's native mesh fill on the wire: the
 /// mirror of `paged_model::MeshFill` (points in the frame's inner
 /// coordinates; colours inline, `space` as a swatch's).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]

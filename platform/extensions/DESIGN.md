@@ -882,7 +882,7 @@ colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`
 protocol 76 like the fill rule; the SVG importer asks it before
 lowering an SVG gradient with `stop-opacity` natively.
 
-`"document.meshFill@1"` (engine ADR 1040) is another property flag: the
+`"document.meshFill@1"` (engine ADR 1048) is another property flag: the
 vendored wire carries `frameFillMesh`, a frame's gradient mesh (grids of
 Coons or tensor patches, colour and opacity per mesh point) or freeform
 gradient (coloured points with a spread, and lines through them), points

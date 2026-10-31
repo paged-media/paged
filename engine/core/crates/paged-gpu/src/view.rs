@@ -270,7 +270,7 @@ fn outline(list: &DisplayList, px_per_pt: f32) -> DisplayList {
                 out.commands.push(cmd.clone());
             }
             // Effects, shadows, feathers, blend groups, transparency
-            // layers and mesh shadings (engine ADR 1040; the frame's own
+            // layers and mesh shadings (engine ADR 1048; the frame's own
             // outline is its path) are appearance, not geometry: Outline
             // draws none.
             DisplayCommand::MeshShade { .. }

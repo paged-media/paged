@@ -832,7 +832,7 @@ pub(crate) fn affine_of(t: &Transform) -> Affine {
     Affine::new([a as f64, b as f64, c as f64, d as f64, e as f64, f as f64])
 }
 
-/// Engine ADR 1040 — the raster a `MeshShade` of `mesh_id` under
+/// Engine ADR 1048 — the raster a `MeshShade` of `mesh_id` under
 /// `transform` draws at `page_to_px` (both lanes take it from the one
 /// cache in `paged_compose::mesh`, rasterised at the display scale), and
 /// the affine that takes its pixel grid to device pixels.

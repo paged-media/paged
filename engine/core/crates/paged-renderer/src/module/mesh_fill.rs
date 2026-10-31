@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — a frame's gradient mesh or freeform gradient.
+//! Engine ADR 1048 — a frame's gradient mesh or freeform gradient.
 //!
 //! The model's [`MeshFill`] (points in the frame's inner coordinates,
 //! colours inline) becomes a [`MeshShading`] in the display list's mesh

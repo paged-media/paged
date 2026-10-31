@@ -288,7 +288,7 @@ thread_local! {
 type MeshImage = ((u64, i32), ImageData);
 
 thread_local! {
-    /// Engine ADR 1040 — the last mesh rasters as peniko images: the same
+    /// Engine ADR 1048 — the last mesh rasters as peniko images: the same
     /// blob on every redraw at one scale, so the GPU uploads it once.
     static MESH_IMAGES: RefCell<Vec<MeshImage>> = const { RefCell::new(Vec::new()) };
 }
@@ -5289,7 +5289,7 @@ mod tests {
         }
     }
 
-    /// Engine ADR 1040 — a mesh shading under a clip draws alike on both
+    /// Engine ADR 1048 — a mesh shading under a clip draws alike on both
     /// lanes (ADR 146): both sample the one raster `paged_compose::mesh`
     /// makes at the display scale, upright and under a turn.
     #[cfg(feature = "cpu")]

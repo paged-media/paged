@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — `FrameFillMesh` through the mutation layer: set on
+//! Engine ADR 1048 — `FrameFillMesh` through the mutation layer: set on
 //! each fillable kind with an exact inverse, clamped colour opacity, the
 //! refusals (a line, a malformed spec, the wrong value type), and a
 //! spec that round-trips through the model.

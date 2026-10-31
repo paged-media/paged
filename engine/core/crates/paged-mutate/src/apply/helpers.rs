@@ -443,7 +443,7 @@ pub(super) fn find_image_adjustments_mut<'a>(
     }
 }
 
-/// Engine ADR 1040 — locate the `fill_mesh` field on a fillable frame.
+/// Engine ADR 1048 — locate the `fill_mesh` field on a fillable frame.
 pub(super) fn find_fill_mesh_mut<'a>(
     doc: &'a mut Document,
     node: &NodeId,

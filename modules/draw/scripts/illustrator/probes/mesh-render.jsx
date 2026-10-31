@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Engine ADR 1040 -- the gradient mesh, asked of Illustrator.
+// Engine ADR 1048 -- the gradient mesh, asked of Illustrator.
 //
 // Illustrator's scripting cannot BUILD a gradient mesh (MeshItem has no
 // constructor and Object > Create Gradient Mesh opens a dialog), so this

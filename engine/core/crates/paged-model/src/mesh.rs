@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1040 — the gradient mesh and the freeform gradient: two
+//! Engine ADR 1048 — the gradient mesh and the freeform gradient: two
 //! native fills no swatch can hold.
 //!
 //! Both are per-object (their points sit on the object, in the frame's

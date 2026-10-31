@@ -18,7 +18,7 @@
  */
 
 // The Mesh tool and the Gradient tool's freeform modes (WP7.2, engine
-// ADR 1040), driven through the real rail, canvas and Color panel on a
+// ADR 1048), driven through the real rail, canvas and Color panel on a
 // File ▸ New document (corpus-free): a click makes a 2×2 mesh, a node
 // drag moves the node, a colour applied in the Color panel colours the
 // selected node and repaints the rectangle; every gesture is ONE undo

@@ -167,7 +167,7 @@ is not written yet.
 | [1037](1037-an-image-frame-has-a-filter-stack.md) | An image frame has a filter stack, evaluated by the kernel twins `paged-kernels` shares with paged.image | Accepted 2026-10-28 |
 | [1038](1038-the-remaining-codecs-and-the-layered-tiff.md) | The remaining codecs: GIF, BMP, TGA, JPEG XL and AVIF encode, HDR and OpenEXR floats, and the layered TIFF | Accepted 2026-10-28 |
 | [1039](1039-a-symbol-is-drawn-by-its-instances.md) | A symbol is kept once and drawn by its instances: 9-slice, overrides, one PDF form, IDML through labels | Accepted 2026-10-28 |
-| [1040](1040-gradient-mesh-and-freeform-gradient.md) | Gradient meshes and freeform gradients are native fills, drawn as a cached raster | Accepted 2026-10-29 |
+| [1048](1048-gradient-mesh-and-freeform-gradient.md) | Gradient meshes and freeform gradients are native fills, drawn as a cached raster | Accepted 2026-10-29 |
 | [1044](1044-a-photoshop-layer-style-maps-onto-the-effect-stack.md) | A Photoshop layer style maps onto the effect stack: `paged-psd-fx`, losses named | Accepted 2026-10-29 |
 | [1046](1046-a-scene-layer-takes-its-frames-effects.md) | A scene layer takes its frame's opacity, blend mode and effects | Accepted 2026-10-30 |
 

@@ -661,7 +661,7 @@ impl<'a> Writer<'a> {
         self.push(at, el);
     }
 
-    /// Engine ADR 1040 — a gradient mesh or freeform gradient. SVG has no
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient. SVG has no
     /// mesh paint (SVG 2's `meshgradient` was dropped), so the shading is
     /// written as a picture of it, rasterised by the engine's one mesh
     /// rasteriser at twice its page scale, and reported as approximated.
