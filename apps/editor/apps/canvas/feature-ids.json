@@ -5,8 +5,8 @@
     "chrome": 4,
     "command": 867,
     "keybinding": 166,
-    "menu": 612,
-    "panel": 146,
+    "menu": 613,
+    "panel": 147,
     "tool": 127
   },
   "features": [
@@ -5911,6 +5911,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Edit/Settings/Models…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Edit/Transform/Free distort",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -8762,6 +8767,11 @@
     },
     {
       "id": "panel:paged.master-pages",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.models",
       "kind": "panel",
       "owner": "editor"
     },
