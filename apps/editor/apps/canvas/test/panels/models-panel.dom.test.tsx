@@ -142,8 +142,14 @@ describe("Models panel", () => {
     expect(q(h.root, "[data-ml-disk]")!.textContent).not.toContain("0 B");
 
     await act(async () => q(row(), '[data-action="ml-try"]')!.click());
-    await settle();
-    await settle();
+    // The try runs the real onnxruntime in-process: its first session can
+    // take far longer than a settle on a loaded runner, so wait for the
+    // outcome (a result or an error) rather than a fixed time.
+    for (let i = 0; i < 300; i++) {
+      if (q(row(), "[data-ml-try-result], [data-ml-try-error]")) break;
+      await settle();
+    }
+    expect(q(row(), "[data-ml-try-error]")?.textContent ?? null).toBeNull();
     expect(q(row(), "[data-ml-try-result]")!.dataset["mlTryResult"]).toBe(
       "paged.ml.paged.fixture.matte",
     );
