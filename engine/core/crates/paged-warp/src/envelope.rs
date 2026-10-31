@@ -280,6 +280,45 @@ pub fn invert(mesh: &Mesh, (x, y): (f64, f64), tolerance: f64) -> Option<(f64, f
     (close && inside).then_some((u.clamp(0.0, 1.0), v.clamp(0.0, 1.0)))
 }
 
+/// [`invert`] as the raster sampler (`geom.warp_mesh`) needs it: the
+/// solve may land up to a quarter outside the unit square (`u, v ∈
+/// [−0.25, 1.25]`), so a pixel just past the outline still finds its
+/// point and reads the transparent outside of the source — the warped
+/// edge antialiases instead of being cut. `None` only when no point of
+/// the extended patch lands within `tolerance`.
+pub fn invert_extended(mesh: &Mesh, (x, y): (f64, f64), tolerance: f64) -> Option<(f64, f64)> {
+    let n = INVERT_GRID;
+    let mut best = (0.5, 0.5);
+    let mut best_d = f64::INFINITY;
+    for i in 0..=n {
+        for k in 0..=n {
+            let (u, v) = (k as f64 / n as f64, i as f64 / n as f64);
+            let (px, py) = eval(mesh, u, v);
+            let d = (px - x).powi(2) + (py - y).powi(2);
+            if d < best_d {
+                best_d = d;
+                best = (u, v);
+            }
+        }
+    }
+    let (mut u, mut v) = best;
+    for _ in 0..INVERT_STEPS {
+        let (px, py) = eval(mesh, u, v);
+        let (ex, ey) = (px - x, py - y);
+        let j = jacobian(mesh, u, v);
+        let det = j[0][0] * j[1][1] - j[0][1] * j[1][0];
+        if det.abs() < 1e-12 {
+            break;
+        }
+        let du = (j[1][1] * ex - j[0][1] * ey) / det;
+        let dv = (-j[1][0] * ex + j[0][0] * ey) / det;
+        u = (u - du).clamp(-0.25, 1.25);
+        v = (v - dv).clamp(-0.25, 1.25);
+    }
+    let (px, py) = eval(mesh, u, v);
+    ((px - x).powi(2) + (py - y).powi(2) <= tolerance * tolerance).then_some((u, v))
+}
+
 /// The box around the warped rectangle (sampled on a 17 × 17 grid, which
 /// a style's interior can push past its edges, as Twist does).
 pub fn extent(mesh: &Mesh) -> Rect {
@@ -651,6 +690,27 @@ mod tests {
         let left = eval(&m, 0.0, 1.0).1 - eval(&m, 0.0, 0.0).1;
         let right = eval(&m, 1.0, 1.0).1 - eval(&m, 1.0, 0.0).1;
         assert!(right > left * 2.0, "{left} {right}");
+    }
+
+    #[test]
+    fn invert_extended_reaches_past_the_outline() {
+        let rect = Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 40.0,
+            h: 20.0,
+        };
+        let m = mesh(&warp(WarpStyle::Arc, 0.5), rect);
+        // Inside, both agree.
+        let p = eval(&m, 0.3, 0.6);
+        let a = invert(&m, p, 0.5).unwrap();
+        let b = invert_extended(&m, p, 0.5).unwrap();
+        assert!((a.0 - b.0).abs() < 1e-3 && (a.1 - b.1).abs() < 1e-3);
+        // A point just above the top edge: only the extended solve finds it.
+        let q = eval(&m, 0.5, -0.05);
+        assert!(invert(&m, q, 0.5).is_none());
+        let (_, v) = invert_extended(&m, q, 0.5).unwrap();
+        assert!(v < 0.0);
     }
 
     #[test]

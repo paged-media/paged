@@ -550,6 +550,7 @@ fn master(
             body_style: style("bodyStyle"),
             other_style: style("otherStyle"),
             layouts: layout_parts,
+            preserve: el.attr_bool("preserve").unwrap_or(false),
         },
         layouts,
     ))
@@ -573,6 +574,7 @@ fn layout(
         background: csld.and_then(|c| background(c, &ctx)),
         shapes: csld.map(|c| shapes_of(c, &ctx)).unwrap_or_default(),
         color_map_override: color_map_override(&el),
+        preserve: el.attr_bool("preserve").unwrap_or(false),
     })
 }
 
@@ -735,7 +737,9 @@ fn theme(el: &El, ctx: &Ctx) -> Theme {
         effect_styles: list("effectStyleLst")
             .map(|l| {
                 l.children_named(Ns::A, "effectStyle")
-                    .map(|s| s.child(Ns::A, "effectLst").map(|e| paint::effects(e, ctx)))
+                    .map(|s| {
+                        paged_ooxml::drawingml::effect::container(s).map(|e| paint::effects(e, ctx))
+                    })
                     .collect()
             })
             .unwrap_or_default(),

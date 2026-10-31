@@ -95,6 +95,15 @@ template fields | fill | check` run the same messages headlessly.
   `deleteMaster` and `renameMaster` make, remove and name masters. A radial gradient is centred
   at its `GradientFillStart`, and a cell edge draws in its stroke style (a double border as two
   rules) ([ADR 129](adr/129-pages-and-masters-for-presentations.md), protocol 70).
+- **Masters based on masters.** A master page's `AppliedMaster` stacks that master under it on
+  every page that shows it (InDesign's "Based on Master", a PowerPoint layout's slide master), at
+  most four deep, a cycle drawn once; override lists accumulate down the chain.
+  `applyMasterToPage` bases a master on another (a cycle is refused), `setPageOverrides` sets a
+  page's override list, and `overrideMasterItems` copies master items onto a page where the
+  master draws them (InDesign's Override; `emptyText` for a new slide's placeholders). A page
+  item can be a hyperlink's source (`insertItemHyperlink`, IDML's `HyperlinkPageItemSource`). A
+  snapshot of a master page draws the master as a page; `masterPages` lists each master's pages
+  and items ([ADR 1026](adr/1026-masters-based-on-masters.md), protocol 78).
 - **Footnotes and hyperlinks edited over the wire.** `insertFootnote` and `deleteFootnote` add
   and remove a note and its reference, and a text delete over a reference takes its note
   ([ADR 163](adr/163-footnotes-inserted-and-deleted.md)). `deleteHyperlink` and `editHyperlink`
@@ -255,6 +264,16 @@ template fields | fill | check` run the same messages headlessly.
   `insertCrossReference`, `insertTableOfContents` (a table inside the text, updated in place by
   `updateTableOfContents`) and `insertIndexMarker`. IDML writes fields as InDesign's variables
   where one exists, else as their result.
+- **Word's review** ([ADR 1040](adr/1040-word-change-tracking.md),
+  [ADR 1020](adr/1020-range-comments-with-threads.md)). Tracked insertions, deletions,
+  formatting and paragraph changes and inserted or deleted paragraph marks are carried by the
+  runs and paragraphs they changed (`recordChange` for importers). While
+  `documentTrackChanges` is on, typing, deleting and range formatting record changes (your own
+  insertion deleted goes outright); `acceptChange` / `rejectChange` resolve one, an author's
+  or all, as each other's opposite (proptest), one undo step each. `documentMarkupView` shows
+  All Markup (author colours), Simple / No Markup or Original. Range comments with threads:
+  `insertComment`, `replyComment`, `resolveComment`, `deleteComment`, `editComment`, the
+  `comments` collection; the story read names every change and comment.
 - **Fidelity tooling.** The fixture generator (67 samples), the image-diff tool, 66
   reference PDFs with thresholds (`docx-pagination` has none and is not gated), and the
   scripts that drive InDesign to export them.
@@ -281,6 +300,9 @@ template fields | fill | check` run the same messages headlessly.
   search table cells or notes. Word fields other than the nine kinds are opaque; a bookmark is
   a point; a TOC style made by `insertTableOfContents`, new text destinations and index topics
   reach the `.paged` model, not IDML; no continuous section breaks (ADR 1022).
+- **Review limits** (ADRs 1040, 1020). Changes and comments in table cells are kept and
+  resolved but not listed; Simple Markup draws no change bar and a deleted paragraph mark
+  still breaks the line; Word's changes and comments reach the `.paged` model, not IDML.
 - **A commit rebuilds the whole document.** Caches make unchanged paragraphs and stories
   cheap, and only a build of text edits in one story reuses previous pages.
 - **Two mutation lanes.** Text edits have no `Operation` form; they use `TextOp` in

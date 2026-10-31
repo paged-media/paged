@@ -230,9 +230,11 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 264: ADR 1039 added a symbol instance's tint and 9-slice guides.
         // 265: draw ADR 365 added the symbol an instance draws.
         // 266: ADR 1037 added an image frame's filter stack.
-        // 267: ADR 1007 added a frame's stroke gradient mode.
-        // 268: ADR 1048 added a frame's gradient mesh or freeform gradient.
-        268,
+        // 268: ADR 1043 added an item's appearance and one layer of it.
+        // 272: ADR 1047 added the live shapes (sides, star inset, pie angles).
+        // 273: ADR 1007 added a frame's stroke gradient mode.
+        // 274: ADR 1048 added a frame's gradient mesh or freeform gradient.
+        274,
         "the advertised roster changed; move the count with the decision"
     );
 }

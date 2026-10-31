@@ -944,6 +944,17 @@ pub(super) fn emit_text_frame_into(
     drop_shadow: Option<DropShadow>,
     auto_sized_bounds: Option<paged_model::Bounds>,
 ) -> Option<BodyTextSlot> {
+    if !frame.appearance.is_empty() {
+        return super::appearance::emit_text_frame(
+            page,
+            frame,
+            document,
+            palette,
+            fallback,
+            color_ctx,
+            auto_sized_bounds,
+        );
+    }
     let Some(mode) = crate::module::effect_stack::stack_mode(&frame.effect_stack) else {
         return emit_text_frame_body(
             page,

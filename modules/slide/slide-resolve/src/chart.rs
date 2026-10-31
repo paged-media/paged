@@ -185,6 +185,7 @@ fn polygon(points: &[(f64, f64)], closed: bool) -> SubPath {
         filled: closed,
         stroked: true,
         fill_mode: None,
+        path: 0,
     }
 }
 
@@ -209,6 +210,7 @@ fn catmull_rom(points: &[(f64, f64)]) -> SubPath {
         filled: false,
         stroked: true,
         fill_mode: None,
+        path: 0,
     }
 }
 
@@ -273,5 +275,6 @@ fn wedge(cx: f64, cy: f64, r: f64, hole: f64, start: f64, sweep: f64) -> SubPath
         filled: true,
         stroked: true,
         fill_mode: None,
+        path: 0,
     }
 }

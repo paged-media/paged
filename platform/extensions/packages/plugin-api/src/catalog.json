@@ -372,6 +372,27 @@
       "summary": "Set (omit/null: clear) a master's name."
     },
     {
+      "name": "paged.setPageOverrides",
+      "params": "(pageId, itemIds)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Set a page's (or master page's) override list: the master items it hides."
+    },
+    {
+      "name": "paged.overrideMasterItems",
+      "params": "(pageId, itemIds, emptyText?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Copy master items onto a page where the master draws them and hide the master's."
+    },
+    {
+      "name": "paged.insertItemHyperlink",
+      "params": "(itemId, url, pageId?)",
+      "returns": "bool",
+      "kind": "write",
+      "summary": "Make a page item a hyperlink's source, to a URL or a page."
+    },
+    {
       "name": "paged.onMaster",
       "params": "(masterId, mutation)",
       "returns": "bool",
@@ -1205,6 +1226,62 @@
       "summary": "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."
     },
     {
+      "name": "paged.recordChange",
+      "params": "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?}, paragraph?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Record a tracked change (insert, delete, format, paraProps, insertMark, deleteMark) over story chars [start, end), or on a paragraph for the paragraph kinds: what an importer writes for Word's revisions. Undoable."
+    },
+    {
+      "name": "paged.acceptChange",
+      "params": "({storyId?, id?, author?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Accept a tracked change by id, every change by an author, or all (in one story when storyId is set). One undo step."
+    },
+    {
+      "name": "paged.rejectChange",
+      "params": "({storyId?, id?, author?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Reject a tracked change by id, an author's, or all: insertions go, deletions stay, formatting goes back. One undo step."
+    },
+    {
+      "name": "paged.insertComment",
+      "params": "(storyId, start, end, {text, id?, author?, initials?, date?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "A comment on story chars [start, end) (paged.collection(\"comments\")). Undoable."
+    },
+    {
+      "name": "paged.replyComment",
+      "params": "(parentId, {text, id?, author?, initials?, date?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Reply to a comment; the reply joins its thread. Undoable."
+    },
+    {
+      "name": "paged.resolveComment",
+      "params": "(commentId, resolved?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Resolve (or, with false, reopen) a comment's thread. Undoable."
+    },
+    {
+      "name": "paged.deleteComment",
+      "params": "(commentId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Delete a comment; a thread's first comment takes its replies and its range. Undoable."
+    },
+    {
+      "name": "paged.editComment",
+      "params": "(commentId, text, date?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Rewrite a comment's text. Undoable."
+    },
+    {
       "name": "paged.find",
       "params": "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})",
       "returns": "string",
@@ -1679,8 +1756,12 @@
     "framePdfPage",
     "frameFillRule",
     "frameImageAdjustments",
+    "frameGradientStrokeMode",
     "frameGradientFillStart",
-    "frameFillMesh",
+    "frameShapeSides",
+    "frameShapeStarInset",
+    "frameShapePieStart",
+    "frameShapePieEnd",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -1784,6 +1865,8 @@
     "frameFillEffectStack",
     "frameStrokeEffectStack",
     "frameContentEffectStack",
+    "frameAppearance",
+    "frameAppearanceLayer",
     "cellFillColor",
     "cellFillTint",
     "cellInsetTop",
@@ -1902,6 +1985,7 @@
     "insertFootnote",
     "deleteFootnote",
     "deleteHyperlink",
+    "insertItemHyperlink",
     "editHyperlink",
     "updateTableOfContents",
     "generateIndex",
@@ -2031,6 +2115,14 @@
     "insertCrossReference",
     "insertTableOfContents",
     "insertIndexMarker",
+    "recordChange",
+    "acceptChange",
+    "rejectChange",
+    "insertComment",
+    "replyComment",
+    "resolveComment",
+    "deleteComment",
+    "editComment",
     "insertOval",
     "insertGuide",
     "moveGuide",
@@ -2051,6 +2143,8 @@
     "createMaster",
     "deleteMaster",
     "renameMaster",
+    "setPageOverrides",
+    "overrideMasterItems",
     "insertSection",
     "editSection",
     "deleteSection",
@@ -4055,6 +4149,23 @@
     },
     {
       "addressKind": "frame",
+      "path": "frameGradientStrokeMode",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "Within",
+          "Along",
+          "Across"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "Within",
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
       "path": "frameGradientFillStart",
       "type": {
         "kind": "list",
@@ -4090,13 +4201,68 @@
     },
     {
       "addressKind": "frame",
-      "path": "frameFillMesh",
+      "path": "frameShapeSides",
       "type": {
-        "kind": "struct",
-        "shape": "MeshFillSpec"
+        "kind": "number",
+        "unit": "count"
       },
-      "wire": "fillMesh",
+      "wire": "length",
       "nullable": true,
+      "range": {
+        "min": 3.0,
+        "max": 100.0
+      },
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapeStarInset",
+      "type": {
+        "kind": "number",
+        "unit": "percent"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0,
+        "max": 99.0
+      },
+      "default": 0.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePieStart",
+      "type": {
+        "kind": "number",
+        "unit": "degrees"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": -360.0,
+        "max": 360.0
+      },
+      "default": 0.0,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePieEnd",
+      "type": {
+        "kind": "number",
+        "unit": "degrees"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": -360.0,
+        "max": 360.0
+      },
+      "default": 360.0,
       "access": "readWrite",
       "bindable": true
     },
@@ -6738,6 +6904,31 @@
       "nullable": false,
       "access": "readWrite",
       "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameAppearance",
+      "type": {
+        "kind": "list",
+        "of": "struct",
+        "shape": "PaintLayerSpec"
+      },
+      "wire": "appearance",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameAppearanceLayer",
+      "type": {
+        "kind": "operation",
+        "shape": "AppearanceLayerSpec"
+      },
+      "wire": "appearanceLayer",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": false
     },
     {
       "addressKind": "cell",
@@ -9772,6 +9963,59 @@
       "wire": "bool",
       "nullable": false,
       "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentTrackChanges",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentTrackChangesAuthor",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "doc",
+      "path": "documentMarkupView",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "simple",
+          "all",
+          "none",
+          "original"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "all",
       "access": "readWrite",
       "virtual": {
         "op": "setProperty",
@@ -16320,6 +16564,59 @@
       },
       {
         "addressKind": "doc",
+        "path": "documentTrackChanges",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentTrackChangesAuthor",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "doc",
+        "path": "documentMarkupView",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "simple",
+            "all",
+            "none",
+            "original"
+          ]
+        },
+        "nullable": true,
+        "default": "all",
+        "access": "readWrite",
+        "virtual": {
+          "op": "setProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "doc",
         "path": "defaultFillColor",
         "type": {
           "kind": "color"
@@ -17793,6 +18090,23 @@
       },
       {
         "addressKind": "frame",
+        "path": "frameGradientStrokeMode",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "Within",
+            "Along",
+            "Across"
+          ]
+        },
+        "nullable": true,
+        "default": "Within",
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
         "path": "frameGradientFillStart",
         "type": {
           "kind": "list",
@@ -17829,17 +18143,70 @@
       },
       {
         "addressKind": "frame",
-        "path": "frameFillMesh",
+        "path": "frameShapeSides",
         "type": {
-          "kind": "struct",
-          "fields": {},
-          "shape": "MeshFillSpec",
-          "open": true
+          "kind": "number",
+          "integer": true
         },
         "nullable": true,
+        "range": {
+          "min": 3.0,
+          "max": 100.0
+        },
         "access": "readWrite",
         "bindable": true,
-        "wire": "fillMesh"
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapeStarInset",
+        "type": {
+          "kind": "number",
+          "unit": "percent"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0,
+          "max": 99.0
+        },
+        "default": 0.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePieStart",
+        "type": {
+          "kind": "number",
+          "unit": "deg"
+        },
+        "nullable": true,
+        "range": {
+          "min": -360.0,
+          "max": 360.0
+        },
+        "default": 0.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePieEnd",
+        "type": {
+          "kind": "number",
+          "unit": "deg"
+        },
+        "nullable": true,
+        "range": {
+          "min": -360.0,
+          "max": 360.0
+        },
+        "default": 360.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
       },
       {
         "addressKind": "frame",
@@ -20456,6 +20823,23 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "effectStack"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameAppearance",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "struct",
+            "fields": {},
+            "shape": "PaintLayerSpec",
+            "open": true
+          }
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "appearance"
       },
       {
         "addressKind": "frame",

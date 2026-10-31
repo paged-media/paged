@@ -94,6 +94,12 @@ export type {
   SubContextHit,
   SubContextProviderContribution,
   SubContextRegistry,
+  // Markup margin bands (ADR 349 amendment 1, C5).
+  MarginBandAnchor,
+  MarginBandItem,
+  MarginBalloonProps,
+  MarginBandContribution,
+  MarginBandRegistry,
   // Document IO — importers + exporters (K-2 / S-06).
   ImporterContribution,
   ImportRequest,

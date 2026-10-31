@@ -24,4 +24,5 @@ paged-ooxml = { workspace = true, features = ["testing"] }
 paged-test-resources.workspace = true
 docx-js.workspace = true
 docx-export.workspace = true
+docx-skeleton.workspace = true
 serde_json.workspace = true

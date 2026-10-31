@@ -330,6 +330,9 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.createMaster", "(masterId, { name?, widthPt?, heightPt?, duplicateOf? })", "bool", "author", "Create a master spread: one page of the given size, or a copy of another master."),
         f!("paged.deleteMaster", "(masterId)", "bool", "author", "Delete a master no page applies."),
         f!("paged.renameMaster", "(masterId, name?)", "bool", "write", "Set (omit/null: clear) a master's name."),
+        f!("paged.setPageOverrides", "(pageId, itemIds)", "bool", "write", "Set a page's (or master page's) override list: the master items it hides."),
+        f!("paged.overrideMasterItems", "(pageId, itemIds, emptyText?)", "bool", "write", "Copy master items onto a page where the master draws them and hide the master's."),
+        f!("paged.insertItemHyperlink", "(itemId, url, pageId?)", "bool", "write", "Make a page item a hyperlink's source, to a URL or a page."),
         f!("paged.onMaster", "(masterId, mutation)", "bool", "write", "Apply a mutation ({ op, args }) to a master spread's items."),
         f!("paged.setPageMetadata", "(pageId, key, value?)", "bool", "write", "Set or delete one plugin-metadata entry on a page (value: the JSON envelope)."),
         // --- frames & groups ---
@@ -514,6 +517,22 @@ fn host_functions() -> Vec<HostFn> {
            "Accept a tracked deletion at its story offset (paged.collection(\"trackedChanges\")): the text stays deleted. Undoable."),
         f!("paged.rejectTrackedChange", "(storyId, offset)", "bool", "author",
            "Reject a tracked deletion at its story offset: its text comes back where it stood, as InDesign rejects one. Undoable."),
+        f!("paged.recordChange", "(storyId, start, end, {kind, id?, author?, date?, beforeCharacterStyle?, beforeParagraphStyle?}, paragraph?)", "bool", "author",
+           "Record a tracked change (insert, delete, format, paraProps, insertMark, deleteMark) over story chars [start, end), or on a paragraph for the paragraph kinds: what an importer writes for Word's revisions. Undoable."),
+        f!("paged.acceptChange", "({storyId?, id?, author?})", "bool", "author",
+           "Accept a tracked change by id, every change by an author, or all (in one story when storyId is set). One undo step."),
+        f!("paged.rejectChange", "({storyId?, id?, author?})", "bool", "author",
+           "Reject a tracked change by id, an author's, or all: insertions go, deletions stay, formatting goes back. One undo step."),
+        f!("paged.insertComment", "(storyId, start, end, {text, id?, author?, initials?, date?})", "bool", "author",
+           "A comment on story chars [start, end) (paged.collection(\"comments\")). Undoable."),
+        f!("paged.replyComment", "(parentId, {text, id?, author?, initials?, date?})", "bool", "author",
+           "Reply to a comment; the reply joins its thread. Undoable."),
+        f!("paged.resolveComment", "(commentId, resolved?)", "bool", "author",
+           "Resolve (or, with false, reopen) a comment's thread. Undoable."),
+        f!("paged.deleteComment", "(commentId)", "bool", "author",
+           "Delete a comment; a thread's first comment takes its replies and its range. Undoable."),
+        f!("paged.editComment", "(commentId, text, date?)", "bool", "author",
+           "Rewrite a comment's text. Undoable."),
         f!("paged.find", "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})", "string", "read",
            "Find text (literal, Word wildcards or a regex; ^p ^t ^l ^m work in every mode): a JSON array of hits with story, caret and character ranges and context."),
         f!("paged.findReplace", "(text, replace, {replaceAll?, replaceParagraphStyle?, replaceCharacterStyle?, …find options})", "bool", "author",
@@ -810,6 +829,11 @@ property_paths! {
         FrameGradientStrokeMode => "frameGradientStrokeMode" : enum_(STROKE_GRADIENT_MODES).default_text("Within"),
         // Engine ADRs 1007 and 1031 — the gradient fill's start, `[x, y]` in inner coordinates ([] = default).
         FrameGradientFillStart => "frameGradientFillStart" : lengths().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillStart)]),
+        // Engine ADR 1047 — live shapes; IDML has none (the outline is written, the parameters ride a label).
+        FrameShapeSides => "frameShapeSides" : count().range(3.0, 100.0),
+        FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
+        FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
+        FrameShapePieEnd => "frameShapePieEnd" : deg().default_num(360.0),
         // Engine ADR 1048 — the native mesh fill (no IDML attribute: a
         // label carries it through an IDML round trip).
         FrameFillMesh => "frameFillMesh" : structure("MeshFillSpec", Wire::FillMesh),
@@ -929,6 +953,10 @@ property_paths! {
         FrameFillEffectStack => "frameFillEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         FrameStrokeEffectStack => "frameStrokeEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         FrameContentEffectStack => "frameContentEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        // Engine ADR 1043 — native appearance: the whole layer list, and
+        // one layer by index.
+        FrameAppearance => "frameAppearance" : list_of("PaintLayerSpec", Wire::Appearance),
+        FrameAppearanceLayer => "frameAppearanceLayer" : operation("AppearanceLayerSpec", Wire::AppearanceLayer),
         CellFillColor => "cellFillColor" : color().idml(idml![attr(Cell | CellStyle, FillColor)]),
         CellFillTint => "cellFillTint" : pct().default_num(100.0).idml(idml![attr(Cell | CellStyle, FillTint)]),
         CellInsetTop => "cellInsetTop" : length_pos().idml(idml![attr(Cell, TextTopInset)]),
@@ -1097,6 +1125,9 @@ property_paths! {
         DocumentFootnoteContinuingRuleOn => "documentFootnoteContinuingRuleOn" : bool_().default_bool(true).idml(idml![attr(FootnoteOption, ContinuingRuleOn)]), "doc",
         DocumentShowHiddenText => "documentShowHiddenText" : bool_().default_bool(false), "doc",
         DocumentShowFieldCodes => "documentShowFieldCodes" : bool_().default_bool(false), "doc",
+        DocumentTrackChanges => "documentTrackChanges" : bool_().default_bool(false), "doc",
+        DocumentTrackChangesAuthor => "documentTrackChangesAuthor" : text(), "doc",
+        DocumentMarkupView => "documentMarkupView" : enum_(MARKUP_VIEWS).default_text("all"), "doc",
         TextVariableName => "textVariableName" : text().idml(idml![attr(TextVariable, Name)]), "textVariable",
         TextVariableType => "textVariableType" : enum_open(TEXT_VARIABLE_TYPES).idml(idml![attr(TextVariable, VariableType)]), "textVariable",
         TextVariableContents => "textVariableContents" : text().idml(idml![child(CustomTextVariablePreference, Contents)]), "textVariable",
@@ -1508,12 +1539,17 @@ mod tests {
         //
         // 265 -> 266: ADR 1037 — an image frame's filter stack.
         //
-        // 266 -> 267: ADR 1007 — a frame's stroke gradient mode (its
+        // 266 -> 268: ADR 1043 — an item's appearance, and one layer of it.
+        //
+        // 268 -> 272: ADR 1047 — live shapes (a polygon's sides and star
+        // inset, an oval's pie angles).
+        //
+        // 272 -> 273: ADR 1007 — a frame's stroke gradient mode (its
         // gradient's start point is ADR 1031's path).
         //
-        // 267 -> 268: ADR 1048 — a frame's gradient mesh or freeform
+        // 273 -> 274: ADR 1048 — a frame's gradient mesh or freeform
         // gradient.
-        assert_eq!(cat.settable_paths.len(), 268, "settable path count drifted");
+        assert_eq!(cat.settable_paths.len(), 274, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

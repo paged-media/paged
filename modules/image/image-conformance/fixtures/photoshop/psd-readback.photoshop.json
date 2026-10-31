@@ -7,9 +7,9 @@
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
     "script": "scripts/photoshop/probes/psd-readback.jsx",
-    "script_sha256": "19605f042e8754194e7321def5ef6291342044e3e30d62eb2705da00e550ec09",
+    "script_sha256": "a6aea55267b258419fdcde5ca5b7d5e17ba60c90f14765141a4c8de235dadfb6",
     "runner": "scripts/photoshop/run-probe.sh",
-    "recorded_at": "2026-10-28T16:53:43.470Z",
+    "recorded_at": "2026-10-29T11:33:57.673Z",
     "host_os": "macOS 26.4"
   },
   "stimulus_size": 128,
@@ -1729,6 +1729,307 @@
             "kind": "LayerKind.NORMAL",
             "opacity": 25.0980392156863,
             "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "converted-gray-8",
+      "params": {
+        "file": "converted-gray-8.psd",
+        "hash": "bc5192dffba7ec4c"
+      },
+      "profile": "Gray Gamma 2.2",
+      "bits": 8,
+      "files": [
+        "psd-readback/converted-gray-8.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.GRAYSCALE",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "painted",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 70.1960784313726,
+            "blend": "BlendMode.MULTIPLY",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "converted-gray-16",
+      "params": {
+        "file": "converted-gray-16.psd",
+        "hash": "2eafb2c1dca1a090"
+      },
+      "profile": "Gray Gamma 2.2",
+      "bits": 16,
+      "files": [
+        "psd-readback/converted-gray-16.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.GRAYSCALE",
+          "bits": "BitsPerChannelType.SIXTEEN",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "painted",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 70.1960784313726,
+            "blend": "BlendMode.MULTIPLY",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "converted-lab-8",
+      "params": {
+        "file": "converted-lab-8.psd",
+        "hash": "4b59245423780dc2"
+      },
+      "profile": "none",
+      "bits": 8,
+      "files": [
+        "psd-readback/converted-lab-8.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.LAB",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "painted",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 70.1960784313726,
+            "blend": "BlendMode.MULTIPLY",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "converted-lab-16",
+      "params": {
+        "file": "converted-lab-16.psd",
+        "hash": "da2414d6f48f8d18"
+      },
+      "profile": "none",
+      "bits": 16,
+      "files": [
+        "psd-readback/converted-lab-16.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.LAB",
+          "bits": "BitsPerChannelType.SIXTEEN",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "painted",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 70.1960784313726,
+            "blend": "BlendMode.MULTIPLY",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "converted-cmyk-8",
+      "params": {
+        "file": "converted-cmyk-8.psd",
+        "hash": "7850f8af85e06a2b"
+      },
+      "profile": "Coated FOGRA39 (ISO 12647-2:2004)",
+      "bits": 8,
+      "files": [
+        "psd-readback/converted-cmyk-8.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.CMYK",
+          "bits": "BitsPerChannelType.EIGHT",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "painted",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 70.1960784313726,
+            "blend": "BlendMode.MULTIPLY",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "converted-cmyk-16",
+      "params": {
+        "file": "converted-cmyk-16.psd",
+        "hash": "00fc0b24651e0f55"
+      },
+      "profile": "Coated FOGRA39 (ISO 12647-2:2004)",
+      "bits": 16,
+      "files": [
+        "psd-readback/converted-cmyk-16.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.CMYK",
+          "bits": "BitsPerChannelType.SIXTEEN",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "painted",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 70.1960784313726,
+            "blend": "BlendMode.MULTIPLY",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          },
+          {
+            "name": "Hintergrund",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 100,
+            "blend": "BlendMode.NORMAL",
+            "visible": true,
+            "fill_opacity": 100,
+            "clipped": false,
+            "depth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "converted-rgb-16",
+      "params": {
+        "file": "converted-rgb-16.psd",
+        "hash": "1e81d42248a6f977"
+      },
+      "profile": "none",
+      "bits": 16,
+      "files": [
+        "psd-readback/converted-rgb-16.png"
+      ],
+      "values": {
+        "document": {
+          "mode": "DocumentMode.RGB",
+          "bits": "BitsPerChannelType.SIXTEEN",
+          "width": 128,
+          "height": 128,
+          "layers": 2
+        },
+        "layers": [
+          {
+            "name": "painted",
+            "kind": "LayerKind.NORMAL",
+            "opacity": 70.1960784313726,
+            "blend": "BlendMode.MULTIPLY",
             "visible": true,
             "fill_opacity": 100,
             "clipped": false,

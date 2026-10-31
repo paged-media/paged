@@ -167,6 +167,27 @@ fn shadow(s: &El) -> Option<Shadow> {
     })
 }
 
+/// The effect container among a shape's properties: its `a:effectLst`,
+/// or, when it has none, its `a:effectDag`.
+///
+/// A DAG's direct children are read as a list ([`effects`]): its effects
+/// in the order the list keeps, and its containers (`a:cont`) and the
+/// effects only a DAG holds (`a:alphaMod`, `a:xfrm`, …) named in
+/// [`Effects::unknown`], so the lowering reports them.
+pub fn container(parent: &El) -> Option<&El> {
+    parent
+        .child(Ns::A, "effectLst")
+        .or_else(|| parent.child(Ns::A, "effectDag"))
+}
+
+/// The effects of a shape's properties ([`container`]), empty when it
+/// has none.
+pub fn effects_in(parent: &El, rels: Rels) -> Effects {
+    container(parent)
+        .map(|e| effects(e, rels))
+        .unwrap_or_default()
+}
+
 /// `a:effectLst` (an `a:effectDag`'s direct effects read the same way).
 pub fn effects(el: &El, rels: Rels) -> Effects {
     let mut fx = Effects::default();
@@ -296,5 +317,35 @@ mod tests {
         assert_eq!(*o.fill, Fill::Solid(Color::srgb(0xff0000)));
         assert_eq!(fx.unknown, ["effectDag"]);
         assert!(read("").is_empty());
+    }
+
+    #[test]
+    fn an_effect_dag_reads_its_direct_effects_and_names_the_rest() {
+        let sp = parse(
+            format!(
+                r#"<p:spPr xmlns:p="p" {NS}><a:effectDag><a:blur rad="25400"/><a:cont type="tree"><a:glow rad="1"><a:srgbClr val="FF0000"/></a:glow></a:cont><a:alphaModFix amt="50000"/></a:effectDag></p:spPr>"#
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        let fx = effects_in(&sp, &|_| None);
+        assert_eq!(fx.blur.map(|b| b.radius), Some(25_400));
+        assert!(fx.glow.is_none());
+        assert_eq!(fx.unknown, ["cont", "alphaModFix"]);
+        // A list wins over a DAG beside it.
+        let sp = parse(
+            format!(
+                r#"<p:spPr xmlns:p="p" {NS}><a:effectLst><a:softEdge rad="12700"/></a:effectLst><a:effectDag><a:blur rad="25400"/></a:effectDag></p:spPr>"#
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        let fx = effects_in(&sp, &|_| None);
+        assert_eq!((fx.soft_edge, fx.blur), (Some(12_700), None));
+        assert!(effects_in(
+            &parse(format!(r#"<a:spPr {NS}/>"#).as_bytes()).unwrap(),
+            &|_| None
+        )
+        .is_empty());
     }
 }

@@ -156,3 +156,11 @@ mod tests {
 
 /// Envelope warps: the Bézier mesh and Photoshop's warp styles (WP5.10).
 pub mod envelope;
+
+/// Displacement fields (the backward map of a free-form raster warp) and
+/// the Liquify brushes that edit one (WP5.6).
+pub mod field;
+
+/// Puppet Warp: an as-rigid-as-possible triangle mesh bent by pins, and
+/// its raster backward field (WP5.6).
+pub mod puppet;

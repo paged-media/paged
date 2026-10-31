@@ -1,7 +1,8 @@
 # ADR 618 — Pictures' DrawingML looks through the shared reader and mapper
 
 - **Status:** Accepted 2026-10-28. Amends [ADR 606](606-skeleton-is-a-native-document.md)
-  (which crates reach the engine).
+  (which crates reach the engine). Completed by [ADR 619](619-picture-looks-drawn-on-their-anchored-frames.md)
+  (2026-10-29): the look is drawn on the picture's anchored frame; decision 4's warning is gone.
 - **Scope:** `docx-core` (`Image::look`, `PictureLook`, `Theme::drawingml_slots`, the theme
   tint and shade on the shared HSL), `docx-import` (`picture_looks`), `docx-lower`
   (`Lowering::lower_look`, `LoweredImage::fx` / `losses`, the diagnostics),
@@ -95,3 +96,12 @@ that reason.
   (2026-10-28) got no answer from Word, which opened no document at all, not even a fixture
   it had opened before. The answer file and a test that reads Word's own look back to the
   same native effects follow once it is recorded.
+
+## Amendment 2026-10-30 — the effect stack in the look (plan C10)
+
+`NativeFx` gains `effectStack` (engine ADR 1008): a picture's `a:blur`, solid `a:fillOverlay`
+and `a:reflection` are carried in the look instead of reported (slide ADR 722 amendment
+2026-10-30); `lowered.ts` types it. The look as a whole is still carried for the anchored
+frames (the diagnostic names "reflection" among what it holds); whatever writes the look onto
+the frame writes the stack last, as `frameEffectStack`. Evidence:
+`docx-conformance/tests/it/picture_effects.rs`, `platform/shared/dml-native/tests/native.rs`.

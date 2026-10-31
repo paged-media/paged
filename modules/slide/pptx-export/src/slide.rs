@@ -449,7 +449,7 @@ const FRAME: &[&str] = &[
     "minimum_first_baseline_offset",
 ];
 /// The item's drop shadow and effects: written back as `a:effectLst`.
-const EFFECTS: &[&str] = &["drop_shadow", "effects"];
+const EFFECTS: &[&str] = &["drop_shadow", "effects", "effect_stack"];
 /// What `spPr` holds before an effect list.
 const BEFORE_EFFECTS: &[&str] = &[
     "a:xfrm",
@@ -1612,8 +1612,9 @@ impl<'a> Writer<'a, '_> {
         )
     }
 
-    /// An element's drop shadow and effects as `a:effectLst` (the shared
-    /// mapper's inverse); `None` when it has none.
+    /// An element's drop shadow, effects and effect stack as
+    /// `a:effectLst` (the shared mapper's inverse); `None` when it has
+    /// none.
     fn effects_of(&self, e: &Elem) -> Option<String> {
         let drop: Option<paged_model::DropShadowSetting> =
             e.v.get("drop_shadow")
@@ -1621,7 +1622,30 @@ impl<'a> Writer<'a, '_> {
         let fx: Option<paged_model::FrameEffects> =
             e.v.get("effects")
                 .and_then(|v| serde_json::from_value(v.clone()).ok());
-        let back = dml_native::effects_of(drop.as_ref(), fx.as_ref(), &|id| self.colors.rgb(id));
+        let stack: Vec<paged_model::effect_stack::EffectEntry> =
+            e.v.get("effect_stack")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+        let gradient_of = |id: &str| {
+            let g = self.colors.doc.palette.gradients.get(id)?;
+            Some(
+                g.stops
+                    .iter()
+                    .map(|s| dml_native::Stop {
+                        pos: s.location_pct as f64,
+                        rgb: self.colors.rgb(&s.stop_color).unwrap_or([0, 0, 0]),
+                        alpha: 1.0,
+                    })
+                    .collect(),
+            )
+        };
+        let back = dml_native::effects_with_stack(
+            drop.as_ref(),
+            fx.as_ref(),
+            &stack,
+            &|id| self.colors.rgb(id),
+            &gradient_of,
+        );
         paged_ooxml::drawingml::write::effects(&back, &|rgb, a| self.colors.rgb_color(rgb, a))
     }
 

@@ -41,6 +41,7 @@ import { freshIdentityParams } from "./engine";
 import { FAMILY_FILTERS } from "./filters-families";
 import { FG, GALLERY_FILTERS, galleryWorkspace } from "./filters-gallery";
 import { DEVELOP_FILTERS } from "./develop";
+import { WARP_FILTERS } from "./filters-warp";
 
 export * from "./filters-schema";
 
@@ -659,6 +660,7 @@ const ENTRIES: readonly FilterDef[] = [
   ...GALLERY_FILTERS,
   ...BLUR_GALLERY,
   ...DEVELOP_FILTERS,
+  ...WARP_FILTERS,
 ];
 
 /** The effects the Filter Gallery workspace stacks: every entry of the

@@ -461,7 +461,16 @@ fn apply_insert_text(
     let enter_at_end = (text == "\n")
         .then(|| paragraph_end_at(paragraphs, offset))
         .flatten();
+    let typed_at = content_offset_to_char(paragraphs, offset);
     insert_segments(paragraphs, offset, text);
+    // Engine ADR 1040 — typed text is nobody's insertion or deletion until
+    // the tracked lane records it as one: it does not inherit the change
+    // of the run it was typed into.
+    crate::review::clear_revisions(
+        paragraphs,
+        typed_at,
+        typed_at + text.chars().filter(|c| *c != '\n').count() as u32,
+    );
     if let Some(pi) = enter_at_end {
         apply_next_style(doc, story_id, cell, pi);
     }
@@ -772,9 +781,12 @@ fn split_paragraph_at(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32)
         Locate::EndOfStory { paragraph_idx } => {
             // Split at the end of the paragraph — the new paragraph
             // is empty.
-            let para = &paragraphs[paragraph_idx];
+            let para = &mut paragraphs[paragraph_idx];
+            // Engine ADR 1040 — the paragraph's mark ends the new
+            // paragraph; the split paragraph ends with a new one.
             let new_para = paged_model::Paragraph {
                 paragraph_style: para.paragraph_style.clone(),
+                mark_revision: para.mark_revision.take(),
                 ..Default::default()
             };
             paragraphs.insert(paragraph_idx + 1, new_para);
@@ -820,6 +832,8 @@ fn split_paragraph_at(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32)
         tracked_deletions: moved_deletions,
         table,
         table_anchor,
+        // Engine ADR 1040 — the paragraph's mark ends the tail.
+        mark_revision: para.mark_revision.take(),
         ..Default::default()
     };
     paragraphs.insert(paragraph_idx + 1, new_para);

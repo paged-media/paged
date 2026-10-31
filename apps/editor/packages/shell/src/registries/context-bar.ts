@@ -30,6 +30,9 @@ import type { Disposable } from "./types";
  */
 export type ControlBarGroupContribution = Api.ControlBarGroupContribution;
 export type StatusItemContribution = Api.StatusItemContribution;
+/** Extensions ADR 349 amendment 1 (C5), editor ADR 300 — a markup margin
+ *  band, rendered beside the pages by `overlays/margin-band.tsx`. */
+export type MarginBandContribution = Api.MarginBandContribution;
 
 interface Scoped {
   id: string;
@@ -106,6 +109,12 @@ export function createControlBarGroupRegistry(): ControlBarGroupRegistry {
 
 export function createStatusItemRegistry(): StatusItemRegistry {
   return createScopedItemRegistry<StatusItemContribution>("StatusItemRegistry");
+}
+
+export type MarginBandRegistry = ScopedItemRegistry<MarginBandContribution>;
+
+export function createMarginBandRegistry(): MarginBandRegistry {
+  return createScopedItemRegistry<MarginBandContribution>("MarginBandRegistry");
 }
 
 /**

@@ -115,8 +115,11 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
         .expect("inner shadow");
     assert_eq!((i.angle, i.size, i.opacity), (-45.0, 2.5, 50.0));
     assert!((i.distance - 4.0).abs() < 2e-3);
+    // The reflection rides the look's effect stack (engine ADR 1008).
+    let stack = &p3.fx.as_ref().unwrap().effect_stack;
+    assert!(stack.iter().any(|e| e.kind == "reflection"), "{stack:?}");
     assert!(
-        p3.losses.iter().any(|l| l.contains("a:reflection")),
+        !p3.losses.iter().any(|l| l.contains("reflection")),
         "{:?}",
         p3.losses
     );
@@ -132,25 +135,33 @@ fn what_the_engine_cannot_hold_is_reported_per_kind__feat__plugin_doc_native_eff
         .find(|m| m.contains("carry a DrawingML look"))
         .expect("the look diagnostic");
     assert!(shown.starts_with("4 picture(s)"), "{shown}");
+    // Engine ADR 1045, doc ADR 619: drawn, so said as a note, not a loss.
+    assert!(shown.contains("drawn natively"), "{shown}");
+    assert!(!shown.contains("NOT shown"), "{shown}");
+    let look = ir
+        .diagnostics
+        .iter()
+        .find(|d| d.message.contains("carry a DrawingML look"))
+        .unwrap();
+    assert_eq!(look.severity, "info");
     for kind in [
         "drop shadow",
         "glow",
         "inner shadow",
         "outline",
         "soft edge",
+        "reflection",
     ] {
         assert!(shown.contains(kind), "{kind}: {shown}");
     }
-    for what in ["a:reflection", "a:grayscl"] {
-        assert_eq!(
-            messages
-                .iter()
-                .filter(|m| m.starts_with("picture look in 1 picture(s)") && m.contains(what))
-                .count(),
-            1,
-            "{what}: {messages:?}"
-        );
-    }
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|m| m.starts_with("picture look in 1 picture(s)") && m.contains("a:grayscl"))
+            .count(),
+        1,
+        "{messages:?}"
+    );
 }
 
 #[test]
@@ -235,4 +246,24 @@ fn pictures_with_a_look_save_back_byte_identical__feat__plugin_doc_native_effect
     assert!(after.contains("P1 edited."));
     assert_eq!(drawings(&before), drawings(&after));
     assert_eq!(drawings(&after).len(), 5);
+}
+
+/// Doc ADR 619 — every colour a look paints with is a document swatch the
+/// host model names (`Color/docx-RRGGBB`), so the look's ops resolve.
+#[test]
+fn a_looks_colours_are_document_swatches__feat__plugin_doc_native_effects() {
+    let (_, images, ir) = pictures();
+    let mut checked = 0;
+    for img in &images {
+        let Some(fx) = &img.fx else { continue };
+        for c in fx.colors() {
+            let id = format!("Color/docx-{}", c.trim_start_matches('#'));
+            assert!(ir.swatches.iter().any(|s| s.id == id), "{id} not minted");
+            checked += 1;
+        }
+    }
+    assert!(
+        checked >= 5,
+        "the fixture's looks paint with colours: {checked}"
+    );
 }

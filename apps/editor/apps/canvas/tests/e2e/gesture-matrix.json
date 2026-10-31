@@ -762,6 +762,10 @@
       "unspecified": "module tool: hosts the host transform box inside the raster edit context; matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.image.tool.perspectiveCrop",
+      "unspecified": "module tool: acts inside the raster edit context (covered by tests/plugin-surface/image-warps.spec.ts and modules/image/glue/test/warps.spec.ts); matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.move",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },

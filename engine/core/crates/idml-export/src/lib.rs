@@ -257,18 +257,50 @@ pub fn write_idml_with(
     original: &[u8],
     opts: &ExportOptions,
 ) -> Result<IdmlExport, WriteError> {
+    // Engine ADR 1043: IDML has one fill and one stroke per item; an
+    // item's appearance is baked to a group of single-paint items, the
+    // source kept in the carrier's label.
+    use paged_model::appearance::interchange as appearance;
+    let baked;
+    let doc = if doc
+        .spreads
+        .iter()
+        .any(|p| appearance::needs_bake(&p.spread))
+        || doc
+            .master_spreads
+            .values()
+            .any(|p| appearance::needs_bake(&p.spread))
+    {
+        let mut d = doc.clone();
+        for p in d.spreads.iter_mut() {
+            appearance::bake_spread(&mut p.spread);
+        }
+        for p in d.master_spreads.values_mut() {
+            appearance::bake_spread(&mut p.spread);
+        }
+        baked = d;
+        &baked
+    } else {
+        doc
+    };
     // Engine ADR 1008: IDML carries InDesign's effects in their slots
-    // and nothing else; an item's effect stacks ride its label.
+    // and nothing else; an item's effect stacks ride its label. Engine
+    // ADR 1047: so do its live-shape parameters (the outline itself is
+    // written as its path).
     use paged_model::effect_stack::label;
-    if doc.spreads.iter().any(|p| label::any(&p.spread))
-        || doc.master_spreads.values().any(|p| label::any(&p.spread))
+    use paged_model::live_shape::label as shape_label;
+    let needs = |s: &paged_model::Spread| label::any(s) || shape_label::any(s);
+    if doc.spreads.iter().any(|p| needs(&p.spread))
+        || doc.master_spreads.values().any(|p| needs(&p.spread))
     {
         let mut stamped = doc.clone();
         for p in stamped.spreads.iter_mut() {
             label::stamp(&mut p.spread);
+            shape_label::stamp(&mut p.spread);
         }
         for p in stamped.master_spreads.values_mut() {
             label::stamp(&mut p.spread);
+            shape_label::stamp(&mut p.spread);
         }
         return write_package(&stamped, original, false, opts);
     }
@@ -1401,6 +1433,7 @@ fn navigation_plan<'a>(
         sections,
         destinations,
         hyperlinks: &doc.designmap.hyperlinks,
+        item_sources: &doc.designmap.hyperlink_page_item_sources,
         bookmarks: &doc.designmap.bookmarks,
         bookmark_parents: &doc.designmap.bookmark_parents,
         conditions: &doc.styles.conditions,

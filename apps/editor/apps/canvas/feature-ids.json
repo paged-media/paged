@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 830,
-    "keybinding": 164,
-    "menu": 600,
-    "panel": 145,
-    "tool": 126
+    "command": 864,
+    "keybinding": 166,
+    "menu": 609,
+    "panel": 146,
+    "tool": 127
   },
   "features": [
     {
@@ -207,6 +207,96 @@
     },
     {
       "id": "command:media.paged.doc.command.placeDoc",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.acceptAll",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.acceptChange",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.deleteComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.markupAll",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.markupNone",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.markupOriginal",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.markupSimple",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.newComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.nextChange",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.nextComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.previousChange",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.previousComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.rejectAll",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.rejectChange",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.replyComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.resolveComment",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.showReview",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.review.toggleTrackChanges",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -1481,12 +1571,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.commitPerspectiveCrop",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.contentAwareFill",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.contentAwareFillWorkspace",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.contentAwareScale",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1832,6 +1932,11 @@
     },
     {
       "id": "command:media.paged.image.command.filterLightingEffects",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.filterLiquify",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2471,6 +2576,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.puppetWarp",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.quickMask",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2682,6 +2792,21 @@
     },
     {
       "id": "command:media.paged.image.command.toggleSnapGuides",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.transformDistort",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.transformPerspective",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.transformWarp",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -3041,6 +3166,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.changeLayout",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.addComment",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -3176,12 +3306,22 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.resetSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.resolveComment",
       "kind": "command",
       "owner": "media.paged.slide"
     },
     {
       "id": "command:media.paged.slide.command.saveAsTemplate",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.slideMaster",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3207,6 +3347,11 @@
     },
     {
       "id": "command:media.paged.slide.deleteCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.deleteLayout",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3246,7 +3391,17 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.insertPlaceholder",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.insertShape",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.layouts",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3291,6 +3446,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.renameLayout",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.renameSection",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -3307,6 +3467,16 @@
     },
     {
       "id": "command:media.paged.slide.setCustomShow",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setPlaceholderStyle",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.setPreserve",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -4386,6 +4556,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+alt+m→media.paged.doc.command.review.newComment",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
       "kind": "keybinding",
       "owner": "editor"
@@ -4557,6 +4732,11 @@
     },
     {
       "id": "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+shift+e→media.paged.doc.command.review.toggleTrackChanges",
       "kind": "keybinding",
       "owner": "media.paged.doc"
     },
@@ -5561,6 +5741,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Edit/Content-aware scale…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Edit/Copy",
       "kind": "menu",
       "owner": "editor"
@@ -5627,6 +5812,11 @@
     },
     {
       "id": "menu:Edit/Path to selection",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Puppet warp…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -5702,6 +5892,21 @@
     },
     {
       "id": "menu:Edit/Selection to path",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Transform/Free distort",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Transform/Perspective",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Transform/Warp…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -5862,6 +6067,11 @@
     },
     {
       "id": "menu:Image/Apply crop",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Apply perspective crop",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -6337,6 +6547,11 @@
     },
     {
       "id": "menu:Image/Filter/Filter gallery…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Filter/Liquify…",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7681,6 +7896,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Reset slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/SmartArt text pane",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -7921,6 +8141,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:View/Slide Master",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:View/Slide Sorter",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -8047,6 +8272,11 @@
     },
     {
       "id": "panel:media.paged.doc.panel.references",
+      "kind": "panel",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "panel:media.paged.doc.panel.review",
       "kind": "panel",
       "owner": "media.paged.doc"
     },
@@ -9132,6 +9362,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.pencil",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.perspectiveCrop",
       "kind": "tool",
       "owner": "media.paged.image"
     },

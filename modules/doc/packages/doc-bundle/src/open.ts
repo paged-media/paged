@@ -37,6 +37,7 @@ import {
   buildStyleMutations,
   noteTexts,
   sectionBlocks,
+  trackChangesMutation,
 } from "@paged-media/doc-host-model";
 import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
 import { refusalText } from "@paged-media/panel-kit";
@@ -44,6 +45,7 @@ import { t } from "@paged-media/strings";
 
 import type { DocEngine } from "./engine.js";
 import { DOC } from "./messages.js";
+import { pourPageItems } from "./page-items.js";
 import { applyStyleOpsReporting, pourSteps } from "./pour.js";
 
 /** What a standalone open produced: the section stories (save-back reads
@@ -226,10 +228,27 @@ export async function finishStandalone(
   const notes = noteTexts(ir);
   const groups = sectionBlocks(ir);
   for (let k = 0; k < groups.length && k < storyIds.length; k++) {
-    await pourSteps(host, buildStoryBlocks(groups[k], storyIds[k], { notes }));
+    await pourSteps(
+      host,
+      buildStoryBlocks(groups[k], storyIds[k], {
+        notes,
+        comments: ir.comments ?? [],
+      }),
+    );
   }
   await pourHeadersFooters(host, ir);
+  await pourPageItems(host, ir);
   await setFootnoteOptions(host, ir);
+  // Doc ADR 613 — a document Word tracked changes in keeps tracking them:
+  // switched on last, so the pour itself was not recorded.
+  if (ir.trackChanges) {
+    const on = await host.document.mutate(trackChangesMutation());
+    if (!on.applied) {
+      host.log.warn(
+        `paged.doc: the engine did not turn change tracking on: ${JSON.stringify(on.error)}`,
+      );
+    }
+  }
 
   const frameId: ElementId = { kind: "textFrame", id: "docx_f0" };
   const partPath = `${storyIds[0] ?? "docx"}/source.docx`;

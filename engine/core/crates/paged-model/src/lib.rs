@@ -30,13 +30,20 @@
 //! primitive. `paged-parse` re-exports everything moved here, so its dependents
 //! compile unchanged.
 
+pub mod appearance;
 pub mod effect_stack;
 pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
+pub mod live_shape;
 pub mod mesh;
+pub mod review;
 pub mod winding;
 pub mod word_field;
+pub use review::{
+    author_slot, review_color, review_color_id, review_highlight_id, Change, ChangeKind, Comment,
+    FormatChange, MarkupView, ParaPropsChange,
+};
 pub use word_field::{WordField, WordFieldKind};
 
 pub use mesh::{
@@ -1712,6 +1719,11 @@ pub struct TextFrame {
     /// are on in InDesign's order and nothing else is stacked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -1882,6 +1894,7 @@ impl TextFrame {
             fill_mesh: None,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -2218,6 +2231,11 @@ pub struct Rectangle {
     /// are on in InDesign's order and nothing else is stacked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -2386,6 +2404,7 @@ impl Rectangle {
             blend_mode: None,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -2702,6 +2721,11 @@ pub struct Oval {
     /// are on in InDesign's order and nothing else is stacked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -2823,6 +2847,13 @@ pub struct Oval {
     /// field is here so every frame kind takes the same write.
     #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
     pub fill_rule: FillRule,
+    /// Engine ADR 1047 — the live pie: the wedge of the ellipse the oval
+    /// draws, as Illustrator's pie start and end angles. `None` is the
+    /// whole ellipse (and the only value IDML spells natively; the IDML
+    /// export writes a pie's outline and keeps the angles in the item's
+    /// label, [`crate::live_shape::label`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pie: Option<crate::live_shape::PieAngles>,
     /// Engine ADR 1037 — the picture's filter stack, applied in order when
     /// it is drawn and exported. Empty (the default, and every imported
     /// frame without the label) draws the picture as it is; an empty stack
@@ -2857,6 +2888,7 @@ impl Oval {
             item_layer: None,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -2887,6 +2919,7 @@ impl Oval {
             corners: Default::default(),
             end_cap: None,
             fill_rule: FillRule::NonZero,
+            pie: None,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
             fill_mesh: None,
@@ -3479,6 +3512,11 @@ pub struct Polygon {
     /// are on in InDesign's order and nothing else is stacked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// Engine ADR 1043 — the item's extra fills and strokes, bottom to
+    /// top, in order with its own fill and stroke. Empty in the canonical
+    /// form: the item paints its one fill and one stroke, as always.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearance: Vec<crate::appearance::PaintLayer>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -3619,6 +3657,13 @@ pub struct Polygon {
     /// C-62 — `RightArrowHeadScale` (percent, default 100).
     #[serde(default = "default_arrowhead_scale")]
     pub end_arrow_scale: f32,
+    /// Engine ADR 1047 — the live polygon or star the anchors were made
+    /// from: its side count and star inset. It is LIVE while the anchors
+    /// are still what these parameters make in their own bounding box
+    /// ([`crate::live_shape::live_polygon`]); an edit of the points ends
+    /// it without a write. `None` for every other path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_shape: Option<crate::live_shape::PolygonShape>,
 }
 
 impl Polygon {
@@ -3655,6 +3700,7 @@ impl Polygon {
             item_layer: None,
             effects: None,
             effect_stack: Vec::new(),
+            appearance: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -3689,6 +3735,7 @@ impl Polygon {
             end_arrow: ArrowheadType::None,
             start_arrow_scale: 100.0,
             end_arrow_scale: 100.0,
+            live_shape: None,
         }
     }
 }
@@ -4574,6 +4621,19 @@ pub struct Hyperlink {
     pub destination: Option<String>,
 }
 
+/// Engine ADR 1026 — IDML `<HyperlinkPageItemSource>`: the page item a
+/// hyperlink starts from. The whole item is the link (a click anywhere on
+/// it follows it); its destination is the hyperlink's.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HyperlinkPageItemSource {
+    /// `Self` (`HyperlinkPageItemSource/<id>` as `Hyperlink::source` spells it).
+    pub self_id: String,
+    /// The source page item's `Self` (`SourcePageItem`).
+    pub source_page_item: String,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
 /// IDML `<Bookmark>` definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bookmark {
@@ -4917,6 +4977,25 @@ pub struct DocumentPreference {
     /// document, carried by the `.paged` model part; not an IDML attribute.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub show_field_codes: Option<bool>,
+    /// Word's Track Changes (engine ADR 1040): while true, text typed and
+    /// deleted and the character and paragraph formatting set on story
+    /// ranges are recorded as [`Change`]s instead of being applied
+    /// destructively. `None` / false: edits apply as they always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_changes: Option<bool>,
+    /// The author a recorded change carries (Word's user name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_changes_author: Option<String>,
+    /// How tracked changes and comments are shown (engine ADR 1040);
+    /// `None` is [`MarkupView::All`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markup_view: Option<MarkupView>,
+    /// Engine ADR 1040 — the date a tracked change recorded now carries
+    /// (ISO 8601), as the host's clock stamped it before the edit. The
+    /// engine reads no clock; `None` records changes without a date, as
+    /// Word allows. Session state: never saved.
+    #[serde(skip)]
+    pub review_clock: Option<String>,
 }
 
 /// `<GridPreference>` — the document's baseline-grid + document-grid
@@ -7781,6 +7860,16 @@ pub struct Paragraph {
     /// InDesign table of contents is a story of its own).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toc: Option<String>,
+    /// Engine ADR 1040 — the paragraph MARK (the break that ends this
+    /// paragraph) inserted or deleted by a tracked change. Accepting a
+    /// deleted mark, or rejecting an inserted one, joins this paragraph
+    /// with the next.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark_revision: Option<Change>,
+    /// Engine ADR 1040 — a tracked paragraph-formatting change (Word's
+    /// `w:pPrChange`): the paragraph's properties before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub props_change: Option<ParaPropsChange>,
 }
 impl Paragraph {
     /// Keep the anchors of [`Self::anchored_frame_offsets`], the
@@ -7997,7 +8086,15 @@ pub struct IndexMarker {
 /// frame carries its own geometry / transform and an
 /// `<AnchoredObjectSetting>` describing where it should land relative
 /// to the anchor character.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// An anchored frame paints as a free frame does (engine ADR 1045): its
+/// fill, outline, opacity, blend mode, InDesign's effects in their slots,
+/// the ordered effect stack (ADR 1008) and the three transparency targets
+/// are the free frames' own fields and types, read by the same renderer
+/// modules through the rectangle the anchored pass synthesises. Each is
+/// absent from the serialised form while unset, so an anchored frame
+/// without a look serialises and hashes as before.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AnchoredFrame {
     pub frame_kind: AnchoredFrameKind,
     pub self_id: Option<String>,
@@ -8033,10 +8130,88 @@ pub struct AnchoredFrame {
     /// Children of an anchored Group, in z-order. Empty for non-Group
     /// anchored frames.
     pub children: Vec<AnchoredFrame>,
+    /// `GradientFillLength`; see [`Rectangle::gradient_fill_length`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient_fill_length: Option<f32>,
+    /// `GradientFillStart`; see [`Rectangle::gradient_fill_start`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient_fill_start: Option<[f32; 2]>,
+    /// `StrokeType`; see [`Rectangle::stroke_type`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_type: Option<String>,
+    /// `StrokeDashAndGap`; see [`Rectangle::stroke_dash`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stroke_dash: Vec<f32>,
+    /// `StrokeAlignment`; see [`Rectangle::stroke_alignment`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_alignment: Option<String>,
+    /// `EndCap`; see [`Rectangle::end_cap`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_cap: Option<String>,
+    /// `EndJoin`; see [`Rectangle::end_join`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_join: Option<String>,
+    /// `MiterLimit`; see [`Rectangle::miter_limit`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub miter_limit: Option<f32>,
+    /// The object's `<BlendingSetting Opacity>`, 0–100; see
+    /// [`Rectangle::opacity`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<f32>,
+    /// The object's `<BlendingSetting BlendMode>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend_mode: Option<String>,
+    /// The object's `<DropShadowSetting>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drop_shadow: Option<DropShadowSetting>,
+    /// The object's other InDesign effects; see [`Rectangle::effects`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effects: Option<FrameEffects>,
+    /// The object target's ordered effect stack (engine ADR 1008), empty
+    /// in the canonical form.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
+    /// The fill, stroke and content targets (R-10); see
+    /// [`TargetTransparency`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_transparency: Option<TargetTransparency>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_transparency: Option<TargetTransparency>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_transparency: Option<TargetTransparency>,
+    /// The targets' own drop shadows (R-10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_drop_shadow: Option<DropShadowSetting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_drop_shadow: Option<DropShadowSetting>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_drop_shadow: Option<DropShadowSetting>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+
+impl AnchoredFrame {
+    /// Whether the frame carries anything of a look beyond its fill and
+    /// stroke colours: an opacity, a blend mode, an effect in any slot or
+    /// stack, a target setting. Such a frame's picture is painted inside
+    /// its effect run (see the renderer's anchored pass).
+    pub fn has_transparency(&self) -> bool {
+        self.opacity.is_some()
+            || self.blend_mode.is_some()
+            || self.drop_shadow.is_some()
+            || self.effects.is_some()
+            || !self.effect_stack.is_empty()
+            || self.fill_transparency.is_some()
+            || self.stroke_transparency.is_some()
+            || self.content_transparency.is_some()
+            || self.fill_drop_shadow.is_some()
+            || self.stroke_drop_shadow.is_some()
+            || self.content_drop_shadow.is_some()
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AnchoredFrameKind {
     TextFrame,
+    #[default]
     Rectangle,
     Group,
 }
@@ -9007,6 +9182,20 @@ pub struct CharacterRun {
     /// when the fields are updated (Word's F9). `None` for ordinary text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field: Option<WordField>,
+    /// Engine ADR 1040 — the tracked insertion or deletion this run's text
+    /// is ([`ChangeKind::Insert`] / [`ChangeKind::Delete`]). A deleted run
+    /// keeps its text, as Word keeps `w:delText`; the markup view decides
+    /// whether it shows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<Change>,
+    /// Engine ADR 1040 — a tracked formatting change (Word's `w:rPrChange`):
+    /// the run's properties before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_change: Option<FormatChange>,
+    /// Engine ADR 1020 — the comments whose range covers this run: the ids
+    /// of their threads' root [`Comment`]s in the story.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<String>,
     pub text: String,
 }
 impl CharacterRun {
@@ -9077,6 +9266,10 @@ impl Graphic {
     /// one level if the id names a Swatch rather than a Color directly.
     pub fn resolve(&self, id: &str) -> Option<&ColorEntry> {
         if let Some(c) = self.colors.get(id) {
+            return Some(c);
+        }
+        // Engine ADR 1040 — the markup's reserved author colours.
+        if let Some(c) = review::review_color(id) {
             return Some(c);
         }
         let swatch = self.swatches.get(id)?;
@@ -9572,6 +9765,11 @@ pub struct Story {
     /// `Self`) with the elements that tag its ranges as children.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub xml_elements: Vec<XmlElement>,
+    /// Engine ADR 1020 — the story's comment threads: each root comment
+    /// covers the runs that name its id ([`CharacterRun::comments`]), and
+    /// its replies name it as their `parent`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<Comment>,
 }
 
 /// D-02 — an `<XMLTag Self Name>` of `XML/Tags.xml`, as InDesign 20.0.1
@@ -10088,6 +10286,13 @@ pub struct DesignMap {
     /// `<Hyperlink Destination="...">` resolves through this table to a
     /// concrete URL or page target.
     pub hyperlink_destinations: Vec<HyperlinkDestination>,
+    /// Engine ADR 1026 — `<HyperlinkPageItemSource>`s: page items that are
+    /// a hyperlink's source (a clickable shape; a PowerPoint shape's click
+    /// action). A [`Hyperlink::source`] names one by its `Self`.
+    /// Not written when empty, so a document without one keeps its bytes
+    /// and its state hash.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hyperlink_page_item_sources: Vec<HyperlinkPageItemSource>,
     /// SDK Phase 5 (v1 sweep) — `<Bookmark>` definitions. Each
     /// is a named anchor pointing at a destination (typically a
     /// hyperlink-page-destination or text-anchor).

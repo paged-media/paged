@@ -800,6 +800,16 @@ value, on a rectangle, oval or polygon. The engine draws and exports the
 picture through it; IDML keeps it in a label. Additive at protocol 77:
 an older engine refuses the write as an unknown path and reads no row.
 
+`"document.liveShapes@1"` (engine ADR 1047) says the vendored wire and
+catalog carry the live-shape paths: `frameShapeSides` and
+`frameShapeStarInset` on a Polygon (a live polygon or star the engine
+redraws from its side count and inset, keeping its outer radius) and
+`frameShapePieStart` / `frameShapePieEnd` on an Oval (the wedge the oval
+draws). Additive at protocol 78: an older engine refuses the writes as
+unknown paths. paged.draw's Star tool asks it before it inserts a live
+star (the plain polygon, then its points and inset in the same batch)
+instead of a plain path.
+
 `"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the
@@ -854,6 +864,22 @@ read as a new mask would take them and a write is refused.
 `applyOpacityMask` takes an optional `clip` (absent: `true`). A snapshot
 whose `only` names a mask item without its target draws the mask artwork
 alone (the Transparency panel's thumbnail). All additive: no protocol bump.
+
+`"document.appearance@1"` (engine ADR 1043) says the vendored wire and
+catalog carry native appearance: an item's extra fills and strokes, bottom
+to top, in order with its own fill and stroke. `frameAppearance` is the
+whole list, written as `{ type: "appearance", value: { layers } }` (a
+`PaintLayerSpec` per layer: `kind` — `fill`, `stroke`, or the placeholders
+`frameFill` / `frameStroke` that place the item's own paint — `enabled`,
+`color`, `tint`, the gradient geometry, `opacityPct`, `blendMode`,
+`effects` (stack-only `EffectEntrySpec`s) and, for a stroke, `weight`,
+`alignment`, `endCap`, `endJoin`, `miterLimit`, `strokeType`, `dash`);
+`frameAppearanceLayer` replaces one layer, `{ index, layer }` (one past the
+end appends). Each write is one undo step; the empty list is the item as it
+always was. `host.objects` reads and writes `frameAppearance` as its list of
+layers. IDML gets a group of single-paint items with the source in the
+item's `paged:appearance` label (and a loss line); a paged reader restores
+it. Additive at protocol 78: an older engine refuses the paths.
 
 `"document.symbols@1"` (engine ADR 1039, protocol 78) is the engine's
 symbol: a definition kept once in the document and instances that draw it
@@ -3180,3 +3206,31 @@ on the page they see it on (editor ADR 301). C6 is the door.
   `doubleClickPage(pageId, pagePoint, editContext?)`, `subContext()`, `exitSubContext()`.
 - **Additivity.** One `ContributeSurface` member, four `ShellSurface` members, six types and an
   optional `ShellRegistries.subContexts`. An older host warns and answers false / null.
+
+## 30. The markup margin band (ADR 349 amendment 1 — `shell.marginBand@1`, `text.contentRange@1`)
+
+A document under review shows its balloons beside the page, level with their text (editor
+ADR 300). C5 is the door; the bundle owns what a balloon says, the host where it stands.
+
+- **Contribution.** `contribute.marginBand({ id, scope: { editContext }, title?, width?,
+order?, items(), onDidChange(listener), render })`. The band applies while its context is
+  the active scope context (§26). `width` is the balloons' width in screen pixels (default
+  240); bands are columns in `order`, the first nearest the page.
+- **Items.** `MarginBandItem { id, anchor, kind?, color? }`; `anchor` is `{ storyId, start,
+end }` in CONTENT offsets (an empty range anchors at a point); `kind` is free text the host
+  writes on the balloon (`data-margin-kind`, its accessible label); `color` is a CSS colour
+  for the edge and the leader line. `items()` is read on registration and after every
+  `onDidChange`; a throwing `items()` shows nothing.
+- **Render.** `render` gets `MarginBalloonProps { item, editContext, active }` per item and is
+  React in the host realm (§6). Pointer and key events stop at the balloon, so a field in it is
+  the balloon's.
+- **The host's part.** Anchor geometry from the engine's selection geometry, re-read on every
+  text-moving push; stacking in text order with measured heights; screen-constant size;
+  leader lines; `active` while the caret or selection touches the anchor.
+- **`host.text.contentRange(range)`.** Characters → content offsets for one range (the
+  engine's collections count characters, the caret and anchors content offsets);
+  `charToContent(paragraphTexts, at)` is the same conversion as an export.
+- **Probes.** `contribute.marginBand@1`, `text.contentRange@1` (static); `shell.marginBand@1`
+  (the editor's registry). The harness records bands (`marginBandsContributed()`).
+- **Additivity.** One `ContributeSurface` member, one `TextSurface` member, five types and an
+  optional `ShellRegistries.marginBands`. An older host warns and registers nothing.

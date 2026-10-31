@@ -44,6 +44,7 @@ use crate::module::{Geometry, ResolvedFrame};
 use crate::AssetResolver;
 
 mod anchored;
+mod appearance;
 mod auto_size;
 mod baseline_grid;
 mod blend_shadow;
@@ -66,6 +67,7 @@ mod placed_eps;
 mod placed_pdf;
 mod placed_svg;
 mod resume;
+mod review;
 mod ruby;
 /// C-26 — the inline-image cache key is shared with `paged-canvas`'s
 /// `placed_asset_bytes` door on purpose. Two copies of this format
@@ -91,7 +93,7 @@ mod text_slots;
 pub mod word_fields;
 
 pub use anchored::AnchoredImageEmit;
-use anchored::{emit_anchored_frames_for_paragraph, emit_anchored_rect_image};
+use anchored::{emit_anchored_frames_for_paragraph, emit_anchored_rect_image, AnchoredLook};
 pub use datefmt::DateParts;
 // Doc-link-only imports: referenced from `///` comments in this file.
 #[cfg(doc)]

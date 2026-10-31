@@ -51,7 +51,7 @@ describe("the SmartArt text pane", () => {
     expect(
       view.container.querySelector('[data-smartart-panel="empty"]'),
     ).not.toBeNull();
-    await d.host.selection.set([{ kind: "group", id: "u7" }]);
+    await d.host.selection.set([{ kind: "group", id: "u46" }]);
     await waitFor(() => expect(fields(view.container).length).toBe(5));
     expect(fields(view.container).map((f) => f.value)).toEqual([
       "Alpha",

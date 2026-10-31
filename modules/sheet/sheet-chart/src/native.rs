@@ -20,133 +20,35 @@
 //! items (sheet ADR 527, WP10.4).
 //!
 //! The chart's DrawingML is read as authored ([`DmlFx`]); here it is
-//! resolved against the workbook theme (`paged_ooxml::drawingml::resolved`)
-//! and lowered through the ONE DrawingML mapper of slide, doc and sheet,
-//! `dml-native`: the gradient swatch and its placement, the item opacity,
-//! alpha stops as a gradient feather, the outer shadow as the drop shadow,
-//! the inner shadow, glow and soft edge as the engine's frame effects, and
-//! a line of loss for everything the engine cannot hold yet (reflection,
-//! blur, patterns, …). Nothing here maps DrawingML itself.
+//! resolved against the workbook theme and lowered through the ONE
+//! DrawingML mapper of slide, doc and sheet, `dml-native`
+//! ([`dml_native::native::Lowering`]): the gradient swatch and its
+//! placement, the item opacity, alpha stops as a gradient feather, the
+//! outer shadow as the drop shadow, the inner shadow, glow and soft edge as
+//! the engine's frame effects, a blur, a colour overlay and a reflection
+//! on the effect stack (engine ADR 1008), and a line of loss for
+//! everything the engine cannot hold yet (patterns, …). Nothing here maps
+//! DrawingML itself, and the wire form is the mapper's own
+//! ([`NativeFx`]).
 //!
 //! What comes out is [`NativeFx`], an optional field of a geometry
-//! primitive: the mapper's result restated with colours as `#RRGGBB` (the
-//! page lowering mints its content-addressed chart swatches from them, as
-//! it does for every other chart colour) and the gradient's start in
-//! chart-content pt (the lowering adds the frame's and the page's origin:
-//! the engine reads a page item's gradient start in its spread's
-//! coordinates).
+//! primitive: colours as `#RRGGBB` (the page lowering mints its
+//! content-addressed chart swatches from them, as it does for every other
+//! chart colour) and the gradient's start in chart-content pt (the
+//! lowering adds the frame's and the page's origin: the engine reads a
+//! page item's gradient start in its spread's coordinates). A primitive
+//! keeps its solid fill and stroke itself, so `fill` and `stroke` are
+//! never set here.
 
-use dml_native::{axis_start, feather_of, placement, Mapper, Paint};
-use paged_ooxml::drawingml::{resolved, Rgba};
+use dml_native::native::Lowering;
+use paged_ooxml::drawingml::{resolved::Paint, Rgba};
+
+pub use dml_native::native::{
+    NativeEffect, NativeFeather, NativeFx, NativeGlow, NativeGradient, NativeInnerShadow,
+    NativeShadow,
+};
 
 use crate::model::DmlFx;
-
-/// A gradient fill on a native item.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NativeGradient {
-    /// `linear` or `radial`.
-    pub kind: &'static str,
-    /// (location 0–100, `#RRGGBB`), in position order.
-    pub stops: Vec<(f32, String)>,
-    /// The engine's angle (counter-clockwise, degrees); linear only.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub angle: Option<f32>,
-    /// The axis length (linear) or the radius (radial), pt.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub length: Option<f32>,
-    /// Where the axis starts (linear) or the centre (radial), in
-    /// chart-content pt.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start: Option<(f64, f64)>,
-}
-
-/// A drop shadow.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NativeShadow {
-    pub x_offset: f32,
-    pub y_offset: f32,
-    /// The blur size, pt.
-    pub size: f32,
-    /// 0–100.
-    pub opacity: f32,
-    pub color: String,
-}
-
-/// An inner shadow, as the engine's editors address it.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NativeInnerShadow {
-    /// Counter-clockwise degrees.
-    pub angle: f32,
-    pub distance: f32,
-    pub size: f32,
-    pub opacity: f32,
-    pub color: String,
-}
-
-/// An outer glow.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NativeGlow {
-    pub size: f32,
-    pub opacity: f32,
-    pub color: String,
-}
-
-/// A gradient feather (a fill whose stops fade).
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NativeFeather {
-    /// `Linear` or `Radial`.
-    pub gradient_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub angle: Option<f32>,
-    /// (location 0–100, opacity 0–100).
-    pub stops: Vec<(f32, f32)>,
-}
-
-/// What a primitive carries beyond its solid fill and stroke: each field
-/// omitted when unset.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NativeFx {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gradient: Option<NativeGradient>,
-    /// The item's opacity, 0–100.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub opacity: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub drop_shadow: Option<NativeShadow>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inner_shadow: Option<NativeInnerShadow>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub outer_glow: Option<NativeGlow>,
-    /// A soft edge's width, pt.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub feather: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gradient_feather: Option<NativeFeather>,
-}
-
-impl NativeFx {
-    pub fn is_empty(&self) -> bool {
-        *self == NativeFx::default()
-    }
-
-    /// Every colour it paints with (`#RRGGBB`), for the swatch mint.
-    pub fn colors(&self) -> Vec<&str> {
-        let mut out: Vec<&str> = Vec::new();
-        if let Some(g) = &self.gradient {
-            out.extend(g.stops.iter().map(|(_, c)| c.as_str()));
-        }
-        out.extend(self.drop_shadow.as_ref().map(|s| s.color.as_str()));
-        out.extend(self.inner_shadow.as_ref().map(|s| s.color.as_str()));
-        out.extend(self.outer_glow.as_ref().map(|s| s.color.as_str()));
-        out
-    }
-}
 
 /// What lowering one role on one item gives: its native look, and the
 /// solid colour a pattern is drawn in.
@@ -185,37 +87,21 @@ fn scheme_slots(theme: &[u32; 12]) -> Vec<(String, Rgba)> {
         .collect()
 }
 
-fn hex(rgb: [u8; 3]) -> String {
-    format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2])
-}
-
-/// One chart's lowering: the theme, and the shared mapper with what it
-/// could not hold.
+/// One chart's lowering: the shared mapper's, against the workbook theme.
 pub struct NativeLowering {
-    slots: Vec<(String, Rgba)>,
-    mapper: Mapper,
+    lowering: Lowering,
 }
 
 impl NativeLowering {
     pub fn new(theme: &[u32; 12]) -> NativeLowering {
         NativeLowering {
-            slots: scheme_slots(theme),
-            mapper: Mapper::default(),
+            lowering: Lowering::new(scheme_slots(theme)),
         }
     }
 
     /// One line per kind of loss, in the order first met.
     pub fn take_losses(&mut self) -> Vec<String> {
-        self.mapper.take_losses()
-    }
-
-    /// `#RRGGBB` of a colour swatch the mapper minted.
-    fn hex_of(&self, id: &str) -> Option<String> {
-        self.mapper
-            .palette
-            .colors()
-            .find(|(_, i)| i.as_str() == id)
-            .map(|(rgb, _)| hex(*rgb))
+        self.lowering.take_losses()
     }
 
     /// Lower `fx` onto an item whose box is `(x, y, w, h)` in chart-content
@@ -227,78 +113,42 @@ impl NativeLowering {
         (x, y, w, h): (f64, f64, f64, f64),
         filled: bool,
     ) -> Lowered {
-        let mut notes: Vec<String> = Vec::new();
+        let l = &mut self.lowering;
         let paint = fx
             .fill
             .as_ref()
             .filter(|_| filled)
-            .map(|f| resolved::paint(f, &self.slots, &mut |n| notes.push(n)))
+            .map(|f| l.resolve_paint(f))
             .unwrap_or_default();
-        let effects = resolved::effects(&fx.effects, &self.slots, &mut |n| notes.push(n));
-        for n in notes {
-            self.mapper.lose(n);
-        }
+        let effects = l.resolve_effects(&fx.effects);
         if !filled {
             if let Some(f) = &fx.line_fill {
-                let p = resolved::paint(f, &self.slots, &mut |_| {});
-                match p {
-                    Paint::Linear { .. } | Paint::Radial { .. } => self.mapper.lose(
+                match l.resolve_paint(f) {
+                    Paint::Linear { .. } | Paint::Radial { .. } => l.lose(
                         "a gradient line is drawn in its first colour (lines take no gradient yet)",
                     ),
-                    Paint::Pattern(_) => self
-                        .mapper
-                        .lose("a pattern line is drawn in its foreground colour"),
+                    Paint::Pattern(_) => l.lose("a pattern line is drawn in its foreground colour"),
                     _ => {}
                 }
             }
         }
-        for name in &fx.effects.unknown {
-            self.mapper
-                .lose(format!("effect {name} is not carried (not read)"));
-        }
         let mut out = NativeFx::default();
         let mut lowered = Lowered::default();
-        match &paint {
-            Paint::Linear { .. } | Paint::Radial { .. } => {
-                let id = self.mapper.paint(&paint);
-                let entry = self
-                    .mapper
-                    .palette
-                    .gradient_entries()
-                    .into_iter()
-                    .find(|g| g.self_id == id);
-                if let Some(entry) = entry {
-                    let p = placement(&paint, w, h);
-                    let start = axis_start(&p, w, h).map(|[sx, sy]| (x + sx as f64, y + sy as f64));
-                    out.gradient = Some(NativeGradient {
-                        kind: if matches!(paint, Paint::Radial { .. }) {
-                            "radial"
-                        } else {
-                            "linear"
-                        },
-                        stops: entry
-                            .stops
-                            .iter()
-                            .filter_map(|s| Some((s.location_pct, self.hex_of(&s.stop_color)?)))
-                            .collect(),
-                        angle: p.angle,
-                        length: p.length,
-                        start,
-                    });
-                }
-            }
-            Paint::Pattern(_) => {
-                let id = self.mapper.paint(&paint);
-                lowered.fill = self.hex_of(&id);
-            }
-            _ => {}
+        // The gradient, or a pattern's mixed colour; the primitive keeps a
+        // solid fill itself.
+        if matches!(
+            paint,
+            Paint::Linear { .. } | Paint::Radial { .. } | Paint::Pattern(_)
+        ) {
+            l.fill_into(&paint, w, h, &mut out);
         }
-        // A translucent fill (one alpha throughout) is the item's opacity;
-        // stops that differ in alpha fade it through a gradient feather.
-        let opacity = paint.uniform_alpha().unwrap_or(1.0);
-        let fade = (filled && feather_of(&paint).is_some()).then_some(&paint);
-        let t = self.mapper.transparency(opacity, &effects, fade);
-        self.restate(&t, &mut out);
+        if matches!(paint, Paint::Pattern(_)) {
+            lowered.fill = out.fill.take();
+        }
+        if let Some(g) = &mut out.gradient {
+            g.start = g.start.map(|(sx, sy)| (x + sx, y + sy));
+        }
+        l.look_into(&paint, &effects, 1.0, filled, &mut out);
         lowered.fx = (!out.is_empty()).then_some(out);
         lowered
     }
@@ -312,83 +162,12 @@ impl NativeLowering {
         blip: &paged_ooxml::drawingml::Blip,
         effects: &paged_ooxml::drawingml::Effects,
     ) -> Option<NativeFx> {
-        let pic = resolved::picture(blip, &self.slots);
-        // The filter stack (engine ADR 1037) is not carried here: the
-        // opacity is, and each adjustment is reported.
-        let mapped = self.mapper.picture(&pic);
-        for op in &mapped.adjustments {
-            self.mapper.lose(dml_native::picture_adjustment_loss(op));
-        }
-        let opacity = mapped.opacity;
-        let mut notes: Vec<String> = Vec::new();
-        let fx = resolved::effects(effects, &self.slots, &mut |n| notes.push(n));
-        for n in notes {
-            self.mapper.lose(n);
-        }
-        for name in &effects.unknown {
-            self.mapper
-                .lose(format!("effect {name} is not carried (not read)"));
-        }
-        let t = self.mapper.transparency(opacity, &fx, None);
+        let l = &mut self.lowering;
+        let alpha = l.picture_alpha(blip);
+        let fx = l.resolve_effects(effects);
         let mut out = NativeFx::default();
-        self.restate(&t, &mut out);
+        l.look_into(&Paint::None, &fx, alpha, false, &mut out);
         (!out.is_empty()).then_some(out)
-    }
-
-    /// The mapper's transparency restated for the wire: colours as hex, the
-    /// inner shadow by angle and distance.
-    fn restate(&self, t: &dml_native::Transparency, out: &mut NativeFx) {
-        out.opacity = t.opacity;
-        if let Some(s) = &t.shadow {
-            out.drop_shadow = Some(NativeShadow {
-                x_offset: s.x_offset,
-                y_offset: s.y_offset,
-                size: s.size,
-                opacity: s.opacity_pct,
-                color: s
-                    .effect_color
-                    .as_deref()
-                    .and_then(|c| self.hex_of(c))
-                    .unwrap_or_else(|| "#000000".into()),
-            });
-        }
-        if let Some(e) = &t.effects {
-            let color = |c: &Option<String>| {
-                c.as_deref()
-                    .and_then(|c| self.hex_of(c))
-                    .unwrap_or_else(|| "#000000".into())
-            };
-            out.inner_shadow = e.inner_shadow.as_ref().map(|s| {
-                let (dx, dy) = (
-                    s.x_offset.unwrap_or(0.0) as f64,
-                    s.y_offset.unwrap_or(0.0) as f64,
-                );
-                NativeInnerShadow {
-                    // The engine's angle runs counter-clockwise on the
-                    // y-down page: an offset (dx, dy) is at atan2(−dy, dx).
-                    angle: dml_native::pt((-dy).atan2(dx).to_degrees()),
-                    distance: dml_native::pt(dx.hypot(dy)),
-                    size: s.size.unwrap_or(0.0),
-                    opacity: s.opacity_pct.unwrap_or(75.0),
-                    color: color(&s.effect_color),
-                }
-            });
-            out.outer_glow = e.outer_glow.as_ref().map(|g| NativeGlow {
-                size: g.size.unwrap_or(0.0),
-                opacity: g.opacity_pct.unwrap_or(75.0),
-                color: color(&g.effect_color),
-            });
-            out.feather = e.feather.as_ref().and_then(|f| f.width);
-            out.gradient_feather = e.gradient_feather.as_ref().map(|g| NativeFeather {
-                gradient_type: g.gradient_type.clone().unwrap_or_else(|| "Linear".into()),
-                angle: g.angle_deg,
-                stops: g
-                    .stops
-                    .iter()
-                    .map(|s| (s.location_pct, s.alpha_pct))
-                    .collect(),
-            });
-        }
     }
 }
 
@@ -476,10 +255,7 @@ mod tests {
         DmlFx {
             fill: paged_ooxml::drawingml::fill_in(&el, &rels),
             line_fill: None,
-            effects: el
-                .child(paged_ooxml::tree::Ns::A, "effectLst")
-                .map(|e| paged_ooxml::drawingml::effects(e, &rels))
-                .unwrap_or_default(),
+            effects: paged_ooxml::drawingml::effects_in(&el, &rels),
         }
     }
 
@@ -550,13 +326,32 @@ mod tests {
         let mut n = NativeLowering::new(&OFFICE_THEME);
         let l = n.lower(&fx, (0.0, 0.0, 10.0, 10.0), true);
         assert_eq!(l.fill.as_deref(), Some("#808080"));
-        assert!(l.fx.is_none());
+        // The reflection is carried (engine ADR 1008); the pattern is not.
+        let f = l.fx.unwrap();
+        assert!(f.fill.is_none());
+        assert_eq!(f.effect_stack.len(), 1);
         let losses = n.take_losses();
-        assert!(losses.iter().any(|l| l.contains("pattern")), "{losses:?}");
-        assert!(
-            losses.iter().any(|l| l.contains("reflection")),
-            "{losses:?}"
+        assert_eq!(losses.len(), 1, "{losses:?}");
+        assert!(losses[0].contains("pattern"), "{losses:?}");
+    }
+
+    #[test]
+    fn blur_overlay_and_reflection_ride_the_effect_stack__feat__sheet_chart_native_effects() {
+        let fx = fx_of(
+            r#"<a:solidFill><a:srgbClr val="FFFF00"/></a:solidFill><a:effectLst><a:blur rad="38100"/><a:fillOverlay blend="mult"><a:solidFill><a:schemeClr val="accent2"/></a:solidFill></a:fillOverlay><a:reflection blurRad="6350" stA="50000" endA="300" endPos="55000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/></a:effectLst>"#,
         );
+        let mut n = NativeLowering::new(&OFFICE_THEME);
+        let l = n.lower(&fx, (0.0, 0.0, 10.0, 10.0), true);
+        assert!(n.take_losses().is_empty());
+        let f = l.fx.unwrap();
+        // The primitive keeps its solid fill; the wire form has none.
+        assert!(f.fill.is_none() && l.fill.is_none());
+        let kinds: Vec<&str> = f.effect_stack.iter().map(|e| e.kind.as_str()).collect();
+        assert_eq!(kinds, ["colorOverlay", "gaussianBlur", "reflection"]);
+        assert_eq!(f.effect_stack[0].color.as_deref(), Some("#ED7D31"));
+        assert_eq!(f.effect_stack[1].radius_pt, Some(1.0));
+        assert_eq!(f.effect_stack[2].size_pct, Some(55.0));
+        assert!(f.colors().contains(&"#ED7D31"));
     }
 
     #[test]

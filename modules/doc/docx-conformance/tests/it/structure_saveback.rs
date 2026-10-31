@@ -41,6 +41,8 @@ fn part(bytes: &[u8], name: &str) -> Option<String> {
 
 fn paragraph_content(p: &LoweredParagraph) -> ParagraphContentIn {
     ParagraphContentIn {
+        mark_change: None,
+        props_change: None,
         paragraph_style: p.para_style_id.clone(),
         runs: p
             .runs
@@ -58,6 +60,7 @@ fn paragraph_content(p: &LoweredParagraph) -> ParagraphContentIn {
 /// The body as the canvas reads it back unedited: markers and fields in.
 fn body(base: &LoweredDoc) -> StoryContentIn {
     StoryContentIn {
+        comments: Vec::new(),
         self_id: "docx_s0".into(),
         paragraphs: base
             .story
@@ -80,6 +83,7 @@ fn headers(base: &LoweredDoc) -> Vec<HeaderContentIn> {
         .map(|f| HeaderContentIn {
             part: f.part,
             content: StoryContentIn {
+                comments: Vec::new(),
                 self_id: f.story_id.clone(),
                 paragraphs: base.header_footer_parts[f.part]
                     .paragraphs
@@ -120,6 +124,7 @@ fn unedited(base: &LoweredDoc) -> StructureIn {
         footnotes: notes(base, false),
         endnotes: notes(base, true),
         anchors: Vec::new(),
+        text_boxes: Vec::new(),
     }
 }
 

@@ -24,6 +24,7 @@
 // them.
 
 export {
+  charToContent,
   contentToChar,
   paragraphTexts,
   wordAroundCaret,
@@ -158,6 +159,22 @@ export {
   rowPathOf,
   ROW_PATH,
 } from "./object-schema.js";
+export {
+  nativeFxOps,
+  nativeFxColors,
+  nativeGradientId,
+  nativeGradientMintOps,
+  type GradientMintOptions,
+  type NativeEffect,
+  type NativeFeather,
+  type NativeFx,
+  type NativeFxOptions,
+  type NativeGlow,
+  type NativeGradient,
+  type NativeInnerShadow,
+  type NativeShadow,
+  type NativeStroke,
+} from "./lowering.js";
 export {
   createObjectRegistry,
   escapeLabelValue,

@@ -88,6 +88,14 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   the final vote on the GPU (`geom.patch_vote`) or its CPU twin;
   presets from an `.abr` brush library. The type tool paints a shaped run of text into the
   active layer with font bytes the host serves for the document's fonts.
+- **Transform and warp** ([ADR 483](adr/483-transform-and-warp-on-pixels.md)). Free Transform
+  of a layer or a selection, with Edit ▸ Transform ▸ Free distort and Perspective opening the box
+  in that mode; Warp… (the fifteen styles or a custom mesh dragged on the canvas,
+  `geom.warp_mesh`); Puppet Warp… (pins on an as-rigid-as-possible mesh, Rigid / Normal /
+  Distort); Filter ▸ Liquify… (Forward Warp, Reconstruct, Smooth, Twirl both ways, Pucker, Bloat,
+  Push Left, the freeze mask; `geom.warp_field`); Content-aware scale… (seam carving, Amount,
+  the selection as protection); the Perspective Crop tool over every layer. Each is one undo step
+  with a live preview.
 - **Layers.** Add, duplicate, remove, reorder; visibility, lock, opacity and 26 blend modes;
   a mask from the selection, Add layer mask (reveal all or hide all) and painting on a mask
   (a Pixels/Mask edit target: the brush and pencil paint the foreground's grey, the eraser
@@ -315,13 +323,19 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   bits and say so. A curve is a 256-entry table.
 - **Colour modes.** Image ▸ Mode ▸ Greyscale, RGB colour, CMYK colour and Lab colour convert every
   layer through the engine's CMS (Gray Gamma 2.2, the session's CMYK profile, CIE Lab) and keep the
-  document inside that mode: a pixel edit lands projected inside its damage. The stack still works
-  in RGB — layers are not ink planes and blends are not subtractive, and Indexed, Duotone and
-  Multichannel are not offered. Against Photoshop: greyscale and 16-bit Lab within 0.05 of a level,
+  document inside that mode: a pixel edit lands projected inside its damage. A CMYK document with
+  a profile composites in its INKS — every layer as two ink planes, a CMYK file's layers with the
+  file's own inks — so separable blends agree with Photoshop's CMYK composite within 0.7 ΔE00 at
+  the 95th percentile, where blending the RGB conversions was 10–50 off; a non-separable mode,
+  Blend If, an adjustment layer or a style composites in RGB
+  ([ADR 481](adr/481-n-channel-planes-and-the-ink-fold.md)). Grey and Lab documents still blend
+  in RGB; Indexed, Duotone and Multichannel are not offered. Against Photoshop: greyscale and 16-bit Lab within 0.05 of a level,
   CMYK (Coated FOGRA39) and 8-bit Lab within 1.8 ΔE at the 99th percentile. CMYK without a profile
   changes no colour, and the status says so. Image ▸ Proof shows Proof colours and the Gamut warning
   (Gray Gamma 2.2 or the CMYK profile) on the preview without touching the document. The layered PSD
-  save keeps the file's own depth and mode.
+  save writes the document's mode and depth (ADR 481): Photoshop reopens a converted Grayscale,
+  Lab, CMYK or 16-bit document with live layers; an adjustment layer or Blend If in a document
+  converted to another mode makes the save flatten, saying why.
 - **PSD.** The composite decode takes 8- and 16-bit RGB, greyscale or CMYK, raw or RLE (not
   16-bit RLE); other modes and depths are refused, and a transparent document's white-matted
   merged colour is un-matted (CMYK: matted against the paper). Layers are imported from RGB
@@ -384,8 +398,10 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   Invert and Hue/Saturation adjustment layers and the blending properties; a pattern fill is
   written as its render, and any other adjustment kind makes the save flatten, naming the layer.
 - **Layers and undo.** A layer is canvas-sized once edited (an imported layer keeps its bounds
-  until then); the layer fold keeps whole-canvas accumulator textures, so the largest image is the device's texture limit (16384 px on Apple silicon,
-  8192 on many others). A crop, resize or straighten keeps every layer and mask, is one undo
+  until then); past the device's texture limit (16384 px on Apple silicon, 8192 on many
+  others) or its readback buffer the fold runs tile by tile, byte-equal to the whole fold, and
+  refolds only the tiles an edit damaged; without a device it runs on the kernels' CPU twins
+  (no layer style there) ([ADR 480](adr/480-tiles-past-the-device-and-the-cpu-fold.md)). A crop, resize or straighten keeps every layer and mask, is one undo
   step that keeps the history, and drops the selection (a crop does in Photoshop too); a
   quarter turn or flip carries the selection with the pixels, and a canvas resize drops it.
   A selection is session state ([ADR 460](adr/460-document-is-not-the-store.md)): it is
@@ -401,7 +417,8 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   on-canvas handles. The Clone Source overlay replaces the frame's image while it shows. A
   multi-layer image needs a GPU for the composite after a retouch, as every layer edit does.
 - **Called only by tests:** Engine B's op-node evaluation and the residency manager's third
-  tier (scratch storage), which returns an error.
+  tier (scratch storage), which returns an error. The tiled fold takes Engine B's model —
+  persistent tiles, damage, recompute only invalid ones — without its graph (ADR 480).
 - **Oracles.** Photoshop 2026's answers for 80 blend, adjustment and filter cases, seven
   layered RGB PSDs and six CMYK PSDs with Photoshop's own sRGB conversions are replayed in CI
   (`image-conformance/tests/it/oracle_photoshop.rs`, `psd_composite_photoshop.rs`,
@@ -428,6 +445,10 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
 - A runner for the GEGL oracle the registry names for some rows.
 - Drawing the PSD adjustment kinds the import declines (above) as Photoshop does, and writing Color
   Lookup layers, text (`TySh`, WP5.10), vector masks and shapes (WP5.11).
+- Transform and warp (ADR 483): the Warp styles are paged-warp's closed forms, not Photoshop's
+  (recorded, large distances on a square); Perspective Warp, Lens Correction, Adaptive Wide Angle,
+  Vanishing Point and Liquify's face-aware tools are not offered; Puppet Warp has no pin depth or
+  rotation; Content-Aware Scale has no Protect Skin Tones or interactive box.
 - Smart objects (ADR 482): a warp (`customEnvelopeWarp`) is read and kept, not drawn; smart
   filters blend in Normal mode only and run at 8 bits; the filter mask is set from the selection,
   inverted, cleared or switched, not painted; a linked file is read again only through a picker;

@@ -370,6 +370,17 @@ pub enum CanvasOp {
     RotateArbitrary {
         degrees: f32,
     },
+    /// The Perspective Crop tool's commit (WP5.6): the quadrilateral
+    /// `quad` (NW, NE, SE, SW corners, canvas px, flat x/y pairs) drawn
+    /// upright onto a `width`×`height` canvas through the homography that
+    /// takes the new canvas's corners onto it (`paged-warp`), sampled by
+    /// `geom.warp_projective` (bicubic, transparent outside the old
+    /// canvas).
+    Perspective {
+        quad: [f32; 8],
+        width: u32,
+        height: u32,
+    },
 }
 
 /// The reconstruction filter of [`CanvasOp::Resample`] — the three T1
@@ -415,6 +426,23 @@ pub fn rotated_bounds(w: u32, h: u32, degrees: f32) -> (u32, u32) {
     (fit(w * c + h * s), fit(w * s + h * c))
 }
 
+/// The Perspective Crop's homographies: `(forward, inverse)`, forward
+/// taking the old canvas's points onto the new canvas (the quad onto its
+/// `width`×`height` rectangle) and inverse the other way (what
+/// `geom.warp_projective` samples through). `None` for a degenerate quad.
+pub fn perspective_crop_maps(
+    quad: [f32; 8],
+    width: u32,
+    height: u32,
+) -> Option<(paged_warp::Homography, paged_warp::Homography)> {
+    let q = |i: usize| (f64::from(quad[2 * i]), f64::from(quad[2 * i + 1]));
+    let (w, h) = (f64::from(width), f64::from(height));
+    let rect = [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)];
+    let inverse = paged_warp::from_quads(rect, [q(0), q(1), q(2), q(3)])?;
+    let forward = paged_warp::invert(inverse)?;
+    Some((forward, inverse))
+}
+
 impl CanvasOp {
     /// Image ▸ Image Rotation ▸ Arbitrary as the op it is: a quarter or
     /// half turn (and a whole one, which is no op) becomes the EXACT
@@ -445,7 +473,8 @@ impl CanvasOp {
             CanvasOp::Resize { width, height, .. }
             | CanvasOp::Crop { width, height, .. }
             | CanvasOp::Resample { width, height, .. }
-            | CanvasOp::Straighten { width, height, .. } => (width, height),
+            | CanvasOp::Straighten { width, height, .. }
+            | CanvasOp::Perspective { width, height, .. } => (width, height),
             CanvasOp::RotateArbitrary { degrees } => rotated_bounds(w, h, degrees),
         }
     }
@@ -458,6 +487,7 @@ impl CanvasOp {
             CanvasOp::Resample { .. }
                 | CanvasOp::Straighten { .. }
                 | CanvasOp::RotateArbitrary { .. }
+                | CanvasOp::Perspective { .. }
         )
     }
 
@@ -474,6 +504,7 @@ impl CanvasOp {
             CanvasOp::Resample { .. } => "Image size",
             CanvasOp::Straighten { .. } => "Straighten and crop",
             CanvasOp::RotateArbitrary { .. } => "Rotate canvas",
+            CanvasOp::Perspective { .. } => "Perspective crop",
         }
     }
 
@@ -553,7 +584,8 @@ impl CanvasOp {
             }
             CanvasOp::Resample { .. }
             | CanvasOp::Straighten { .. }
-            | CanvasOp::RotateArbitrary { .. } => None,
+            | CanvasOp::RotateArbitrary { .. }
+            | CanvasOp::Perspective { .. } => None,
         }
     }
 
@@ -1606,7 +1638,16 @@ impl LayerStack {
             snapshots: Vec::new(),
             next_snapshot_id: 1,
             next_step_id: 1,
-            mode: Default::default(),
+            // A CMYK document stays one (its profile, when the caller has
+            // the file, comes with `adopt_mode`).
+            mode: if import.converted_from_cmyk {
+                crate::color_mode::DocMode {
+                    mode: crate::color_mode::ColorMode::Cmyk,
+                    cmyk_profile: None,
+                }
+            } else {
+                Default::default()
+            },
             workspace: Default::default(),
         };
         stack.styles.global_light = import.global_light;
@@ -1908,7 +1949,10 @@ impl LayerStack {
             if !rerendered {
                 let canvas = layer.rgba.canvas();
                 let depth = canvas.depth();
-                let out = if matches!(op, CanvasOp::RotateArbitrary { .. }) {
+                let out = if matches!(
+                    op,
+                    CanvasOp::RotateArbitrary { .. } | CanvasOp::Perspective { .. }
+                ) {
                     // The rotated edge blends with the transparent
                     // surround: interpolate ASSOCIATED colour, or the
                     // fringe darkens towards the black of rgb(0,0,0,0).
@@ -1983,6 +2027,7 @@ impl LayerStack {
                 CanvasOp::Crop { .. } | CanvasOp::Straighten { .. } => {
                     format!("the crop rectangle is empty against {w}×{h}")
                 }
+                CanvasOp::Perspective { .. } => "the perspective crop's size is empty".into(),
                 _ => "canvas size must be at least 1×1".into(),
             }));
         }
@@ -1990,6 +2035,20 @@ impl LayerStack {
             if !degrees.is_finite() {
                 return Err(IngestError::Unsupported(
                     "the rotation angle must be finite".into(),
+                ));
+            }
+        }
+        if let CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        } = op
+        {
+            if quad.iter().any(|v| !v.is_finite())
+                || perspective_crop_maps(quad, width, height).is_none()
+            {
+                return Err(IngestError::Unsupported(
+                    "the perspective crop's corners make no quadrilateral (three in a line)".into(),
                 ));
             }
         }
@@ -3055,7 +3114,22 @@ impl LayerStack {
                 .or_insert_with(|| Arc::clone(&before));
             self.history_states.previous.insert(id, before);
         }
+        // A CMYK layer's own inks (ADR 481) are kept outside the damage.
+        let old_inks = {
+            let l = &self.layers[self.active];
+            l.ext.inks.0.clone().filter(|i| i.of(&l.rgba))
+        };
         self.layers[self.active].rgba = pixels.into();
+        let inks = match (old_inks, self.ink_transform()?) {
+            (Some(old), Some(t)) => Some(Arc::new(old.carried(
+                &t,
+                self.layers[self.active].rgba.canvas(),
+                clipped,
+                self.width,
+            ))),
+            _ => None,
+        };
+        self.layers[self.active].ext.inks = InkCell(inks);
         if matches!(outcome, RecordOutcome::Recorded { .. }) {
             self.push_pixel_step();
         }
@@ -3564,6 +3638,60 @@ impl LayerStack {
         &self.mode
     }
 
+    /// Keep a CMYK file's own INKS on the layers read from it (image ADR
+    /// 481): `cmy` and `k` are the same import read through transforms
+    /// that hand the ink through (`PsdFile::layer_plates_rgba8_via`). The
+    /// layers read from records pair with the import's plates in order; a
+    /// layer whose shape is not its plate's keeps none (its inks are then
+    /// its pixels through the profile). Answers how many layers kept theirs.
+    pub fn attach_inks(
+        &mut self,
+        cmy: &image_psd::LayerImport,
+        k: &image_psd::LayerImport,
+    ) -> usize {
+        let from_records: Vec<usize> = (0..self.layers.len())
+            .filter(|&i| self.layers[i].ext.source.is_some())
+            .collect();
+        if from_records.len() != cmy.layers.len() || cmy.layers.len() != k.layers.len() {
+            return 0;
+        }
+        let mut kept = 0;
+        for (n, &i) in from_records.iter().enumerate() {
+            let (c, kp) = (&cmy.layers[n], &k.layers[n]);
+            let l = &mut self.layers[i];
+            if !l.is_pixels() || l.rgba.is_16bit() {
+                continue;
+            }
+            // The plate at the layer's shape: its own rectangle, or the
+            // canvas (a plate may name the whole canvas as its rectangle).
+            let (w, h) = (cmy.width, cmy.height);
+            let at_shape = |p: &image_psd::LayerPlate| -> Option<Vec<u8>> {
+                match (l.rgba.bounded(), p.rect) {
+                    (Some(b), Some(r)) if b.rect == r => Some(p.rgba.clone()),
+                    (None, None) => Some(p.rgba.clone()),
+                    (None, Some(_)) => Some(p.canvas_rgba8(w, h)),
+                    _ => None,
+                }
+            };
+            let (Some(ci), Some(ki)) = (at_shape(c), at_shape(kp)) else {
+                continue;
+            };
+            if let Some(inks) = crate::planes::InkPlanes::from_ink_rgba8(&l.rgba, &ci, &ki) {
+                l.ext.inks = InkCell(Some(Arc::new(inks)));
+                kept += 1;
+            }
+        }
+        kept
+    }
+
+    /// Take the mode a document was OPENED in (a CMYK, Grayscale or Lab
+    /// file): its pixels already are that mode's colours, so nothing is
+    /// projected and nothing is recorded — the layered save then writes
+    /// the file's own mode back (image ADR 481).
+    pub fn adopt_mode(&mut self, mode: crate::color_mode::DocMode) {
+        self.mode = mode;
+    }
+
     /// Image ▸ Mode ▸ Grayscale / RGB Color / CMYK Color / Lab Color:
     /// every layer's pixels (each at its bounds, its alpha kept) put
     /// through the new mode's space and back ([`crate::color_mode`]), and
@@ -3667,14 +3795,33 @@ impl LayerStack {
             }
             _ => {}
         }
-        let ctx = ctx.ok_or_else(|| {
-            IngestError::Unsupported(
-                "compositing layers is GPU-only — call init_gpu first (the blend \
-                 is a registered WGSL kernel dispatch; no CPU blend path ships)"
-                    .into(),
-            )
-        })?;
-        self.composite_resident(ctx, &plates, depth).await
+        // A CMYK document folds in its inks (ADR 481) when its plan is
+        // separable; otherwise in RGB, as below.
+        if let Some(px) = self.composite_inks(ctx, &plates, depth).await? {
+            return Ok(px);
+        }
+        // Without a device the fold runs on the CPU twins (ADR 480):
+        // pixel, adjustment, group and clipping layers; a style needs one.
+        let Some(ctx) = ctx else {
+            return self
+                .composite_tiled(None, &plates, depth, fold::CPU_TILE_SIDE)
+                .await;
+        };
+        self.fold_on(ctx, &plates, depth).await
+    }
+
+    /// The fold on the device: whole, or tile by tile past the device's
+    /// limits (ADR 480).
+    async fn fold_on(
+        &self,
+        ctx: &GpuContext,
+        plates: &[(usize, Plate)],
+        depth: image_core::SampleDepth,
+    ) -> Result<crate::pixels::Pixels, IngestError> {
+        match self.fold_tile_side(ctx) {
+            Some(side) => self.composite_tiled(Some(ctx), plates, depth, side).await,
+            None => self.composite_resident(ctx, plates, depth).await,
+        }
     }
 
     /// Every visible fill layer whose render is stale, rendered now (for
@@ -3760,14 +3907,23 @@ impl LayerStack {
             }
             _ => {}
         }
-        let ctx = ctx.ok_or_else(|| {
-            IngestError::Unsupported("compositing layers is GPU-only — call init_gpu first".into())
-        })?;
         // The tools sample 8-bit.
-        Ok(self
-            .composite_resident(ctx, &plates, image_core::SampleDepth::U8)
-            .await?
-            .raw_arc())
+        let px = match ctx {
+            Some(ctx) => {
+                self.fold_on(ctx, &plates, image_core::SampleDepth::U8)
+                    .await?
+            }
+            None => {
+                self.composite_tiled(
+                    None,
+                    &plates,
+                    image_core::SampleDepth::U8,
+                    fold::CPU_TILE_SIDE,
+                )
+                .await?
+            }
+        };
+        Ok(px.raw_arc())
     }
 
     /// The fold as it ran before it became resident: every blend its own
@@ -4934,6 +5090,32 @@ async fn gpu_canvas_op(
         CanvasOp::RotateArbitrary { degrees } => {
             rotate_onto_bounds(ctx, win, w, h, degrees, [0; 8]).await
         }
+        CanvasOp::Perspective {
+            quad,
+            width,
+            height,
+        } => {
+            use image_kernels::families::geom::{
+                WarpInterp, WarpProjectiveParams, GEOM_WARP_PROJECTIVE,
+            };
+            let (_, inverse) = perspective_crop_maps(quad, width, height).ok_or_else(|| {
+                IngestError::Unsupported("the perspective crop's quad is degenerate".into())
+            })?;
+            let params = WarpProjectiveParams::from_inverse(inverse, WarpInterp::Bicubic, false);
+            image_gpu::execute_windowed_once_async(
+                ctx,
+                &GEOM_WARP_PROJECTIVE,
+                win,
+                w,
+                h,
+                params.as_bytes(),
+                None,
+                width,
+                height,
+            )
+            .await
+            .map_err(|e| IngestError::Pipeline(e.to_string()))
+        }
         _ => Err(IngestError::Unsupported(format!(
             "{} is an exact op with no dispatch",
             op.label()
@@ -5504,6 +5686,59 @@ mod tests {
             Some(ResampleFilter::Lanczos3)
         );
         assert_eq!(ResampleFilter::from_wire("bicubic"), None);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn perspective_crop_maps_the_quad_upright_in_one_undo_step__feat__image_editor_transform_warp()
+    {
+        // The maps: the quad's corners land on the new canvas's corners.
+        let quad = [1.0, 0.0, 3.0, 0.0, 3.0, 2.0, 1.0, 2.0];
+        let (fwd, inv) = perspective_crop_maps(quad, 2, 2).expect("a rectangle");
+        let p = paged_warp::apply(&fwd, (3.0, 2.0));
+        assert!((p.0 - 2.0).abs() < 1e-9 && (p.1 - 2.0).abs() < 1e-9);
+        let q = paged_warp::apply(&inv, (0.0, 0.0));
+        assert!((q.0 - 1.0).abs() < 1e-9 && q.1.abs() < 1e-9);
+        let map = masking_ops::map_point(
+            CanvasOp::Perspective {
+                quad,
+                width: 2,
+                height: 2,
+            },
+            3,
+            2,
+            [2.0, 1.0],
+        );
+        assert!(
+            (map[0] - 1.0).abs() < 1e-5 && (map[1] - 1.0).abs() < 1e-5,
+            "{map:?}"
+        );
+        // A degenerate quad is refused before anything changes.
+        let mut s = numbered();
+        let flat = CanvasOp::Perspective {
+            quad: [0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 3.0, 0.0],
+            width: 2,
+            height: 2,
+        };
+        assert!(pollster::block_on(s.transform_canvas_gpu(None, flat)).is_err());
+        assert!(s.undo_labels().is_empty());
+        let Some(ctx) = device() else { return };
+        // An axis-aligned quad on whole pixels is the plain crop: the
+        // bicubic taps land on pixel centres.
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Perspective {
+                quad,
+                width: 2,
+                height: 2,
+            },
+        ))
+        .expect("perspective crop");
+        assert_eq!((s.width, s.height), (2, 2));
+        assert_eq!(reds(&s), vec![1, 2, 11, 12]);
+        assert_eq!(s.undo_labels(), vec!["Perspective crop"]);
+        assert_eq!(s.undo().as_deref(), Some("Perspective crop"));
+        assert_eq!((s.width, s.height), (3, 2));
     }
 
     #[test]
@@ -6306,15 +6541,22 @@ mod tests {
     }
 
     #[test]
-    fn image_editor_layers_a_second_painted_layer_makes_the_composite_gpu_only() {
+    fn image_editor_layers_a_second_painted_layer_folds_on_the_cpu_without_a_device() {
         let mut s = stack(4, 4);
         s.add("Paint");
         s.edit_active("fill", Region::new(0, 0, 4, 4), px(4, 4, 200).into())
             .expect("unlocked");
         assert!(!s.composite_is_trivial());
-        // …and says so rather than inventing a CPU blend.
-        let err = pollster::block_on(s.composite(None, None)).expect_err("GPU-only");
-        assert!(format!("{err}").contains("GPU-only"));
+        // …and folds on the kernels' CPU twins (ADR 480): source-over,
+        // alpha 200 over alpha 128 is 200 + 128 · (1 − 200/255) ≈ 228.
+        assert!(s.composite_runs_without_gpu());
+        let out = pollster::block_on(s.composite(None, None)).expect("the CPU fold");
+        assert_eq!(out.len(), 64);
+        assert!(
+            out.chunks(4).all(|p| p[3].abs_diff(228) <= 1),
+            "{:?}",
+            &out[..4]
+        );
     }
 
     #[test]

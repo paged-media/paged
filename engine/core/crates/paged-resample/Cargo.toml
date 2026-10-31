@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "CPU resampling of RGBA8 rasters: a separable Lanczos-3 / bilinear resize (premultiplied, the filter widened when shrinking), a bilinear rotate-and-crop and a projective warp (bilinear or bicubic). The supported backend of headless and batch image actions (image ADR 467). Leaf crate: depends on nothing."
+description = "CPU resampling of RGBA8 rasters: a separable Lanczos-3 / bilinear resize (premultiplied, the filter widened when shrinking), a bilinear rotate-and-crop, a projective warp and any backward-mapped warp (bilinear or bicubic), and seam carving (Content-Aware Scale). The supported backend of headless and batch image actions (image ADR 467). Leaf crate: depends on nothing."
 
 [lints]
 workspace = true

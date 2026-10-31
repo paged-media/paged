@@ -66,6 +66,7 @@ pub mod mutate;
 mod paint_v2_export;
 pub mod resolve;
 pub mod resource_tiles;
+pub mod review;
 pub mod selection;
 pub mod snap;
 pub mod snap_point;

@@ -358,7 +358,8 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
           key: "starInset",
           label: "Star Inset",
           min: 0,
-          max: 100,
+          // Engine ADR 1047: a live star's inset stops at 99 %.
+          max: 99,
           step: 1,
           unit: "%",
         },
@@ -423,7 +424,8 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
           key: "starInset",
           label: "Star Inset",
           min: 0,
-          max: 100,
+          // Engine ADR 1047: a live star's inset stops at 99 %.
+          max: 99,
           step: 1,
           unit: "%",
         },

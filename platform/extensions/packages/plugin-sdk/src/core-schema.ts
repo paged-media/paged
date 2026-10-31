@@ -792,8 +792,17 @@ export const CORE_PATHS: Record<
   frameFillEffectStack: V71,
   frameStrokeEffectStack: V71,
   frameContentEffectStack: V71,
+  // The appearance is protocol 78 (engine ADR 1043): the layer list, and
+  // the per-layer edit, an operation.
+  frameAppearance: V71,
+  frameAppearanceLayer: OP,
   // An image frame's filter stack is protocol 77 (engine ADR 1037).
   frameImageAdjustments: V71,
+  // The live shapes are protocol 78 (engine ADR 1047).
+  frameShapeSides: V71,
+  frameShapeStarInset: V71,
+  frameShapePieStart: V71,
+  frameShapePieEnd: V71,
   // Engine ADR 1007: "Within" / "Along" / "Across".
   frameGradientStrokeMode: V71,
   // Engine ADR 1048: the frame's gradient mesh or freeform
@@ -999,6 +1008,10 @@ export const CORE_PATHS: Record<
   paragraphBorderWeight: V71,
   documentShowHiddenText: V71,
   documentShowFieldCodes: V71,
+  // Engine ADR 1040 — Track Changes and the markup view.
+  documentTrackChanges: V71,
+  documentTrackChangesAuthor: V71,
+  documentMarkupView: V71,
   frameDropShadowBlendMode: {
     scope: "frame",
     wire: "text",

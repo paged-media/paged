@@ -22,6 +22,7 @@
 // footnotes and endnotes in document order, and the body stories' text
 // anchors (Word's bookmarks), addressed in the merged body read-back.
 
+import { readTextBoxes } from "./page-items.js";
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { LoweredDoc, StoryContentLike } from "@paged-media/doc-host-model";
 
@@ -45,6 +46,8 @@ export interface StructureRead {
   footnotes: Array<{ text: string }>;
   endnotes: Array<{ text: string }>;
   anchors: Array<{ name: string; paragraph: number; offset: number }>;
+  /** Doc ADR 614 — the text boxes' stories, by page item. */
+  textBoxes?: Array<{ item: string; content: unknown }>;
 }
 
 /** The paragraphs `mergeSectionContents` keeps of each story: its trailing
@@ -127,5 +130,6 @@ export async function readStructure(
     footnotes: inOrder(await collection(host, "footnotes"), storyIds),
     endnotes: inOrder(await collection(host, "endnotes"), storyIds),
     anchors,
+    textBoxes: await readTextBoxes(host, ir),
   };
 }

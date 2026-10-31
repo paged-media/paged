@@ -1290,6 +1290,21 @@ pub enum Mutation {
     DeleteHyperlink {
         hyperlink_id: String,
     },
+    /// v78 rider (engine ADR 1026) — make page item `item` (a page's or a
+    /// master's) the source of a new hyperlink: a clickable shape, a
+    /// PowerPoint shape's click action. It goes to `page` (a page `Self`)
+    /// when given, else to `url`. `name` names the link. Reads back in
+    /// `documentCollection:hyperlinks` with `sourceItem`. Undo
+    /// (`deleteHyperlink` likewise) removes the source with the link.
+    InsertItemHyperlink {
+        item: String,
+        #[serde(default)]
+        url: String,
+        #[serde(default)]
+        page: Option<PageId>,
+        #[serde(default)]
+        name: Option<String>,
+    },
     /// v0.71.13 — edit a hyperlink (ADR 164): `name` renames it (empty clears
     /// it); `page` (wins) or `url` sends it somewhere new. Its own
     /// destination of that kind changes in place; a shared one, a text
@@ -2506,6 +2521,76 @@ pub enum Mutation {
         #[serde(default)]
         sort_order: Option<String>,
     },
+    /// Engine ADR 1040 — record tracked change `change` over story chars
+    /// `[start, end)` (contiguous, as `applyStyle` counts them; of `cell`
+    /// when set), or on paragraph `paragraph` for the paragraph kinds
+    /// (`paraProps`, `insertMark`, `deleteMark`). What an importer writes
+    /// for Word's `w:ins`, `w:del`, `w:rPrChange` and `w:pPrChange`. The
+    /// reply's `createdId` is the change's id. Undoable.
+    RecordChange {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        #[serde(default)]
+        paragraph: Option<u32>,
+        change: paged_mutate::operation::ChangeSpec,
+    },
+    /// Engine ADR 1040 — Accept: tracked change `id`, every change by
+    /// `author`, or every change (in story `storyId` only when set). One
+    /// undo step.
+    AcceptChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1040 — Reject, scoped as `acceptChange`. One undo step.
+    RejectChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1020 — New Comment on story chars `[start, end)` (not
+    /// empty). The reply's `createdId` is the comment's id. Undoable.
+    InsertComment {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        comment: paged_mutate::operation::CommentSpec,
+    },
+    /// Engine ADR 1020 — Reply to comment `parentId` (a root, or a reply,
+    /// whose root the reply joins). `createdId` is the reply's id. Undoable.
+    ReplyComment {
+        parent_id: String,
+        comment: paged_mutate::operation::CommentSpec,
+    },
+    /// Engine ADR 1020 — Resolve (or reopen, `resolved: false`) the thread
+    /// of comment `commentId`. Undoable.
+    ResolveComment {
+        comment_id: String,
+        resolved: bool,
+    },
+    /// Engine ADR 1020 — delete comment `commentId`; a thread's root takes
+    /// its replies and its range with it. Undoable.
+    DeleteComment {
+        comment_id: String,
+    },
+    /// Engine ADR 1020 — rewrite comment `commentId`'s text. Undoable.
+    EditComment {
+        comment_id: String,
+        text: String,
+        #[serde(default)]
+        date: Option<String>,
+    },
     // ── W0.5 wire-expansion ─────────────────────────────────────────
     /// W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local
     /// `bounds` `(top, left, bottom, right)`; the model resolves the
@@ -2643,7 +2728,10 @@ pub enum Mutation {
     ActivateConditionSet {
         set: String,
     },
-    /// W0.5 — set a page's applied master (`None` detaches).
+    /// W0.5 — set a page's applied master (`None` detaches). v77 rider
+    /// (engine ADR 1026): `page` may be a master page, which bases that
+    /// master on `master` ("Based on Master"; a layout's slide master); a
+    /// cycle or more than four stacked masters is refused.
     ApplyMasterToPage {
         page: PageId,
         #[serde(default)]
@@ -2693,6 +2781,29 @@ pub enum Mutation {
         master: String,
         #[serde(default)]
         name: Option<String>,
+    },
+    /// v78 rider (engine ADR 1026) — set page `page`'s override list (a
+    /// body page's or a master page's): the ids of the master items it
+    /// hides (the page holds its own copies, or does not show them). A
+    /// master page's list hides items of the masters it is based on on
+    /// every page that shows it. One undo step.
+    SetPageOverrides {
+        page: PageId,
+        overrides: Vec<String>,
+    },
+    /// v78 rider (engine ADR 1026) — override master items on body page
+    /// `page` (InDesign's Override; a slide's placeholder): copy `items`,
+    /// all on one master the page shows (its own or one it is based on),
+    /// onto the page where the master draws them, with their text, labels
+    /// and styles, and add them to the page's override list. The copies'
+    /// ids come back as `minted`. `emptyText` empties the copies' text,
+    /// keeping its formatting (a new slide's placeholders, whose master
+    /// text is a prompt). One undo step.
+    OverrideMasterItems {
+        page: PageId,
+        items: Vec<String>,
+        #[serde(default)]
+        empty_text: bool,
     },
     /// v70 — move a page (its single-page spread) to follow `after`, or to
     /// the front when `after` is absent: a slide sorter's reorder. Spreads
@@ -2963,6 +3074,7 @@ mutation_vocabulary! {
     InsertFootnote,
     DeleteFootnote,
     DeleteHyperlink,
+    InsertItemHyperlink,
     EditHyperlink,
     UpdateTableOfContents,
     GenerateIndex,
@@ -3092,6 +3204,14 @@ mutation_vocabulary! {
     InsertCrossReference,
     InsertTableOfContents,
     InsertIndexMarker,
+    RecordChange,
+    AcceptChange,
+    RejectChange,
+    InsertComment,
+    ReplyComment,
+    ResolveComment,
+    DeleteComment,
+    EditComment,
     InsertOval,
     InsertGuide,
     MoveGuide,
@@ -3112,6 +3232,8 @@ mutation_vocabulary! {
     CreateMaster,
     DeleteMaster,
     RenameMaster,
+    SetPageOverrides,
+    OverrideMasterItems,
     InsertSection,
     EditSection,
     DeleteSection,

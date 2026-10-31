@@ -131,8 +131,9 @@ pub(super) fn is_svg_magic(bytes: &[u8]) -> bool {
 /// at most `max_px` (matching the DCT-scale cap for raster images),
 /// preserving aspect.
 fn decode_svg_bytes(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
-    let opt = usvg::Options::default();
-    let tree = usvg::Tree::from_data(bytes, &opt).ok()?;
+    // The guarded parse (`paged_svg::limits`): an SVG over the size and
+    // complexity limits decodes to nothing, as an unreadable one does.
+    let tree = paged_svg::limits::read_tree(bytes, usvg::Options::default()).ok()?;
     let svg_w: f32 = tree.size().width().ceil().max(1.0);
     let svg_h: f32 = tree.size().height().ceil().max(1.0);
     let longest = svg_w.max(svg_h);
@@ -164,8 +165,9 @@ pub(super) fn decode_svg_raster(bytes: &[u8]) -> Option<paged_compose::DecodedIm
 /// Read width / height from the image header without materialising
 /// the pixel buffer. For JPEGs we apply the same DCT-scale logic as
 /// the eager decoder so the displayed dimensions match what the
-/// rasterizer will actually produce. Only used by the wasm32 lazy path.
-#[cfg(target_arch = "wasm32")]
+/// rasterizer will actually produce. Only used by the wasm32 lazy path
+/// (built natively for its tests).
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 fn peek_image_dimensions(bytes: &[u8], max_px: u32) -> Option<(u32, u32)> {
     if is_jpeg_magic(bytes) {
         let (src_w, src_h) = peek_jpeg_dimensions(bytes)?;
@@ -202,8 +204,18 @@ fn peek_image_dimensions(bytes: &[u8], max_px: u32) -> Option<(u32, u32)> {
     // PNG / WebP / etc — header read via the image crate's lazy
     // dimension probe, which doesn't materialise pixels.
     let cursor = std::io::Cursor::new(bytes);
-    let reader = image::ImageReader::new(cursor).with_guessed_format().ok()?;
-    reader.into_dimensions().ok()
+    let guessed = image::ImageReader::new(cursor)
+        .with_guessed_format()
+        .ok()
+        .and_then(|r| r.into_dimensions().ok());
+    // A TGA has no magic the image crate guesses by; paged-raster sniffs
+    // its header and reads the size (the decode at raster time is its
+    // too). Without a size the lazy image was dropped and drew nothing.
+    guessed.or_else(|| {
+        paged_raster::probe(bytes)
+            .ok()
+            .map(|info| (info.width, info.height))
+    })
 }
 
 /// Same as [`decode_image_bytes`] but with a caller-supplied
@@ -409,4 +421,22 @@ fn decode_jpeg_scaled(
         icc: icc_profile.map(bytes::Bytes::from),
         rendering: None,
     })
+}
+
+#[cfg(test)]
+mod peek_tests {
+    /// An uncompressed 24-bit TGA, `w` × `h`.
+    fn tga(w: u16, h: u16) -> Vec<u8> {
+        let mut b = vec![0u8; 18 + usize::from(w) * usize::from(h) * 3];
+        b[2] = 2;
+        b[12..14].copy_from_slice(&w.to_le_bytes());
+        b[14..16].copy_from_slice(&h.to_le_bytes());
+        b[16] = 24;
+        b
+    }
+
+    #[test]
+    fn the_lazy_path_sizes_a_tga_the_image_crate_cannot_guess() {
+        assert_eq!(super::peek_image_dimensions(&tga(8, 4), 4096), Some((8, 4)));
+    }
 }

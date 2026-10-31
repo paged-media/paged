@@ -27,10 +27,16 @@ use std::io::Write;
 use zip::write::SimpleFileOptions;
 
 mod first_fit;
+mod objects;
 mod structure;
 pub use first_fit::{
     first_fit_cases, first_fit_cases_json, first_fit_docx, FirstFitCase, CHAR_PT,
     FIRST_FIT_FULL_MEASURE_PT,
+};
+pub use objects::{
+    float_cases, objects_floats_docx, objects_languages_docx, objects_nested_tables_docx,
+    objects_table_look_docx, objects_text_boxes_docx, FLOAT_PAGE_PARAGRAPHS, FLOAT_SIZE_PT,
+    LANGUAGE_CASES, TABLE_LOOK_CASES, TEXT_BOX_LINES,
 };
 pub use structure::{structure_docx, STRUCTURE_NOTES};
 
@@ -54,6 +60,7 @@ const CONTENT_TYPES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="txt" ContentType="text/plain"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 </Types>"#;
@@ -2721,13 +2728,19 @@ fn w0_package(document: &str, styles: Option<&str>) -> Vec<u8> {
 /// Nine tracked changes: ins, del, moveFrom, moveTo, ins, the mark's del
 /// and its run's del, pPrChange, rPrChange.
 pub fn tracked_changes_docx() -> Vec<u8> {
+    tracked_changes_with(
+        r#"<w:p><w:moveFromRangeStart w:id="10" w:author="Reviewer" w:name="move1"/><w:moveFrom w:id="3" w:author="Reviewer"><w:r><w:delText xml:space="preserve">moved </w:delText></w:r></w:moveFrom><w:moveFromRangeEnd w:id="10"/><w:r><w:t xml:space="preserve">Stay </w:t></w:r><w:moveToRangeStart w:id="11" w:author="Reviewer" w:name="move1"/><w:moveTo w:id="4" w:author="Reviewer"><w:r><w:t>moved</w:t></w:r></w:moveTo><w:moveToRangeEnd w:id="11"/></w:p>"#,
+    )
+}
+
+fn tracked_changes_with(p2: &str) -> Vec<u8> {
     let document = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document {W_NS}>
   <w:body>
     <w:p><w:r><w:t>Plain paragraph.</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">Before </w:t></w:r><w:ins w:id="1" w:author="Reviewer" w:date="2026-10-01T10:00:00Z"><w:r><w:t>inserted</w:t></w:r></w:ins><w:del w:id="2" w:author="Reviewer" w:date="2026-10-01T10:00:00Z"><w:r><w:delText>deleted</w:delText></w:r></w:del><w:r><w:t xml:space="preserve"> after.</w:t></w:r></w:p>
-    <w:p><w:moveFrom w:id="3" w:author="Reviewer"><w:r><w:delText xml:space="preserve">moved </w:delText></w:r></w:moveFrom><w:r><w:t xml:space="preserve">Stay </w:t></w:r><w:moveTo w:id="4" w:author="Reviewer"><w:r><w:t>moved</w:t></w:r></w:moveTo></w:p>
+    {p2}
     <w:p><w:hyperlink w:anchor="target"><w:r><w:t xml:space="preserve">Link </w:t></w:r><w:ins w:id="5" w:author="Reviewer"><w:r><w:t>new</w:t></w:r></w:ins><w:r><w:t xml:space="preserve"> end</w:t></w:r></w:hyperlink></w:p>
     <w:p><w:pPr><w:rPr><w:del w:id="6" w:author="Reviewer"/></w:rPr></w:pPr><w:del w:id="7" w:author="Reviewer"><w:r><w:delText>Gone paragraph</w:delText></w:r></w:del></w:p>
     <w:p><w:pPr><w:jc w:val="center"/><w:pPrChange w:id="8" w:author="Reviewer"><w:pPr/></w:pPrChange></w:pPr><w:r><w:rPr><w:b/><w:rPrChange w:id="9" w:author="Reviewer"><w:rPr/></w:rPrChange></w:rPr><w:t>Bold now</w:t></w:r></w:p>
@@ -2952,6 +2965,89 @@ pub fn completeness_docx() -> Vec<u8> {
 </w:document>"#
     );
     theme_package(&document, THEME_STYLES)
+}
+
+/// Doc ADR 613 — a document with comment threads and change tracking on:
+///
+/// - p0 `Plain paragraph.`
+/// - p1 `Commented text` under comment 0 (`Author A`, "First remark"),
+///   answered by comment 1 (`Author B`, "Agreed"); both ranges cover it.
+/// - p2 `Second ` + `start` — comment 2 (`Author A`, "Spans two",
+///   resolved) starts at `start` and ends in p3.
+/// - p3 `Third paragraph.`
+///
+/// `settings.xml` turns `w:trackRevisions` on.
+pub fn review_docx() -> Vec<u8> {
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:r><w:t>Plain paragraph.</w:t></w:r></w:p>
+    <w:p><w:commentRangeStart w:id="0"/><w:commentRangeStart w:id="1"/><w:r><w:t>Commented text</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r><w:commentRangeEnd w:id="1"/><w:r><w:commentReference w:id="1"/></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Second </w:t></w:r><w:commentRangeStart w:id="2"/><w:r><w:t>start</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Third paragraph.</w:t></w:r><w:commentRangeEnd w:id="2"/><w:r><w:commentReference w:id="2"/></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    let comment = |id: u32, author: &str, para: &str, text: &str| {
+        format!(
+            r#"<w:comment w:id="{id}" w:author="{author}" w:date="2026-10-02T09:00:00Z" w:initials="A"><w:p w14:paraId="{para}" w14:textId="77777777"><w:r><w:annotationRef/></w:r><w:r><w:t>{text}</w:t></w:r></w:p></w:comment>"#
+        )
+    };
+    let comments = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">{}{}{}</w:comments>"#,
+        comment(0, "Author A", "0A000001", "First remark"),
+        comment(1, "Author B", "0A000002", "Agreed"),
+        comment(2, "Author A", "0A000003", "Spans two"),
+    );
+    let extended = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"><w15:commentEx w15:paraId="0A000001" w15:done="0"/><w15:commentEx w15:paraId="0A000002" w15:paraIdParent="0A000001" w15:done="0"/><w15:commentEx w15:paraId="0A000003" w15:done="1"/></w15:commentsEx>"#;
+    let ids = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w16cid:commentsIds xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid"><w16cid:commentId w16cid:paraId="0A000001" w16cid:durableId="11111111"/><w16cid:commentId w16cid:paraId="0A000002" w16cid:durableId="22222222"/><w16cid:commentId w16cid:paraId="0A000003" w16cid:durableId="33333333"/></w16cid:commentsIds>"#;
+    let settings = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:trackRevisions/></w:settings>"#;
+    let rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/><Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2016/09/relationships/commentsIds" Target="commentsIds.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/></Relationships>"#;
+    let types = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/commentsExtended.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"/><Override PartName="/word/commentsIds.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>"#;
+    zip_parts(&[
+        ("[Content_Types].xml", types.as_bytes()),
+        ("_rels/.rels", ROOT_RELS.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+        ("word/_rels/document.xml.rels", rels.as_bytes()),
+        ("word/comments.xml", comments.as_bytes()),
+        ("word/commentsExtended.xml", extended.as_bytes()),
+        ("word/commentsIds.xml", ids.as_bytes()),
+        ("word/settings.xml", settings.as_bytes()),
+    ])
+}
+
+/// Doc ADR 613 — two plain paragraphs and no comment part: where review
+/// markup made in paged is written from nothing.
+pub fn w0_plain_docx() -> Vec<u8> {
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:r><w:rPr><w:i/></w:rPr><w:t>First second third.</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Another paragraph.</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    w0_package(&document, None)
+}
+
+/// [`tracked_changes_docx`] with p2's move written as a deletion and an
+/// insertion: what Word opens unprompted (doc ADR 613's Word probe).
+/// Microsoft Word 16.114 stops on a move whose source and destination
+/// stand this close, so the probe's documents carry none.
+pub fn tracked_changes_no_moves_docx() -> Vec<u8> {
+    tracked_changes_with(
+        r#"<w:p><w:del w:id="3" w:author="Reviewer"><w:r><w:delText xml:space="preserve">moved </w:delText></w:r></w:del><w:r><w:t xml:space="preserve">Stay </w:t></w:r><w:ins w:id="4" w:author="Reviewer"><w:r><w:t>moved</w:t></w:r></w:ins></w:p>"#,
+    )
 }
 
 /// Doc ADR 618 — pictures with a DrawingML look, each one paragraph after a

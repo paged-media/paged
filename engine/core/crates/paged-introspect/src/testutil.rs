@@ -76,6 +76,7 @@ pub fn empty_text_frame(self_id: &str, bounds: Bounds) -> TextFrame {
         fill_mesh: None,
         effects: None,
         effect_stack: Vec::new(),
+        appearance: Vec::new(),
         gradient_fill_angle: None,
         gradient_fill_length: None,
         gradient_fill_start: None,

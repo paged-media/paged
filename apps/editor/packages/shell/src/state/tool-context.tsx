@@ -46,6 +46,31 @@ export const ZOOM_TOOL_ID: ToolId = "paged.tool.zoom";
  *  reaching for another editing tool, so it never leaves the context. */
 export const VIEW_TOOL_IDS: readonly ToolId[] = [HAND_TOOL_ID, ZOOM_TOOL_ID];
 
+/** Editor ADR 311 (plan WP10.7) — host tools that work on the frame an
+ *  edit context was entered on, in every context: Free Transform moves,
+ *  scales, rotates and shears the frame being edited, whatever content
+ *  it holds. Inside a context that restricts the rail (`toolIds`) these
+ *  stay on it; picking one does not leave the context; and a press with
+ *  one in hand goes to the tool, not to the context's content pointer. */
+export const CONTEXT_SHARED_TOOL_IDS: readonly ToolId[] = [
+  "paged.tool.freeTransform",
+];
+
+/** Does picking `toolId` keep the user inside an edit context that
+ *  declares `contextToolIds`? Its own tools, the tools you look with and
+ *  the host tools shared by every context do; anything else is the way
+ *  out (ADR 024's leaving by tool). */
+export function toolStaysInContext(
+  toolId: string,
+  contextToolIds: readonly string[],
+): boolean {
+  return (
+    contextToolIds.includes(toolId) ||
+    VIEW_TOOL_IDS.includes(toolId) ||
+    CONTEXT_SHARED_TOOL_IDS.includes(toolId)
+  );
+}
+
 /**
  * Concept 1 (T2) — the active tool is a base selection plus a
  * transient-override STACK, not a scalar, because spring-loaded tools

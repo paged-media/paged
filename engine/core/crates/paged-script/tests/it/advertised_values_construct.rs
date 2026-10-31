@@ -113,6 +113,15 @@ const STRUCTURED: &[(&str, &str)] = &[
         "frameContentEffectStack",
         "{ type: 'effectStack', value: { entries: [] } }",
     ),
+    // Engine ADR 1043 — the appearance, whole and by layer.
+    (
+        "frameAppearance",
+        "{ type: 'appearance', value: { layers: [{ kind: 'fill', color: 'Color/Black' }] } }",
+    ),
+    (
+        "frameAppearanceLayer",
+        "{ type: 'appearanceLayer', value: { index: 0, layer: { kind: 'fill', color: 'Color/Black' } } }",
+    ),
     // Engine ADR 1037 — an image frame's filter stack, whole.
     (
         "frameImageAdjustments",
@@ -141,6 +150,9 @@ fn probe_nodes() -> Vec<(Document, NodeId)> {
         load(paged_gen::samples::tables::build()),
         load(paged_gen::samples::geometry_groups::build()),
         load(paged_gen::samples::anchored::build()),
+        // Engine ADR 1047 — an oval, for the paths only an oval takes (its
+        // pie angles).
+        load(paged_gen::samples::strokes_fills::build()),
     ];
     let spread_id = docs[0].spreads[0]
         .spread

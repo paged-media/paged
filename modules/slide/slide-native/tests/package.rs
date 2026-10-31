@@ -18,7 +18,7 @@
 
 // ADR 708 — what a deck opens as: a `.paged` package whose native model part
 // is the deck, read back the way the engine reads it (the model part, its
-// image blobs), with a page per slide, a master spread per used layout, a
+// image blobs), with a page per slide, a master spread per master and layout, a
 // story per text frame and every picture's bytes.
 
 use std::collections::HashMap;
@@ -82,7 +82,7 @@ fn a_deck_opens_as_a_native_document() {
     let doc = &opened.document;
 
     // A single-page spread per slide, at the slide size, on its layout's
-    // master spread; a master spread per used layout.
+    // master spread; a master spread per master and per layout.
     assert_eq!(doc.spreads.len(), deck.slides.len());
     for (s, slide) in doc.spreads.iter().zip(&deck.slides) {
         let page = &s.spread.pages[0];
@@ -178,6 +178,7 @@ fn a_picture_travels_as_a_blob_stretched_over_its_crop() {
                 filled: true,
                 stroked: true,
                 fill_mode: None,
+                path: 0,
             }],
             stroke: None,
             image_part: "ppt/media/image1.png".into(),
@@ -290,4 +291,69 @@ fn a_slides_timing_rides_its_page_with_the_elements_its_shapes_became() {
     }
     // Four builds on slide 5: three effects' behaviours and four bldP.
     assert!(targets >= 8, "{targets}");
+}
+
+/// Slide ADR 712: a master spread per slide master and one per layout,
+/// every layout, based on its master; a slide hides its layout's
+/// placeholders, which its own stand in for.
+#[test]
+fn masters_and_layouts_are_two_levels_and_slides_override_placeholders() {
+    let bytes = fixture("placeholders");
+    let ir = pptx_import::import_pptx(&bytes).unwrap();
+    let (deck, written) = build("placeholders");
+    let doc = &open(&written.paged).document;
+    let layouts: usize = ir.masters.iter().map(|m| m.layouts.len()).sum();
+    assert_eq!(
+        doc.master_spreads.len(),
+        ir.masters.len() + layouts,
+        "every master and every layout"
+    );
+    for m in &deck.masters {
+        let page = &doc.master_spreads[&m.id].spread.pages[0];
+        if m.is_master {
+            assert_eq!(page.applied_master.as_deref(), Some("n"));
+        } else {
+            let parent = m.parent.as_deref().unwrap();
+            assert_eq!(page.applied_master.as_deref(), Some(parent));
+            assert!(doc.master_spreads[parent].spread.pages.len() == 1);
+            // The layout hides the master's placeholders.
+            assert!(!page.override_list.is_empty(), "{}", m.name);
+        }
+        // The page's master label says which it is.
+        let label = &doc.master_spreads[&m.id].spread.labels[page.self_id.as_ref().unwrap()];
+        let kind = if m.is_master { "master" } else { "layout" };
+        assert!(
+            label[0].1.contains(&format!(r#""kind":"{kind}""#)),
+            "{label:?}"
+        );
+    }
+    // The engine's chain from a slide: its layout, then its master.
+    for s in &doc.spreads {
+        let page = &s.spread.pages[0];
+        let chain: Vec<_> = doc
+            .master_chain(page.applied_master.as_deref().unwrap())
+            .into_iter()
+            .map(|m| m.self_id.clone())
+            .collect();
+        assert_eq!(chain.len(), 2, "{chain:?}");
+        // Every id the slide hides is an item of its layout.
+        let layout = &doc.master_spreads[&chain[0]].spread;
+        for id in &page.override_list {
+            assert!(
+                layout
+                    .text_frames
+                    .iter()
+                    .any(|f| f.self_id.as_ref() == Some(id))
+                    || layout
+                        .polygons
+                        .iter()
+                        .any(|f| f.self_id.as_ref() == Some(id))
+                    || layout
+                        .rectangles
+                        .iter()
+                        .any(|f| f.self_id.as_ref() == Some(id)),
+                "{id}"
+            );
+        }
+    }
 }

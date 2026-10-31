@@ -214,7 +214,9 @@ pub fn plan_import(
     if let Some(first) = fonts.first() {
         opt.font_family = first.family.to_string();
     }
-    let tree = match usvg::Tree::from_data(svg, &opt) {
+    // The guarded parse: a file over the size and complexity limits
+    // (`crate::limits`) is refused with its reason, never parsed.
+    let tree = match crate::limits::read_tree(svg, opt) {
         Ok(t) => t,
         Err(e) => {
             return SvgImportPlan {
@@ -222,7 +224,7 @@ pub fn plan_import(
                 report: SvgReport::default(),
                 width: 0.0,
                 height: 0.0,
-                error: Some(format!("not a readable SVG: {e}")),
+                error: Some(e.to_string()),
             }
         }
     };

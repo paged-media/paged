@@ -427,6 +427,20 @@ pub enum PropertyPath {
     FrameStrokeEffectStack,
     /// ADR 1008 — the content target's stack (InDesign effects only).
     FrameContentEffectStack,
+    /// Engine ADR 1043 — the item's appearance (`Value::Appearance`):
+    /// its extra fills and strokes, bottom to top, with the `frameFill` /
+    /// `frameStroke` placeholders putting them in order with its own fill
+    /// and stroke. Whole-list replacement: add, remove, reorder and any
+    /// layer field are one write each. The empty list is the item as it
+    /// always was. The inverse carries a snapshot (`prev`), so undo
+    /// restores the model exactly. Text frames, rectangles, ovals and
+    /// polygons. Paint-only.
+    FrameAppearance,
+    /// ADR 1043 — one layer of the appearance, by index
+    /// (`Value::AppearanceLayer`): the per-layer edit (a colour, an
+    /// opacity, a blend mode, a stroke weight, its effects). An index one
+    /// past the last layer appends. Undoes through `FrameAppearance`.
+    FrameAppearanceLayer,
     /// Editor-ops (Page tool) — a page's `GeometricBounds`
     /// `[top, left, bottom, right]` in the page's INNER coordinate
     /// system (`Value::Bounds`). Only `NodeId::Page` carries it.
@@ -1699,6 +1713,40 @@ pub enum PropertyPath {
     /// braces instead of its result (engine ADR 1022). A whole-document
     /// reflow.
     DocumentShowFieldCodes,
+    /// Word's Track Changes (engine ADR 1040), on `NodeId::Document`:
+    /// `Value::Bool`, default false. While on, text and formatting edits on
+    /// story ranges are recorded as tracked changes.
+    DocumentTrackChanges,
+    /// The author tracked changes are recorded under: `Value::Text`.
+    DocumentTrackChangesAuthor,
+    /// How tracked changes and comments show (engine ADR 1040):
+    /// `Value::Text` `simple` / `all` / `none` / `original`, default `all`.
+    /// A whole-document reflow.
+    DocumentMarkupView,
+    // ---- engine ADR 1047 — live shapes ------------------------------
+    /// A live polygon's side count (a star's points): `Value::Length` of a
+    /// whole number in 3..=100, on a Polygon that is one closed contour.
+    /// Setting it makes the polygon live and redraws its anchors in their
+    /// own bounding box, keeping a live star's inset;
+    /// `Length(None)` ends the live shape and keeps the path. Reads `None`
+    /// for a path that is not a live polygon. Reshapes
+    /// (`frame_geometry`); the inverse restores the parameters and the
+    /// anchors exactly. No IDML attribute: the anchors are written, the
+    /// parameters ride the item's label (`paged:liveShape`).
+    FrameShapeSides,
+    /// A live polygon's star inset, percent: `Value::Length` in 0..=99, 0
+    /// (or `None`) the plain polygon. Only on a LIVE polygon; any other
+    /// path refuses it (set `FrameShapeSides` first). Redraws the anchors.
+    FrameShapeStarInset,
+    /// An oval's pie start angle, degrees counter-clockwise from three
+    /// o'clock (Illustrator's Pie Start Angle): `Value::Length`, `None`
+    /// is 0. The oval draws the wedge from the start counter-clockwise to
+    /// the end; a whole turn between them is the whole ellipse. Reshapes
+    /// (`frame_geometry`).
+    FrameShapePieStart,
+    /// An oval's pie end angle (Illustrator's Pie End Angle):
+    /// `Value::Length`, `None` is 360.
+    FrameShapePieEnd,
     // ---- engine ADR 1007 — paint model v2 ---------------------------
     /// How the frame's gradient stroke maps onto the stroke:
     /// `Value::Text` `"Within"` (IDML's mode, the default), `"Along"`
@@ -1809,6 +1857,8 @@ impl PropertyPath {
             PropertyPath::FrameFillEffectStack => "frame.fillEffectStack",
             PropertyPath::FrameStrokeEffectStack => "frame.strokeEffectStack",
             PropertyPath::FrameContentEffectStack => "frame.contentEffectStack",
+            PropertyPath::FrameAppearance => "frame.appearance",
+            PropertyPath::FrameAppearanceLayer => "frame.appearanceLayer",
             PropertyPath::PageBounds => "page.bounds",
             PropertyPath::PageCanvasOrigin => "page.canvasOrigin",
             PropertyPath::FrameNonprinting => "frame.nonprinting",
@@ -2120,6 +2170,13 @@ impl PropertyPath {
             PropertyPath::DocumentShowHiddenText => "document.showHiddenText",
             PropertyPath::FrameGradientFillStart => "frame.gradientFillStart",
             PropertyPath::DocumentShowFieldCodes => "document.showFieldCodes",
+            PropertyPath::DocumentTrackChanges => "document.trackChanges",
+            PropertyPath::DocumentTrackChangesAuthor => "document.trackChangesAuthor",
+            PropertyPath::DocumentMarkupView => "document.markupView",
+            PropertyPath::FrameShapeSides => "frame.shapeSides",
+            PropertyPath::FrameShapeStarInset => "frame.shapeStarInset",
+            PropertyPath::FrameShapePieStart => "frame.shapePieStart",
+            PropertyPath::FrameShapePieEnd => "frame.shapePieEnd",
             PropertyPath::FrameGradientStrokeMode => "frame.gradientStrokeMode",
             PropertyPath::FrameFillMesh => "frame.fillMesh",
         }
@@ -3160,6 +3217,20 @@ pub enum Value {
     /// Engine ADR 1048 — a frame's gradient mesh or freeform gradient
     /// (`PropertyPath::FrameFillMesh`); `None` clears it.
     FillMesh(Option<MeshFillSpec>),
+    /// Engine ADR 1043 — an item's whole appearance. `prev` is the apply
+    /// layer's snapshot of the stored layers (JSON); an inverse carries it
+    /// so undo restores exactly. Wire callers leave it `None`.
+    Appearance {
+        layers: Vec<crate::appearance_wire::PaintLayerSpec>,
+        #[serde(default)]
+        prev: Option<String>,
+    },
+    /// Engine ADR 1043 — one layer of an item's appearance, at `index`
+    /// (one past the last appends).
+    AppearanceLayer {
+        index: u32,
+        layer: crate::appearance_wire::PaintLayerSpec,
+    },
     /// W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).
     /// `None` clears the rule back to the all-`None` default. The
     /// inverse carries the prior `Option<spec>` so undo round-trips
@@ -5295,6 +5366,12 @@ pub enum Operation {
         /// picture alone on its line) has no offset of its own otherwise.
         #[serde(default)]
         paragraph: Option<u32>,
+        /// Engine ADR 1045 — the frame whole, as JSON, when this insert is
+        /// a `RemoveAnchoredFrame`'s inverse: undo puts back the frame that
+        /// was removed (its look, its setting, its children), not a bare
+        /// picture box. A forward insert carries none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restore: Option<String>,
     },
     /// v52 — inverse-only companion to `InsertAnchoredFrame`: remove the
     /// anchored frame `self_id` from whichever paragraph of `story_id` holds
@@ -5407,6 +5484,85 @@ pub enum Operation {
         remove: u32,
         change: String,
     },
+    /// Engine ADR 1040 — record tracked change `change` over story chars
+    /// `[start, end)` (of `cell`'s stream when set), or on paragraph
+    /// `paragraph` for the paragraph kinds. What an importer writes for
+    /// Word's `w:ins` / `w:del` / `w:rPrChange` / `w:pPrChange`, and what a
+    /// tracked edit lowers to. Inverse: `RestoreParagraphs`.
+    RecordChange {
+        story_id: String,
+        #[serde(default)]
+        cell: Option<CellAddr>,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        paragraph: Option<u32>,
+        change: ChangeSpec,
+    },
+    /// Engine ADR 1040 — accept tracked change `id` (all its runs and
+    /// marks), every change by `author`, or every change; in story
+    /// `story_id` only when set. An insertion's text stays, a deletion's
+    /// goes, a formatting change keeps the new formatting. Inverse: the
+    /// stories restored (`RestoreStoryReview`).
+    AcceptChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1040 — reject: an insertion's text goes, a deletion's
+    /// stays, a formatting change puts the formatting before it back.
+    /// Scoped as `AcceptChange`.
+    RejectChange {
+        #[serde(default)]
+        story_id: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        author: Option<String>,
+    },
+    /// Engine ADR 1020 — a comment on story chars `[start, end)`; with
+    /// `comment.parentId` a reply (the range is the thread's). The id is
+    /// `comment.id` (the canvas mints one when absent). Inverse:
+    /// `RestoreStoryReview`.
+    InsertComment {
+        story_id: String,
+        #[serde(default)]
+        cell: Option<CellAddr>,
+        start: u32,
+        end: u32,
+        comment: CommentSpec,
+    },
+    /// Engine ADR 1020 — Resolve (or reopen) comment `comment_id`'s
+    /// thread. Inverse: `RestoreStoryReview`.
+    ResolveComment {
+        comment_id: String,
+        resolved: bool,
+    },
+    /// Engine ADR 1020 — delete comment `comment_id`: a root takes its
+    /// replies and its range. Inverse: `RestoreStoryReview`.
+    DeleteComment {
+        comment_id: String,
+    },
+    /// Engine ADR 1020 — rewrite comment `comment_id`'s text (and date).
+    /// Inverse: `RestoreStoryReview`.
+    EditComment {
+        comment_id: String,
+        text: String,
+        #[serde(default)]
+        date: Option<String>,
+    },
+    /// Inverse-only (engines ADR 1040 / 1020) — set story `story_id`'s
+    /// paragraphs (when `paragraphs_json` is set) and comment threads to
+    /// what they were. Its inverse carries what it replaced.
+    RestoreStoryReview {
+        story_id: String,
+        #[serde(default)]
+        paragraphs_json: Option<String>,
+        comments_json: String,
+    },
     /// v72 — create bookmark `bookmark_id` named `name` (ADR 173) under
     /// `parent` (the top level when `None`) at `index` among its children
     /// (the end when `None`), going to destination `destination` or else
@@ -5503,6 +5659,21 @@ pub enum Operation {
         /// v70 — the page the link went to, so the inverse recreates it.
         #[serde(default)]
         page: Option<String>,
+    },
+    /// Engine ADR 1026 — make page item `item_id` the source of a new
+    /// hyperlink (a `HyperlinkPageItemSource`) to `url`, or to page `page`
+    /// when given: a clickable shape, a PowerPoint shape's click action.
+    /// Inverse: `DeleteHyperlink`, which removes the source with the link.
+    InsertItemHyperlink {
+        item_id: String,
+        url: String,
+        #[serde(default)]
+        page: Option<String>,
+        #[serde(default)]
+        name: Option<String>,
+        source_id: String,
+        dest_id: String,
+        hyperlink_id: String,
     },
     /// v0.71.13 — delete hyperlink `hyperlink_id` of any origin (ADR 164):
     /// every run its source tags stops linking, the record goes, and so
@@ -5689,6 +5860,34 @@ pub enum Operation {
         master_id: String,
         #[serde(default)]
         name: Option<String>,
+    },
+    /// Engine ADR 1026 — set page `page`'s `OverrideList` (a body page's or
+    /// a master page's): the master items it hides, because the page holds
+    /// its own copies of them or does not show them. Duplicates are
+    /// dropped. Inverse: the previous list.
+    SetPageOverrides {
+        page: String,
+        overrides: Vec<String>,
+    },
+    /// Engine ADR 1026 — override master items on body page `page`
+    /// (InDesign's Override; a PowerPoint slide's placeholder): copy
+    /// `items`, all on one master the page shows, onto the page's spread
+    /// where the master draws them, with their stories, labels and styles,
+    /// and add them to the page's `OverrideList`. `ids` / `story_ids` are
+    /// the copies' ids as `InsertSnippet` takes them (both empty: minted).
+    /// `empty_text` empties the copies' stories, keeping the first
+    /// paragraph's and first run's formatting (a new slide's placeholders,
+    /// whose master text is a prompt). Inverse: the paste's
+    /// `RemoveSnippet` and the previous list.
+    OverrideMasterItems {
+        page: String,
+        items: Vec<String>,
+        #[serde(default)]
+        ids: Vec<String>,
+        #[serde(default)]
+        story_ids: Vec<String>,
+        #[serde(default)]
+        empty_text: bool,
     },
     /// v70 — apply `op` to the items of master spread `master_id` (its
     /// `Self` id): the master is the only spread `op` sees, so every item,
@@ -6026,6 +6225,75 @@ pub struct CellAddr {
     pub table_id: String,
     pub row: u32,
     pub col: u32,
+}
+
+/// Engine ADR 1040 — what [`Operation::RecordChange`] records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum ChangeSpecKind {
+    /// The range's text was inserted (`w:ins`).
+    Insert,
+    /// The range's text was deleted (`w:del`); it stays in the story.
+    Delete,
+    /// The range's character formatting changed (`w:rPrChange`).
+    Format,
+    /// The paragraph's formatting changed (`w:pPrChange`).
+    ParaProps,
+    /// The paragraph's mark was inserted (`w:pPr/w:rPr/w:ins`).
+    InsertMark,
+    /// The paragraph's mark was deleted (`w:pPr/w:rPr/w:del`).
+    DeleteMark,
+}
+
+/// Engine ADR 1040 — one tracked change to record over a range or on a
+/// paragraph. `id` absent: the change joins an adjacent change of the same
+/// kind and author, else the engine mints one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeSpec {
+    pub kind: ChangeSpecKind,
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
+    /// ISO 8601, as Word's `w:date`.
+    #[serde(default)]
+    pub date: Option<String>,
+    /// `format`: the run's applied character style before the change (its
+    /// other properties are taken as they are now).
+    #[serde(default)]
+    pub before_character_style: Option<String>,
+    /// `paraProps`: the paragraph's applied style before the change.
+    #[serde(default)]
+    pub before_paragraph_style: Option<String>,
+}
+
+/// Engine ADR 1020 — one comment of a thread on the wire. `parentId` makes
+/// it a reply; `id` absent: the engine mints one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentSpec {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub initials: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    /// Paragraphs separated by `\n`.
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub resolved: bool,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 /// W0.5 — character- vs paragraph-level style application for

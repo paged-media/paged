@@ -31,6 +31,7 @@ PAGED_PROBE_STAGE=<stage> bash scripts/photoshop/run-probe.sh scripts/photoshop/
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/guides.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/warp-text.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/smart-objects.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/transform-warps.jsx
 # smart-readback opens the smart objects paged WROTE: stage them first (image ADR 482)
 PAGED_SMART_READBACK_OUT=<stage>/smart-readback cargo nextest run -p image-conformance \
   --run-ignored only write_smart_readback_inputs
@@ -80,7 +81,10 @@ byte for byte: `psd_adjustment_blocks_photoshop.rs`; Color Lookup is not recorde
 document, an embedded smart object; a linked one is not recorded, its `lnkE` holds an absolute temporary path) and `psd-readback`, which has Photoshop OPEN the
 files the layered save writes and report each layer's kind, adjustment descriptor, effects and a
 render (`psd_write_photoshop.rs`; the files are rebuilt by the test and held to the recording by
-content hash, so they are not committed). A probe file that Photoshop cannot open is an error
+content hash, so they are not committed). Its `converted-*` cases (image ADR 481) are documents
+paged converted with Image ▸ Mode: Photoshop reports their mode and depth, then MERGES each in
+its own mode before converting it to sRGB for the render — converting a layered document would
+convert every layer and blend them again in RGB, which is not how a CMYK document composites. A probe file that Photoshop cannot open is an error
 the runner refuses — that is how the Curves block's missing `Crv ` extension was found.
 
 Replays: `image-conformance/tests/it/oracle_photoshop.rs` (blend modes,
@@ -118,6 +122,16 @@ TRIP — a PSD paged's layered save wrote, opened by Photoshop). The round trip'
 before the run: `PAGED_VECTOR_PROBE_INPUT=<dir>/input cargo nextest run -p image-conformance
 write_probe_input --run-ignored only`, then the probe with `PAGED_PROBE_STAGE=<dir>`; copy
 `<dir>/input/paged-vectors.psd` into `fixtures/photoshop/vector-paths/` with the recording.
+
+## Warps: `transform-warps` (image ADR 483)
+
+`transform-warps.jsx` unlocks the `colour-sweep` Background and sends the Transform event
+(`Trnf`): each of the fifteen Warp styles at +50 % (the `warp` object — keyed by the STRING id
+`warp`; the char id `'warp'` is accepted and silently ignored) and a 75 % width with and without
+`contentAware`. Distort and Perspective are NOT recorded: `Trnf` ignores every corner form tried
+(`nonAffineTransform` as `Pnt ` objects, doubles or px, `quadCorners`, `quadrilateral`,
+`corners`, a `warpCustom` mesh) and hands the layer back untouched, which would have recorded the
+identity as Photoshop's answer. The replay is `image-conformance/tests/it/transform_warps_photoshop.rs`.
 
 ## Smart objects: `smart-objects` and `smart-readback` (image ADR 482)
 

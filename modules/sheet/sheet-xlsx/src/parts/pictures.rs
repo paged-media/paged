@@ -101,8 +101,7 @@ fn picture_dml(pic: &paged_ooxml::tree::El) -> Option<Box<PictureDml>> {
         .children
         .iter()
         .find(|c| c.local == "spPr")
-        .and_then(|sp| sp.child(paged_ooxml::tree::Ns::A, "effectLst"))
-        .map(|e| paged_ooxml::drawingml::effects(e, &rels))
+        .map(|sp| paged_ooxml::drawingml::effects_in(sp, &rels))
         .unwrap_or_default();
     let plain = blip.alpha.is_none() && blip.effects.is_empty() && effects.is_empty();
     (!plain).then(|| Box::new(PictureDml { blip, effects }))

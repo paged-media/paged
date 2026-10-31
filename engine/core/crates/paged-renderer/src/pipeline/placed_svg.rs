@@ -111,7 +111,16 @@ enum ArtPaint {
 /// `None` when it is not an SVG `usvg` reads or uses something the list
 /// cannot express (see the module docs).
 pub(crate) fn prepare(bytes: &[u8]) -> Option<SvgArt> {
-    let tree = usvg::Tree::from_data(bytes, &usvg::Options::default()).ok()?;
+    // Over the size and complexity limits (`paged_svg::limits`) the SVG
+    // is not read at all: the raster lane, which applies them too,
+    // declines it as well.
+    let tree = match paged_svg::limits::read_tree(bytes, usvg::Options::default()) {
+        Ok(tree) => tree,
+        Err(e) => {
+            tracing::warn!(error = %e, "placed SVG not read");
+            return None;
+        }
+    };
     let mut walk = Walk {
         ops: Vec::new(),
         failed: false,
@@ -1109,6 +1118,20 @@ mod tests {
         let art = prepare(plain).unwrap();
         assert_eq!((art.width, art.height), (21.0, 20.0));
         assert!(art.follows(&Transform::scale(2.0, 1.0)));
+    }
+
+    #[test]
+    fn a_placed_svg_over_the_limits_is_neither_vectors_nor_raster() {
+        let deep = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">{}<rect width="1" height="1"/>{}</svg>"#,
+            "<g>".repeat(50_000),
+            "</g>".repeat(50_000)
+        );
+        assert!(prepare(deep.as_bytes()).is_none());
+        assert!(super::super::image_decode::decode_svg_raster(deep.as_bytes()).is_none());
+        let plain = br#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+            <rect width="10" height="10" fill="red"/></svg>"#;
+        assert!(prepare(plain).is_some());
     }
 
     #[test]

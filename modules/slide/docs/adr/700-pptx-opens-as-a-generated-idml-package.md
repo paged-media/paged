@@ -58,3 +58,10 @@ The decision above stands (one package, opened atomically, inheritance resolved 
 `slide-idml` and "the IDML writer" now read `slide-native` and the builder. The route this
 record rejected, building with the engine's crates, became possible when the module moved
 into the same repository as the engine (PM-0002, PM-0005).
+
+## Amendment (2026-10-29): two levels of masters
+
+[ADR 712](712-two-level-masters-and-placeholders-as-overrides.md): the engine has masters based
+on masters (engine ADR 1026), so a slide master and each of its layouts are master spreads of
+their own, every layout is imported, and placeholders are layout items a slide overrides. The
+flattened master per used layout is gone.
