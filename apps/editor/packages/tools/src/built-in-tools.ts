@@ -44,12 +44,18 @@
 // order (first-seen group order) and section order come out right.
 
 import type { CursorSpec, ToolContribution } from "@paged-media/shell";
+import { t } from "@paged-media/strings";
 
 import { createEllipseHandler } from "./handlers/ellipse-tool";
 import { createEyedropperHandler } from "./handlers/eyedropper-tool";
 import { createGradientFeatherHandler } from "./handlers/gradient-feather-tool";
-import { createGradientSwatchHandler } from "./handlers/gradient-tool";
+import {
+  createGradientSwatchHandler,
+  GRADIENT_OPTION_FIELDS,
+  GRADIENT_SWATCH_TOOL_ID,
+} from "./handlers/gradient-tool";
 import { createLineHandler } from "./handlers/line-tool";
+import { createMeshHandler, MESH_TOOL_ID } from "./handlers/mesh-tool";
 import { createPolygonHandler } from "./handlers/polygon-tool";
 import { createArtboardHandler } from "./handlers/artboard-tool";
 import { createPageHandler } from "./handlers/page-tool";
@@ -69,6 +75,7 @@ import {
   createRotateHandler,
   createScaleHandler,
 } from "./handlers/transform-tools";
+import { MESH_TOOL } from "./messages";
 
 export const BUILT_IN_TOOLS: ToolContribution[] = [
   // ── A · Selection tools ──────────────────────────────────────
@@ -515,8 +522,35 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     section: "transform",
     cluster: "colour",
     isGroupDefault: true,
-    // Editor-ops — drag → batched gradient angle+length (v24).
+    order: 0,
+    // Editor-ops — drag → batched gradient angle+length (v24). WP7.2 —
+    // the `mode` option adds the freeform modes (engine ADR 1048).
     gesture: createGradientSwatchHandler,
+    options: {
+      toolId: GRADIENT_SWATCH_TOOL_ID,
+      fields: GRADIENT_OPTION_FIELDS,
+    },
+  },
+  // WP7.2 — the Mesh tool (engine ADR 1048): click a shape to give it a
+  // gradient mesh and add mesh points, drag points and handles, colour
+  // the selected points in the Color panel. In the Gradient Swatch slot,
+  // as Illustrator keeps it beside its Gradient tool. No shortcut: the
+  // single keys are all taken or reserved (INV-REG-1); the rail and the
+  // palette reach it. Its words follow the editor's locale (getters).
+  {
+    id: MESH_TOOL_ID,
+    get title() {
+      return t(MESH_TOOL.title);
+    },
+    get description() {
+      return t(MESH_TOOL.description);
+    },
+    icon: "tool-mesh",
+    group: "gradientSwatch",
+    section: "transform",
+    cluster: "colour",
+    order: 1,
+    gesture: createMeshHandler,
   },
   {
     id: "paged.tool.gradientFeather",
@@ -637,6 +671,7 @@ const TOOL_CURSORS: Record<string, CursorSpec> = {
   "paged.tool.scissors": CROSS,
   "paged.tool.gradientSwatch": CROSS,
   "paged.tool.gradientFeather": CROSS,
+  "paged.tool.mesh": CROSS,
   "paged.tool.hand": { kind: "css", token: "grab" },
   "paged.tool.zoom": { kind: "css", token: "zoom-in" },
 };

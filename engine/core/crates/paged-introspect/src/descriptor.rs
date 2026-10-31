@@ -120,6 +120,7 @@ impl From<Value> for AuthoredValue {
             | Value::SimplifyPath { .. }
             | Value::ClosePath { .. }
             | Value::GradientFeather(_)
+            | Value::FillMesh(_)
             // W0.2 — whole-struct / whole-list paragraph payloads,
             // like the gradient-feather struct: no scalar
             // authored-value widget renders them, so they collapse

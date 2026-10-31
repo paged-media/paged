@@ -2065,7 +2065,7 @@ pub(super) fn rect_bounds_in_page(
 /// drop-shadow / gradient-stop / decoration paths that have only ever
 /// understood RGB keep producing identical pixels to the pre-Stage A
 /// world.
-pub(super) fn paint_as_solid_with_icc(p: Paint, color_ctx: ColorCtx<'_>) -> Option<Color> {
+pub(crate) fn paint_as_solid_with_icc(p: Paint, color_ctx: ColorCtx<'_>) -> Option<Color> {
     match p {
         Paint::Solid(c) => Some(c),
         // The CMYK paint carries the ICC-resolved display RGB cached

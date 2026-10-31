@@ -1051,6 +1051,15 @@ impl<'a, 'b> Walker<'a, 'b> {
                         }
                     }
                 }
+                DisplayCommand::MeshShade {
+                    mesh_id,
+                    bounds,
+                    transform,
+                } => {
+                    if let Some(mesh) = list.mesh(*mesh_id) {
+                        self.emit_mesh(content, mesh, *bounds, transform);
+                    }
+                }
                 DisplayCommand::DropShadow {
                     path_id,
                     transform,
@@ -1278,6 +1287,66 @@ impl<'a, 'b> Walker<'a, 'b> {
         let name = format!("GsSm{}", self.resources.ext_g_states.len());
         self.resources.ext_g_states.insert(name.clone(), gs_ref);
         name
+    }
+
+    /// Engine ADR 1048 — a mesh shading, painted with `sh` in its local
+    /// space under the clips in force (the renderer's `PushClip` of the
+    /// frame outline); translucent colours under a luminosity soft mask
+    /// of the same patches' alpha, set in page space as the ramps' are.
+    fn emit_mesh(
+        &mut self,
+        content: &mut Content,
+        mesh: &paged_compose::MeshShading,
+        bounds: paged_compose::Rect,
+        transform: &Transform,
+    ) {
+        content.save_state();
+        if mesh.is_translucent() {
+            if let Some(alpha) = crate::color::write_mesh_shading(
+                self.state,
+                mesh,
+                crate::color::ShadeChannels::Alpha,
+            ) {
+                let mut mask = Content::new();
+                mask.transform(transform.0);
+                let name = format!("Sh{}", self.resources.shadings.len());
+                self.resources.shadings.insert(name.clone(), alpha);
+                mask.shading(Name(name.as_bytes()));
+                let corners = [
+                    (bounds.x, bounds.y),
+                    (bounds.x + bounds.w, bounds.y),
+                    (bounds.x, bounds.y + bounds.h),
+                    (bounds.x + bounds.w, bounds.y + bounds.h),
+                ]
+                .map(|(x, y)| transform.apply(x, y));
+                let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+                for (x, y) in corners {
+                    x0 = x0.min(x);
+                    y0 = y0.min(y);
+                    x1 = x1.max(x);
+                    y1 = y1.max(y);
+                }
+                let gs = self.alpha_mask_gs(
+                    mask,
+                    paged_compose::Rect {
+                        x: x0,
+                        y: y0,
+                        w: x1 - x0,
+                        h: y1 - y0,
+                    },
+                );
+                content.set_parameters(Name(gs.as_bytes()));
+            }
+        }
+        if let Some(sh) =
+            crate::color::write_mesh_shading(self.state, mesh, crate::color::ShadeChannels::Color)
+        {
+            content.transform(transform.0);
+            let name = format!("Sh{}", self.resources.shadings.len());
+            self.resources.shadings.insert(name.clone(), sh);
+            content.shading(Name(name.as_bytes()));
+        }
+        content.restore_state();
     }
 
     fn emit_fill(
