@@ -34,8 +34,9 @@
 //! folds are the one ink fold Photoshop makes; the folded inks go to the
 //! screen through the profile.
 //!
-//! What is not separable is not folded in inks: the four non-separable
-//! modes (and Darker/Lighter Color), Blend If (it reads grey and RGB),
+//! Hue, Saturation, Color and Luminosity fold on the planes too (image
+//! ADR 484: Photoshop's own rule, measured). What else is not separable is
+//! not folded in inks: Darker/Lighter Color, Blend If (it reads grey and RGB),
 //! an adjustment layer (the chain is RGB), a layer style and the direct
 //! adjustments. A plan with one of them composites in RGB, as before,
 //! and [`LayerStack::ink_fold_declines`] says why.
@@ -52,6 +53,20 @@ use image_gpu::GpuContext;
 /// Is a blend applied channel by channel?
 fn separable(def: &image_kernels::KernelDef) -> bool {
     Blend::from_kernel_id(def.id).is_some_and(|b| !b.is_non_separable())
+}
+
+/// Hue, Saturation, Color and Luminosity in a CMYK document (image ADR
+/// 484): Photoshop applies their formulas to the ink planes as they are —
+/// on `C'M'Y'` as if it were RGB, and on `K'`, a grey, where they keep the
+/// backdrop's black (Luminosity takes the source's) — which the kernels do
+/// unchanged on the two planes (`cmyk-stacks/blend-modes`: within 0.7 ΔE00
+/// p95 of Photoshop's CMYK composite). Darker and Lighter Color are
+/// unmeasured and still fold in RGB.
+fn ink_hsl(def: &image_kernels::KernelDef) -> bool {
+    matches!(
+        def.id,
+        "compose.hue" | "compose.saturation" | "compose.color" | "compose.luminosity"
+    )
 }
 
 /// A layer's Color or Luminosity in a Lab document: L* from one side,
@@ -73,7 +88,10 @@ fn declines(steps: &[Step], space: PlaneSpace) -> Option<&'static str> {
             } => {
                 if gamma.is_some() {
                     Some("a text layer's gamma blend")
-                } else if !separable(blend) && !(space == PlaneSpace::Lab && lab_split(blend)) {
+                } else if !separable(blend)
+                    && !(space == PlaneSpace::Lab && lab_split(blend))
+                    && !(space == PlaneSpace::Ink && ink_hsl(blend))
+                {
                     Some("a non-separable blend mode")
                 } else if extra.as_ref().is_some_and(|x| x.blend_if.is_some()) {
                     Some("Blend If")
@@ -81,13 +99,17 @@ fn declines(steps: &[Step], space: PlaneSpace) -> Option<&'static str> {
                     None
                 }
             }
-            Step::ClipClose { blend, .. } if !separable(blend) => {
+            Step::ClipClose { blend, .. }
+                if !separable(blend) && !(space == PlaneSpace::Ink && ink_hsl(blend)) =>
+            {
                 Some("a non-separable blend mode")
             }
             Step::Close {
                 blend: Some((def, _)),
                 ..
-            } if !separable(def) => Some("a non-separable blend mode"),
+            } if !separable(def) && !(space == PlaneSpace::Ink && ink_hsl(def)) => {
+                Some("a non-separable blend mode")
+            }
             Step::Adjust { .. } | Step::Direct { .. } => Some("an adjustment layer"),
             Step::Effect { .. }
             | Step::BodyOpen

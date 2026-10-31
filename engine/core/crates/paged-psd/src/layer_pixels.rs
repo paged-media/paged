@@ -515,14 +515,14 @@ pub const CMYK_RGB_SAFE_BLENDS: &[&[u8; 4]] = &[b"norm", b"mul "];
 /// (image ADR 484): those its consumer cannot composite in the inks. Since
 /// image ADR 481 a CMYK document with a profile folds every SEPARABLE mode
 /// in its inks as Photoshop does (`image-js`'s ink fold, within 7 levels
-/// of Photoshop's merged composite on `cmyk-stacks/blend-modes`), and the
-/// consumer's per-file check against the merged composite still judges
-/// each file; the non-separable modes would blend the converted colours
-/// in RGB, tens of levels off, so they keep the flattened open.
+/// of Photoshop's merged composite on `cmyk-stacks/blend-modes`), and Hue,
+/// Saturation, Color and Luminosity too (image ADR 484); the consumer's
+/// per-file check against the merged composite still judges each file.
+/// Darker and Lighter Color are unmeasured in CMYK and would blend the
+/// converted colours in RGB, so they keep the flattened open.
 /// ([`CMYK_RGB_SAFE_BLENDS`] still judges a Color Overlay: a style folds
 /// in RGB.)
-pub const CMYK_INK_FOLD_DECLINES: &[&[u8; 4]] =
-    &[b"hue ", b"sat ", b"colr", b"lum ", b"dkCl", b"lgCl"];
+pub const CMYK_INK_FOLD_DECLINES: &[&[u8; 4]] = &[b"dkCl", b"lgCl"];
 
 /// A CMYK document's ink transform as the import takes it: packed 4-ink
 /// CMYK8 (0 = no ink) in, the same number of RGBA8 pixels out.

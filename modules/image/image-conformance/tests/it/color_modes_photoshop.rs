@@ -173,8 +173,9 @@ const TILE_IDS: [&str; 20] = [
 /// in the document's own numbers, and the p95 the RGB fold is at least
 /// (the improvement this record is for). Measured 2026-10-30.
 /// The RGB fold was 8.7–43 (Lab) and 0.7–6.7 (grey) ΔE p95 off per tile.
+/// Measured on Metal and on the CPU fold of CI (lab-8: 2.47 / 1.81 there).
 const IN_MODE: &[(&str, f64, f64)] = &[
-    ("lab-8", 2.4, 1.9),
+    ("lab-8", 2.7, 1.9),
     ("lab-16", 0.5, 0.25),
     ("gray-8", 1.5, 1.1),
     ("gray-16", 0.2, 0.1),

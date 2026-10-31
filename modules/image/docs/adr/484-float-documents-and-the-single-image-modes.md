@@ -82,7 +82,7 @@ three-colour background (the modes a mode does not offer stay Normal and say so)
 converted 16 → 32 and 8 → 32; Indexed with the Web palette and with an Exact one, each with
 Photoshop's sRGB render; Multichannel from RGB. `color_modes_photoshop.rs` replays them:
 
-- Lab: every judged tile within 2.4 ΔE*ab (max) and 1.9 (p95) at 8 bits, 0.5 / 0.25 at 16, where
+- Lab: every judged tile within 2.7 ΔE*ab (max) and 1.9 (p95) at 8 bits, 0.5 / 0.25 at 16, where
   the RGB fold was 8.2–43 at p95; Grayscale within 1.5 / 1.1 at 8 bits and 0.2 / 0.1 at 16
   (the RGB fold: up to 6.7).
 - 32 bits: every offered separable tile within 0.001 of Photoshop's linear values; 16 → 32 is

@@ -453,7 +453,9 @@ const STACKS: &[(&str, StackOutcome)] = &[
     ("transparent-soft", Ok((2, 1))),
     ("normal-stack", Err("cmyk-composite")),
     ("normal-stack-16", Err("cmyk-composite")),
-    ("blend-modes", Err("cmyk-blend")),
+    // Every blend folds in inks now (image ADR 484); the RGB fold this
+    // measures is far off, so its per-file check declines it.
+    ("blend-modes", Err("cmyk-composite")),
 ];
 
 #[test]
@@ -621,14 +623,9 @@ fn blending_converted_cmyk_layers_in_rgb_is_measured_per_mode__feat__image_psd_l
         .iter()
         .map(|b| b.category)
         .collect();
-    // Since the ink fold (image ADR 484) only the modes it cannot fold —
-    // the four non-separable ones — are blockers; the separable ones fold
-    // in inks and are judged per file against the composite.
-    assert_eq!(
-        blocked.len(),
-        4,
-        "one cmyk-blend blocker per non-separable layer: {blocked:?}"
-    );
+    // Since the ink fold (image ADR 484) every mode of the tiles folds in
+    // inks and is judged per file against the composite: no blocker.
+    assert!(blocked.is_empty(), "{blocked:?}");
     assert!(blocked.iter().all(|b| *b == "cmyk-blend"));
     println!("{}", report.join("\n"));
     assert!(problems.is_empty(), "{}", problems.join("\n"));
@@ -707,6 +704,12 @@ const INK_TILES: &[(&str, u8, f64)] = &[
     ("exclusion", 2, 1.0),
     ("linear-burn", 4, 0.8),
     ("linear-dodge", 2, 0.75),
+    // Hue, Saturation, Color and Luminosity on the ink planes (image ADR
+    // 484; measured 2026-10-31: 3 / 0.68, 1 / 0.66, 3 / 0.68, 1 / 0.66).
+    ("hue", 4, 0.8),
+    ("saturation", 2, 0.8),
+    ("color", 4, 0.8),
+    ("luminosity", 2, 0.8),
     ("multiply-50", 2, 0.8),
 ];
 
@@ -714,10 +717,7 @@ const INK_TILES: &[(&str, u8, f64)] = &[
 #[allow(non_snake_case)]
 fn a_cmyk_document_composites_in_its_inks_as_photoshop_does__feat__image_io_depth_color_modes() {
     let file = psd("blend-modes");
-    let nonsep = ["hue", "saturation", "color", "luminosity"];
-    let stack = ink_stack(&file, &|name| {
-        !nonsep.iter().any(|n| name.eq_ignore_ascii_case(n))
-    });
+    let stack = ink_stack(&file, &|_| true);
     assert_eq!(
         stack.ink_fold_declines(),
         None,
@@ -844,19 +844,11 @@ fn the_ink_fold_names_what_it_declines_and_an_edit_keeps_the_inks__feat__image_i
 #[allow(non_snake_case)]
 fn the_cmyk_gates_follow_the_ink_fold__feat__image_io_depth_color_modes() {
     let file = psd("blend-modes");
-    let blocked: Vec<String> = file
-        .layer_import_blockers()
-        .iter()
-        .filter(|b| b.category == "cmyk-blend")
-        .map(|b| b.message.clone())
-        .collect();
-    assert_eq!(blocked.len(), 4, "{blocked:#?}");
-    for m in ["hue", "saturation", "color", "luminosity"] {
-        assert!(
-            blocked.iter().any(|b| b.contains(&format!("(\"{m}\")"))),
-            "{m}: {blocked:#?}"
-        );
-    }
+    assert!(
+        file.layer_import_blockers().is_empty(),
+        "every blend of blend-modes folds in inks: {:?}",
+        file.layer_import_blockers()
+    );
     let ctx = image_conformance::device::test_device();
     for id in ["normal-stack", "normal-stack-16", "opaque-stack"] {
         let file = psd(id);
@@ -868,3 +860,4 @@ fn the_cmyk_gates_follow_the_ink_fold__feat__image_io_depth_color_modes() {
         println!("{id}: {:.2}% off, max {}", a.pct_off, a.max);
     }
 }
+
