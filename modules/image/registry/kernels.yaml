@@ -2096,9 +2096,6 @@
 - id: style.shift
   rust_path: families::style::STYLE_SHIFT
   state_row: image.kernel.family-t3
-- id: geom.warp_mesh
-  rust_path: families::warp::GEOM_WARP_MESH
-  state_row: image.kernel.family-t2
   class: resample
   mip_exact: false
   gpu_tolerance: { kind: channel_eps_f16, value: 4 }
@@ -2109,6 +2106,35 @@
     - "layer styles (WP5.4): replayed against Photoshop 27.10's own renders in image-conformance/tests/it/psd_layer_styles.rs; no reference reading"
   tests:
     rust: ["image-conformance/tests/it/family_style.rs"]
+- id: geom.warp_mesh
+  rust_path: families::warp::GEOM_WARP_MESH
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: photoshop
+  status: implemented
+  provenance:
+    - "ENVELOPE warp: a bicubic Bezier patch (4x4 control mesh, cubic Bernstein basis) inverted per output texel — seed at the nearest 9x9 grid node, ten Newton steps on the 2x2 Jacobian, transparent where the residual exceeds half a pixel. Inverse mapping and bilinear reconstruction after Heckbert, Fundamentals of Texture Mapping and Image Warping (UC Berkeley, 1989); Newton inversion of a parametric patch is textbook numerical analysis; no reference reading"
+    - "the mesh comes from paged-warp's envelope module (one definition with the vector lane: draw's envelopes map points forward through the same patch); Photoshop's fifteen Warp Text styles are that module's closed forms, recorded against Photoshop by scripts/photoshop/probes/warp-text.jsx"
+    - "(u, v) is clamped to [-0.25, 1.25], not [0, 1], so a texel just outside an edge still converges and reads the transparent outside of the source: the warped edge is antialiased instead of cut, and the result is continuous across it (no branch flips between the two lanes there)"
+    - "CPU twin (WP5.6, image ADR 483): paged-resample warp_map_rgba8 through paged_warp::envelope::invert_extended (the same extended solve); pixel layers and selections bend through it too (Edit > Transform > Warp)"
+  tests:
+    rust: ["image-conformance/tests/it/family_warp.rs", "image-conformance/tests/it/transform_warps_photoshop.rs"]
+- id: geom.warp_field
+  rust_path: families::warp::GEOM_WARP_FIELD
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "DISPLACEMENT-FIELD warp (Liquify, Puppet Warp; WP5.6, image ADR 483): output texel reads the source at its own position plus a displacement interpolated bilinearly between grid nodes; inverse mapping after Heckbert, Fundamentals of Texture Mapping and Image Warping (UC Berkeley, 1989); reconstruction as geom.warp_projective (bilinear, or Catmull-Rom after Keys 1981); no reference reading"
+    - "the field is paged-warp's (engine crate): Liquify's brushes edit a coarse mesh, Puppet Warp rasterises an as-rigid-as-possible triangle mesh (Sorkine and Alexa, SGP 2007) into a dense one; the nodes travel in the same rgba16float window as the source under the frozen unary ABI, each as an exact f16 integer part and a fraction"
+    - "CPU twin: paged-resample warp_map_rgba8 through paged_warp::field::Field::source (the supported headless lane, ADR 467); the selection lane lands through the mask as a filter does"
+  tests:
+    rust: ["image-conformance/tests/it/family_warp.rs", "image-kernels/src/families/warp.rs"]
 - id: style.blur_h
   rust_path: families::style::STYLE_BLUR_H
   state_row: image.kernel.family-t3
@@ -2710,8 +2736,3 @@
     - "identity: texture, clarity, dehaze, sharpen amount and both noise reductions 0"
   tests:
     rust: ["image-conformance/tests/it/filters_develop.rs"]
-    - "ENVELOPE warp: a bicubic Bezier patch (4x4 control mesh, cubic Bernstein basis) inverted per output texel — seed at the nearest 9x9 grid node, ten Newton steps on the 2x2 Jacobian, transparent where the residual exceeds half a pixel. Inverse mapping and bilinear reconstruction after Heckbert, Fundamentals of Texture Mapping and Image Warping (UC Berkeley, 1989); Newton inversion of a parametric patch is textbook numerical analysis; no reference reading"
-    - "the mesh comes from paged-warp's envelope module (one definition with the vector lane: draw's envelopes map points forward through the same patch); Photoshop's fifteen Warp Text styles are that module's closed forms, recorded against Photoshop by scripts/photoshop/probes/warp-text.jsx"
-    - "(u, v) is clamped to [-0.25, 1.25], not [0, 1], so a texel just outside an edge still converges and reads the transparent outside of the source: the warped edge is antialiased instead of cut, and the result is continuous across it (no branch flips between the two lanes there)"
-  tests:
-    rust: ["image-conformance/tests/it/family_warp.rs"]

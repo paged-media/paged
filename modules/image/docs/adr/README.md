@@ -46,6 +46,7 @@ stood, for decisions made earlier; their status says so.
 | [480](480-tiles-past-the-device-and-the-cpu-fold.md) | The fold tile by tile past the device's limits, and on the CPU without one | Accepted 2026-10-29 (WP5.13; amends 450, 454 and 465) |
 | [481](481-n-channel-planes-and-the-ink-fold.md) | N-channel planes, the ink fold, and a converted document saved in its mode | Accepted 2026-10-29 (WP5.13; amends 455, 478 and 479; PixelFormat amendment 1) |
 | [482](482-smart-objects-in-full.md) | A smart object is a source, a placement and its filters; the layer is their render | Accepted 2026-10-29 (WP5.14; amends 467 and 478) |
+| [483](483-transform-and-warp-on-pixels.md) | Warps on pixels are backward maps from `paged-warp`, sampled by three kernels | Accepted 2026-10-30 (WP5.6; amends 467) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
