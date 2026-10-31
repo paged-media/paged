@@ -21,6 +21,7 @@ import type {
 import { contributeTool } from "@paged-media/plugin-sdk";
 import { defineMessages, t } from "@paged-media/strings";
 
+import { withCanvasCapture } from "./canvas-capture";
 import type { ImageSession } from "./session";
 import type { RulerUnit } from "./workspace";
 import {
@@ -142,15 +143,26 @@ export function trackCursor(
   };
 }
 
-/** `contributeTool` with the cursor readout wired in. */
+/** `contributeTool` with the cursor readout wired in, and the press
+ *  offered to a dialog that draws on the canvas first (the Blur Gallery's
+ *  pins, the warps' meshes, pins and strokes — `canvas-capture.ts`): the
+ *  image tools registered here were not wrapped before, so with one of
+ *  them in hand a drag on a dialog's geometry painted instead. */
 export function contributeImageTool(
   host: BundleHost,
   session: ImageSession,
   c: ToolContribution,
 ): Disposable {
+  const gesture = c.gesture;
   return contributeTool(host, {
     ...c,
-    ...(c.gesture ? { gesture: trackCursor(session, c.gesture) } : {}),
+    ...(gesture
+      ? {
+          gesture: trackCursor(session, () =>
+            withCanvasCapture(host, session, gesture()),
+          ),
+        }
+      : {}),
   });
 }
 

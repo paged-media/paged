@@ -476,6 +476,44 @@ fn an_unreadable_file_is_an_error_not_a_panic() {
     assert!(plan.mutation.is_none());
 }
 
+/// Over the size and complexity limits (`paged_svg::limits`) an import
+/// is refused with its reason, and the model goes on working: the next,
+/// ordinary import plans and applies.
+#[test]
+#[allow(non_snake_case)]
+fn an_oversize_or_pathological_file_is_refused_and_the_model_goes_on() {
+    let (mut m, page) = blank();
+    let oversize = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><!--{}--></svg>"#,
+        " ".repeat(paged_svg::limits::MAX_SVG_BYTES)
+    );
+    let deep = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">{}{}</svg>"#,
+        "<g>".repeat(50_000),
+        "</g>".repeat(50_000)
+    );
+    let mut many =
+        String::from(r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">"#);
+    for _ in 0..=paged_svg::limits::MAX_SVG_NODES {
+        many.push_str(r#"<path d="M0 0h1v1z"/>"#);
+    }
+    many.push_str("</svg>");
+    for (svg, why) in [
+        (&oversize, "too large"),
+        (&deep, "nest"),
+        (&many, "XML nodes"),
+    ] {
+        let plan = m.svg_import_plan(&page, svg.as_bytes(), &at_origin());
+        assert!(plan.mutation.is_none());
+        let e = plan.error.expect("an error");
+        assert!(e.contains(why), "{e}");
+    }
+    let before = counts(&m);
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><path d="M0 0h10v10z" fill="#123456"/></svg>"##;
+    import(&mut m, &page, svg, &at_origin());
+    assert_ne!(counts(&m), before, "the ordinary import lands");
+}
+
 // ------------------------------------------------------------- export
 
 #[test]

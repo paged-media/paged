@@ -88,6 +88,14 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   the final vote on the GPU (`geom.patch_vote`) or its CPU twin;
   presets from an `.abr` brush library. The type tool paints a shaped run of text into the
   active layer with font bytes the host serves for the document's fonts.
+- **Transform and warp** ([ADR 483](adr/483-transform-and-warp-on-pixels.md)). Free Transform
+  of a layer or a selection, with Edit ▸ Transform ▸ Free distort and Perspective opening the box
+  in that mode; Warp… (the fifteen styles or a custom mesh dragged on the canvas,
+  `geom.warp_mesh`); Puppet Warp… (pins on an as-rigid-as-possible mesh, Rigid / Normal /
+  Distort); Filter ▸ Liquify… (Forward Warp, Reconstruct, Smooth, Twirl both ways, Pucker, Bloat,
+  Push Left, the freeze mask; `geom.warp_field`); Content-aware scale… (seam carving, Amount,
+  the selection as protection); the Perspective Crop tool over every layer. Each is one undo step
+  with a live preview.
 - **Layers.** Add, duplicate, remove, reorder; visibility, lock, opacity and 26 blend modes;
   a mask from the selection, Add layer mask (reveal all or hide all) and painting on a mask
   (a Pixels/Mask edit target: the brush and pencil paint the foreground's grey, the eraser
@@ -437,6 +445,10 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
 - A runner for the GEGL oracle the registry names for some rows.
 - Drawing the PSD adjustment kinds the import declines (above) as Photoshop does, and writing Color
   Lookup layers, text (`TySh`, WP5.10), vector masks and shapes (WP5.11).
+- Transform and warp (ADR 483): the Warp styles are paged-warp's closed forms, not Photoshop's
+  (recorded, large distances on a square); Perspective Warp, Lens Correction, Adaptive Wide Angle,
+  Vanishing Point and Liquify's face-aware tools are not offered; Puppet Warp has no pin depth or
+  rotation; Content-Aware Scale has no Protect Skin Tones or interactive box.
 - Smart objects (ADR 482): a warp (`customEnvelopeWarp`) is read and kept, not drawn; smart
   filters blend in Normal mode only and run at 8 bits; the filter mask is set from the selection,
   inverted, cleared or switched, not painted; a linked file is read again only through a picker;

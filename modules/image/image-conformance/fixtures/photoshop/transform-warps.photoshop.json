@@ -1,0 +1,195 @@
+{
+  "fixture": "transform-warps",
+  "produced_by": {
+    "app": "Adobe Photoshop",
+    "version": "27.10.0",
+    "build": "27.10.0 (20260824.r.26 9d9635d)",
+    "locale": "de_DE",
+    "color_settings": "Europe General Purpose 3",
+    "script": "scripts/photoshop/probes/transform-warps.jsx",
+    "script_sha256": "a84fce051e43ce82f77a6b133174ab6a21ae55a352df75f468a3081e1f5aa65c",
+    "runner": "scripts/photoshop/run-probe.sh",
+    "recorded_at": "2026-10-30T07:08:42.426Z",
+    "host_os": "macOS 26.4"
+  },
+  "stimulus_size": 128,
+  "cases": [
+    {
+      "id": "identity",
+      "params": {},
+      "output": "transform-warps/identity.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-arc-50",
+      "params": {
+        "style": "arc",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-arc-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-arcLower-50",
+      "params": {
+        "style": "arcLower",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-arcLower-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-arcUpper-50",
+      "params": {
+        "style": "arcUpper",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-arcUpper-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-arch-50",
+      "params": {
+        "style": "arch",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-arch-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-bulge-50",
+      "params": {
+        "style": "bulge",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-bulge-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-shellLower-50",
+      "params": {
+        "style": "shellLower",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-shellLower-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-shellUpper-50",
+      "params": {
+        "style": "shellUpper",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-shellUpper-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-flag-50",
+      "params": {
+        "style": "flag",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-flag-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-wave-50",
+      "params": {
+        "style": "wave",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-wave-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-fish-50",
+      "params": {
+        "style": "fish",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-fish-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-rise-50",
+      "params": {
+        "style": "rise",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-rise-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-fishEye-50",
+      "params": {
+        "style": "fishEye",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-fishEye-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-inflate-50",
+      "params": {
+        "style": "inflate",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-inflate-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-squeeze-50",
+      "params": {
+        "style": "squeeze",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-squeeze-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "warp-twist-50",
+      "params": {
+        "style": "twist",
+        "bend": 50
+      },
+      "output": "transform-warps/warp-twist-50.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "content-aware-scale-w75",
+      "params": {
+        "width_percent": 75,
+        "content_aware": true
+      },
+      "output": "transform-warps/content-aware-scale-w75.png",
+      "profile": "none",
+      "bits": 16
+    },
+    {
+      "id": "plain-scale-w75",
+      "params": {
+        "width_percent": 75,
+        "content_aware": false
+      },
+      "output": "transform-warps/plain-scale-w75.png",
+      "profile": "none",
+      "bits": 16
+    }
+  ]
+}
