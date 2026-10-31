@@ -780,7 +780,7 @@ fn has_curves(data: &PathData) -> bool {
 
 /// The largest factor `m` stretches a length by (its largest singular
 /// value).
-fn max_stretch(m: Affine) -> f64 {
+pub(crate) fn max_stretch(m: Affine) -> f64 {
     let [a, b, c, d, _, _] = m.as_coeffs();
     let s = a * a + b * b + c * c + d * d;
     let det = a * d - b * c;
@@ -824,6 +824,32 @@ pub(crate) fn glyph_fills(list: &DisplayList) -> std::collections::HashSet<usize
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// A display-list transform as a kurbo affine.
+pub(crate) fn affine_of(t: &Transform) -> Affine {
+    let [a, b, c, d, e, f] = t.0;
+    Affine::new([a as f64, b as f64, c as f64, d as f64, e as f64, f as f64])
+}
+
+/// Engine ADR 1048 — the raster a `MeshShade` of `mesh_id` under
+/// `transform` draws at `page_to_px` (both lanes take it from the one
+/// cache in `paged_compose::mesh`, rasterised at the display scale), and
+/// the affine that takes its pixel grid to device pixels.
+pub(crate) fn mesh_image(
+    list: &DisplayList,
+    mesh_id: paged_compose::MeshId,
+    transform: &Transform,
+    page_to_px: Affine,
+) -> Option<(std::sync::Arc<paged_compose::MeshRaster>, Affine)> {
+    let mesh = list.mesh(mesh_id)?;
+    let local_to_px = page_to_px * affine_of(transform);
+    let scale = max_stretch(local_to_px) as f32;
+    let raster = paged_compose::mesh_raster(mesh, scale)?;
+    if raster.width == 0 || raster.height == 0 {
+        return None;
+    }
+    Some((raster.clone(), local_to_px * affine_of(&raster.to_local)))
 }
 
 #[cfg(test)]

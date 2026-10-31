@@ -478,6 +478,20 @@ pub(super) fn find_image_adjustments_mut<'a>(
     }
 }
 
+/// Engine ADR 1048 — locate the `fill_mesh` field on a fillable frame.
+pub(super) fn find_fill_mesh_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Option<Box<paged_model::MeshFill>>> {
+    match node {
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.fill_mesh),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.fill_mesh),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.fill_mesh),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.fill_mesh),
+        _ => None,
+    }
+}
+
 /// Engine ADR 1007 — locate the `gradient_stroke_mode` field on any
 /// stroked page-item kind.
 pub(super) fn find_gradient_stroke_mode_mut<'a>(

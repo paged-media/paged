@@ -47,6 +47,7 @@ describe("the built-in tools, mounted from the registry", () => {
         "paged.tool.gradientFeather",
         "paged.tool.gradientSwatch",
         "paged.tool.line",
+        "paged.tool.mesh",
         "paged.tool.page",
         "paged.tool.pen",
         "paged.tool.pencil",

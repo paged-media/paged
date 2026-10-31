@@ -661,6 +661,64 @@ impl<'a> Writer<'a> {
         self.push(at, el);
     }
 
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient. SVG has no
+    /// mesh paint (SVG 2's `meshgradient` was dropped), so the shading is
+    /// written as a picture of it, rasterised by the engine's one mesh
+    /// rasteriser at twice its page scale, and reported as approximated.
+    fn mesh(&mut self, at: usize, mesh_id: paged_compose::MeshId, t: &Transform) {
+        let Some(mesh) = self.input.list.mesh(mesh_id) else {
+            return;
+        };
+        let [a, b, c, d, _, _] = t.0;
+        let scale = a.hypot(b).max(c.hypot(d)).max(1e-3);
+        let Some(raster) = paged_compose::mesh_raster(mesh, 2.0 * scale) else {
+            return;
+        };
+        if raster.width == 0 || raster.height == 0 {
+            return;
+        }
+        let Some(buf) =
+            image::RgbaImage::from_raw(raster.width, raster.height, raster.rgba.to_vec())
+        else {
+            return;
+        };
+        let mut out = std::io::Cursor::new(Vec::new());
+        if buf.write_to(&mut out, image::ImageFormat::Png).is_err() {
+            return;
+        }
+        self.report.approximated(
+            "mesh.rasterized",
+            "a gradient mesh or freeform gradient is written as a picture of it",
+        );
+        // The unit square → the raster's pixels → the shading's local
+        // space → the page.
+        let m = t.compose(&raster.to_local).compose(&Transform([
+            raster.width as f32,
+            0.0,
+            0.0,
+            raster.height as f32,
+            0.0,
+            0.0,
+        ]));
+        for (x, y) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+            let (x, y) = apply(&m, x, y);
+            self.grow(x, y, 0.0);
+        }
+        use base64::Engine as _;
+        let [a, b, c, d, e, f] = m.0;
+        let el = format!(
+            "<image width=\"1\" height=\"1\" preserveAspectRatio=\"none\" transform=\"matrix({} {} {} {} {} {})\" href=\"data:image/png;base64,{}\"/>",
+            self.num_m(a),
+            self.num_m(b),
+            self.num_m(c),
+            self.num_m(d),
+            self.num(e),
+            self.num(f),
+            base64::engine::general_purpose::STANDARD.encode(out.into_inner())
+        );
+        self.push(at, el);
+    }
+
     /// A matrix's linear part needs more places than a coordinate.
     fn num_m(&self, v: f32) -> String {
         let mut s = format!("{:.6}", v);
@@ -881,6 +939,9 @@ impl<'a> Writer<'a> {
                     image_id,
                     transform,
                 } => self.image(i, *image_id, transform),
+                DisplayCommand::MeshShade {
+                    mesh_id, transform, ..
+                } => self.mesh(i, *mesh_id, transform),
                 DisplayCommand::PushClip { path_id, transform } => {
                     let cid = self.id("c");
                     let mut b = clip_box(self.input.list, *path_id, transform);

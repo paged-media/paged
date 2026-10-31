@@ -929,6 +929,14 @@ colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`
 protocol 76 like the fill rule; the SVG importer asks it before
 lowering an SVG gradient with `stop-opacity` natively.
 
+`"document.meshFill@1"` (engine ADR 1048) is another property flag: the
+vendored wire carries `frameFillMesh`, a frame's gradient mesh (grids of
+Coons or tensor patches, colour and opacity per mesh point) or freeform
+gradient (coloured points with a spread, and lines through them), points
+in the frame's inner coordinates, whole-value with an exact inverse.
+Additive at protocol 76 like the paint v2 flag; an older engine refuses
+the path. IDML carries it only in a label, which a paged import restores.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

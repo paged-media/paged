@@ -835,6 +835,9 @@ property_paths! {
         FrameShapeStarInset => "frameShapeStarInset" : pct().range(0.0, 99.0).default_num(0.0),
         FrameShapePieStart => "frameShapePieStart" : deg().default_num(0.0),
         FrameShapePieEnd => "frameShapePieEnd" : deg().default_num(360.0),
+        // Engine ADR 1048 — the native mesh fill (no IDML attribute: a
+        // label carries it through an IDML round trip).
+        FrameFillMesh => "frameFillMesh" : structure("MeshFillSpec", Wire::FillMesh),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -1548,7 +1551,10 @@ mod tests {
         //
         // 273 -> 274: ADR 1007 — a frame's stroke gradient mode (its
         // gradient's start point is ADR 1031's path).
-        assert_eq!(cat.settable_paths.len(), 274, "settable path count drifted");
+        //
+        // 274 -> 275: ADR 1048 — a frame's gradient mesh or freeform
+        // gradient.
+        assert_eq!(cat.settable_paths.len(), 275, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings
