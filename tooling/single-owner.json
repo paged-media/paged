@@ -79,8 +79,6 @@
         "apps/editor/apps/canvas/src/panels/info-readouts.ts",
         "apps/editor/packages/ui/src/color/color-space.ts",
         "engine/core/crates/paged-gpu/src/svg_filter.rs",
-        "engine/core/crates/paged-renderer/src/pipeline/placed_pdf.rs",
-        "engine/core/crates/paged-renderer/src/pipeline/placed_svg.rs",
         "modules/draw/packages/draw-geometry/src/color-harmony.ts",
         "modules/image/image-conformance/tests/it/filters_develop.rs",
         "modules/image/image-kernels/src/families/adjust_ext.rs",

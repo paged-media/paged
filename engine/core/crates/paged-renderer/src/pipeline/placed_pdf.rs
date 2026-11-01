@@ -36,6 +36,7 @@ use hayro_interpret::{
     Paint as PdfPaint, SoftMask,
 };
 use kurbo13::{Affine, BezPath, PathEl};
+use paged_color::math::srgb_to_linear as linear;
 use paged_compose::{
     BlendMode, Color, DisplayCommand, DisplayList, FillRule, LineCap, LineJoin, Paint, PathData,
     PathSegment, Rect as ListRect, Stroke, Transform,
@@ -295,15 +296,6 @@ fn paint(p: &PdfPaint<'_>) -> Paint {
         // A pattern (a shading or a tile) is not modelled yet: its
         // average-free stand-in is mid grey, which the fixture will show.
         PdfPaint::Pattern(_) => Paint::Solid(Color::rgba(0.5, 0.5, 0.5, 1.0)),
-    }
-}
-
-/// sRGB-encoded `c` (0..1) in linear light.
-fn linear(c: f32) -> f32 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
     }
 }
 

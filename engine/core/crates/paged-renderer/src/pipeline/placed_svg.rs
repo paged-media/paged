@@ -604,12 +604,7 @@ fn path_data(path: &usvg::tiny_skia_path::Path, t: &Transform) -> PathData {
 
 /// sRGB-encoded `c` (0..255) in linear light, as the list composites.
 fn linear(c: u8) -> f32 {
-    let c = c as f32 / 255.0;
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
+    paged_color::math::srgb_to_linear(c as f32 / 255.0)
 }
 
 fn color(c: usvg::Color, alpha: f32) -> Color {
