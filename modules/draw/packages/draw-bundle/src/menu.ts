@@ -149,6 +149,15 @@ defineMessages("menu", {
   "One-point perspective": "One-point perspective",
   "Two-point perspective": "Two-point perspective",
   "Three-point perspective": "Three-point perspective",
+  "Envelope distort": "Envelope distort",
+  "Import library": "Import library",
+  "Export library": "Export library",
+  "Make with warp": "Make with warp",
+  "Make with mesh": "Make with mesh",
+  "Make with top object": "Make with top object",
+  "Edit contents": "Edit contents",
+  "Envelope mesh tool": "Envelope mesh tool",
+  "Expand appearance": "Expand appearance",
 });
 
 const C = "media.paged.draw.command";
@@ -246,6 +255,10 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Graphic style/Apply", "applyGraphicStyle", "gs"],
   ["Draw/Graphic style/Redefine", "redefineGraphicStyle", "gs"],
   ["Draw/Graphic style/Break link", "breakGraphicStyleLink", "gs"],
+  //    Draw ADR 367 — the library as a file: import and export (no "…":
+  //    they raise no panel; the host's file dialog asks the one question).
+  ["Draw/Graphic style/Import library", "importGraphicStyles", "gs-library"],
+  ["Draw/Graphic style/Export library", "exportGraphicStyles", "gs-library"],
 
   // ── Symbols ──
   ["Draw/Symbol/Define from selection", "defineSymbol", "sym"],
@@ -321,6 +334,36 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    the Free Transform group, and lists no menu row — this one is for
   //    finding it), and Illustrator's Object ▸ Perspective pair. ──
   ["Object/Puppet warp", "puppetWarpTool", "plugin-distort"],
+
+  // ── WP6.3 (draw ADR 367) — Illustrator's Object ▸ Envelope Distort, and
+  //    Object ▸ Expand Appearance, both over the engine's effect stack. ──
+  [
+    "Object/Envelope distort/Make with warp",
+    "envelopeMakeWithWarp",
+    "envelope-make",
+  ],
+  [
+    "Object/Envelope distort/Make with mesh",
+    "envelopeMakeWithMesh",
+    "envelope-make",
+  ],
+  [
+    "Object/Envelope distort/Make with top object",
+    "envelopeMakeWithTopObject",
+    "envelope-make",
+  ],
+  [
+    "Object/Envelope distort/Edit contents",
+    "envelopeEditContents",
+    "envelope-edit",
+  ],
+  [
+    "Object/Envelope distort/Envelope mesh tool",
+    "envelopeMeshTool",
+    "envelope-edit",
+  ],
+  ["Object/Envelope distort/Expand", "envelopeExpand", "envelope-expand"],
+  ["Object/Expand appearance", "expandAppearance", "plugin-expand"],
   [
     "Object/Perspective/Attach to active plane",
     "attachToPerspective",

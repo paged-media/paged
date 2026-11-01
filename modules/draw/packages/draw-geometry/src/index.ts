@@ -319,3 +319,6 @@ export * from "./warp";
 // WP6.8 — the Symbolism tools' kernels (draw ADR 365) and 9-slice scaling.
 export * from "./symbolism";
 export * from "./nine-slice";
+// Draw ADR 367 — Envelope Distort: the engine's envelope mesh map, the
+// net edits of the Envelope Mesh tool, and Make with Top Object's patch.
+export * from "./envelope";

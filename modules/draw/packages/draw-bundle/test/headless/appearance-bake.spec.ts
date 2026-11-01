@@ -91,7 +91,7 @@ import {
   type BakeLayer,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "./host";
+import { openHost, withoutNativeAppearance } from "./host";
 import { runThrough, type LaneName } from "./one-batch";
 
 const RECT = {
@@ -258,6 +258,7 @@ async function reopenViaIdml(h: HeadlessHost): Promise<HeadlessHost> {
   const reopened = await openHost();
   await reopened.load(bytes);
   reopened.loadBundle(drawBundle);
+  withoutNativeAppearance(reopened);
   return reopened;
 }
 
@@ -534,6 +535,8 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       h = await openHost();
       await h.load(F1_MULTI_SHAPE.bytes());
       h.loadBundle(drawBundle);
+      // The metadata lane (draw ADR 354); the native one is draw ADR 367.
+      withoutNativeAppearance(h);
     });
     afterAll(() => h?.dispose());
 

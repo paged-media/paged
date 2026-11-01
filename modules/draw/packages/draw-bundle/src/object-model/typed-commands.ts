@@ -72,6 +72,7 @@ import {
 import type { TraceOptions } from "../trace-engine";
 import { TRACE_PRESET_IDS } from "../commands/trace-presets";
 import { RECOLOR_MODES } from "../commands/recolor";
+import { WARP_STYLES } from "../commands/envelope";
 import { HARMONY_RULES, LIQUIFY_KINDS } from "@paged-media/draw-geometry";
 import {
   BOOL,
@@ -335,6 +336,16 @@ export const TWINS: readonly TwinSpec[] = [
         ]),
     },
   ),
+  // Draw ADR 367 — the library's import / export / merge.
+  twin("importGraphicStyles", { json: TEXT }),
+  twin("exportGraphicStyles", {
+    styles: { kind: "list", of: TEXT },
+    save: BOOL,
+  }),
+  twin("mergeGraphicStyles", {
+    styles: { kind: "list", of: TEXT },
+    name: TEXT,
+  }),
   // Symbols.
   twin("defineSymbol", {
     ...T,
@@ -607,6 +618,22 @@ export const TWINS: readonly TwinSpec[] = [
     autoPins: INT,
   }),
   twin("puppetWarpTool", {}),
+  // WP6.3 (draw ADR 367) — Envelope Distort and Expand Appearance on the
+  // selection. Make with Warp takes Illustrator's Warp Options in full.
+  twin("envelopeMakeWithWarp", {
+    ...T,
+    style: enumOf(WARP_STYLES),
+    horizontal: BOOL,
+    bendPct: NUM,
+    distortHPct: NUM,
+    distortVPct: NUM,
+  }),
+  twin("envelopeMakeWithMesh", { ...T, rows: INT, columns: INT }),
+  twin("envelopeMakeWithTopObject", { ...T }),
+  twin("envelopeEditContents", { ...T }),
+  twin("envelopeExpand", { ...T }),
+  twin("expandAppearance", { ...T }),
+  twin("envelopeMeshTool", {}),
   // The perspective grid (per page; "" = the selection's page, else the
   // page in view) and artwork on its planes.
   twin("perspectiveShowGrid", { page: TEXT }),

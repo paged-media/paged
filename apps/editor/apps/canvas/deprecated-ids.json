@@ -1,4 +1,11 @@
 {
   "$comment": "Feature ids that left feature-ids.json, each with its replacement (null: none) and its window: the release that deprecated it and the first release without the alias (docs/adr/PM-0013-editor-package.md, amendment 2). An editor reads an old id in a host's profile or feature set as its replacement and reports it once. Edited by hand; apps/editor/scripts/feature-ids.mjs checks it and mirrors it into feature-ids.json.",
-  "deprecated": []
+  "deprecated": [
+    {
+      "id": "panel:media.paged.draw.panel.appearance",
+      "replacement": "panel:paged.appearance",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    }
+  ]
 }
