@@ -177,13 +177,21 @@ paged-scene = { path = "crates/paged-scene" }
 # boolean ends in that call, and `panic = abort` in the wasm worker means we
 # cannot catch it. Upstream PR: Logicalshift/flo_curves#33.
 #
+# The pin also carries a second fix of the same class: `ray_collisions()` (the
+# ray casts of `path_remove_interior_points`, so every path offset) ordered its
+# collisions with a tolerance-based, non-transitive comparison. Its collisions
+# are now sorted by position with `total_cmp` and only runs of coincident
+# collisions are settled with an insertion sort. The point snap does not help
+# there (the collisions are computed, not input). Fork branch
+# fix/ray-collisions-total-order, regression test in paged-vector-fx.
+#
 # Pinned to a REV, not a branch, so a force-push cannot change what we build.
 # REMOVE THIS BLOCK when the fix reaches a crates.io release: drop it, raise
 # the `flo_curves` version pin, and re-lock. `paged-mutate`'s BOOLEAN_GRID
 # snap stays either way — it is defence in depth, and it is what protects a
 # build that does not carry this patch.
 [patch.crates-io]
-flo_curves = { git = "https://github.com/drietsch/flo_curves", rev = "6196f18" }
+flo_curves = { git = "https://github.com/drietsch/flo_curves", rev = "b351df8" }
 # vello_shaders 0.11.0 with one change to `shader/fine.wgsl`: an image is
 # sampled in image space and its atlas offset is added to the integer texel
 # index, so where Vello's persistent image atlas happens to place a picture
