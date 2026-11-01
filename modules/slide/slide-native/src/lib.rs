@@ -2478,6 +2478,7 @@ fn engine_theme(
                         format: THEME_SOURCE_OOXML.into(),
                         data: x.to_string(),
                     }),
+                edited: false,
             });
         }
     }
