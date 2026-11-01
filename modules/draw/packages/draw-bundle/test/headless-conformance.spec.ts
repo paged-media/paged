@@ -42,7 +42,7 @@
 // subject left this bundle with ADR 023 phase D — the Layers PANEL is
 // retired and paged.draw now resolves the HOST panel's values through
 // a binding provider instead. So the contribution log holds eighteen tools + two
-// schema panels + thirty-four commands (4 dash + 2 group + 2
+// schema panels + thirty commands (2 group + 2
 // gradient-fill + 3 path-ops + 2 join/average + the Phase 9
 // Tier B 3 select-same + the wave-2
 // 4 insert-shape + blend + select-parent-group) + the edit context.
@@ -243,8 +243,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "panel",
         "panel",
         "panel",
-        // B-12 — the stroke dash-preset commands (Solid / Dashed /
-        // Dotted / Dash-dot).
+        // (The stroke dash-preset commands are the host's.)
         // WP6.1 part 2 — six gesture/insert commands and two "…" raisers
         // (registered among the rest; the kinds are what is counted);
         // Object ▸ Rasterize and its "…" raiser (extensions ADR 338);
@@ -253,7 +252,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Symbol Options (draw ADR 365); WP6.3 — the seven Envelope
         // distort / Expand appearance commands and the graphic-style
         // library's import / export / merge (draw ADR 367).
-        ...Array<string>(41).fill("command"),
+        ...Array<string>(37).fill("command"),
         "command",
         "command",
         "command",

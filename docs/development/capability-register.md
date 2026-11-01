@@ -171,9 +171,14 @@ Status (draw items, one line each; updated as they land):
 - Star and Flare: KEEP. The host's polygon tool draws a live star by drag, but there is no host
   command or dialog for a parametrised star (radius 1, radius 2, points, rotation) and nothing
   like Flare; draw's `Insert star…` / `Insert flare` and their Path Options sections stay.
-- Fill / stroke / dash panels: the schema panels are already gone from draw (the bundle log
-  says their rows moved to the host panels). What remains are the dash preset commands and the
-  Path Options dash section, which the host stroke panel does not duplicate: KEEP.
+- Fill / stroke / dash: the schema panels were already gone from draw. The four dash PRESET
+  commands are MERGED 2026-11-01: the host declares `paged.stroke.dash*` (Solid, Dashed, Dotted,
+  Dash-dot; palette only, as draw's had no menu rows; `stroke-dash-commands.ts`), writing the
+  shared op in `platform/shared/helpers` (`dashArrayOp`, `DASH_PRESET_LENGTHS`) that draw's dash
+  editor also builds through. Draw's four commands are gone (ids left through the deprecation
+  window). KEPT: draw's dash EDITOR (`Draw > Stroke > Dashes…` and the Path Options section with up
+  to three dash/gap pairs). The host Stroke panel has a "Dashes & arrows" field on the same
+  property; whether it replaces the editor is not proven, so it stays.
 - SVG import registration: KEEP. The host has File > Import / Export SVG commands
   (`svg-commands.ts`); draw's `importer.svg/dxf/ai/eps` and `exporter.svg/dxf` are registry
   doors (Place, drop, scripts, data bindings), a different entry. Whether the host's drop path

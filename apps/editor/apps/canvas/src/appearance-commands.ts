@@ -96,7 +96,7 @@ export interface AppearanceDeps {
 }
 
 const entryValue = (
-  props: { entries: readonly { path: string; value: unknown }[] } | null,
+  props: { entries: readonly { path: string; value?: unknown }[] } | null,
   path: string,
 ): unknown => {
   const v = props?.entries.find((e) => e.path === path)?.value;
@@ -156,7 +156,7 @@ export async function editAppearance(
         path: "frameAppearance",
         value: appearanceValue(next([...layers], seed)),
       },
-    } as Mutation);
+    } as unknown as Mutation);
   }
   if (ops.length === 0) return null;
   const reply = await deps.client.mutate({ op: "batch", args: { ops } });

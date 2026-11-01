@@ -676,3 +676,41 @@ describe("Appearance", () => {
     await expectOneUndoStep(e, cleared.before);
   });
 });
+
+describe("Stroke dashes", () => {
+  const dash = (dump: ModelDump, key: string): number[] | undefined => {
+    const el = dump.elements[key] as {
+      entries: Array<{ path: string; value: { value: unknown } }>;
+    };
+    return el.entries.find((e) => e.path === "frameStrokeDashArray")?.value
+      .value as number[] | undefined;
+  };
+
+  test("each preset writes its run to the selection in one undo step", async () => {
+    covers(
+      "command:paged.stroke.dashSolid",
+      "command:paged.stroke.dashDashed",
+      "command:paged.stroke.dashDotted",
+      "command:paged.stroke.dashDashDot",
+    );
+    const e = await open();
+    for (const [verb, lengths] of [
+      ["dashDashed", [6, 3]],
+      ["dashDotted", [1, 3]],
+      ["dashDashDot", [6, 3, 1, 3]],
+    ] as const) {
+      await e.select([T.frame.id, T.path.id]);
+      const out = await run(e, `paged.stroke.${verb}`);
+      expect(e.problems(), verb).toEqual([]);
+      expect(dash(out.after, FRAME), verb).toEqual([...lengths]);
+      expect(dash(out.after, PATH), verb).toEqual([...lengths]);
+      await expectOneUndoStep(e, out.before);
+    }
+    await e.select([T.frame.id]);
+    await e.invoke("paged.stroke.dashDashed");
+    await e.idle();
+    const solid = await run(e, "paged.stroke.dashSolid");
+    expect(dash(solid.after, FRAME) ?? []).toEqual([]);
+    await expectOneUndoStep(e, solid.before);
+  });
+});

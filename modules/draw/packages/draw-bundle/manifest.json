@@ -95,10 +95,6 @@
       "media.paged.draw.panel.properties"
     ],
     "commands": [
-      "media.paged.draw.command.strokeDashSolid",
-      "media.paged.draw.command.strokeDashDashed",
-      "media.paged.draw.command.strokeDashDotted",
-      "media.paged.draw.command.strokeDashDashDot",
       "media.paged.draw.command.fillGradientLinear",
       "media.paged.draw.command.fillGradientRadial",
       "media.paged.draw.command.outlineStroke",
@@ -1575,70 +1571,6 @@
         }
       ],
       "commands": [
-        {
-          "id": "media.paged.draw.command.strokeDashSolid",
-          "title": "Stroke dash solid",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.strokeDashDashed",
-          "title": "Stroke dash dashed",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.strokeDashDotted",
-          "title": "Stroke dash dotted",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.strokeDashDashDot",
-          "title": "Stroke dash dash dot",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
         {
           "id": "media.paged.draw.command.fillGradientLinear",
           "title": "Fill gradient linear",

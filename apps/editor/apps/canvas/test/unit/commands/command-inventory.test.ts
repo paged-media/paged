@@ -49,6 +49,7 @@ import { buildTransformEachDialogCommands } from "../../../src/panels/transform-
 import { buildCoreCommandEntries } from "../../../src/core-command-entries";
 import { buildInsertCommands } from "../../../src/insert-commands";
 import { buildObjectCommands } from "../../../src/object-commands";
+import { buildStrokeDashCommands } from "../../../src/stroke-dash-commands";
 import { buildAppearanceCommands } from "../../../src/appearance-commands";
 import { buildCornerCommands } from "../../../src/corner-commands";
 import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
@@ -173,6 +174,7 @@ function tableIds(): string[] {
     ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildCornerCommands(noop as never, noop, noop),
     ...buildAppearanceCommands(noop as never, noop, noop),
+    ...buildStrokeDashCommands(noop as never, noop, noop),
     ...buildInsertCommands(noop),
     ...buildCoreCommandEntries(),
     ...buildTransformCommands(noop),
@@ -263,6 +265,7 @@ describe("the host command inventory", () => {
       "pathfinderCommands",
       "cornerCommands",
       "appearanceCommands",
+      "strokeDashCommands",
       "insertCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",
