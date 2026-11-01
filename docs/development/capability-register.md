@@ -40,9 +40,11 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
   orphaning; the host Comments panel and canvas pins; slide comments on engine threads; PDF
   comment annotations (`paged export --comments`). Oracles: PowerPoint opens the exported slide comments and
   re-saves them with every comment, reply and the resolved state intact; Word's review round trip is recorded in
-  `modules/doc/docx-conformance/fixtures/review.word.json`. Open: Excel threaded comments (editable) and
-  sheet notes sync, Word people, mentions and `commentsExtensible`, IDML notes, PDF annotation
-  import, the `comments@1` door, a sheet cell resolver.
+  `modules/doc/docx-conformance/fixtures/review.word.json`. Excel threaded comments are read and written in
+  `sheet-xlsx` (sheet ADR 528) and projected into the engine threads as cell anchors; Excel opens and keeps what
+  the panel's reply, edit and resolve produce. Open: starting a thread from the panel on a cell, plain notes as
+  threads, Word people, mentions and `commentsExtensible`, IDML notes, PDF annotation import, the `comments@1`
+  door.
 - **OOXML foundation:** one DrawingML theme reader (`paged-ooxml::drawingml::theme`) for sheet
   and doc; content-type and relationship writers (`render`, `patch`) in doc, slide and sheet
   exporters; HSL through `paged_ooxml::colour`; `paged_store::package::read_document` for
@@ -121,8 +123,10 @@ slide's adjust handles on `contribute.overlay`; doc's word count.
 - **doc:** shapes (`dml-geom`), picture crop (`srcRect`), recolour, charts, SmartArt, drop caps,
   OpenType features, embedded fonts, equations.
 - **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.
-- **slide:** hyphenation (forced off), bullet font/colour/size, fields beyond `slidenum`,
-  autofit, date/time fields.
+- **slide:** autofit (stored `fontScale` is applied as fixed values). Done and checked against PowerPoint:
+  date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
+  font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
+  right: PowerPoint does not hyphenate.
 - **all:** path tools in every context (`CONTEXT_SHARED_TOOL_IDS` is Free Transform only);
   image filters as `actions@1` steps on any picture; barcode insert; ML service and door.
 
