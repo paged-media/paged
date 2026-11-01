@@ -181,7 +181,7 @@ jobs:
         if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' }}
         run: python3 ../../tooling/rust/skip-report.py --lane "image rust engine (no GPU)" --cargo-log "$RUNNER_TEMP/cargo-test.log"
 
-      # --- Isolation-contract dependency guards (spec §2.1 / §4) ---------
+      # --- Layering guards (PM-0017; formerly the isolation contract, §2.1 / §4)
       # Each guard asserts an EMPTY match: grep exits 1 on no-match, which
       # is the success condition, so we invert it and fail loudly on a hit.
 
