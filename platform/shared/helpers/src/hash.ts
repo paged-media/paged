@@ -56,6 +56,33 @@ export async function sha256HexPrefix(
   return (await sha256Hex(input)).slice(0, hexChars);
 }
 
+/**
+ * FNV-1a, 32 bit: a short, stable, NON-cryptographic fingerprint (a census key,
+ * a swatch id, a "did this change" guard). A string is read by UTF-16 code unit,
+ * bytes by value; `seed` is the offset basis (`0x811c9dc5`). Returns the
+ * unsigned 32-bit hash. Never authenticates anything: use [`sha256Hex`] for that.
+ */
+export function fnv1a32(input: string | Uint8Array, seed = 0x811c9dc5): number {
+  let h = seed;
+  if (typeof input === "string") {
+    for (let i = 0; i < input.length; i += 1) {
+      h ^= input.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+  } else {
+    for (let i = 0; i < input.length; i += 1) {
+      h ^= input[i]!;
+      h = Math.imul(h, 0x01000193);
+    }
+  }
+  return h >>> 0;
+}
+
+/** [`fnv1a32`] as eight lower-case hex digits. */
+export function fnv1a32Hex(input: string | Uint8Array): string {
+  return fnv1a32(input).toString(16).padStart(8, "0");
+}
+
 /** Lower-case hex of `bytes`, two digits per byte. */
 export function hex(bytes: Uint8Array): string {
   let out = "";

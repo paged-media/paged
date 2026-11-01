@@ -606,6 +606,7 @@
       "name": "@paged-media/sheet-host-model",
       "version": "0.1.0-canary.0",
       "dependencies": {
+        "@paged-media/helpers": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
       },
@@ -735,7 +736,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.74.3-canary.66",
+      "version": "0.74.3-canary.70",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -745,7 +746,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.74.3-canary.66",
+      "version": "0.74.3-canary.70",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },

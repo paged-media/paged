@@ -49,6 +49,7 @@
 // Geometry stays in the SceneLayer's own frame-content POINTS; the
 // orchestrator offsets by the frame's page origin.
 
+import { fnv1a32Hex } from "@paged-media/helpers";
 import type {
   MutationInput,
   PageId,
@@ -482,12 +483,7 @@ export function fontStyleName(
 
 /** FNV-1a, 8 hex digits — deterministic ids for gradient swatches. */
 function shortHash(text: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i += 1) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
+  return fnv1a32Hex(text);
 }
 
 /** An opacity percentage for a 0..1 alpha, `undefined` when opaque. */

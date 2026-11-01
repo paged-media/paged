@@ -100,8 +100,8 @@
     },
     {
       "name": "fnv-hash",
-      "description": "no owner yet: platform/shared/helpers (TS) and a Rust util crate are planned (capability register, B9)",
-      "owner": [],
+      "description": "hash with fnv1a32 / fnv1a32Hex from @paged-media/helpers (TypeScript); the Rust 64-bit variant has no shared owner yet",
+      "owner": ["platform/shared/helpers/src/hash.ts"],
       "patterns": [
         "0xcbf29ce484222325",
         "14695981039346656037",
@@ -117,13 +117,7 @@
         "engine/core/crates/paged-renderer/src/pipeline/geom.rs",
         "modules/draw/packages/draw-bundle/src/commands/graphic-styles.ts",
         "modules/draw/packages/draw-bundle/src/commands/image-trace-live.ts",
-        "modules/draw/packages/draw-bundle/src/recipe-store.ts",
-        "modules/sheet/packages/sheet-bundle/src/workbook-part.ts",
-        "modules/sheet/packages/sheet-host-model/src/binding.ts",
-        "modules/sheet/packages/sheet-host-model/src/cell-character-styles.ts",
-        "modules/sheet/packages/sheet-host-model/src/cell-paragraph-align.ts",
-        "modules/web/packages/web-bundle/src/bake-plan.ts",
-        "modules/web/packages/web-bundle/src/css-faces.ts"
+        "modules/draw/packages/draw-bundle/src/recipe-store.ts"
       ]
     },
     {

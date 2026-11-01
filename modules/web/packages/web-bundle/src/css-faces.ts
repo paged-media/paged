@@ -1,3 +1,4 @@
+import { fnv1a32Hex } from "@paged-media/helpers";
 /*
  * This file is part of paged (https://paged.media).
  *
@@ -208,12 +209,5 @@ export function sfntFamily(bytes: Uint8Array): string | null {
 
 /** FNV-1a over the bytes: the identity of a face's bytes. */
 export function bytesHash(bytes: Uint8Array): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < bytes.length; i += 1) {
-    h ^= bytes[i];
-    h = Math.imul(h, 0x01000193);
-  }
-  return (
-    (h >>> 0).toString(16).padStart(8, "0") + bytes.byteLength.toString(16)
-  );
+  return fnv1a32Hex(bytes) + bytes.byteLength.toString(16);
 }
