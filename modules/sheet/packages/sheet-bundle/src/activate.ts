@@ -206,16 +206,14 @@ export function activate(host: BundleHost): BundleHandle {
   // ADR 323 — the object properties as host-rendered PropertyFields (a
   // schema panel of property rows over host.objects).
   const propertiesPanel = sheetPropertiesPanel();
-  const propertyBindings = host.supports("contribute.schemaPanel@1")
-    ? (contributeSchemaPanel(host, {
-        id: PROPERTIES_PANEL_ID,
-        title: propertiesPanel.title,
-        icon: propertiesPanel.icon,
-        defaultDock: "right",
-        schema: propertiesPanel,
-      }),
-      publishPropertyBindings(host, session))
-    : null;
+  contributeSchemaPanel(host, {
+    id: PROPERTIES_PANEL_ID,
+    title: propertiesPanel.title,
+    icon: propertiesPanel.icon,
+    defaultDock: "right",
+    schema: propertiesPanel,
+  });
+  const propertyBindings = publishPropertyBindings(host, session);
 
   host.contribute.command({
     id: "media.paged.sheet.command.importXlsx",
@@ -627,180 +625,176 @@ export function activate(host: BundleHost): BundleHandle {
   // descent. The cell-pointer editing channel (onContentPointerDown +
   // selectCell) lands with the editor's content-pointer delivery (K-1
   // ViewportCanvas wire) — see k1-modal-session-plan.md.
-  if (host.supports("contribute.objectType@1")) {
-    host.contribute.objectType({
-      type: "sheetFrame",
-      bakedFallback: "rectangle",
-      // The first frame of a paginated chain carries a binding too (its
-      // chain record, ADR 522 amendment): it stays a text frame.
-      matches: (c) => {
-        const b = parseBinding(c.metadata);
-        return b !== null && !b.data.chain;
-      },
-      editContextType: "sheet",
+  host.contribute.objectType({
+    type: "sheetFrame",
+    bakedFallback: "rectangle",
+    // The first frame of a paginated chain carries a binding too (its
+    // chain record, ADR 522 amendment): it stays a text frame.
+    matches: (c) => {
+      const b = parseBinding(c.metadata);
+      return b !== null && !b.data.chain;
+    },
+    editContextType: "sheet",
+  });
+  host.contribute.editContext({
+    type: "sheet",
+    entry: "doubleClick",
+    // ADR 024 — NO CANVAS TOOL EDITS A SPREADSHEET, and saying so is
+    // now possible: a declared-empty list restricts to nothing, where
+    // it used to collapse into "unrestricted" and leave the whole rail
+    // lit. Inside a sheet you edit by keyboard and by panel — the
+    // grid takes pointer and key events through this context's own
+    // hooks below, not through a tool.
+    //
+    // Not a trap: the rail treats a pick outside the set as an EXIT
+    // (it commits the context, then activates), so reaching for the
+    // pointer walks you out of the sheet rather than doing nothing.
+    toolIds: [],
+    // The workbook panel is this context's own surface. Deliberately
+    // NOT the host panels its binding providers serve (Swatches,
+    // Character/Paragraph) — naming those here would put host panel
+    // ids in plugin code, which is the coupling ADR 023 removed from
+    // the value lane, and the host already infers "serves" from
+    // `provides`.
+    panelIds: [PANEL_ID],
+    onEnter: (ctx) => {
+      const id = frameIdOf(ctx.id);
+      if (!id) return;
+      // A frame entered before its document's workbook is loaded (a host
+      // that never announced the open, or a restore still in flight)
+      // restores it first instead of reporting "no workbook".
+      void session.ensureRestored().then(() => session.showGridInFrame(id));
+    },
+    // K-1 — the editor delivers a pointer in FRAME-CONTENT coordinates
+    // (it owns the page→content inversion via the frame's HitResult
+    // bounds + item_transform; §8.5 — the plugin never compensates).
+    // Map it to a cell + select it (re-renders the in-frame grid with
+    // the selection chrome).
+    onContentPointerDown: (e) => {
+      if (e.button !== 0) return;
+      session.pointerDownInFrame(e.contentPoint[0], e.contentPoint[1], {
+        shift: e.modifiers.shift,
+      });
+    },
+    // Wave 5 — drag extends the selection (or drags the fill handle);
+    // the release ends the gesture (a fill-handle release fills).
+    onContentPointerMove: (e) => {
+      session.pointerMoveInFrame(e.contentPoint[0], e.contentPoint[1]);
+    },
+    onContentPointerUp: (e) => {
+      session.pointerUpInFrame(e.contentPoint[0], e.contentPoint[1]);
+    },
+    // A plain wheel over the entered frame scrolls the grid window (by
+    // whole rows / columns); declining at an edge lets the canvas pan.
+    // Shift turns a vertical wheel horizontal.
+    onContentWheel: (e: ContentWheelEvent) => {
+      const [dx, dy] = e.delta;
+      return e.modifiers.shift && dx === 0
+        ? session.wheelInFrame(dy, 0)
+        : session.wheelInFrame(dx, dy);
+    },
+    // K-1 + Wave 5 — every key the shell forwards goes through the grid's
+    // key map (grid-nav.ts): typing edits the active cell, Enter/Tab
+    // commit and move, arrows move (shift extends), F2 edits in place,
+    // Delete/Backspace clear the selection, Cmd+C/V/D/R/A/F/Z. NOTE the
+    // editor forwards only printable keys, Backspace and Delete while no
+    // cell edit is open — arrows, Tab, Enter, F2 and Cmd combos reach
+    // here only mid-edit until the editor forwards them (shim recorded in
+    // the Wave 5 report); the keybindings below cover Cmd+C/V/F/R today.
+    onContentKey: (e) => {
+      if (session.handleGridKey(e)) e.preventDefault?.();
+    },
+    // The context is "dirty" while a cell edit is open — gates the shell's
+    // Enter/Esc routing (to the cell) + a future discard prompt (§8.0).
+    isDirty: () => session.isCellEditing(),
+    // ADR-012 Tier 1 — this context OWNS undo while active: the shell
+    // routes Cmd-Z / Cmd-Shift-Z (and Edit/Undo) to the session's
+    // journal of committed cell edits (workbook grain), never the
+    // document stack; the modal exit is the document's one-step grain
+    // (Tier 2). In-session Cmd-Z stops at the session's start.
+    onUndo: () => session.undoCellEdit(),
+    onRedo: () => session.redoCellEdit(),
+    onCanUndo: () => session.canUndoCellEdit(),
+    onCanRedo: () => session.canRedoCellEdit(),
+    // Wave 5 — the journal SURVIVES the exit: the session's edits land on
+    // the page as one refresh (Tier 2), and a later host Cmd-Z that undoes
+    // that refresh unwinds the workbook with it (the session's
+    // document-undo follower). Inside the next session Cmd-Z stops at its
+    // own start.
+    onExit: () => {
+      session.hideGridInFrame();
+    },
+  });
+
+  // Sheet ADR 510 / extensions ADR 334 — while the frame is entered the
+  // grid is a FRAME SURFACE: a main-thread surface over the frame with
+  // headings, native pointer and key input, no render-worker round trip
+  // per keystroke. A host without frame surfaces keeps the scene layer:
+  // the probe is the DYNAMIC flag (a host that mounts them), not the
+  // static door every SDK has.
+  if (host.supports("editContext.frameSurface@1")) {
+    host.contribute.frameSurface({
+      contextType: "sheet",
+      ...makeSheetFrameSurface(session),
     });
   }
-  if (host.supports("contribute.editContext@1")) {
-    host.contribute.editContext({
-      type: "sheet",
-      entry: "doubleClick",
-      // ADR 024 — NO CANVAS TOOL EDITS A SPREADSHEET, and saying so is
-      // now possible: a declared-empty list restricts to nothing, where
-      // it used to collapse into "unrestricted" and leave the whole rail
-      // lit. Inside a sheet you edit by keyboard and by panel — the
-      // grid takes pointer and key events through this context's own
-      // hooks below, not through a tool.
-      //
-      // Not a trap: the rail treats a pick outside the set as an EXIT
-      // (it commits the context, then activates), so reaching for the
-      // pointer walks you out of the sheet rather than doing nothing.
-      toolIds: [],
-      // The workbook panel is this context's own surface. Deliberately
-      // NOT the host panels its binding providers serve (Swatches,
-      // Character/Paragraph) — naming those here would put host panel
-      // ids in plugin code, which is the coupling ADR 023 removed from
-      // the value lane, and the host already infers "serves" from
-      // `provides`.
-      panelIds: [PANEL_ID],
-      onEnter: (ctx) => {
-        const id = frameIdOf(ctx.id);
-        if (!id) return;
-        // A frame entered before its document's workbook is loaded (a host
-        // that never announced the open, or a restore still in flight)
-        // restores it first instead of reporting "no workbook".
-        void session.ensureRestored().then(() => session.showGridInFrame(id));
-      },
-      // K-1 — the editor delivers a pointer in FRAME-CONTENT coordinates
-      // (it owns the page→content inversion via the frame's HitResult
-      // bounds + item_transform; §8.5 — the plugin never compensates).
-      // Map it to a cell + select it (re-renders the in-frame grid with
-      // the selection chrome).
-      onContentPointerDown: (e) => {
-        if (e.button !== 0) return;
-        session.pointerDownInFrame(e.contentPoint[0], e.contentPoint[1], {
-          shift: e.modifiers.shift,
-        });
-      },
-      // Wave 5 — drag extends the selection (or drags the fill handle);
-      // the release ends the gesture (a fill-handle release fills).
-      onContentPointerMove: (e) => {
-        session.pointerMoveInFrame(e.contentPoint[0], e.contentPoint[1]);
-      },
-      onContentPointerUp: (e) => {
-        session.pointerUpInFrame(e.contentPoint[0], e.contentPoint[1]);
-      },
-      // A plain wheel over the entered frame scrolls the grid window (by
-      // whole rows / columns); declining at an edge lets the canvas pan.
-      // Shift turns a vertical wheel horizontal.
-      onContentWheel: (e: ContentWheelEvent) => {
-        const [dx, dy] = e.delta;
-        return e.modifiers.shift && dx === 0
-          ? session.wheelInFrame(dy, 0)
-          : session.wheelInFrame(dx, dy);
-      },
-      // K-1 + Wave 5 — every key the shell forwards goes through the grid's
-      // key map (grid-nav.ts): typing edits the active cell, Enter/Tab
-      // commit and move, arrows move (shift extends), F2 edits in place,
-      // Delete/Backspace clear the selection, Cmd+C/V/D/R/A/F/Z. NOTE the
-      // editor forwards only printable keys, Backspace and Delete while no
-      // cell edit is open — arrows, Tab, Enter, F2 and Cmd combos reach
-      // here only mid-edit until the editor forwards them (shim recorded in
-      // the Wave 5 report); the keybindings below cover Cmd+C/V/F/R today.
-      onContentKey: (e) => {
-        if (session.handleGridKey(e)) e.preventDefault?.();
-      },
-      // The context is "dirty" while a cell edit is open — gates the shell's
-      // Enter/Esc routing (to the cell) + a future discard prompt (§8.0).
-      isDirty: () => session.isCellEditing(),
-      // ADR-012 Tier 1 — this context OWNS undo while active: the shell
-      // routes Cmd-Z / Cmd-Shift-Z (and Edit/Undo) to the session's
-      // journal of committed cell edits (workbook grain), never the
-      // document stack; the modal exit is the document's one-step grain
-      // (Tier 2). In-session Cmd-Z stops at the session's start.
-      onUndo: () => session.undoCellEdit(),
-      onRedo: () => session.redoCellEdit(),
-      onCanUndo: () => session.canUndoCellEdit(),
-      onCanRedo: () => session.canRedoCellEdit(),
-      // Wave 5 — the journal SURVIVES the exit: the session's edits land on
-      // the page as one refresh (Tier 2), and a later host Cmd-Z that undoes
-      // that refresh unwinds the workbook with it (the session's
-      // document-undo follower). Inside the next session Cmd-Z stops at its
-      // own start.
-      onExit: () => {
-        session.hideGridInFrame();
-      },
+
+  // ADR 023 phase D — paged.sheet answers the HOST's Swatches panel
+  // while the `sheet` context is active: the WORKBOOK PALETTE (the
+  // document swatches this workbook's charts + data bars mint) instead
+  // of the document's own swatch list, plus first refusal on
+  // `editSwatch`.
+  //
+  // Registered INSIDE the editContext branch on purpose — the
+  // provider's lifetime is BORROWED from that context's
+  // onEnter/onExit, so a host that cannot host the context cannot host
+  // the provider either. Where the host wires no binding-provider
+  // registry (`bindings.provider@1` false) nothing would consult it.
+  const providersConsulted = host.supports("bindings.provider@1");
+  swatchesProviderHandle = providersConsulted
+    ? host.contribute.bindingProvider(
+        "sheet",
+        makeSwatchesBindingProvider(host, session).provider,
+      )
+    : null;
+
+  // ADR 023 phase D — the CHARACTER/PARAGRAPH provider (the VALUE
+  // axis). Registered on the SAME context and therefore with the same
+  // borrowed lifetime; a separate registration only because the two
+  // answer different lanes about the same selection.
+  textProviderHandle = providersConsulted
+    ? host.contribute.bindingProvider(
+        "sheet",
+        makeTextBindingProvider(host, {
+          textSelectionRange: () => session.textSelectionRange(),
+          lowerRange: (sheet, range) => {
+            const engine = session.state().engine;
+            if (!engine) return null;
+            // The STYLED door, not the frozen page-lowering one: the
+            // Character panel is about the workbook's real cell fonts, and
+            // `getRangeLowered` emits a key-0-only table by contract.
+            return engine.getRangeStyled(sheet, range, {
+              includeGridRules: false,
+            });
+          },
+          // P7 — the host's Character / Paragraph / style panels write
+          // the selected cells (sheet ADR 518 `setStyle`).
+          applyStyle: (patch) => {
+            const r = session.setStyle(patch);
+            return r.ok ? { ok: true } : { ok: false, message: r.message };
+          },
+          swatchRef: (id) => session.documentSwatchRef(id),
+        }).provider,
+      )
+    : null;
+
+  if (swatchesProviderHandle || textProviderHandle) {
+    // Each provider re-reads only on changes that can move its answer
+    // (see binding-provider/invalidation.ts) — not on every signal.
+    providerInvalidateSub = subscribeProviderInvalidation(session, {
+      swatches: swatchesProviderHandle,
+      text: textProviderHandle,
     });
-
-    // Sheet ADR 510 / extensions ADR 334 — while the frame is entered the
-    // grid is a FRAME SURFACE: a main-thread surface over the frame with
-    // headings, native pointer and key input, no render-worker round trip
-    // per keystroke. A host without frame surfaces keeps the scene layer:
-    // the probe is the DYNAMIC flag (a host that mounts them), not the
-    // static door every SDK has.
-    if (host.supports("editContext.frameSurface@1")) {
-      host.contribute.frameSurface({
-        contextType: "sheet",
-        ...makeSheetFrameSurface(session),
-      });
-    }
-
-    // ADR 023 phase D — paged.sheet answers the HOST's Swatches panel
-    // while the `sheet` context is active: the WORKBOOK PALETTE (the
-    // document swatches this workbook's charts + data bars mint) instead
-    // of the document's own swatch list, plus first refusal on
-    // `editSwatch`.
-    //
-    // Registered INSIDE the editContext branch on purpose — the
-    // provider's lifetime is BORROWED from that context's
-    // onEnter/onExit, so a host that cannot host the context cannot host
-    // the provider either. Where the host wires no binding-provider
-    // registry (`bindings.provider@1` false) nothing would consult it.
-    const providersConsulted = host.supports("bindings.provider@1");
-    swatchesProviderHandle = providersConsulted
-      ? host.contribute.bindingProvider(
-          "sheet",
-          makeSwatchesBindingProvider(host, session).provider,
-        )
-      : null;
-
-    // ADR 023 phase D — the CHARACTER/PARAGRAPH provider (the VALUE
-    // axis). Registered on the SAME context and therefore with the same
-    // borrowed lifetime; a separate registration only because the two
-    // answer different lanes about the same selection.
-    textProviderHandle = providersConsulted
-      ? host.contribute.bindingProvider(
-          "sheet",
-          makeTextBindingProvider(host, {
-            textSelectionRange: () => session.textSelectionRange(),
-            lowerRange: (sheet, range) => {
-              const engine = session.state().engine;
-              if (!engine) return null;
-              // The STYLED door, not the frozen page-lowering one: the
-              // Character panel is about the workbook's real cell fonts, and
-              // `getRangeLowered` emits a key-0-only table by contract.
-              return engine.getRangeStyled(sheet, range, {
-                includeGridRules: false,
-              });
-            },
-            // P7 — the host's Character / Paragraph / style panels write
-            // the selected cells (sheet ADR 518 `setStyle`).
-            applyStyle: (patch) => {
-              const r = session.setStyle(patch);
-              return r.ok ? { ok: true } : { ok: false, message: r.message };
-            },
-            swatchRef: (id) => session.documentSwatchRef(id),
-          }).provider,
-        )
-      : null;
-
-    if (swatchesProviderHandle || textProviderHandle) {
-      // Each provider re-reads only on changes that can move its answer
-      // (see binding-provider/invalidation.ts) — not on every signal.
-      providerInvalidateSub = subscribeProviderInvalidation(session, {
-        swatches: swatchesProviderHandle,
-        text: textProviderHandle,
-      });
-    }
   }
 
   // K-2 / S-06 — register the .xlsx IMPORTER so opening a spreadsheet
@@ -808,77 +802,73 @@ export function activate(host: BundleHost): BundleHandle {
   // host loads them into this in-memory session instead of the IDML
   // loader — it does NOT replace the document). Same path as the in-panel
   // import; degrades honestly if the host predates the door.
-  if (host.supports("contribute.importer@1")) {
-    host.contribute.importer({
-      id: "media.paged.sheet.importer.xlsx",
-      title: t(FILES.spreadsheet),
-      // Sheet ADR 521 — the macro-enabled workbook and the templates are
-      // the same package (macros kept, never run; a template opens as a
-      // new workbook).
-      extensions: XLSX_FAMILY_EXTENSIONS,
-      mimeTypes: XLSX_FAMILY_MIMES,
-      import: async ({ name, bytes, newDocument }) => {
-        await session.import(bytes, name);
-        await placeIntoNewDocument(session, newDocument);
-        host.shell.openPanel(PANEL_ID);
-      },
-    });
-    // Wave 4 — CSV / TSV open through the same door: the text becomes a
-    // one-sheet workbook (typed in Rust by the host language's locale).
-    host.contribute.importer({
-      id: "media.paged.sheet.importer.csv",
-      title: t(FILES.delimited),
-      extensions: [".csv", ".tsv"],
-      mimeTypes: DELIMITED_MIMES,
-      import: async ({ name, bytes, newDocument }) => {
-        await importBytes(session, bytes, name);
-        await placeIntoNewDocument(session, newDocument);
-        host.shell.openPanel(PANEL_ID);
-      },
-    });
-    // Sheet ADR 521 — OpenDocument spreadsheets, read (converted in Rust).
-    host.contribute.importer({
-      id: "media.paged.sheet.importer.ods",
-      title: t(FILES.ods),
-      extensions: ODS_EXTENSIONS,
-      mimeTypes: ODS_MIMES,
-      import: async ({ name, bytes, newDocument }) => {
-        await importBytes(session, bytes, name);
-        await placeIntoNewDocument(session, newDocument);
-        host.shell.openPanel(PANEL_ID);
-      },
-    });
-  }
+  host.contribute.importer({
+    id: "media.paged.sheet.importer.xlsx",
+    title: t(FILES.spreadsheet),
+    // Sheet ADR 521 — the macro-enabled workbook and the templates are
+    // the same package (macros kept, never run; a template opens as a
+    // new workbook).
+    extensions: XLSX_FAMILY_EXTENSIONS,
+    mimeTypes: XLSX_FAMILY_MIMES,
+    import: async ({ name, bytes, newDocument }) => {
+      await session.import(bytes, name);
+      await placeIntoNewDocument(session, newDocument);
+      host.shell.openPanel(PANEL_ID);
+    },
+  });
+  // Wave 4 — CSV / TSV open through the same door: the text becomes a
+  // one-sheet workbook (typed in Rust by the host language's locale).
+  host.contribute.importer({
+    id: "media.paged.sheet.importer.csv",
+    title: t(FILES.delimited),
+    extensions: [".csv", ".tsv"],
+    mimeTypes: DELIMITED_MIMES,
+    import: async ({ name, bytes, newDocument }) => {
+      await importBytes(session, bytes, name);
+      await placeIntoNewDocument(session, newDocument);
+      host.shell.openPanel(PANEL_ID);
+    },
+  });
+  // Sheet ADR 521 — OpenDocument spreadsheets, read (converted in Rust).
+  host.contribute.importer({
+    id: "media.paged.sheet.importer.ods",
+    title: t(FILES.ods),
+    extensions: ODS_EXTENSIONS,
+    mimeTypes: ODS_MIMES,
+    import: async ({ name, bytes, newDocument }) => {
+      await importBytes(session, bytes, name);
+      await placeIntoNewDocument(session, newDocument);
+      host.shell.openPanel(PANEL_ID);
+    },
+  });
   // K-2 / S-06 — register the .xlsx EXPORTER: the Export Center pulls the
   // workbook bytes on demand (the host owns blob→download). Preservation-
   // first re-emit via session.saveWorkbook → engine.saveXlsx (§10.2).
-  if (host.supports("contribute.exporter@1")) {
-    host.contribute.exporter({
-      id: "media.paged.sheet.exporter.xlsx",
-      title: t(FILES.xlsx),
-      extension: ".xlsx",
-      mimeType: XLSX_MIME,
-      // A macro workbook saved as .xlsx leaves its VBA project out (Excel
-      // refuses an .xlsx with one); the .xlsm exporter keeps it.
-      export: () => session.saveWorkbookAs("xlsx"),
-    });
-    // Sheet ADR 521 — the macro-enabled workbook, and the active sheet as
-    // CSV (UTF-8 with a BOM, the host language's list separator).
-    host.contribute.exporter({
-      id: "media.paged.sheet.exporter.xlsm",
-      title: t(FILES.xlsm),
-      extension: ".xlsm",
-      mimeType: XLSM_MIME,
-      export: () => session.saveWorkbookAs("xlsm"),
-    });
-    host.contribute.exporter({
-      id: "media.paged.sheet.exporter.csv",
-      title: t(FILES.csv),
-      extension: ".csv",
-      mimeType: "text/csv",
-      export: () => session.exportCsv(defaultCsvOptions()),
-    });
-  }
+  host.contribute.exporter({
+    id: "media.paged.sheet.exporter.xlsx",
+    title: t(FILES.xlsx),
+    extension: ".xlsx",
+    mimeType: XLSX_MIME,
+    // A macro workbook saved as .xlsx leaves its VBA project out (Excel
+    // refuses an .xlsx with one); the .xlsm exporter keeps it.
+    export: () => session.saveWorkbookAs("xlsx"),
+  });
+  // Sheet ADR 521 — the macro-enabled workbook, and the active sheet as
+  // CSV (UTF-8 with a BOM, the host language's list separator).
+  host.contribute.exporter({
+    id: "media.paged.sheet.exporter.xlsm",
+    title: t(FILES.xlsm),
+    extension: ".xlsm",
+    mimeType: XLSM_MIME,
+    export: () => session.saveWorkbookAs("xlsm"),
+  });
+  host.contribute.exporter({
+    id: "media.paged.sheet.exporter.csv",
+    title: t(FILES.csv),
+    extension: ".csv",
+    mimeType: "text/csv",
+    export: () => session.exportCsv(defaultCsvOptions()),
+  });
 
   host.log.info(`activated (apiVersion ${manifest.apiVersion})`);
 

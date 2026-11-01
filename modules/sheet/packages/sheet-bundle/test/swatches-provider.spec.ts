@@ -300,6 +300,13 @@ describe("sheet_plugin_swatch_provider: the structural write", () => {
   });
 });
 
+/** A door that exists and does nothing: every member is a function returning
+ *  a disposable-shaped no-op (ADR 305: a door is always present). */
+function inertSurface(own: Record<string, unknown> = {}) {
+  const noop = () => ({ dispose() {} });
+  return new Proxy(own, { get: (t, k) => (k in t ? t[k as string] : noop) });
+}
+
 describe("sheet_plugin_swatch_provider: the honest door", () => {
   it("activate() registers the provider for the `sheet` context when both hold", () => {
     const registered: { contextType: string }[] = [];
@@ -324,6 +331,9 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
         command: () => ({ dispose() {} }),
         objectType: () => ({ dispose() {} }),
         editContext: () => ({ dispose() {} }),
+        importer: () => ({ dispose() {} }),
+        exporter: () => ({ dispose() {} }),
+        schemaPanel: () => ({ dispose() {} }),
         bindingProvider: (contextType: string) => {
           registered.push({ contextType });
           return {
@@ -334,6 +344,9 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
           };
         },
       },
+      bindings: inertSurface(),
+      selection: inertSurface({ get: () => [] }),
+      objects: inertSurface({ query: async () => [] }),
       shell: { openPanel() {}, closePanel() {} },
     } as unknown as BundleHost;
 
@@ -369,11 +382,17 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
         command: () => ({ dispose() {} }),
         objectType: () => ({ dispose() {} }),
         editContext: () => ({ dispose() {} }),
+        importer: () => ({ dispose() {} }),
+        exporter: () => ({ dispose() {} }),
+        schemaPanel: () => ({ dispose() {} }),
         bindingProvider: (contextType: string) => {
           registered.push(contextType);
           return { dispose() {}, invalidate() {} };
         },
       },
+      bindings: inertSurface(),
+      selection: inertSurface({ get: () => [] }),
+      objects: inertSurface({ query: async () => [] }),
       shell: { openPanel() {}, closePanel() {} },
     } as unknown as BundleHost;
 
