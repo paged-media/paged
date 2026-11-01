@@ -1581,6 +1581,9 @@ fn text_cases(c: &mut Vec<Case>) {
             width: 60.0,
             height: 60.0,
             image_uri: None,
+            kind: None,
+            layout: None,
+            cell: None,
         }
     }));
     // A link is a REGION, not a mark: it restyles no glyph, and the
@@ -4096,6 +4099,9 @@ fn table_cases(c: &mut Vec<Case>) {
             footer_rows: 0,
             column_widths: vec![80.0, 80.0, 80.0],
             row_heights: vec![20.0, 20.0, 20.0],
+            cell: None,
+            word: None,
+            paragraph: None,
         }
     }));
     c.push(paints("SetRowHeight", "tables", |m| {
@@ -4105,6 +4111,7 @@ fn table_cases(c: &mut Vec<Case>) {
             table_id,
             row: 0,
             height: Some(90.0),
+            auto_grow: None,
         }
     }));
     c.push(paints("SetColumnWidth", "tables", |m| {
@@ -4172,6 +4179,7 @@ fn table_cases(c: &mut Vec<Case>) {
             table_id: table_id.clone(),
             row: 0,
             height: Some(36.0),
+            auto_grow: None,
         })
         .expect("make the seeded header row visible");
         Mutation::RemoveHeaderRow { story_id, table_id }
@@ -4207,6 +4215,7 @@ fn table_cases(c: &mut Vec<Case>) {
             table_id: table_id.clone(),
             row: last as u32,
             height: Some(36.0),
+            auto_grow: None,
         })
         .expect("size the seeded footer row");
         m.apply_mutation(&Mutation::InsertText {

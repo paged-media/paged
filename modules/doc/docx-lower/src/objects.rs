@@ -49,9 +49,9 @@
 use docx_core::{BorderEdge, Borders, DocxDocument, Image, Run, TextBox};
 
 use crate::ir::{
-    LoweredAnchor, LoweredCellLook, LoweredEdge, LoweredFloat, LoweredFloatPosition,
-    LoweredItemHost, LoweredItemKind, LoweredItemSource, LoweredPageItem, LoweredSection,
-    LoweredWrap,
+    LoweredAnchor, LoweredCellLook, LoweredEdge, LoweredFloat, LoweredFloatLayout,
+    LoweredFloatPosition, LoweredItemHost, LoweredItemKind, LoweredItemSource, LoweredPageItem,
+    LoweredSection, LoweredWrap,
 };
 use crate::sections::{self, LowerOptions};
 use crate::{emu_to_pt, lower_float, lower_image, structure, twip_to_pt};
@@ -255,11 +255,38 @@ pub fn wrap_for(f: &LoweredFloat) -> Option<LoweredWrap> {
 /// How an anchored float was placed, for the diagnostics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnchorCase {
-    /// Custom, at Word's position; its wrap is not applied.
+    /// Custom, at Word's position; `wraps` when Word wraps text around it
+    /// (the engine's anchored object then wraps it too, engine ADR 1050).
     Custom { wraps: bool },
-    /// Above the line (top and bottom, or no room beside it); `moved` when
-    /// Word's horizontal offset is not one of the column's three alignments.
-    AboveLine { moved: bool },
+}
+
+/// A float's layout among its story's text (engine ADR 1050): Word's wrap
+/// (square → bounding box, tight / through → contour on `wp:wrapPolygon`,
+/// top and bottom → jump object; a square, tight or through float with less
+/// than [`NARROWEST_SIDE_PT`] of text room beside it jumps the text too, as
+/// Word sets no line in such a gap), `behindDoc` and `allowOverlap`.
+pub fn layout_for(f: &LoweredFloat, w: f32, h: f32, geo: &PageGeo) -> LoweredFloatLayout {
+    let column = (geo.left, geo.width - geo.right);
+    let bounds = page_bounds(f, w, h, geo, geo.top);
+    let left = bounds[1] - f.dist_left_pt - column.0;
+    let right = column.1 - bounds[3] - f.dist_right_pt;
+    let room = match f.wrap_text.as_deref() {
+        Some("left") => left,
+        Some("right") => right,
+        _ => left.max(right),
+    };
+    let mut wrap = wrap_for(f);
+    if let Some(wr) = wrap.as_mut() {
+        if wr.mode != "JumpObjectTextWrap" && room < NARROWEST_SIDE_PT {
+            wr.mode = "JumpObjectTextWrap".into();
+            wr.side = None;
+        }
+    }
+    LoweredFloatLayout {
+        wrap,
+        behind: f.behind_doc,
+        no_overlap: !f.allow_overlap,
+    }
 }
 
 /// One axis of an anchored float: the engine's reference and alignment,
@@ -334,57 +361,6 @@ fn anchor_point(v: u8, h: u8) -> &'static str {
 /// The anchored-object settings of a float `w` x `h` pt, on a page of
 /// `geo`'s geometry.
 pub fn anchor_for(f: &LoweredFloat, w: f32, h: f32, geo: &PageGeo) -> (LoweredAnchor, AnchorCase) {
-    let column = (geo.left, geo.width - geo.right);
-    let bounds = page_bounds(f, w, h, geo, geo.top);
-    let side_room = || {
-        let left = bounds[1] - f.dist_left_pt - column.0;
-        let right = column.1 - bounds[3] - f.dist_right_pt;
-        match f.wrap_text.as_deref() {
-            Some("left") => left,
-            Some("right") => right,
-            _ => left.max(right),
-        }
-    };
-    let band = match f.wrap.as_str() {
-        "wrapTopAndBottom" => true,
-        "wrapSquare" | "wrapTight" | "wrapThrough" => side_room() < NARROWEST_SIDE_PT,
-        _ => false,
-    };
-    if band {
-        let (x, align, moved) = match f.horizontal.as_ref().and_then(|p| p.align.as_deref()) {
-            Some("center") => (0.0, "CenterAlign", false),
-            Some("right" | "outside") => (0.0, "RightAlign", false),
-            Some(_) => (0.0, "LeftAlign", false),
-            None => {
-                let left = bounds[1] - column.0;
-                let right = column.1 - bounds[3];
-                let centre = (left - right).abs() * 0.5;
-                let near = left.abs().min(right.abs()).min(centre);
-                let align = if near == left.abs() {
-                    "LeftAlign"
-                } else if near == right.abs() {
-                    "RightAlign"
-                } else {
-                    "CenterAlign"
-                };
-                (0.0, align, near > 1.0)
-            }
-        };
-        return (
-            LoweredAnchor {
-                position: "AbovePosition".into(),
-                anchor_point: "TopLeftAnchor".into(),
-                horizontal_reference: "ColumnEdge".into(),
-                horizontal_alignment: align.into(),
-                vertical_reference: "TopOfLeading".into(),
-                vertical_alignment: "TopAlign".into(),
-                x_offset_pt: x,
-                // The space after the band: Word's distance below it.
-                y_offset_pt: f.dist_bottom_pt,
-            },
-            AnchorCase::AboveLine { moved },
-        );
-    }
     let (href, hc, hoff, vref, vc, voff) = match f.simple_pos_pt {
         Some((x, y)) => ("PageEdge", 0, x, "PageEdge", 0, y),
         None => {
@@ -416,7 +392,7 @@ pub fn anchor_for(f: &LoweredFloat, w: f32, h: f32, geo: &PageGeo) -> (LoweredAn
             y_offset_pt: voff,
         },
         AnchorCase::Custom {
-            wraps: matches!(f.wrap.as_str(), "wrapSquare" | "wrapTight" | "wrapThrough"),
+            wraps: wrap_for(f).is_some(),
         },
     )
 }
@@ -707,7 +683,7 @@ fn picture_fx(
     (!fx.is_empty()).then_some(fx)
 }
 
-fn box_fx(
+pub(crate) fn box_fx(
     tb: &TextBox,
     w: f32,
     h: f32,
@@ -808,9 +784,9 @@ pub(crate) struct W4 {
     /// horizontal offset is not kept), as page items.
     pub custom: usize,
     pub custom_wrapping: usize,
-    pub above_line: usize,
-    pub above_moved: usize,
-    /// Text boxes that are not page items, and so are not placed.
+    /// Text boxes that are not page items: anchored text frames.
+    pub anchored_boxes: usize,
+    /// Text boxes in table cells, which are not placed.
     pub unplaced_boxes: usize,
     /// Nested tables shown as their paragraphs.
     pub nested_tables: usize,
@@ -853,6 +829,87 @@ impl W4 {
 }
 
 impl crate::Lowering {
+    /// A text box that is not a page item, as an anchored text frame of its
+    /// paragraph (engine ADR 1050): a float at Word's position with Word's
+    /// wrap, anchored at the paragraph's start (or `at`, measured from its
+    /// line), an inline box a character of its line at `at`; its paragraphs
+    /// lowered at its inner width.
+    pub(crate) fn lower_text_box(&mut self, tb: &TextBox, at: u32) -> crate::ir::LoweredTextBox {
+        let w = emu_to_pt(tb.width_emu);
+        let h = emu_to_pt(tb.height_emu);
+        let geo = self.w4.geo.unwrap_or(PageGeo {
+            width: 612.0,
+            height: 792.0,
+            top: 72.0,
+            bottom: 72.0,
+            left: 72.0,
+            right: 72.0,
+        });
+        let float = tb
+            .float
+            .as_ref()
+            .map(|f| lower_float(f, tb.width_emu, tb.height_emu));
+        let (anchor, layout, at) = match &float {
+            Some(f) => {
+                let (anchor, AnchorCase::Custom { .. }) = anchor_for(f, w, h, &geo);
+                let by_line = f
+                    .vertical
+                    .as_ref()
+                    .is_some_and(|v| v.relative_from == "line");
+                (
+                    Some(anchor),
+                    layout_for(f, w, h, &geo),
+                    if by_line { at } else { 0 },
+                )
+            }
+            None => (None, LoweredFloatLayout::default(), at),
+        };
+        let insets_pt = box_insets(tb);
+        let saved = (
+            self.text_width,
+            self.section_indent,
+            self.section_columns,
+            self.in_cell,
+            self.spacing_override,
+        );
+        self.text_width = Some((w - insets_pt[1] - insets_pt[3]).max(1.0));
+        self.section_indent = (0.0, 0.0);
+        self.section_columns = sections::SectionColumns::Frame;
+        let paragraphs = tb
+            .paragraphs
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                self.spacing_override = (None, false);
+                self.lower_body_paragraph(p, i as u32, None, Some(false)).0
+            })
+            .collect();
+        (
+            self.text_width,
+            self.section_indent,
+            self.section_columns,
+            self.in_cell,
+            self.spacing_override,
+        ) = saved;
+        self.w4.anchored_boxes += 1;
+        let fx = box_fx(tb, w, h, &self.dml_slots);
+        if let Some(fx) = &fx {
+            for c in fx.colors() {
+                self.swatch_for(c.trim_start_matches('#'));
+            }
+        }
+        crate::ir::LoweredTextBox {
+            at,
+            width_pt: w,
+            height_pt: h,
+            anchor,
+            layout,
+            insets_pt,
+            paragraphs,
+            fx,
+        }
+    }
+
     /// Place a floating picture as an anchored object of its paragraph
     /// (doc ADR 614): its settings, and its anchor at the paragraph's start
     /// unless Word measures it from its line.
@@ -869,20 +926,12 @@ impl crate::Lowering {
             right: 72.0,
         });
         let (anchor, case) = anchor_for(&f, li.width_pt, li.height_pt, &geo);
-        match case {
-            AnchorCase::Custom { wraps } => {
-                self.w4.custom += 1;
-                if wraps {
-                    self.w4.custom_wrapping += 1;
-                }
-            }
-            AnchorCase::AboveLine { moved } => {
-                self.w4.above_line += 1;
-                if moved {
-                    self.w4.above_moved += 1;
-                }
-            }
+        let AnchorCase::Custom { wraps } = case;
+        self.w4.custom += 1;
+        if wraps {
+            self.w4.custom_wrapping += 1;
         }
+        li.layout = Some(layout_for(&f, li.width_pt, li.height_pt, &geo));
         let by_line = f
             .vertical
             .as_ref()
@@ -1163,71 +1212,40 @@ impl crate::Lowering {
             );
             if w.custom_wrapping > 0 {
                 msg.push_str(&format!(
-                    "; {} of them wrap text in Word (square, tight or through), which the \
-                     engine's anchored objects do not do yet, so text runs under them",
+                    "; {} of them wrap the text as Word does (square, tight, through, top and \
+                     bottom)",
                     w.custom_wrapping
                 ));
             }
             out.push(Diagnostic::info(msg, 2));
         }
-        if w.above_line > 0 {
-            let mut msg = format!(
-                "{} floating picture(s) with text above and below (top and bottom, or no \
-                 room for text beside them) placed in a band of their own above their \
-                 anchor line, so the text resumes below them as in Word; their vertical \
-                 offset is not kept",
-                w.above_line
-            );
-            if w.above_moved > 0 {
-                msg.push_str(&format!(
-                    "; {} of them are aligned to the nearest of the column's left, centre \
-                     or right, not at Word's horizontal offset",
-                    w.above_moved
-                ));
-            }
-            out.push(Diagnostic::info(msg, 2));
+        if w.anchored_boxes > 0 {
+            out.push(Diagnostic::info(
+                format!(
+                    "{} text box(es) placed as anchored text frames that follow their \
+                     paragraph; edits to their text are not saved back yet (the boxes \
+                     round-trip unchanged)",
+                    w.anchored_boxes
+                ),
+                2,
+            ));
         }
         if w.unplaced_boxes > 0 {
             out.push(Diagnostic::warning(
                 format!(
-                    "{} text box(es) are NOT shown: a text box is placed only where its page \
-                     is known (anchored in a section's first paragraph, or in a header or \
-                     footer); elsewhere it would need an anchored text frame, which the \
-                     engine cannot create yet. They are kept in the .docx and round-trip \
-                     on save",
+                    "{} text box(es) in table cells are NOT shown; they are kept in the \
+                     .docx and round-trip on save",
                     w.unplaced_boxes
                 ),
                 2,
             ));
         }
         if w.nested_tables > 0 {
-            out.push(Diagnostic::warning(
+            out.push(Diagnostic::info(
                 format!(
-                    "{} table(s) nested in a table cell are shown as their paragraphs, in \
-                     reading order, without their grid: no operation creates a table inside \
-                     a cell yet. Edits to them are not saved back; the nested tables \
-                     round-trip unchanged",
+                    "{} table(s) nested in a table cell made as native tables in their cells; \
+                     edits to them are not saved back yet (they round-trip unchanged)",
                     w.nested_tables
-                ),
-                2,
-            ));
-        }
-        if w.exact_rows > 0 {
-            out.push(Diagnostic::info(
-                format!(
-                    "{} table row(s) Word holds at an exact height grow with their text \
-                     here: the engine's row has no fixed height on the wire yet",
-                    w.exact_rows
-                ),
-                2,
-            ));
-        }
-        if w.indented_tables > 0 {
-            out.push(Diagnostic::info(
-                format!(
-                    "{} table(s) with an indent (w:tblInd) start at the column's edge: the \
-                     engine does not indent a table yet",
-                    w.indented_tables
                 ),
                 2,
             ));
