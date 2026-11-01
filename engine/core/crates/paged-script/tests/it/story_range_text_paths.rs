@@ -238,7 +238,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 286: ADRs 1041 / 1051 / 1052 added the direction, script and content
         // control paths.
         // 287: ADR 1027 added a movie or sound frame's medium.
-        287,
+        // 288: ADR 1054 added a paragraph style's PDF export tag.
+        288,
         "the advertised roster changed; move the count with the decision"
     );
 }
