@@ -1,1 +1,3 @@
-{}
+{
+  "command:media.paged.sheet.command.newComment": "The command opens the sheet's own card and starts a cell thread through host.comments; the unit spec (test/activate.spec.ts) asserts it is registered and the real-engine spec (test/session-comments-real.spec.ts) asserts the thread reaches the workbook. No headless or browser journey invokes it by id yet."
+}

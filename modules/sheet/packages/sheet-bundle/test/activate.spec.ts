@@ -36,6 +36,8 @@ import type {
   PanelContribution,
 } from "@paged-media/plugin-api";
 
+import { covers } from "@paged-media/test-kit";
+
 import { sheetBundle } from "../src";
 
 /** A minimal recording fake of the slice of BundleHost activate touches:
@@ -164,6 +166,7 @@ describe("sheet_plugin_bundle_activate", () => {
   });
 
   it("registers the commands under their declared ids", () => {
+    covers("command:media.paged.sheet.command.newComment");
     const fake = fakeHost();
     sheetBundle.activate(fake.host);
     expect(fake.commands.map((c) => c.id)).toEqual([
