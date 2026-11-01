@@ -1549,6 +1549,7 @@ fn synthetic_rectangle(
         image_adjustments: Vec::new(),
         media: None,
         fill_mesh: None,
+        pattern_transform: None,
     }
 }
 
@@ -1674,6 +1675,7 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         fill_rule: paged_model::FillRule::NonZero,
         gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
         fill_mesh: None,
+        pattern_transform: None,
         effects: None,
         effect_stack: Vec::new(),
         appearance: Vec::new(),

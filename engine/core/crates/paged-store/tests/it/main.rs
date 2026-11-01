@@ -10,4 +10,5 @@ mod fill_rule;
 mod media;
 mod mesh_fill;
 mod paint_v2;
+mod pattern_paint;
 mod round_trip_render;

@@ -339,8 +339,114 @@ pub fn import_idml_archive(archive: &SourceArchive) -> Result<paged_scene::Docum
         anchors: Vec::new(),
         symbols: Vec::new(),
     };
+    restore_patterns(&mut document);
     document.rebuild_indexes();
     Ok(document)
+}
+
+/// Engine ADR 1041 — a frame's pattern fill or stroke comes back from the
+/// label the IDML export kept it in ([`paged_model::PATTERN_FILL_LABEL_KEY`],
+/// [`paged_model::PATTERN_STROKE_LABEL_KEY`]): the pattern swatch joins
+/// the palette (the first label of an id wins), the frame names it again
+/// and takes its pattern transform back, and the entry is dropped. A
+/// label that does not parse stays a label (it is somebody's data).
+/// A frame's fill (absent on a line), stroke and pattern transform.
+type PaintSlots<'a> = (
+    Option<&'a mut Option<String>>,
+    &'a mut Option<String>,
+    &'a mut Option<[f32; 6]>,
+);
+
+fn restore_patterns(document: &mut paged_scene::Document) {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PatternLabel {
+        pattern: paged_model::PatternEntry,
+        #[serde(default)]
+        transform: Option<[f32; 6]>,
+    }
+    let keys = [
+        (paged_model::PATTERN_FILL_LABEL_KEY, true),
+        (paged_model::PATTERN_STROKE_LABEL_KEY, false),
+    ];
+    for parsed in &mut document.spreads {
+        let sp = &mut parsed.spread;
+        let mut restored: Vec<(String, bool, PatternLabel)> = Vec::new();
+        for (id, entries) in &sp.labels {
+            for (key, fill) in keys {
+                if let Some((_, json)) = entries.iter().find(|(k, _)| k == key) {
+                    if let Ok(label) = serde_json::from_str::<PatternLabel>(json) {
+                        if label
+                            .pattern
+                            .self_id
+                            .starts_with(paged_model::PATTERN_ID_PREFIX)
+                        {
+                            restored.push((id.clone(), fill, label));
+                        }
+                    }
+                }
+            }
+        }
+        for (id, fill, label) in restored {
+            let pid = label.pattern.self_id.clone();
+            let is = |s: &Option<String>| s.as_deref() == Some(id.as_str());
+            let slots: Option<PaintSlots<'_>> =
+                if let Some(f) = sp.text_frames.iter_mut().find(|f| is(&f.self_id)) {
+                    Some((
+                        Some(&mut f.fill_color),
+                        &mut f.stroke_color,
+                        &mut f.pattern_transform,
+                    ))
+                } else if let Some(f) = sp.rectangles.iter_mut().find(|f| is(&f.self_id)) {
+                    Some((
+                        Some(&mut f.fill_color),
+                        &mut f.stroke_color,
+                        &mut f.pattern_transform,
+                    ))
+                } else if let Some(f) = sp.ovals.iter_mut().find(|f| is(&f.self_id)) {
+                    Some((
+                        Some(&mut f.fill_color),
+                        &mut f.stroke_color,
+                        &mut f.pattern_transform,
+                    ))
+                } else if let Some(f) = sp.polygons.iter_mut().find(|f| is(&f.self_id)) {
+                    Some((
+                        Some(&mut f.fill_color),
+                        &mut f.stroke_color,
+                        &mut f.pattern_transform,
+                    ))
+                } else if let Some(f) = sp.graphic_lines.iter_mut().find(|f| is(&f.self_id)) {
+                    Some((None, &mut f.stroke_color, &mut f.pattern_transform))
+                } else {
+                    None
+                };
+            let Some((fill_slot, stroke_slot, transform)) = slots else {
+                continue;
+            };
+            match (fill, fill_slot) {
+                (true, Some(slot)) => *slot = Some(pid.clone()),
+                (true, None) => continue,
+                (false, _) => *stroke_slot = Some(pid.clone()),
+            }
+            *transform = label.transform;
+            document
+                .palette
+                .patterns
+                .entry(pid)
+                .or_insert(label.pattern);
+            let key = if fill {
+                paged_model::PATTERN_FILL_LABEL_KEY
+            } else {
+                paged_model::PATTERN_STROKE_LABEL_KEY
+            };
+            if let Some(entries) = sp.labels.get_mut(&id) {
+                entries.retain(|(k, _)| k != key);
+                if entries.is_empty() {
+                    sp.labels.remove(&id);
+                }
+            }
+        }
+    }
 }
 
 /// The `Name` attribute of a master spread part's `<MasterSpread>`.

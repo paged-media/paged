@@ -9,7 +9,8 @@
     "modules/doc/Cargo.toml",
     "modules/slide/Cargo.toml",
     "modules/web/packages/web-render/Cargo.toml",
-    "apps/server/server/Cargo.toml"
+    "apps/server/server/Cargo.toml",
+    "apps/ml-host/Cargo.toml"
   ],
   "rust-analyzer.cargo.targetDir": true
 }

@@ -1,0 +1,7 @@
+# cargo-nextest config. The `ci` profile emits a JUnit report
+# (target/nextest/ci/junit.xml), as the other Rust workspaces do.
+[profile.ci]
+fail-fast = false
+
+[profile.ci.junit]
+path = "junit.xml"

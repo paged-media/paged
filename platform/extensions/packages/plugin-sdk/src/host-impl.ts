@@ -170,6 +170,7 @@ import type {
   WidgetSurface,
   SnapPointQuery,
   SnapPointResult,
+  MlCapability,
 } from "@paged-media/plugin-api";
 
 import { DisposableStore, toDisposable } from "./disposables.js";
@@ -194,6 +195,11 @@ import {
   hostDrawsHandles,
   wrapToolGesture,
 } from "./overlay-handles.js";
+import {
+  ML_CAPABILITIES,
+  createMlSurface,
+  type MlBackend,
+} from "./doors-ml.js";
 import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
@@ -602,6 +608,16 @@ export const HOST_FEATURES: readonly string[] = [
   // STATIC, like `document.paint2@1`: additive at protocol 76, so an older
   // engine refuses the path.
   "document.meshFill@1",
+  // Engine ADR 1041 — pattern swatches. `createSwatch` / `editSwatch` take
+  // `SwatchSpec.pattern` (a `PatternSpec`: tile, items, tile type,
+  // spacing, overlap, placement) and keep it under a `Pattern/…` id; a
+  // frame shows it by naming the id in `frameFillColor` /
+  // `frameStrokeColor`; `framePatternTransform` moves it per frame; the
+  // `swatches` collection lists it with kind `"pattern"`. STATIC, like
+  // `document.meshFill@1`: additive at protocol 76, so an older engine
+  // refuses the field and the path. paged.draw's Pattern Options ask it
+  // before saving a pattern swatch.
+  "document.patternPaint@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never
@@ -1624,6 +1640,11 @@ export interface CreateBundleHostOptions {
    *  (`createActionRegistry`). Absent: `register` throws, `list` is empty
    *  and `supports("actions@1")` is false. */
   actions?: ActionBackend;
+  /** The shared ML backend (`ml.<capability>@1`, extensions ADR 1100): the
+   *  editor builds ONE (`createMlRegistry`), registers its Tier-A and
+   *  Tier-B providers into it and injects it into every host. Absent:
+   *  every `host.ml` call rejects and every `ml.*@1` feature is false. */
+  ml?: MlBackend;
   /** Host-provided SHARED BINDING-PROVIDER registry (ADR-023 phase A): the
    *  editor creates ONE (`createBindingProviderRegistry`) and injects the SAME
    *  instance into every plugin host, so its own panels can ask "who resolves
@@ -4860,6 +4881,13 @@ export function createBundleHost(
     requireDeclared,
     (d) => store.add(d),
   );
+  // ----------------------------------------------------- ml (ADR 1100)
+  const ml = createMlSurface(
+    options?.ml,
+    manifest.capabilities?.ml,
+    requireDeclared,
+    (d) => store.add(d),
+  );
   const dataProviders: DataProvidersSurface = {
     register(registration) {
       requireDeclared(
@@ -6636,6 +6664,7 @@ export function createBundleHost(
     dataProviders,
     data,
     actions,
+    ml,
     diagnostics,
     journal,
     bindings,
@@ -6648,12 +6677,25 @@ export function createBundleHost(
     clipboard,
     tools,
     objects,
-    supports: (feature) =>
+    supports: (feature) => {
       // `storage.blob@1` means bytes persist: a wired store that says it
       // cannot persist right now does not count (HOST-2).
-      feature === "storage.blob@1"
-        ? featureSet.has(feature) && options?.blobStore?.available?.() !== false
-        : featureSet.has(feature),
+      if (feature === "storage.blob@1")
+        return (
+          featureSet.has(feature) && options?.blobStore?.available?.() !== false
+        );
+      // `ml.<capability>@1` is LIVE: true while a healthy provider for it
+      // is registered (extensions ADR 1100).
+      const mlDoor = /^ml\.([a-z]+)@1$/.exec(feature);
+      if (mlDoor) {
+        const capability = mlDoor[1] as MlCapability;
+        return (
+          (ML_CAPABILITIES as readonly string[]).includes(capability) &&
+          options?.ml?.supports(capability) === true
+        );
+      }
+      return featureSet.has(feature);
+    },
     get editor() {
       return getEditor();
     },

@@ -80,13 +80,19 @@ describe("plugin object kinds", () => {
     ]);
     const kinds = await cli(["schema", fx.paged, NOTES]);
     // core's typed commands (owner "core") are listed beside the plugin's
-    // Besides core's, the plugin's command and the CLI's own paged.ai.complete.
+    // Besides core's, the plugin's command and the CLI's own paged.ai.complete
+    // and paged.ml.generate / paged.ml.edit (extensions ADR 1100).
     expect(
       kinds.json.commands
         .filter((c: { owner: string }) => c.owner !== "core")
         .map((c: { id: string }) => c.id)
         .sort(),
-    ).toEqual(["acme.notes.attach", "paged.ai.complete"]);
+    ).toEqual([
+      "acme.notes.attach",
+      "paged.ai.complete",
+      "paged.ml.edit",
+      "paged.ml.generate",
+    ]);
     expect(
       (
         await cli(["schema", fx.paged, "plugin:acme.notes/note", NOTES])

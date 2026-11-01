@@ -1,0 +1,19 @@
+paged-ml-host
+Copyright (c) And The Next GmbH
+Licensed under AGPL-3.0-only OR the Paged Media Enterprise License (LICENSE.md).
+
+Third-party programs and data this host works with, none of which is part of
+this work or distributed with it:
+
+stable-diffusion.cpp (https://github.com/leejet/stable-diffusion.cpp), MIT
+License. paged-ml-host invokes its command-line program (`sd` / `sd-cli`) as an
+external program at a path the user configures. It is not vendored, built,
+linked, downloaded or redistributed by paged; the user builds or installs it
+under its own licence.
+
+Model weights. The diffusion model, text encoder and VAE files the host is
+pointed at belong to the user, who obtains them and accepts their licences.
+The intended model, Qwen-Image-2.1, is published under the Qwen Research
+License; paged does not bundle, download, fetch or redistribute it, and the
+host refuses a model configuration whose licence the user has not
+acknowledged (`licenceAcknowledged: true`).

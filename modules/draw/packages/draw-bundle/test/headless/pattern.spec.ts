@@ -18,10 +18,10 @@
 
 // PATTERN EDITING v1 — the re-editable tile FIELD, through the REAL
 // engine wasm the harness boots (protocol 58). Pins, in order:
-//   (1) the HARD BOUNDARY: this is not a pattern swatch and the module
-//       says so in words the test owns (`PATTERN_SWATCH_NOTE`), because
-//       there is no pattern paint type in IDML / the engine / the wire
-//       (RFI C-31);
+//   (1) WHAT IS WHAT: a field is pattern artwork, the swatch it saves is
+//       the engine's pattern paint (engine ADR 1041, which closed RFI
+//       C-31), in words the test owns (`PATTERN_SWATCH_NOTE`); the save
+//       itself is pinned in pattern-swatch.spec.ts;
 //   (2) the PARAMETERS v0 did not have — grid / brick / hex lattices,
 //       tile size, spacing incl. NEGATIVE (overlap), copy counts,
 //       dimming, and the overlap ORDER (which copy paints in front);
@@ -266,28 +266,22 @@ const RING: PatternPlan = {
   ],
 };
 
-describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not a swatch)", () => {
-  describe("the hard boundary (RFI C-31)", () => {
-    it("the module says, in words this test owns, that a pattern SWATCH is not buildable", () => {
-      expect(PATTERN_SWATCH_NOTE).toContain("THIS IS NOT A PATTERN SWATCH");
-      // The three places the paint type is absent — named, because a
-      // reader has to be able to check the claim.
+describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD; the swatch it saves)", () => {
+  describe("artwork and swatch (RFI C-31, closed by engine ADR 1041)", () => {
+    it("the module says, in words this test owns, what a field is and what the swatch is", () => {
       expect(PATTERN_SWATCH_NOTE).toContain(
-        "no pattern paint type in the format",
+        "A FIELD IS PATTERN ARTWORK, NOT A PATTERN SWATCH",
       );
-      expect(PATTERN_SWATCH_NOTE).toContain("Graphic model");
+      expect(PATTERN_SWATCH_NOTE).toContain("the engine's pattern paint");
       expect(PATTERN_SWATCH_NOTE).toContain(
-        "colour and gradient swatches are the only two kinds",
+        "applies as a fill or a stroke to any object",
       );
-      expect(PATTERN_SWATCH_NOTE).toContain(
-        "would render nothing and lie on save",
-      );
-      expect(PATTERN_SWATCH_NOTE).toContain("not supported yet");
+      expect(PATTERN_SWATCH_NOTE).toContain("IDML has no pattern swatch");
       expect(PATTERN_SWATCH_NOTE).not.toMatch(/RFI|\b[A-Z]-\d+\b/);
-      // The panel says it in plain words AND adds the two limits its own
+      // The panel says it in plain words AND adds the limits its own
       // form cannot hide.
       expect(t(PATTERN_PANEL_NOTE)).toContain(
-        "It is not a fill you can apply to other objects",
+        "Save swatch turns the tile, the tile type, spacing and overlap into a pattern swatch",
       );
       expect(t(PATTERN_PANEL_NOTE)).toContain(
         "The copies always sit above the original",
@@ -295,10 +289,10 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(t(PATTERN_PANEL_NOTE)).toContain(
         "Dimming sets the copies' opacity",
       );
-      // Baking and re-planning are ONE undo step each (measured below);
-      // the note said TWO until it was corrected to match.
+      // Baking, re-planning and saving are ONE undo step each (measured
+      // below and in pattern-swatch.spec.ts).
       expect(t(PATTERN_PANEL_NOTE)).toContain(
-        "Making, re-planning, releasing and deleting the copies are one undo step each",
+        "Making, re-planning, releasing and deleting the copies and saving the swatch are one undo step each",
       );
       expect(t(PATTERN_PANEL_NOTE)).not.toContain("two undo steps");
       expect(t(PATTERN_PANEL_NOTE)).toContain(
@@ -313,6 +307,7 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         "media.paged.draw.command.selectPatternTiles",
         "media.paged.draw.command.deletePatternTiles",
         "media.paged.draw.command.releasePatternField",
+        "media.paged.draw.command.savePatternSwatch",
       ]);
     });
   });

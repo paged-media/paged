@@ -314,6 +314,25 @@ describe("paged.draw commands, no engine — patterns", () => {
     expect(new Set(ops(r.leaves()))).toEqual(new Set(["setPluginMetadata"]));
     await refuses([POLY], `${C}.releasePatternField`);
   });
+
+  it("Save pattern swatch writes ONE createSwatch with the field's pattern (engine ADR 1041); a plain path sends nothing", async () => {
+    covers("command:media.paged.draw.command.savePatternSwatch");
+    const r = await patterned();
+    await r.run(`${C}.savePatternSwatch`, { name: "Dots" });
+    expect(r.steps()).toBe(1);
+    const created = r
+      .leaves()
+      .filter((m) => m.op === "createSwatch") as Extract<
+      Mutation,
+      { op: "createSwatch" }
+    >[];
+    expect(created).toHaveLength(1);
+    const spec = created[0]!.args.spec;
+    expect(spec.selfId).toBe("Pattern/dots");
+    expect(spec.pattern?.tileType).toBe("Grid");
+    expect(spec.pattern?.items.length).toBeGreaterThan(0);
+    await refuses([POLY], `${C}.savePatternSwatch`);
+  });
 });
 
 describe("paged.draw commands, no engine — objects on a path", () => {

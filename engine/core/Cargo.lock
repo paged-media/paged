@@ -1621,7 +1621,7 @@ dependencies = [
 [[package]]
 name = "flo_curves"
 version = "0.8.1"
-source = "git+https://github.com/drietsch/flo_curves?rev=6196f18#6196f1856f3f5680a6b2b22ea8b109e98a2cb868"
+source = "git+https://github.com/drietsch/flo_curves?rev=b351df8#b351df8e5131d6df47ba55a5798a0abef48a9f99"
 dependencies = [
  "itertools 0.14.0",
  "ouroboros",

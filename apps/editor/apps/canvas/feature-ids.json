@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 881,
+    "command": 882,
     "keybinding": 167,
-    "menu": 624,
-    "panel": 147,
+    "menu": 626,
+    "panel": 148,
     "tool": 129
   },
   "features": [
@@ -1317,6 +1317,11 @@
     },
     {
       "id": "command:media.paged.draw.command.saveGraphicStyle",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.savePatternSwatch",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -5716,6 +5721,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Pattern/Save as pattern swatch",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Re-trace image",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -5994,6 +6004,11 @@
       "id": "menu:Edit/Selection to path",
       "kind": "menu",
       "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Edit/Settings/Models…",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:Edit/Transform/Free distort",
@@ -8902,6 +8917,11 @@
     },
     {
       "id": "panel:paged.master-pages",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.models",
       "kind": "panel",
       "owner": "editor"
     },

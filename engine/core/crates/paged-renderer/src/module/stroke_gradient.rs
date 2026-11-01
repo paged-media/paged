@@ -204,7 +204,7 @@ fn ramp_stops(page: &BuiltPage, paint: &Paint) -> Option<Vec<GradientStop>> {
         Paint::LinearGradient(id) => &list.linear_gradient(*id)?.stops,
         Paint::RadialGradient(id) => &list.radial_gradient(*id)?.stops,
         Paint::SweepGradient(id) => &list.sweep_gradient(*id)?.stops,
-        Paint::Solid(_) | Paint::Cmyk { .. } => return None,
+        Paint::Solid(_) | Paint::Cmyk { .. } | Paint::Pattern(_) => return None,
     };
     if stops.is_empty() {
         return None;

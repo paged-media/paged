@@ -122,6 +122,8 @@ pub(crate) struct ResolvedFrame<'a> {
     /// Engine ADR 1048 — the gradient mesh or freeform gradient the
     /// frame fills with instead of its swatch.
     pub fill_mesh: Option<&'a paged_model::MeshFill>,
+    /// Engine ADR 1041 — the frame's own placement of a pattern paint.
+    pub pattern_transform: Option<[f32; 6]>,
     pub geometry: Geometry<'a>,
 }
 
@@ -367,6 +369,7 @@ impl<'a> ResolvedFrame<'a> {
             fill_rule: list_fill_rule(frame.fill_rule),
             gradient_stroke_mode: frame.gradient_stroke_mode,
             fill_mesh: frame.fill_mesh.as_deref(),
+            pattern_transform: frame.pattern_transform,
             geometry,
         }
     }
@@ -424,6 +427,7 @@ impl<'a> ResolvedFrame<'a> {
             fill_rule: list_fill_rule(rect.fill_rule),
             gradient_stroke_mode: rect.gradient_stroke_mode,
             fill_mesh: rect.fill_mesh.as_deref(),
+            pattern_transform: rect.pattern_transform,
             geometry,
         }
     }
@@ -472,6 +476,7 @@ impl<'a> ResolvedFrame<'a> {
             fill_rule: list_fill_rule(oval.fill_rule),
             gradient_stroke_mode: oval.gradient_stroke_mode,
             fill_mesh: oval.fill_mesh.as_deref(),
+            pattern_transform: oval.pattern_transform,
             geometry: Geometry::Oval {
                 rect: rect_from_bounds(oval.bounds),
             },
@@ -535,6 +540,7 @@ impl<'a> ResolvedFrame<'a> {
             fill_rule: list_fill_rule(poly.fill_rule),
             gradient_stroke_mode: poly.gradient_stroke_mode,
             fill_mesh: poly.fill_mesh.as_deref(),
+            pattern_transform: poly.pattern_transform,
             geometry,
         }
     }
@@ -592,6 +598,7 @@ impl<'a> ResolvedFrame<'a> {
             fill_rule: list_fill_rule(line.fill_rule),
             gradient_stroke_mode: line.gradient_stroke_mode,
             fill_mesh: None,
+            pattern_transform: line.pattern_transform,
             geometry: Geometry::Line {
                 p0: (bounds.left, bounds.top),
                 p1: (bounds.right, bounds.bottom),
@@ -674,6 +681,7 @@ mod tests {
             media: None,
             gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
             fill_mesh: None,
+            pattern_transform: None,
         }
     }
 
@@ -743,6 +751,7 @@ mod tests {
             fill_rule: paged_model::FillRule::NonZero,
             gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
             fill_mesh: None,
+            pattern_transform: None,
             effects: None,
             effect_stack: Vec::new(),
             appearance: Vec::new(),

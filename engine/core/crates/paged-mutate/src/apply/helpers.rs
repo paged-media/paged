@@ -503,6 +503,22 @@ pub(super) fn find_fill_mesh_mut<'a>(
     }
 }
 
+/// Engine ADR 1041 — locate the `pattern_transform` field on any
+/// filled or stroked page-item kind.
+pub(super) fn find_pattern_transform_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Option<[f32; 6]>> {
+    match node {
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.pattern_transform),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.pattern_transform),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.pattern_transform),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.pattern_transform),
+        NodeId::GraphicLine(id) => find_graphic_line_mut(doc, id).map(|l| &mut l.pattern_transform),
+        _ => None,
+    }
+}
+
 /// Engine ADR 1007 — locate the `gradient_stroke_mode` field on any
 /// stroked page-item kind.
 pub(super) fn find_gradient_stroke_mode_mut<'a>(

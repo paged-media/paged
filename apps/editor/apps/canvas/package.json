@@ -52,6 +52,7 @@
     "@paged-media/tools": "workspace:*",
     "@paged-media/ui": "workspace:*",
     "@paged-media/web": "workspace:*",
+    "onnxruntime-web": "1.30.0",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

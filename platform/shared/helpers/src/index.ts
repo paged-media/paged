@@ -21,7 +21,8 @@
 // extension contract's own copies (plugin-sdk's `parseLength`, its
 // `data:` URI encoding) stay in the public SDK, which cannot import this.
 
-export { hex, sha256Hex, sha256HexPrefix } from "./hash.ts";
+export { crc32, hex, sha256Hex, sha256HexPrefix } from "./hash.ts";
+export { decodePng, encodePng, type RgbaImage } from "./png.ts";
 export {
   base64ToBytes,
   bytesToBase64,
@@ -40,7 +41,7 @@ export {
   labelKey,
   type LabelEnvelope,
 } from "./label.ts";
-export { crc32, zip, type ZipOptions } from "./zip.ts";
+export { zip, type ZipOptions } from "./zip.ts";
 export {
   isApprovedScript,
   trustedHtml,

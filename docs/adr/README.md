@@ -13,6 +13,7 @@ always used:
 | 350–749 | `modules/*` |
 | 950–999 | `apps/server` |
 | 1000–1099 | `engine/core` (from 2026-10-22, PM-0012; its records 200–209 keep their numbers) |
+| 1100–1199 | `platform/extensions` (from 2026-10-30, PM-0016) |
 
 A PM record may supersede or amend a component record; it names it, and the component record
 keeps its text.
@@ -31,3 +32,4 @@ keeps its text.
 | [PM-0013](PM-0013-editor-package.md) | A fourth public package, `@paged-media/editor`: the editor bundled, the engine from `@paged-media/paged`, React a peer |
 | [PM-0014](PM-0014-capability-layering.md) | A capability lives at the lowest layer every consumer can reach; modules may path-depend on engine crates (amended 2026-10-25: DrawingML geometry in `platform/shared/dml-geom`) |
 | [PM-0015](PM-0015-data-and-actions-are-platform-layers.md) | Data and actions are platform layers: bindings in the engine, `data@1` and `actions@1`, Turso replaces DuckDB, one script interpreter |
+| [PM-0016](PM-0016-extensions-adr-range.md) | The extensions' records continue at 1100–1199; 300–349 keep their numbers |

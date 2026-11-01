@@ -1756,6 +1756,7 @@ fn swatch_for(session: &mut Session, intent: &ColorIntent) -> Result<String> {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                pattern: None,
             },
         },
     )

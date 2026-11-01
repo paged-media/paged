@@ -34,6 +34,7 @@
 // migration escape hatch. See thoughts/docs/paged/plugin-trust-line.md.
 
 import type { AssetKind } from "./assets.js";
+import type { MlCapability } from "./ml.js";
 
 /** Reverse-DNS plugin identity, e.g. `media.paged.draw`. Doubles as
  *  the namespace prefix for every contribution id the bundle
@@ -153,6 +154,12 @@ export interface PluginCapabilities {
    * it runs registered actions.
    */
   actions?: ActionsCapability;
+  /**
+   * The ML doors (`host.ml`, `ml.<capability>@1`, extensions ADR 1100): the
+   * capabilities the bundle calls. A call to one it did not declare is
+   * refused by the host gate.
+   */
+  ml?: MlCapability[];
   /**
    * The clipboard door's grant (K-6 / S-14). Gates `host.clipboard`:
    * `"full"` grants the text, the rich `tabular` (cell-grid) and the
