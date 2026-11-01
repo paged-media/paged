@@ -158,6 +158,15 @@ Rides protocol v78 (added before its first consumer sync; governance rule 4).
   `ReplyCommentThread`. The schema, the introspect catalog and the CLI surface are regenerated.
 - `paged-canvas`: the `comments` collection lists thread comments after the text comments, with
   `threadId`, `anchor`, `threadKind`, `person`, `modified` and `orphaned` on every row.
+- A comment keeps the **source** its format wrote (`CommentSpec.source`, `SourceBlob`): the thread
+  stores it per comment id, the collection returns it, and deleting a reply drops its entry.
+- Each document-thread row reports the **page** it stands at and the **point** on it (`page`, `at`):
+  a page point as given, an item at its top-left plus the anchor's own point, a page id used as a
+  module address at the page's origin; a thread whose target is gone reports neither.
+- **slide** is on it: a deck's comments become threads on their page or shape (`shape:<id>`), the
+  original `SlideComment` is the source, export rebuilds the per-page lists from the rows, the
+  plugin's panel and markers are gone, and an older deck's container part is read into the
+  document once. A text comment has no slide to go on and is not written to the `.pptx`.
 - Not yet: orphaning when an anchor's target is deleted, the format readers and writers, the
   host panel and pins, `comments@1`, the CLI verbs, PDF annotations.
 

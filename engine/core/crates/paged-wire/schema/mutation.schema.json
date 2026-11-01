@@ -13209,6 +13209,18 @@
             "null"
           ],
           "default": null
+        },
+        "source": {
+          "description": "What the format this comment was read from wrote for it, kept so the\nwriter can give it back unchanged (engine ADR 1055). Only a thread's\ncomments keep one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceBlobSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       }
     },
@@ -13287,6 +13299,22 @@
       "required": [
         "person",
         "emoji"
+      ]
+    },
+    "SourceBlobSpec": {
+      "description": "Engine ADR 1055 — the element a format wrote a comment as: `format` names\nthe family (`docx`, `xlsx`, `pptx`, `pdf`, `idml`, `odf`), `data` is its XML\n(or the annotation dictionary as text, or the module's JSON).",
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "data"
       ]
     },
     "CommentAnchorSpec": {

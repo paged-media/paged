@@ -7254,6 +7254,23 @@ pub struct CommentSpec {
     /// A PDF review state: `accepted`, `rejected`, `cancelled`, `completed`.
     #[serde(default)]
     pub review_state: Option<String>,
+    /// What the format this comment was read from wrote for it, kept so the
+    /// writer can give it back unchanged (engine ADR 1055). Only a thread's
+    /// comments keep one.
+    #[serde(default)]
+    pub source: Option<SourceBlobSpec>,
+}
+
+/// Engine ADR 1055 — the element a format wrote a comment as: `format` names
+/// the family (`docx`, `xlsx`, `pptx`, `pdf`, `idml`, `odf`), `data` is its XML
+/// (or the annotation dictionary as text, or the module's JSON).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceBlobSpec {
+    pub format: String,
+    pub data: String,
 }
 
 /// Engine ADR 1055 — a mention of a person inside a comment's text.

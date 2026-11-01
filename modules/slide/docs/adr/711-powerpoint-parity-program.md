@@ -92,6 +92,14 @@ written, how a slide made in the editor is written, and what happens to links.
 
 ## Amendment (2026-10-25): comments are read, shown and written
 
+> **Superseded in part (2026-11-01).** The comment model, its panel and its markers moved to the
+> engine ([engine ADR 1055](../../../../engine/core/docs/adr/1055-one-comment-model-for-every-module.md)):
+> a slide comment is a document thread anchored to its page or, for a shape comment, to
+> `shape:<cNvPr id>` on the page, and keeps the comment PowerPoint wrote as the thread's source.
+> The host's Comments panel replaces this plugin's, comments undo and save with the document, and
+> `comments/comments.json` is read once into the document and emptied. What follows describes the
+> file formats, which still hold.
+
 Wave 1 asks for PowerPoint's threaded comments to survive a round trip. The engine's notes
 (engine ADR 172) are anchored in text, plain and single-level; a slide comment sits on the slide
 or on a shape and has replies and a status. So comments are kept by this plugin, not the engine.

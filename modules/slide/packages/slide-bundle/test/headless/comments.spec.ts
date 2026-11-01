@@ -127,47 +127,6 @@ describe("[plugin-slide.comments] comments, headless", () => {
     await waitFor(() => expect(d.h.documentContext()).toBeNull());
   }, 120_000);
 
-  it("marks the active slide's open threads on the overlay; a resolved one is not marked", async () => {
-    const d = await open(fixture("placeholders"), "placeholders.pptx");
-    const pages = await d.pageIds();
-    d.setActive(pages[1]!);
-    const layer = () =>
-      d.h
-        .overlayLayers()
-        .find((l) => l.key === "media.paged.slide/media.paged.slide.comments");
-    const { comment } = (await d.h.objects.invoke(ADD_COMMENT_COMMAND, {
-      slide: d.slides[1]!,
-      text: "Here",
-      author: "Ana Lima",
-      x: 200,
-      y: 100,
-    })) as { comment: string };
-    await waitFor(() =>
-      expect(layer()?.shapes).toEqual([
-        { pageId: pages[1], rect: [100, 200, 118, 218] },
-        {
-          kind: "text",
-          pageId: pages[1],
-          x: 209,
-          y: 100 + 18 * 0.7,
-          text: "AL",
-          anchor: "middle",
-          background: true,
-        },
-      ]),
-    );
-    // Another slide: its own (none).
-    d.setActive(pages[0]!);
-    await waitFor(() => expect(layer()?.shapes).toEqual([]));
-    d.setActive(pages[1]!);
-    await waitFor(() => expect(layer()?.shapes.length).toBe(2));
-    await d.h.objects.invoke(RESOLVE_COMMENT_COMMAND, {
-      slide: d.slides[1]!,
-      comment,
-    });
-    await waitFor(() => expect(layer()?.shapes).toEqual([]));
-  }, 120_000);
-
   it("the typed commands add, reply, resolve and delete on a slide of an opened deck", async () => {
     covers(
       "command:media.paged.slide.command.addComment",

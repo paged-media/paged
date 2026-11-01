@@ -4348,6 +4348,18 @@ pub struct CommentSummary {
     /// be re-anchored or deleted.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub orphaned: bool,
+    /// What the format this comment was read from wrote for it (engine ADR
+    /// 1055), when it kept one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<paged_mutate::SourceBlobSpec>,
+    /// The page a document thread is on and the point of it on that page
+    /// (points from the page's top-left), resolved from the anchor: a page
+    /// point as given, an item at its top-left (or the anchor's own point in
+    /// the item), a page id used as an address at the page's origin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<[f64; 2]>,
 }
 
 /// Engine ADR 1040 — a tracked change as the content read names it.

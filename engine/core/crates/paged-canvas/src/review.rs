@@ -413,6 +413,9 @@ pub(crate) fn comment_rows(story_id: &str, story: &paged_model::Story) -> Vec<Co
             person: c.person.clone(),
             modified: c.modified.clone(),
             orphaned: false,
+            source: None,
+            page: None,
+            at: None,
         }
     };
     let mut out = Vec::new();
@@ -484,6 +487,14 @@ pub(crate) fn thread_rows(doc: &paged_scene::Document) -> Vec<CommentSummary> {
                 person: c.person.clone(),
                 modified: c.modified.clone(),
                 orphaned: t.anchor.is_none() || t.orphaned.is_some(),
+                source: t.source.iter().find(|(id, _)| id == &c.id).map(|(_, s)| {
+                    paged_mutate::SourceBlobSpec {
+                        format: s.format.clone(),
+                        data: s.data.clone(),
+                    }
+                }),
+                page: None,
+                at: None,
             });
         }
     }

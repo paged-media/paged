@@ -1380,6 +1380,12 @@ export interface CommentSpec {
      * A PDF review state: `accepted`, `rejected`, `cancelled`, `completed`.
      */
     reviewState?: string | null;
+    /**
+     * What the format this comment was read from wrote for it, kept so the
+     * writer can give it back unchanged (engine ADR 1055). Only a thread\'s
+     * comments keep one.
+     */
+    source?: SourceBlobSpec | null;
 }
 
 /**
@@ -1431,6 +1437,19 @@ export interface CommentSummary {
      * be re-anchored or deleted.
      */
     orphaned?: boolean;
+    /**
+     * What the format this comment was read from wrote for it (engine ADR
+     * 1055), when it kept one.
+     */
+    source?: SourceBlobSpec;
+    /**
+     * The page a document thread is on and the point of it on that page
+     * (points from the page\'s top-left), resolved from the anchor: a page
+     * point as given, an item at its top-left (or the anchor\'s own point in
+     * the item), a page id used as an address at the page\'s origin.
+     */
+    page?: string;
+    at?: [number, number];
 }
 
 /**
@@ -1915,6 +1934,16 @@ export interface PersonSpec {
     initials?: string | null;
     userId?: string | null;
     providerId?: string | null;
+}
+
+/**
+ * Engine ADR 1055 — the element a format wrote a comment as: `format` names
+ * the family (`docx`, `xlsx`, `pptx`, `pdf`, `idml`, `odf`), `data` is its XML
+ * (or the annotation dictionary as text, or the module\'s JSON).
+ */
+export interface SourceBlobSpec {
+    format: string;
+    data: string;
 }
 
 /**

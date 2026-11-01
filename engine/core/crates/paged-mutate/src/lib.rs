@@ -93,8 +93,8 @@ pub use operation::{
     MeshGridSpec, MeshNodeSpec, NestedParent, NodeId, NodeSpec, NumberingLevelSpec,
     NumberingListSpec, OpacityMaskMode, Operation, ParagraphListState, PathPointAddress,
     PathPointRole, PathfinderKind, PathfinderRegionVerb, PatternColorSpec, PatternItemSpec,
-    PatternSpec, PersonSpec, PropertyPath, ReactionSpec, StopColorSpec, StyleCollection,
-    StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
+    PatternSpec, PersonSpec, PropertyPath, ReactionSpec, SourceBlobSpec, StopColorSpec,
+    StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 

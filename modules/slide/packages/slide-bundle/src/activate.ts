@@ -58,7 +58,6 @@ import {
 } from "./anim/contribute.js";
 import { ChartEditing, contributeCharts } from "./charts.js";
 import { chartPlans, keepCharts } from "./charts-model.js";
-import { contributeCommentMarkers } from "./comment-markers.js";
 import { CommentsStore, fileFromReport } from "./comments-model.js";
 import { contributeSlideCommands, DECK_CONTEXT } from "./commands.js";
 import {
@@ -71,22 +70,13 @@ import {
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
-import {
-  COMMENTS,
-  DECK,
-  ICONS_MSG,
-  MASTERS,
-  NOTES,
-  SHAPES,
-  SLIDES,
-} from "./messages.js";
+import { DECK, ICONS_MSG, MASTERS, NOTES, SHAPES, SLIDES } from "./messages.js";
 import {
   contributeSlideObjectModel,
   parseLabel,
   type DeckLabel,
 } from "./object-model.js";
 import { slidePanels } from "./panels.js";
-import { makeCommentsPanel } from "./panels/comments-panel.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
 import { makeSlidesPanel } from "./panels/slides-panel.js";
 import { SlidesStore } from "./slides-model.js";
@@ -146,7 +136,8 @@ import { DESIGN } from "./messages.js";
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
 export const NOTES_PANEL_ID = "media.paged.slide.panel.notes";
-export const COMMENTS_PANEL_ID = "media.paged.slide.panel.comments";
+/** The host's Comments panel (engine ADR 1055): slide has none of its own. */
+export const COMMENTS_PANEL_ID = "paged.comments";
 export const PPTX_MIME =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 /** Diagnostics key for what an import met and could not render. */
@@ -268,11 +259,9 @@ function renders(host: BundleHost, what: string): boolean {
 
 export function activate(host: BundleHost): BundleHandle {
   const disposers: Array<() => void> = [];
-  // The deck's comments, in a container part (needs the parts door).
-  const comments = host.supports("storage.parts@1")
-    ? new CommentsStore(host)
-    : null;
-  if (comments) disposers.push(() => comments.dispose());
+  // The deck's comments, held by the engine as comment threads (ADR 1055).
+  const comments = new CommentsStore(host);
+  disposers.push(() => comments.dispose());
   /** An import is opening its own document (which gets its fonts there). */
   let importing = false;
 
@@ -905,20 +894,6 @@ export function activate(host: BundleHost): BundleHandle {
             '<path d="M5 15h14M5 18.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
         }).dispose,
       );
-      if (comments) {
-        panelDisposers.push(
-          host.contribute.panel({
-            id: COMMENTS_PANEL_ID,
-            title: t(COMMENTS.title),
-            component: makeCommentsPanel(host, s, comments),
-            defaultDock: "right",
-            rail,
-            // A speech bubble.
-            iconSvg:
-              '<path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
-          }).dispose,
-        );
-      }
     };
     registerPanels(s.isDeck());
     textPane = true;
@@ -954,12 +929,6 @@ export function activate(host: BundleHost): BundleHandle {
   if (host.supports("storage.parts@1")) {
     const editing = new ChartEditing(host);
     disposers.push(...contributeCharts(host, editing), () => editing.dispose());
-  }
-
-  // The comment markers on the active slide (the host's overlay layers).
-  if (store && comments) {
-    const markers = contributeCommentMarkers(host, store, comments);
-    if (markers) disposers.push(() => markers.dispose());
   }
 
   // ADR 323 — the slide, transition, notes, placeholder and deck fields as

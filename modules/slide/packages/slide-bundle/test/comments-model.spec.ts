@@ -16,29 +16,30 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// [plugin-slide.comments] The comments model: the pure edits (add, reply,
-// resolve, delete), the store over the container part (a fake parts door),
-// the author an edit is written under, the markers on the slide, and what
-// export hands the engine per page.
+// [plugin-slide.comments] The comments model over the engine's comment threads
+// (engine ADR 1055): a deck's comments become threads on their page or shape,
+// the rows read back as what export hands the engine, the store writes through
+// the engine's mutations, an older deck's container part is moved into the
+// document once, and export hands each page its comments only when the
+// document keeps them.
 
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost, ToolPreviewText } from "@paged-media/plugin-api";
+import type { BundleHost } from "@paged-media/plugin-api";
 
-import { markerShapes } from "../src/comment-markers";
 import {
   COMMENTS_PART,
   CommentsStore,
+  commentMutations,
   fileFromReport,
+  fileFromRows,
   initialsOf,
   makeComment,
   newGuid,
-  parseFile,
-  withComment,
-  withReply,
-  withStatus,
-  withoutComment,
+  shapeAddress,
+  shapeOfAddress,
   type CommentsFile,
+  type EngineCommentRow,
   type SlideComment,
 } from "../src/comments-model";
 import { exportPlan } from "../src/deck-export";
@@ -64,14 +65,63 @@ function comment(over: Partial<SlideComment> = {}): SlideComment {
   };
 }
 
-/** A host with a parts door and a KV store, in memory. */
-function fakeHost() {
+type Mutation = { op: string; args: Record<string, any> };
+
+/** The rows the engine would list for the mutations a deck's comments make. */
+function rowsFor(file: CommentsFile): EngineCommentRow[] {
+  const rows: EngineCommentRow[] = [];
+  const flat = (ops: Mutation[]): Mutation[] => ops;
+  for (const m of flat(commentMutations(file))) {
+    if (m.op === "insertCommentThread") {
+      const c = m.args.comment;
+      const anchor = m.args.anchor;
+      rows.push({
+        id: c.id,
+        threadId: c.id,
+        author: c.author,
+        initials: c.initials,
+        date: c.date,
+        text: c.text,
+        resolved: c.resolved,
+        person: c.person,
+        page: anchor.kind === "page" ? anchor.page : anchor.item,
+        at: anchor.kind === "page" ? anchor.at : [0, 0],
+        anchor,
+        source: c.source,
+      });
+    } else if (m.op === "replyComment") {
+      const c = m.args.comment;
+      rows.push({
+        id: c.id,
+        parentId: m.args.parentId,
+        author: c.author,
+        initials: c.initials,
+        date: c.date,
+        text: c.text,
+        resolved: false,
+        person: c.person,
+        source: c.source,
+      });
+    }
+  }
+  return rows;
+}
+
+/** A host with the engine's comment door and a KV store, in memory. */
+function fakeHost(initial: EngineCommentRow[] = []) {
+  let rows = initial;
   const parts = new Map<string, Uint8Array>();
   const kv = new Map<string, unknown>();
+  const sent: Mutation[] = [];
   const opened = new Set<() => void>();
+  const changed = new Set<() => void>();
   const host = {
     supports: (door: string) =>
-      door === "storage.parts@1" || door === "document.onDidOpen@1",
+      [
+        "storage.parts@1",
+        "document.onDidOpen@1",
+        "document.onDidChange@1",
+      ].includes(door),
     parts: {
       read: async (p: string) => parts.get(p) ?? null,
       write: async (p: string, b: Uint8Array) => void parts.set(p, b),
@@ -85,11 +135,25 @@ function fakeHost() {
         opened.add(l);
         return { dispose: () => opened.delete(l) };
       },
+      onDidChange(l: () => void) {
+        changed.add(l);
+        return { dispose: () => changed.delete(l) };
+      },
+      collection: async () => rows,
+      mutate: async (m: Mutation) => {
+        sent.push(m);
+        return { applied: true };
+      },
     },
   } as unknown as BundleHost;
-  const file = (): CommentsFile | null =>
-    parseFile(parts.get(COMMENTS_PART) ?? null);
-  return { host, parts, kv, file, reopen: () => opened.forEach((l) => l()) };
+  return {
+    host,
+    parts,
+    kv,
+    sent,
+    setRows: (r: EngineCommentRow[]) => void (rows = r),
+    reopen: () => opened.forEach((l) => l()),
+  };
 }
 
 describe("[plugin-slide.comments] the comments model", () => {
@@ -115,115 +179,258 @@ describe("[plugin-slide.comments] the comments model", () => {
     });
   });
 
-  it("adds, replies, resolves and deletes without touching the other threads", () => {
-    const base: CommentsFile = { v: 1, byPage: { p1: [comment()] } };
-    const made = makeComment(ANA, "Use the brand blue", { x: 10, y: 20 });
-    expect(made).toMatchObject({
-      authorId: "{A}",
-      author: "Ana Lima",
-      initials: "AL",
-      text: "Use the brand blue",
-      x: 10,
-      y: 20,
-      status: null,
-      replies: [],
-      legacy: false,
-    });
-    expect(Number.isNaN(Date.parse(made.created!))).toBe(false);
-
-    const added = withComment(base, "p1", made);
-    expect(added.byPage.p1!.map((c) => c.id)).toEqual(["{C1}", made.id]);
-    expect(base.byPage.p1).toHaveLength(1); // not mutated
-
-    const { file: replied, reply } = withReply(
-      added,
-      "p1",
-      "{C1}",
-      ANA,
-      "Done",
-    );
-    expect(reply).toMatchObject({ author: "Ana Lima", text: "Done" });
-    expect(replied.byPage.p1![0]!.replies).toEqual([reply!]);
-    expect(withReply(added, "p1", "{nope}", ANA, "x").reply).toBeNull();
-
-    const resolved = withStatus(replied, "p1", "{C1}", true);
-    expect(resolved.byPage.p1![0]!.status).toBe("resolved");
-    expect(
-      withStatus(resolved, "p1", "{C1}", false).byPage.p1![0]!.status,
-    ).toBeNull();
-
-    const noReply = withoutComment(resolved, "p1", "{C1}", reply!.id);
-    expect(noReply.byPage.p1![0]!.replies).toEqual([]);
-    const gone = withoutComment(noReply, "p1", "{C1}");
-    expect(gone.byPage.p1!.map((c) => c.id)).toEqual([made.id]);
-    // An unknown comment changes nothing (the very same file).
-    expect(withoutComment(gone, "p1", "{nope}")).toBe(gone);
+  it("names a shape on its page by a module address", () => {
+    expect(shapeAddress(7)).toBe("shape:7");
+    expect(shapeOfAddress("shape:7")).toBe(7);
+    expect(shapeOfAddress("Sheet1!B3")).toBeNull();
+    expect(shapeOfAddress(undefined)).toBeNull();
   });
 
-  it("the store writes every change to the container part and reads it back on open", async () => {
-    const f = fakeHost();
+  it("puts a deck's comments into the document: each author once, each comment a thread on its page or shape, each reply in its thread", () => {
+    const file: CommentsFile = {
+      v: 1,
+      byPage: {
+        p1: [
+          comment({
+            replies: [
+              {
+                id: "{R1}",
+                authorId: "{B}",
+                author: "Ben Ode",
+                initials: "BO",
+                created: "2026-10-02T09:00:00.000",
+                text: "Done",
+              },
+            ],
+          }),
+          comment({
+            id: "{C2}",
+            shapeId: 5,
+            x: null,
+            y: null,
+            status: "resolved",
+          }),
+        ],
+      },
+    };
+    const ops = commentMutations(file) as Mutation[];
+    expect(ops.map((o) => o.op)).toEqual([
+      "setPerson",
+      "insertCommentThread",
+      "replyComment",
+      "insertCommentThread",
+    ]);
+    expect(ops[0]!.args.person).toEqual({
+      id: "{B}",
+      name: "Ben Ode",
+      initials: "BO",
+    });
+    expect(ops[1]!.args.anchor).toEqual({
+      kind: "page",
+      page: "p1",
+      at: [120, 40],
+    });
+    expect(ops[1]!.args.comment).toMatchObject({
+      id: "{C1}",
+      author: "Ben Ode",
+      date: "2026-10-01T09:00:00.000",
+      person: "{B}",
+      resolved: false,
+    });
+    expect(ops[2]!.args).toMatchObject({
+      parentId: "{C1}",
+      comment: { id: "{R1}", text: "Done" },
+    });
+    expect(ops[3]!.args.anchor).toEqual({
+      kind: "cell",
+      item: "p1",
+      address: "shape:5",
+    });
+    expect(ops[3]!.args.comment.resolved).toBe(true);
+  });
+
+  it("reads the engine's rows back as exactly what the deck held", () => {
+    const file: CommentsFile = {
+      v: 1,
+      byPage: {
+        p1: [
+          comment({
+            legacy: true,
+            replies: [
+              {
+                id: "{R1}",
+                authorId: "{B}",
+                author: "Ben Ode",
+                initials: "BO",
+                created: "2026-10-02T09:00:00.000",
+                text: "Done",
+              },
+            ],
+          }),
+          comment({
+            id: "{C2}",
+            shapeId: 5,
+            x: null,
+            y: null,
+            status: "closed",
+          }),
+        ],
+      },
+    };
+    expect(fileFromRows(rowsFor(file))).toEqual(file);
+  });
+
+  it("a comment the panel made has no source: it takes its place from the engine's page and point", () => {
+    const rows: EngineCommentRow[] = [
+      {
+        id: "7",
+        threadId: "7",
+        author: "Cy",
+        text: "From the host panel",
+        resolved: false,
+        page: "p2",
+        at: [30, 60],
+        anchor: { kind: "item", item: "u9" } as never,
+        date: "2026-11-01T10:00:00Z",
+      },
+      // A text comment has no slide to go on.
+      {
+        id: "8",
+        threadId: undefined,
+        author: "Cy",
+        text: "on text",
+        resolved: false,
+      } as never,
+      // A thread whose target is gone is not exported.
+      {
+        id: "9",
+        threadId: "9",
+        author: "Cy",
+        text: "orphan",
+        resolved: false,
+        page: null,
+      },
+    ];
+    const f = fileFromRows(rows);
+    expect(Object.keys(f.byPage)).toEqual(["p2"]);
+    expect(f.byPage.p2![0]).toMatchObject({
+      id: "7",
+      author: "Cy",
+      initials: "C",
+      text: "From the host panel",
+      x: 30,
+      y: 60,
+      shapeId: null,
+      status: null,
+      legacy: false,
+      replies: [],
+    });
+  });
+
+  it("resolving in the host sets the exported status; reopening clears a resolved one", () => {
+    const file: CommentsFile = {
+      v: 1,
+      byPage: { p1: [comment({ status: "resolved" })] },
+    };
+    const rows = rowsFor(file);
+    rows[0]!.resolved = false; // reopened in the host panel
+    expect(fileFromRows(rows).byPage.p1![0]!.status).toBeNull();
+    rows[0]!.resolved = true;
+    expect(fileFromRows(rows).byPage.p1![0]!.status).toBe("resolved");
+  });
+
+  it("the store reads the engine's comments on open and after a change", async () => {
+    const f = fakeHost(rowsFor({ v: 1, byPage: { p1: [comment()] } }));
     const store = new CommentsStore(f.host);
     await store.ready();
-    expect(store.has()).toBe(false);
-    await store.replace({ v: 1, byPage: { p1: [comment()], p2: [] } });
     expect(store.has()).toBe(true);
-
-    const c = await store.add("p2", "New thread", "Ana Lima", { x: 5, y: 6 });
-    expect(f.file()!.byPage.p2!.map((x) => x.text)).toEqual(["New thread"]);
-    const r = await store.reply("p2", c.id, "A reply", "Ben Ode");
-    // Ben is the deck's own author: the reply is written under his id.
-    expect(r).toMatchObject({ authorId: "{B}", initials: "BO" });
-    expect(await store.setResolved("p2", c.id, true)).toBe(true);
-    expect(f.file()!.byPage.p2![0]!.status).toBe("resolved");
-    expect(await store.remove("p1", "{C1}")).toBe(true);
-    expect(await store.remove("p1", "{C1}")).toBe(false);
-    expect(f.file()!.byPage.p1).toEqual([]);
-
-    // Another store (the document reopened) reads what was written.
-    const again = new CommentsStore(f.host);
-    await again.ready();
-    expect(again.forPage("p2").map((x) => x.text)).toEqual(["New thread"]);
-    expect(again.forPage("p2")[0]!.replies.map((x) => x.text)).toEqual([
-      "A reply",
+    expect(store.forPage("p1").map((c) => c.text)).toEqual([
+      "Tighten the title",
     ]);
-    expect(again.forPage(null)).toEqual([]);
+    f.setRows([]);
+    await store.load();
+    expect(store.forPage("p1")).toEqual([]);
     store.dispose();
-    again.dispose();
+  });
+
+  it("the store writes through the engine's mutations", async () => {
+    const f = fakeHost(rowsFor({ v: 1, byPage: { p1: [comment()] } }));
+    const store = new CommentsStore(f.host);
+    await store.ready();
+
+    const made = await store.add("p1", "Use the brand blue", "Ana Lima", {
+      x: 10,
+      y: 20,
+    });
+    const batch = f.sent.at(-1)!;
+    expect(batch.op).toBe("batch");
+    expect((batch.args.ops as Mutation[]).map((o) => o.op)).toEqual([
+      "setPerson",
+      "insertCommentThread",
+    ]);
+    expect((batch.args.ops as Mutation[])[1]!.args.comment.id).toBe(made.id);
+
+    const reply = await store.reply("p1", "{C1}", "Agreed", "Ana Lima");
+    expect(reply?.text).toBe("Agreed");
+    expect((f.sent.at(-1)!.args.ops as Mutation[]).at(-1)!.args.parentId).toBe(
+      "{C1}",
+    );
+    expect(await store.reply("p1", "{missing}", "x", "Ana Lima")).toBeNull();
+
+    expect(await store.setResolved("p1", "{C1}", true)).toBe(true);
+    expect(f.sent.at(-1)).toEqual({
+      op: "resolveComment",
+      args: { commentId: "{C1}", resolved: true },
+    });
+    expect(await store.setResolved("p1", "{missing}", true)).toBe(false);
+
+    expect(await store.remove("p1", "{C1}")).toBe(true);
+    expect(f.sent.at(-1)).toEqual({
+      op: "deleteComment",
+      args: { commentId: "{C1}" },
+    });
+    expect(await store.remove("p1", "{C1}", "{nope}")).toBe(false);
+    store.dispose();
+  });
+
+  it("an older deck's container part is moved into the document once", async () => {
+    const f = fakeHost([]);
+    f.parts.set(
+      COMMENTS_PART,
+      new TextEncoder().encode(
+        JSON.stringify({
+          v: 1,
+          byPage: { p1: [comment()] },
+        } satisfies CommentsFile),
+      ),
+    );
+    const store = new CommentsStore(f.host);
+    await store.ready();
+    const ops = f.sent.flatMap((m) =>
+      m.op === "batch" ? (m.args.ops as Mutation[]) : [m],
+    );
+    expect(ops.map((o) => o.op)).toEqual(["setPerson", "insertCommentThread"]);
+    // The part is emptied so the next open does not move it again.
+    const left = JSON.parse(
+      new TextDecoder().decode(f.parts.get(COMMENTS_PART)!),
+    );
+    expect(left).toEqual({ v: 1, byPage: {} });
+    store.dispose();
   });
 
   it("writes new comments under one id per name, remembered per user", async () => {
-    const f = fakeHost();
+    const f = fakeHost(rowsFor({ v: 1, byPage: { p1: [comment()] } }));
     const store = new CommentsStore(f.host);
-    await store.replace({ v: 1, byPage: { p1: [] } });
-    expect(store.authorName()).toBe("");
+    await store.ready();
+    // The deck's own author of that name keeps their id, so PowerPoint shows one person.
+    expect(store.author("Ben Ode").id).toBe("{B}");
+    const a = store.author("Ana Lima");
+    expect(store.author("Ana Lima").id).toBe(a.id);
+    expect(a.id).toMatch(/^\{/);
     store.setAuthorName("  Ana Lima ");
     expect(store.authorName()).toBe("Ana Lima");
-    const a = await store.add("p1", "one", "Ana Lima");
-    const b = await store.add("p1", "two", "Ana Lima");
-    expect(a.authorId).toBe(b.authorId);
-    expect(a.authorId).toMatch(/^\{.+\}$/);
-    expect(a.initials).toBe("AL");
+    expect(makeComment(ANA, "x").authorId).toBe("{A}");
     store.dispose();
-  });
-
-  it("marks the open threads on the slide, the slide's own ones stacked in its corner", () => {
-    const shapes = markerShapes("p1", [
-      comment({ id: "a", x: 100, y: 50, initials: "BO" }),
-      comment({ id: "b", x: null, y: null, initials: "AL" }),
-      comment({ id: "c", x: null, y: null, initials: "CX" }),
-      comment({ id: "d", status: "resolved", initials: "RS" }),
-    ]);
-    const rects = shapes.filter((s) => "rect" in s) as { rect: number[] }[];
-    const texts = shapes.filter(
-      (s) => (s as ToolPreviewText).kind === "text",
-    ) as ToolPreviewText[];
-    expect(rects.map((r) => r.rect)).toEqual([
-      [50, 100, 68, 118],
-      [8, 8, 26, 26],
-      [30, 8, 48, 26],
-    ]);
-    expect(texts.map((t) => t.text)).toEqual(["BO", "AL", "CX"]);
-    expect(shapes.every((s) => s.pageId === "p1")).toBe(true);
   });
 
   it("export hands each page its comments only when the document keeps them", async () => {

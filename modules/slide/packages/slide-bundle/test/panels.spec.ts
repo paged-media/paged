@@ -40,7 +40,7 @@ import type { ObjectValue, PropertySchema } from "@paged-media/plugin-api";
 
 import manifest from "../manifest.json";
 import slideBundle from "../src/index";
-import { COMMENTS_PANEL_ID, SLIDES_PANEL_ID } from "../src/activate";
+import { SLIDES_PANEL_ID } from "../src/activate";
 import { ANIMATIONS_PANEL_ID } from "../src/anim/pane";
 import { SHAPES_PANEL_ID } from "../src/shapes";
 import {
@@ -111,13 +111,12 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
   });
 
   it("the manifest declares every panel", () => {
-    // The schema panels, the Slides sorter and the Comments panel (the
-    // Notes panel shares the notes schema panel's id).
+    // The schema panels and the Slides sorter (the Notes panel shares the
+    // notes schema panel's id; comments are the host's panel).
     expect([...manifest.contributes.panels].sort()).toEqual(
       [
         ...slidePanels().map((s) => s.id),
         SLIDES_PANEL_ID,
-        COMMENTS_PANEL_ID,
         SHAPES_PANEL_ID,
         ICONS_PANEL_ID,
         ANIMATIONS_PANEL_ID,

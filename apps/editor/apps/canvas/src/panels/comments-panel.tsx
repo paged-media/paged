@@ -77,7 +77,7 @@ const M = defineMessages("app.commentsPanel", {
   whereItem: "On an object",
   wherePage: "On a page",
   whereRegion: "On a region",
-  whereCell: "In cell {address}",
+  whereCell: "At {address}",
   whereOrphaned: "Its target was deleted",
   whereText: "On “{text}”",
   note: "Note",
@@ -86,22 +86,29 @@ const M = defineMessages("app.commentsPanel", {
 
 const AUTHOR_KEY = "paged.comments.author";
 
+/** The remembered name, or `fallback` (storage can be absent or refuse). */
+function readAuthor(fallback: string): string {
+  try {
+    return globalThis.localStorage?.getItem(AUTHOR_KEY) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeAuthor(name: string): void {
+  try {
+    globalThis.localStorage?.setItem(AUTHOR_KEY, name);
+  } catch {
+    // The name still works for this session.
+  }
+}
+
 /** The name the panel comments as, remembered in this browser. */
 function useReviewer(fallback: string): [Reviewer, (name: string) => void] {
-  const [name, setName] = useState(() => {
-    try {
-      return globalThis.localStorage?.getItem(AUTHOR_KEY) || fallback;
-    } catch {
-      return fallback;
-    }
-  });
+  const [name, setName] = useState(() => readAuthor(fallback));
   const set = (next: string) => {
     setName(next);
-    try {
-      globalThis.localStorage?.setItem(AUTHOR_KEY, next);
-    } catch {
-      // The name still works for this session.
-    }
+    writeAuthor(next);
   };
   return [{ name }, set];
 }

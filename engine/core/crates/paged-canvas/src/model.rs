@@ -12231,7 +12231,47 @@ impl CanvasModel {
             .iter()
             .flat_map(|s| crate::review::comment_rows(&s.self_id, &s.story))
             .chain(crate::review::thread_rows(&self.scene))
+            .map(|mut row| {
+                if let Some((page, at)) = row.anchor.as_ref().and_then(|a| self.anchor_page(a)) {
+                    row.page = Some(page);
+                    row.at = Some(at);
+                }
+                row
+            })
             .collect()
+    }
+
+    /// Engine ADR 1055 — the page and the point on it a comment anchor
+    /// stands at. A page point is itself; an item is resolved at its
+    /// top-left (the anchor's own point is in the item's space); a name that
+    /// is a page id, not an item, stands at that page's origin (a module's
+    /// address on a page, such as a slide's shape comment).
+    fn anchor_page(
+        &self,
+        anchor: &paged_mutate::operation::CommentAnchorSpec,
+    ) -> Option<(String, [f64; 2])> {
+        use paged_mutate::operation::CommentAnchorSpec as A;
+        let (target, own) = match anchor {
+            A::Page { page, at } => return Some((page.clone(), *at)),
+            A::Item { item, at } => (item.as_str(), at.unwrap_or([0.0, 0.0])),
+            A::Region { item, rect } => (item.as_str(), [rect[0], rect[1]]),
+            A::Cell { item, .. } => (item.as_str(), [0.0, 0.0]),
+        };
+        if let Some(el) = element_of_id(&self.scene, target) {
+            let g = self.element_geometry(&[el]).into_iter().next()?;
+            let page = g.page_id?;
+            // `bounds` is `[top, left, bottom, right]`.
+            return Some((
+                page.0,
+                [g.bounds[1] as f64 + own[0], g.bounds[0] as f64 + own[1]],
+            ));
+        }
+        self.scene
+            .spreads
+            .iter()
+            .flat_map(|p| p.spread.pages.iter())
+            .any(|pg| pg.self_id.as_deref() == Some(target))
+            .then(|| (target.to_string(), own))
     }
 
     /// The story, paragraph and index in it of note `note_id`.

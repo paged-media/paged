@@ -26,7 +26,7 @@
 
 use paged_canvas::{CanvasModel, CanvasOptions, Mutation};
 use paged_mutate::operation::{CommentAnchorSpec, PersonSpec};
-use paged_mutate::{CommentSpec, MentionSpec};
+use paged_mutate::{CommentSpec, MentionSpec, SourceBlobSpec};
 
 fn model() -> CanvasModel {
     let idml = paged_gen::write_idml(&paged_gen::samples::notes::build()).expect("idml");
@@ -296,4 +296,122 @@ fn people_and_comment_fields_survive_the_native_encoding__feat__core_comments() 
     assert_eq!(m.scene().people[0].name, "Ann B. Author");
     m.undo().unwrap();
     assert_eq!(m.scene().people[0].name, "Ann Author");
+}
+
+#[test]
+fn a_comment_keeps_what_its_format_wrote_for_it__feat__core_comments() {
+    let mut m = model();
+    let blob = |data: &str| {
+        Some(SourceBlobSpec {
+            format: "pptx".into(),
+            data: data.into(),
+        })
+    };
+    m.apply_mutation(&Mutation::InsertCommentThread {
+        anchor: item("u1"),
+        thread_kind: None,
+        comment: CommentSpec {
+            source: blob(r#"{"id":"A","legacy":true}"#),
+            ..spec(Some("A"), "Ann Author", "root")
+        },
+    })
+    .unwrap();
+    m.apply_mutation(&Mutation::ReplyComment {
+        parent_id: "A".into(),
+        comment: CommentSpec {
+            source: blob(r#"{"id":"A.1"}"#),
+            ..spec(Some("A.1"), "Bob", "reply")
+        },
+    })
+    .unwrap();
+    let rows = m.comments();
+    let src = |id: &str| {
+        rows.iter()
+            .find(|r| r.id == id)
+            .and_then(|r| r.source.clone())
+            .map(|s| (s.format, s.data))
+    };
+    assert_eq!(
+        src("A"),
+        Some(("pptx".into(), r#"{"id":"A","legacy":true}"#.into()))
+    );
+    assert_eq!(src("A.1"), Some(("pptx".into(), r#"{"id":"A.1"}"#.into())));
+
+    // A comment without one reports none; deleting a reply drops its source.
+    m.apply_mutation(&Mutation::ReplyComment {
+        parent_id: "A".into(),
+        comment: spec(Some("A.2"), "Cy", "no source"),
+    })
+    .unwrap();
+    assert!(m
+        .comments()
+        .iter()
+        .find(|r| r.id == "A.2")
+        .unwrap()
+        .source
+        .is_none());
+    m.apply_mutation(&Mutation::DeleteComment {
+        comment_id: "A.1".into(),
+    })
+    .unwrap();
+    assert_eq!(m.scene().comment_threads[0].source.len(), 1);
+    m.undo().unwrap();
+    assert_eq!(m.scene().comment_threads[0].source.len(), 2);
+}
+
+#[test]
+fn a_thread_reports_the_page_and_point_it_stands_at__feat__core_comments() {
+    let mut m = model();
+    let page = m.scene().spreads[0].spread.pages[0]
+        .self_id
+        .clone()
+        .expect("a page id");
+    let frame = m.scene().spreads[0].spread.text_frames[0]
+        .self_id
+        .clone()
+        .expect("a text frame id");
+
+    insert(
+        &mut m,
+        CommentAnchorSpec::Page {
+            page: page.clone(),
+            at: [40.0, 50.0],
+        },
+        Some("p"),
+        "on the page",
+    );
+    // A page id used as a module address stands at the page's origin.
+    insert(
+        &mut m,
+        CommentAnchorSpec::Cell {
+            item: page.clone(),
+            address: "shape:5".into(),
+        },
+        Some("c"),
+        "a module address on a page",
+    );
+    insert(&mut m, item(&frame), Some("i"), "on an item");
+    insert(
+        &mut m,
+        CommentAnchorSpec::Item {
+            item: "no-such-item".into(),
+            at: None,
+        },
+        Some("x"),
+        "its target is not here",
+    );
+
+    let rows = m.comments();
+    let at = |id: &str| {
+        let r = rows.iter().find(|r| r.id == id).unwrap();
+        (r.page.clone(), r.at)
+    };
+    assert_eq!(at("p"), (Some(page.clone()), Some([40.0, 50.0])));
+    assert_eq!(at("c"), (Some(page.clone()), Some([0.0, 0.0])));
+    let (item_page, item_at) = at("i");
+    assert_eq!(item_page.as_deref(), Some(page.as_str()));
+    // The anchor's own point (12, 34) is in the item's space, from its top-left.
+    let origin = item_at.expect("a point");
+    assert!(origin[0] >= 12.0 && origin[1] >= 34.0);
+    assert_eq!(at("x"), (None, None));
 }

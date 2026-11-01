@@ -152,6 +152,22 @@ pub(crate) fn comment_from(spec: &CommentSpec, id: String) -> Comment {
     }
 }
 
+/// The source a spec carries, keyed by the comment's id.
+fn source_of(spec: &CommentSpec, id: &str) -> Vec<(String, paged_model::SourceBlob)> {
+    spec.source
+        .iter()
+        .map(|s| {
+            (
+                id.to_string(),
+                paged_model::SourceBlob {
+                    format: s.format.clone(),
+                    data: s.data.clone(),
+                },
+            )
+        })
+        .collect()
+}
+
 /// Every comment id of the document: text comments and thread comments.
 fn all_ids(doc: &Document) -> impl Iterator<Item = &str> {
     doc.stories
@@ -210,6 +226,7 @@ pub(super) fn apply_insert_thread(
         anchor: Some(anchor_of(anchor)),
         kind,
         comments: vec![comment_from(spec, id.clone())],
+        source: source_of(spec, &id),
         ..Default::default()
     });
     let mut echoed = spec.clone();
@@ -261,6 +278,7 @@ pub(super) fn apply_reply(
         }
     }
     thread.comments.push(c);
+    thread.source.extend(source_of(spec, &id));
     let mut echoed = spec.clone();
     echoed.id = Some(id);
     Ok(applied(
@@ -401,7 +419,9 @@ pub(super) fn delete(doc: &mut Document, comment_id: &str) -> Option<AppliedOper
     if k == 0 {
         doc.comment_threads.remove(ti);
     } else {
-        doc.comment_threads[ti].comments.remove(k);
+        let thread = &mut doc.comment_threads[ti];
+        thread.comments.remove(k);
+        thread.source.retain(|(id, _)| id != comment_id);
     }
     Some(applied(
         Operation::DeleteComment {
