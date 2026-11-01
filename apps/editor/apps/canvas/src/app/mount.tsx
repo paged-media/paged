@@ -300,6 +300,11 @@ import {
   CLIPBOARD_MENU_ITEMS,
 } from "../clipboard-commands";
 import {
+  buildCornerCommands,
+  CORNER_DIAGNOSTIC_SOURCE,
+  CORNER_MENU_ITEMS,
+} from "../corner-commands";
+import {
   buildPathfinderCommands,
   PATHFINDER_DIAGNOSTIC_SOURCE,
   PATHFINDER_MENU_ITEMS,
@@ -1496,6 +1501,15 @@ function CanvasAppIntegration() {
         ]),
       () => problemsSink.clear(PATHFINDER_DIAGNOSTIC_SOURCE),
     );
+    // `paged.corners.*` — the five corner presets.
+    const cornerCommands = buildCornerCommands(
+      { client, getSelection: objectDeps.getSelection },
+      (message) =>
+        problemsSink.publish(CORNER_DIAGNOSTIC_SOURCE, "corners", [
+          { severity: "error", message, source: "corners" },
+        ]),
+      () => problemsSink.clear(CORNER_DIAGNOSTIC_SOURCE),
+    );
     // `paged.insert.*` — the object-authoring verbs (U7). Unlike the
     // object layer's deps bag, every runner reads its state (camera,
     // page layout, caret, edit context) off the LIVE `PagedEditor` the
@@ -1631,6 +1645,7 @@ function CanvasAppIntegration() {
       CANVAS_CONTEXT_MENU_COMMAND,
       ...objectCommands,
       ...pathfinderCommands,
+      ...cornerCommands,
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
@@ -1656,6 +1671,7 @@ function CanvasAppIntegration() {
       ...ASSET_EXPORT_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...PATHFINDER_MENU_ITEMS,
+      ...CORNER_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,

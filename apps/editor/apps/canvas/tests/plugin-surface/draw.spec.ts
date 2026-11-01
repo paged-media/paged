@@ -179,11 +179,6 @@ const COMMANDS = [
   "media.paged.draw.command.selectRepeatInstances",
   "media.paged.draw.command.expandRepeat",
   "media.paged.draw.command.releaseRepeat",
-  "media.paged.draw.command.cornersRounded",
-  "media.paged.draw.command.cornersInverseRounded",
-  "media.paged.draw.command.cornersBevel",
-  "media.paged.draw.command.cornersFancy",
-  "media.paged.draw.command.cornersNone",
   "media.paged.draw.command.appearanceAddFill",
   "media.paged.draw.command.appearanceAddStroke",
   "media.paged.draw.command.appearanceClear",
@@ -762,7 +757,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(46);
     expect(PANELS).toHaveLength(14);
-    expect(COMMANDS).toHaveLength(160);
+    expect(COMMANDS).toHaveLength(155);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────

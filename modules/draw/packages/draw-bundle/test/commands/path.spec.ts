@@ -265,65 +265,6 @@ describe("paged.draw commands, no engine — path operations", () => {
   });
 });
 
-describe("paged.draw commands, no engine — live corners", () => {
-  const corners = async (id: string, option: string) => {
-    const r = rig([RECT]);
-    await r.run(id);
-    const writes = r.leaves().filter((m) => m.op === "setElementProperty");
-    // The option and the radius of all four corners…
-    expect(writes.map((m) => set(m).path).sort()).toEqual(
-      [
-        "frameCornerOptionBottomLeft",
-        "frameCornerOptionBottomRight",
-        "frameCornerOptionTopLeft",
-        "frameCornerOptionTopRight",
-        "frameCornerRadiusBottomLeft",
-        "frameCornerRadiusBottomRight",
-        "frameCornerRadiusTopLeft",
-        "frameCornerRadiusTopRight",
-      ].sort(),
-    );
-    expect(
-      writes
-        .filter((m) => String(set(m).path).startsWith("frameCornerOption"))
-        .map((m) => (set(m).value as { value: string }).value),
-    ).toEqual([option, option, option, option]);
-    // …and the live marker that lets the panel read the preset back
-    // (DRW-2: a second write).
-    const marker = r.metaOf(RECT)?.data as { liveCorners?: unknown };
-    if (option === "") expect(marker?.liveCorners).toBeUndefined();
-    else expect(marker?.liveCorners).toMatchObject({ style: option });
-    const line = rig([LINE]);
-    await line.run(id);
-    expect(line.sent()).toEqual([]);
-  };
-
-  it("Corners: Rounded rounds all four corners and stamps the live marker; a line sends nothing", async () => {
-    covers("command:media.paged.draw.command.cornersRounded");
-    await corners(`${C}.cornersRounded`, "RoundedCorner");
-  });
-
-  it("Corners: Inverse rounded", async () => {
-    covers("command:media.paged.draw.command.cornersInverseRounded");
-    await corners(`${C}.cornersInverseRounded`, "InverseRoundedCorner");
-  });
-
-  it("Corners: Bevel", async () => {
-    covers("command:media.paged.draw.command.cornersBevel");
-    await corners(`${C}.cornersBevel`, "BeveledCorner");
-  });
-
-  it("Corners: Fancy", async () => {
-    covers("command:media.paged.draw.command.cornersFancy");
-    await corners(`${C}.cornersFancy`, "FancyCorner");
-  });
-
-  it("Corners: None clears the corners (empty option, zero radius) and the marker", async () => {
-    covers("command:media.paged.draw.command.cornersNone");
-    await corners(`${C}.cornersNone`, "");
-  });
-});
-
 describe("paged.draw commands, no engine — transforms", () => {
   /** The frameTransform writes, rounded (a reflection's sine terms come
    *  back as 1e-16, not 0). */

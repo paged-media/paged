@@ -66,12 +66,6 @@ defineMessages("menu", {
   "Compound path": "Compound path",
   Make: "Make",
   Release: "Release",
-  Corners: "Corners",
-  Rounded: "Rounded",
-  "Inverse rounded": "Inverse rounded",
-  Bevel: "Bevel",
-  Fancy: "Fancy",
-  None: "None",
   Repeat: "Repeat",
   Radial: "Radial",
   Grid: "Grid",
@@ -210,13 +204,6 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // ── Compound path ──
   ["Draw/Compound path/Make", "makeCompoundPath", "compound"],
   ["Draw/Compound path/Release", "releaseCompoundPath", "compound"],
-
-  // ── Live corners ──
-  ["Draw/Corners/Rounded", "cornersRounded", "corners"],
-  ["Draw/Corners/Inverse rounded", "cornersInverseRounded", "corners"],
-  ["Draw/Corners/Bevel", "cornersBevel", "corners"],
-  ["Draw/Corners/Fancy", "cornersFancy", "corners"],
-  ["Draw/Corners/None", "cornersNone", "corners-off"],
 
   // ── Repeat ──
   ["Draw/Repeat/Radial", "makeRadialRepeat", "repeat-make"],

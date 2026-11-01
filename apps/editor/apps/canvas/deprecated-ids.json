@@ -150,6 +150,66 @@
       "replacement": "menu:Object/Pathfinder/Minus back",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersRounded",
+      "replacement": "command:paged.corners.rounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/Rounded",
+      "replacement": "menu:Object/Corners/Rounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersInverseRounded",
+      "replacement": "command:paged.corners.inverseRounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/Inverse rounded",
+      "replacement": "menu:Object/Corners/Inverse rounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersBevel",
+      "replacement": "command:paged.corners.bevel",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/Bevel",
+      "replacement": "menu:Object/Corners/Bevel",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersFancy",
+      "replacement": "command:paged.corners.fancy",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/Fancy",
+      "replacement": "menu:Object/Corners/Fancy",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersNone",
+      "replacement": "command:paged.corners.none",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/None",
+      "replacement": "menu:Object/Corners/None",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

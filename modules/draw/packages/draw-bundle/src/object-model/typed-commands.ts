@@ -234,7 +234,7 @@ const recipeVerb = (
   );
 
 export const TWINS: readonly TwinSpec[] = [
-  // Stroke dashes / gradient fills / live corners — presets on the selection.
+  // Stroke dashes / gradient fills — presets on the selection (corners are the host's).
   ...[
     "strokeDashSolid",
     "strokeDashDashed",
@@ -242,13 +242,7 @@ export const TWINS: readonly TwinSpec[] = [
     "strokeDashDashDot",
   ].map(sel),
   ...["fillGradientLinear", "fillGradientRadial"].map(sel),
-  ...[
-    "cornersRounded",
-    "cornersInverseRounded",
-    "cornersBevel",
-    "cornersFancy",
-    "cornersNone",
-  ].map(sel),
+  ...[].map(sel),
   // Path ops (the v30 kernels) — full parameters.
   twin("outlineStroke", {
     ...T,

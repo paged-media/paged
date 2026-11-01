@@ -113,8 +113,6 @@ export function cornerDragMutationFor(
     );
   }
   return cornerStyleMutationFor(drag.target, {
-    id: "",
-    title: "",
     style: "RoundedCorner",
     radius,
   });

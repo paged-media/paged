@@ -424,36 +424,48 @@ async function pathfinderInputs(
 
 const PATHFINDER_KINDS = ["union", "subtract", "intersect", "exclude"] as const;
 
-/** Live-corner styles and the surface that applies each: the four preset
- *  commands, and InsetCorner through draw's own builder (it is in the
- *  token vocabulary but has no command). */
+/** Live-corner styles, and whether the preset commands stamped the
+ *  `liveCorners` record (InsetCorner has no preset: the builder only). */
 const CORNER_STYLES = [
-  ["RoundedCorner", "cornersRounded"],
-  ["InverseRoundedCorner", "cornersInverseRounded"],
-  ["BeveledCorner", "cornersBevel"],
-  ["FancyCorner", "cornersFancy"],
-  ["InsetCorner", null],
+  ["RoundedCorner", true],
+  ["InverseRoundedCorner", true],
+  ["BeveledCorner", true],
+  ["FancyCorner", true],
+  ["InsetCorner", false],
 ] as const;
 
 async function applyCornerStyle(
   ctx: AuthorContext,
   id: ElementId,
   style: string,
-  command: string | null,
+  stamped: boolean,
 ): Promise<void> {
   await ctx.select([id]);
-  if (command) {
-    await ctx.command(D + command);
-    return;
-  }
   ctx.surfaces.add("builder");
+  const corners = cornerStyleMutationFor(id, {
+    style: style as never,
+    radius: 12,
+  }) as MutationInput;
+  // The editor's `paged.corners.*` presets write exactly these corners
+  // (PM-0017). The label below is the `liveCorners` record draw's commands
+  // used to stamp: the InDesign recordings of these cases echo it, so it
+  // stays until they are re-recorded (then drop it and the recordings'
+  // labels with it).
   await ctx.mutate(
-    cornerStyleMutationFor(id, {
-      id: "roundtrip.inset",
-      title: "Inset",
-      style: style as never,
-      radius: 12,
-    }) as MutationInput,
+    stamped
+      ? {
+          op: "batch",
+          args: {
+            ops: [
+              corners,
+              stampDrawMetadata(id, {
+                v: 1,
+                data: { liveCorners: { style, radius: 12 } },
+              }),
+            ],
+          },
+        }
+      : corners,
     `corner style ${style}`,
   );
 }
@@ -608,12 +620,12 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       rectangleXml(`rc${i}`, 60 + i * 140, 100, 160 + i * 140, 300),
     ).join(""),
     async author(ctx) {
-      for (const [i, [style, command]] of CORNER_STYLES.entries()) {
+      for (const [i, [style, stamped]] of CORNER_STYLES.entries()) {
         await applyCornerStyle(
           ctx,
           { kind: "rectangle", id: `rc${i}` } as ElementId,
           style,
-          command,
+          stamped,
         );
       }
     },
@@ -622,13 +634,13 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     id: "live-corners-polygon",
     row: "live corners — every style, on a Polygon",
     async author(ctx) {
-      for (const [i, [style, command]] of CORNER_STYLES.entries()) {
+      for (const [i, [style, stamped]] of CORNER_STYLES.entries()) {
         const id = await ctx.pen(
           box(100, 60 + i * 140, 300, 160 + i * 140),
           true,
         );
         await ctx.fill(id, "Color/Black");
-        await applyCornerStyle(ctx, id, style, command);
+        await applyCornerStyle(ctx, id, style, stamped);
       }
     },
   },

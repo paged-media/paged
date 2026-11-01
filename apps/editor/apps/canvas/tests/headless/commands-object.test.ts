@@ -574,3 +574,47 @@ describe("Pathfinder", () => {
     expect(dumpDiff(out.before, out.after)).toEqual([]);
   });
 });
+
+describe("Corners", () => {
+  const prop = (dump: ModelDump, key: string, path: string): unknown => {
+    const el = dump.elements[key] as {
+      entries: Array<{ path: string; value: { value: unknown } }>;
+    };
+    return el.entries.find((e) => e.path === path)?.value.value;
+  };
+
+  test("each preset writes the option and radius on a rectangle and a polygon in one undo step; a group is skipped", async () => {
+    covers(
+      "command:paged.corners.rounded",
+      "command:paged.corners.inverseRounded",
+      "command:paged.corners.bevel",
+      "command:paged.corners.fancy",
+      "command:paged.corners.none",
+    );
+    const e = await open();
+    for (const [verb, option] of [
+      ["rounded", "RoundedCorner"],
+      ["inverseRounded", "InverseRoundedCorner"],
+      ["bevel", "BeveledCorner"],
+      ["fancy", "FancyCorner"],
+    ] as const) {
+      await e.select([T.frame.id, T.path.id, T.group.id]);
+      const out = await run(e, `paged.corners.${verb}`);
+      expect(e.problems(), verb).toEqual([]);
+      expect(prop(out.after, FRAME, "frameCornerOptionTopLeft"), verb).toBe(
+        option,
+      );
+      expect(prop(out.after, PATH, "frameCornerOptionTopLeft"), verb).toBe(
+        option,
+      );
+      expect(prop(out.after, FRAME, "frameCornerRadiusTopLeft"), verb).toBe(12);
+      await expectOneUndoStep(e, out.before);
+    }
+    await e.select([T.frame.id]);
+    await e.invoke("paged.corners.rounded");
+    await e.idle();
+    const none = await run(e, "paged.corners.none");
+    expect(prop(none.after, FRAME, "frameCornerRadiusTopLeft")).toBe(0);
+    await expectOneUndoStep(e, none.before);
+  });
+});

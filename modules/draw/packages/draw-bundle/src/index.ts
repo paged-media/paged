@@ -726,17 +726,9 @@ export {
 // Phase 9 (Tier B) — Live Corners: the per-corner wire-shape builders +
 // the metadata "live" marker, exported for the conformance spec.
 export {
-  LIVE_CORNER_PRESETS,
-  LIVE_CORNER_COMMAND_IDS,
-  LIVE_CORNERS_COMMAND_CATEGORY,
-  DEFAULT_CORNER_RADIUS_PT,
   supportsLiveCorners,
   cornerStyleMutationFor,
   cornerRadiiMutationFor,
-  withLiveCornerMarker,
-  applyLiveCornerPreset,
-  contributeLiveCornerCommands,
-  type LiveCornerPreset,
   type CornerStyleToken,
 } from "./commands/live-corners";
 // Phase 9 (Tier B) — Appearance model: the stack model + bake builders +

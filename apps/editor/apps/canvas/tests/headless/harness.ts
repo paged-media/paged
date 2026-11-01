@@ -130,6 +130,10 @@ import {
   type ObjectCommandDeps,
 } from "../../src/object-commands";
 import {
+  buildCornerCommands,
+  CORNER_DIAGNOSTIC_SOURCE,
+} from "../../src/corner-commands";
+import {
   buildPathfinderCommands,
   PATHFINDER_DIAGNOSTIC_SOURCE,
 } from "../../src/pathfinder-commands";
@@ -981,6 +985,14 @@ export async function createHeadlessEditor(
       ]),
     () => problemsSink.clear(PATHFINDER_DIAGNOSTIC_SOURCE),
   );
+  const cornerCommands = buildCornerCommands(
+    { client: objectDeps.client, getSelection: objectDeps.getSelection },
+    (message) =>
+      problemsSink.publish(CORNER_DIAGNOSTIC_SOURCE, "corners", [
+        { severity: "error", message, source: "corners" },
+      ]),
+    () => problemsSink.clear(CORNER_DIAGNOSTIC_SOURCE),
+  );
   const insertReport: InsertReport = (severity, message) =>
     problemsSink.publish(INSERT_DIAGNOSTIC_SOURCE, "insert", [
       { severity, message, source: "insert" },
@@ -1055,6 +1067,7 @@ export async function createHeadlessEditor(
       ...clipboardCommands,
       ...objectCommands,
       ...pathfinderCommands,
+      ...cornerCommands,
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
