@@ -1846,25 +1846,28 @@ test.describe.serial("plugin menus — paged.draw", () => {
   // ── WP6.3 (draw ADR 367) — Object ▸ Envelope distort, Object ▸ Expand
   //    appearance, and the graphic-style library as a file. ──
 
-  for (const [row, command, what] of [
+  for (const [row, command, what, cover] of [
     [
       "Object/Envelope distort/Make with warp",
       "envelopeMakeWithWarp",
       "a warp",
+      () => covers("menu:Object/Envelope distort/Make with warp"),
     ],
     [
       "Object/Envelope distort/Make with mesh",
       "envelopeMakeWithMesh",
       "a 4 × 4 mesh",
+      () => covers("menu:Object/Envelope distort/Make with mesh"),
     ],
     [
       "Object/Envelope distort/Make with top object",
       "envelopeMakeWithTopObject",
       "the front rectangle's outline (which goes)",
+      () => covers("menu:Object/Envelope distort/Make with top object"),
     ],
   ] as const) {
     test(`${row} — gives the selection ${what} as a live envelope, and one Undo takes it back`, async () => {
-      covers(`menu:${row}`);
+      cover();
       await expectGreyedAndInert(bare, row);
       const out = await clickEntry(
         live,
@@ -1879,13 +1882,25 @@ test.describe.serial("plugin menus — paged.draw", () => {
     });
   }
 
-  for (const [row, command] of [
-    ["Object/Envelope distort/Edit contents", "envelopeEditContents"],
-    ["Object/Envelope distort/Expand", "envelopeExpand"],
-    ["Object/Expand appearance", "expandAppearance"],
+  for (const [row, command, cover] of [
+    [
+      "Object/Envelope distort/Edit contents",
+      "envelopeEditContents",
+      () => covers("menu:Object/Envelope distort/Edit contents"),
+    ],
+    [
+      "Object/Envelope distort/Expand",
+      "envelopeExpand",
+      () => covers("menu:Object/Envelope distort/Expand"),
+    ],
+    [
+      "Object/Expand appearance",
+      "expandAppearance",
+      () => covers("menu:Object/Expand appearance"),
+    ],
   ] as const) {
     test(`${row} — the rectangles carry no envelope or live effect, so it changes nothing`, async () => {
-      covers(`menu:${row}`);
+      cover();
       await expectGreyedAndInert(bare, row);
       const out = await clickEntry(
         live,
@@ -1913,7 +1928,7 @@ test.describe.serial("plugin menus — paged.draw", () => {
 
   test("Object/Envelope distort/Envelope mesh tool — switches to the Envelope Mesh tool and leaves the document alone", async () => {
     const row = "Object/Envelope distort/Envelope mesh tool";
-    covers(`menu:${row}`);
+    covers("menu:Object/Envelope distort/Envelope mesh tool");
     await expectGreyedAndInert(bare, row);
     const before = await documentDigest(live);
     const m = await mark(live);
@@ -1935,12 +1950,20 @@ test.describe.serial("plugin menus — paged.draw", () => {
     await runCommand(live, "paged.tool.activate.paged.tool.select");
   });
 
-  for (const [row, command] of [
-    ["Draw/Graphic style/Import library", "importGraphicStyles"],
-    ["Draw/Graphic style/Export library", "exportGraphicStyles"],
+  for (const [row, command, cover] of [
+    [
+      "Draw/Graphic style/Import library",
+      "importGraphicStyles",
+      () => covers("menu:Draw/Graphic style/Import library"),
+    ],
+    [
+      "Draw/Graphic style/Export library",
+      "exportGraphicStyles",
+      () => covers("menu:Draw/Graphic style/Export library"),
+    ],
   ] as const) {
     test(`${row} — goes through the host's file door and leaves the document alone`, async () => {
-      covers(`menu:${row}`);
+      cover();
       await expectGreyedAndInert(bare, row);
       const out = await clickEntry(
         live,

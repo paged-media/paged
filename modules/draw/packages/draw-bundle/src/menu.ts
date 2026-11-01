@@ -88,6 +88,7 @@ defineMessages("menu", {
   Pattern: "Pattern",
   "Make from selection": "Make from selection",
   "Edit tile field": "Edit tile field",
+  "Save as pattern swatch": "Save as pattern swatch",
   Appearance: "Appearance",
   "Add fill": "Add fill",
   "Add stroke": "Add stroke",
