@@ -72,6 +72,7 @@ import { createLiquifyHandler } from "./handlers/liquify";
 import { createNineSliceHandler } from "./handlers/nine-slice";
 import { createSymbolismHandler } from "./handlers/symbolism";
 import { createPuppetWarpHandler } from "./handlers/puppet-warp";
+import { createEnvelopeMeshHandler } from "./handlers/envelope-mesh";
 import {
   createPerspectiveGridHandler,
   createPerspectiveSelectHandler,
@@ -128,6 +129,7 @@ const M = defineMessages("draw.tools", {
   crystallize: "Crystallize",
   wrinkle: "Wrinkle",
   puppetWarp: "Puppet Warp",
+  envelopeMesh: "Envelope Mesh",
   perspectiveGrid: "Perspective Grid",
   perspectiveSelect: "Perspective Selection",
   symbolSprayer: "Symbol Sprayer",
@@ -235,6 +237,12 @@ export const DISTORTION_TOOL_IDS = [
   "media.paged.draw.tool.puppetWarp",
   "media.paged.draw.tool.perspectiveGrid",
   "media.paged.draw.tool.perspectiveSelect",
+] as const;
+
+/** WP6.3 — the Envelope Mesh tool (draw ADR 367): KEYLESS, in the host's
+ *  Free Transform flyout beside Puppet Warp. */
+export const ENVELOPE_TOOL_IDS = [
+  "media.paged.draw.tool.envelopeMesh",
 ] as const;
 
 /** WP6.8 — the Symbolism flyout, in rail order (draw ADR 365). */
@@ -768,6 +776,19 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       cursor: CROSS,
       gesture: () => createPuppetWarpHandler(host),
       options: toolOptionsSpecOf(PUPPET_WARP_OPTIONS),
+    },
+    // WP6.3 — THE ENVELOPE MESH tool (draw ADR 367) joins the same
+    // flyout: it bends what Object ▸ Envelope distort ▸ Make with mesh
+    // (or with top object) made. Keyless (the registers are full).
+    {
+      id: "media.paged.draw.tool.envelopeMesh",
+      title: t(M.envelopeMesh),
+      icon: "tool-shear",
+      group: "transform",
+      section: "transform",
+      order: 13,
+      cursor: CROSS,
+      gesture: () => createEnvelopeMeshHandler(host),
     },
     // THE PERSPECTIVE GRID and PERSPECTIVE SELECTION share a flyout, as in
     // Illustrator.

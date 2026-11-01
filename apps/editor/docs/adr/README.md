@@ -95,6 +95,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [287](287-view-modes.md) | View modes, grids and smart guides: Outline, Overprint and Pixel Preview, the grids, snapping v2, Rotate View | Accepted 2026-10-24 |
 | [289](289-the-vector-clipboard.md) | The vector clipboard: copy writes SVG, paste reads SVG | Accepted 2026-10-28 |
 | [288](288-asset-export.md) | Asset Export | Accepted 2026-10-28 |
+| [290](290-the-ml-service.md) | The ML service: in-browser models on demand, a local image model through the editor's own origin | Accepted 2026-10-24 |
 | [291](291-the-data-panel.md) | The Data panel: the document's data as a grid, over the data door | Accepted 2026-10-24 |
 | [292](292-the-bind-popover.md) | The bind popover: field, rules, map or expression on any property field | Accepted 2026-10-24 |
 | [293](293-a-template-opened-as-a-document-says-so.md) | A template opened as a document says so, and offers "Edit template" | Accepted 2026-10-24 |
@@ -113,6 +114,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [309](309-effects-transparency-and-appearance-panels.md) | The Effects, Transparency and Appearance panels and the Effect menu: kinds from core's catalog, the mask's options and Clip, every edit context | Accepted 2026-10-29 |
 | [310](310-live-shape-widgets.md) | Live-shape widgets on the canvas and the Transform panel's Shape section | Accepted 2026-10-30 |
 | [311](311-shared-host-surfaces-in-every-context.md) | Gradients, Picture adjustments, History and Free Transform in every edit context | Accepted 2026-10-30 |
+| [312](312-the-appearance-panel-lists-every-fill-and-stroke.md) | The Appearance panel lists every fill and stroke: the native appearance front to back, Illustrator's add, duplicate, move and clear, one write each | Accepted 2026-10-31 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

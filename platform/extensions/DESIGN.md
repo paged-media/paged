@@ -922,6 +922,15 @@ STATIC: the protocol-78 handshake proves the engine has the op and the
 paths. paged.draw's effect UI (WP6.3) and the host Effects panel list the
 kinds from the schema's `EffectKind`.
 
+`envelope` (draw ADR 367, additive under the same flag) is Illustrator's
+Envelope Distort mesh: `rows` × `columns` bicubic Bézier patches over the
+item's tight source box, `mesh` their control net — `(3·rows+1) ×
+(3·columns+1)` `[x, y]` points, row-major, in the box's unit square (a
+flat net, or none, draws the item as drawn; 1 to 50 cells a side). A read
+answers the whole net. paged.draw's Object ▸ Envelope distort verbs and
+its Envelope Mesh tool write it; `expandAppearance` keeps it like any
+vector entry.
+
 `"document.strokeStyles@1"` (engine ADR 1053, protocol 78) says the
 engine draws STROKE STYLES: two more vector kinds of `frameEffectStack`
 that draw the item's stroke along its path, painted with the stroke's
@@ -948,6 +957,14 @@ colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`
 ("Within" / "Along" / "Across") and `frameGradientFillStart`. Additive at
 protocol 76 like the fill rule; the SVG importer asks it before
 lowering an SVG gradient with `stop-opacity` natively.
+
+`"document.meshFill@1"` (engine ADR 1048) is another property flag: the
+vendored wire carries `frameFillMesh`, a frame's gradient mesh (grids of
+Coons or tensor patches, colour and opacity per mesh point) or freeform
+gradient (coloured points with a spread, and lines through them), points
+in the frame's inner coordinates, whole-value with an exact inverse.
+Additive at protocol 76 like the paint v2 flag; an older engine refuses
+the path. IDML carries it only in a label, which a paged import restores.
 
 ### 4.9 `host.editor` — the marked escape hatch
 
@@ -3267,3 +3284,36 @@ end }` in CONTENT offsets (an empty range anchors at a point); `kind` is free te
   (the editor's registry). The harness records bands (`marginBandsContributed()`).
 - **Additivity.** One `ContributeSurface` member, one `TextSurface` member, five types and an
   optional `ShellRegistries.marginBands`. An older host warns and registers nothing.
+
+## 31. The ML doors (ADR 1100 — `ml.<capability>@1`; editor ADR 290)
+
+**Seven doors, one surface.** `host.ml.segment | matting | inpaint | superres | landmarks |
+generate | edit`, each feature-flagged on its own (`ml.generate@1`, …), because a machine often
+has some capabilities and not others: a matting model installed and no local generative host, or
+the reverse. Images are RGBA and masks one byte per pixel: a bundle never sees a tensor, a model
+layout or a normalisation.
+
+**Live flags, not static ones.** Unlike most doors, whose flag says the backend is wired, an
+`ml.*@1` flag says a provider can answer NOW (installed and healthy). `supports()` asks the
+shared backend (`options.ml.supports(capability)`) at call time; `host.ml.onDidChange` tells a
+bundle to ask again. A bundle that offers Generative Fill shows it when the flag is true and,
+when it is false, says "local image model not running" rather than hiding it.
+
+**Providers, not models, are the unit.** The registry (`doors-ml.ts`) knows providers with a
+tier, capabilities and a status; it does not know ONNX, GGUF or HTTP. The editor's Tier-A
+providers run a worker, its Tier-B provider is `mlHostProvider` over `createMlHostClient`, and a
+test registers `fakeMlProvider`. Routing prefers Tier A for analysis and Tier B for generation;
+`options.tier` overrides. Every answer is stamped with `provider`, `tier` and `model` by the
+registry, so a provider cannot misreport the route.
+
+**Checks before routing.** `checkMlRequest` is the one validator (the surface, the typed commands
+and `paged-node ml` call it), so a malformed request fails the same way with or without a model.
+
+**Tier B over HTTP, one client.** The local host is a separate native process
+(`apps/ml-host`); the editor reaches it through its own origin (`/api/ml`, editor ADR 290) and
+`paged-node` directly. Both use the SDK's client: jobs are submitted, followed as server-sent
+events (progress, then a terminal event) and fetched as PNG; aborting cancels the job on the host
+before the caller hears of it.
+
+**Additivity.** New capabilities are new doors (`ml.<name>@1`), a changed request shape is `@2`.
+The capability vocabulary is gated like the others (`capability-vocabulary.spec.ts`).

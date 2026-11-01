@@ -716,8 +716,18 @@ fn created_element_id(
     }
     // v52 — an inserted anchored frame is a Rectangle; report its minted id so
     // the caller can address it (e.g. offset the anchor after placement).
-    if let paged_mutate::Operation::InsertAnchoredFrame { self_id, .. } = op {
-        return Some(ElementId::Rectangle(self_id.clone()));
+    if let paged_mutate::Operation::InsertAnchoredFrame {
+        self_id,
+        frame_story,
+        ..
+    } = op
+    {
+        // Engine ADR 1050 — an anchored text frame is a text frame.
+        return Some(if frame_story.is_some() {
+            ElementId::TextFrame(self_id.clone())
+        } else {
+            ElementId::Rectangle(self_id.clone())
+        });
     }
     // Engine ADR 1026 — an insert on a master reports what it made.
     if let paged_mutate::Operation::OnMaster { op, .. } = op {
@@ -791,6 +801,8 @@ fn created_story_id(op: &paged_mutate::Operation) -> Option<String> {
             },
             _ => None,
         },
+        // Engine ADR 1050 — an anchored text frame's own story.
+        paged_mutate::Operation::InsertAnchoredFrame { frame_story, .. } => frame_story.clone(),
         _ => None,
     }
 }
@@ -4208,7 +4220,14 @@ impl CanvasModel {
                 .chain(self.scene.master_spreads.values().map(|m| &m.spread))
                 .flat_map(|spread| spread.text_frames.iter())
                 .find(|f| f.self_id.as_deref() == Some(frame_id.as_str()))
-                .and_then(|f| f.parent_story.clone()),
+                .and_then(|f| f.parent_story.clone())
+                // Engine ADR 1050 — an anchored text frame's own story.
+                .or_else(|| {
+                    self.scene.stories.iter().find_map(|s| {
+                        paged_model::anchored_frame_in(&s.story.paragraphs, frame_id)
+                            .and_then(|af| af.parent_story.clone())
+                    })
+                }),
             ElementId::StoryRange { story_id, .. }
             | ElementId::Table { story_id, .. }
             | ElementId::TableCell { story_id, .. } => Some(story_id.clone()),
@@ -5413,6 +5432,9 @@ impl CanvasModel {
                 footer_rows,
                 column_widths,
                 row_heights,
+                cell,
+                paragraph,
+                word,
             } => Some(Operation::InsertNode {
                 parent: NodeId::Story(story_id.clone()),
                 position: 0,
@@ -5424,6 +5446,13 @@ impl CanvasModel {
                     footer_rows: *footer_rows,
                     column_widths: column_widths.clone(),
                     row_heights: row_heights.clone(),
+                    cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                        table_id: c.table_id.clone(),
+                        row: c.row,
+                        col: c.col,
+                    }),
+                    cell_paragraph: *paragraph,
+                    word: word.clone(),
                 },
                 z_slot: None,
             }),
@@ -5438,16 +5467,36 @@ impl CanvasModel {
                 height,
                 image_uri,
                 paragraph,
-            } => Some(Operation::InsertAnchoredFrame {
-                paragraph: *paragraph,
-                story_id: story_id.clone(),
-                offset: *offset,
-                width: *width,
-                height: *height,
-                image_uri: image_uri.clone(),
-                self_id: self.mint_page_item_id_with_offset(mint_offset),
-                restore: None,
-            }),
+                kind,
+                layout,
+                cell,
+            } => {
+                let kind = kind.unwrap_or_default();
+                // Engine ADR 1050 — a text frame's story, numbered past
+                // every minted story at this child's offset (as
+                // `insertTextFrame` does), before the frame takes its id.
+                let frame_story = (kind == paged_mutate::operation::AnchoredFrameInsertKind::Text)
+                    .then(|| self.mint_story_ids(1, *mint_offset).remove(0));
+                let self_id = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::InsertAnchoredFrame {
+                    paragraph: *paragraph,
+                    story_id: story_id.clone(),
+                    offset: *offset,
+                    width: *width,
+                    height: *height,
+                    image_uri: image_uri.clone(),
+                    self_id,
+                    frame_kind: kind,
+                    frame_story,
+                    layout: layout.clone(),
+                    restore: None,
+                    cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                        table_id: c.table_id.clone(),
+                        row: c.row,
+                        col: c.col,
+                    }),
+                })
+            }
             Mutation::InsertHyperlink {
                 story_id,
                 start,
@@ -6182,11 +6231,14 @@ impl CanvasModel {
                 table_id,
                 row,
                 height,
+                auto_grow,
             } => Some(Operation::SetRowHeight {
                 story_id: story_id.clone(),
                 table_id: table_id.clone(),
                 row: *row,
                 height: *height,
+                auto_grow: *auto_grow,
+                clear_auto_grow: false,
             }),
             Mutation::SetColumnWidth {
                 story_id,
@@ -7604,6 +7656,8 @@ impl CanvasModel {
         // Engine ADR 1007 — IDML says paint v2 only as unnamed stop
         // colours and gradient feathers; the rest is reported lost.
         crate::paint_v2_export::lower_for_idml(&mut scene);
+        // Engine ADR 1048 — a mesh fill rides in its frame's label.
+        crate::mesh_fill_export::lower_for_idml(&mut scene);
         let out = idml_export::write_idml_with(
             &scene,
             &self.source_idml,
@@ -7737,6 +7791,7 @@ impl CanvasModel {
         out.extend(crate::export_losses::vector_effect_losses(&self.scene));
         out.extend(crate::export_losses::appearance_losses(&self.scene));
         out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
+        out.extend(crate::export_losses::blend_mode_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -7768,6 +7823,10 @@ impl CanvasModel {
                         };
                         out.extend(crate::export_losses::diff(&self.scene, &twin, &ctx));
                         out.extend(crate::paint_v2_export::paint_v2_losses(
+                            &self.scene,
+                            Some(&twin),
+                        ));
+                        out.extend(crate::mesh_fill_export::mesh_fill_losses(
                             &self.scene,
                             Some(&twin),
                         ));
@@ -8376,6 +8435,15 @@ impl CanvasModel {
                                     f.gradient_fill_start.map(|s| s.to_vec()).unwrap_or_default(),
                                 )),
                             },
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillMesh,
+                                value: Some(Value::FillMesh(
+                                    f.fill_mesh
+                                        .as_deref()
+                                        .map(paged_mutate::MeshFillSpec::from_model),
+                                )),
+                            },
                             // C-24 — a text frame's outline is stroked
                             // inside / centred / outside like any other
                             // closed shape, and the stroke's share insets
@@ -8758,6 +8826,15 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(f.gradient_stroke_mode.as_str().into())),
+                            },
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillMesh,
+                                value: Some(Value::FillMesh(
+                                    f.fill_mesh
+                                        .as_deref()
+                                        .map(paged_mutate::MeshFillSpec::from_model),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -9311,6 +9388,15 @@ impl CanvasModel {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(p.gradient_stroke_mode.as_str().into())),
                             },
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillMesh,
+                                value: Some(Value::FillMesh(
+                                    p.fill_mesh
+                                        .as_deref()
+                                        .map(paged_mutate::MeshFillSpec::from_model),
+                                )),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(p.opacity)),
@@ -9721,6 +9807,15 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(o.gradient_stroke_mode.as_str().into())),
+                            },
+                            // Engine ADR 1048 — the gradient mesh or freeform gradient.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillMesh,
+                                value: Some(Value::FillMesh(
+                                    o.fill_mesh
+                                        .as_deref()
+                                        .map(paged_mutate::MeshFillSpec::from_model),
+                                )),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
@@ -10576,11 +10671,7 @@ impl CanvasModel {
     /// inspector read-side. Returns the host paragraph's table ref.
     fn find_table_read(&self, story_id: &str, table_id: &str) -> Option<&paged_model::Table> {
         let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
-        story.story.paragraphs.iter().find_map(|p| {
-            p.table
-                .as_ref()
-                .filter(|t| t.self_id.as_deref() == Some(table_id))
-        })
+        paged_model::table_in(&story.story.paragraphs, table_id)
     }
 
     /// W3.A1 — table-scoped property snapshot (the `AppliedTableStyle`
@@ -13066,19 +13157,12 @@ impl CanvasModel {
         let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
         let paragraphs: &[paged_model::Paragraph] = match cell {
             None => &story.story.paragraphs,
-            Some(addr) => {
-                let table = story
-                    .story
-                    .paragraphs
-                    .iter()
-                    .filter_map(|p| p.table.as_ref())
-                    .find(|t| t.self_id.as_deref() == Some(addr.table_id.as_str()))?;
-                &table
-                    .cells
-                    .iter()
-                    .find(|c| c.coords() == Some((addr.col, addr.row)))?
-                    .paragraphs
-            }
+            Some(addr) => paged_model::cell_paragraphs_in(
+                &story.story.paragraphs,
+                &addr.table_id,
+                addr.col,
+                addr.row,
+            )?,
         };
         let mut text = String::new();
         for (i, para) in paragraphs.iter().enumerate() {
@@ -16189,6 +16273,7 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameFillEffectStack
             | P::FrameStrokeEffectStack
             | P::FrameContentEffectStack
+            | P::FrameFillMesh
             | P::FrameAppearance
             | P::FrameAppearanceLayer
     )

@@ -26,7 +26,8 @@
 //   engine's wasm excepted: it is the `@paged-media/paged` dependency's), and
 //   every worker is constructed in the form a host's bundler reads;
 // - no engine wasm, no paged.data engine wasm (the module host serves it), no
-//   source map, no path of the machine that built it;
+//   ML runtime (onnxruntime-web: the embed runs no in-browser model, editor
+//   ADR 290), no source map, no path of the machine that built it;
 // - the size budget: the whole of dist/, and the entry a page loads first.
 //
 // tooling/release/verify-tarballs.mjs runs it on the packed tarball too.
@@ -88,6 +89,8 @@ for (const f of files) {
     fail(
       `${f} (${bytes} bytes): the engine is the @paged-media/paged dependency's, never a copy`,
     );
+  if (/(^|\/)ort[-.][^/]*\.(wasm|m?js)$|onnxruntime/.test(f))
+    fail(`${f}: the ML runtime is not in the package (editor ADR 290)`);
   if (/(^|\/)data_js_bg[^/]*\.wasm$/.test(f))
     fail(`${f}: paged.data's engine is hosted (ADR 220), not shipped`);
   if (!/\.(m?js|d\.ts|css|json|html|txt)$/.test(f)) continue;

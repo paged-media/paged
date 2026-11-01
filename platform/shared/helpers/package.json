@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
-  "description": "Internal small helpers of the built-ins and the editor, one implementation each: sha256Hex, base64 and data: URLs, length units, naive colour conversions, the x-paged label key and envelope codec, the Trusted Types policies, and CRC-32 and the ZIP writer. Never published (docs/adr/PM-0002).",
+  "description": "Internal small helpers of the built-ins and the editor, one implementation each: sha256Hex, CRC-32, an 8-bit PNG codec, base64 and data: URLs, length units, naive colour conversions, the x-paged label key and envelope codec, the Trusted Types policies, and the ZIP writer. Never published (docs/adr/PM-0002).",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

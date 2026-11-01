@@ -113,6 +113,8 @@ const HOST_MENU = [
   "Edit/Find next",
   "Edit/Find previous",
   "Edit/Go to page…",
+  // Editor ADR 290 — the ML service's Models settings page.
+  "Edit/Settings/Models…",
   "Object/Bring to front",
   "Object/Bring forward",
   "Object/Send backward",

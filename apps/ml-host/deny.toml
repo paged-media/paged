@@ -1,0 +1,41 @@
+# cargo-deny policy for the ML host workspace, derived from the server's
+# (apps/server/server/deny.toml) and trimmed to what this workspace pulls in:
+# serde, serde_json, base64 and libc, all from crates.io.
+# Run:  cargo deny check
+# Docs: https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+version = 2
+# RUSTSEC advisories: fail on vulnerabilities; add IDs here to ignore with a
+# justification once triaged.
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# paged is AGPL-3.0-only OR PMEL (ADR PM-0001). Dependencies must be
+# permissively licensed so the whole work can be distributed under both: the
+# AGPL and the commercial PMEL. No GPL/AGPL dependency can pass this gate.
+# The external programs and model files the host runs or reads are not
+# dependencies (NOTICE).
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "Unicode-3.0",
+]
+exceptions = []
+
+# This workspace's own crate is AGPL-3.0-only OR LicenseRef-PMEL and
+# unpublished (`publish = false`), so it is not checked against the policy.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

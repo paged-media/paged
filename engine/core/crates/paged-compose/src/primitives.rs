@@ -360,6 +360,7 @@ mod tests {
             DisplayCommand::DropShadow { transform, .. } => *transform,
             DisplayCommand::PathShadow { transform, .. } => *transform,
             DisplayCommand::Image { transform, .. } => *transform,
+            DisplayCommand::MeshShade { transform, .. } => *transform,
             DisplayCommand::PushClip { transform, .. } => *transform,
             DisplayCommand::PopClip(transform) => *transform,
             DisplayCommand::BeginBlendGroup { transform, .. } => *transform,

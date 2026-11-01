@@ -103,6 +103,7 @@ export type {
   ValueEdit,
 } from "./object-model.js";
 
+export type { BlendModeInfo } from "./blend-modes.js";
 export type { BundleHandle, PagedBundle } from "./bundle.js";
 
 export type {
@@ -388,6 +389,34 @@ export type {
 // One element a mutation minted (`MutationOutcome.minted`): the element,
 // the `bindCreated` handle that named it, and the story minted with it.
 export type { MintedElement } from "./wire.js";
+
+export type {
+  MlCapability,
+  MlTier,
+  MlImage,
+  MlMask,
+  MlBox,
+  MlPoint,
+  MlProviderInfo,
+  MlProgress,
+  MlCallOptions,
+  MlAnswered,
+  MlSegmentRequest,
+  MlSegmentResult,
+  MlMattingRequest,
+  MlMattingResult,
+  MlInpaintRequest,
+  MlImageResult,
+  MlSuperresRequest,
+  MlLandmarksRequest,
+  MlFace,
+  MlLandmarksResult,
+  MlGenerateRequest,
+  MlEditRequest,
+  MlRequests,
+  MlResults,
+  MlSurface,
+} from "./ml.js";
 
 export type {
   ClipboardSurface,

@@ -159,11 +159,13 @@ is not written yet.
 | [1020](1020-range-comments-with-threads.md) | Range comments with threads: a comment's range is the runs that name it (extends 172) | Accepted 2026-10-29 |
 | [1021](1021-find-and-replace.md) | Find and replace: the caret space, Word's specials and wildcards on `regress`, Replace All as one undo step | Accepted 2026-10-24 |
 | [1022](1022-word-document-structure.md) | Word document structure: section first / odd / even masters and odd/even starts (amends 026), Word fields and F9, creating tables of contents, cross-references, bookmarks and index markers | Accepted 2026-10-25 |
+| [1025](1025-word-tables-split-rows-and-autofit.md) | Word tables: rows split across frames (`cantSplit` holds), autofit columns, indent, exact rows — behind a policy switch on the table | Accepted 2026-10-30 |
 | [1026](1026-masters-based-on-masters.md) | Masters based on masters (four deep, cycles drawn once), override lists and Override on the wire, page items as hyperlink sources | Accepted 2026-10-29 |
 | [1030](1030-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
 | [1031](1031-svg-in-and-out-through-paged-svg.md) | SVG in and out through `paged-svg` | Accepted 2026-10-24 |
 | [1032](1032-one-cms-with-intents-and-bpc.md) | One colour API with explicit intents and black-point compensation on every backend | Accepted 2026-10-24 |
 | [1033](1033-an-eps-is-drawn-from-its-postscript.md) | An EPS is drawn from its PostScript, by `paged-ps` | Accepted 2026-10-24 |
+| [1034](1034-twenty-seven-blend-modes-defined-once.md) | Twenty-seven blend modes, defined once | Accepted 2026-10-24 |
 | [1035](1035-a-snapshot-can-draw-a-story-the-document-does-not-hold.md) | A snapshot can draw a story the document does not hold | Accepted 2026-10-27 |
 | [1036](1036-a-snippet-carries-opacity-masks-and-names.md) | A snippet carries its opacity masks and item names; an inline PDF is readable | Accepted 2026-10-27 |
 | [1037](1037-an-image-frame-has-a-filter-stack.md) | An image frame has a filter stack, evaluated by the kernel twins `paged-kernels` shares with paged.image | Accepted 2026-10-28 |
@@ -176,6 +178,8 @@ is not written yet.
 | [1045](1045-an-anchored-frame-paints-as-a-free-frame.md) | An anchored frame paints as a free frame does: its look, its picture in its effects, IDML both ways | Accepted 2026-10-29 |
 | [1046](1046-a-scene-layer-takes-its-frames-effects.md) | A scene layer takes its frame's opacity, blend mode and effects | Accepted 2026-10-30 |
 | [1047](1047-live-shapes.md) | A polygon, a star and a pie stay live shapes: parameters on the item, the outline in IDML, the parameters in a label | Accepted 2026-10-30 |
+| [1048](1048-gradient-mesh-and-freeform-gradient.md) | Gradient meshes and freeform gradients are native fills, drawn as a cached raster | Accepted 2026-10-29 |
+| [1050](1050-anchored-floats-text-frames-and-objects-in-cells.md) | Anchored floats wrap, sit behind the text and keep clear of each other; anchored text frames; tables and objects in table cells | Accepted 2026-10-30 |
 | [1053](1053-a-stroke-style-draws-the-stroke-along-the-path.md) | A stroke style draws the stroke along the path: width profiles and Art, Scatter, Pattern and Bristle brushes, the fill kept by a split, IDML baked | Accepted 2026-10-31 |
 
 Decisions made in other repositories that this engine's code rests on are listed in

@@ -28,8 +28,12 @@ use pdf_writer::{Content, Finish, Name, Ref};
 
 use crate::writer::{DocState, PageResources};
 
+/// The PDF name of a blend mode. Photoshop's eleven (engine ADR 1034)
+/// have none: the page walk rasterises a group in one of them with its
+/// backdrop baked (`page.rs`), so only an effect stamp's own blend can
+/// reach here with one, and it writes the nearest PDF mode.
 fn blend_name(mode: BlendMode) -> &'static str {
-    match mode {
+    match mode.nearest_native() {
         BlendMode::Normal => "Normal",
         BlendMode::Multiply => "Multiply",
         BlendMode::Screen => "Screen",
@@ -46,6 +50,7 @@ fn blend_name(mode: BlendMode) -> &'static str {
         BlendMode::Saturation => "Saturation",
         BlendMode::Color => "Color",
         BlendMode::Luminosity => "Luminosity",
+        _ => "Normal",
     }
 }
 
@@ -102,7 +107,7 @@ pub fn apply_gs(
 
 fn pdf_blend(mode: BlendMode) -> pdf_writer::types::BlendMode {
     use pdf_writer::types::BlendMode as P;
-    match mode {
+    match mode.nearest_native() {
         BlendMode::Normal => P::Normal,
         BlendMode::Multiply => P::Multiply,
         BlendMode::Screen => P::Screen,
@@ -119,6 +124,7 @@ fn pdf_blend(mode: BlendMode) -> pdf_writer::types::BlendMode {
         BlendMode::Saturation => P::Saturation,
         BlendMode::Color => P::Color,
         BlendMode::Luminosity => P::Luminosity,
+        _ => P::Normal,
     }
 }
 

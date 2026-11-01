@@ -26,6 +26,9 @@
 // workspace package is the decision-B publish unit
 // (`@paged-media/tools` on npm once the org + token exist).
 
+// The German of the tools' own words (plan E10).
+import "./translations";
+
 export { BUILT_IN_TOOLS } from "./built-in-tools";
 // The shared post-insert flow (mutate → select created → geometry
 // refresh) — reused by the editor's `paged.insert.*` command layer so

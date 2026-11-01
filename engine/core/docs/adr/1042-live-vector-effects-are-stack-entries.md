@@ -148,3 +148,16 @@ evidence of the feature row `effects-transparency.live-vector-effects`.
   vector effects on a text frame's GLYPHS (the frame's outline only),
   Warp and Free Distort recorded against Illustrator, and the host panels
   (WP4.3) and paged.draw's effect UI (WP6.3).
+
+## Amendment 2026-10-31 — the envelope mesh
+
+`Effect::Envelope` (`envelope` on the wire, additive under protocol 78) is Illustrator's
+Envelope Distort mesh: `rows` × `columns` (1 to 50) bicubic Bézier patches over the item's tight
+source box; `mesh` is their control net, `(3·rows+1) × (3·columns+1)` points row-major in the box's
+unit square, so it follows the item when it is resized. A flat net is stored as none and a read
+answers the whole net. `paged-vector-fx::envelope` maps every point through its cell's patch with
+`paged-warp`'s patch evaluator and cuts curves to 0.05 pt, as Warp does; `expandAppearance`, hit
+testing, IDML's bake and label treat it as any vector entry. paged.draw makes and edits it (draw
+ADR 367, which records Illustrator's Make with Top Object against it). Evidence:
+`crates/paged-vector-fx/tests/it/envelope.rs`, `crates/paged-canvas/tests/it/vector_effects.rs`
+(`an_envelope_mesh_is_a_vector_entry…`), `crates/paged-mutate/src/vector_effect_spec.rs`.

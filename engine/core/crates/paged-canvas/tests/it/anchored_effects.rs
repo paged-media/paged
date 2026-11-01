@@ -113,6 +113,9 @@ fn place_with_look(m: &mut CanvasModel, look: Vec<Mutation>) {
             width: 60.0,
             height: 60.0,
             image_uri: Some(PNG.into()),
+            kind: None,
+            layout: None,
+            cell: None,
         },
         Mutation::BindCreated {
             handle: "pic".into(),
@@ -309,6 +312,9 @@ fn a_mixed_pour_batch_binds_the_picture_and_its_look__feat__anchored_inline_obje
             width: 60.0,
             height: 60.0,
             image_uri: Some(PNG.into()),
+            kind: None,
+            layout: None,
+            cell: None,
         },
         Mutation::BindCreated {
             handle: "pic".into(),

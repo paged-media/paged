@@ -2,7 +2,7 @@ $ paged describe
 --- exit: 0
 --- stdout
 top-level keys: ["catalog", "protocol"]
-catalog sections: ["constraints", "effectCategories", "effectKinds", "elements", "hostFunctions", "idGrammar", "objectSchemas", "operations", "pathAliases", "propertySchemas", "settablePaths"]
+catalog sections: ["blendModes", "constraints", "effectCategories", "effectKinds", "elements", "hostFunctions", "idGrammar", "objectSchemas", "operations", "pathAliases", "propertySchemas", "settablePaths"]
 protocol: <PROTOCOL>
 --- stderr
 (empty)

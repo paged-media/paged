@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "paged.fixture.matte",
+      "title": "Test fixture: sigmoid matte",
+      "tier": "A",
+      "capabilities": ["matting"],
+      "licence": {
+        "id": "AGPL-3.0-only OR LicenseRef-PMEL",
+        "title": "paged's own licence",
+        "url": "https://github.com/paged-media/paged/blob/main/LICENSE.md",
+        "requiresAcknowledgement": false,
+        "summary": "A one-node model written by paged's tests; not a real matting model."
+      },
+      "install": "download",
+      "enabled": true,
+      "fixture": true,
+      "variants": [
+        {
+          "id": "fp32",
+          "title": "Sigmoid (float32)",
+          "files": [
+            {
+              "name": "model.onnx",
+              "url": "/ml/fixtures/matte-sigmoid.onnx",
+              "sha256": "a9c3f054ed16ace54c2a1716826e9f4bf53ff29480bed2169d473153bfb947bc",
+              "size": 147
+            }
+          ]
+        },
+        {
+          "id": "hard",
+          "title": "Hard sigmoid (float32)",
+          "files": [
+            {
+              "name": "model.onnx",
+              "url": "/ml/fixtures/matte-hard-sigmoid.onnx",
+              "sha256": "c4c66e1cc9d7369865c7f82500ac6aa29daf99cb04c572eabea5cbcb4c277d70",
+              "size": 159
+            }
+          ]
+        }
+      ],
+      "defaultVariant": "fp32",
+      "adapter": {
+        "kind": "mask",
+        "input": "image",
+        "output": "mask",
+        "size": [32, 32]
+      }
+    },
+    {
+      "id": "qwen-image-2.1",
+      "title": "Qwen-Image 2.1",
+      "tier": "B",
+      "capabilities": ["generate", "edit"],
+      "licence": {
+        "id": "LicenseRef-Qwen-Research",
+        "title": "Qwen Research License",
+        "url": "https://huggingface.co/unsloth/Qwen-Image-2.1-GGUF",
+        "requiresAcknowledgement": true,
+        "summary": "Not an open-source licence: read its terms on the model's page before you install it. paged never downloads or redistributes this model."
+      },
+      "install": "user",
+      "enabled": true,
+      "source": "unsloth/Qwen-Image-2.1-GGUF",
+      "variants": [
+        {
+          "id": "Q2_K",
+          "title": "Q2_K (smallest)",
+          "files": [],
+          "sizeBytes": 2500000000
+        },
+        { "id": "Q4_K_M", "title": "Q4_K_M (recommended)", "files": [] },
+        { "id": "Q8_0", "title": "Q8_0", "files": [], "sizeBytes": 7600000000 },
+        {
+          "id": "F16",
+          "title": "F16 (largest)",
+          "files": [],
+          "sizeBytes": 14200000000
+        }
+      ],
+      "defaultVariant": "Q4_K_M",
+      "components": [
+        {
+          "role": "diffusionModel",
+          "title": "Denoiser (the GGUF of the chosen quantisation)"
+        },
+        {
+          "role": "textEncoder",
+          "title": "Text encoder: Qwen3-VL-8B-Instruct GGUF (UD-Q4_K_XL)"
+        },
+        { "role": "vae", "title": "VAE: qwen_image_2.1_vae_bf16.safetensors" }
+      ]
+    }
+  ]
+}

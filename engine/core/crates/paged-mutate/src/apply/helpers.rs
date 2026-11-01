@@ -173,8 +173,31 @@ pub(super) fn find_anchored_setting_mut<'a>(
     doc: &'a mut Document,
     self_id: &str,
 ) -> Option<&'a mut paged_model::AnchoredObjectSetting> {
-    super::anchored_look::find_anchored_frame_mut(doc, self_id)
-        .map(|frame| frame.setting.get_or_insert_with(Default::default))
+    // Engine ADR 1050: the frames in table cells too.
+    for parsed in &mut doc.stories {
+        if let Some(frame) =
+            paged_model::anchored_frame_in_mut(&mut parsed.story.paragraphs, self_id)
+        {
+            return Some(frame.setting.get_or_insert_with(Default::default));
+        }
+    }
+    None
+}
+
+/// Engine ADR 1050 — the layout (wrap, z-order) of the anchored frame
+/// `self_id`, in any story, table cells included.
+pub(super) fn find_anchored_frame_mut<'a>(
+    doc: &'a mut Document,
+    self_id: &str,
+) -> Option<&'a mut paged_model::AnchoredFrame> {
+    for parsed in &mut doc.stories {
+        if let Some(frame) =
+            paged_model::anchored_frame_in_mut(&mut parsed.story.paragraphs, self_id)
+        {
+            return Some(frame);
+        }
+    }
+    None
 }
 
 // ---- W0.3 — enum string round-trippers (parse `from_idml`s are
@@ -455,6 +478,20 @@ pub(super) fn find_image_adjustments_mut<'a>(
     }
 }
 
+/// Engine ADR 1048 — locate the `fill_mesh` field on a fillable frame.
+pub(super) fn find_fill_mesh_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Option<Box<paged_model::MeshFill>>> {
+    match node {
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.fill_mesh),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.fill_mesh),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.fill_mesh),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.fill_mesh),
+        _ => None,
+    }
+}
+
 /// Engine ADR 1007 — locate the `gradient_stroke_mode` field on any
 /// stroked page-item kind.
 pub(super) fn find_gradient_stroke_mode_mut<'a>(
@@ -671,6 +708,21 @@ pub(super) fn find_text_wrap_mut<'a>(
     node: &NodeId,
 ) -> Option<&'a mut Option<paged_model::TextWrap>> {
     let raw = node.self_id();
+    // Engine ADR 1050: an anchored object takes the same wrap properties,
+    // addressed by its own id as its anchoring settings are.
+    let on_spread = doc.spreads.iter().any(|p| {
+        p.spread
+            .text_frames
+            .iter()
+            .any(|f| f.self_id.as_deref() == Some(raw))
+            || p.spread
+                .rectangles
+                .iter()
+                .any(|r| r.self_id.as_deref() == Some(raw))
+    });
+    if matches!(node, NodeId::TextFrame(_) | NodeId::Rectangle(_)) && !on_spread {
+        return find_anchored_frame_mut(doc, raw).map(|f| &mut f.layout.text_wrap);
+    }
     for parsed in &mut doc.spreads {
         match node {
             NodeId::TextFrame(_) => {

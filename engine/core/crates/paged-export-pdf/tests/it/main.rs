@@ -5,6 +5,7 @@
 
 mod anchored_effects;
 mod appearance;
+mod blend_modes_27;
 mod bookmarks;
 mod clip_groups;
 mod effect_stack;
@@ -15,6 +16,7 @@ mod feathered_stroke_and_text;
 mod fill_rule;
 mod image_adjustments;
 mod links;
+mod mesh_fill;
 mod opacity_mask;
 mod paint_v2;
 mod pdf_fragments;

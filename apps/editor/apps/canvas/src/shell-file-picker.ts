@@ -48,6 +48,14 @@ export interface FilePickerOptions {
 export async function pickFiles(
   options?: FilePickerOptions,
 ): Promise<readonly PickedFile[]> {
+  // A browser shows a file chooser only within a user activation; outside
+  // one (a script or a command run programmatically) it shows nothing and
+  // the input never settles. That is an empty answer, now.
+  const activation = (
+    globalThis.navigator as
+      { userActivation?: { isActive: boolean } } | undefined
+  )?.userActivation;
+  if (activation && !activation.isActive) return [];
   const files = await chooseFiles(options);
   // A file that cannot be read is an empty answer, not a picker that
   // never settles.

@@ -38,6 +38,7 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 import {
+  BLEND_MODE_NAMES,
   formatAddress,
   parseAddress,
   toElementId,
@@ -123,25 +124,10 @@ export const enumOf = (members: readonly string[]): ValueType => ({
   members,
 });
 
-/** IDML `BlendMode` values (InDesign's Effects panel set). */
-export const BLEND_MODES = [
-  "Normal",
-  "Multiply",
-  "Screen",
-  "Overlay",
-  "SoftLight",
-  "HardLight",
-  "ColorDodge",
-  "ColorBurn",
-  "Darken",
-  "Lighten",
-  "Difference",
-  "Exclusion",
-  "Hue",
-  "Saturation",
-  "Color",
-  "Luminosity",
-] as const;
+/** The model's `BlendMode` values — all 27, Dissolve and Photoshop's
+ *  eleven included — read from the engine's one list (engine ADR 1034,
+ *  plugin-sdk's `BLEND_MODE_NAMES`). */
+export const BLEND_MODES = BLEND_MODE_NAMES;
 
 export const BLEND_MODE: ValueType = enumOf(BLEND_MODES);
 

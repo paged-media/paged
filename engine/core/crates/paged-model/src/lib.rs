@@ -36,6 +36,7 @@ pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
 pub mod live_shape;
+pub mod mesh;
 pub mod review;
 pub mod vector_effect;
 pub mod winding;
@@ -45,6 +46,11 @@ pub use review::{
     FormatChange, MarkupView, ParaPropsChange,
 };
 pub use word_field::{WordField, WordFieldKind};
+
+pub use mesh::{
+    FreeformGradient, FreeformPoint, GradientMesh, MeshColor, MeshFill, MeshGrid, MeshHandle,
+    MeshNode, MeshPatch, PatchInput, MESH_FILL_LABEL_KEY,
+};
 
 use std::collections::BTreeMap;
 
@@ -1761,6 +1767,12 @@ pub struct TextFrame {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// `AppliedTOCStyle` attribute — `TOCStyle/<id>` reference. Frames
     /// authored as Table-of-Contents hosts carry this; the renderer
     /// detects it at story emission and swaps the story's paragraphs
@@ -1887,6 +1899,7 @@ impl TextFrame {
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
             gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
             effects: None,
             effect_stack: Vec::new(),
             appearance: Vec::new(),
@@ -2285,6 +2298,12 @@ pub struct Rectangle {
     /// reported as a loss on IDML export.
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// `<TextPath>` children attached to this rectangle. See
     /// [`Polygon::text_paths`].
     pub text_paths: Vec<TextPath>,
@@ -2416,6 +2435,7 @@ impl Rectangle {
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
         }
     }
 }
@@ -2749,6 +2769,12 @@ pub struct Oval {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// See [`Rectangle::opacity`].
     pub opacity: Option<f32>,
     /// See [`Rectangle::blend_mode`].
@@ -2904,6 +2930,7 @@ impl Oval {
             pie: None,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
         }
     }
 }
@@ -3185,7 +3212,7 @@ pub struct PathAnchor {
 /// every shape (TextFrame / Rectangle / Oval / Polygon /
 /// GraphicLine). The renderer uses the AABB plus offsets as a
 /// per-page wrap exclusion when laying out other text frames.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TextWrap {
     pub mode: TextWrapMode,
     /// IDML order: `[top, left, bottom, right]`, in pt. Inflates the
@@ -3533,6 +3560,12 @@ pub struct Polygon {
     /// See [`Rectangle::gradient_stroke_mode`].
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1048 — a gradient mesh or freeform gradient the frame
+    /// shows instead of its fill swatch while set (native: kept in
+    /// `.paged`; on IDML export the frame keeps its swatch, the fill
+    /// is reported as a loss and kept in a label the import restores).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_mesh: Option<Box<mesh::MeshFill>>,
     /// See [`Rectangle::opacity`].
     pub opacity: Option<f32>,
     /// See [`Rectangle::blend_mode`].
@@ -3670,6 +3703,7 @@ impl Polygon {
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            fill_mesh: None,
             text_wrap: None,
             item_layer: None,
             effects: None,
@@ -8160,6 +8194,224 @@ pub struct AnchoredFrame {
     pub stroke_drop_shadow: Option<DropShadowSetting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_drop_shadow: Option<DropShadowSetting>,
+    /// How the object stands among the text of its story (engine ADR
+    /// 1050): the wrap it makes, behind-text z-order, overlap, a text
+    /// frame's insets. Unset for every IDML import (InDesign's anchored
+    /// objects keep their earlier rendering); a Word float sets it.
+    #[serde(default, skip_serializing_if = "AnchoredLayout::is_unset")]
+    pub layout: AnchoredLayout,
+}
+
+/// Engine ADR 1050 — how a custom-positioned anchored object stands
+/// among the text of its story, as Word lays out a float.
+///
+/// - `text_wrap` makes the object a wrap obstacle for the lines of its
+///   story set after it is placed in the frame it lands in: the lines of
+///   its own paragraph and every later one (a bounding box narrows them, a
+///   jump object moves them below it, a contour follows `wrap_polygon` or
+///   the frame's box). Only a custom (`Anchored`) object wraps; an inline
+///   or above-line one is a character of its line already.
+/// - `behind_text` draws the object under its story's text (Word's
+///   `behindDoc`), else over it.
+/// - `allow_overlap` `Some(false)` moves the object down, clear of the
+///   objects of its story already placed on the page (Word's
+///   `allowOverlap="0"`).
+/// - `inset_spacing` / `vertical_justification` are an anchored TEXT
+///   frame's, as a text frame's `InsetSpacing` (`[top, left, bottom,
+///   right]`) and `VerticalJustification` (`TopAlign`, `CenterAlign`,
+///   `BottomAlign`).
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnchoredLayout {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_wrap: Option<TextWrap>,
+    /// A custom contour (Word's `wp:wrapPolygon`): the outline as points
+    /// in pt from the frame's top-left. A contour wrap follows it instead
+    /// of the frame's box. Empty: the frame's box.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wrap_polygon: Vec<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub behind_text: bool,
+    /// `None` ⇒ true (objects may overlap).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_overlap: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inset_spacing: Option<[f32; 4]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vertical_justification: Option<String>,
+}
+
+/// Engine ADR 1050 — the table `table_id` among `paragraphs`: a table of
+/// one of them, or one nested in a cell of such a table, at any depth.
+pub fn table_in<'a>(paragraphs: &'a [Paragraph], table_id: &str) -> Option<&'a Table> {
+    for p in paragraphs {
+        let Some(table) = &p.table else {
+            continue;
+        };
+        if table.self_id.as_deref() == Some(table_id) {
+            return Some(table);
+        }
+        for cell in &table.cells {
+            if let Some(found) = table_in(&cell.paragraphs, table_id) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+/// The mutable [`table_in`].
+pub fn table_in_mut<'a>(paragraphs: &'a mut [Paragraph], table_id: &str) -> Option<&'a mut Table> {
+    for p in paragraphs.iter_mut() {
+        let Some(table) = p.table.as_mut() else {
+            continue;
+        };
+        if table.self_id.as_deref() == Some(table_id) {
+            return Some(table);
+        }
+        for cell in table.cells.iter_mut() {
+            if let Some(found) = table_in_mut(&mut cell.paragraphs, table_id) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+/// Engine ADR 1050 — the paragraphs of cell `(col, row)` of the table
+/// `table_id` among `paragraphs` ([`table_in`]: nested tables too).
+pub fn cell_paragraphs_in<'a>(
+    paragraphs: &'a [Paragraph],
+    table_id: &str,
+    col: u32,
+    row: u32,
+) -> Option<&'a Vec<Paragraph>> {
+    table_in(paragraphs, table_id)?
+        .cells
+        .iter()
+        .find(|c| c.coords() == Some((col, row)))
+        .map(|c| &c.paragraphs)
+}
+
+/// The mutable [`cell_paragraphs_in`].
+pub fn cell_paragraphs_in_mut<'a>(
+    paragraphs: &'a mut [Paragraph],
+    table_id: &str,
+    col: u32,
+    row: u32,
+) -> Option<&'a mut Vec<Paragraph>> {
+    table_in_mut(paragraphs, table_id)?
+        .cells
+        .iter_mut()
+        .find(|c| c.coords() == Some((col, row)))
+        .map(|c| &mut c.paragraphs)
+}
+
+/// Engine ADR 1050 — where the host paragraph of the NESTED table
+/// `table_id` stands: the `(table id, col, row)` of the cell holding it
+/// and its index among that cell's paragraphs. `None` for a table of
+/// `paragraphs` themselves, or none at all.
+pub fn nested_table_host(
+    paragraphs: &[Paragraph],
+    table_id: &str,
+) -> Option<((String, u32, u32), usize)> {
+    for p in paragraphs {
+        let Some(table) = &p.table else {
+            continue;
+        };
+        for cell in &table.cells {
+            if let Some(i) = cell
+                .paragraphs
+                .iter()
+                .position(|q| q.table.as_ref().and_then(|t| t.self_id.as_deref()) == Some(table_id))
+            {
+                let (col, row) = cell.coords()?;
+                return Some(((table.self_id.clone()?, col, row), i));
+            }
+            if let Some(found) = nested_table_host(&cell.paragraphs, table_id) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+/// Engine ADR 1050 — the anchored frame `self_id` among `paragraphs`:
+/// their anchored frames, the members of anchored groups, and the
+/// paragraphs of their tables' cells, nested tables included.
+pub fn anchored_frame_in<'a>(
+    paragraphs: &'a [Paragraph],
+    self_id: &str,
+) -> Option<&'a AnchoredFrame> {
+    fn in_frames<'b>(frames: &'b [AnchoredFrame], self_id: &str) -> Option<&'b AnchoredFrame> {
+        for frame in frames {
+            if frame.self_id.as_deref() == Some(self_id) {
+                return Some(frame);
+            }
+            if let Some(found) = in_frames(&frame.children, self_id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    for p in paragraphs {
+        if let Some(found) = in_frames(&p.anchored_frames, self_id) {
+            return Some(found);
+        }
+        if let Some(table) = &p.table {
+            for cell in &table.cells {
+                if let Some(found) = anchored_frame_in(&cell.paragraphs, self_id) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The mutable [`anchored_frame_in`].
+pub fn anchored_frame_in_mut<'a>(
+    paragraphs: &'a mut [Paragraph],
+    self_id: &str,
+) -> Option<&'a mut AnchoredFrame> {
+    fn in_frames<'b>(
+        frames: &'b mut [AnchoredFrame],
+        self_id: &str,
+    ) -> Option<&'b mut AnchoredFrame> {
+        for frame in frames.iter_mut() {
+            if frame.self_id.as_deref() == Some(self_id) {
+                return Some(frame);
+            }
+            if let Some(found) = in_frames(&mut frame.children, self_id) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    for p in paragraphs.iter_mut() {
+        if let Some(found) = in_frames(&mut p.anchored_frames, self_id) {
+            return Some(found);
+        }
+        if let Some(table) = p.table.as_mut() {
+            for cell in table.cells.iter_mut() {
+                if let Some(found) = anchored_frame_in_mut(&mut cell.paragraphs, self_id) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+impl AnchoredLayout {
+    /// Nothing set: the object lays out as it did before ADR 1050.
+    pub fn is_unset(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The wrap this object makes, when it makes one.
+    pub fn active_wrap(&self) -> Option<TextWrap> {
+        self.text_wrap.filter(|w| w.mode.is_active())
+    }
 }
 
 impl AnchoredFrame {
@@ -8357,6 +8609,67 @@ pub struct Table {
     /// `StartColumnStroke*` / `EndColumnStroke*` analogue for column
     /// dividers. Currently captured but not rendered.
     pub column_strokes: TableLineStrokes,
+    /// Engine ADR 1025 — the table lays out by Word's rules: its rows split
+    /// across frames, its columns fit their content, it stands indented.
+    /// `None` (every IDML table): InDesign's rules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub word: Option<WordTableLayout>,
+}
+
+/// Engine ADR 1025 — a table laid out by Microsoft Word's rules rather than
+/// InDesign's ([`Table::word`]):
+///
+/// - a row that does not fit the rest of its frame splits there, each cell
+///   continuing its lines in the next frame (under repeated header rows),
+///   unless it is one of `cant_split_rows` (`w:cantSplit`), spans rows, or
+///   is held at an exact height;
+/// - with `autofit` (`w:tblLayout` autofit), a column too narrow for its
+///   content's longest unbreakable piece (a word, a picture) grows to it,
+///   taking the room from the columns that have some to spare; the table's
+///   width comes from `width` (`w:tblW`) and the columns from their cells'
+///   `cell_widths` (`w:tcW`) where the grid gives none;
+/// - `indent` (`w:tblInd`) moves a left-aligned table in from its column's
+///   start.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordTableLayout {
+    /// pt; negative stands out into the margin.
+    #[serde(default)]
+    pub indent: f32,
+    #[serde(default)]
+    pub autofit: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<TableWidth>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_widths: Vec<CellWidth>,
+    /// Rows (0-based) that never split.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cant_split_rows: Vec<u32>,
+}
+
+impl WordTableLayout {
+    /// Whether row `r` may split across frames.
+    pub fn row_splits(&self, r: usize) -> bool {
+        !self.cant_split_rows.contains(&(r as u32))
+    }
+}
+
+/// Engine ADR 1025 — a preferred width as Word states one (`w:tblW`,
+/// `w:tcW`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "unit", content = "value", rename_all = "camelCase")]
+pub enum TableWidth {
+    Auto,
+    Points(f32),
+    /// Percent of the room the table stands in (of the table, for a cell).
+    Percent(f32),
+}
+
+/// Engine ADR 1025 — a cell's preferred width (`w:tcW`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CellWidth {
+    pub row: u32,
+    pub col: u32,
+    pub width: TableWidth,
 }
 /// Outer-table border attributes serialised directly on `<Table>`
 /// (vs. via an `AppliedTableStyle`). All fields optional — `None`

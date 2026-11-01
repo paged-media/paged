@@ -377,23 +377,14 @@ fn find_cell_paragraphs_mut<'a>(
     story_id: &str,
     addr: &TextCellAddr,
 ) -> Result<&'a mut Vec<paged_model::Paragraph>, TextOpError> {
-    for para in story.paragraphs.iter_mut() {
-        let Some(table) = para.table.as_mut() else {
-            continue;
-        };
-        if table.self_id.as_deref() != Some(addr.table_id.as_str()) {
-            continue;
-        }
-        for c in table.cells.iter_mut() {
-            if c.coords() == Some((addr.col, addr.row)) {
-                return Ok(&mut c.paragraphs);
-            }
-        }
-    }
-    Err(TextOpError::UnknownStory(format!(
-        "{story_id} cell {}:{} of table {}",
-        addr.col, addr.row, addr.table_id
-    )))
+    // Engine ADR 1050: `table_id` names a nested table as well.
+    paged_model::cell_paragraphs_in_mut(&mut story.paragraphs, &addr.table_id, addr.col, addr.row)
+        .ok_or_else(|| {
+            TextOpError::UnknownStory(format!(
+                "{story_id} cell {}:{} of table {}",
+                addr.col, addr.row, addr.table_id
+            ))
+        })
 }
 
 fn apply_insert_text(
