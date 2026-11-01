@@ -125,7 +125,8 @@ Its dependencies are `onnxruntime-common`, `protobufjs` 7, `flatbuffers`, `long`
 (`ort-wasm-simd-threaded.asyncify.wasm`, about 27 MB), and only when a model runs, since the
 worker is a chunk of its own. The app's wasm budget (`scripts/wasm-budget.mjs`) now measures
 third-party packages the page loads WebAssembly from, by a named list (`THIRD_PARTY_WASM`), so
-this one counts against the 120 MB like the engine's. Renovate never updates it
+this one counts against the app budget like the engine's (the budget went from 120 to 140 MB on
+2026-11-01 with it: the total was 134.9 MB). Renovate never updates it
 automatically (`.github/renovate.json5`): an update is reviewed against these tests and the wasm
 budget. `bun audit` gates its advisories as for every package (PM-0011). NOTICE lists it.
 
