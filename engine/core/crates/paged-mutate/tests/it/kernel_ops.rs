@@ -2378,7 +2378,7 @@ fn offset_path_honours_the_join_on_a_concave_shape_in_both_directions() {
 /// 40 to within the kernel's tolerance.
 #[test]
 fn offset_path_on_a_curve_is_the_parallel_curve_in_every_join() {
-    const K: f32 = 0.552_284_8 * 50.0;
+    const K: f32 = paged_geom::KAPPA_F32 * 50.0;
     let (cx, cy, r) = (200.0_f32, 200.0_f32, 50.0_f32);
     // (anchor, left handle, right handle), clockwise from the top.
     let anchors: [AnchorKey; 4] = [
