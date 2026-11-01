@@ -45,7 +45,11 @@ with timeout of 60 seconds
         set nc to count of Word comments of d
         repeat with i from 1 to nc
             set c to Word comment i of d
-            set out to out & "comment" & tab & (author of c) & tab & (content of comment text of c) & linefeed
+            set cd to ""
+            try
+                set cd to (date value of c) as «class isot» as string
+            end try
+            set out to out & "comment" & tab & (author of c) & tab & (content of comment text of c) & tab & cd & linefeed
         end repeat
         close d saving no
         return out
@@ -77,7 +81,7 @@ for line in sys.stdin.read().splitlines():
         "file": name,
         "opensWithoutPrompt": bool(rows) and rows[0] == ["opened"],
         "revisions": [{"type": r[1], "author": r[2], "text": r[3]} for r in rows if r[0] == "revision" and len(r) > 3],
-        "comments": [{"author": r[1], "text": r[2]} for r in rows if r[0] == "comment" and len(r) > 2],
+        "comments": [dict({"author": r[1], "text": r[2]}, **({"date": r[3]} if len(r) > 3 and r[3] else {})) for r in rows if r[0] == "comment" and len(r) > 2],
     })
 print(json.dumps({"word": "Microsoft Word 16.114 (macOS)", "files": files}, indent=1, ensure_ascii=False))
 '

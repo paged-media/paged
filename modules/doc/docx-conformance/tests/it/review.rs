@@ -514,9 +514,38 @@ fn a_first_comment_makes_the_comment_parts__feat__plugin_doc_save_back() {
     probe_out("comments-first", &saved);
     assert_well_formed(&saved);
     let types = part(&saved, "[Content_Types].xml").unwrap();
-    for ct in ["comments+xml", "commentsExtended+xml", "commentsIds+xml"] {
+    for ct in [
+        "comments+xml",
+        "commentsExtended+xml",
+        "commentsIds+xml",
+        "commentsExtensible+xml",
+        "people+xml",
+    ] {
         assert!(types.contains(ct), "{types}");
     }
+    // The author's identity and the exact UTC time (Word's people.xml and
+    // commentsExtensible.xml).
+    let people = part(&saved, "word/people.xml").unwrap();
+    assert!(people.contains("w15:author=\"Author A\""), "{people}");
+    assert!(people.contains("w15:providerId=\"None\""), "{people}");
+    let cex = part(&saved, "word/commentsExtensible.xml").unwrap();
+    assert!(
+        cex.contains("w16cex:dateUtc=\"2026-10-29T10:00:00Z\""),
+        "{cex}"
+    );
+    let ids = part(&saved, "word/commentsIds.xml").unwrap();
+    let durable = ids.split("w16cid:durableId=\"").nth(1).unwrap();
+    assert!(
+        cex.contains(&format!("durableId=\"{}", &durable[..8])),
+        "{cex}"
+    );
+    let back = import_docx(&saved).unwrap();
+    assert_eq!(
+        back.comments[0].date_utc.as_deref(),
+        Some("2026-10-29T10:00:00Z")
+    );
+    assert_eq!(back.comments[0].provider_id.as_deref(), Some("None"));
+    assert_eq!(back.comments[0].user_id.as_deref(), Some("Author A"));
     let rels = part(&saved, "word/_rels/document.xml.rels").unwrap();
     assert!(rels.contains("relationships/comments\""), "{rels}");
     let doc = import_docx(&saved).unwrap();

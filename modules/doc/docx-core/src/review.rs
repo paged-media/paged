@@ -132,6 +132,16 @@ pub struct Comment {
     /// `w16cid:durableId`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub durable_id: Option<String>,
+    /// `w16cex:dateUtc` of `commentsExtensible.xml`: the exact UTC time
+    /// (`w:date` is the author's local time written as if it were UTC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_utc: Option<String>,
+    /// The author's account id (`people.xml`, `w15:presenceInfo/@w15:userId`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+    /// The author's identity provider (`AD`, `Windows Live`, `None`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
 }
 
 /// The engine id a Word revision id becomes (`docx-r12`), and back.

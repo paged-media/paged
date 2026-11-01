@@ -147,6 +147,15 @@ pub struct LoweredComment {
     pub initials: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
+    /// The exact UTC time (`commentsExtensible.xml`) when the file has one;
+    /// `date` is the author's local time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_utc: Option<String>,
+    /// The author's account id and identity provider (`people.xml`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
     pub text: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub resolved: bool,

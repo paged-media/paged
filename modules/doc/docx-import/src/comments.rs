@@ -32,6 +32,8 @@ pub struct CommentParts {
     pub comments: Option<String>,
     pub extended: Option<String>,
     pub ids: Option<String>,
+    pub extensible: Option<String>,
+    pub people: Option<String>,
 }
 
 /// The comment parts of the main part's relationships.
@@ -49,6 +51,8 @@ pub fn comments_parts(pkg: &OpcPackage, main_part: &str) -> CommentParts {
         comments: part("/comments"),
         extended: part("/commentsExtended"),
         ids: part("/commentsIds"),
+        extensible: part("/commentsExtensible"),
+        people: part("/people"),
     }
 }
 
@@ -126,6 +130,38 @@ pub fn read_comments(pkg: &OpcPackage, main_part: &str) -> Vec<Comment> {
                 if let Some(c) = out.iter_mut().find(|c| c.para_id.as_deref() == Some(pid)) {
                     c.durable_id = Some(durable.to_string());
                 }
+            }
+        }
+    }
+    // Word 2018's exact UTC times, by durable id.
+    if let Some(ext) = parsed(pkg, &parts.extensible) {
+        for e in ext
+            .children
+            .iter()
+            .filter(|e| e.local == "commentExtensible")
+        {
+            if let (Some(durable), Some(utc)) = (e.attr("durableId"), e.attr("dateUtc")) {
+                if let Some(c) = out
+                    .iter_mut()
+                    .find(|c| c.durable_id.as_deref() == Some(durable))
+                {
+                    c.date_utc = Some(utc.to_string());
+                }
+            }
+        }
+    }
+    // The authors' identities.
+    if let Some(people) = parsed(pkg, &parts.people) {
+        for person in people.children.iter().filter(|e| e.local == "person") {
+            let Some(name) = person.attr("author") else {
+                continue;
+            };
+            let info = person.children.iter().find(|e| e.local == "presenceInfo");
+            let user = info.and_then(|i| i.attr("userId")).map(str::to_string);
+            let provider = info.and_then(|i| i.attr("providerId")).map(str::to_string);
+            for c in out.iter_mut().filter(|c| c.author.as_deref() == Some(name)) {
+                c.user_id = user.clone();
+                c.provider_id = provider.clone();
             }
         }
     }

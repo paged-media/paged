@@ -131,6 +131,11 @@ export interface LoweredComment {
   author?: string | null;
   initials?: string | null;
   date?: string | null;
+  /** The exact UTC time (Word's `commentsExtensible.xml`); `date` is local. */
+  dateUtc?: string | null;
+  /** The author's account id and identity provider (Word's `people.xml`). */
+  userId?: string | null;
+  providerId?: string | null;
   /** Paragraphs separated by `\n`. */
   text: string;
   resolved?: boolean;
