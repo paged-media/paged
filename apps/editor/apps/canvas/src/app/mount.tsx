@@ -299,6 +299,11 @@ import {
   CLIPBOARD_KEYBINDINGS,
   CLIPBOARD_MENU_ITEMS,
 } from "../clipboard-commands";
+import {
+  buildPathfinderCommands,
+  PATHFINDER_DIAGNOSTIC_SOURCE,
+  PATHFINDER_MENU_ITEMS,
+} from "../pathfinder-commands";
 import { buildSvgCommands, SVG_MENU_ITEMS } from "../svg-commands";
 import {
   ASSET_EXPORT_MENU_ITEMS,
@@ -1477,6 +1482,20 @@ function CanvasAppIntegration() {
       hide: fresh(() => hideSelection(objectDeps)),
       showAllOnSpread: fresh(() => showAllOnSpread(objectDeps)),
     });
+    // `paged.pathfinder.*` — the ten Pathfinder verbs; the panel's buttons
+    // run the same two functions.
+    const pathfinderCommands = buildPathfinderCommands(
+      {
+        client,
+        getSelection: objectDeps.getSelection,
+        setSelection: objectDeps.setSelection,
+      },
+      (message) =>
+        problemsSink.publish(PATHFINDER_DIAGNOSTIC_SOURCE, "pathfinder", [
+          { severity: "error", message, source: "pathfinder" },
+        ]),
+      () => problemsSink.clear(PATHFINDER_DIAGNOSTIC_SOURCE),
+    );
     // `paged.insert.*` — the object-authoring verbs (U7). Unlike the
     // object layer's deps bag, every runner reads its state (camera,
     // page layout, caret, edit context) off the LIVE `PagedEditor` the
@@ -1611,6 +1630,7 @@ function CanvasAppIntegration() {
       ...buildAssetExportCommands(),
       CANVAS_CONTEXT_MENU_COMMAND,
       ...objectCommands,
+      ...pathfinderCommands,
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
@@ -1635,6 +1655,7 @@ function CanvasAppIntegration() {
       ...SVG_MENU_ITEMS,
       ...ASSET_EXPORT_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
+      ...PATHFINDER_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,

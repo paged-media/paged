@@ -42,26 +42,32 @@ import {
   beforeEach,
 } from "bun:test";
 
-import type {
-  CommandContribution,
-  ElementId,
-  Mutation,
-} from "@paged-media/plugin-api";
+import type { ElementId, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
   drawBundle,
-  PATHFINDER_REGION_PRESETS,
-  PATHFINDER_REGION_COMMAND_IDS,
   pathfinderRegionMutationFor,
   pathfinderFacesMutationFor,
   orderTopToBottom,
   paintOrderLeaves,
   regionRefusalReason,
+  selectionTopToBottom,
   type PlanarRegionsWire,
 } from "../../src";
 import { F4_OVERLAP, F5_OVER_CAP } from "../fixtures/corpus";
 import { openHost } from "./host";
+
+/** The six region verbs, in Illustrator's order. The commands that send
+ *  them are the host's (`paged.pathfinder.*`). */
+const REGION_VERBS = [
+  "pathfinderDivide",
+  "pathfinderTrim",
+  "pathfinderMerge",
+  "pathfinderCrop",
+  "pathfinderOutline",
+  "pathfinderMinusBack",
+] as const;
 
 /** `ua` — the BACK square. */
 const A = { kind: "polygon", id: F4_OVERLAP.ids.polygon! } as ElementId;
@@ -69,12 +75,6 @@ const A = { kind: "polygon", id: F4_OVERLAP.ids.polygon! } as ElementId;
 const B = { kind: "polygon", id: F4_OVERLAP.secondId } as ElementId;
 /** The engine's convention: index 0 frontmost. */
 const TOP_TO_BOTTOM = [B, A];
-
-function commandFor(h: HeadlessHost, id: string): CommandContribution {
-  const rec = h.contributions.find((c) => c.kind === "command" && c.id === id);
-  if (!rec) throw new Error(`no command recorded for ${id}`);
-  return rec.value as CommandContribution;
-}
 
 async function leaves(h: HeadlessHost): Promise<ElementId[]> {
   const roots = await h.host.document.tree();
@@ -133,33 +133,14 @@ async function planarRegions(
 
 describe("draw conformance — the region Pathfinder row (B-22)", () => {
   describe("wire shapes + the ordering rule (pure)", () => {
-    it("each preset emits the exact <verb>{ elementIds } wire shape", () => {
-      for (const preset of PATHFINDER_REGION_PRESETS) {
-        const m = pathfinderRegionMutationFor(preset.verb, TOP_TO_BOTTOM) as {
+    it("each verb emits the exact <verb>{ elementIds } wire shape", () => {
+      for (const verb of REGION_VERBS) {
+        const m = pathfinderRegionMutationFor(verb, TOP_TO_BOTTOM) as {
           op: string;
           args: unknown;
         };
-        expect(m).toEqual({
-          op: preset.verb,
-          args: { elementIds: TOP_TO_BOTTOM },
-        });
+        expect(m).toEqual({ op: verb, args: { elementIds: TOP_TO_BOTTOM } });
       }
-      expect(PATHFINDER_REGION_PRESETS.map((p) => p.verb)).toEqual([
-        "pathfinderDivide",
-        "pathfinderTrim",
-        "pathfinderMerge",
-        "pathfinderCrop",
-        "pathfinderOutline",
-        "pathfinderMinusBack",
-      ]);
-      expect(PATHFINDER_REGION_COMMAND_IDS).toEqual([
-        "media.paged.draw.command.pathfinderDivide",
-        "media.paged.draw.command.pathfinderTrim",
-        "media.paged.draw.command.pathfinderMerge",
-        "media.paged.draw.command.pathfinderCrop",
-        "media.paged.draw.command.pathfinderOutline",
-        "media.paged.draw.command.pathfinderMinusBack",
-      ]);
     });
 
     it("pathfinderFaces carries the ids + the keep/remove mode verbatim", () => {
@@ -433,44 +414,35 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
       expect(await leaves(h)).toHaveLength(2);
     });
 
-    it("the recorded command handlers derive top-to-bottom from the SCENE TREE, not click order", async () => {
+    it("the selection is ordered top-to-bottom from the SCENE TREE, not click order", async () => {
       // Select bottom-up on purpose: `ua` first, then `ub`.
       await h.host.selection.set([A, B]);
-      await commandFor(h, "media.paged.draw.command.pathfinderCrop").handler(
-        undefined,
+      const ordered = await selectionTopToBottom(h.host);
+      expect(ordered).toEqual([B, A]);
+      await h.host.document.mutate(
+        pathfinderRegionMutationFor("pathfinderCrop", ordered),
       );
-      // Had the command trusted click order, `ub` would have survived.
+      // Had click order been trusted, `ub` would have survived.
       expect(idsOf(await leaves(h))).toEqual(["ua"]);
       expect(await bboxOf(h, A)).toEqual({ n: 4, box: [200, 200, 300, 300] });
       await h.host.document.undo();
       expect(await leaves(h)).toHaveLength(2);
     });
 
-    it("every one of the six commands runs from a live selection and one undo restores", async () => {
-      for (const preset of PATHFINDER_REGION_PRESETS) {
-        await h.host.selection.set([A, B]);
-        await commandFor(h, preset.id).handler(undefined);
+    it("every one of the six verbs applies over the pair and one undo restores", async () => {
+      for (const verb of REGION_VERBS) {
+        const outcome = await h.host.document.mutate(
+          pathfinderRegionMutationFor(verb, TOP_TO_BOTTOM),
+        );
+        expect(outcome.applied, verb).toBe(true);
         const after = await leaves(h);
         expect(
           after.length,
-          `${preset.verb} left ${after.length} leaves`,
+          `${verb} left ${after.length} leaves`,
         ).toBeGreaterThanOrEqual(1);
         await h.host.document.undo();
-        expect(idsOf(await leaves(h)), `${preset.verb} undo`).toEqual([
-          "ua",
-          "ub",
-        ]);
+        expect(idsOf(await leaves(h)), `${verb} undo`).toEqual(["ua", "ub"]);
       }
-    });
-
-    it("fewer than two selected is an honest no-op (no throw, tree intact)", async () => {
-      await h.host.selection.set([A]);
-      await expect(
-        commandFor(h, "media.paged.draw.command.pathfinderDivide").handler(
-          undefined,
-        ),
-      ).resolves.toBeUndefined();
-      expect(await leaves(h)).toHaveLength(2);
     });
   });
 
@@ -572,18 +544,6 @@ describe("draw conformance — the region Pathfinder row (B-22)", () => {
       expect(reason).toContain("planar arrangement takes at most 1000");
       expect(reason).toContain("1001");
       expect(await leaves(h)).toHaveLength(before.length);
-    });
-
-    it("the COMMAND surfaces the refusal on the status binding instead of a silent no-op", async () => {
-      await h.host.selection.set(ids);
-      await commandFor(h, "media.paged.draw.command.pathfinderDivide").handler(
-        undefined,
-      );
-      const status = h.host.bindings.get("media.paged.draw.pathfinderStatus");
-      expect(String(status)).toContain("at most 1000");
-      // Nothing changed and the selection is untouched.
-      expect(await leaves(h)).toHaveLength(F5_OVER_CAP.count);
-      expect(h.host.selection.get()).toHaveLength(F5_OVER_CAP.count);
     });
   });
 });

@@ -184,7 +184,7 @@ test.describe("journey · paged.draw render output", () => {
         { kind: "rectangle", id: r2 },
       ]);
       const beforeUnite = await designer.renderBytes();
-      await invokeCommand(page, "media.paged.draw.command.pathfinderUnite");
+      await invokeCommand(page, "paged.pathfinder.unite");
       await page.waitForTimeout(300);
       const afterUnite = await designer.renderBytes();
       const united = await designer.renderDiffPixels(beforeUnite, afterUnite);

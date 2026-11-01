@@ -422,12 +422,7 @@ async function pathfinderInputs(
 // The cases — one per Tier-A row, more where a row has variants
 // ---------------------------------------------------------------------------
 
-const PATHFINDER_VERBS = [
-  ["union", "pathfinderUnite"],
-  ["subtract", "pathfinderSubtract"],
-  ["intersect", "pathfinderIntersect"],
-  ["exclude", "pathfinderExclude"],
-] as const;
+const PATHFINDER_KINDS = ["union", "subtract", "intersect", "exclude"] as const;
 
 /** Live-corner styles and the surface that applies each: the four preset
  *  commands, and InsetCorner through draw's own builder (it is in the
@@ -498,13 +493,20 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       await ctx.command(D + "makeCompoundPath");
     },
   },
-  ...PATHFINDER_VERBS.map(([kind, command]): RoundtripCase => ({
+  ...PATHFINDER_KINDS.map((kind): RoundtripCase => ({
     id: `pathfinder-${kind}`,
     row: `Pathfinder ${kind}`,
     async author(ctx) {
       const [back, front] = await pathfinderInputs(ctx);
-      await ctx.select([back, front]);
-      await ctx.command(D + command);
+      // The editor's Pathfinder sends this op (`paged.pathfinder.*`, PM-0017):
+      // the first selected object is the kept target.
+      await ctx.mutate(
+        {
+          op: "pathfinderBoolean",
+          args: { kept: back, others: [front], kind },
+        },
+        `pathfinder ${kind}`,
+      );
     },
   })),
   {
@@ -512,8 +514,11 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     row: "Pathfinder Divide",
     async author(ctx) {
       const [back, front] = await pathfinderInputs(ctx);
-      await ctx.select([back, front]);
-      await ctx.command(D + "pathfinderDivide");
+      // Top-to-bottom: the front object first.
+      await ctx.mutate(
+        { op: "pathfinderDivide", args: { elementIds: [front, back] } },
+        "pathfinder divide",
+      );
     },
   },
   {

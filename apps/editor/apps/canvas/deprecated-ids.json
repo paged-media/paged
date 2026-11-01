@@ -30,6 +30,126 @@
       "replacement": "menu:Object/Opacity mask/Release",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderUnite",
+      "replacement": "command:paged.pathfinder.unite",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Unite",
+      "replacement": "menu:Object/Pathfinder/Unite",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderSubtract",
+      "replacement": "command:paged.pathfinder.subtract",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Subtract",
+      "replacement": "menu:Object/Pathfinder/Subtract",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderIntersect",
+      "replacement": "command:paged.pathfinder.intersect",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Intersect",
+      "replacement": "menu:Object/Pathfinder/Intersect",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderExclude",
+      "replacement": "command:paged.pathfinder.exclude",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Exclude",
+      "replacement": "menu:Object/Pathfinder/Exclude",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderDivide",
+      "replacement": "command:paged.pathfinder.divide",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Divide",
+      "replacement": "menu:Object/Pathfinder/Divide",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderTrim",
+      "replacement": "command:paged.pathfinder.trim",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Trim",
+      "replacement": "menu:Object/Pathfinder/Trim",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderMerge",
+      "replacement": "command:paged.pathfinder.merge",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Merge",
+      "replacement": "menu:Object/Pathfinder/Merge",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderCrop",
+      "replacement": "command:paged.pathfinder.crop",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Crop",
+      "replacement": "menu:Object/Pathfinder/Crop",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderOutline",
+      "replacement": "command:paged.pathfinder.outline",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Outline",
+      "replacement": "menu:Object/Pathfinder/Outline",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderMinusBack",
+      "replacement": "command:paged.pathfinder.minusBack",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Minus back",
+      "replacement": "menu:Object/Pathfinder/Minus back",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

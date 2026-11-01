@@ -155,17 +155,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.reflectHorizontal",
       "media.paged.draw.command.reflectVertical",
       "media.paged.draw.command.transformAgain",
-      "media.paged.draw.command.pathfinderUnite",
-      "media.paged.draw.command.pathfinderSubtract",
-      "media.paged.draw.command.pathfinderIntersect",
-      "media.paged.draw.command.pathfinderExclude",
-      // B-22 (engine v57) — the REGION Pathfinder row.
-      "media.paged.draw.command.pathfinderDivide",
-      "media.paged.draw.command.pathfinderTrim",
-      "media.paged.draw.command.pathfinderMerge",
-      "media.paged.draw.command.pathfinderCrop",
-      "media.paged.draw.command.pathfinderOutline",
-      "media.paged.draw.command.pathfinderMinusBack",
       // Illustrator Phase 2 — compound paths (Make / Release).
       "media.paged.draw.command.makeCompoundPath",
       "media.paged.draw.command.releaseCompoundPath",

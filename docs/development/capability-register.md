@@ -134,11 +134,38 @@ Status (draw items, one line each; updated as they land):
   builders (`resolveGraphicPaint`, `graphicPaintFromStyle`, `withGraphicPaint`) are one
   implementation in `platform/shared/helpers`. The editor's tools and draw's tools each keep
   only their two reads (client / `BundleHost`), which cannot be shared.
-- Pathfinder: KEEP for now, MERGE first. The host panel (`pathfinder-panel.tsx`) has all ten
-  verbs, orders by real z and shows the engine's refusal, but it is the only host entry point:
-  no commands, no menu entries, no palette or scripting ids. Draw's ten commands and their
-  Draw > Pathfinder menu are those. Delete draw's once the host declares
-  `paged.pathfinder.*` commands (the `paged.object.*` layer is the model) and the panel calls them.
+- Pathfinder: MERGED 2026-11-01. The host declares `paged.pathfinder.*` (all ten verbs,
+  `pathfinder-commands.ts`), with Object > Pathfinder menu entries and palette rows; the panel's
+  buttons run the same two functions. Draw's ten commands, its Draw > Pathfinder menu and its
+  strings are gone (ids left through the deprecation window); what stays in draw is what its
+  other tools build on (`pathfinderMutationFor`, the paint-order readers, the faces builder).
+  Neither side had keybindings. After a success the shape modes leave the kept object selected
+  and the region verbs clear the selection (draw's behaviour, now the host's).
+- Gradient annotator and stop machine: KEEP. The host gradient tool commits an axis drag
+  (and the freeform modes) but draws no axis for an existing gradient and has no stop markers on
+  the canvas; draw's annotator shows the axis with a marker per stop and drags a stop along it
+  (`GradientStopMachine`). The host's `gradient-editor.tsx` is a panel, not the canvas lane.
+  Delete draw's when the host tool shows the axis and stops.
+- Appearance stack: KEEP. The host panel (`panel:paged.appearance`) replaced draw's panel (done
+  earlier) and covers add fill/stroke, clear, remove, reorder as panel gestures, but it has no
+  commands: draw's five `appearance*` commands are the only palette and scripting entry. The
+  metadata lane (`appearance-native.ts`, `appearance-migrate.ts`, `appearance-bake.ts`) is the
+  read path for documents written before the native appearance and the fallback of a host
+  without `document.appearance@1`; graphic styles build on it, and specs exercise it. Not a
+  duplicate to remove.
+- Reflect / Transform again: KEEP. The host has rotate, scale and shear tools and Transform
+  each, but no Reflect and no repeat-last-transform; nothing to delete.
+- Live corners and star: KEEP. The host covers editing (corner type and radius per corner in
+  the shape section, on-canvas widgets, the polygon tool's star inset); draw's five corner
+  presets and `Insert star…` are command and menu entries the host lacks, and the Flare tool has
+  no host equivalent. Same gap as the pathfinder was: merge by declaring host commands first.
+- Fill / stroke / dash panels: the schema panels are already gone from draw (the bundle log
+  says their rows moved to the host panels). What remains are the dash preset commands and the
+  Path Options dash section, which the host stroke panel does not duplicate: KEEP.
+- SVG import registration: KEEP. The host has File > Import / Export SVG commands
+  (`svg-commands.ts`); draw's `importer.svg/dxf/ai/eps` and `exporter.svg/dxf` are registry
+  doors (Place, drop, scripts, data bindings), a different entry. Whether the host's drop path
+  could use the registry's SVG door instead is open; not proven, not touched.
 - Colour guide: KEEP. The host colour wheel (`color-wheel-panel.tsx`) authors a harmony from the
   wheel's own colour and adds swatches; draw's panel reads the selection's fill, offers the
   shade/tint, warm/cool and vivid/muted variation grids and paints the selection from a chip.

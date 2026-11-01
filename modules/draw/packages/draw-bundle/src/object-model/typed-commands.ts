@@ -270,21 +270,8 @@ export const TWINS: readonly TwinSpec[] = [
   ].map(sel),
   twin("reflectHorizontal", { ...T, copy: BOOL, angleDeg: DEG, pivot: POINT }),
   twin("reflectVertical", { ...T, copy: BOOL, angleDeg: DEG, pivot: POINT }),
-  // Pathfinder (boolean + region) and compound paths.
-  ...[
-    "pathfinderUnite",
-    "pathfinderSubtract",
-    "pathfinderIntersect",
-    "pathfinderExclude",
-    "pathfinderDivide",
-    "pathfinderTrim",
-    "pathfinderMerge",
-    "pathfinderCrop",
-    "pathfinderOutline",
-    "pathfinderMinusBack",
-    "makeCompoundPath",
-    "releaseCompoundPath",
-  ].map(sel),
+  // Compound paths (Pathfinder is the host's).
+  ...["makeCompoundPath", "releaseCompoundPath"].map(sel),
   // Appearance.
   ...[
     "appearanceAddFill",

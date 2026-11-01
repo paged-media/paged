@@ -43,7 +43,7 @@
 // retired and paged.draw now resolves the HOST panel's values through
 // a binding provider instead. So the contribution log holds eighteen tools + two
 // schema panels + thirty-four commands (4 dash + 2 group + 2
-// gradient-fill + 3 path-ops + 2 join/average + 4 pathfinder + the Phase 9
+// gradient-fill + 3 path-ops + 2 join/average + the Phase 9
 // Tier B 5 live-corner + 3 appearance + 3 select-same + the wave-2
 // 4 insert-shape + blend + select-parent-group) + the edit context.
 
@@ -300,19 +300,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         // Object ▸ Transform — Reflect horizontally / vertically and
         // Transform again.
-        "command",
-        "command",
-        "command",
-        // Phase 4c — Pathfinder Unite / Subtract / Intersect / Exclude.
-        "command",
-        "command",
-        "command",
-        "command",
-        // B-22 (engine v57) — the REGION Pathfinder row: Divide / Trim
-        // / Merge / Crop / Outline / Minus back.
-        "command",
-        "command",
-        "command",
         "command",
         "command",
         "command",

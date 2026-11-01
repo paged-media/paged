@@ -499,3 +499,78 @@ describe("nothing selected, the wrong kind selected, no document, inside a conte
     expect(ed.problems()).toEqual([]);
   });
 });
+
+describe("Pathfinder", () => {
+  /** A second rectangle over the fixture frame, selected with it (frame
+   *  first, so the frame is the kept target). */
+  async function overlapping(e: HeadlessEditor) {
+    const reply = await e.client.mutate({
+      op: "insertFrame",
+      args: { pageId: T.pageId, bounds: [130, 120, 210, 260] },
+    } as never);
+    const created = (reply as { payload?: { createdId?: unknown } }).payload
+      ?.createdId as { kind: string; id: string };
+    expect(created).toBeTruthy();
+    await e.idle();
+    await e.select([T.frame.id, created as never]);
+    return created;
+  }
+
+  test("Unite folds the second shape into the first (the kept target); one undo step", async () => {
+    covers(
+      "command:paged.pathfinder.unite",
+      "command:paged.pathfinder.subtract",
+      "command:paged.pathfinder.intersect",
+      "command:paged.pathfinder.exclude",
+    );
+    const e = await open();
+    const other = await overlapping(e);
+    const united = await run(e, "paged.pathfinder.unite");
+    expect(e.problems()).toEqual([]);
+    expect(pageOne(united.after)).toContain(FRAME);
+    expect(pageOne(united.after)).not.toContain(elementKey(other as never));
+    await expectOneUndoStep(e, united.before);
+
+    for (const verb of ["subtract", "intersect", "exclude"]) {
+      await e.select([T.frame.id, other as never]);
+      const out = await run(e, `paged.pathfinder.${verb}`);
+      expect(e.problems()).toEqual([]);
+      expect(pageOne(out.after)).not.toContain(elementKey(other as never));
+      await expectOneUndoStep(e, out.before);
+    }
+  });
+
+  test("the region verbs change the page and each is one undo step", async () => {
+    covers(
+      "command:paged.pathfinder.divide",
+      "command:paged.pathfinder.trim",
+      "command:paged.pathfinder.merge",
+      "command:paged.pathfinder.crop",
+      "command:paged.pathfinder.outline",
+      "command:paged.pathfinder.minusBack",
+    );
+    const e = await open();
+    const other = await overlapping(e);
+    for (const verb of [
+      "divide",
+      "trim",
+      "merge",
+      "crop",
+      "outline",
+      "minusBack",
+    ]) {
+      await e.select([T.frame.id, other as never]);
+      const out = await run(e, `paged.pathfinder.${verb}`);
+      expect(e.problems(), verb).toEqual([]);
+      expect(dumpDiff(out.before, out.after).length, verb).toBeGreaterThan(0);
+      await expectOneUndoStep(e, out.before);
+    }
+  });
+
+  test("one object selected sends nothing", async () => {
+    const e = await open();
+    await e.select([T.frame.id]);
+    const out = await run(e, "paged.pathfinder.unite");
+    expect(dumpDiff(out.before, out.after)).toEqual([]);
+  });
+});

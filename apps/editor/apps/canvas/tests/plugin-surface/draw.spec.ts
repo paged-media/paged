@@ -164,16 +164,6 @@ const COMMANDS = [
   "media.paged.draw.command.joinEndpoints",
   "media.paged.draw.command.closePath",
   "media.paged.draw.command.averageEndpoints",
-  "media.paged.draw.command.pathfinderUnite",
-  "media.paged.draw.command.pathfinderSubtract",
-  "media.paged.draw.command.pathfinderIntersect",
-  "media.paged.draw.command.pathfinderExclude",
-  "media.paged.draw.command.pathfinderDivide",
-  "media.paged.draw.command.pathfinderTrim",
-  "media.paged.draw.command.pathfinderMerge",
-  "media.paged.draw.command.pathfinderCrop",
-  "media.paged.draw.command.pathfinderOutline",
-  "media.paged.draw.command.pathfinderMinusBack",
   "media.paged.draw.command.makeCompoundPath",
   "media.paged.draw.command.releaseCompoundPath",
   "media.paged.draw.command.makePatternFromSelection",
@@ -941,7 +931,8 @@ test.describe("plugin surface · paged.draw", () => {
       .toBeLessThan(beforeCompound);
     await designer.runCommand("media.paged.draw.command.releaseCompoundPath");
 
-    // ── THE SIX PATHFINDER OPS the journeys never drove. Each runs on
+    // ── THE SIX PATHFINDER OPS the journeys never drove (the host's now,
+    //    `paged.pathfinder.*`). Each runs on
     //    its own fresh overlapping pair; collected per-op so one refused
     //    op does not hide the other five.
     //
@@ -954,12 +945,12 @@ test.describe("plugin surface · paged.draw", () => {
     //    3,323 bytes, and with the front object UNFILLED the same op
     //    removes 11,449 px of ink. An export digest sees all six. ──
     const ops = [
-      "media.paged.draw.command.pathfinderDivide",
-      "media.paged.draw.command.pathfinderTrim",
-      "media.paged.draw.command.pathfinderMerge",
-      "media.paged.draw.command.pathfinderCrop",
-      "media.paged.draw.command.pathfinderOutline",
-      "media.paged.draw.command.pathfinderMinusBack",
+      "paged.pathfinder.divide",
+      "paged.pathfinder.trim",
+      "paged.pathfinder.merge",
+      "paged.pathfinder.crop",
+      "paged.pathfinder.outline",
+      "paged.pathfinder.minusBack",
     ];
     const inert: string[] = [];
     let y = 300;

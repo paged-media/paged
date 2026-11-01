@@ -52,20 +52,19 @@
 
 import { useState } from "react";
 
-import { refusalText, StatusLine } from "@paged-media/panel-kit";
+import { StatusLine } from "@paged-media/panel-kit";
 import { useCanvasClient, useSelection, Icon } from "@paged-media/shell";
 
+import {
+  runRegionVerb,
+  runShapeMode,
+  type PathfinderRegionVerb,
+} from "../pathfinder-commands";
 import { CoreCommandButton } from "../core-command-dialog";
 import { CORE_COMMAND_ENTRIES } from "../core-command-entries";
 import { defineMessages, useStrings } from "@paged-media/strings";
 import { KitSelect } from "@paged-media/ui";
-import type {
-  ElementId,
-  Mutation,
-  PathfinderKind,
-  SceneTreeNode,
-  WorkerToMain,
-} from "@paged-media/client";
+import type { ElementId, PathfinderKind } from "@paged-media/client";
 
 interface ButtonDef {
   kind: PathfinderKind;
@@ -74,23 +73,8 @@ interface ButtonDef {
   hint: string;
 }
 
-/** The six region verbs' wire op names — the `Mutation` variants that
- *  take a bare `{ elementIds }` (protocol v57). */
-type RegionVerb = Extract<
-  Mutation,
-  {
-    op:
-      | "pathfinderDivide"
-      | "pathfinderTrim"
-      | "pathfinderMerge"
-      | "pathfinderCrop"
-      | "pathfinderOutline"
-      | "pathfinderMinusBack";
-  }
->["op"];
-
 interface RegionDef {
-  verb: RegionVerb;
+  verb: PathfinderRegionVerb;
   icon: string;
   label: string;
   hint: string;
@@ -210,48 +194,6 @@ const TILE_CLASS =
   "flex flex-col items-center gap-[5px] rounded-[7px] border border-input " +
   "bg-background px-1 py-[9px] hover:bg-muted/60 disabled:opacity-50";
 
-/** Key an element id the way the scene tree's leaves key. */
-function keyOf(id: ElementId): string {
-  return `${id.kind}:${String((id as { id: unknown }).id)}`;
-}
-
-/** Flatten the scene tree to its selectable leaves in PAINT order
- *  (back to front — the order `frames_in_order` records). */
-function paintOrder(roots: SceneTreeNode[]): string[] {
-  const out: string[] = [];
-  const walk = (nodes: SceneTreeNode[]) => {
-    for (const node of nodes) {
-      if (node.id) out.push(keyOf(node.id));
-      if (node.children) walk(node.children);
-    }
-  };
-  walk(roots);
-  return out;
-}
-
-/** Order the selection TOP-TO-BOTTOM (index 0 frontmost). Ids the tree
- *  does not carry keep their relative selection order at the back — a
- *  partial answer still runs rather than dropping operands. */
-function topToBottom(selection: ElementId[], paint: string[]): ElementId[] {
-  const rank = new Map<string, number>();
-  paint.forEach((k, i) => rank.set(k, i));
-  return selection
-    .map((id, i) => ({ id, i, z: rank.get(keyOf(id)) ?? -1 }))
-    .sort((a, b) => (a.z !== b.z ? b.z - a.z : a.i - b.i))
-    .map((e) => e.id);
-}
-
-/** The engine's reason for a refused mutation, in words, or null when it
- *  applied. An apply-layer refusal arrives as `mutationFailed { error:
- *  NotImplemented { what: "frame mutation failed: invalid value for
- *  FramePath on X: <reason>" } }` — the user gets the reason, not the
- *  envelope; a bare variant name ("Mutation::PathfinderBoolean") says
- *  that `subject` is not available for these objects. */
-function refusalOf(reply: WorkerToMain, subject: string): string | null {
-  if (reply.kind !== "mutationFailed") return null;
-  return refusalText(reply.payload.error, subject);
-}
-
 // The path verbs plus opacity mask and step-and-repeat (their menu groups
 // split when the Object menu got real submenus).
 const PATH_ENTRIES = CORE_COMMAND_ENTRIES.filter(
@@ -261,38 +203,30 @@ const PATH_ENTRIES = CORE_COMMAND_ENTRIES.filter(
 export function PathfinderPanel() {
   const strings = useStrings();
   const client = useCanvasClient();
-  const { elementSelection } = useSelection();
+  const { elementSelection, setElementSelection } = useSelection();
   const [status, setStatus] = useState<string | null>(null);
   const enabled = elementSelection.length >= 2;
 
+  const deps = {
+    client,
+    getSelection: () => elementSelection as ElementId[],
+    setSelection: async (ids: ElementId[]) => {
+      const applied = await client.setElementSelection(ids, "replace");
+      setElementSelection(applied);
+    },
+  };
+
   async function run(kind: PathfinderKind, label: string) {
     if (!enabled) return;
-    const [kept, ...others] = elementSelection as ElementId[];
-    if (others.length === 0) return;
     setStatus(null);
-    const reply = await client.mutate({
-      op: "pathfinderBoolean",
-      args: { kept, others, kind },
-    });
-    setStatus(refusalOf(reply, label));
+    setStatus(await runShapeMode(deps, kind, label));
   }
 
   /** One region verb over the selection, ordered by real z. */
-  async function runRegion(verb: RegionVerb, label: string) {
+  async function runRegion(verb: PathfinderRegionVerb, label: string) {
     if (!enabled) return;
     setStatus(null);
-    let ordered = [...elementSelection] as ElementId[];
-    try {
-      ordered = topToBottom(ordered, paintOrder(await client.sceneTree()));
-    } catch {
-      // An unreadable tree leaves click order in place rather than
-      // aborting; Crop / Minus back may then pick the other operand.
-    }
-    const reply = await client.mutate({
-      op: verb,
-      args: { elementIds: ordered },
-    } as Mutation);
-    setStatus(refusalOf(reply, label));
+    setStatus(await runRegionVerb(deps, verb, label));
   }
 
   return (
