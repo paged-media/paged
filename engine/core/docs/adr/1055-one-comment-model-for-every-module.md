@@ -185,6 +185,8 @@ Rides protocol v78 (added before its first consumer sync; governance rule 4).
 - **Canvas pins** (editor): a pin with the author's initials at each non-text thread's place on its
   page, faint when resolved; a click focuses the thread and opens the Comments panel on it. Text
   comments keep the margin band.
+- **`comments@1` was deferred here and is built:** [extensions ADR 1101](../../../../platform/extensions/docs/adr/1101-the-comments-door.md)
+  (2026-11-01) records the door over the same reads and writes. What follows was true when this section was written.
 - **`comments@1` is deferred.** Every operation and read it would wrap is reachable today through
   `document.collection("comments")` and `document.mutate` with the generated wire types, which is
   what paged.slide and the host panel use. The door becomes worth its contract and harness cost when

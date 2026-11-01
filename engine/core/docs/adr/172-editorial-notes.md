@@ -1,6 +1,7 @@
 # ADR 172 — Editorial notes, kept and edited as InDesign keeps them
 
-- **Status:** Accepted 2026-10-16.
+- **Status:** Accepted 2026-10-16. Extended 2026-11-01 by [ADR 1055](1055-one-comment-model-for-every-module.md): a note is a thread of kind
+  `note` in the one comment model.
 - **Scope:**
   - `paged-model`: `NOTE_MARKER`, `Note`, `Paragraph.notes` (kept on their characters by
     `shift_anchors`).
@@ -103,3 +104,11 @@ deletes it with the character.
   document user.
 - **A note outside a character range,** which InDesign does not write, is replayed and not read.
 - **Hidden text** (`<HiddenText>`) is still carried and not read.
+
+## Amendment (2026-11-01): a note is a `note` thread
+
+[ADR 1055](1055-one-comment-model-for-every-module.md) reads an InDesign note as a thread of `kind: note` (single, unthreaded) in the document's
+one comment model, listed in the `comments` collection with the comments of every other module
+and exported to PDF as a comment annotation on request. The note's own operations, its marker
+character and the preserved `<Note>` subtree of this record are unchanged, and a reply folded into
+an IDML note is reported as a loss.
