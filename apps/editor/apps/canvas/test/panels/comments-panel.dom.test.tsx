@@ -22,6 +22,7 @@
 // the panel on a real engine.
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { focusThread } from "@paged-media/shell";
 import { covers } from "@paged-media/test-kit";
 
 import { CommentsPanel } from "../../src/panels/comments-panel";
@@ -120,6 +121,24 @@ describe("Comments panel", () => {
       q(h.root, '[data-thread="t1"] [data-comment="t1"] [data-delete]'),
     );
     expect(h.root.querySelector('[data-thread="t1"]')).toBeNull();
+  });
+
+  test("the thread a pin points at is highlighted, and clicking a thread focuses it", async () => {
+    covers("panel:paged.comments");
+    const h = await mount();
+    await h.mutate(thread("t1", rectId(h), "First"));
+    await h.mutate(thread("t2", rectId(h), "Second"));
+    const current = () =>
+      [...h.root.querySelectorAll("[data-thread]")]
+        .filter((c) => c.getAttribute("aria-current") === "true")
+        .map((c) => c.getAttribute("data-thread"));
+    expect(current()).toEqual([]);
+    // What a canvas pin does.
+    await h.act(() => focusThread(h.scope, "t2"));
+    expect(current()).toEqual(["t2"]);
+    // Clicking the other thread moves the focus.
+    await h.click(q(h.root, '[data-thread="t1"]'));
+    expect(current()).toEqual(["t1"]);
   });
 
   test("a new comment goes on the selected object", async () => {

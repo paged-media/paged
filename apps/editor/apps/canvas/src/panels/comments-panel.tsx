@@ -22,15 +22,19 @@
 // comment on the current selection. One panel for every module's edit
 // context: the modules supply anchors, never panels.
 
-import { useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import type { CommentSummary } from "@paged-media/client";
 import {
   CockpitPanelHeader,
   ComingSoon,
+  focusThread,
+  getFocusedThread,
+  subscribeFocusedThread,
   useCanvasClient,
   useCollection,
   useContentSelection,
+  useEditorScope,
   useSelection,
 } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
@@ -121,6 +125,13 @@ export function CommentsPanel() {
   const rows = useCollection<CommentSummary>("comments");
   const { elementSelection } = useSelection();
   const { contentSelection } = useContentSelection();
+  const scope = useEditorScope();
+  // The thread a canvas pin (or a click here) points at.
+  const focused = useSyncExternalStore(
+    (l) => subscribeFocusedThread(scope, l),
+    () => getFocusedThread(scope),
+    () => null,
+  );
   const [filter, setFilter] = useState<ThreadFilter>("all");
   const [draft, setDraft] = useState("");
   const [reviewer, setReviewer] = useReviewer(strings.t(M.defaultAuthor));
@@ -241,6 +252,8 @@ export function CommentsPanel() {
               thread={t}
               reviewer={reviewer}
               write={write}
+              focused={focused === t.id}
+              onFocus={() => focusThread(scope, t.id)}
             />
           ))}
         </div>
@@ -253,12 +266,21 @@ function ThreadCard({
   thread,
   reviewer,
   write,
+  focused,
+  onFocus,
 }: {
   thread: Thread;
   reviewer: Reviewer;
   write: (mutation: unknown) => Promise<unknown>;
+  focused: boolean;
+  onFocus: () => void;
 }) {
   const strings = useStrings();
+  const card = useRef<HTMLElement | null>(null);
+  // A pin on the canvas brought the user here: show the thread.
+  useEffect(() => {
+    if (focused) card.current?.scrollIntoView?.({ block: "nearest" });
+  }, [focused]);
   const [reply, setReply] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -290,7 +312,10 @@ function ThreadCard({
   const comments = [thread.root, ...thread.replies];
   return (
     <article
-      className="border-b border-border p-2 text-xs"
+      ref={card}
+      className="border-b border-border p-2 text-xs aria-[current=true]:bg-accent"
+      aria-current={focused ? "true" : undefined}
+      onPointerDown={onFocus}
       data-thread={thread.id}
       data-resolved={thread.resolved ? "true" : undefined}
       data-where={thread.where}

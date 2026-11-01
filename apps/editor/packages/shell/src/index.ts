@@ -664,6 +664,9 @@ export {
   elementOfPlacement,
   markersOf,
   type DataMarkerTone,
+  commentPinsContribution,
+  pinsOf,
+  type CommentPin,
   tableCellOverlayContribution,
   snapLinesContribution,
   gridOverlayContribution,
@@ -1141,3 +1144,9 @@ export {
   type FeatureRule,
   type FeatureStore,
 } from "./state/features";
+
+export {
+  focusThread,
+  getFocusedThread,
+  subscribeFocusedThread,
+} from "./state/comment-focus";

@@ -57,6 +57,7 @@ import {
   threadingPortsContribution,
   threadLinesContribution,
   dataMarkersContribution,
+  commentPinsContribution,
   loadDocumentFile,
   fetchDefaultFont,
   fetchDefaultFontFaces,
@@ -399,6 +400,8 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // Editor ADR 291 — View ▸ Show data markers: the frames the data is
   // placed in, in their sync state. Reads nothing until toggled on.
   dataMarkersContribution,
+  // Engine ADR 1055 — a pin for every comment thread that is not on text.
+  commentPinsContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,

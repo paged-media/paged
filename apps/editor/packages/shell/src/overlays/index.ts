@@ -52,6 +52,13 @@ export {
   markersOf,
   type DataMarkerTone,
 } from "./data-markers";
+export {
+  commentPinsContribution,
+  COMMENTS_PANEL,
+  initialsOf as pinInitialsOf,
+  pinsOf,
+  type CommentPin,
+} from "./comment-pins";
 export { tableCellOverlayContribution } from "./table-cell-overlay";
 export { snapLinesContribution } from "./snap-lines";
 export {
