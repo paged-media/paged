@@ -64,6 +64,8 @@ paged-compose = { path = "../paged-compose" }
 # Live vector effects (engine ADR 1042): an item with vector entries in its
 # effect stack is drawn as the item its effected outline describes.
 paged-vector-fx = { path = "../paged-vector-fx" }
+# The one fixed-step flattener and the circle constant.
+paged-geom = { path = "../paged-geom" }
 paged-gpu = { path = "../paged-gpu", default-features = false, features = ["svg"] }
 # W3.B2 — IDML save-back, used by the `paged-inspect --roundtrip`
 # conformance hook. Lightweight (idml-import + paged-scene + zip +

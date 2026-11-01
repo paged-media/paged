@@ -28,5 +28,7 @@ tracing = { workspace = true }
 blake3 = "1"
 
 [dev-dependencies]
+# The fixed-step flattener the frame-shape tests sample circles with.
+paged-geom = { path = "../paged-geom" }
 # Reads Word's answer to the first-fit probe (tests/fixtures/first-fit.word.json).
 serde_json = { workspace = true }

@@ -15,6 +15,8 @@ paged-blend = { path = "../paged-blend" }
 paged-scene = { path = "../paged-scene" }
 paged-model = { path = "../paged-model" }
 paged-text = { path = "../paged-text" }
+# The one fixed-step flattener and the circle constant.
+paged-geom = { path = "../paged-geom" }
 paged-color = { path = "../paged-color" }
 ttf-parser = "0.25"
 # The engine's geometry crate (the renderer's version): a path converts to

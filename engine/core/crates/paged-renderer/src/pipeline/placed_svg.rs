@@ -949,7 +949,7 @@ fn contours(segments: &[PathSegment]) -> Vec<&[PathSegment]> {
 
 /// The contour's points, its curves flattened into eight chords each.
 fn flatten(contour: &[PathSegment]) -> Vec<(f32, f32)> {
-    const STEPS: usize = 8;
+    const STEPS: u32 = 8;
     let mut pts: Vec<(f32, f32)> = Vec::new();
     let mut cur = (0.0, 0.0);
     for s in contour {
@@ -959,14 +959,7 @@ fn flatten(contour: &[PathSegment]) -> Vec<(f32, f32)> {
                 pts.push(cur);
             }
             PathSegment::QuadTo { cx, cy, x, y } => {
-                for i in 1..=STEPS {
-                    let t = i as f32 / STEPS as f32;
-                    let u = 1.0 - t;
-                    pts.push((
-                        u * u * cur.0 + 2.0 * u * t * cx + t * t * x,
-                        u * u * cur.1 + 2.0 * u * t * cy + t * t * y,
-                    ));
-                }
+                paged_geom::flatten::sample_quad(cur, (cx, cy), (x, y), STEPS, |p| pts.push(p));
                 cur = (x, y);
             }
             PathSegment::CubicTo {
@@ -977,15 +970,14 @@ fn flatten(contour: &[PathSegment]) -> Vec<(f32, f32)> {
                 x,
                 y,
             } => {
-                for i in 1..=STEPS {
-                    let t = i as f32 / STEPS as f32;
-                    let u = 1.0 - t;
-                    let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
-                    pts.push((
-                        a * cur.0 + b * cx1 + c * cx2 + d * x,
-                        a * cur.1 + b * cy1 + c * cy2 + d * y,
-                    ));
-                }
+                paged_geom::flatten::sample_cubic(
+                    cur,
+                    (cx1, cy1),
+                    (cx2, cy2),
+                    (x, y),
+                    STEPS,
+                    |p| pts.push(p),
+                );
                 cur = (x, y);
             }
             PathSegment::Close => {}

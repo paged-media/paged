@@ -46,7 +46,7 @@ pub use compose::{
     drop_cap_column_widths_with_min, drop_cap_point_size, AdvanceMeasurer, ComposeOptions,
     ComposedLine, DropCapComposition, DropCapSpec, HarfrustMeasurer, MonospaceMeasurer, TextShaper,
 };
-pub use frame_shape::{cubic_steps_for_tolerance, flatten_cubic, Contour, FrameShape};
+pub use frame_shape::{cubic_steps_for_tolerance, Contour, FrameShape};
 pub use hyphenate::{
     soft_hyphen_opportunities, HyphenationLimits, Hyphenator, Hyphenators, Language, SOFT_HYPHEN,
 };

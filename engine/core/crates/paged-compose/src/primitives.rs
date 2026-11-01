@@ -236,10 +236,9 @@ pub fn emit_line(
     });
 }
 
-/// Magic constant for cubic Bézier ellipse approximation: the cubic
-/// control-point distance that turns four arcs into a near-perfect
-/// circle. Standard value: 4·(√2 − 1) / 3.
-const ELLIPSE_KAPPA: f32 = 0.552_284_8;
+/// Cubic control-point distance that turns four arcs into a near-perfect
+/// circle (4·(√2 − 1) / 3): the engine's one constant.
+const ELLIPSE_KAPPA: f32 = paged_geom::KAPPA_F32;
 
 pub fn unit_ellipse() -> PathData {
     // A cubic Bézier approximation of a unit-square inscribed circle

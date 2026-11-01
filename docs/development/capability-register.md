@@ -79,7 +79,15 @@ Path coverage rasterizers ×3 in image-js.
 
 ### Geometry and vector
 
-Flatten ×9, kappa ×5, affine types ×4 → `paged-geom`. Draw's TS copies of width, brush,
+Fixed-step f32 flattening is `paged_geom::flatten` (renderer stroke/placed-SVG/text-path, compose
+mask/dash-fit, text frame shapes; bit-identical, tested against the old copies). Left: `winding.rs`
+(`paged-model` sits below `paged-geom`), `image-js` masking (no engine geometry dependency in the
+image bundle) and the tolerance-driven ones (`psd_vector_mask`, kurbo in `paged-ps`). Kappa:
+`paged_geom::KAPPA` / `KAPPA_F32` (the `paged-gen` samples and the TS copies stay). The IDML
+`[f32;6]` product and point map are `paged_geom::affine` (`paged-mutate`, `paged-canvas`, the
+renderer); the inverse (three singularity tests), the `[f64;6]` copies (slide ×3, draw-dxf) and
+the `Affine`/`Transform` newtypes of `paged-svg` and `paged-compose` → `paged-geom`.
+Draw's TS copies of width, brush,
 along-path, envelope and `appearance-bake.ts` → `paged-vector-fx`. `dml-native` still maps
 pattern fill to a two-colour mix, drops gradient alpha and loses `clrChange`: adopt paint v2.
 `a:custGeom` / `a:xfrm` writer (`pptx-export/geom.rs`) → `dml-geom`. Pie wedge ×3 → `dml-chart`.

@@ -751,9 +751,7 @@ pub(crate) fn transform_bbox(b: Bounds, m: Option<[f32; 6]>) -> Bounds {
     }
 }
 
-pub(crate) fn apply_matrix(m: &[f32; 6], x: f32, y: f32) -> (f32, f32) {
-    (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
-}
+pub(crate) use paged_geom::affine::apply as apply_matrix;
 
 /// Step 5 — closest anchor / Bezier-handle hit for path-edit mode.
 ///

@@ -57,23 +57,7 @@ use super::duplicate_nodes::{ref_self_id, refused, DuplicateDemand};
 use super::insert_node::{ensure_frames_in_order, ref_home, unregister_frame_ref, RefHome};
 use super::snippet::{count_subtree, extract_snippet, graft_roots, mint, page_item_ids};
 
-type Affine = [f32; 6];
-
-const IDENTITY: Affine = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
-
-/// `outer ∘ inner` (`inner` applies first).
-fn multiply(outer: Affine, inner: Affine) -> Affine {
-    let [a, b, c, d, e, f] = outer;
-    let [g, h, i, j, k, l] = inner;
-    [
-        a * g + c * h,
-        b * g + d * h,
-        a * i + c * j,
-        b * i + d * j,
-        a * k + c * l + e,
-        b * k + d * l + f,
-    ]
-}
+use paged_geom::affine::{multiply, Affine, IDENTITY};
 
 /// The state a symbol op replaces (see the module docs).
 #[derive(Debug, Default, Serialize, Deserialize)]

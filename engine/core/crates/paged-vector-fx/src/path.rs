@@ -224,7 +224,7 @@ pub fn round_corners(shape: &Shape, p: &RoundCornersParams) -> Shape {
 }
 
 /// The circle's kappa, for Convert to Shape's ellipse and rounded corners.
-const KAPPA: f64 = 0.552_284_749_830_793_4;
+const KAPPA: f64 = paged_geom::KAPPA;
 
 fn rect_contour(r: Rect) -> Contour {
     Contour {

@@ -332,13 +332,9 @@ fn flatten_path_px(
                 current.push(to_px(map(x, y)));
             }
             S::QuadTo { cx, cy, x, y } => {
-                for i in 1..=8 {
-                    let s = i as f32 / 8.0;
-                    let inv = 1.0 - s;
-                    let px = inv * inv * last.0 + 2.0 * inv * s * cx + s * s * x;
-                    let py = inv * inv * last.1 + 2.0 * inv * s * cy + s * s * y;
-                    current.push(to_px(map(px, py)));
-                }
+                paged_geom::flatten::sample_quad(last, (cx, cy), (x, y), 8, |(px, py)| {
+                    current.push(to_px(map(px, py)))
+                });
                 last = (x, y);
             }
             S::CubicTo {
@@ -349,19 +345,14 @@ fn flatten_path_px(
                 x,
                 y,
             } => {
-                for i in 1..=12 {
-                    let s = i as f32 / 12.0;
-                    let inv = 1.0 - s;
-                    let px = inv * inv * inv * last.0
-                        + 3.0 * inv * inv * s * cx1
-                        + 3.0 * inv * s * s * cx2
-                        + s * s * s * x;
-                    let py = inv * inv * inv * last.1
-                        + 3.0 * inv * inv * s * cy1
-                        + 3.0 * inv * s * s * cy2
-                        + s * s * s * y;
-                    current.push(to_px(map(px, py)));
-                }
+                paged_geom::flatten::sample_cubic(
+                    last,
+                    (cx1, cy1),
+                    (cx2, cy2),
+                    (x, y),
+                    12,
+                    |(px, py)| current.push(to_px(map(px, py))),
+                );
                 last = (x, y);
             }
             S::Close => {

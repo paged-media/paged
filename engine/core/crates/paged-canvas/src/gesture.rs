@@ -423,8 +423,8 @@ impl SelectionBox {
     /// The box's centre, spread space: the default reference point.
     fn centre(&self) -> (f32, f32) {
         let b = self.bounds;
-        apply_affine(
-            self.placement.unwrap_or(IDENTITY),
+        paged_geom::affine::apply(
+            &self.placement.unwrap_or(IDENTITY),
             (b.left + b.right) * 0.5,
             (b.top + b.bottom) * 0.5,
         )
@@ -435,10 +435,10 @@ impl SelectionBox {
         let b = self.bounds;
         let m = self.placement.unwrap_or(IDENTITY);
         [
-            apply_affine(m, b.left, b.top),
-            apply_affine(m, b.right, b.top),
-            apply_affine(m, b.right, b.bottom),
-            apply_affine(m, b.left, b.bottom),
+            paged_geom::affine::apply(&m, b.left, b.top),
+            paged_geom::affine::apply(&m, b.right, b.top),
+            paged_geom::affine::apply(&m, b.right, b.bottom),
+            paged_geom::affine::apply(&m, b.left, b.bottom),
         ]
     }
 
@@ -477,10 +477,6 @@ impl SelectionBox {
             None => local_m,
         }
     }
-}
-
-fn apply_affine(m: [f32; 6], x: f32, y: f32) -> (f32, f32) {
-    (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
 }
 
 /// See [`GestureSession::group_frames`].

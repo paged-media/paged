@@ -359,8 +359,7 @@ fn push_circle_contour(
     reverse: bool,
 ) {
     use paged_compose::PathSegment::*;
-    const KAPPA: f32 = 0.552_284_8;
-    let k = r * KAPPA;
+    let k = r * paged_geom::KAPPA_F32;
     let sy = if reverse { -1.0 } else { 1.0 };
     segs.push(MoveTo { x: c.0 + r, y: c.1 });
     segs.push(CubicTo {
@@ -2114,7 +2113,7 @@ pub(crate) fn per_corner_kinds(
 ///   uses.
 /// * `k_convex` / `k_concave` — cubic control-point fractions from an
 ///   endpoint toward `c` (convex arc) / toward `m` (concave arc).
-///   `0.5522848` for a quarter-circle; the polygon builder derives
+///   `paged_geom::KAPPA_F32` for a quarter-circle; the polygon builder derives
 ///   them from the corner's actual sweep so a 30° or 150° corner is
 ///   a true circular arc rather than a 90°-shaped approximation.
 #[derive(Debug, Clone, Copy)]
@@ -2130,7 +2129,7 @@ pub(crate) struct CornerFrame {
 /// Kappa — the cubic control fraction that approximates a QUARTER
 /// circle. Exact for a rect's 90° corners; the polygon builder scales
 /// it by the corner's real sweep.
-pub(crate) const KAPPA: f32 = 0.552_284_8;
+pub(crate) const KAPPA: f32 = paged_geom::KAPPA_F32;
 
 /// Emit one corner's segments, assuming the path's current point is
 /// already at `f.p_in`; the last segment lands on `f.p_out`. Sharp
@@ -2601,12 +2600,12 @@ fn push_plain_contour(
 }
 
 /// Approximate a unit ellipse with four cubic Bezier curves (the
-/// standard 0.5522847 control-point distance for a circle). Returns
+/// standard control-point distance for a circle, `paged_geom::KAPPA_F32`). Returns
 /// a `PathData` ready to intern under `UNIT_ELLIPSE_KEY`.
 pub(super) fn unit_ellipse_path() -> paged_compose::PathData {
     use paged_compose::PathSegment;
     // Kappa for circular Bezier approximation.
-    const K: f32 = 0.552_284_8;
+    const K: f32 = paged_geom::KAPPA_F32;
     // Unit ellipse in the [0,1]×[0,1] rect: center (0.5, 0.5),
     // radius 0.5. Each quadrant is one CubicTo.
     let cx = 0.5;
@@ -2662,7 +2661,7 @@ pub(super) fn unit_ellipse_path() -> paged_compose::PathData {
 /// frame's `outer` transform directly (no unit→rect rescale).
 pub(crate) fn ellipse_outline_path(rect: Rect) -> paged_compose::PathData {
     use paged_compose::PathSegment;
-    const K: f32 = 0.552_284_8;
+    const K: f32 = paged_geom::KAPPA_F32;
     let cx = rect.x + rect.w * 0.5;
     let cy = rect.y + rect.h * 0.5;
     let rx = rect.w * 0.5;

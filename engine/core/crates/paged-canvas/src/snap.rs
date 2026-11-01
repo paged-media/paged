@@ -1061,10 +1061,10 @@ fn snapshot_aabb_in_spread(snap: &crate::gesture::NodeSnapshot) -> [f32; 4] {
         .item_transform
         .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
     let corners = [
-        apply(m, b.left, b.top),
-        apply(m, b.right, b.top),
-        apply(m, b.right, b.bottom),
-        apply(m, b.left, b.bottom),
+        paged_geom::affine::apply(&m, b.left, b.top),
+        paged_geom::affine::apply(&m, b.right, b.top),
+        paged_geom::affine::apply(&m, b.right, b.bottom),
+        paged_geom::affine::apply(&m, b.left, b.bottom),
     ];
     let mut min_x = f32::INFINITY;
     let mut max_x = f32::NEG_INFINITY;
@@ -1077,10 +1077,6 @@ fn snapshot_aabb_in_spread(snap: &crate::gesture::NodeSnapshot) -> [f32; 4] {
         max_y = max_y.max(y);
     }
     [min_y, min_x, max_y, max_x]
-}
-
-fn apply(m: [f32; 6], x: f32, y: f32) -> (f32, f32) {
-    (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
 }
 
 pub(crate) fn snap_targets_x(
