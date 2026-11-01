@@ -344,8 +344,21 @@ pub fn paragraph(
             }
         }
         Some("NumberedList") => {
-            if !matches!(&d.bullet, Some(Bullet::Number { .. })) {
-                kids.push_str(r#"<a:buAutoNum type="arabicPeriod"/>"#);
+            let scheme = scheme_of(
+                p.numbering_format.as_deref(),
+                p.numbering_expression.as_deref(),
+            );
+            let start = p.numbering_start_at.filter(|n| *n > 1);
+            let unchanged = matches!(
+                &d.bullet,
+                Some(Bullet::Number { scheme: ds, start: dstart, .. })
+                    if ds == scheme && *dstart == start.unwrap_or(1)
+            );
+            if !unchanged {
+                let start_at = start
+                    .map(|n| format!(r#" startAt="{n}""#))
+                    .unwrap_or_default();
+                kids.push_str(&format!(r#"<a:buAutoNum type="{scheme}"{start_at}/>"#));
             }
         }
         _ => {
@@ -553,5 +566,82 @@ fn run_props(
         } else {
             format!("<{name}{attrs}>{kids}</{name}>")
         }
+    }
+}
+
+/// The `a:buAutoNum type` the engine's numbering is: slide-native's mapping
+/// read back. The format sample's first glyph picks the family (arabic, roman
+/// or alphabetic, in upper or lower case) and the expression around `^#` the
+/// punctuation (a period by default).
+fn scheme_of(format: Option<&str>, expression: Option<&str>) -> &'static str {
+    let head = format.and_then(|f| f.split(',').next()).map(str::trim);
+    let expr = expression.unwrap_or("^#.^t").replace("^t", "");
+    let both = expr.starts_with('(') && expr.ends_with(')');
+    let right = !both && expr.ends_with(')');
+    let plain = !both && !right && !expr.ends_with('.');
+    let pick = |period, paren_r, paren_both, plain_| match () {
+        _ if both => paren_both,
+        _ if right => paren_r,
+        _ if plain => plain_,
+        _ => period,
+    };
+    match head {
+        Some("A") => pick(
+            "alphaUcPeriod",
+            "alphaUcParenR",
+            "alphaUcParenBoth",
+            "alphaUcPeriod",
+        ),
+        Some("a") => pick(
+            "alphaLcPeriod",
+            "alphaLcParenR",
+            "alphaLcParenBoth",
+            "alphaLcPeriod",
+        ),
+        Some("I") => pick(
+            "romanUcPeriod",
+            "romanUcParenR",
+            "romanUcParenBoth",
+            "romanUcPeriod",
+        ),
+        Some("i") => pick(
+            "romanLcPeriod",
+            "romanLcParenR",
+            "romanLcParenBoth",
+            "romanLcPeriod",
+        ),
+        _ => pick(
+            "arabicPeriod",
+            "arabicParenR",
+            "arabicParenBoth",
+            "arabicPlain",
+        ),
+    }
+}
+
+#[cfg(test)]
+mod numbering_tests {
+    use super::scheme_of;
+
+    #[test]
+    fn the_engines_numbering_reads_back_as_the_powerpoint_scheme() {
+        for (format, expr, scheme) in [
+            ("1, 2, 3, 4...", "^#.^t", "arabicPeriod"),
+            ("1, 2, 3, 4...", "^#)^t", "arabicParenR"),
+            ("1, 2, 3, 4...", "(^#)^t", "arabicParenBoth"),
+            ("1, 2, 3, 4...", "^#^t", "arabicPlain"),
+            ("I, II, III, IV...", "^#.^t", "romanUcPeriod"),
+            ("i, ii, iii, iv...", "^#)^t", "romanLcParenR"),
+            ("A, B, C, D...", "(^#)^t", "alphaUcParenBoth"),
+            ("a, b, c, d...", "^#.^t", "alphaLcPeriod"),
+        ] {
+            assert_eq!(
+                scheme_of(Some(format), Some(expr)),
+                scheme,
+                "{format} {expr}"
+            );
+        }
+        // Nothing set: a plain list, `1.`.
+        assert_eq!(scheme_of(None, None), "arabicPeriod");
     }
 }

@@ -1757,6 +1757,9 @@ impl Builder<'_> {
             if let Some(Bullet::Char { ch, .. }) = &p.bullet {
                 para.bullet_character = Some(ch.chars().next().map(|c| c as u32).unwrap_or(0x2022));
             }
+            if let Some(Bullet::Number { scheme, start, .. }) = &p.bullet {
+                apply_numbering(&mut para, scheme, *start);
+            }
             // An empty paragraph's line is its size alone: no run.
             for r in &p.runs {
                 let color = self.run_color(r.rgb, r.theme.as_deref());
@@ -2445,9 +2448,87 @@ pub fn snippet(deck: &Deck, slide: usize, item: &Item) -> Result<String, String>
     serde_json::to_string(&value).map_err(|e| e.to_string())
 }
 
+/// PowerPoint's `a:buAutoNum type` (ECMA-376 `ST_TextAutonumberScheme`) as the
+/// engine's numbering: the format sample (`1, 2, 3, 4...`) and the expression
+/// around the number (`^#.^t`: the number, a period, a tab). The Latin schemes
+/// (arabic, roman and alphabetic, in upper and lower case, with a period, one
+/// or two parentheses, or nothing); any other scheme reads as `1.`.
+fn numbering_of(scheme: &str) -> (&'static str, &'static str) {
+    let format = if scheme.starts_with("alphaUc") {
+        "A, B, C, D..."
+    } else if scheme.starts_with("alphaLc") {
+        "a, b, c, d..."
+    } else if scheme.starts_with("romanUc") {
+        "I, II, III, IV..."
+    } else if scheme.starts_with("romanLc") {
+        "i, ii, iii, iv..."
+    } else {
+        "1, 2, 3, 4..."
+    };
+    let expression = if scheme.ends_with("ParenBoth") {
+        "(^#)^t"
+    } else if scheme.ends_with("ParenR") {
+        "^#)^t"
+    } else if scheme.ends_with("Plain") {
+        "^#^t"
+    } else {
+        "^#.^t"
+    };
+    (format, expression)
+}
+
+/// Give a numbered paragraph PowerPoint's scheme and start.
+fn apply_numbering(para: &mut Paragraph, scheme: &str, start: i32) {
+    let (format, expression) = numbering_of(scheme);
+    para.numbering_format = Some(format.to_string());
+    para.numbering_expression = Some(expression.to_string());
+    if start > 1 {
+        para.numbering_start_at = Some(start);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_numbering_scheme_becomes_the_engines_format_and_expression() {
+        assert_eq!(numbering_of("arabicPeriod"), ("1, 2, 3, 4...", "^#.^t"));
+        assert_eq!(numbering_of("arabicParenR"), ("1, 2, 3, 4...", "^#)^t"));
+        assert_eq!(numbering_of("arabicParenBoth"), ("1, 2, 3, 4...", "(^#)^t"));
+        assert_eq!(numbering_of("arabicPlain"), ("1, 2, 3, 4...", "^#^t"));
+        assert_eq!(
+            numbering_of("romanUcPeriod"),
+            ("I, II, III, IV...", "^#.^t")
+        );
+        assert_eq!(
+            numbering_of("romanLcParenR"),
+            ("i, ii, iii, iv...", "^#)^t")
+        );
+        assert_eq!(numbering_of("alphaUcPeriod"), ("A, B, C, D...", "^#.^t"));
+        assert_eq!(
+            numbering_of("alphaLcParenBoth"),
+            ("a, b, c, d...", "(^#)^t")
+        );
+        // A scheme this does not map reads as `1.`.
+        assert_eq!(
+            numbering_of("ea1JpnChsDbPeriod"),
+            ("1, 2, 3, 4...", "^#.^t")
+        );
+    }
+
+    #[test]
+    fn a_numbered_paragraph_takes_the_scheme_and_a_start_past_one() {
+        let mut p = Paragraph::default();
+        apply_numbering(&mut p, "romanLcPeriod", 4);
+        assert_eq!(p.numbering_format.as_deref(), Some("i, ii, iii, iv..."));
+        assert_eq!(p.numbering_expression.as_deref(), Some("^#.^t"));
+        assert_eq!(p.numbering_start_at, Some(4));
+        // Starting at 1 is the default: nothing is written.
+        let mut q = Paragraph::default();
+        apply_numbering(&mut q, "arabicPeriod", 1);
+        assert_eq!(q.numbering_start_at, None);
+    }
 
     #[test]
     fn the_deck_label_is_an_ascii_envelope_of_the_deck() {
