@@ -738,6 +738,24 @@ export const CAPABILITIES: Capability[] = [
     status: "supported",
     note: "proto 78, ADR 1026; {page, overrides}; probed on the masters fixture's first page and its master's rectangle",
   },
+  // Content controls (protocol 78, engine ADR 1052). Controls come from a Word
+  // import; no IDML fixture holds one, so the probe addresses a control that
+  // does not exist and the engine refuses it.
+  {
+    op: "setContentControlValue",
+    status: "unsupported",
+    note: "proto 78, ADR 1052; {storyId, controlId, value}; probed on an absent control (the IDML fixtures hold none)",
+  },
+  {
+    op: "toggleContentControl",
+    status: "unsupported",
+    note: "proto 78, ADR 1052; {storyId, controlId}; probed on an absent control (the IDML fixtures hold none)",
+  },
+  {
+    op: "chooseContentControlItem",
+    status: "unsupported",
+    note: "proto 78, ADR 1052; {storyId, controlId, index}; probed on an absent control (the IDML fixtures hold none)",
+  },
   {
     op: "expandAppearance",
     status: "supported",

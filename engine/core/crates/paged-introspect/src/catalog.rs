@@ -600,6 +600,12 @@ fn host_functions() -> Vec<HostFn> {
            "Word's Insert Bookmark: a named text destination at a story offset, which REF and PAGEREF fields and cross-references name. Returns its id."),
         f!("paged.deleteTextAnchor", "(anchorId)", "bool", "author",
            "Delete a bookmark (a text destination). Undoable."),
+        f!("paged.setContentControlValue", "(storyId, controlId, value)", "bool", "author",
+           "Set a content control's value: a text or rich text control's text, a drop-down or combo box item, a date (YYYY-MM-DD) or a checkbox's true / false; the control's text becomes the value's. Refused for a locked control or a value its kind does not take (engine ADR 1052). Undoable."),
+        f!("paged.toggleContentControl", "(storyId, controlId)", "bool", "author",
+           "Flip a checkbox content control (engine ADR 1052). Undoable."),
+        f!("paged.chooseContentControlItem", "(storyId, controlId, index)", "bool", "author",
+           "Choose item index (0-based) of a drop-down or combo box content control (engine ADR 1052). Undoable."),
         f!("paged.insertCrossReference", "(storyId, offset, {bookmark} | {storyId, paragraph}, {referTo?: text|pageNumber|aboveBelow, hyperlink?})", "bool", "author",
            "Word's Insert Cross-reference: a REF or PAGEREF field with its result, to a bookmark or to a paragraph (which gets a hidden _Ref bookmark). One undo step."),
         f!("paged.insertTableOfContents", "(storyId, offset, [{style, level}], {title?, tocStyleName?, pageNumbers?, leader?, tabPosition?})", "bool", "author",
@@ -1084,6 +1090,16 @@ property_paths! {
         CharacterUnderlineType => "characterUnderlineType" : enum_open(UNDERLINE_KINDS).default_text("single").idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, UnderlineType)]),
         CharacterUnderlineColor => "characterUnderlineColor" : color().idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, UnderlineColor)]),
         CharacterDoubleStrikethrough => "characterDoubleStrikethrough" : bool_().default_bool(false).idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, StrikeThroughType)]),
+        ParagraphDirection => "paragraphDirection" : enum_(PARAGRAPH_DIRECTIONS).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphDirection)]),
+        CharacterDirection => "characterDirection" : enum_(CHARACTER_DIRECTIONS).idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, CharacterDirection)]),
+        CharacterEastAsianFont => "characterEastAsianFont" : reference(RefKind::Font),
+        CharacterComplexFont => "characterComplexFont" : reference(RefKind::Font),
+        CharacterComplexFontSize => "characterComplexFontSize" : length().range(0.1, 1296.0),
+        CharacterComplexBold => "characterComplexBold" : bool_(),
+        CharacterComplexItalic => "characterComplexItalic" : bool_(),
+        CharacterComplexScript => "characterComplexScript" : bool_().default_bool(false),
+        CharacterFontHint => "characterFontHint" : enum_(FONT_HINTS).default_text("default"),
+        CharacterContentControl => "characterContentControl" : text(),
         ParagraphShadingOn => "paragraphShadingOn" : bool_().default_bool(false).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingOn)]),
         ParagraphShadingColor => "paragraphShadingColor" : color().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingColor)]),
         ParagraphShadingTint => "paragraphShadingTint" : pct().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingTint)]),
@@ -1608,8 +1624,9 @@ mod tests {
         // 274 -> 275: ADR 1048 — a frame's gradient mesh or freeform
         // gradient.
         //
-        // 275 -> 276: ADR 1041 — a frame's own pattern transform.
-        assert_eq!(cat.settable_paths.len(), 276, "settable path count drifted");
+        // 275 -> 286: ADR 1041 — a frame's own pattern transform; ADR 1051 — the paragraph direction and the eight
+        // script paths; ADR 1052 — a range's content control.
+        assert_eq!(cat.settable_paths.len(), 286, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

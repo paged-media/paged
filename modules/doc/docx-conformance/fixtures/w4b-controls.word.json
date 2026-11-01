@@ -1,0 +1,46 @@
+{
+ "pages": [
+  {
+   "width": 612.0,
+   "height": 792.0,
+   "images": [],
+   "lines": [
+    {
+     "top": 73.0,
+     "left": 72.0,
+     "width": 32.0,
+     "height": 15.0,
+     "text": "Agree "
+    },
+    {
+     "top": 73.0,
+     "left": 116.0,
+     "width": 171.0,
+     "height": 15.0,
+     "text": " colour Red on 2 January 2026 by "
+    },
+    {
+     "top": 73.0,
+     "left": 287.0,
+     "width": 52.0,
+     "height": 15.0,
+     "text": "Click here"
+    },
+    {
+     "top": 73.0,
+     "left": 338.0,
+     "width": 118.0,
+     "height": 15.0,
+     "text": " note rich size Medium "
+    },
+    {
+     "top": 74.0,
+     "left": 104.0,
+     "width": 12.0,
+     "height": 12.0,
+     "text": "☐"
+    }
+   ]
+  }
+ ]
+}

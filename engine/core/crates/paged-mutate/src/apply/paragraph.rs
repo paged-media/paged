@@ -1007,6 +1007,10 @@ pub(super) fn apply_paragraph_field(
         }
         // W0.2 — whole rule structs.
         PropertyPath::ParagraphRuleAbove => set_para_rule_field(path, value, &mut para.rule_above),
+        // Engine ADR 1051 — the base direction.
+        PropertyPath::ParagraphDirection => {
+            super::script::set_direction_field(&mut para.direction, path, value)
+        }
         // Engine ADR 1018 — direct shading and border.
         p if super::word::is_shading_border_path(p) => {
             super::word::set_shading_border_field(&mut para.shading, &mut para.border, p, value)
@@ -1363,6 +1367,14 @@ pub(super) fn apply_character_field_on_run(
         p if super::word::is_decoration_path(p) => {
             super::word::set_decoration_field(&mut run.decorations, &mut run.underline, p, value)
                 .expect("a decoration path")
+        }
+        // Engine ADR 1052 — the content control a run is text of.
+        PropertyPath::CharacterContentControl => {
+            super::content_control::set_run_control(&mut run.control, path, value)
+        }
+        // Engine ADR 1051 — script slots and direction.
+        p if super::script::is_script_path(p) => {
+            super::script::set_script_field(&mut run.script, p, value).expect("a script path")
         }
         _ => Err(OperationError::UnsupportedProperty {
             node: NodeId::StoryRange {

@@ -235,8 +235,9 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 273: ADR 1042 added a group's vector effects.
         // 274: ADR 1007 added a frame's stroke gradient mode.
         // 275: ADR 1048 added a frame's gradient mesh or freeform gradient.
-        // 276: ADR 1041 added a frame's own pattern transform.
-        276,
+        // 286: ADRs 1041 / 1051 / 1052 added the direction, script and content
+        // control paths.
+        286,
         "the advertised roster changed; move the count with the decision"
     );
 }

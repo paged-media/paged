@@ -385,6 +385,15 @@ pub(super) fn compose_footnote_paragraphs(
                     line_starts_64: vec![left_64 + first_64, left_64],
                 });
             }
+            // Engine ADR 1051 — a stated direction, set as in body text.
+            let stated_bidi = super::direction::stated_bidi(
+                resolved_paragraph.direction,
+                styled_runs
+                    .iter()
+                    .zip(&resolved_runs)
+                    .map(|(r, a)| (r.text, a.script.direction)),
+            );
+            lopts.bidi = stated_bidi.clone();
             let mut laid = paged_text::cache::layout_runs_cached(&styled_runs, &lopts);
             for (i, line) in laid.lines.iter_mut().enumerate() {
                 let dx = left_64 + if i == 0 { first_64 } else { 0 };
@@ -408,6 +417,10 @@ pub(super) fn compose_footnote_paragraphs(
                         leader_ctx.as_ref(),
                     );
                 }
+            }
+            if let Some(spec) = &stated_bidi {
+                let width_64 = to_64(column_width_pt);
+                paged_text::set_stated_bidi(&mut laid.lines, &text, spec, |_| (0, width_64));
             }
             let line_leadings: Vec<f32> = if laid.lines.is_empty() {
                 // An empty paragraph still takes its line.

@@ -257,7 +257,9 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::InsertTextAnchor { story_id, .. }
         | O::SetStoryDestinations { story_id, .. }
         | O::InsertIndexMarker { story_id, .. }
-        | O::RestoreIndexMarkers { story_id, .. } => vec![story(P::TextEdit, story_id)],
+        | O::RestoreIndexMarkers { story_id, .. }
+        | O::SetContentControlValue { story_id, .. }
+        | O::RestoreContentControl { story_id, .. } => vec![story(P::TextEdit, story_id)],
         O::DeleteTextAnchor { .. } => vec![doc(P::TextEdit)],
         // Removing or duplicating a page is asked of that page: its own
         // policy (an `x-paged:template` label keyed by the page's id) may

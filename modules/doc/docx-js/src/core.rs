@@ -419,6 +419,10 @@ impl DocSession {
         // Doc ADR 613 — the read-back paragraphs lined up with the blocks
         // (tracked paragraph marks inserted or removed in paged).
         let (prepared, review_plan) = docx_export::review::prepare(&marked, content, layout);
+        // Doc ADR 614: a content control's new value is written into its
+        // `w:sdt` (below), not patched as text.
+        let mut prepared = prepared;
+        let control_changes = docx_export::controls::take_control_changes(&mut prepared, &marked);
         let content = &prepared;
         let mut edited_marked = overlay_story_content_with(&marked, content, layout, &created);
         // What the canvas put into the text that is not text: notes kept,
@@ -518,6 +522,16 @@ impl DocSession {
             docx_export::apply_style_plan(&mut package, self.styles_part.as_deref(), &plan)
                 .map_err(|e| e.to_string())?,
         );
+        if !control_changes.is_empty() {
+            let (xml, control_skips) = docx_export::controls::save_controls(
+                package
+                    .require(&self.main_part)
+                    .map_err(|e| e.to_string())?,
+                &control_changes,
+            );
+            package.set_part(&self.main_part, xml);
+            skips.extend(control_skips);
+        }
         let bytes = package.write().map_err(|e| e.to_string())?;
         Ok((bytes, skips))
     }
