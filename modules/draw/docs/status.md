@@ -119,6 +119,9 @@ canary added is under [Releases](#releases).
   keys with different anchor or contour counts (the intermediates get a matched structure,
   the keys keep theirs), two groups (member to member by order; the groups stay groups) and
   gradient fills (stop for stop, each intermediate its own gradient).
+- **Pattern swatches (WP6.9, ADR 368).** A pattern field's Save swatch and Done write an
+  engine pattern swatch (engine ADR 1041) from the field's tile, lattice, spacing and overlap;
+  the Swatches panel applies it as a fill or a stroke. The field itself stays pattern artwork.
 - **Opacity mask and type on a path.** Make and release a mask from the top selected object;
   attach an existing story to a path and detach it.
 - **Create outlines.** Type ▸ Create outlines turns a text frame's glyphs into compound

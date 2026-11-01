@@ -193,6 +193,7 @@ fn outline(list: &DisplayList, px_per_pt: f32) -> DisplayList {
         radial_gradients: list.radial_gradients.clone(),
         sweep_gradients: list.sweep_gradients.clone(),
         meshes: list.meshes.clone(),
+        patterns: list.patterns.clone(),
         images: Vec::new(),
         spot_inks: list.spot_inks.clone(),
         glyph_runs: None,

@@ -394,6 +394,8 @@ export {
   SELECT_PATTERN_TILES_COMMAND_ID,
   DELETE_PATTERN_TILES_COMMAND_ID,
   RELEASE_PATTERN_COMMAND_ID,
+  SAVE_PATTERN_SWATCH_COMMAND_ID,
+  PATTERN_PAINT_FEATURE,
   PATTERN_PART,
   PATTERN_LIBRARY_VERSION,
   PATTERN_FEATURE,
@@ -440,7 +442,11 @@ export {
   applySelectPatternTiles,
   applyDeletePatternTiles,
   applyReleasePattern,
+  applySavePatternSwatch,
+  patternSwatchSpecFor,
+  patternSwatchIdFor,
   contributePatternCommands,
+  type PatternSwatchSpec,
   type PatternLayout,
   type PatternOverlapOrder,
   type PatternParams,
@@ -456,9 +462,9 @@ export {
   type PatternCopy,
   type PatternCopyBinding,
 } from "./commands/pattern";
-// …and its PANEL — the editing MODE the catalog row asks for (the only
-// half of that row this engine can carry). The note it renders is the
-// hard boundary, pinned by conformance.
+// …and its PANEL — pattern editing mode: the copies preview the tile,
+// Save swatch / Done write the engine pattern swatch (WP6.9, engine ADR
+// 1041). The note it renders is pinned by conformance.
 export {
   makePatternPanel,
   patternRowLabel,

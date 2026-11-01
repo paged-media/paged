@@ -16,21 +16,22 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The PATTERN OPTIONS panel — the EDITING MODE the catalog row asks for,
-// which is the only half of that row this engine can carry. Every knob
-// here is a real `PatternParams` field the recipe persists, and the
-// panel's Bake / Re-plan buttons drive the SAME appliers the commands do
-// — no second write path to drift from.
+// The PATTERN OPTIONS panel — pattern editing mode. A field's copies are
+// the live preview of the tile (pattern ARTWORK), every knob here is a
+// real `PatternParams` field the recipe persists, and the panel's Bake /
+// Re-plan buttons drive the SAME appliers the commands do — no second
+// write path to drift from. Since WP6.9 a field also SAVES as a pattern
+// swatch (the engine's pattern paint, engine ADR 1041): Save swatch
+// writes it, Done writes it and removes the copies; the Swatches panel
+// then applies it as a fill or a stroke.
 //
 // An expert-leaf REACT panel for the Layers / Appearance / Graphic
 // Styles / Symbols / Live Paint reason (B-01): a list of records with
 // per-row actions, plus an enum + numeric form, is above the v1 schema
 // panel's scalar binding ceiling.
 //
-// The panel is ALSO where the hard boundary is put in front of the user,
-// because the word "pattern" promises a swatch this engine has no paint
-// type for. `PATTERN_SWATCH_NOTE` says so verbatim and its wording is
-// pinned by a conformance test.
+// The panel also says what is artwork and what is a swatch:
+// `PATTERN_PANEL_NOTE` and `PATTERN_SWATCH_NOTE` are pinned by tests.
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
@@ -40,6 +41,7 @@ import {
   applyEditPattern,
   applyMakePattern,
   applyReleasePattern,
+  applySavePatternSwatch,
   applySelectPatternTiles,
   patternLinks,
   readPatternLibrary,
@@ -47,6 +49,7 @@ import {
   PATTERN_DEFAULTS,
   PATTERN_FEATURE,
   PATTERN_LEGACY_FIELD,
+  PATTERN_PAINT_FEATURE,
   type PatternField,
   type PatternLayout,
   type PatternParams,
@@ -65,8 +68,8 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("draw.patternPanel", {
   summary:
-    "Tile the selected artwork into rows and columns of copies you can re-plan later. The result is artwork, not a pattern swatch.",
-  note: "A pattern here makes real copies of the artwork, which you can re-plan, select, delete or release. It is not a fill you can apply to other objects: the document format has no pattern swatch. The copies always sit above the original; the overlap setting only decides how the copies cover each other, and the vertical choice wins. Dimming sets the copies' opacity and is saved with the document. While Update automatically is on, editing the original re-plans the copies in the same undo step; with it off, they change only when you choose Re-plan. Making, re-planning, releasing and deleting the copies are one undo step each; the saved settings are kept outside undo.",
+    "Pattern editing mode: tile the selected artwork into copies that preview the pattern, then save it as a pattern swatch any object can take as a fill or stroke.",
+  note: "A pattern starts as pattern artwork: real copies of the artwork, which you can re-plan, select, delete or release. Save swatch turns the tile, the tile type, spacing and overlap into a pattern swatch in the document; the Swatches panel applies it as a fill (Alt: a stroke) to any object. Done saves the swatch and removes the copies. InDesign has no pattern swatch: an IDML export shows a stand-in colour and keeps the pattern for paged to reopen. The copies always sit above the original; the overlap setting decides how the copies cover each other, and the vertical choice wins. Dimming sets the copies' opacity and is saved with the document. While Update automatically is on, editing the original re-plans the copies in the same undo step; with it off, they change only when you choose Re-plan. Making, re-planning, releasing and deleting the copies and saving the swatch are one undo step each; the saved settings are kept outside undo.",
   rowLabel:
     "{layout} · {columns} × {rows} ({requested, plural, one {# copy} other {# copies}} requested, {placed} placed)",
   heading: "Patterns",
@@ -103,6 +106,16 @@ const M = defineMessages("draw.patternPanel", {
   legacy:
     "{count} copies come from an older version that saved no settings. They can be released or deleted, but not re-planned.",
   title: "Pattern options",
+  tileWidth: "Tile width (pt, 0 = artwork)",
+  tileHeight: "Tile height (pt, 0 = artwork)",
+  saveSwatch: "Save swatch",
+  saveSwatchHint:
+    "Save this pattern as a pattern swatch with the settings above (an earlier save is updated)",
+  done: "Done",
+  doneHint: "Save the pattern swatch and remove the preview copies",
+  noPaint:
+    "This editor's engine has no pattern swatches; the copies stay artwork",
+  swatchOf: "Swatch: {swatch}",
 });
 
 export const PATTERN_PANEL_ID = "media.paged.draw.panel.pattern";
@@ -172,6 +185,7 @@ export function makePatternPanel(host: BundleHost): {
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [hasSelection, setHasSelection] = React.useState(false);
     const [portable, setPortable] = React.useState(true);
+    const paint = host.supports(PATTERN_PAINT_FEATURE);
     const [draft, setDraft, followDraft] =
       useFollowedDraft<PatternParams>(PATTERN_DEFAULTS);
 
@@ -280,6 +294,26 @@ export function makePatternPanel(host: BundleHost): {
             ))}
           </select>
         </div>
+        {numberRow(
+          s.t(M.tileWidth),
+          draft.tile?.[0] ?? 0,
+          (n) =>
+            setDraft({
+              ...draft,
+              tile: n > 0 ? [n, draft.tile?.[1] ?? n] : null,
+            }),
+          "tileWidth",
+        )}
+        {numberRow(
+          s.t(M.tileHeight),
+          draft.tile?.[1] ?? 0,
+          (n) =>
+            setDraft({
+              ...draft,
+              tile: n > 0 ? [draft.tile?.[0] ?? n, n] : null,
+            }),
+          "tileHeight",
+        )}
         {numberRow(
           s.t(M.hSpacing),
           draft.spacing[0],
@@ -433,6 +467,41 @@ export function makePatternPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
+                  title={paint ? s.t(M.saveSwatchHint) : s.t(M.noPaint)}
+                  data-draw-pattern-save-swatch
+                  disabled={!paint}
+                  onClick={() =>
+                    void run(() =>
+                      applySavePatternSwatch(host, {
+                        patternId: field.id,
+                        ...draft,
+                      }),
+                    )
+                  }
+                >
+                  {s.t(M.saveSwatch)}
+                </button>
+                <button
+                  type="button"
+                  style={iconBtn}
+                  title={paint ? s.t(M.doneHint) : s.t(M.noPaint)}
+                  data-draw-pattern-done
+                  disabled={!paint}
+                  onClick={() =>
+                    void run(() =>
+                      applySavePatternSwatch(host, {
+                        patternId: field.id,
+                        ...draft,
+                        exit: true,
+                      }),
+                    )
+                  }
+                >
+                  {s.t(M.done)}
+                </button>
+                <button
+                  type="button"
+                  style={iconBtn}
                   title={s.t(M.releaseHint)}
                   data-draw-pattern-release
                   onClick={() =>
@@ -447,6 +516,11 @@ export function makePatternPanel(host: BundleHost): {
               <div style={mutedStyle}>
                 {patternRowLabel(field, placed[field.id] ?? 0)}
               </div>
+              {field.swatch && (
+                <div style={mutedStyle} data-draw-pattern-swatch={field.swatch}>
+                  {s.t(M.swatchOf, { swatch: field.swatch })}
+                </div>
+              )}
             </div>
           ))
         )}

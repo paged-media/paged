@@ -1774,6 +1774,16 @@ pub enum PropertyPath {
     /// stores the mesh in a label the import restores and reports the
     /// loss. Paint-only (`frame_style`).
     FrameFillMesh,
+
+    // ---- engine ADR 1041 — pattern paint --------------------------------
+    /// The frame's own placement of a pattern fill or stroke
+    /// (`Value::Transform`, `[a b c d tx ty]` in the frame's box space,
+    /// applied after the pattern's own placement; `None` is identity) —
+    /// Illustrator's "transform patterns". On a TextFrame, Rectangle,
+    /// Oval, Polygon or GraphicLine. No IDML attribute carries it: the
+    /// IDML export keeps it in the pattern label. Paint-only
+    /// (`frame_style`).
+    FramePatternTransform,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -2187,6 +2197,7 @@ impl PropertyPath {
             PropertyPath::FrameShapePieEnd => "frame.shapePieEnd",
             PropertyPath::FrameGradientStrokeMode => "frame.gradientStrokeMode",
             PropertyPath::FrameFillMesh => "frame.fillMesh",
+            PropertyPath::FramePatternTransform => "frame.patternTransform",
         }
     }
 }
@@ -3991,6 +4002,12 @@ pub struct SwatchSpec {
     pub tint: Option<f32>,
     #[serde(default)]
     pub alpha: Option<f32>,
+    /// Engine ADR 1041 — a PATTERN swatch: when set, the swatch is the
+    /// pattern (`space` and `value` are ignored, `""` and `[]` will do)
+    /// and lives under a `Pattern/…` id (`Pattern/u<n>` when `selfId` is
+    /// absent). A frame shows it by naming the id as its fill or stroke.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<PatternSpec>,
 }
 
 /// Which style collection a `SetStyleProperty` targets.
@@ -4027,6 +4044,296 @@ pub struct GradientStopSpec {
     /// When set it wins over `stop_color`, which may then be `""`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<StopColorSpec>,
+}
+
+/// Engine ADR 1041 — a pattern swatch on the wire, the mirror of
+/// `paged_model::PatternEntry`: the tile rectangle `0..width × 0..height`
+/// in pattern units, its items (paths in the same space), the lattice and
+/// the placement. Carried by `SwatchSpec::pattern`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternSpec {
+    pub width: f32,
+    pub height: f32,
+    pub items: Vec<PatternItemSpec>,
+    /// `"Grid"` (default) | `"BrickByRow"` | `"BrickByColumn"` |
+    /// `"HexByColumn"` | `"HexByRow"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_type: Option<String>,
+    /// A brick row's (column's) shift as a fraction of the pitch, 0..1;
+    /// absent is 0.5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brick_offset: Option<f32>,
+    /// Extra space between columns / rows; negative overlaps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub h_spacing: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub v_spacing: Option<f32>,
+    /// `"LeftInFront"` (default) | `"RightInFront"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub h_overlap: Option<String>,
+    /// `"TopInFront"` (default) | `"BottomInFront"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub v_overlap: Option<String>,
+    /// Placement on the frame's box: offset `[x, y]`, scale `[sx, sy]`,
+    /// rotation in degrees (clockwise on the page).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<[f32; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation_deg: Option<f32>,
+}
+
+/// One path of a pattern tile.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternItemSpec {
+    pub anchors: Vec<PathAnchorSpec>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subpath_starts: Vec<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subpath_open: Vec<bool>,
+    /// `"NonZero"` (default) | `"EvenOdd"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_rule: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<PatternColorSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<PatternColorSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_weight: Option<f32>,
+}
+
+/// A pattern item's colour: a palette swatch (`swatch`), or its own
+/// colour (`space` + `value`, as a swatch's).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternColorSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swatch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub value: Vec<f32>,
+}
+
+impl PatternColorSpec {
+    fn to_model(&self) -> Result<paged_model::PatternColor, String> {
+        if let Some(id) = &self.swatch {
+            if id.starts_with(paged_model::PATTERN_ID_PREFIX) {
+                return Err("a pattern item's colour is not a pattern".to_string());
+            }
+            return Ok(paged_model::PatternColor::Swatch(id.clone()));
+        }
+        let space = self.space.as_deref().unwrap_or("");
+        let c = MeshColorSpec {
+            space: space.to_string(),
+            value: self.value.clone(),
+            opacity_pct: None,
+        }
+        .to_model()?;
+        Ok(paged_model::PatternColor::Inline(
+            paged_model::InlineStopColor {
+                space: c.space,
+                value: c.value,
+            },
+        ))
+    }
+
+    fn from_model(c: &paged_model::PatternColor) -> Self {
+        match c {
+            paged_model::PatternColor::Swatch(id) => PatternColorSpec {
+                swatch: Some(id.clone()),
+                space: None,
+                value: Vec::new(),
+            },
+            paged_model::PatternColor::Inline(c) => PatternColorSpec {
+                swatch: None,
+                space: Some(c.space.as_attr().to_string()),
+                value: c.value.clone(),
+            },
+        }
+    }
+}
+
+impl PatternSpec {
+    /// The model's pattern under `self_id` (and `name`), or why the spec
+    /// is not one: a tile that is not positive and finite, a non-finite
+    /// point, an unknown tile type, overlap or fill rule, a colour of an
+    /// unknown space or the wrong channel count.
+    pub fn to_model(
+        &self,
+        self_id: String,
+        name: Option<String>,
+    ) -> Result<paged_model::PatternEntry, String> {
+        use paged_model::{HorizontalOverlap, PatternTileKind, VerticalOverlap};
+        let finite = |v: f32, what: &str| -> Result<f32, String> {
+            if v.is_finite() {
+                Ok(v)
+            } else {
+                Err(format!("a pattern's {what} is finite, not {v}"))
+            }
+        };
+        if !(self.width.is_finite() && self.height.is_finite())
+            || self.width <= 0.0
+            || self.height <= 0.0
+        {
+            return Err(format!(
+                "a pattern tile is positive and finite, not {} × {}",
+                self.width, self.height
+            ));
+        }
+        let kind = match self.tile_type.as_deref() {
+            None => PatternTileKind::Grid,
+            Some(t) => PatternTileKind::parse(t).ok_or_else(|| {
+                format!(
+                    "a tile type is Grid, BrickByRow, BrickByColumn, HexByColumn or HexByRow, not {t:?}"
+                )
+            })?,
+        };
+        let h_overlap = match self.h_overlap.as_deref() {
+            None | Some("") | Some("LeftInFront") => HorizontalOverlap::LeftInFront,
+            Some("RightInFront") => HorizontalOverlap::RightInFront,
+            Some(o) => {
+                return Err(format!(
+                    "a horizontal overlap is LeftInFront or RightInFront, not {o:?}"
+                ))
+            }
+        };
+        let v_overlap = match self.v_overlap.as_deref() {
+            None | Some("") | Some("TopInFront") => VerticalOverlap::TopInFront,
+            Some("BottomInFront") => VerticalOverlap::BottomInFront,
+            Some(o) => {
+                return Err(format!(
+                    "a vertical overlap is TopInFront or BottomInFront, not {o:?}"
+                ))
+            }
+        };
+        let brick_offset =
+            finite(self.brick_offset.unwrap_or(0.5), "brick offset")?.rem_euclid(1.0);
+        let h_spacing = finite(self.h_spacing.unwrap_or(0.0), "spacing")?;
+        let v_spacing = finite(self.v_spacing.unwrap_or(0.0), "spacing")?;
+        if self.width + h_spacing <= 0.0 || self.height + v_spacing <= 0.0 {
+            return Err("a pattern's spacing leaves a positive pitch".to_string());
+        }
+        let offset = self.offset.unwrap_or([0.0, 0.0]);
+        let scale = self.scale.unwrap_or([1.0, 1.0]);
+        for v in offset.iter().chain(scale.iter()) {
+            finite(*v, "placement")?;
+        }
+        if scale[0] == 0.0 || scale[1] == 0.0 {
+            return Err("a pattern's scale is not zero".to_string());
+        }
+        let rotation_deg = finite(self.rotation_deg.unwrap_or(0.0), "rotation")?;
+        let mut items = Vec::with_capacity(self.items.len());
+        for item in &self.items {
+            let mut anchors = Vec::with_capacity(item.anchors.len());
+            for a in &item.anchors {
+                for p in [a.anchor, a.left, a.right] {
+                    finite_point(p)?;
+                }
+                anchors.push(a.to_parse());
+            }
+            let fill_rule = paged_model::FillRule::parse(item.fill_rule.as_deref().unwrap_or(""))
+                .ok_or_else(|| {
+                format!(
+                    "a fill rule is NonZero or EvenOdd, not {:?}",
+                    item.fill_rule
+                )
+            })?;
+            let stroke_weight =
+                finite(item.stroke_weight.unwrap_or(0.0), "stroke weight")?.max(0.0);
+            items.push(paged_model::PatternItem {
+                anchors,
+                subpath_starts: item.subpath_starts.clone(),
+                subpath_open: item.subpath_open.clone(),
+                fill_rule,
+                fill: item
+                    .fill
+                    .as_ref()
+                    .map(PatternColorSpec::to_model)
+                    .transpose()?,
+                stroke: item
+                    .stroke
+                    .as_ref()
+                    .map(PatternColorSpec::to_model)
+                    .transpose()?,
+                stroke_weight,
+            });
+        }
+        Ok(paged_model::PatternEntry {
+            self_id,
+            name,
+            width: self.width,
+            height: self.height,
+            layout: paged_model::PatternLayout {
+                kind,
+                brick_offset,
+                h_spacing,
+                v_spacing,
+                h_overlap,
+                v_overlap,
+            },
+            placement: paged_model::PatternPlacement {
+                offset,
+                scale,
+                rotation_deg,
+            },
+            items,
+        })
+    }
+
+    /// The wire form of a model pattern.
+    pub fn from_model(p: &paged_model::PatternEntry) -> Self {
+        use paged_model::{HorizontalOverlap, VerticalOverlap};
+        let l = &p.layout;
+        PatternSpec {
+            width: p.width,
+            height: p.height,
+            items: p
+                .items
+                .iter()
+                .map(|i| PatternItemSpec {
+                    anchors: i.anchors.iter().map(PathAnchorSpec::from_parse).collect(),
+                    subpath_starts: i.subpath_starts.clone(),
+                    subpath_open: i.subpath_open.clone(),
+                    fill_rule: (!i.fill_rule.is_non_zero())
+                        .then(|| i.fill_rule.as_str().to_string()),
+                    fill: i.fill.as_ref().map(PatternColorSpec::from_model),
+                    stroke: i.stroke.as_ref().map(PatternColorSpec::from_model),
+                    stroke_weight: (i.stroke_weight != 0.0).then_some(i.stroke_weight),
+                })
+                .collect(),
+            tile_type: Some(l.kind.as_str().to_string()),
+            brick_offset: Some(l.brick_offset),
+            h_spacing: Some(l.h_spacing),
+            v_spacing: Some(l.v_spacing),
+            h_overlap: Some(
+                match l.h_overlap {
+                    HorizontalOverlap::LeftInFront => "LeftInFront",
+                    HorizontalOverlap::RightInFront => "RightInFront",
+                }
+                .to_string(),
+            ),
+            v_overlap: Some(
+                match l.v_overlap {
+                    VerticalOverlap::TopInFront => "TopInFront",
+                    VerticalOverlap::BottomInFront => "BottomInFront",
+                }
+                .to_string(),
+            ),
+            offset: Some(p.placement.offset),
+            scale: Some(p.placement.scale),
+            rotation_deg: Some(p.placement.rotation_deg),
+        }
+    }
 }
 
 /// Engine ADR 1048 — a frame's native mesh fill on the wire: the

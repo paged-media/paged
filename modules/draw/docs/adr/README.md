@@ -31,6 +31,7 @@ their status says so.
 | [365](365-live-symbols-on-the-engine-node.md) | Live symbols run on the engine's instance node; the Symbolism tools change what an instance carries | Accepted 2026-10-29 |
 | [366](366-brushes-and-width-are-live-stroke-styles.md) | Brushes and width points are live stroke styles: the Width tool, the Paintbrush's live result and the Brushes panel write the engine's entries | Accepted 2026-10-31 |
 | [367](367-envelopes-and-graphic-styles-on-native-appearance.md) | Draw's appearance runs on the engine: the host panel, envelopes as stack entries, graphic styles on native appearance | Accepted 2026-10-31 (amends 354, 355) |
+| [368](368-pattern-options-save-an-engine-pattern-swatch.md) | Pattern Options save an engine pattern swatch; the tile field stays as pattern artwork | Accepted 2026-10-29 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

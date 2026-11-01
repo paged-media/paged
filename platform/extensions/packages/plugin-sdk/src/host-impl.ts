@@ -604,6 +604,16 @@ export const HOST_FEATURES: readonly string[] = [
   // STATIC, like `document.paint2@1`: additive at protocol 76, so an older
   // engine refuses the path.
   "document.meshFill@1",
+  // Engine ADR 1041 — pattern swatches. `createSwatch` / `editSwatch` take
+  // `SwatchSpec.pattern` (a `PatternSpec`: tile, items, tile type,
+  // spacing, overlap, placement) and keep it under a `Pattern/…` id; a
+  // frame shows it by naming the id in `frameFillColor` /
+  // `frameStrokeColor`; `framePatternTransform` moves it per frame; the
+  // `swatches` collection lists it with kind `"pattern"`. STATIC, like
+  // `document.meshFill@1`: additive at protocol 76, so an older engine
+  // refuses the field and the path. paged.draw's Pattern Options ask it
+  // before saving a pattern swatch.
+  "document.patternPaint@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never

@@ -3581,6 +3581,46 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // Engine ADR 1041 — the frame's own placement of a pattern paint.
+        // The inverse is the transform it replaced (`None` for identity).
+        (
+            NodeId::TextFrame(_)
+            | NodeId::Rectangle(_)
+            | NodeId::Oval(_)
+            | NodeId::Polygon(_)
+            | NodeId::GraphicLine(_),
+            PropertyPath::FramePatternTransform,
+        ) => {
+            let new = match value {
+                Value::Transform(t) => *t,
+                _ => {
+                    return Err(OperationError::TypeMismatch {
+                        path,
+                        expected: "Transform".to_string(),
+                    })
+                }
+            };
+            if let Some(m) = new {
+                let det = m[0] * m[3] - m[1] * m[2];
+                if !m.iter().all(|v| v.is_finite()) || det.abs() < 1e-9 {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason: "a pattern transform is finite and invertible".to_string(),
+                    });
+                }
+            }
+            let slot = find_pattern_transform_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = std::mem::replace(slot, new);
+            (
+                Value::Transform(prev),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
         // Engine ADR 1048 — the frame's gradient mesh or freeform
         // gradient, whole. The inverse is the fill it replaced (`None`
         // when there was none), so undo restores it exactly.

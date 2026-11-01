@@ -465,6 +465,16 @@ export const TWINS: readonly TwinSpec[] = [
   ),
   recipeVerb("deletePatternTiles", "pattern", "pattern", "patternId"),
   recipeVerb("releasePatternField", "pattern", "pattern", "patternId"),
+  // WP6.9 — save the field as an engine pattern swatch; the result is the
+  // swatch id (`Pattern/…`).
+  recipeVerb(
+    "savePatternSwatch",
+    "pattern",
+    "pattern",
+    "patternId",
+    { name: TEXT, exit: BOOL },
+    { result: TEXT },
+  ),
   // Repeats.
   twin("makeRadialRepeat", { ...T, name: TEXT }),
   twin("makeGridRepeat", { ...T, name: TEXT }),

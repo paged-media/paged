@@ -2171,6 +2171,8 @@
   "app.swatchRow.noGroups": "Der aktive Inhaltstyp unterstützt keine Farbgruppen",
   "app.swatchRow.noRenames": "Der aktive Inhaltstyp unterstützt das Umbenennen von Farbfeldern nicht",
   "app.swatchRow.outOfGamut": "Außerhalb des Farbumfangs",
+  "app.swatchRow.pattern": "Muster",
+  "app.swatchRow.patternChip": "Musterfeld: wie eine Farbe als Fläche oder Kontur anwenden; bearbeitet wird es im Musterbearbeitungsmodus",
   "app.swatchRow.process": "Prozess",
   "app.swatchRow.reserved": "Reserviertes Farbfeld",
   "app.swatchRow.spot": "Vollton",

@@ -252,6 +252,7 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Pattern/Make from selection", "makePatternFromSelection", "pattern"],
   ["Draw/Pattern/Edit tile field", "editPatternField", "pattern"],
   ["Draw/Pattern/Release", "releasePatternField", "pattern"],
+  ["Draw/Pattern/Save as pattern swatch", "savePatternSwatch", "pattern"],
 
   // ── Appearance ──
   ["Draw/Appearance/Add fill", "appearanceAddFill", "appearance-add"],

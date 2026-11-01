@@ -72,6 +72,7 @@ mod overset_continuation;
 mod paint_v2;
 mod paragraph_pages;
 mod paste_into;
+mod pattern_paint;
 mod pipeline_lib;
 mod placed_eps_vectors;
 mod placed_pdf_page;
