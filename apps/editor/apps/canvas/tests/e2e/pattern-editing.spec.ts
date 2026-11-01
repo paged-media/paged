@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Pattern editing mode (WP6.9, draw ADR 366, engine ADR 1041), driven
+// Pattern editing mode (WP6.9, draw ADR 368, engine ADR 1041), driven
 // through the real Pattern Options panel and Swatches panel on a File ▸
 // New document (corpus-free): a tile rectangle becomes a pattern field
 // (the copies preview it), Save swatch writes ONE pattern swatch (one

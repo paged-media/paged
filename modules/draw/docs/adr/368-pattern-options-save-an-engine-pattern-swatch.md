@@ -1,4 +1,4 @@
-# ADR 366 — Pattern Options save an engine pattern swatch; the tile field stays as pattern artwork
+# ADR 368 — Pattern Options save an engine pattern swatch; the tile field stays as pattern artwork
 
 - **Status:** Accepted 2026-10-29.
 - **Scope:** `packages/draw-bundle/src/commands/pattern.ts` (`patternSwatchSpecFor`,
