@@ -98,14 +98,7 @@ pub(crate) fn flatten_path(path: &PathData, steps: u32) -> Vec<Polyline> {
                 pen = (x, y);
             }
             PathSegment::QuadTo { cx, cy, x, y } => {
-                let (p0x, p0y) = pen;
-                for i in 1..=n {
-                    let t = i as f32 / n as f32;
-                    let mt = 1.0 - t;
-                    let px = mt * mt * p0x + 2.0 * mt * t * cx + t * t * x;
-                    let py = mt * mt * p0y + 2.0 * mt * t * cy + t * t * y;
-                    cur.push((px, py));
-                }
+                paged_geom::flatten::sample_quad(pen, (cx, cy), (x, y), n, |p| cur.push(p));
                 pen = (x, y);
             }
             PathSegment::CubicTo {
@@ -116,20 +109,9 @@ pub(crate) fn flatten_path(path: &PathData, steps: u32) -> Vec<Polyline> {
                 x,
                 y,
             } => {
-                let (p0x, p0y) = pen;
-                for i in 1..=n {
-                    let t = i as f32 / n as f32;
-                    let mt = 1.0 - t;
-                    let px = mt * mt * mt * p0x
-                        + 3.0 * mt * mt * t * cx1
-                        + 3.0 * mt * t * t * cx2
-                        + t * t * t * x;
-                    let py = mt * mt * mt * p0y
-                        + 3.0 * mt * mt * t * cy1
-                        + 3.0 * mt * t * t * cy2
-                        + t * t * t * y;
-                    cur.push((px, py));
-                }
+                paged_geom::flatten::sample_cubic(pen, (cx1, cy1), (cx2, cy2), (x, y), n, |p| {
+                    cur.push(p)
+                });
                 pen = (x, y);
             }
             PathSegment::Close => {
