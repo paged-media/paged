@@ -1817,6 +1817,7 @@ impl Builder<'_> {
                     // largest leading of its runs, so every run carries it.
                     leading: p.leading.map(n),
                     hyperlink_source: r.link.as_ref().and_then(|h| self.text_link(h)),
+                    field: r.field.as_deref().and_then(datetime_field),
                     text,
                     ..CharacterRun::default()
                 });
@@ -2477,6 +2478,55 @@ fn numbering_of(scheme: &str) -> (&'static str, &'static str) {
     (format, expression)
 }
 
+/// PowerPoint's date and time field types (`a:fld type="datetimeN"`) and the
+/// Word-style picture the engine's `DATE` / `TIME` field formats them with,
+/// as PowerPoint 16 renders them in the English (US) language (read back
+/// from the application, not from the specification).
+const DATETIME_PICTURES: [(&str, &str); 13] = [
+    ("datetime1", "M/d/yy"),
+    ("datetime2", "dddd, MMMM d, yyyy"),
+    ("datetime3", "d MMMM yyyy"),
+    ("datetime4", "MMMM d, yyyy"),
+    ("datetime5", "d-MMM-yy"),
+    ("datetime6", "MMMM yy"),
+    ("datetime7", "MMM-yy"),
+    ("datetime8", "M/d/yy h:mm AM/PM"),
+    ("datetime9", "M/d/yy h:mm:ss AM/PM"),
+    ("datetime10", "H:mm"),
+    ("datetime11", "H:mm:ss"),
+    ("datetime12", "h:mm AM/PM"),
+    ("datetime13", "h:mm:ss AM/PM"),
+];
+
+/// The engine field a PowerPoint `a:fld type` is: a date or time that follows
+/// the clock, with the run's own text as the result it came with. `None` for
+/// every other field type (`slidenum` has its own marker).
+pub fn datetime_field(field_type: &str) -> Option<paged_model::WordField> {
+    let (_, picture) = DATETIME_PICTURES.iter().find(|(t, _)| *t == field_type)?;
+    let time = picture.contains(['h', 'H']);
+    Some(paged_model::WordField {
+        code: format!("{} \\@ \"{picture}\"", if time { "TIME" } else { "DATE" }),
+        kind: paged_model::WordFieldKind::Date {
+            format: Some((*picture).to_string()),
+            time,
+        },
+        number_format: None,
+    })
+}
+
+/// The PowerPoint `a:fld type` of an engine date or time field, when its
+/// picture is one of PowerPoint's thirteen.
+pub fn datetime_type_of(field: &paged_model::WordField) -> Option<&'static str> {
+    let paged_model::WordFieldKind::Date { format, .. } = &field.kind else {
+        return None;
+    };
+    let picture = format.as_deref()?;
+    DATETIME_PICTURES
+        .iter()
+        .find(|(_, p)| *p == picture)
+        .map(|(t, _)| *t)
+}
+
 /// Give a numbered paragraph PowerPoint's scheme and start.
 fn apply_numbering(para: &mut Paragraph, scheme: &str, start: i32) {
     let (format, expression) = numbering_of(scheme);
@@ -2490,6 +2540,56 @@ fn apply_numbering(para: &mut Paragraph, scheme: &str, start: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn powerpoints_date_and_time_types_are_engine_date_fields_and_back() {
+        for n in 1..=13 {
+            let t = format!("datetime{n}");
+            let f = datetime_field(&t).expect("a known type");
+            assert_eq!(datetime_type_of(&f), Some(DATETIME_PICTURES[n - 1].0));
+        }
+        let f = datetime_field("datetime1").unwrap();
+        assert_eq!(f.code, "DATE \\@ \"M/d/yy\"");
+        assert!(matches!(
+            datetime_field("datetime12").unwrap().kind,
+            paged_model::WordFieldKind::Date { time: true, .. }
+        ));
+        assert!(datetime_field("slidenum").is_none());
+        assert!(datetime_field("datetime14").is_none());
+        // The engine formats a field with PowerPoint's own result.
+        let at = paged_model::word_field::CivilDateTime {
+            year: 2026,
+            month: 11,
+            day: 1,
+            hour: 19,
+            minute: 48,
+            second: 56,
+        };
+        let shown = |t: &str| match datetime_field(t).unwrap().kind {
+            paged_model::WordFieldKind::Date { format, time } => {
+                paged_model::word_field::format_word_date(format.as_deref(), &at, time)
+            }
+            _ => unreachable!(),
+        };
+        // Read back from PowerPoint 16 on 2026-11-01 19:48:56.
+        for (t, want) in [
+            ("datetime1", "11/1/26"),
+            ("datetime2", "Sunday, November 1, 2026"),
+            ("datetime3", "1 November 2026"),
+            ("datetime4", "November 1, 2026"),
+            ("datetime5", "1-Nov-26"),
+            ("datetime6", "November 26"),
+            ("datetime7", "Nov-26"),
+            ("datetime8", "11/1/26 7:48 PM"),
+            ("datetime9", "11/1/26 7:48:56 PM"),
+            ("datetime10", "19:48"),
+            ("datetime11", "19:48:56"),
+            ("datetime12", "7:48 PM"),
+            ("datetime13", "7:48:56 PM"),
+        ] {
+            assert_eq!(shown(t), want, "{t}");
+        }
+    }
 
     #[test]
     fn a_numbering_scheme_becomes_the_engines_format_and_expression() {
