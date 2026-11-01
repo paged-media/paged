@@ -107,7 +107,7 @@ impl ContentTypes {
             .any(|(pn, _)| pn == absolute_part_name)
     }
 
-    /// A table with no entries (write one with the `add_*` methods and [`to_xml`](Self::to_xml)).
+    /// A table with no entries (write one with the `add_*` methods and [`render`](Self::render)).
     pub fn new() -> ContentTypes {
         ContentTypes::default()
     }
@@ -140,7 +140,7 @@ impl ContentTypes {
     }
 
     /// The whole `[Content_Types].xml`: defaults, then overrides, in order.
-    pub fn to_xml(&self) -> String {
+    pub fn render(&self) -> String {
         let mut out = String::from(XML_DECL);
         out.push_str(&format!(r#"<Types xmlns="{NS}">"#));
         for (ext, ct) in &self.defaults {
@@ -377,7 +377,7 @@ mod tests {
         t.add_default("PNG", "image/other"); // the extension has one, any case
         t.add_override("/word/document.xml", "main");
         t.add_override("/word/document.xml", "other"); // first stays
-        let back = ContentTypes::parse(t.to_xml().as_bytes()).unwrap();
+        let back = ContentTypes::parse(t.render().as_bytes()).unwrap();
         assert_eq!(back.defaults, vec![("png".into(), "image/png".into())]);
         assert_eq!(
             back.overrides,

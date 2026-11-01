@@ -116,7 +116,7 @@ pub fn write_docx(doc: &DocxDocument) -> Result<(Vec<u8>, WriteReport), String> 
     for (id, url) in &w.link_rels {
         rels.add(id, &format!("{REL}/hyperlink"), url, true);
     }
-    let rels = rels.to_xml();
+    let rels = rels.render();
 
     let mut types = paged_ooxml::ContentTypes::new();
     types.add_default(
@@ -149,7 +149,7 @@ pub fn write_docx(doc: &DocxDocument) -> Result<(Vec<u8>, WriteReport), String> 
             "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml",
         );
     }
-    let types = types.to_xml();
+    let types = types.render();
 
     let root_rels = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="{REL}/officeDocument" Target="word/document.xml"/></Relationships>"#
