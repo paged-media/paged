@@ -125,7 +125,11 @@ The last item of wave 5: a motion path is shown and edited on the slide.
   (`pathEditMode="fixed"`). The pane's Effect Options show Auto-reverse (`autoRev`, the
   `rewind` timing edit) for every effect, and Lock the path for a motion path; the `path` edit
   sets `pathEditMode`. A path edit clears `ptsTypes`, which names the old path's points.
-- **Not built.** Adding or deleting points. A locked path is not kept in place when its shape
+- **Points (2026-11-01).** A double-click on the path adds a point where it passes (a line
+  splits in two; a curve splits at de Casteljau's point, so its shape holds); a double-click on
+  an anchor deletes it and joins its neighbours (a path keeps two points). One undo step each,
+  through the same `path` edit.
+- **Not built.** Reshaping a locked path in place. A locked path is not kept in place when its shape
   moves in the editor (PowerPoint rewrites it; here it moves with the shape, as an unlocked
   one does).
 

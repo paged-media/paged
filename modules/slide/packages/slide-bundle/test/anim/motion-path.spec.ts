@@ -22,10 +22,13 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  deletePoint,
   fromPage,
   handlePoint,
   handlesOf,
+  insertPoint,
   moveHandle,
+  nearestOnPath,
   svgPath,
   toPage,
   type MotionPathState,
@@ -82,5 +85,39 @@ describe("motion path editing (slide ADR 714)", () => {
     expect(toPage(ST, [0.5, 0.5])).toEqual([580, 320]);
     expect(fromPage(ST, [580, 320])).toEqual([0.5, 0.5]);
     expect(svgPath(ST, PATH.slice(0, 1))).toBe("M 100.00 50.00");
+  });
+
+  it("finds the nearest place on the path and adds a point there", () => {
+    const hit = nearestOnPath(PATH, [0.5, 0.1])!;
+    expect(hit.seg).toBe(3);
+    expect(hit.t).toBeCloseTo(0.5, 1);
+    const grown = insertPoint(PATH, 3, 0.5);
+    expect(grown.length).toBe(5);
+    expect(grown[3]).toEqual({ kind: "line", to: [0.5, 0.1] });
+    expect(grown[4]).toEqual(PATH[3]!);
+    // A curve splits where it stood: the new point lies on it.
+    const split = insertPoint(PATH, 1, 0.5);
+    expect(split.length).toBe(5);
+    const mid = (split[1] as Extract<PathSeg, { kind: "curve" }>).to;
+    expect(nearestOnPath(PATH, mid)!.dist).toBeLessThan(1e-3);
+    expect((split[2] as Extract<PathSeg, { kind: "curve" }>).to).toEqual([
+      0.25, 0.2,
+    ]);
+  });
+
+  it("deletes an anchor and joins its neighbours, keeping two points", () => {
+    const less = deletePoint(PATH, 1);
+    expect(less.length).toBe(3);
+    const joined = less[1] as Extract<PathSeg, { kind: "curve" }>;
+    expect(joined.to).toEqual([0.5, 0.2]);
+    expect(joined.c1).toEqual([0.1, 0]);
+    expect(joined.c2).toEqual([0.4, 0.3]);
+    expect(deletePoint(PATH, 3).length).toBe(3);
+    expect(deletePoint(PATH, 0)[0]).toEqual({ kind: "move", to: [0.25, 0.2] });
+    const two: PathSeg[] = [
+      { kind: "move", to: [0, 0] },
+      { kind: "line", to: [1, 0] },
+    ];
+    expect(deletePoint(two, 1)).toEqual(two);
   });
 });
