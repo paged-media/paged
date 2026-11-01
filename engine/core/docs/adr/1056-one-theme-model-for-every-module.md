@@ -1,0 +1,143 @@
+# ADR 1056 — One theme model for every module: colour slots and a font scheme on the document
+
+- **Status:** Accepted 2026-11-01; **slice 1 built** (the model, its `.paged` encoding, slide's
+  import). Open: the `theme` collection and the theme operations (slice 2, they ride a protocol
+  bump), swatches that reference slots, doc and sheet lowering, export write-back from the model
+  (slice 3 onward). Part of the capability layering of PM-0014 and PM-0017
+  ([capability register](../../../../docs/development/capability-register.md), "Themes"). Amends
+  slide [ADR 713](../../../../modules/slide/docs/adr/713-live-theme.md) and
+  [ADR 719](../../../../modules/slide/docs/adr/719-document-styles.md) (see Migration).
+- **Scope:** `paged-model` (`theme.rs`), `paged-scene` (`Document.theme`), `paged-store` (the
+  native encoding), later `paged-mutate`, `paged-wire`, `paged-canvas` (the `theme` collection);
+  for the readers and writers per format: slide (`slide-native`, `pptx-export`), doc
+  (`docx-*`), sheet (`sheet-xlsx`); the one DrawingML reader is `paged-ooxml::drawingml::theme`.
+
+## Context
+
+Word, PowerPoint and Excel carry the same `a:theme` part: a colour scheme of twelve slots, a font
+scheme (a headings set and a body set, each with a face per script) and a format scheme (fills,
+lines, effects). The engine has no such concept. Five places read the part (doc ×2, slide ×2,
+sheet; the shared reader exists since PM-0017's first wave) and each lowers it its own way:
+
+| Where | Lowers a theme to |
+|---|---|
+| slide (ADR 713, 719) | swatches by key (`Color/accent1 lumMod60000 lumOff40000`) in a "Theme" swatch group; two character styles `Headings font` / `Body font` and the root paragraph styles `Title` / `Body`; the theme as JSON in the deck label; the Design panel's `applyTheme` batch |
+| doc | literal swatches; the theme's fonts are baked into styles |
+| sheet | literal colours; the part is kept as a blob for export |
+
+So a document opened from Word cannot offer a theme picker, a Word theme change cannot reach
+content, and a host that wants one list of themes has to know three plugin conventions.
+
+## Decision
+
+### The model
+
+`Document.theme: Option<Theme>` (absent from the native encoding when the document has none, so
+older documents read unchanged and their canonical hash does not move).
+
+```
+Theme { name, color_scheme_name?, colors: [ThemeColor], font_scheme_name?,
+        major: ThemeFonts, minor: ThemeFonts, source?: SourceBlob }
+ThemeColor { slot, value: "RRGGBB", system?: "windowText" | "window" }
+ThemeFonts { latin?, east_asian?, complex?, scripts: [(script, typeface)] }
+```
+
+- **Twelve slots**, in the order the file writes them: `dk1, lt1, dk2, lt2, accent1..accent6,
+  hlink, folHlink` (`THEME_SLOTS`). A slot the file has no colour for is absent. `dk1` and `lt1`
+  are system colours in Office's themes; the model keeps the last value as `value` and the system
+  name as `system`, so a writer can restore the `sysClr`.
+- **Fonts** are the font scheme as the file has it: major (headings) and minor (body), each a Latin,
+  East Asian and complex-script face and a list of per-script faces (`Jpan`, `Hans`, `Arab`, …) in
+  file order. An empty face in the file is no face.
+- **Variants are not in the model.** PowerPoint's Variants and the gallery are module behaviour
+  (slide's `ThemeIr::variant`, the dark/swapped/muted variants of `slide-resolve`): a variant is a
+  theme with other slot values, and applying one is the slot-colour operation below. Excel's tint
+  steps and Word's "Lighter 40%" names are colour *transforms* on a slot and stay with the module
+  that writes the `schemeClr`.
+- **Not in slice 1: the format scheme** (fill, line and effect styles). Slide's resolver reads them
+  and lowers references; the engine model gets them when a second consumer needs them.
+
+### How content follows a theme change (slice 3)
+
+A swatch gains an optional **theme reference**: `slot` plus the transforms after it (the key
+slide already writes, `accent1 lumMod60000 lumOff40000`). A swatch with a reference takes its value
+from the theme: setting a slot colour recolours every such swatch, and so every item that uses it,
+in the same undo step. This is slide's mechanism (swatch id = key), moved into the engine; the
+swatch group "Theme" becomes a view of the theme (its slots and tints) rather than a stored list.
+Fonts: a **theme font reference** (`major` / `minor`, per script) on a character and paragraph
+style's font, resolved against the theme at composition time. Until slice 3 the references are
+the two slide character styles and the root paragraph styles, written as today.
+
+### Operations (slice 2, wire)
+
+Each is one named undo step (ADR 1030), over the wire and in the script bridge:
+`setTheme(theme)` (replace; used by a theme picker and by import), `setThemeColor(slot, value)`
+and `setThemeFonts(which, fonts)`. A change drops `source` (the theme is then re-rendered from the
+model), and recolours the referencing swatches in the same step.
+
+### Reads
+
+The collection `theme` (slice 2): one row, the model as above, without `source`'s data (its
+presence and format only). A host's theme picker reads it and sends `setTheme`; the list of
+available themes (the gallery) is the module's.
+
+### Fidelity
+
+`source` holds the original theme part, as comments' `source` does (ADR 1055): a writer
+re-emits it **byte for byte** until the theme is edited. After an edit the writer rewrites the colour
+and font schemes in the original XML and keeps everything else in it (the format scheme, extension
+lists, `objectDefaults`): slide's `rewrite_theme_xml` is that writer. A field a target cannot carry
+is a reported loss. Word's and Excel's theme parts, and a `.thmx`, read into the same type.
+
+### What slice 1 covers
+
+- `paged-model::Theme`, `ThemeColor`, `ThemeFonts`, `THEME_SLOTS`; `Document.theme`; the native
+  `.paged` encoding (serde; absent when `None`).
+- slide's import fills it from the deck's first theme: name, colour scheme name, the twelve slots
+  with `dk1`/`lt1` system names, both font sets with their scripts, and the part as `source`.
+- Additive and byte-neutral: slide's swatches, "Theme" group, character styles and deck label are
+  unchanged, and `pptx-export` still writes from them (its tests and goldens pass unchanged).
+- **No wire change**: no collection and no operation yet, so no schema, catalog or CLI regeneration
+  and no plugin-sdk bump. Slice 2 adds both with the full resync in one commit.
+
+### Slices after
+
+2. The `theme` collection and the three operations (a protocol bump). 3. Swatch and font theme
+references; slide's `applyTheme` becomes `setTheme`; the Design panel reads the collection.
+4. doc and sheet lower onto it (their literal swatches become references; the doc's theme fonts
+leave the styles); export writes back from the model. 5. The format scheme.
+
+## Oracle (PowerPoint, 2026-11-01)
+
+A deck saved by PowerPoint (the conformance fixtures are) carries `ppt/theme/theme1.xml` named
+`Office`: `clrScheme` in the order `dk1` (`sysClr windowText 000000`), `lt1` (`sysClr window
+FFFFFF`), `dk2` 0E2841, `lt2` E8E8E8, `accent1` 156082, `accent2` E97132, `accent3` 196B24,
+`accent4` 0F9ED5, `accent5` A02B93, `accent6` 4EA72E, `hlink` 467886, `folHlink` 96607D;
+`fontScheme` `Office` with `majorFont` latin `Aptos Display`, `minorFont` latin `Aptos`, then `ea`,
+`cs` and 94 `font script=` faces in the two sets. To prove PowerPoint keeps a *non-default* theme as
+the model reads it, the fixture's theme was edited (theme name `Probe Theme`, scheme name `Probe
+Colours`, font scheme `Probe Fonts`, ten slots changed, Georgia/Verdana as the Latin faces), opened in
+PowerPoint and saved as `.pptx`: the saved `theme1.xml` has the same name, scheme and font scheme
+names, the same twelve slots in the same order with the new values, `sysClr` kept for `dk1`/`lt1`,
+and the new faces. The notes master's own theme (`theme2.xml`) stays `Office`; one theme per
+master, so a deck can hold several (the model holds the first master's, as slide does today; the
+others stay with the deck's package).
+
+## Consequences
+
+- One model for the theme picker, the Design/Page Layout surfaces and the CLI, whichever module
+  opened the file; a theme change can recolour Word and Excel content once their swatches reference
+  slots.
+- The document holds both the model and (until slice 3) slide's swatch convention; the two agree
+  because both are built from the same part in one import.
+- The `.paged` of a slide deck is larger by the theme part (about 9 KB before compression).
+
+## Migration
+
+1. **slide** (ADR 713, 719). Slice 1 changes nothing they describe. From slice 3 the theme in the deck
+   label (`theme`, `deckTheme`) is the model's `theme` plus the variant name; the "Theme" group and
+   the `Headings font` / `Body font` styles become views of the theme and theme-font references.
+   ADR 713's "the engine has no theme" is amended by this ADR now.
+2. **doc, sheet.** Their readers keep lowering to literal swatches until slice 4; each adds the
+   `Document.theme` fill (a call to the same constructor) at that point.
+3. **Old documents** read unchanged: no `theme` field means no theme.

@@ -163,3 +163,51 @@ fn shape_styles_become_object_styles_of_theme_swatches__feat__plugin_slide_impor
         assert!(applied > 0, "{} is applied", style.self_id);
     }
 }
+
+// Engine ADR 1056, slice 1 — the deck's theme is also the engine's theme:
+// name, the twelve slots in scheme order, the font scheme with its scripts,
+// and the theme part as the file wrote it. Additive: the swatch group above
+// is unchanged.
+#[test]
+fn the_decks_theme_is_the_documents_theme__feat__plugin_slide_import_native() {
+    for name in [
+        "placeholders",
+        "text",
+        "tables",
+        "charts",
+        "fonts-full",
+        "geometry",
+    ] {
+        let doc = open(name);
+        let t = doc
+            .theme
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name}: no theme"));
+        assert_eq!(t.name, "Office", "{name}");
+        assert_eq!(t.color_scheme_name.as_deref(), Some("Office"), "{name}");
+        let slots: Vec<&str> = t.colors.iter().map(|c| c.slot.as_str()).collect();
+        assert_eq!(
+            slots,
+            paged_model::THEME_SLOTS,
+            "{name}: slots in scheme order"
+        );
+        assert_eq!(
+            t.color("dk1").unwrap().system.as_deref(),
+            Some("windowText")
+        );
+        assert_eq!(t.color("lt1").unwrap().value, "FFFFFF");
+        assert_eq!(t.color("accent1").unwrap().rgb(), Some([0x15, 0x60, 0x82]));
+        assert_eq!(t.color("accent1").unwrap().system, None);
+        assert_eq!(t.major.latin.as_deref(), Some("Aptos Display"), "{name}");
+        assert_eq!(t.minor.latin.as_deref(), Some("Aptos"), "{name}");
+        assert!(!t.major.scripts.is_empty(), "{name}: per-script faces");
+        let src = t.source.as_ref().expect("source part");
+        assert_eq!(src.format, paged_model::THEME_SOURCE_OOXML);
+        assert!(src.data.contains("<a:clrScheme"), "{name}");
+        // The swatch the deck's art uses is the same colour as the slot.
+        assert_eq!(
+            doc.palette.colors["Color/accent1"].value,
+            vec![0x15 as f32, 0x60 as f32, 0x82 as f32]
+        );
+    }
+}

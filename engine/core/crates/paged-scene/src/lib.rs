@@ -115,6 +115,10 @@ pub struct Document {
     /// Engine ADR 1055 — the authors comments name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub people: Vec<paged_model::Person>,
+    /// Engine ADR 1056 — the document's theme (colour slots and font
+    /// scheme). Absent from the native encoding when the document has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<paged_model::Theme>,
 }
 
 /// A spread plus the path it came from in the container.

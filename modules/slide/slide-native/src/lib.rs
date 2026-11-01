@@ -2406,6 +2406,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: engine_theme(deck, images),
     };
     Built {
         document,
@@ -2420,6 +2421,89 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         },
         media: w.media,
     }
+}
+
+/// The deck's theme as the engine's theme (engine ADR 1056): the twelve
+/// slots, the font scheme with its scripts, and the theme part as the file
+/// wrote it. Read from the part when the package has it; else from the
+/// deck's own data (`ThemeIr`: slots and the two Latin fonts).
+fn engine_theme(
+    deck: &Deck,
+    images: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> Option<paged_model::Theme> {
+    use paged_model::{Theme, ThemeColor, ThemeFonts, THEME_SOURCE_OOXML};
+    use paged_ooxml::drawingml::theme::Theme as Ooxml;
+    use paged_ooxml::drawingml::{color_in, ColorBase};
+    use paged_ooxml::tree::{self, Ns};
+
+    let bytes = deck.theme_part.as_deref().and_then(images);
+    if let Some(bytes) = &bytes {
+        if let Some(t) = Ooxml::parse(bytes) {
+            // `dk1` and `lt1` are system colours in Office's themes; the
+            // reader resolves them to their last value, so ask the tree.
+            let system = |slot: &str| -> Option<String> {
+                let root = tree::parse(bytes).ok()?;
+                let scheme = root
+                    .child(Ns::A, "themeElements")?
+                    .child(Ns::A, "clrScheme")?;
+                match color_in(scheme.child(Ns::A, slot)?)?.base {
+                    ColorBase::System { name, .. } => Some(name),
+                    _ => None,
+                }
+            };
+            let fonts = |f: &paged_ooxml::drawingml::FontSet| ThemeFonts {
+                latin: f.latin.clone(),
+                east_asian: f.east_asian.clone(),
+                complex: f.complex.clone(),
+                scripts: f.scripts.clone(),
+            };
+            return Some(Theme {
+                name: t.name.clone().unwrap_or_default(),
+                color_scheme_name: t.color_scheme_name.clone(),
+                colors: t
+                    .colors
+                    .iter()
+                    .map(|(slot, _)| ThemeColor {
+                        slot: slot.clone(),
+                        value: t.hex(slot).unwrap_or_default(),
+                        system: system(slot),
+                    })
+                    .collect(),
+                font_scheme_name: t.font_scheme_name.clone(),
+                major: fonts(&t.major_font),
+                minor: fonts(&t.minor_font),
+                source: std::str::from_utf8(bytes)
+                    .ok()
+                    .map(|x| paged_model::SourceBlob {
+                        format: THEME_SOURCE_OOXML.into(),
+                        data: x.to_string(),
+                    }),
+            });
+        }
+    }
+    let ir = deck.theme.as_ref()?;
+    let face = |f: &str| Some(f.to_string()).filter(|f| !f.is_empty());
+    Some(Theme {
+        name: ir.name.clone(),
+        colors: ir
+            .colors
+            .iter()
+            .map(|(slot, hex)| ThemeColor {
+                slot: slot.clone(),
+                value: hex.to_uppercase(),
+                system: None,
+            })
+            .collect(),
+        major: ThemeFonts {
+            latin: face(&ir.major),
+            ..ThemeFonts::default()
+        },
+        minor: ThemeFonts {
+            latin: face(&ir.minor),
+            ..ThemeFonts::default()
+        },
+        ..Theme::default()
+    })
 }
 
 /// Build `deck` and package it as `.paged`. `images` returns a package

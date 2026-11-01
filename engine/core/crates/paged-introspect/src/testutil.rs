@@ -140,5 +140,6 @@ pub fn document_with_one_textframe(self_id: &str) -> Document {
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: None,
     }
 }

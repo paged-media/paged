@@ -43,6 +43,7 @@ pub mod mesh;
 pub mod pattern;
 pub mod review;
 pub mod script;
+pub mod theme;
 pub mod vector_effect;
 pub mod winding;
 pub mod word_field;
@@ -59,6 +60,7 @@ pub use script::{
     CharacterDirection, FontHint, ParagraphDirection, ResolvedDirection, ScriptClass,
     ScriptProperties,
 };
+pub use theme::{Theme, ThemeColor, ThemeFonts, THEME_SLOTS, THEME_SOURCE_OOXML};
 pub use word_field::{WordField, WordFieldKind};
 
 pub use mesh::{

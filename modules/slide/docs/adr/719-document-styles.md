@@ -55,3 +55,9 @@ masters in the engine (engine ADR 1026), which another wave builds.
   placeholder `lstStyle` overrides stay local values until masters and layouts are two-level
   (engine ADR 1026). Object styles carry fill and line, not effects or the font reference; export
   writes a shape's own fill and line, not its `p:style`.
+
+## Amendment 2026-11-01 (engine ADR 1056)
+
+The theme fonts on the root styles stay as described. The engine now also holds the theme's font
+scheme (`Document.theme.major` / `minor`, with the per-script faces); when ADR 1056 slice 3 adds
+theme font references to styles, the root styles reference the scheme instead of naming a face.

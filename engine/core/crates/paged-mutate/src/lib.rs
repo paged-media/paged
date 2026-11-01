@@ -335,6 +335,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         }
     }
 
@@ -1949,6 +1950,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         }
     }
 
@@ -2151,6 +2153,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         }
     }
 
@@ -2270,6 +2273,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         };
         Project::new(doc)
     }
@@ -2442,6 +2446,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         };
         let mut project = Project::new(doc);
         let node = NodeId::GraphicLine("GraphicLine/l1".to_string());
@@ -2853,6 +2858,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         }
     }
 
@@ -3218,6 +3224,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         }
     }
 
@@ -4110,6 +4117,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         });
         // Two rectangles: A = [0..20, 0..20], B = [10..30, 10..30].
         // A \ B is an L-shape of 6 corner vertices.
@@ -4697,6 +4705,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         });
         // Insert a fresh rectangle (the InsertNode arm fills in the
         // full struct including default `end_cap: None`).
@@ -4762,6 +4771,7 @@ mod tests {
             symbols: Vec::new(),
             comment_threads: Vec::new(),
             people: Vec::new(),
+            theme: None,
         });
         project
             .apply(Operation::InsertNode {
@@ -8187,6 +8197,7 @@ mod tests {
                 symbols: Vec::new(),
                 comment_threads: Vec::new(),
                 people: Vec::new(),
+                theme: None,
             }
         }
 
@@ -9149,6 +9160,7 @@ mod tests {
                 symbols: Vec::new(),
                 comment_threads: Vec::new(),
                 people: Vec::new(),
+                theme: None,
             }
         }
 

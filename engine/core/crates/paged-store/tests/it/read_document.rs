@@ -51,6 +51,37 @@ fn a_wrapped_document_reads_back_the_same() {
     assert_eq!(back.comment_threads[0].comments[0].text, "Check");
 }
 
+/// Engine ADR 1056: the theme is part of the native encoding, source and all,
+/// and a document without one writes none.
+#[test]
+fn a_documents_theme_survives_the_container() {
+    let mut doc = Document::default();
+    let plain = wrap_document(&doc, "doc", 612.0, 792.0).expect("wrap");
+    assert!(read_document(&plain).expect("read").theme.is_none());
+    doc.theme = Some(paged_model::Theme {
+        name: "Probe".into(),
+        colors: vec![paged_model::ThemeColor {
+            slot: "accent1".into(),
+            value: "FF0000".into(),
+            system: None,
+        }],
+        major: paged_model::ThemeFonts {
+            latin: Some("Georgia".into()),
+            scripts: vec![("Jpan".into(), "Yu Gothic".into())],
+            ..Default::default()
+        },
+        source: Some(paged_model::SourceBlob {
+            format: paged_model::THEME_SOURCE_OOXML.into(),
+            data: "<a:theme/>".into(),
+        }),
+        ..Default::default()
+    });
+    let bytes = wrap_document(&doc, "doc", 612.0, 792.0).expect("wrap");
+    let back = read_document(&bytes).expect("read");
+    assert_eq!(back.theme, doc.theme);
+    assert_ne!(back.canonical_hash(), Document::default().canonical_hash());
+}
+
 #[test]
 fn a_container_without_the_model_part_says_so() {
     // A zip with a mimetype and nothing else.

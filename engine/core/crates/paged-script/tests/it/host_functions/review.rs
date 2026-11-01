@@ -135,3 +135,59 @@ fn edit_comment() {
     refuses(&mut m, "paged.editComment('nope', 'x')", "false");
     writes(&mut m, "paged.editComment('1', 'Why not?')", "true");
 }
+
+#[test]
+fn insert_comment_thread() {
+    covers!("script:paged.insertCommentThread");
+    let (mut m, _page, frame, _story) = with_story("One two three");
+    // An anchor that is not an anchor, and a comment that is not one.
+    refuses(
+        &mut m,
+        "paged.insertCommentThread('nope', {text: 'x'})",
+        "false",
+    );
+    refuses(
+        &mut m,
+        &format!("paged.insertCommentThread({{kind: 'item', item: {frame:?}}}, 'nope')"),
+        "false",
+    );
+    writes(
+        &mut m,
+        &format!(
+            "paged.insertCommentThread({{kind: 'item', item: {frame:?}}}, \
+             {{text: 'Check this', author: 'Author A'}})"
+        ),
+        "true",
+    );
+}
+
+#[test]
+fn set_comment_anchor() {
+    covers!("script:paged.setCommentAnchor");
+    let (mut m, page, frame, _story) = with_story("One two three");
+    ok(
+        &mut m,
+        &format!(
+            "paged.insertCommentThread({{kind: 'item', item: {frame:?}}}, \
+             {{id: 't1', text: 'Check this', author: 'Author A'}})"
+        ),
+    );
+    refuses(&mut m, "paged.setCommentAnchor('t1', 'nope')", "false");
+    writes(
+        &mut m,
+        &format!("paged.setCommentAnchor('t1', {{kind: 'page', page: {page:?}, at: [10, 20]}})"),
+        "true",
+    );
+}
+
+#[test]
+fn set_person() {
+    covers!("script:paged.setPerson");
+    let (mut m, _, _, _) = with_story("One two three");
+    refuses(&mut m, "paged.setPerson('nope')", "false");
+    writes(
+        &mut m,
+        "paged.setPerson({id: 'p1', name: 'Ann Author', initials: 'AA'})",
+        "true",
+    );
+}

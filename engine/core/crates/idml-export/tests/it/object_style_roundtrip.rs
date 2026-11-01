@@ -111,6 +111,7 @@ fn open(package: &[u8]) -> Document {
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: None,
     }
 }
 
