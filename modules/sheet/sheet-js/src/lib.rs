@@ -860,6 +860,93 @@ mod wasm {
             self.session.delete_note(sheet, row, col).map_err(map_err)
         }
 
+        /// The threaded comments of a sheet: `[{sheet, row, col, resolved,
+        /// comments: [{id, parentId?, personId, displayName?, userId?,
+        /// providerId?, timestamp, text, done}]}]`.
+        pub fn list_threads(&self, sheet: u16) -> Result<JsValue, JsValue> {
+            let t = self.session.list_threads(sheet).map_err(map_err)?;
+            to_js(&t)
+        }
+
+        /// Start a thread on a cell; returns the root comment's id. `seed`
+        /// feeds the ids, `timestamp` is the comment's `dT` text.
+        pub fn add_thread(
+            &mut self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            display_name: &str,
+            user_id: &str,
+            provider_id: &str,
+            timestamp: &str,
+            text: &str,
+            seed: u32,
+        ) -> Result<String, JsValue> {
+            let author = sheet_xlsx::threaded::Author {
+                display_name,
+                user_id,
+                provider_id,
+            };
+            self.session
+                .add_thread(sheet, row, col, &author, timestamp, text, seed)
+                .map_err(map_err)
+        }
+
+        /// Reply to the thread on a cell; returns the reply's id.
+        pub fn reply_thread(
+            &mut self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            display_name: &str,
+            user_id: &str,
+            provider_id: &str,
+            timestamp: &str,
+            text: &str,
+            seed: u32,
+        ) -> Result<String, JsValue> {
+            let author = sheet_xlsx::threaded::Author {
+                display_name,
+                user_id,
+                provider_id,
+            };
+            self.session
+                .reply_thread(sheet, row, col, &author, timestamp, text, seed)
+                .map_err(map_err)
+        }
+
+        /// Replace the text of a comment; `false` when `id` is unknown.
+        pub fn edit_thread_comment(
+            &mut self,
+            sheet: u16,
+            id: &str,
+            text: &str,
+        ) -> Result<bool, JsValue> {
+            self.session
+                .edit_thread_comment(sheet, id, text)
+                .map_err(map_err)
+        }
+
+        /// Delete a comment (a root takes its thread); `false` when unknown.
+        pub fn delete_thread_comment(&mut self, sheet: u16, id: &str) -> Result<bool, JsValue> {
+            self.session
+                .delete_thread_comment(sheet, id)
+                .map_err(map_err)
+        }
+
+        /// Resolve (`done`) or reopen the thread on a cell.
+        pub fn set_thread_done(
+            &mut self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            done: bool,
+        ) -> Result<bool, JsValue> {
+            self.session
+                .set_thread_done(sheet, row, col, done)
+                .map_err(map_err)
+        }
+
         /// The sheet's pictures in sheet points: `[{id, sheet, name, descr?,
         /// media, contentType, x, y, w, h, inCell, row, col}]`.
         pub fn list_pictures(&self, sheet: u16) -> Result<JsValue, JsValue> {

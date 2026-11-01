@@ -69,6 +69,7 @@ pub mod structure;
 pub mod style_edit;
 pub mod table_doc;
 pub mod table_style;
+pub mod threaded;
 pub mod write;
 pub mod ws_child;
 pub mod xtree;

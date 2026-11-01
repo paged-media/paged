@@ -309,7 +309,8 @@ pub struct CommentInfo {
     pub col: u32,
     pub author: String,
     pub text: String,
-    /// The cell also carries a threaded comment (its note is kept as it is).
+    /// The cell also carries a threaded comment (edit it through the thread
+    /// methods; `list_threads` reads it).
     pub threaded: bool,
 }
 
