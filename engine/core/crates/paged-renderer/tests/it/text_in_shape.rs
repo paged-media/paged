@@ -40,7 +40,7 @@ const PAGE_W_PT: f32 = 595.276;
 const PAGE_H_PT: f32 = 841.890;
 const SHAPE_W_PT: f32 = 320.0;
 const SHAPE_H_PT: f32 = 320.0;
-const KAPPA: f32 = 0.552_284_8;
+const KAPPA: f32 = paged_geom::KAPPA_F32;
 
 fn read_font(name: &str) -> Vec<u8> {
     let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -86,7 +86,7 @@ fn oval_shape() -> FrameShape {
     let bottom = (cx, cy + ry);
     let left = (cx - rx, cy);
     let mut pts = vec![top];
-    paged_text::flatten_cubic(
+    paged_geom::flatten::flatten_cubic(
         top,
         (cx + kx, cy - ry),
         (cx + rx, cy - ky),
@@ -94,7 +94,7 @@ fn oval_shape() -> FrameShape {
         24,
         &mut pts,
     );
-    paged_text::flatten_cubic(
+    paged_geom::flatten::flatten_cubic(
         right,
         (cx + rx, cy + ky),
         (cx + kx, cy + ry),
@@ -102,7 +102,7 @@ fn oval_shape() -> FrameShape {
         24,
         &mut pts,
     );
-    paged_text::flatten_cubic(
+    paged_geom::flatten::flatten_cubic(
         bottom,
         (cx - kx, cy + ry),
         (cx - rx, cy + ky),
@@ -110,7 +110,7 @@ fn oval_shape() -> FrameShape {
         24,
         &mut pts,
     );
-    paged_text::flatten_cubic(
+    paged_geom::flatten::flatten_cubic(
         left,
         (cx - rx, cy - ky),
         (cx - kx, cy - ry),
@@ -379,7 +379,7 @@ fn flatten_closed(anchors: &[PathPoint]) -> Vec<(f32, f32)> {
         let (a, _, right) = anchors[k];
         let (b, left, _) = anchors[(k + 1) % anchors.len()];
         let steps = paged_text::cubic_steps_for_tolerance(a, right, left, b, TOL);
-        paged_text::flatten_cubic(a, right, left, b, steps, &mut pts);
+        paged_geom::flatten::flatten_cubic(a, right, left, b, steps, &mut pts);
     }
     if pts.first() == pts.last() {
         pts.pop();

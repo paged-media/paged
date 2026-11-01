@@ -191,7 +191,7 @@ pub(super) fn frame_shape_spread(frame: &TextFrame) -> Option<paged_text::FrameS
             let c2 = apply_matrix(&m, to.left.0, to.left.1);
             let b = apply_matrix(&m, to.anchor.0, to.anchor.1);
             let steps = paged_text::cubic_steps_for_tolerance(a, c1, c2, b, FLATTEN_TOL_PT);
-            paged_text::flatten_cubic(a, c1, c2, b, steps, &mut pts);
+            paged_geom::flatten::flatten_cubic(a, c1, c2, b, steps, &mut pts);
         }
         // The closing edge re-appended the first anchor; drop the
         // duplicate so the contour is a clean closed ring.

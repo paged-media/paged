@@ -271,34 +271,6 @@ fn intersect_intervals(a: &[(f32, f32)], b: &[(f32, f32)]) -> Vec<(f32, f32)> {
     out
 }
 
-/// Flatten a cubic Bezier `p0 → (c1, c2) → p1` into a polyline,
-/// appending the *intermediate* and end points to `out` (the caller
-/// is responsible for having pushed `p0`). Uniform parameter sampling
-/// at `steps` subdivisions; `steps` is chosen by the caller from a
-/// flatness tolerance via [`cubic_steps_for_tolerance`].
-pub fn flatten_cubic(
-    p0: (f32, f32),
-    c1: (f32, f32),
-    c2: (f32, f32),
-    p1: (f32, f32),
-    steps: u32,
-    out: &mut Vec<(f32, f32)>,
-) {
-    let steps = steps.max(1);
-    for k in 1..=steps {
-        let t = k as f32 / steps as f32;
-        let mt = 1.0 - t;
-        let w0 = mt * mt * mt;
-        let w1 = 3.0 * mt * mt * t;
-        let w2 = 3.0 * mt * t * t;
-        let w3 = t * t * t;
-        out.push((
-            w0 * p0.0 + w1 * c1.0 + w2 * c2.0 + w3 * p1.0,
-            w0 * p0.1 + w1 * c1.1 + w2 * c2.1 + w3 * p1.1,
-        ));
-    }
-}
-
 /// Pick a subdivision count for a cubic Bezier so the flattened
 /// polyline stays within `tol_pt` of the true curve. Uses the standard
 /// control-polygon deviation bound: the maximum flattening error of an
@@ -337,7 +309,7 @@ mod tests {
     /// IDML stores ovals (four cardinal anchors + 0.5523 handles).
     fn circle_contour(cx: f32, cy: f32, r: f32) -> Contour {
         // Kappa for a quarter-circle cubic approximation.
-        const K: f32 = 0.552_284_8;
+        const K: f32 = paged_geom::KAPPA_F32;
         let kr = K * r;
         // Cardinal anchors: top, right, bottom, left (clockwise).
         let top = (cx, cy - r);
@@ -346,7 +318,7 @@ mod tests {
         let left = (cx - r, cy);
         // Handles (right = outgoing, left = incoming) per anchor.
         let mut pts = vec![top];
-        flatten_cubic(
+        paged_geom::flatten::flatten_cubic(
             top,
             (cx + kr, cy - r),
             (cx + r, cy - kr),
@@ -354,7 +326,7 @@ mod tests {
             16,
             &mut pts,
         );
-        flatten_cubic(
+        paged_geom::flatten::flatten_cubic(
             right,
             (cx + r, cy + kr),
             (cx + kr, cy + r),
@@ -362,7 +334,7 @@ mod tests {
             16,
             &mut pts,
         );
-        flatten_cubic(
+        paged_geom::flatten::flatten_cubic(
             bottom,
             (cx - kr, cy + r),
             (cx - r, cy + kr),
@@ -370,7 +342,7 @@ mod tests {
             16,
             &mut pts,
         );
-        flatten_cubic(
+        paged_geom::flatten::flatten_cubic(
             left,
             (cx - r, cy - kr),
             (cx - kr, cy - r),
