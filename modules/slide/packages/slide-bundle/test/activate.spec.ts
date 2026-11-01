@@ -27,7 +27,7 @@ import { ANIMATIONS_PANEL_ID } from "../src/anim/pane";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
-import { covers, waitFor } from "@paged-media/test-kit";
+import { covers, waitFor, inertSurface } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -70,7 +70,7 @@ function recordingHost(supports: (f: string) => boolean) {
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports,
-    contribute: {
+    contribute: inertSurface({
       importer(c: ImporterContribution): Disposable {
         importers.push(c);
         return noop();
@@ -83,14 +83,14 @@ function recordingHost(supports: (f: string) => boolean) {
         schemaPanels.push(c.id);
         return noop();
       },
-    },
+    }),
     nativeDocument: {
       async open(bytes: Uint8Array) {
         opened.push(bytes);
       },
     },
     // An empty document: the fingerprints the importer keeps are read here.
-    document: {
+    document: inertSurface({
       async mutate(m: MutationInput) {
         mutations.push(m);
         return { applied: true, createdId: null, pageIds: [] };
@@ -100,7 +100,7 @@ function recordingHost(supports: (f: string) => boolean) {
       collection: async () => [],
       frameChain: async () => [],
       storyContent: async () => null,
-    },
+    }),
     parts: {
       async write(path: string, bytes: Uint8Array) {
         parts.set(path, bytes);
@@ -205,12 +205,12 @@ describe("paged.slide importer", () => {
           "render.snapshot@1",
           "viewport.pages@1",
         ].includes(f),
-      contribute: {
+      contribute: inertSurface({
         panel(c: { id: string }) {
           panels.push(c);
           return noop;
         },
-      },
+      }),
       viewport: { activePage: () => null, onDidChangeActivePage: () => noop },
       document: {
         collection: async () => [],
@@ -243,15 +243,6 @@ describe("paged.slide importer", () => {
       undefined,
     ]);
     handle.dispose();
-
-    // Without the v70 doors the panels stay out.
-    const without: { id: string }[] = [];
-    activate({
-      ...host,
-      supports: (f: string) => f === "contribute.panel@1",
-      contribute: { panel: (c: { id: string }) => (without.push(c), noop) },
-    } as unknown as BundleHost);
-    expect(without).toEqual([]);
   });
 
   it("puts the panels in the rail once the open document is a deck", async () => {
@@ -264,13 +255,13 @@ describe("paged.slide importer", () => {
           "render.snapshot@1",
           "viewport.pages@1",
         ].includes(f),
-      contribute: {
+      contribute: inertSurface({
         panel(c: { id: string; rail?: boolean }) {
           if (live.has(c.id)) throw new Error(`${c.id} registered twice`);
           live.set(c.id, c);
           return { dispose: () => live.delete(c.id) };
         },
-      },
+      }),
       viewport: {
         activePage: () => null,
         onDidChangeActivePage: () => ({ dispose() {} }),

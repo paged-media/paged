@@ -36,7 +36,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "bun:test";
-import { waitFor } from "@paged-media/test-kit";
+import { waitFor, inertSurface } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -83,12 +83,6 @@ async function workbookWith(marker: string): Promise<Uint8Array> {
 /** An editor that opens documents one after another. Each document has its
  *  own container parts; the per-browser blob is shared by all of them. When
  *  `broadcasts`, every open is announced through `document.onDidOpen`. */
-/** A door that exists and does nothing (ADR 305): every member is a no-op
- *  returning a disposable, except the ones given. */
-function inertSurface(own: Record<string, unknown> = {}) {
-  const noop = () => ({ dispose() {} });
-  return new Proxy(own, { get: (t, k) => (k in t ? t[k as string] : noop) });
-}
 
 function fakeEditor(opts: { broadcasts?: boolean } = {}) {
   const opened = new Set<(e: unknown) => void>();

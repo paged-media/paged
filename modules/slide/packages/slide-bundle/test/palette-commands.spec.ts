@@ -27,7 +27,7 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
-import { covers } from "@paged-media/test-kit";
+import { covers, inertSurface } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -107,7 +107,7 @@ function recordingHost(
       warn: (m: string) => logs.push(m),
       error: (m: string) => logs.push(m),
     },
-    contribute: {
+    contribute: inertSurface({
       command(c: CommandContribution) {
         commands.set(c.id, c);
         return { dispose: () => commands.delete(c.id) };
@@ -120,16 +120,16 @@ function recordingHost(
         keys.push(c);
         return { dispose: () => keys.splice(keys.indexOf(c), 1) };
       },
-    },
+    }),
     text: { caret: () => caret },
     selection: { get: () => selected },
-    document: {
+    document: inertSurface({
       collection: async () => pageIds().map((selfId) => ({ selfId })),
       async mutate(m: MutationInput) {
         mutations.push(m);
         return { applied: true };
       },
-    },
+    }),
     objects: {
       async invoke(command: string, args: unknown) {
         invoked.push({ command, args });

@@ -26,7 +26,7 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
-import { waitFor } from "@paged-media/test-kit";
+import { waitFor, inertSurface } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -79,12 +79,12 @@ function fontHost(options: {
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: (f: string) => features.has(f),
-    contribute: {
+    contribute: inertSurface({
       importer(c: ImporterContribution): Disposable {
         importers.push(c);
         return { dispose() {} };
       },
-    },
+    }),
     assets: {
       async registerDocumentFont(
         bytes: Uint8Array,
@@ -107,7 +107,7 @@ function fontHost(options: {
         events.push("open");
       },
     },
-    document: {
+    document: inertSurface({
       async mutate() {
         return { applied: true, createdId: null, pageIds: [] };
       },
@@ -121,7 +121,7 @@ function fontHost(options: {
         opened.push(listener);
         return { dispose() {} };
       },
-    },
+    }),
     parts: {
       async read(path: string) {
         return parts.get(path) ?? null;

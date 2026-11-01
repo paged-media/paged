@@ -326,15 +326,13 @@ export function contributeShow(
     host.supports("text.caret@1") && host.text.caret() !== null;
 
   // ---- the presentation: one render, three roles.
-  if (host.supports("contribute.presentation@1")) {
-    handles.push(
-      host.contribute.presentation({
-        id: SHOW_PRESENTATION,
-        title: t(SHOW.title),
-        render: (el, ctx) => renderShow(el, ctx),
-      }),
-    );
-  }
+  handles.push(
+    host.contribute.presentation({
+      id: SHOW_PRESENTATION,
+      title: t(SHOW.title),
+      render: (el, ctx) => renderShow(el, ctx),
+    }),
+  );
 
   /** The slides as the show needs them, read when it starts. */
   let slides: ShowSlide[] = [];
@@ -493,56 +491,54 @@ export function contributeShow(
   }
 
   // ---- palette commands, keys, menu
-  if (host.supports("contribute.command@1")) {
-    const titles: Record<string, string> = {
-      [SHOW_CMD.fromBeginning]: t(SHOW.fromBeginning),
-      [SHOW_CMD.fromCurrent]: t(SHOW.fromCurrent),
-      [SHOW_CMD.presenterView]: t(SHOW.presenterView),
-      [SHOW_CMD.rehearseTimings]: t(SHOW.rehearseTimings),
-      [SHOW_CMD.slideSorter]: t(SHOW.slideSorter),
-    };
-    const canPresent = () =>
-      deckOpen() && host.supports("shell.present@1") && !presenting();
-    for (const id of Object.values(SHOW_CMD)) {
-      if (id === SHOW_CMD.slideSorter && !sorter) continue;
-      ids.add(id);
+  const titles: Record<string, string> = {
+    [SHOW_CMD.fromBeginning]: t(SHOW.fromBeginning),
+    [SHOW_CMD.fromCurrent]: t(SHOW.fromCurrent),
+    [SHOW_CMD.presenterView]: t(SHOW.presenterView),
+    [SHOW_CMD.rehearseTimings]: t(SHOW.rehearseTimings),
+    [SHOW_CMD.slideSorter]: t(SHOW.slideSorter),
+  };
+  const canPresent = () =>
+    deckOpen() && host.supports("shell.present@1") && !presenting();
+  for (const id of Object.values(SHOW_CMD)) {
+    if (id === SHOW_CMD.slideSorter && !sorter) continue;
+    ids.add(id);
+    handles.push(
+      host.contribute.command({
+        id,
+        title: titles[id],
+        category: "Slide",
+        when: () =>
+          id === SHOW_CMD.slideSorter
+            ? deckOpen() && host.supports("shell.views@1")
+            : canPresent(),
+        handler: async () => {
+          try {
+            await run(id);
+          } catch (err) {
+            host.log.warn(
+              `paged.slide ${id}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        },
+      }),
+    );
+  }
+  if (host.supports("contribute.keybinding@1")) {
+    for (const [key, command] of SHOW_KEYBINDINGS) {
+      if (!ids.has(command)) continue;
       handles.push(
-        host.contribute.command({
-          id,
-          title: titles[id],
-          category: "Slide",
-          when: () =>
-            id === SHOW_CMD.slideSorter
-              ? deckOpen() && host.supports("shell.views@1")
-              : canPresent(),
-          handler: async () => {
-            try {
-              await run(id);
-            } catch (err) {
-              host.log.warn(
-                `paged.slide ${id}: ${err instanceof Error ? err.message : String(err)}`,
-              );
-            }
-          },
+        host.contribute.keybinding({
+          key,
+          command,
+          when: () => !caretActive() && canPresent(),
         }),
       );
     }
-    if (host.supports("contribute.keybinding@1")) {
-      for (const [key, command] of SHOW_KEYBINDINGS) {
-        if (!ids.has(command)) continue;
-        handles.push(
-          host.contribute.keybinding({
-            key,
-            command,
-            when: () => !caretActive() && canPresent(),
-          }),
-        );
-      }
-    }
-    for (const [path, command, group, order] of SHOW_MENU) {
-      if (!ids.has(command)) continue;
-      handles.push(host.contribute.menu({ path, command, group, order }));
-    }
+  }
+  for (const [path, command, group, order] of SHOW_MENU) {
+    if (!ids.has(command)) continue;
+    handles.push(host.contribute.menu({ path, command, group, order }));
   }
 
   return {

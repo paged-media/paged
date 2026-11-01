@@ -1,3 +1,4 @@
+import { inertSurface } from "@paged-media/test-kit";
 /*
  * This file is part of paged (https://paged.media).
  *
@@ -299,13 +300,6 @@ describe("sheet_plugin_swatch_provider: the structural write", () => {
     expect(answer.kind).toBe("decline");
   });
 });
-
-/** A door that exists and does nothing: every member is a function returning
- *  a disposable-shaped no-op (ADR 305: a door is always present). */
-function inertSurface(own: Record<string, unknown> = {}) {
-  const noop = () => ({ dispose() {} });
-  return new Proxy(own, { get: (t, k) => (k in t ? t[k as string] : noop) });
-}
 
 describe("sheet_plugin_swatch_provider: the honest door", () => {
   it("activate() registers the provider for the `sheet` context when both hold", () => {

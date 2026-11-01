@@ -471,51 +471,48 @@ export function contributeAnimations(
     }
   }
 
-  if (host.supports("contribute.command@1")) {
-    const deckSlide = () => (store.isDeck() ? store.activeSlide() : null);
-    const titles: Record<string, string> = {
-      [ANIM_CMD.pane]: t(ANIM.animationPane),
-      [ANIM_CMD.preview]: t(ANIM.previewAnimations),
-      [ANIM_CMD.painter]: t(ANIM.animationPainter),
-    };
-    const run: Record<string, () => void> = {
-      [ANIM_CMD.pane]: () => {
-        if (host.supports("shell.openPanel@1"))
-          host.shell.openPanel(ANIMATIONS_PANEL_ID);
-      },
-      [ANIM_CMD.preview]: () => {
-        const s = deckSlide();
-        if (s) startPreview(s.pageId);
-      },
-      [ANIM_CMD.painter]: () => {
-        const s = deckSlide();
-        const from = host.selection.get()[0];
-        if (painter) painter = null;
-        else if (s && from) arm(s.pageId, from);
-        else log("select a shape with animations first");
-      },
-    };
-    const when: Record<string, () => boolean> = {
-      [ANIM_CMD.pane]: () => !!deckSlide() && opts.panel,
-      [ANIM_CMD.preview]: () => !!deckSlide()?.state.timing && opts.overlay,
-      [ANIM_CMD.painter]: () =>
-        !!deckSlide() && host.selection.get().length > 0,
-    };
-    for (const id of Object.values(ANIM_CMD)) {
-      ids.add(id);
-      handles.push(
-        host.contribute.command({
-          id,
-          title: titles[id],
-          category: "Slide",
-          when: when[id],
-          handler: () => run[id](),
-        }),
-      );
-    }
-    for (const [path, command, group, order] of ANIM_MENU)
-      handles.push(host.contribute.menu({ path, command, group, order }));
+  const deckSlide = () => (store.isDeck() ? store.activeSlide() : null);
+  const titles: Record<string, string> = {
+    [ANIM_CMD.pane]: t(ANIM.animationPane),
+    [ANIM_CMD.preview]: t(ANIM.previewAnimations),
+    [ANIM_CMD.painter]: t(ANIM.animationPainter),
+  };
+  const run: Record<string, () => void> = {
+    [ANIM_CMD.pane]: () => {
+      if (host.supports("shell.openPanel@1"))
+        host.shell.openPanel(ANIMATIONS_PANEL_ID);
+    },
+    [ANIM_CMD.preview]: () => {
+      const s = deckSlide();
+      if (s) startPreview(s.pageId);
+    },
+    [ANIM_CMD.painter]: () => {
+      const s = deckSlide();
+      const from = host.selection.get()[0];
+      if (painter) painter = null;
+      else if (s && from) arm(s.pageId, from);
+      else log("select a shape with animations first");
+    },
+  };
+  const when: Record<string, () => boolean> = {
+    [ANIM_CMD.pane]: () => !!deckSlide() && opts.panel,
+    [ANIM_CMD.preview]: () => !!deckSlide()?.state.timing && opts.overlay,
+    [ANIM_CMD.painter]: () => !!deckSlide() && host.selection.get().length > 0,
+  };
+  for (const id of Object.values(ANIM_CMD)) {
+    ids.add(id);
+    handles.push(
+      host.contribute.command({
+        id,
+        title: titles[id],
+        category: "Slide",
+        when: when[id],
+        handler: () => run[id](),
+      }),
+    );
   }
+  for (const [path, command, group, order] of ANIM_MENU)
+    handles.push(host.contribute.menu({ path, command, group, order }));
 
   return {
     binding: { authoring, store, preview: startPreview },

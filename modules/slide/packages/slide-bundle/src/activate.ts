@@ -476,19 +476,17 @@ export function activate(host: BundleHost): BundleHandle {
   }
   reload();
 
-  if (host.supports("contribute.importer@1")) {
-    disposers.push(
-      host.contribute.importer({
-        id: IMPORTER_ID,
-        title: t(DECK.format),
-        extensions: [".pptx", ".ppsx", ".potx"],
-        mimeTypes: [PPTX_MIME],
-        import: async ({ name, bytes }) => {
-          await openDeck(name, bytes);
-        },
-      }).dispose,
-    );
-  }
+  disposers.push(
+    host.contribute.importer({
+      id: IMPORTER_ID,
+      title: t(DECK.format),
+      extensions: [".pptx", ".ppsx", ".potx"],
+      mimeTypes: [PPTX_MIME],
+      import: async ({ name, bytes }) => {
+        await openDeck(name, bytes);
+      },
+    }).dispose,
+  );
 
   // The deck's own name (the document label's `deck.name`): an opened deck
   // document can have no name, since the native open door carries none.
@@ -649,12 +647,10 @@ export function activate(host: BundleHost): BundleHandle {
   // canvas.
   // The follow-up write needs the amend door; without it a redraw would be
   // an undo step of its own, so nothing follows.
-  if (host.supports("document.mutate.amend@1")) {
-    const follower = new LiveFollower(host, slideEngine, () =>
-      store ? store.isDeck() : true,
-    );
-    disposers.push(() => follower.dispose());
-  }
+  const follower = new LiveFollower(host, slideEngine, () =>
+    store ? store.isDeck() : true,
+  );
+  disposers.push(() => follower.dispose());
   if (host.supports("contribute.overlay@1") && renders(host, "overlay")) {
     const handles = new HandlesModel(host, slideEngine);
     const overlay = host.contribute.overlay(adjustHandlesOverlay(handles));
@@ -664,39 +660,32 @@ export function activate(host: BundleHost): BundleHandle {
     );
   }
 
-  if (host.supports("contribute.command@1")) {
-    const commands = contributeSlideCommands(host, {
-      store,
-      objectModel: model !== null,
-      openDeck,
-      exportDeck,
-      scopedKeys: deckContext,
-      ...(comments && host.supports("shell.openPanel@1")
-        ? { openComments: () => host.shell.openPanel(COMMENTS_PANEL_ID) }
-        : {}),
-      shapesPanel: richPanels ? SHAPES_PANEL_ID : undefined,
-    });
-    const menu = contributeMenu(host, (id) => commands.ids.has(id));
-    const contentCommands = contributeContentCommands(
-      host,
-      content,
-      clipboard,
-      {
-        deckOpen: () => (store ? store.isDeck() : false),
-        scopedKeys: deckContext,
-        deckContext: DECK_CONTEXT,
-      },
-    );
-    const designCommands = contributeDesignCommands(host, designDeps, () =>
-      store ? store.isDeck() : false,
-    );
-    disposers.push(
-      () => commands.dispose(),
-      () => menu.dispose(),
-      () => contentCommands.dispose(),
-      () => designCommands.dispose(),
-    );
-  }
+  const commands = contributeSlideCommands(host, {
+    store,
+    objectModel: model !== null,
+    openDeck,
+    exportDeck,
+    scopedKeys: deckContext,
+    ...(comments && host.supports("shell.openPanel@1")
+      ? { openComments: () => host.shell.openPanel(COMMENTS_PANEL_ID) }
+      : {}),
+    shapesPanel: richPanels ? SHAPES_PANEL_ID : undefined,
+  });
+  const menu = contributeMenu(host, (id) => commands.ids.has(id));
+  const contentCommands = contributeContentCommands(host, content, clipboard, {
+    deckOpen: () => (store ? store.isDeck() : false),
+    scopedKeys: deckContext,
+    deckContext: DECK_CONTEXT,
+  });
+  const designCommands = contributeDesignCommands(host, designDeps, () =>
+    store ? store.isDeck() : false,
+  );
+  disposers.push(
+    () => commands.dispose(),
+    () => menu.dispose(),
+    () => contentCommands.dispose(),
+    () => designCommands.dispose(),
+  );
 
   // Slide ADR 716 — Slide Show, Presenter View, Rehearse Timings (one
   // presentation, extensions ADR 345) and View ▸ Slide Sorter (a module

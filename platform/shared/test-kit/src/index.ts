@@ -25,6 +25,7 @@
 export { waitFor, type FakeClock, type WaitForOptions } from "./wait-for.ts";
 export { stubGlobal, unstubAllGlobals } from "./globals.ts";
 export { importActual } from "./modules.ts";
+export { inertSurface } from "./inert-surface.ts";
 export { advanceTimersByTimeAsync, settle, type TimerClock } from "./timers.ts";
 
 // The surface-conformance marker (apps/editor/docs/reference/

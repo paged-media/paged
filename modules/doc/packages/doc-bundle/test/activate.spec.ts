@@ -1,3 +1,4 @@
+import { inertSurface } from "@paged-media/test-kit";
 /*
  * This file is part of paged (https://paged.media).
  *
@@ -48,12 +49,6 @@ const PANEL_ID = "media.paged.doc.panel.outline";
  * dependency to read a contribution back would be the wrong trade.
  * Same shape paged.sheet's activation spec uses.
  */
-/** An object whose every other member is a door that does nothing. */
-function inert(own: Record<string, unknown>) {
-  const noop = (): Disposable => ({ dispose() {} });
-  return new Proxy(own, { get: (t, k) => (k in t ? t[k as string] : noop) });
-}
-
 function fakeHost() {
   const editContexts: EditContextContribution[] = [];
   const openedPanels: string[] = [];
@@ -69,7 +64,7 @@ function fakeHost() {
     // Every contribution door exists (ADR 305); the ones this spec does not
     // inspect are inert.
     document: { onDidChange: noop, onDidOpen: noop, onWillSave: noop },
-    contribute: inert({
+    contribute: inertSurface({
       panel: noop,
       command: noop,
       importer: noop,
