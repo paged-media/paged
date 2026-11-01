@@ -182,8 +182,16 @@ Rides protocol v78 (added before its first consumer sync; governance rule 4).
   arguments (for example `paged invoke doc.paged insertCommentThread '{"anchor":{"kind":"page",
   "page":"u1","at":[40,50]},"comment":{"author":"Ann","text":"Check"}}'`); `paged export
   --comments` puts them in a PDF. A separate `paged comments` verb would add nothing these do not.
+- **Canvas pins** (editor): a pin with the author's initials at each non-text thread's place on its
+  page, faint when resolved; a click focuses the thread and opens the Comments panel on it. Text
+  comments keep the margin band.
+- **`comments@1` is deferred.** Every operation and read it would wrap is reachable today through
+  `document.collection("comments")` and `document.mutate` with the generated wire types, which is
+  what paged.slide and the host panel use. The door becomes worth its contract and harness cost when
+  a module needs to *contribute* to comments (sheet resolving `Sheet1!B3` to the cell's rectangle),
+  not before.
 - Not yet: the format readers and writers for Word (people, mentions), Excel (threaded comments,
-  editable), IDML notes and PDF import; canvas pins for non-text anchors; the `comments@1` door.
+  editable) and IDML notes; reading annotations back from a PDF (`pdf-import`).
 
 ## Verification
 

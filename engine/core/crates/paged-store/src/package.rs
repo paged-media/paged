@@ -119,6 +119,45 @@ fn spread(bounds: &str) -> String {
     ))
 }
 
+/// The most a container entry may unpack to: a bound against a zip bomb.
+const MAX_ENTRY_BYTES: u64 = 2 << 30;
+
+/// Read a `.paged` container's native document: the model part and the image
+/// parts it names. The reverse of [`wrap_document`]; the one reader, so a
+/// module that needs the model (an exporter that diffs against it) does not
+/// spell the part paths out. `Err` says why the container does not read.
+pub fn read_document(paged: &[u8]) -> Result<Document, String> {
+    use std::io::Read;
+
+    let mut archive = zip::ZipArchive::new(Cursor::new(paged)).map_err(|e| e.to_string())?;
+    let mut model = None;
+    let mut blobs = std::collections::HashMap::new();
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i).map_err(|e| e.to_string())?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = entry.name().map_err(|e| e.to_string())?.into_owned();
+        let is_model = name == crate::DOCUMENT_PGM_PATH;
+        if !is_model && crate::blob_name_of(&name).is_none() {
+            continue;
+        }
+        let mut bytes = Vec::new();
+        entry
+            .take(MAX_ENTRY_BYTES)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if is_model {
+            model = Some(bytes);
+        } else if let Some(blob) = crate::blob_name_of(&name) {
+            blobs.insert(blob.to_string(), bytes);
+        }
+    }
+    let model = model.ok_or("the document has no native model part")?;
+    crate::from_parts(&model, blobs)
+        .ok_or_else(|| "the native model part does not read".to_string())
+}
+
 /// Wrap `doc` in the `.paged` container. `name` is the document name the
 /// fallback designmap carries; `fallback_width_pt` x `fallback_height_pt`
 /// size its one fallback page.

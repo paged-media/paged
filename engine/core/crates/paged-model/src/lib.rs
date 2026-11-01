@@ -4473,7 +4473,30 @@ fn hebrew_letters(n: u32) -> String {
 
 /// Roman numerals as InDesign writes them: up to 4999 with as many M as
 /// thousands (4000 → MMMM), above it the thousands in Roman followed by
-/// M (5001 → VMI, 10000 → XM).
+/// M (5001 → VMI, 10000 → XM). Upper case, or lower with `lower`; 0 is
+/// the empty string. The one implementation: page numbers, list numbers
+/// and footnote numbers all call it.
+pub fn roman(n: u32, lower: bool) -> String {
+    let r = to_roman(n);
+    if lower {
+        r.to_lowercase()
+    } else {
+        r
+    }
+}
+
+/// Spreadsheet-style alphabetic numbering, upper or (with `lower`) lower
+/// case: 1→A, 26→Z, 27→AA (InDesign: 199 → GQ, 703 → AAA); 0 is the empty
+/// string.
+pub fn alpha(n: u32, lower: bool) -> String {
+    let a = to_alpha(n);
+    if lower {
+        a.to_lowercase()
+    } else {
+        a
+    }
+}
+
 fn to_roman(n: u32) -> String {
     const TABLE: [(u32, &str); 13] = [
         (1000, "M"),

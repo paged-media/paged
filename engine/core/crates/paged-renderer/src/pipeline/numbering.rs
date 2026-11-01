@@ -463,54 +463,13 @@ fn to_hanzi(n: u32, formal: bool) -> String {
     out
 }
 
-/// Roman numeral conversion. `n` must be ≥ 1; `n == 0` returns
-/// an empty string (lists start at 1, so this is a sanity guard).
-fn to_roman(mut n: u32, lower: bool) -> String {
-    if n == 0 {
-        return String::new();
-    }
-    const MAP: &[(u32, &str)] = &[
-        (1000, "M"),
-        (900, "CM"),
-        (500, "D"),
-        (400, "CD"),
-        (100, "C"),
-        (90, "XC"),
-        (50, "L"),
-        (40, "XL"),
-        (10, "X"),
-        (9, "IX"),
-        (5, "V"),
-        (4, "IV"),
-        (1, "I"),
-    ];
-    let mut out = String::new();
-    for &(value, symbol) in MAP {
-        while n >= value {
-            out.push_str(symbol);
-            n -= value;
-        }
-    }
-    if lower {
-        out.make_ascii_lowercase();
-    }
-    out
+/// Roman numerals: the model's one implementation (InDesign's, past 3999 too).
+fn to_roman(n: u32, lower: bool) -> String {
+    paged_model::roman(n, lower)
 }
 
-/// Spreadsheet-column-style alpha encoding: 1→A, 2→B, …, 26→Z,
-/// 27→AA, 28→AB, …, 702→ZZ, 703→AAA. Lowercase mode shifts to
-/// 'a'..'z'.
-fn to_alpha(mut n: u32, lower: bool) -> String {
-    if n == 0 {
-        return String::new();
-    }
-    let base_char = if lower { b'a' } else { b'A' };
-    let mut chars = Vec::new();
-    while n > 0 {
-        let rem = ((n - 1) % 26) as u8;
-        chars.push(base_char + rem);
-        n = (n - 1) / 26;
-    }
-    chars.reverse();
-    String::from_utf8(chars).expect("ascii letters are valid utf-8")
+/// Spreadsheet-column-style alpha encoding (1→A … 26→Z, 27→AA): the
+/// model's one implementation.
+fn to_alpha(n: u32, lower: bool) -> String {
+    paged_model::alpha(n, lower)
 }

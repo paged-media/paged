@@ -28,7 +28,7 @@
 //! still the shapes of its source slide; an item without a key was made in
 //! the editor.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use paged_model::{FrameRef, Group, Paragraph, Spread};
 use paged_scene::Document;
@@ -37,26 +37,9 @@ use serde_json::Value;
 /// The plugin-metadata key slide labels live under.
 pub const LABEL_KEY: &str = "x-paged:media.paged.slide";
 
-/// The model part of a `.paged` container.
-const MODEL_PART: &str = "paged/core/model/document.pgm";
-
 /// Read a `.paged` container's native document.
 pub fn read(paged: &[u8]) -> Result<Document, String> {
-    let entries = paged_ooxml::opc::read_zip(paged, 2 << 30).map_err(|e| e.to_string())?;
-    let mut model = None;
-    let mut blobs = HashMap::new();
-    for e in entries {
-        if let paged_ooxml::opc::ZipEntry::File { name, bytes } = e {
-            if name == MODEL_PART {
-                model = Some(bytes);
-            } else if let Some(b) = paged_store::blob_name_of(&name) {
-                blobs.insert(b.to_string(), bytes);
-            }
-        }
-    }
-    let model = model.ok_or("the document has no native model part")?;
-    paged_store::from_parts(&model, blobs)
-        .ok_or_else(|| "the native model part does not read".into())
+    paged_store::package::read_document(paged)
 }
 
 /// A `.paged` container's media parts (`paged/core/media/…`, engine ADR

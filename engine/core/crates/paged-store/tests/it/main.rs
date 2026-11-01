@@ -11,4 +11,5 @@ mod media;
 mod mesh_fill;
 mod paint_v2;
 mod pattern_paint;
+mod read_document;
 mod round_trip_render;

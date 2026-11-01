@@ -4,5 +4,6 @@
 //! its own process. A new test file goes here and gets a `mod` line below.
 
 mod constructors;
+mod numbering;
 mod object_style_options;
 mod read_gap_fields;
