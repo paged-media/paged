@@ -2820,6 +2820,8 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
     paged_model::live_shape::label::lift(&mut out);
     // Engine ADR 1037 — an image frame's filter stack rides a label.
     paged_model::image_adjust::adopt_labels(&mut out);
+    // Engine ADR 1027 — a movie or sound frame's medium rides a label.
+    paged_model::media::adopt_labels(&mut out);
     restore_mesh_fills(&mut out);
     Ok((out, provenance))
 }

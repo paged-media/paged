@@ -51,6 +51,12 @@ export function setMlService(scope: EditorScope, service: MlService | null) {
   for (const l of [...slot.listeners]) l();
 }
 
+/** The scope's ML service now, or null: for a command handler, which reads
+ *  it when it runs (the app sets it in another effect than the commands). */
+export function mlServiceOf(scope: EditorScope): MlService | null {
+  return scope.get(ML_SERVICE).service;
+}
+
 /** The scope's ML service, or null before the app sets one. */
 export function useMlService(): MlService | null {
   const slot = useScoped(ML_SERVICE);

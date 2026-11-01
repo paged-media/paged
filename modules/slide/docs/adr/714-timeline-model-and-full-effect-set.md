@@ -97,3 +97,38 @@ needs the presets as behaviour templates.
 - The MP4 export (ADR 720) plays the same player frame by frame through the offline renderer's
   `slide(frame, layers)` (Canvas2D): each click step when the one before has finished, within
   the slide's time; builds that run past it are cut.
+
+## Amendment 2026-10-30 — motion paths edited on the canvas
+
+The last item of wave 5: a motion path is shown and edited on the slide.
+
+- **What is shown.** Picking an effect in the Animations pane shows its motion path over the
+  canvas (`anim/motion-path.tsx`, an overlay contribution, as the adjust handles of ADR 717
+  are), drawn as PowerPoint draws it:
+  - the dotted path from where the shape stands (its box's centre is the path's `0 0`, in
+    slide fractions);
+  - a green start marker and a red end marker;
+  - a square anchor at each end point, and a round handle with its arm at each curve control
+    point.
+- **The drag.** A drag edits the path as paged.draw's Direct Selection edits a path: an
+  anchor moves with its two handles, and a handle bends its curve alone. On release, the path
+  is written into the slide's timing in one undo step (the `path` edit), and export writes it
+  as `p:animMotion path`.
+- **Why the overlay, not paged.draw's tools.** The path is the timing's, not a page item, so
+  the pen and direct-selection tools of paged.draw cannot reach it through the contract's
+  doors (extensions ADRs 337/338 address page items). The overlay draws and hit-tests the
+  handles, and the slide engine owns the path's grammar:
+  - `slide_anim::path::segments` and `write` (wasm ops `pathSegments`, `pathWrite`) read and
+    write PowerPoint's `M`/`L`/`C`/`Z`/`E` syntax, with relative commands made absolute;
+  - the player reads what they write as it read the original.
+- **Path lock and auto-reverse.** `EffectInfo` carries the effect's `path` and `pathLocked`
+  (`pathEditMode="fixed"`). The pane's Effect Options show Auto-reverse (`autoRev`, the
+  `rewind` timing edit) for every effect, and Lock the path for a motion path; the `path` edit
+  sets `pathEditMode`. A path edit clears `ptsTypes`, which names the old path's points.
+- **Not built.** Adding or deleting points. A locked path is not kept in place when its shape
+  moves in the editor (PowerPoint rewrites it; here it moves with the shape, as an unlocked
+  one does).
+
+Evidence: `slide-anim/src/path.rs` (`segments_read_back_from_what_they_write`),
+`slide-anim/src/author.rs` (`a_motion_path_edit_writes_the_path_and_its_lock`), the bundle's
+`test/anim/motion-path.spec.ts`, and the `slide-motion-path` journey.

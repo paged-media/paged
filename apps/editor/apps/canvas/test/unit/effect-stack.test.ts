@@ -107,9 +107,13 @@ describe("effect kinds come from core's catalog [effects-transparency.effect-sta
       else expect(object).not.toContain(k.kind);
   });
 
-  test("every kind core describes is in exactly one Effect menu group", () => {
+  test("every kind core describes is in exactly one Effect menu group, the stroke styles aside", () => {
     const listed = effectMenu().flatMap((g) => g.kinds.map((k) => k.kind));
-    expect(listed.sort()).toEqual(CORE_EFFECT_KINDS.map((k) => k.kind).sort());
+    expect(listed.sort()).toEqual(
+      CORE_EFFECT_KINDS.filter((k) => !k.strokeStyle)
+        .map((k) => k.kind)
+        .sort(),
+    );
     expect(effectMenu()[0]!.category).toBe("stylize");
   });
 

@@ -74,6 +74,9 @@ pub struct Built {
     pub stories: BTreeMap<String, String>,
     pub elements: BTreeMap<String, (&'static str, String)>,
     pub diagnostics: Vec<String>,
+    /// The media the deck's video and audio name (slide ADR 718), by
+    /// container path (`paged/core/media/…`, engine ADR 1027).
+    pub media: BTreeMap<String, Vec<u8>>,
 }
 
 /// Where PowerPoint puts a text frame's first baseline, in pt below the top
@@ -789,6 +792,10 @@ struct Builder<'a> {
     /// and each one's definition.
     object_styles: Vec<(String, ObjectStyleDef)>,
     diagnostics: Vec<String>,
+    /// The media parts the video and audio pictures name, by container path.
+    media: BTreeMap<String, Vec<u8>>,
+    /// How the slide being built plays its media, by `spid` (slide ADR 718).
+    media_timing: BTreeMap<String, pptx_core::av::MediaTiming>,
 }
 
 /// What makes two table styles one: name, region cell styles, alternating
@@ -947,7 +954,28 @@ impl Builder<'_> {
                     .cloned()
                     .collect();
                 if has_fill || stroke.is_some() {
-                    let fc = self.paint(fill);
+                    // A pattern fill is drawn as a picture of its tiles in
+                    // the outline (the engine on main has no pattern paint,
+                    // ADR 723); the deck's `a:pattFill` is written back.
+                    let tile = match fill {
+                        Paint::Pattern(pp) => {
+                            // The item's opacity already carries an alpha
+                            // both colours share (slide-resolve).
+                            let op = it.opacity.clamp(1e-3, 1.0);
+                            let pp = PatternPaint {
+                                fg_alpha: (pp.fg_alpha / op).min(1.0),
+                                bg_alpha: (pp.bg_alpha / op).min(1.0),
+                                ..pp.clone()
+                            };
+                            self.dml.pattern_tile(&pp, slide_box(it))
+                        }
+                        _ => None,
+                    };
+                    let fc = if tile.is_some() {
+                        NONE_SWATCH.to_string()
+                    } else {
+                        self.paint(fill)
+                    };
                     let sf = self.stroke(stroke.as_ref());
                     let gp = box_placement(fill, it.w, it.h);
                     // Item ids are `u` + hex, so derived ids take suffixes
@@ -981,6 +1009,16 @@ impl Builder<'_> {
                         label,
                         os.as_deref(),
                     );
+                    if let Some(t) = tile {
+                        if let Some(poly) = sb
+                            .spread
+                            .polygons
+                            .last_mut()
+                            .filter(|p| p.self_id.as_deref() == Some(pid.as_str()))
+                        {
+                            place_tile(poly, &t, &it.transform, &it.id);
+                        }
+                    }
                     let details: Vec<SubPath> = outline
                         .iter()
                         .filter(|s| !s.filled && s.stroked)
@@ -1014,6 +1052,7 @@ impl Builder<'_> {
                 image_part,
                 crop,
                 image_effects,
+                media,
             } => {
                 // Engine ADR 1037 — the blip's picture effects the engine
                 // models ride the frame's filter stack; the rest are reported.
@@ -1092,12 +1131,80 @@ impl Builder<'_> {
                     rect.subpath_starts = path.starts;
                     rect.subpath_open = path.open;
                 }
+                // Slide ADR 718: a video or audio picture is a movie or
+                // sound frame; the picture is its poster.
+                if let Some(m) = media {
+                    rect.media = self.media_item(m, it.meta.shape_id);
+                }
                 let idx = sb.spread.rectangles.len();
                 sb.spread.rectangles.push(rect);
                 sb.register(FrameRef::Rectangle(idx));
             }
             ItemKind::Table(t) => self.table(sb, it, t, label),
         }
+    }
+
+    /// A video or audio picture's medium as the engine's (engine ADR 1027):
+    /// an embedded medium becomes a media part of the document, a linked
+    /// one stays a link; trim and fade from `p14:media`, volume, loop,
+    /// hide and start from the slide's timing. `None` (and a diagnostic)
+    /// when the medium is missing.
+    fn media_item(&mut self, m: &pptx_core::PicMedia, spid: u32) -> Option<paged_model::MediaItem> {
+        use paged_model::{MediaItem, MediaKind, MediaPlay, MediaSource};
+        let kind = match m.kind {
+            pptx_core::PicMediaKind::Video => MediaKind::Movie,
+            pptx_core::PicMediaKind::Audio => MediaKind::Sound,
+        };
+        let file = m.part.as_deref().or(m.link.as_deref()).unwrap_or("");
+        let ext = file
+            .rsplit('/')
+            .next()
+            .and_then(|f| f.rsplit_once('.').map(|(_, e)| e))
+            .unwrap_or("");
+        let source = if let Some(part) = &m.part {
+            let Some(bytes) = (self.images)(part) else {
+                self.diagnostics
+                    .push(format!("{part}: the medium is missing from the deck"));
+                return None;
+            };
+            let path = paged_store::media_part_path(&bytes, ext);
+            self.media.entry(path.clone()).or_insert(bytes);
+            MediaSource::Part { path }
+        } else if let Some(uri) = &m.link {
+            MediaSource::Link { uri: uri.clone() }
+        } else {
+            return None;
+        };
+        let timing = self.media_timing.get(&spid.to_string());
+        let ms = |v: Option<f64>| v.map(|v| v.max(0.0).round() as u32).unwrap_or(0);
+        let mut out = MediaItem {
+            mime: pptx_core::av::mime_for_extension(ext, m.kind).map(str::to_string),
+            name: m
+                .name
+                .clone()
+                .filter(|n| !n.is_empty())
+                .or_else(|| file.rsplit('/').next().map(str::to_string)),
+            trim_start_ms: ms(m.trim_start_ms),
+            trim_end_ms: ms(m.trim_end_ms),
+            fade_in_ms: ms(m.fade_in_ms),
+            fade_out_ms: ms(m.fade_out_ms),
+            ..MediaItem::new(kind, source)
+        };
+        if let Some(t) = timing {
+            if t.muted {
+                out.volume = 0.0;
+            } else if let Some(v) = t.volume {
+                out.volume = v as f32;
+            }
+            out.looped = t.looped;
+            out.hide_while_not_playing = t.hide_while_not_playing;
+            out.full_screen = t.full_screen;
+            out.play = match t.start {
+                Some(pptx_core::av::MediaStart::Auto) => MediaPlay::Auto,
+                _ => MediaPlay::OnClick,
+            };
+        }
+        out.is_valid().then_some(out)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1719,6 +1826,63 @@ impl Builder<'_> {
 
 /// A top-level slide item's shape key: its `cNvPr` id, or `bg` for the
 /// slide's background (the one item with no shape behind it).
+/// The box an item covers on its slide, `[left, top, right, bottom]` pt:
+/// its local box `(0, 0)`–`(w, h)` through its transform.
+fn slide_box(it: &Item) -> [f64; 4] {
+    let m = &it.transform;
+    let at = |x: f64, y: f64| (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]);
+    let pts = [at(0.0, 0.0), at(it.w, 0.0), at(0.0, it.h), at(it.w, it.h)];
+    let xs = pts.iter().map(|p| p.0);
+    let ys = pts.iter().map(|p| p.1);
+    [
+        xs.clone().fold(f64::INFINITY, f64::min),
+        ys.clone().fold(f64::INFINITY, f64::min),
+        xs.fold(f64::NEG_INFINITY, f64::max),
+        ys.fold(f64::NEG_INFINITY, f64::max),
+    ]
+}
+
+/// Place a pattern's tile picture in `poly`: the picture's pixels on the
+/// slide's grid, mapped into the item's inner space through the inverse
+/// of its transform, so the pattern stays upright as PowerPoint draws it.
+fn place_tile(
+    poly: &mut paged_model::Polygon,
+    t: &dml_native::pattern::PatternTile,
+    transform: &[f64; 6],
+    id: &str,
+) {
+    let [a, b, c, d, e, f] = *transform;
+    let det = a * d - b * c;
+    if det.abs() < 1e-12 {
+        return;
+    }
+    // inv(T) ∘ S, S the pixels' scale and origin on the slide.
+    let inv = [
+        d / det,
+        -b / det,
+        -c / det,
+        a / det,
+        (c * f - d * e) / det,
+        (b * e - a * f) / det,
+    ];
+    let k = 1.0 / t.px_per_pt;
+    let s = [k, 0.0, 0.0, k, t.origin[0], t.origin[1]];
+    let m = [
+        inv[0] * s[0] + inv[2] * s[1],
+        inv[1] * s[0] + inv[3] * s[1],
+        inv[0] * s[2] + inv[2] * s[3],
+        inv[1] * s[2] + inv[3] * s[3],
+        inv[0] * s[4] + inv[2] * s[5] + inv[4],
+        inv[1] * s[4] + inv[3] * s[5] + inv[5],
+    ];
+    poly.has_image_element = true;
+    poly.image_link = Some(format!("file:pattern-{id}.png"));
+    poly.image_item_transform = Some(matrix(&m));
+    poly.image_bytes = Some(pptx_core::transcode::png_indexed(
+        t.w, t.h, &t.palette, &t.indices,
+    ));
+}
+
 pub fn slide_key(it: &Item) -> String {
     if it.meta.shape_id == 0 && it.meta.order == 0 {
         "bg".to_string()
@@ -1748,6 +1912,8 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         item_links: Vec::new(),
         object_styles: Vec::new(),
         diagnostics: Vec::new(),
+        media: BTreeMap::new(),
+        media_timing: BTreeMap::new(),
     };
     const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
     let bounds = Bounds {
@@ -1850,6 +2016,11 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         });
         // The slide's notes, hidden flag and transition ride its page as
         // plugin metadata, so they move, duplicate and undo with it.
+        w.media_timing = s
+            .timing
+            .as_ref()
+            .map(pptx_core::av::media_timing)
+            .unwrap_or_default();
         for it in &s.items {
             w.item(&mut sb, it, Some(&format!("{}#{}", s.part, slide_key(it))));
         }
@@ -2169,6 +2340,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             d.extend(w.dml.take_losses());
             d
         },
+        media: w.media,
     }
 }
 
@@ -2180,9 +2352,14 @@ pub fn write(
     name: &str,
 ) -> Result<Written, String> {
     let built = build(deck, images, name);
-    let paged =
-        paged_store::package::wrap_document(&built.document, name, n(deck.width), n(deck.height))
-            .map_err(|e| format!("package the deck: {e}"))?;
+    let paged = paged_store::package::wrap_document_with_parts(
+        &built.document,
+        name,
+        n(deck.width),
+        n(deck.height),
+        &built.media,
+    )
+    .map_err(|e| format!("package the deck: {e}"))?;
     Ok(Written {
         paged,
         stories: built.stories,

@@ -1667,6 +1667,15 @@ pub enum PropertyPath {
     /// Paint-only (`frame_style`).
     FrameImageAdjustments,
 
+    // ---- engine ADR 1027 — movie and sound items ------------------------
+    /// The medium a Rectangle is a movie or a sound of: `Value::Media`
+    /// (`Some` sets it whole, `None` makes the frame an ordinary one again).
+    /// The frame's placed picture is the poster, all the engine draws; the
+    /// medium is a container part (`paged/…`) or a link, never bytes in the
+    /// model. IDML has no such construct here: the export keeps it in a
+    /// label and reports it. Paint-only (`frame_style`).
+    FrameMedia,
+
     // ---- engine ADR 1018 — Word's character and paragraph additions --
     /// A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a
     /// swatch. `ColorRef(None)` clears the run's own value (inherit);
@@ -2210,6 +2219,7 @@ impl PropertyPath {
             PropertyPath::FramePdfPage => "frame.pdfPage",
             PropertyPath::FrameFillRule => "frame.fillRule",
             PropertyPath::FrameImageAdjustments => "frame.imageAdjustments",
+            PropertyPath::FrameMedia => "frame.media",
             PropertyPath::CharacterHighlightColor => "character.highlightColor",
             PropertyPath::CharacterHidden => "character.hidden",
             PropertyPath::CharacterUnderlineType => "character.underlineType",
@@ -2402,10 +2412,13 @@ pub enum EffectKind {
     Pathfinder,
     // Envelope Distort (draw ADR 367): a Bézier patch mesh.
     Envelope,
+    // Engine ADR 1053 — the stroke styles.
+    WidthProfile,
+    Brush,
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 32] = [
+    pub const ALL: [EffectKind; 34] = [
         EffectKind::DropShadow,
         EffectKind::InnerShadow,
         EffectKind::OuterGlow,
@@ -2438,6 +2451,8 @@ impl EffectKind {
         EffectKind::ConvertToShape,
         EffectKind::Pathfinder,
         EffectKind::Envelope,
+        EffectKind::WidthProfile,
+        EffectKind::Brush,
     ];
 
     fn indesign(self) -> Option<paged_model::effect_stack::IndesignEffect> {
@@ -2491,6 +2506,8 @@ impl EffectKind {
             EffectKind::ConvertToShape => "convertToShape",
             EffectKind::Pathfinder => "pathfinder",
             EffectKind::Envelope => "envelope",
+            EffectKind::WidthProfile => "widthProfile",
+            EffectKind::Brush => "brush",
         }
     }
 
@@ -2534,6 +2551,14 @@ impl EffectKind {
 /// | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
 /// | `pathfinder` | `op` (on a group's stack only) |
 /// | `envelope` | `rows`, `columns`, `mesh` (the patches' control net, `(3·rows+1) × (3·columns+1)` `[x, y]` in the box's unit square, row-major) |
+///
+/// The stroke styles (engine ADR 1053), on a page item's object stack
+/// only:
+///
+/// | kind | fields |
+/// | --- | --- |
+/// | `widthProfile` | `widthPoints` (`[t, width]`: arc-length fraction 0..1, width × the stroke weight) |
+/// | `brush` | `brushType` (`art` / `scatter` / `pattern` / `bristle`), `artNodes` (`[x, y, inX, inY, outX, outY]` in the brush frame), `artStarts`, `artClosed`, `scalePct`, `spacingPct`, `scatterPct`, `rotateDeg`, `rotateVariationDeg`, `sizeMinPct`, `flipAlong`, `flipAcross`, `tileAspect`, `bristles`, `bristleThicknessPct`, `seed` |
 ///
 /// InDesign's kinds carry no parameters here: theirs are the per-field
 /// paths (`frameInnerShadowSize`, …), and the stack keeps them.
@@ -2675,6 +2700,37 @@ pub struct EffectEntrySpec {
     pub corner_radius: Option<f32>,
     #[serde(default)]
     pub op: Option<String>,
+    // Engine ADR 1053 — the stroke styles' parameters.
+    #[serde(default)]
+    pub width_points: Option<Vec<[f32; 2]>>,
+    #[serde(default)]
+    pub brush_type: Option<String>,
+    #[serde(default)]
+    pub art_nodes: Option<Vec<[f32; 6]>>,
+    #[serde(default)]
+    pub art_starts: Option<Vec<u32>>,
+    #[serde(default)]
+    pub art_closed: Option<Vec<bool>>,
+    #[serde(default)]
+    pub scale_pct: Option<f32>,
+    #[serde(default)]
+    pub spacing_pct: Option<f32>,
+    #[serde(default)]
+    pub scatter_pct: Option<f32>,
+    #[serde(default)]
+    pub rotate_variation_deg: Option<f32>,
+    #[serde(default)]
+    pub size_min_pct: Option<f32>,
+    #[serde(default)]
+    pub flip_along: Option<bool>,
+    #[serde(default)]
+    pub flip_across: Option<bool>,
+    #[serde(default)]
+    pub tile_aspect: Option<f32>,
+    #[serde(default)]
+    pub bristles: Option<u32>,
+    #[serde(default)]
+    pub bristle_thickness_pct: Option<f32>,
     #[serde(default)]
     pub rows: Option<u32>,
     #[serde(default)]
@@ -2774,6 +2830,21 @@ impl EffectEntrySpec {
             height: None,
             corner_radius: None,
             op: None,
+            width_points: None,
+            brush_type: None,
+            art_nodes: None,
+            art_starts: None,
+            art_closed: None,
+            scale_pct: None,
+            spacing_pct: None,
+            scatter_pct: None,
+            rotate_variation_deg: None,
+            size_min_pct: None,
+            flip_along: None,
+            flip_across: None,
+            tile_aspect: None,
+            bristles: None,
+            bristle_thickness_pct: None,
             rows: None,
             columns: None,
             mesh: None,
@@ -3560,6 +3631,11 @@ pub enum Value {
     /// inverse carries the prior stack, so undo restores it exactly.
     /// Additive new variant (the `TabStops` / `Lengths` precedent).
     ImageAdjustments(Vec<paged_model::RasterOp>),
+    /// Engine ADR 1027 — a frame's medium, the value of `frame.media`:
+    /// `{ type: "media", value: { kind, source, play, … } }`, or `value:
+    /// null` for none. The inverse carries the medium it replaced, so undo
+    /// restores it exactly. Additive new variant.
+    Media(Option<paged_model::MediaItem>),
 }
 
 /// v71 polish — a `text` / `enum` / `ref` payload of `null` is the empty

@@ -125,7 +125,38 @@ const arc = (g: GestureDsl) =>
     steps: 24,
   });
 
+/** The width profile a live stroke's batch writes, or null. */
+const liveProfile = (r: UnitRig): number[][] | null => {
+  const write = r
+    .leaves()
+    .find(
+      (m) =>
+        (m as { args?: { path?: string } }).args?.path === "frameEffectStack",
+    ) as
+    | {
+        args: { value: { value: { entries: { widthPoints?: number[][] }[] } } };
+      }
+    | undefined;
+  return write?.args.value.value.entries[0]?.widthPoints ?? null;
+};
+
 describe("paged.draw tool options, no engine — Paintbrush", () => {
+  it("result: live keeps the centreline, stroked, its widths a live profile; the default outlines", async () => {
+    covers("setting:media.paged.draw.tool.paintbrush.result");
+    const live = await withOptions(
+      `${T}.paintbrush`,
+      [],
+      { result: "live" },
+      arc,
+    );
+    expect(inserted(live)).toBeDefined();
+    expect(widths(live)).toEqual([]);
+    expect(liveProfile(live)!.length).toBeGreaterThan(1);
+    const outline = await withOptions(`${T}.paintbrush`, [], {}, arc);
+    expect(liveProfile(outline)).toBeNull();
+    expect(widths(outline).length).toBeGreaterThan(0);
+  });
+
   it("size: a bigger nib sweeps wider", async () => {
     covers("setting:media.paged.draw.tool.paintbrush.size");
     const base = widths(await withOptions(`${T}.paintbrush`, [], {}, arc));
@@ -186,6 +217,18 @@ describe("paged.draw tool options, no engine — Blob Brush", () => {
       via: [[200, 140]],
       steps: 12,
     });
+
+  it("result: live strokes the centreline instead of merging a filled sweep", async () => {
+    covers("setting:media.paged.draw.tool.blobBrush.result");
+    const live = await withOptions(
+      `${T}.blobBrush`,
+      [A],
+      { result: "live" },
+      over,
+    );
+    expect(liveProfile(live)!.length).toBeGreaterThan(1);
+    expect(live.leaves().some((m) => m.op === "pathfinderBoolean")).toBe(false);
+  });
 
   it("size: a bigger nib sweeps wider", async () => {
     covers("setting:media.paged.draw.tool.blobBrush.size");
@@ -291,12 +334,48 @@ describe("paged.draw tool options, no engine — Eraser", () => {
 describe("paged.draw tool options, no engine — Width", () => {
   const pull = (g: GestureDsl) =>
     g.drag({ from: [250, 650], to: [250, 700], steps: 4 });
+  /** The v0 bake lane, which the three peak options shape. */
+  const OUTLINE = { mode: "outline" } as const;
+
+  it("mode: live (the default) writes a width profile and keeps the path; outline bakes it", async () => {
+    covers("setting:media.paged.draw.tool.width.mode");
+    const live = await withOptions(`${T}.width`, [POLY], {}, pull);
+    const write = live
+      .leaves()
+      .find(
+        (m) =>
+          (m as { args?: { path?: string } }).args?.path === "frameEffectStack",
+      ) as
+      | {
+          args: {
+            value: {
+              value: { entries: { kind: string; widthPoints: number[][] }[] };
+            };
+          };
+        }
+      | undefined;
+    expect(write).toBeDefined();
+    const entry = write!.args.value.value.entries.find(
+      (e) => e.kind === "widthProfile",
+    )!;
+    expect(entry.widthPoints.length).toBe(3);
+    expect(Math.max(...entry.widthPoints.map((p) => p[1]!))).toBeGreaterThan(1);
+    expect(widths(live)).toEqual([]);
+    expect(
+      widths(await withOptions(`${T}.width`, [POLY], OUTLINE, pull)).length,
+    ).toBeGreaterThan(0);
+  });
 
   it("maxWidth: the bulge is capped at it (72 pt by default)", async () => {
     covers("setting:media.paged.draw.tool.width.maxWidth");
-    const base = widths(await withOptions(`${T}.width`, [POLY], {}, pull));
+    const base = widths(await withOptions(`${T}.width`, [POLY], OUTLINE, pull));
     const capped = widths(
-      await withOptions(`${T}.width`, [POLY], { maxWidth: 10 }, pull),
+      await withOptions(
+        `${T}.width`,
+        [POLY],
+        { ...OUTLINE, maxWidth: 10 },
+        pull,
+      ),
     );
     expect(max(capped)).toBe(10);
     expect(max(base)).toBeGreaterThan(10);
@@ -304,18 +383,18 @@ describe("paged.draw tool options, no engine — Width", () => {
 
   it("gain: a higher gain makes the same drag a wider bulge", async () => {
     covers("setting:media.paged.draw.tool.width.gain");
-    const base = widths(await withOptions(`${T}.width`, [POLY], {}, pull));
+    const base = widths(await withOptions(`${T}.width`, [POLY], OUTLINE, pull));
     const strong = widths(
-      await withOptions(`${T}.width`, [POLY], { gain: 3 }, pull),
+      await withOptions(`${T}.width`, [POLY], { ...OUTLINE, gain: 3 }, pull),
     );
     expect(max(strong)).toBeGreaterThan(max(base));
   });
 
   it("falloff: at 0 the bulge stays on its anchor; by default it spreads to the neighbours", async () => {
     covers("setting:media.paged.draw.tool.width.falloff");
-    const base = widths(await withOptions(`${T}.width`, [POLY], {}, pull));
+    const base = widths(await withOptions(`${T}.width`, [POLY], OUTLINE, pull));
     const sharp = widths(
-      await withOptions(`${T}.width`, [POLY], { falloff: 0 }, pull),
+      await withOptions(`${T}.width`, [POLY], { ...OUTLINE, falloff: 0 }, pull),
     );
     expect(sharp[0]!).toBeLessThan(base[0]!);
     expect(sharp[1]).toBe(base[1]);

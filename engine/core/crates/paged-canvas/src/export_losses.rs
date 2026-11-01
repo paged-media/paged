@@ -908,6 +908,35 @@ pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
     use paged_model::effect_stack::{vector_entries, EffectEntry};
     let mut out = Vec::new();
     let mut unwritten = Vec::new();
+    let mut split_ids: std::collections::HashSet<Option<String>> = std::collections::HashSet::new();
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        use paged_vector_fx::bake;
+        split_ids.extend(
+            sp.rectangles
+                .iter()
+                .filter(|f| bake::rectangle_splits(f))
+                .map(|f| f.self_id.clone()),
+        );
+        split_ids.extend(
+            sp.ovals
+                .iter()
+                .filter(|f| bake::oval_splits(f))
+                .map(|f| f.self_id.clone()),
+        );
+        split_ids.extend(
+            sp.polygons
+                .iter()
+                .filter(|f| bake::polygon_splits(f))
+                .map(|f| f.self_id.clone()),
+        );
+        split_ids.extend(
+            sp.text_frames
+                .iter()
+                .filter(|f| bake::text_frame_splits(f))
+                .map(|f| f.self_id.clone()),
+        );
+    }
     let mut check = |kind: &str, id: Option<&str>, stack: &[EffectEntry]| {
         let kinds: Vec<&str> = vector_entries(stack)
             .map(|e| e.effect.kind_name())
@@ -915,9 +944,12 @@ pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
         if kinds.is_empty() {
             return;
         }
+        // Engine ADR 1053 — a stroke style beside a fill is written as
+        // two items: the fill part and the stroke's artwork.
+        let split = split_ids.contains(&id.map(str::to_string));
         out.push(format!(
             "vector effect{} {} on {kind} `{}` has no IDML form — written baked (the \
-             effected outline{}), the source and the live stack kept in the item's \
+             effected outline{}{}), the source and the live stack kept in the item's \
              `paged:vectorSource` and `paged:effectStack` labels, which a paged reader \
              restores; InDesign shows the outline, not the effect.",
             if kinds.len() > 1 { "s" } else { "" },
@@ -931,6 +963,12 @@ pub(crate) fn vector_effect_losses(scene: &Document) -> Vec<String> {
                 "oval" => ", as a polygon",
                 "group" => ", as one polygon in the group's place",
                 _ => "",
+            },
+            if split {
+                "; its stroke style as a separate polygon `<id>vfx` of the stroke's \
+                 artwork after the item, which keeps its fill"
+            } else {
+                ""
             }
         ));
     };
@@ -1097,6 +1135,40 @@ pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
         }
         for p in &sp.polygons {
             check("polygon", p.self_id.as_deref(), &p.image_adjustments);
+        }
+    }
+    out
+}
+
+/// Engine ADR 1027 — the movie and sound items IDML is not given. The
+/// export writes each such frame as the picture frame of its poster and
+/// keeps the medium in the frame's label, which paged reads back on reopen;
+/// InDesign shows the poster. A medium in a container part travels only in
+/// a `.paged` file. Declared from the model, like the filter stacks.
+pub(crate) fn media_losses(scene: &Document) -> Vec<String> {
+    let mut out = Vec::new();
+    for parsed in &scene.spreads {
+        for r in &parsed.spread.rectangles {
+            let Some(m) = &r.media else { continue };
+            let kind = match m.kind {
+                paged_model::MediaKind::Movie => "movie",
+                paged_model::MediaKind::Sound => "sound",
+            };
+            let carried = match &m.source {
+                paged_model::MediaSource::Part { path } => format!(
+                    "its medium is the container part `{path}`, which only a `.paged` file carries"
+                ),
+                paged_model::MediaSource::Link { uri } => {
+                    format!("its medium is linked at `{uri}`")
+                }
+            };
+            out.push(format!(
+                "{kind} `{}` is a paged-native construct here — InDesign is given the picture \
+                 frame of its poster, with the medium in the frame's `{}` label, which paged \
+                 reads back on reopen; {carried}. Save as `.paged` to keep it.",
+                r.self_id.as_deref().unwrap_or("?"),
+                paged_model::media::MEDIA_LABEL,
+            ));
         }
     }
     out

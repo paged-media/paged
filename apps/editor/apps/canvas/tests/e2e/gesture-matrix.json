@@ -642,6 +642,10 @@
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.draw.tool.envelopeMesh",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/envelope.spec.ts); matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.draw.tool.perspectiveGrid",
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/distortion-tools.spec.ts); matrix rows are the follow-up"
     },
@@ -680,6 +684,10 @@
     {
       "tool": "media.paged.draw.tool.symbolNineSlice",
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/headless/symbolism-tools.spec.ts) and the plugin-surface canvas e2e; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.objectSelection",
+      "unspecified": "module tool: covered by its handler tests (modules/image/glue/test/ml-tier-a.spec.ts); matrix rows are the follow-up"
     },
     {
       "tool": "media.paged.image.tool.smudge",

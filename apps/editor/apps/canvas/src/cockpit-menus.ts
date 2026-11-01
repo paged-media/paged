@@ -58,6 +58,7 @@ defineMessages("menu", {
   "Picture adjustments…": "Picture adjustments…",
   Settings: "Settings",
   "Models…": "Models…",
+  "Generate image…": "Generate image…",
 });
 
 const soon = (
@@ -156,6 +157,8 @@ export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
     33,
     "effects",
   ),
+  // Editor ADR 313 — Generate Image: a prompt fills any image frame.
+  panel("Object/Generate image…", "paged.generate-image", 6, "insert"),
   // ── Edit ▸ Settings ── editor ADR 290: the ML service's models.
   panel("Edit/Settings/Models…", "paged.models", 90, "settings"),
   // ── Data (the data-publishing surface) ──

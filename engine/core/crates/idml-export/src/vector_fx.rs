@@ -34,6 +34,16 @@
 //! outline written; the effect stack itself rides `paged:effectStack` as
 //! before (ADR 1008). The reader restores both. The export's loss report
 //! names every baked item (`paged-canvas`'s `vector_effect_losses`).
+//!
+//! Engine ADR 1053 — a stroke style (a width profile, a brush) draws the
+//! STROKE as artwork. On an item that strokes only, the bake above
+//! writes the artwork in the item's place, filled with the stroke's
+//! paint. Beside a fill, a picture or an appearance the item is SPLIT:
+//! it is written as its fill part (stroke off, its other vector entries
+//! baked as above) and followed, in every list that names it, by a
+//! polygon `<id>vfx` of the stroke artwork, labelled
+//! [`label::STROKE_ART_KEY`] with the item's id; the item's label keeps
+//! the whole source, and the reader drops the artwork with the restore.
 
 use idml_import::{FrameRef, Spread};
 use paged_model::effect_stack::has_vector;
@@ -72,6 +82,7 @@ fn written_id(id: &Option<String>) -> String {
 }
 
 fn lower_spread(spread: &mut Spread) {
+    split_stroke_styles(spread);
     // Groups first: their members are read as they are.
     let mut gi = 0;
     while gi < spread.groups.len() {
@@ -277,4 +288,146 @@ fn find(spread: &Spread, kind: FrameRef, id: Option<&str>) -> Option<FrameRef> {
         ),
         _ => return None,
     })
+}
+
+/// Put `art` right after `item` in every list that names it.
+fn insert_after(spread: &mut Spread, item: FrameRef, art: FrameRef) {
+    let put = |l: &mut Vec<FrameRef>| {
+        if let Some(at) = l.iter().position(|r| *r == item) {
+            l.insert(at + 1, art);
+        }
+    };
+    put(&mut spread.frames_in_order);
+    for g in spread.groups.iter_mut() {
+        put(&mut g.members);
+    }
+    for v in spread.nested_children.values_mut() {
+        put(v);
+    }
+}
+
+/// Write the stroke artwork polygon after `item` and label it.
+fn push_art(
+    spread: &mut Spread,
+    item: FrameRef,
+    owner: &Option<String>,
+    art: paged_model::Polygon,
+) {
+    let id = art.self_id.clone();
+    spread.polygons.push(art);
+    let r = FrameRef::Polygon(spread.polygons.len() - 1);
+    insert_after(spread, item, r);
+    if let (Some(id), Some(owner)) = (id, owner) {
+        label::stamp_stroke_art(spread, &id, owner);
+    }
+}
+
+/// Split every item whose stroke style sits beside a fill, a picture or
+/// an appearance (see the module doc).
+fn split_stroke_styles(spread: &mut Spread) {
+    for i in 0..spread.rectangles.len() {
+        let r = &spread.rectangles[i];
+        if !bake::rectangle_splits(r) {
+            continue;
+        }
+        let art = bake::stroke_art_rectangle(r);
+        let fill = bake::fill_part_rectangle(r);
+        // Its outline as the reader will read it back: baked when other
+        // vector entries remain, else the item's own.
+        let written = bake::bake_rectangle(&fill).unwrap_or(fill);
+        let mut source = r.clone();
+        source.image_bytes = None;
+        let id = r.self_id.clone();
+        let src = Source::Rectangle {
+            item: Box::new(source),
+            fingerprint: label::fingerprint(&written.anchors),
+        };
+        spread.rectangles[i] = written;
+        if let Some(id) = &id {
+            label::stamp(spread, id, &src);
+        }
+        if let Some(art) = art {
+            push_art(spread, FrameRef::Rectangle(i), &id, art);
+        }
+    }
+    for i in 0..spread.polygons.len() {
+        let p = &spread.polygons[i];
+        if !bake::polygon_splits(p) {
+            continue;
+        }
+        let art = bake::stroke_art_polygon(p);
+        let fill = bake::fill_part_polygon(p);
+        // Its outline as the reader will read it back: baked when other
+        // vector entries remain, else the item's own.
+        let written = bake::bake_polygon(&fill).unwrap_or(fill);
+        let mut source = p.clone();
+        source.image_bytes = None;
+        let id = p.self_id.clone();
+        let src = Source::Polygon {
+            item: Box::new(source),
+            fingerprint: label::fingerprint(&written.anchors),
+        };
+        spread.polygons[i] = written;
+        if let Some(id) = &id {
+            label::stamp(spread, id, &src);
+        }
+        if let Some(art) = art {
+            push_art(spread, FrameRef::Polygon(i), &id, art);
+        }
+    }
+    for i in 0..spread.text_frames.len() {
+        let t = &spread.text_frames[i];
+        if !bake::text_frame_splits(t) {
+            continue;
+        }
+        let art = bake::stroke_art_text_frame(t);
+        let fill = bake::fill_part_text_frame(t);
+        // Its outline as the reader will read it back: baked when other
+        // vector entries remain, else the item's own.
+        let written = bake::bake_text_frame(&fill).unwrap_or(fill);
+        let id = t.self_id.clone();
+        let src = Source::TextFrame {
+            item: Box::new(t.clone()),
+            fingerprint: label::fingerprint(&written.anchors),
+        };
+        spread.text_frames[i] = written;
+        if let Some(id) = &id {
+            label::stamp(spread, id, &src);
+        }
+        if let Some(art) = art {
+            push_art(spread, FrameRef::TextFrame(i), &id, art);
+        }
+    }
+    // An oval is written as a polygon `<id>vfx` (its fill part) and its
+    // artwork as `<id>vfxs`, the stroke artwork after it.
+    let mut i = 0;
+    while i < spread.ovals.len() {
+        let o = &spread.ovals[i];
+        if !bake::oval_splits(o) {
+            i += 1;
+            continue;
+        }
+        let art = bake::stroke_art_oval(o);
+        let fill = bake::fill_part_oval(o);
+        let mut poly = bake::bake_oval(&fill).unwrap_or_else(|| bake::oval_as_polygon(&fill));
+        let mut source = o.clone();
+        source.image_bytes = None;
+        let id = written_id(&o.self_id);
+        poly.self_id = Some(id.clone());
+        let src = Source::Oval {
+            item: Box::new(source),
+            fingerprint: label::fingerprint(&poly.anchors),
+        };
+        spread.polygons.push(poly);
+        let to = FrameRef::Polygon(spread.polygons.len() - 1);
+        label::replace_ref(spread, FrameRef::Oval(i), to);
+        label::remove_item(spread, FrameRef::Oval(i));
+        label::stamp(spread, &id, &src);
+        if let Some(mut art) = art {
+            art.self_id = Some(format!("{id}s"));
+            // The polygon just pushed is the last one still.
+            let at = FrameRef::Polygon(spread.polygons.len() - 1);
+            push_art(spread, at, &Some(id.clone()), art);
+        }
+    }
 }

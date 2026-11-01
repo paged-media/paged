@@ -502,6 +502,12 @@ pub struct EffectInfo {
     pub begin_ms: f64,
     pub end_ms: f64,
     pub editable: bool,
+    /// Its motion path (`p:animMotion path`, slide fractions from where
+    /// the shape stands), when it moves the shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Path lock: `pathEditMode="fixed"`.
+    pub path_locked: bool,
 }
 
 /// The pane's list: `(effects, clicks)`.
@@ -549,6 +555,19 @@ pub fn list(t: Option<&Timing>) -> (Vec<EffectInfo>, usize) {
         let end = begin + active;
         sub_end = sub_end.max(end);
         let target = e.target();
+        let mut motion: Option<(String, bool)> = None;
+        e.node.walk(&mut |n| {
+            if let TimeNode::AnimMotion {
+                path: Some(p),
+                path_edit_mode,
+                ..
+            } = n
+            {
+                if motion.is_none() {
+                    motion = Some((p.clone(), path_edit_mode.as_deref() == Some("fixed")));
+                }
+            }
+        });
         let repeat = match c.repeat_count.as_deref().map(str::trim) {
             Some("indefinite") => Some(serde_json::Value::from("indefinite")),
             Some(r) => r
@@ -585,6 +604,8 @@ pub fn list(t: Option<&Timing>) -> (Vec<EffectInfo>, usize) {
             begin_ms: begin,
             end_ms: end,
             editable,
+            path: motion.as_ref().map(|m| m.0.clone()),
+            path_locked: motion.as_ref().is_some_and(|m| m.1),
         });
     }
     (out, clicks)

@@ -16,26 +16,24 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Width tool v0 (wave 2) — drag near an anchor of the SELECTED open
-// path to give the stroke a per-anchor width profile peaked there
-// (draw-tools' WidthMachine: falloff over the neighbors, magnitude
-// from the drag distance), then bake it through the engine's
-// `outlineStrokeVariable` op.
+// The Width tool. Two results (its `mode` option, WP6.4):
 //
-// HONEST SCOPE (v0, kept deliberately simple):
-//   · The bake is DESTRUCTIVE — `outlineStrokeVariable` replaces the
-//     centerline with its swept OUTLINE (a closed filled contour).
-//     There is no live width-profile model on the wire (Illustrator
-//     keeps widths editable; the engine's v1 kernel does not), so the
-//     honest v0 is bake-on-release, one mutation = one undo step.
-//   · Targets the FIRST selected path-bearing element only, and only
-//     a SINGLE-CONTOUR OPEN path (the v1 kernel outlines one open
-//     contour — see the ENGINE NOTE in handlers/brush.ts).
-//   · The live preview is a perpendicular width TICK at the peaked
-//     anchor (real profile data), not a full swept-outline preview.
+//   · LIVE (the default) — a drag anywhere on the SELECTED item's stroke
+//     adds a width point there (or moves the one within reach) and the
+//     drag's distance from the path sets its width; the release writes
+//     the item's `widthProfile` stroke style (engine ADR 1053) — the
+//     path keeps its anchors and the profile stays editable, one undo
+//     step per drag. Any path, closed or compound, rectangle, ellipse or
+//     text frame. The overlay previews the band the profile draws.
+//   · OUTLINE — the v0 behaviour, kept: a drag near an anchor of a
+//     single-contour open path peaks a per-anchor profile there and bakes
+//     it through `outlineStrokeVariable` (the centreline becomes its
+//     filled outline). A graphic line, which carries no stroke style,
+//     always takes this lane, and so does a host whose engine has no
+//     stroke styles (`document.strokeStyles@1`).
 //
 // The pointer-down resolve (selection → pathAnchors → local space) is
-// async; events are SERIALIZED through a promise chain so the machine
+// async; events are SERIALIZED through a promise chain so each gesture
 // sees down → moves → up in order even while the reads are in flight.
 
 import type {
@@ -50,8 +48,14 @@ import {
   anchorTangentAngle,
   applyAffine,
   inverseApplyAffine,
+  measureAnchorRun,
+  nearestOnRun,
+  widthFactorAt,
+  widthOutlinePolyline,
+  withWidthPoint,
   type AnchorTriple,
   type Affine,
+  type RunLocation,
   type Vec2,
 } from "@paged-media/draw-geometry";
 import { WidthMachine, type WidthSnapshot } from "@paged-media/draw-tools";
@@ -59,6 +63,14 @@ import { WidthMachine, type WidthSnapshot } from "@paged-media/draw-tools";
 import { outlineStrokeVariableMutationFor } from "./brush";
 import { outlineParamsOf, supportsPathOps } from "../commands/path-ops";
 import { WIDTH_OPTIONS, createToolOptionsReader } from "../tool-options";
+import {
+  readStroke,
+  stackMutationFor,
+  takesStrokeStyle,
+  widthProfileEntryFor,
+  withStrokeStyle,
+  type StackEntry,
+} from "../commands/brushes";
 
 /** Screen-space pick radius around anchors (the anchors.ts constant
  *  family). */
@@ -73,7 +85,49 @@ export const WIDTH_FALLOFF_ANCHORS = 2;
 export const WIDTH_GAIN = 1;
 export const WIDTH_MAX_PT = 72;
 
+/** A live width-point drag (see the header). */
+interface LiveWidthGesture {
+  live: true;
+  target: ElementId;
+  pageId: string;
+  matrix: Affine | null;
+  toLocal(p: Vec2): Vec2 | null;
+  /** The contour pressed on, its open flag, and where on it. */
+  contour: readonly AnchorTriple[];
+  closed: boolean;
+  at: RunLocation;
+  weight: number;
+  stack: StackEntry[];
+  points: readonly (readonly [number, number])[];
+  /** The width the drag sets, × the weight; null until it moves. */
+  factor: number | null;
+  maxFactor: number;
+}
+
+/** The contours of an anchor table: each run of anchors and whether it is
+ *  closed. */
+function contoursOf(table: {
+  anchors: readonly AnchorTriple[];
+  subpathStarts: readonly number[];
+  subpathOpen?: readonly boolean[] | null;
+}): { anchors: AnchorTriple[]; closed: boolean }[] {
+  const starts =
+    table.subpathStarts.length > 0 ? [...table.subpathStarts] : [0];
+  return starts.map((s, i) => ({
+    anchors: table.anchors.slice(s, starts[i + 1] ?? table.anchors.length),
+    closed: table.subpathOpen?.[i] !== true,
+  }));
+}
+
+/** The width points a stack's `widthProfile` entry holds. */
+function pointsOf(stack: readonly StackEntry[]): [number, number][] {
+  const e = stack.find((x) => x.kind === "widthProfile");
+  const pts = e?.widthPoints;
+  return Array.isArray(pts) ? (pts as [number, number][]) : [];
+}
+
 interface WidthGesture {
+  live?: false;
   machine: WidthMachine;
   target: ElementId;
   pageId: string;
@@ -85,12 +139,115 @@ interface WidthGesture {
 export function createWidthHandler(host: BundleHost): GestureHandler {
   // The serialized gesture: null = idle; a promise resolving to null =
   // the down could not arm (no valid target / off-anchor).
-  let gesture: Promise<WidthGesture | null> | null = null;
+  let gesture: Promise<WidthGesture | LiveWidthGesture | null> | null = null;
   const options = createToolOptionsReader(WIDTH_OPTIONS);
 
   const clearPreview = () => host.overlay.setToolPreview(null);
 
+  /** LIVE: arm a width-point drag on the selected item's stroke. */
+  const beginLive = async (
+    e: CanvasPointerEvent,
+    target: ElementId,
+  ): Promise<LiveWidthGesture | null> => {
+    if (!e.pageId || !e.pagePoint) return null;
+    const table = await host.document.pathAnchors(target).catch(() => null);
+    if (!table || table.pageId !== e.pageId || table.anchors.length < 2)
+      return null;
+    const matrix = table.itemTransform ?? null;
+    const toLocal = (p: Vec2): Vec2 | null =>
+      inverseApplyAffine(matrix, p[0], p[1]);
+    const local = toLocal(e.pagePoint);
+    if (!local) return null;
+    const read = await readStroke(host, target);
+    const points = pointsOf(read.stack);
+    let best: {
+      at: RunLocation;
+      anchors: AnchorTriple[];
+      closed: boolean;
+    } | null = null;
+    for (const c of contoursOf(table)) {
+      const at = nearestOnRun(
+        measureAnchorRun(c.anchors, { close: c.closed }),
+        local,
+      );
+      if (at && (!best || at.distance < best.at.distance))
+        best = { at, anchors: c.anchors, closed: c.closed };
+    }
+    if (!best) return null;
+    const reach =
+      host.viewport.pxToPt(PICK_TOLERANCE_PX) / affineScale(matrix) +
+      (read.weight * widthFactorAt(points, best.at.u)) / 2;
+    if (best.at.distance > reach) return null; // off the stroke
+    return {
+      live: true,
+      target,
+      pageId: e.pageId,
+      matrix,
+      toLocal,
+      contour: best.anchors,
+      closed: best.closed,
+      at: best.at,
+      weight: read.weight,
+      stack: read.stack,
+      points,
+      factor: null,
+      maxFactor: options.number("maxWidth") / read.weight,
+    };
+  };
+
+  const previewLive = (g: LiveWidthGesture) => {
+    const pts =
+      g.factor === null ? g.points : withWidthPoint(g.points, g.at.u, g.factor);
+    const line = widthOutlinePolyline(g.contour, g.closed, g.weight, pts);
+    if (line.length < 2) {
+      clearPreview();
+      return;
+    }
+    host.overlay.setToolPreview({
+      pageId: g.pageId,
+      points: line.map((p) =>
+        g.matrix ? (applyAffine(g.matrix, p[0], p[1]) as [number, number]) : p,
+      ) as [number, number][],
+    });
+  };
+
+  const commitLive = async (g: LiveWidthGesture) => {
+    if (g.factor === null) return;
+    const entry = widthProfileEntryFor(
+      withWidthPoint(g.points, g.at.u, g.factor),
+    );
+    const outcome = await host.document.mutate(
+      stackMutationFor(
+        g.target,
+        withStrokeStyle(g.stack, "widthProfile", entry),
+      ),
+    );
+    if (!outcome.applied) {
+      host.log.warn(
+        `width: the live profile was refused: ${JSON.stringify(outcome.error)}`,
+      );
+    }
+  };
+
   const beginGesture = async (
+    e: CanvasPointerEvent,
+  ): Promise<WidthGesture | LiveWidthGesture | null> => {
+    if (!e.pageId || !e.pagePoint) return null;
+    if (
+      options.select("mode") === "live" &&
+      host.supports("document.strokeStyles@1")
+    ) {
+      const target = host.selection.get().find(takesStrokeStyle) ?? null;
+      if (target) {
+        const g = await beginLive(e, target);
+        if (g) previewLive(g);
+        return g;
+      }
+    }
+    return beginOutline(e);
+  };
+
+  const beginOutline = async (
     e: CanvasPointerEvent,
   ): Promise<WidthGesture | null> => {
     if (!e.pageId || !e.pagePoint) return null;
@@ -195,6 +352,32 @@ export function createWidthHandler(host: BundleHost): GestureHandler {
     const chain = gesture;
     gesture = chain.then((g) => {
       if (!g) return null;
+      if (g.live) {
+        if (event.type === "key") {
+          clearPreview();
+          return null;
+        }
+        const onPage = event.pageId === g.pageId;
+        const local = onPage ? g.toLocal(event.point) : null;
+        if (!local) {
+          clearPreview();
+          return null;
+        }
+        const d = Math.abs(
+          (local[0] - g.at.point[0]) * g.at.normal[0] +
+            (local[1] - g.at.point[1]) * g.at.normal[1],
+        );
+        g.factor = Math.min(g.maxFactor, (2 * d) / g.weight);
+        if (event.type === "up") {
+          clearPreview();
+          void commitLive(g).catch((err) =>
+            host.log.warn(`width commit failed: ${err}`),
+          );
+          return null;
+        }
+        previewLive(g);
+        return g;
+      }
       const onPage = "pageId" in event ? event.pageId === g.pageId : true;
       const local = "point" in event && onPage ? g.toLocal(event.point) : null;
       const snap =

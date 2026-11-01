@@ -72,6 +72,7 @@ import {
 import type { TraceOptions } from "../trace-engine";
 import { TRACE_PRESET_IDS } from "../commands/trace-presets";
 import { RECOLOR_MODES } from "../commands/recolor";
+import { GENERATIVE_ROUTES } from "../commands/generative";
 import { WARP_STYLES } from "../commands/envelope";
 import { HARMONY_RULES, LIQUIFY_KINDS } from "@paged-media/draw-geometry";
 import {
@@ -595,7 +596,46 @@ export const TWINS: readonly TwinSpec[] = [
     },
   }),
   twin("recolorArtworkOptions", {}),
+  // WP8.3 — Text to vector (the agent's SVG, or a generated picture traced)
+  // and Generative recolor (the agent's colour map): the prompt as data.
+  twin("textToVector", { prompt: TEXT, route: enumOf(GENERATIVE_ROUTES) }),
+  twin("generativeRecolor", { ...T, prompt: TEXT }),
+  twin("textToVectorOptions", {}),
+  twin("generativeRecolorOptions", {}),
   twin("applyGuideColor", { ...T, hex: TEXT, stroke: BOOL }),
+  // WP6.4 — brushes and width profiles as live stroke styles (engine ADR
+  // 1053): a brush by its id (built-in or the document's), its options,
+  // its removal; a width profile by its library id or its points
+  // (`profile: ""` takes `points`: [t, width × weight]); a new brush of
+  // the selected artwork; the Brushes panel's raiser takes nothing.
+  twin("applyBrush", { ...T, brush: TEXT }),
+  twin("brushes", {}),
+  twin("removeBrush", { ...T }),
+  twin("brushOptions", {
+    ...T,
+    scalePct: NUM,
+    spacingPct: NUM,
+    scatterPct: NUM,
+    rotateDeg: DEG,
+    rotateVariationDeg: DEG,
+    sizeMinPct: NUM,
+    flipAlong: BOOL,
+    flipAcross: BOOL,
+    tileAspect: NUM,
+    bristles: INT,
+    bristleThicknessPct: NUM,
+    seed: INT,
+  }),
+  twin("applyWidthProfile", {
+    ...T,
+    profile: TEXT,
+    points: { kind: "list", of: POINT },
+  }),
+  twin("newBrush", {
+    ...T,
+    type: enumOf(["art", "scatter", "pattern"]),
+    name: TEXT,
+  }),
   // WP6.7 — the distortion tools' gestures as data (page pt). A liquify
   // stroke names its kernel and EVERY option of Illustrator's dialog; a
   // puppet warp names the pins that hold, the pin dragged and where to,

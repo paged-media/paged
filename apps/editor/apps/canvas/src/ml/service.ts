@@ -31,7 +31,11 @@
 // shares, so `supports("ml.x@1")` follows what is installed and healthy.
 // Settings ▸ Models reads it through `subscribe`/`snapshot`.
 
-import type { MlImage } from "@paged-media/plugin-api";
+import type {
+  MlCallOptions,
+  MlGenerateRequest,
+  MlImage,
+} from "@paged-media/plugin-api";
 import {
   mlHostProvider,
   type MlBackend,
@@ -151,6 +155,16 @@ export interface MlServiceSnapshot {
     detail: string;
     error: string | null;
   };
+}
+
+/** A generated image, PNG-encoded, and who made it. */
+export interface GeneratedImage {
+  png: Uint8Array;
+  width: number;
+  height: number;
+  provider: string;
+  tier: "A" | "B";
+  model?: string;
 }
 
 export interface MlServiceOptions {
@@ -445,6 +459,24 @@ export class MlService {
       throw err;
     }
     await this.refreshHost();
+  }
+
+  /** Text to image through the shared backend, as a PNG: what the host's
+   *  Generate Image (editor ADR 313) calls. A refusal is the registry's own
+   *  sentence ("local image model not running…"); nothing is downloaded. */
+  async generateImage(
+    request: MlGenerateRequest,
+    options: MlCallOptions = {},
+  ): Promise<GeneratedImage> {
+    const r = await this.o.backend.run("generate", request, options);
+    return {
+      png: await this.o.codec.encode(r.image),
+      width: r.image.width,
+      height: r.image.height,
+      provider: r.provider,
+      tier: r.tier,
+      ...(r.model !== undefined ? { model: r.model } : {}),
+    };
   }
 
   /** Run a capability through the backend: what Settings ▸ Models' "Try"

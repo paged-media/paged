@@ -120,10 +120,10 @@ fn alpha_stops_patterns_and_dashes_open_as_powerpoint_draws_them__feat__plugin_s
     let r = shape(&doc, "radial gradient");
     assert!(r.fill_color.as_deref().unwrap().starts_with("Gradient/"));
     assert_eq!(r.gradient_fill_start, Some([100.0, 60.0]));
-    assert_eq!(
-        shape(&doc, "pattern").fill_color.as_deref(),
-        Some("Color/R808080")
-    );
+    // A pattern is a picture of its tiles in the outline (ADR 723).
+    let pat = shape(&doc, "pattern");
+    assert_eq!(pat.fill_color.as_deref(), Some("Swatch/None"));
+    assert!(pat.has_image_element && pat.image_bytes.is_some());
     assert_eq!(shape(&doc, "dash sysDash").stroke_dash, [9.0, 3.0]);
     assert_eq!(
         shape(&doc, "dash lgDashDot").stroke_dash,

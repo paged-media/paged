@@ -34,7 +34,7 @@ fn yes() -> bool {
 }
 
 /// The vector effect kinds, by their serialised names.
-pub const VECTOR_KINDS: [&str; 15] = [
+pub const VECTOR_KINDS: [&str; 17] = [
     "roughen",
     "zigZag",
     "puckerBloat",
@@ -50,7 +50,14 @@ pub const VECTOR_KINDS: [&str; 15] = [
     "scribble",
     "convertToShape",
     "pathfinder",
+    "widthProfile",
+    "brush",
 ];
+
+/// The stroke styles among the vector kinds (engine ADR 1053): they
+/// replace the item's STROKE by the artwork they draw along the path; the
+/// fill stays the item's own.
+pub const STROKE_STYLE_KINDS: [&str; 2] = ["widthProfile", "brush"];
 
 /// Illustrator's Roughen: the outline is cut into short pieces and every
 /// new point is moved a random distance up to `size`.
@@ -622,6 +629,205 @@ pub struct PathfinderParams {
     pub op: PathfinderOp,
 }
 
+/// The most width points a profile keeps.
+pub const MAX_WIDTH_POINTS: usize = 256;
+/// The most anchors a brush's artwork keeps.
+pub const MAX_ART_NODES: usize = 4096;
+
+/// One width point of a variable-width stroke: at arc-length fraction
+/// `t` of each contour (0 its start, 1 its end), the stroke is `width`
+/// times the item's stroke weight wide.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidthPoint {
+    pub t: f32,
+    pub width: f32,
+}
+
+/// Illustrator's variable-width stroke (the Width tool's width points, a
+/// width profile of the library): the stroke band is as wide as the
+/// profile says along every contour, between the points eased smoothly.
+/// No points is the uniform stroke. A profile is relative to the stroke
+/// weight, so changing the weight scales it, as Illustrator's do.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidthProfileParams {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<WidthPoint>,
+}
+
+impl WidthProfileParams {
+    /// The canonical form: finite points, `t` in `0..=1`, widths in
+    /// `0..=100`, sorted by `t`, at most [`MAX_WIDTH_POINTS`].
+    pub fn normalized(mut self) -> Self {
+        self.points
+            .retain(|p| p.t.is_finite() && p.width.is_finite());
+        for p in &mut self.points {
+            p.t = p.t.clamp(0.0, 1.0);
+            p.width = p.width.clamp(0.0, 100.0);
+        }
+        self.points.sort_by(|a, b| a.t.total_cmp(&b.t));
+        self.points.truncate(MAX_WIDTH_POINTS);
+        self
+    }
+
+    /// The width factor at fraction `t` (1 without points). Between two
+    /// points the width eases (smoothstep); before the first and after
+    /// the last it holds.
+    pub fn factor_at(&self, t: f32) -> f32 {
+        let pts = &self.points;
+        let (Some(first), Some(last)) = (pts.first(), pts.last()) else {
+            return 1.0;
+        };
+        if t <= first.t {
+            return first.width;
+        }
+        if t >= last.t {
+            return last.width;
+        }
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if t >= a.t && t <= b.t {
+                let span = b.t - a.t;
+                if span <= f32::EPSILON {
+                    return b.width;
+                }
+                let u = (t - a.t) / span;
+                let s = u * u * (3.0 - 2.0 * u);
+                return a.width + (b.width - a.width) * s;
+            }
+        }
+        last.width
+    }
+}
+
+/// Illustrator's four brush types that draw along a path (the Calligraphic
+/// brush is a stroke with an angle and is not one of them).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BrushKind {
+    /// One piece of artwork stretched along the whole path.
+    #[default]
+    Art,
+    /// Copies of the artwork placed along the path.
+    Scatter,
+    /// A tile repeated along the path, bent with it.
+    Pattern,
+    /// Strands of paint, like a bristle brush's.
+    Bristle,
+}
+
+/// A brush's artwork, in the brush's own frame: `x` runs along the path
+/// (0 to 1: the artwork's length), `y` across it (−0.5 to 0.5 of the
+/// stroke's width, positive to the left). The model's anchor convention:
+/// each node `[x, y, inX, inY, outX, outY]`, contours starting at
+/// `starts`, `closed` per contour. Empty is the kind's built-in artwork.
+/// The artwork is painted with the stroke's paint (Illustrator's Tints
+/// colourisation).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrushArt {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<[f32; 6]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub starts: Vec<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub closed: Vec<bool>,
+}
+
+impl BrushArt {
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+}
+
+/// A brush as a stroke style: the stroke is drawn as the brush's artwork
+/// along the path, filled with the stroke's paint (engine ADR 1053).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrushParams {
+    #[serde(default)]
+    pub brush_type: BrushKind,
+    #[serde(default, skip_serializing_if = "BrushArt::is_empty")]
+    pub art: BrushArt,
+    /// The artwork's size across the path, percent of the stroke weight
+    /// (Art, Pattern, Bristle: the band's width; Scatter: each copy's).
+    #[serde(default = "BrushParams::hundred")]
+    pub scale_pct: f32,
+    /// Scatter: the distance between copies, percent of a copy's size.
+    /// Pattern: the gap between tiles, percent of a tile's length.
+    #[serde(default = "BrushParams::default_spacing")]
+    pub spacing_pct: f32,
+    /// Scatter: how far a copy may leave the path, percent of the stroke
+    /// weight, either side.
+    #[serde(default)]
+    pub scatter_pct: f32,
+    /// Scatter: each copy's turn relative to the path, degrees; the seed
+    /// varies it by up to `rotate_variation_deg`.
+    #[serde(default)]
+    pub rotate_deg: f32,
+    #[serde(default)]
+    pub rotate_variation_deg: f32,
+    /// Scatter: each copy's size varies down to this percent of it.
+    #[serde(default = "BrushParams::hundred")]
+    pub size_min_pct: f32,
+    /// Flip the artwork along (end to start) and across (left to right).
+    #[serde(default)]
+    pub flip_along: bool,
+    #[serde(default)]
+    pub flip_across: bool,
+    /// Pattern: a tile's length over its height.
+    #[serde(default = "BrushParams::one")]
+    pub tile_aspect: f32,
+    /// Bristle: the number of strands.
+    #[serde(default = "BrushParams::default_bristles")]
+    pub bristles: u32,
+    /// Bristle: a strand's thickness, percent of the stroke weight.
+    #[serde(default = "BrushParams::default_thickness")]
+    pub bristle_thickness_pct: f32,
+    #[serde(default)]
+    pub seed: u32,
+}
+
+impl BrushParams {
+    fn hundred() -> f32 {
+        100.0
+    }
+    fn one() -> f32 {
+        1.0
+    }
+    fn default_spacing() -> f32 {
+        100.0
+    }
+    fn default_bristles() -> u32 {
+        24
+    }
+    fn default_thickness() -> f32 {
+        12.0
+    }
+}
+
+impl Default for BrushParams {
+    fn default() -> Self {
+        Self {
+            brush_type: BrushKind::Art,
+            art: BrushArt::default(),
+            scale_pct: Self::hundred(),
+            spacing_pct: Self::default_spacing(),
+            scatter_pct: 0.0,
+            rotate_deg: 0.0,
+            rotate_variation_deg: 0.0,
+            size_min_pct: Self::hundred(),
+            flip_along: false,
+            flip_across: false,
+            tile_aspect: Self::one(),
+            bristles: Self::default_bristles(),
+            bristle_thickness_pct: Self::default_thickness(),
+            seed: 0,
+        }
+    }
+}
+
 /// The IDML side of the live vector effects (engine ADR 1042).
 ///
 /// IDML has no live vector effect, so the writer BAKES them: an item is
@@ -648,6 +854,9 @@ pub mod label {
 
     /// The label key.
     pub const SOURCE_KEY: &str = "paged:vectorSource";
+    /// Engine ADR 1053 — the label of a stroke-artwork polygon the
+    /// writer split off an item with a stroke style: the item's id.
+    pub const STROKE_ART_KEY: &str = "paged:strokeArtOf";
 
     /// What a baked item replaced.
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -824,6 +1033,38 @@ pub mod label {
         }
     }
 
+    /// Record on the stroke-artwork polygon `id` the item it was split
+    /// off.
+    pub fn stamp_stroke_art(spread: &mut Spread, id: &str, owner: &str) {
+        let entries = spread.labels.entry(id.to_string()).or_default();
+        entries.retain(|(k, _)| k != STROKE_ART_KEY);
+        entries.push((STROKE_ART_KEY.to_string(), owner.to_string()));
+    }
+
+    /// Drop the stroke-artwork polygons of the items `lift` restored (the
+    /// restored item draws its stroke style again); the others stay as
+    /// InDesign has them, their label gone.
+    fn drop_stroke_art(spread: &mut Spread, restored: &std::collections::HashSet<String>) {
+        let mut i = 0;
+        while i < spread.polygons.len() {
+            let Some(id) = spread.polygons[i].self_id.clone() else {
+                i += 1;
+                continue;
+            };
+            let owner = spread.labels.get_mut(&id).and_then(|entries| {
+                let at = entries.iter().position(|(k, _)| k == STROKE_ART_KEY)?;
+                Some(entries.remove(at).1)
+            });
+            match owner {
+                Some(owner) if restored.contains(&owner) => {
+                    spread.labels.remove(&id);
+                    remove_item(spread, FrameRef::Polygon(i));
+                }
+                _ => i += 1,
+            }
+        }
+    }
+
     fn take(spread: &mut Spread, id: &Option<String>) -> Option<Source> {
         let entries = spread.labels.get_mut(id.as_deref()?)?;
         let at = entries.iter().position(|(k, _)| k == SOURCE_KEY)?;
@@ -866,14 +1107,14 @@ pub mod label {
     /// Restore every baked item on `spread` whose outline is still the
     /// one written (see the module doc). Returns how many came back.
     pub fn lift(spread: &mut Spread) -> usize {
-        if !spread
-            .labels
-            .values()
-            .any(|v| v.iter().any(|(k, _)| k == SOURCE_KEY))
-        {
+        if !spread.labels.values().any(|v| {
+            v.iter()
+                .any(|(k, _)| k == SOURCE_KEY || k == STROKE_ART_KEY)
+        }) {
             return 0;
         }
         let mut restored = 0;
+        let mut back: std::collections::HashSet<String> = std::collections::HashSet::new();
         // In-place kinds first: no list moves.
         for i in 0..spread.rectangles.len() {
             let id = spread.rectangles[i].self_id.clone();
@@ -888,6 +1129,7 @@ pub mod label {
                     *cur = *item;
                     cur.image_bytes = bytes;
                     restored += 1;
+                    back.extend(id);
                 } else {
                     strip_vector(&mut cur.effect_stack);
                 }
@@ -904,6 +1146,7 @@ pub mod label {
                 if fingerprint(&cur.anchors) == fp {
                     *cur = *item;
                     restored += 1;
+                    back.extend(id);
                 } else {
                     strip_vector(&mut cur.effect_stack);
                 }
@@ -927,6 +1170,7 @@ pub mod label {
                         *cur = *item;
                         cur.image_bytes = bytes;
                         restored += 1;
+                        back.extend(id.clone());
                     } else {
                         strip_vector(&mut spread.polygons[i].effect_stack);
                     }
@@ -943,6 +1187,7 @@ pub mod label {
                     spread.polygons.remove(i);
                     step_down(spread, FrameRef::Polygon(i));
                     restored += 1;
+                    back.extend(id.clone());
                 }
                 Source::Group {
                     group,
@@ -979,6 +1224,7 @@ pub mod label {
                 }
             }
         }
+        drop_stroke_art(spread, &back);
         spread.labels.retain(|_, v| !v.is_empty());
         restored
     }

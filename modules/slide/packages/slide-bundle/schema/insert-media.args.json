@@ -1,0 +1,21 @@
+{
+  "kind": "struct",
+  "fields": {
+    "data": { "kind": "text", "optional": true },
+    "name": { "kind": "text", "optional": true },
+    "slide": {
+      "kind": "ref",
+      "to": "plugin:media.paged.slide/slide",
+      "optional": true
+    },
+    "x": { "kind": "number", "unit": "pt", "optional": true },
+    "y": { "kind": "number", "unit": "pt", "optional": true },
+    "w": { "kind": "number", "unit": "pt", "optional": true },
+    "h": { "kind": "number", "unit": "pt", "optional": true },
+    "play": {
+      "kind": "enum",
+      "members": ["onClick", "auto"],
+      "optional": true
+    }
+  }
+}

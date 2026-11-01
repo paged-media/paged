@@ -58,6 +58,10 @@ defineMessages("menu", {
   Stroke: "Stroke",
   "Dashes…": "Dashes…",
   "Width profile…": "Width profile…",
+  "Brushes…": "Brushes…",
+  "Brush options…": "Brush options…",
+  "Remove brush": "Remove brush",
+  "New brush from selection": "New brush from selection",
   "Update linked recipes": "Update linked recipes",
   Pathfinder: "Pathfinder",
   Unite: "Unite",
@@ -88,6 +92,7 @@ defineMessages("menu", {
   Pattern: "Pattern",
   "Make from selection": "Make from selection",
   "Edit tile field": "Edit tile field",
+  "Save as pattern swatch": "Save as pattern swatch",
   Appearance: "Appearance",
   "Add fill": "Add fill",
   "Add stroke": "Add stroke",
@@ -136,6 +141,8 @@ defineMessages("menu", {
   "Re-trace image": "Re-trace image",
   "Edit colors": "Edit colors",
   "Recolor artwork…": "Recolor artwork…",
+  "Generative recolor…": "Generative recolor…",
+  "Text to vector…": "Text to vector…",
   "Rasterize…": "Rasterize…",
   "Puppet warp": "Puppet warp",
   Perspective: "Perspective",
@@ -205,6 +212,12 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    The width profile (the Width tool's bake, typed): run bare, the
   //    command raises the panel's Width profile section.
   ["Draw/Stroke/Width profile…", "widthProfile", "stroke"],
+  // WP6.4 — brushes as live stroke styles: the Brushes panel (libraries,
+  // Brush Options, width profiles), and the two verbs that need no row.
+  ["Draw/Stroke/Brushes…", "brushes", "brushes"],
+  ["Draw/Stroke/Brush options…", "brushOptions", "brushes"],
+  ["Draw/Stroke/Remove brush", "removeBrush", "brushes"],
+  ["Draw/Stroke/New brush from selection", "newBrush", "brushes"],
 
   // ── Pathfinder — the ten boolean ops, in Illustrator's own order so
   //    the muscle memory transfers. ──
@@ -435,10 +448,18 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    Trace / Re-trace); Re-trace runs with the record's options.
   ["Draw/Image trace…", "imageTraceOptions", "trace"],
   ["Draw/Re-trace image", "retraceImage", "trace"],
+  // WP8.3 — Text to vector: the agent writes an SVG, or a generated picture
+  // is traced. The "…" raises the panel where the prompt is typed.
+  ["Draw/Text to vector…", "textToVectorOptions", "trace"],
 
   // ── Colour — Recolor Artwork merges into Edit ▸ Edit colors, where
   //    Illustrator keeps it; the "…" raises its panel. ──
   ["Edit/Edit colors/Recolor artwork…", "recolorArtworkOptions", "edit-colors"],
+  [
+    "Edit/Edit colors/Generative recolor…",
+    "generativeRecolorOptions",
+    "edit-colors",
+  ],
 ];
 
 /**

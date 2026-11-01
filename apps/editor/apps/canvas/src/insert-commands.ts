@@ -108,6 +108,7 @@ const M = defineMessages("app.insertCommands", {
   insertTable: "Insert table",
   deletePage: "Delete page",
   placeImage: "Place image…",
+  generateImage: "Generate image",
   addPage: "Add page",
   placeImageVerb: "Place image",
   needsDocument: "{verb} needs an open document. Open or create one first.",
@@ -155,6 +156,7 @@ export const PAGED_INSERT_ELLIPSE = "paged.insert.ellipse";
 export const PAGED_INSERT_LINE = "paged.insert.line";
 export const PAGED_INSERT_TABLE = "paged.insert.table";
 export const PAGED_INSERT_PLACE_IMAGE = "paged.insert.placeImage";
+export const PAGED_INSERT_GENERATE_IMAGE = "paged.insert.generateImage";
 export const PAGED_INSERT_NEW_PAGE = "paged.insert.newPage";
 export const PAGED_INSERT_DELETE_PAGE = "paged.insert.deletePage";
 
@@ -202,7 +204,7 @@ export interface InsertOutcome {
   createdId: ElementId | null;
 }
 
-const REFUSED: InsertOutcome = { applied: false, createdId: null };
+export const REFUSED: InsertOutcome = { applied: false, createdId: null };
 
 /** B3 — deleting a page had NO menu route at all. `deletePage` was
  *  reachable only from `paged.pages-list`, a panel in no mode's slots,
@@ -413,11 +415,12 @@ const VERB_KEYS: Readonly<Record<string, string>> = {
   "Insert table": M.insertTable,
   "Delete page": M.deletePage,
   "Place image": M.placeImageVerb,
+  "Generate image": M.generateImage,
   "Add page": M.addPage,
 };
 
 /** "<verb> refused: <reason>", in the editor's words. */
-function refused(verb: string, reason: string): string {
+export function refused(verb: string, reason: string): string {
   return t(M.refused, { verb: verbText(verb), reason });
 }
 
@@ -425,7 +428,7 @@ function refused(verb: string, reason: string): string {
  *  having already told the user why — a report, not a silent return
  *  (the `paged.object.*` rule: the user pressed something and is owed
  *  an answer). */
-function blockedFor(
+export function blockedFor(
   paged: PagedEditor,
   report: InsertReport,
   verb: string,
@@ -448,14 +451,14 @@ function blockedFor(
 
 /** Route a `mutationFailed` reply's engine sentence to the report
  *  channel under the verb's name. */
-function refusedTap(report: InsertReport, verb: string) {
+export function refusedTap(report: InsertReport, verb: string) {
   return (reply: MutateReply) => {
     const refusal = refusalOf(reply);
     if (refusal) report("error", refused(verb, refusal));
   };
 }
 
-function outcomeOf(reply: MutateReply | null): InsertOutcome {
+export function outcomeOf(reply: MutateReply | null): InsertOutcome {
   if (!reply || reply.kind !== "mutationApplied") return REFUSED;
   return { applied: true, createdId: reply.payload.createdId ?? null };
 }
@@ -1059,6 +1062,12 @@ export interface InsertCommandHandlers {
     paged: PagedEditor,
     dropped?: PlaceDropPayload,
   ) => unknown | Promise<unknown>;
+  /** `{ prompt, aspect?, seed?, steps? }`: Generate Image into the
+   *  selected frame or a new one (editor ADR 313). */
+  generateImage: (
+    paged: PagedEditor,
+    payload?: unknown,
+  ) => unknown | Promise<unknown>;
   newPage: (paged: PagedEditor) => unknown | Promise<unknown>;
   deletePage: (paged: PagedEditor) => unknown | Promise<unknown>;
 }
@@ -1093,6 +1102,15 @@ export function buildInsertCommands(
           paged as PagedEditor,
           isPlaceDropPayload(payload) ? payload : undefined,
         ),
+    },
+    {
+      ...cmd(
+        PAGED_INSERT_GENERATE_IMAGE,
+        t(M.generateImage),
+        handlers.generateImage,
+      ),
+      handler: (paged, payload) =>
+        handlers.generateImage(paged as PagedEditor, payload),
     },
     cmd(PAGED_INSERT_NEW_PAGE, t(M.addPage), handlers.newPage),
   ];

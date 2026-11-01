@@ -1540,6 +1540,29 @@ export {
   makeImageTracePanel,
   IMAGE_TRACE_PANEL_NOTE,
 } from "./panels/image-trace-panel";
+// WP8.3 — TEXT TO VECTOR and GENERATIVE RECOLOR (the agent and ml doors).
+export {
+  TEXT_TO_VECTOR_COMMAND_ID,
+  GENERATIVE_RECOLOR_COMMAND_ID,
+  TEXT_TO_VECTOR_OPTIONS_COMMAND_ID,
+  GENERATIVE_RECOLOR_OPTIONS_COMMAND_ID,
+  GENERATIVE_COMMAND_IDS,
+  GENERATIVE_PANEL_ID,
+  AGENT_COMPLETE_COMMAND,
+  applyTextToVector,
+  applyGenerativeRecolor,
+  textToVectorByAgent,
+  textToVectorByImage,
+  svgPromptFor,
+  extractSvg,
+  svgRefusal,
+  recolorPromptFor,
+  parseColorMap,
+  type GenerativeOutcome,
+  type GenerativeRecolorOutcome,
+  type GenerativeRoute,
+} from "./commands/generative";
+export { makeGenerativePanel } from "./panels/generative-panel";
 // WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE.
 export {
   RECOLOR_ARTWORK_COMMAND_ID,
@@ -1577,6 +1600,39 @@ export {
   makeColorGuidePanel,
   COLOR_GUIDE_PANEL_NOTE,
 } from "./panels/color-guide-panel";
+// WP6.4 — brushes and width profiles as live stroke styles (engine ADR
+// 1053, draw ADR 366).
+export {
+  APPLY_BRUSH_COMMAND_ID,
+  APPLY_WIDTH_PROFILE_COMMAND_ID,
+  BRUSH_COMMAND_IDS,
+  BRUSH_LIBRARIES,
+  BRUSH_LIBRARY_PART,
+  BRUSH_OPTIONS_COMMAND_ID,
+  BRUSH_TYPES,
+  BRUSHES_COMMAND_ID,
+  BRUSHES_PANEL_ID,
+  BUILTIN_BRUSHES,
+  DEFAULT_BRUSH_OPTIONS,
+  NEW_BRUSH_COMMAND_ID,
+  REMOVE_BRUSH_COMMAND_ID,
+  applyBrush,
+  applyWidthProfileStyle,
+  brushArtOf,
+  brushEntryFor,
+  newBrushFromSelection,
+  removeBrush,
+  setBrushOptions,
+  stackMutationFor,
+  widthProfileEntryFor,
+  withStrokeStyle,
+  type BrushArt,
+  type BrushDef,
+  type BrushOptions,
+  type BrushType,
+} from "./commands/brushes";
+export { makeBrushesPanel, BRUSHES_PANEL_NOTE } from "./panels/brushes-panel";
+export { liveStrokeOpsFor } from "./handlers/brush";
 // The pure tree-parentage resolver Appearance bake + Symbols read,
 // exported for the conformance spec. "Select: Parent group" itself is
 // the host's now (`paged.object.selectParentGroup`) — see

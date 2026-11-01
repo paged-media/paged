@@ -810,6 +810,17 @@ unknown paths. paged.draw's Star tool asks it before it inserts a live
 star (the plain polygon, then its points and inset in the same batch)
 instead of a plain path.
 
+`"document.media@1"` (extensions ADR 345, amendment 1, engine ADR 1027) is the media
+door. A movie or sound frame is a rectangle whose picture is its poster and
+whose `frameMedia` (a `MediaItem`: kind, a part or link source, trim, fades,
+play on click or automatically, loop, volume, hide while not playing) names
+its medium. `host.media.read(id)` answers `{ media, bytes, url }` (the part's
+bytes, or the link); `host.media.store(bytes, { mime })` keeps new media in
+the engine's shared, write-once folder `paged/core/media/` and answers the
+`{ type: "part", path }` source a `frameMedia` write names. The engine never
+plays a medium: a presentation surface (ADR 345) plays it in its own media
+element over the frame. Additive at protocol 78.
+
 `"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the
@@ -930,6 +941,26 @@ flat net, or none, draws the item as drawn; 1 to 50 cells a side). A read
 answers the whole net. paged.draw's Object ▸ Envelope distort verbs and
 its Envelope Mesh tool write it; `expandAppearance` keeps it like any
 vector entry.
+
+`"document.strokeStyles@1"` (engine ADR 1053, protocol 78) says the
+engine draws STROKE STYLES: two more vector kinds of `frameEffectStack`
+that draw the item's stroke along its path, painted with the stroke's
+paint. `widthProfile` (`widthPoints`: `[t, width]`, `t` the arc-length
+fraction of each contour, `width` × the stroke weight, eased between
+points) is Illustrator's variable-width stroke; `brush` (`brushType`:
+`art`, `scatter`, `pattern` or `bristle`; the artwork in the brush frame
+as `artNodes` / `artStarts` / `artClosed`, empty for the kind's own;
+`scalePct`, `spacingPct`, `scatterPct`, `rotateDeg`,
+`rotateVariationDeg`, `sizeMinPct`, `flipAlong`, `flipAcross`,
+`tileAspect`, `bristles`, `bristleThicknessPct`, `seed`) draws a brush's
+artwork. Both together: the brush is as wide as the profile says. The
+item's fill stays on its source outline; a group's stack refuses them.
+Expand Appearance keeps a stroke-only item's artwork and refuses one with
+a fill; IDML export writes the artwork as a path (beside a fill, as a
+polygon `<id>vfx` after the item) and restores it on a paged read.
+Introspection lists them with `strokeStyle: true` in the `stroke`
+category, which is no Effect menu group. paged.draw's Width tool,
+Paintbrush (live result) and Brushes panel write them (draw ADR 366).
 
 `"document.paint2@1"` (engine ADR 1007) is another property flag: the
 vendored wire carries a gradient stop's opacity (`opacityPct`) and inline

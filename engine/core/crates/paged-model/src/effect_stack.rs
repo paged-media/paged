@@ -354,6 +354,12 @@ pub enum Effect {
     ConvertToShape(crate::vector_effect::ConvertToShapeParams),
     /// On a group only: its members combined into one outline.
     Pathfinder(crate::vector_effect::PathfinderParams),
+    // Stroke styles (engine ADR 1053): vector entries that draw the
+    // item's STROKE as artwork along the path; the fill stays.
+    /// A variable-width stroke.
+    WidthProfile(crate::vector_effect::WidthProfileParams),
+    /// A brush along the path.
+    Brush(crate::vector_effect::BrushParams),
 }
 
 /// The stack-only effect kinds, by their serialised names.
@@ -414,6 +420,8 @@ impl Effect {
             Effect::Scribble(_) => "scribble",
             Effect::ConvertToShape(_) => "convertToShape",
             Effect::Pathfinder(_) => "pathfinder",
+            Effect::WidthProfile(_) => "widthProfile",
+            Effect::Brush(_) => "brush",
             _ => unreachable!("InDesign kinds return above"),
         }
     }
@@ -529,6 +537,8 @@ impl Effect {
             "scribble" => Effect::Scribble(v::ScribbleParams::default()),
             "convertToShape" => Effect::ConvertToShape(v::ConvertToShapeParams::default()),
             "pathfinder" => Effect::Pathfinder(v::PathfinderParams::default()),
+            "widthProfile" => Effect::WidthProfile(v::WidthProfileParams::default()),
+            "brush" => Effect::Brush(v::BrushParams::default()),
             _ => return None,
         })
     }
@@ -553,8 +563,23 @@ impl Effect {
                 | Effect::Scribble(_)
                 | Effect::ConvertToShape(_)
                 | Effect::Pathfinder(_)
+                | Effect::WidthProfile(_)
+                | Effect::Brush(_)
         )
     }
+
+    /// Whether this entry is a stroke style (engine ADR 1053): a vector
+    /// entry that draws the item's stroke as artwork along the path.
+    pub fn is_stroke_style(&self) -> bool {
+        matches!(self, Effect::WidthProfile(_) | Effect::Brush(_))
+    }
+}
+
+/// Whether a stack has an enabled stroke style (engine ADR 1053).
+pub fn has_stroke_style(stack: &[EffectEntry]) -> bool {
+    stack
+        .iter()
+        .any(|e| e.enabled && e.effect.is_stroke_style())
 }
 
 /// The enabled vector entries of a stack, in order (engine ADR 1042).

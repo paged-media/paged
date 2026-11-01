@@ -110,6 +110,8 @@ effects parity (engine 1007/1008) and motion-path handles are not part of it.
   density, at most 4096 px on the long side), the bundle renders them with
   `host.render.element` (`render.snapshot@2`) and the deck is written again with them. The
   PNG holds the frame's visible part, so no `a:srcRect` is written for it.
+  ADR 723 narrows this: WebP, TGA, ICO and QOI are decoded by the exporter and written as
+  PNGs of their own pixels; the host renders only the formats that need the engine's decoders.
 - **SVG and icons.** An SVG stays vector in the document: the engine draws placed SVG as paths
   (engine ADR 190). Export writes it as PowerPoint does: an `a:blip` holding a PNG fallback,
   with an `asvg:svgBlip` extension (`{96DAC541-7B7A-43D3-8B79-37D633B846F1}`) naming the SVG

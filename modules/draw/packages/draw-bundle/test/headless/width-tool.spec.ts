@@ -30,6 +30,7 @@ import type { CanvasPointerEvent, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle, createWidthHandler } from "../../src";
+import { readStroke } from "../../src/commands/brushes";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
@@ -70,10 +71,24 @@ function drag(
   from: [number, number],
   to: [number, number],
 ): void {
-  handler.onActivate(undefined as never);
   handler.onPointerDown(pointer(pageId, from));
   handler.onPointerMove(pointer(pageId, to, 30));
   handler.onPointerUp(pointer(pageId, to, 30));
+}
+
+/** The v0 bake these cases pin is the tool's `outline` mode (WP6.4 made
+ *  live width points the default; `test/headless/brushes.spec.ts` and the
+ *  tool-options spec cover that lane). */
+function outlineMode<T extends ReturnType<typeof createWidthHandler>>(
+  handler: T,
+): T {
+  handler.onActivate?.({
+    toolSettings: {
+      getValue: (_tool: string, key: string) =>
+        key === "mode" ? "outline" : undefined,
+    },
+  } as never);
+  return handler;
 }
 
 describe("draw conformance — width tool v0 (wave 2)", () => {
@@ -86,13 +101,32 @@ describe("draw conformance — width tool v0 (wave 2)", () => {
   });
   afterAll(() => h?.dispose());
 
+  it("LIVE (the default): a drag on the stroke writes a width point; the path keeps its anchors; one undo [plugin-draw.brushes-width]", async () => {
+    await h.host.selection.set([POLY]);
+    const before = await h.host.document.pathAnchors(POLY);
+    const handler = createWidthHandler(h.host);
+    drag(handler, F1_MULTI_SHAPE.pageId, [250, 600], [250, 580]);
+    const kinds = async () =>
+      (await readStroke(h.host, POLY)).stack.map((e) => e.kind);
+    await until(async () => (await kinds()).includes("widthProfile"));
+    const entry = (await readStroke(h.host, POLY)).stack.find(
+      (e) => e.kind === "widthProfile",
+    )!;
+    expect((entry.widthPoints as number[][]).length).toBe(3);
+    expect((await h.host.document.pathAnchors(POLY))!.anchors).toEqual(
+      before!.anchors,
+    );
+    await h.host.document.undo();
+    expect(await kinds()).toEqual([]);
+  });
+
   it("a drag on the selected open polygon's middle anchor bakes the outline (one undo)", async () => {
     await h.host.selection.set([POLY]);
     const before = await h.host.document.pathAnchors(POLY);
     expect(before!.subpathOpen?.[0]).toBe(true);
     expect(before!.anchors).toHaveLength(3);
 
-    const handler = createWidthHandler(h.host);
+    const handler = outlineMode(createWidthHandler(h.host));
     // upoly's middle anchor sits at (250, 600); drag 20 pt upward.
     drag(handler, F1_MULTI_SHAPE.pageId, [250, 600], [250, 580]);
 
@@ -117,7 +151,7 @@ describe("draw conformance — width tool v0 (wave 2)", () => {
   it("an off-anchor press is inert", async () => {
     await h.host.selection.set([POLY]);
     const before = await h.host.document.pathAnchors(POLY);
-    const handler = createWidthHandler(h.host);
+    const handler = outlineMode(createWidthHandler(h.host));
     // (250, 450) is > 8 px-pt from every anchor of upoly.
     drag(handler, F1_MULTI_SHAPE.pageId, [250, 450], [250, 430]);
     await new Promise((r) => setTimeout(r, 100));
@@ -130,7 +164,7 @@ describe("draw conformance — width tool v0 (wave 2)", () => {
   it("no path-bearing selection → no-op", async () => {
     await h.host.selection.set([]);
     const before = await h.host.document.pathAnchors(POLY);
-    const handler = createWidthHandler(h.host);
+    const handler = outlineMode(createWidthHandler(h.host));
     drag(handler, F1_MULTI_SHAPE.pageId, [250, 600], [250, 580]);
     await new Promise((r) => setTimeout(r, 100));
     const after = await h.host.document.pathAnchors(POLY);
@@ -141,7 +175,7 @@ describe("draw conformance — width tool v0 (wave 2)", () => {
   it("a CLOSED path is refused (the v0 open-single-contour gate)", async () => {
     await h.host.selection.set([RECT]);
     const before = await h.host.document.pathAnchors(RECT);
-    const handler = createWidthHandler(h.host);
+    const handler = outlineMode(createWidthHandler(h.host));
     // (100, 100) is the rectangle's first corner anchor.
     drag(handler, F1_MULTI_SHAPE.pageId, [100, 100], [80, 80]);
     await new Promise((r) => setTimeout(r, 100));

@@ -86,6 +86,28 @@ fn blob_name(bytes: &[u8]) -> String {
     blake3::hash(bytes).to_hex()[..32].to_string()
 }
 
+/// Engine ADR 1027 — the container path a medium's bytes are kept at:
+/// `paged/core/media/<name>.<ext>`, named by its content (the blobs' hash),
+/// so the same medium is one part however often it is placed.
+pub fn media_part_path(bytes: &[u8], ext: &str) -> String {
+    let ext: String = ext
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let ext = if ext.is_empty() {
+        "bin".to_string()
+    } else {
+        ext
+    };
+    format!(
+        "{}{}.{ext}",
+        paged_model::media::MEDIA_PART_PREFIX,
+        blob_name(bytes)
+    )
+}
+
 /// The on-disk envelope: a version tag around the model. Serialized borrowed
 /// (no clone) and deserialized owned.
 #[derive(serde::Serialize)]

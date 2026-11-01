@@ -1,0 +1,8 @@
+{
+ "oracle": "Microsoft PowerPoint 16.114.1",
+ "recorded": "2026-10-30",
+ "authored_by": "scripts/fixtures/effects.applescript (two blank slides), scripts/fixtures/media.seed.py, re-saved by scripts/fixtures/resave.applescript",
+ "slides": 2,
+ "media": "self-made: a 2 s 320x180 H.264 clip of ffmpeg's testsrc2 pattern with a 440 Hz sine (AAC), a 1 s 660 Hz sine (AAC, m4a), a 160x90 poster taken from the clip's first frame, a 64x64 flat-colour icon",
+ "contents": "slide 1: an embedded video (trim 250 ms / 500 ms) that plays automatically at 40 % volume, looped, hidden while not playing; slide 2: an embedded audio that plays on the first click at 80 % volume"
+}

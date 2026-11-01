@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 878,
-    "keybinding": 166,
-    "menu": 623,
-    "panel": 147,
-    "tool": 129
+    "command": 900,
+    "keybinding": 167,
+    "menu": 642,
+    "panel": 149,
+    "tool": 130
   },
   "features": [
     {
@@ -701,12 +701,22 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.applyBrush",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.applyGraphicStyle",
       "kind": "command",
       "owner": "media.paged.draw"
     },
     {
       "id": "command:media.paged.draw.command.applyGuideColor",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.applyWidthProfile",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -742,6 +752,16 @@
     },
     {
       "id": "command:media.paged.draw.command.breakSymbolLink",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.brushOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.brushes",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -1041,6 +1061,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.newBrush",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.offsetPath",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1262,6 +1287,11 @@
     },
     {
       "id": "command:media.paged.draw.command.releaseRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.removeBrush",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -1612,6 +1642,11 @@
     },
     {
       "id": "command:media.paged.image.command.colorRange",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.colorize",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2286,6 +2321,21 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.generateImage",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.generativeExpand",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.generativeFill",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.globalLight",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2312,6 +2362,11 @@
     },
     {
       "id": "command:media.paged.image.command.invertSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.jpegArtifacts",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2671,6 +2726,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.removeBackground",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.removeHq",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.replaceLayerPixels",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2746,6 +2811,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.selectSky",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.selectSubject",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.selectionToPath",
       "kind": "command",
       "owner": "media.paged.image"
@@ -2762,6 +2837,16 @@
     },
     {
       "id": "command:media.paged.image.command.similar",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.skinSmoothing",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.skyReplacement",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2837,6 +2922,11 @@
     },
     {
       "id": "command:media.paged.image.command.strokePath",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.superZoom",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -3306,7 +3396,22 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.formatPainter",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.formatPainterOff",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.importPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertAudio",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3322,6 +3427,11 @@
     },
     {
       "id": "command:media.paged.slide.command.insertShapes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertVideo",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -5126,6 +5236,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:escape→media.paged.slide.command.formatPainterOff",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:f5→media.paged.slide.command.slideShowFromBeginning",
       "kind": "keybinding",
       "owner": "media.paged.slide"
@@ -5736,7 +5851,27 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Stroke/Brush options…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Stroke/Brushes…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Stroke/Dashes…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Stroke/New brush from selection",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Stroke/Remove brush",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -6646,6 +6781,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Filter/Neural filters/JPEG artifact removal",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Filter/Neural filters/Super zoom",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Filter/Noise/Add noise…",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -6802,6 +6947,46 @@
     },
     {
       "id": "menu:Image/Flip vertical",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Generate/Colorize",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Generate/Generate image…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Generate/Generative expand…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Generate/Generative fill…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Generate/Remove background",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Generate/Remove selection",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Generate/Skin smoothing",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Generate/Sky replacement",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -7386,6 +7571,16 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Selection/Select sky",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Selection/Select subject",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Selection/Similar",
       "kind": "menu",
       "owner": "media.paged.image"
@@ -7421,6 +7616,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Insert/Audio…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Insert/Icons…",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -7432,6 +7632,11 @@
     },
     {
       "id": "menu:Insert/Shapes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Insert/Video…",
       "kind": "menu",
       "owner": "media.paged.slide"
     },
@@ -8001,6 +8206,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Format Painter",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Move slide down",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -8431,6 +8641,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "panel:media.paged.draw.panel.brushes",
+      "kind": "panel",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "panel:media.paged.draw.panel.colorGuide",
       "kind": "panel",
       "owner": "media.paged.draw"
@@ -8552,6 +8767,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.design",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.icons",
       "kind": "panel",
       "owner": "media.paged.slide"
     },
@@ -9492,6 +9712,11 @@
     },
     {
       "id": "tool:media.paged.image.tool.note",
+      "kind": "tool",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "tool:media.paged.image.tool.objectSelection",
       "kind": "tool",
       "owner": "media.paged.image"
     },
