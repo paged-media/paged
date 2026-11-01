@@ -4585,10 +4585,11 @@ export function createWorkbookSession(
     // ADR 524 — a mapping naming a style this document lacks falls back.
     await syncDocStyleAvailability();
     emitter.emit();
-    // The workbook's threads join the document's comments; an import drops
-    // the threads left from the workbook it replaced.
-    sheetComments.reset();
-    void sheetComments.sync({ fresh: persist });
+    // The workbook's threads join the document's comments. A restore starts
+    // from nothing; an import keeps the last reconcile, so the threads of the
+    // workbook it replaced leave the document.
+    if (!persist) sheetComments.reset();
+    void sheetComments.sync();
     return true;
   }
 

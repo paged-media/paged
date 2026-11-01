@@ -234,10 +234,11 @@ describe("plan", () => {
     ]);
   });
 
-  it("leaves a document thread of an unknown workbook alone, drops it on import", () => {
+  it("leaves a document thread of an unknown workbook alone, drops one the last reconcile held", () => {
     const stale = [eroot("{OLD}")];
     expect(plan([], stale, new Map(), frames).engine).toEqual([]);
-    expect(plan([], stale, new Map(), frames, true).engine).toEqual([
+    const held = new Map([["{OLD}", { text: "hello", done: false }]]);
+    expect(plan([], stale, held, frames).engine).toEqual([
       { op: "deleteComment", args: { commentId: "{OLD}" } },
     ]);
   });

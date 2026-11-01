@@ -287,16 +287,13 @@ const specOf = (c: WbComment) => ({
 
 /**
  * What to change on each side so the two agree.
- *
- * `fresh` marks a workbook just imported over another: roots the document
- * holds for a workbook that is gone are deleted instead of left alone.
+
  */
 export function plan(
   wb: readonly WbComment[],
   rows: readonly EngineRow[],
   snap: Snapshot,
   frames: () => readonly FrameRange[],
-  fresh = false,
 ): Plan {
   const out: Plan = { engine: [], workbook: [], replies: [] };
   const w = new Map(wb.map((c) => [c.id, c]));
@@ -385,7 +382,7 @@ export function plan(
         doneAfter.set(id, wc.done);
       }
     } else if (!wc && er) {
-      if (s || fresh) {
+      if (s) {
         out.engine.push({ op: "deleteComment", args: { commentId: id } });
         gone.add(id);
         inEngine.delete(id);
@@ -500,10 +497,11 @@ export interface SheetCommentsDeps {
 }
 
 export interface SheetComments {
-  /** Reconcile now (coalesced with one in flight). `fresh`: a workbook was
-   *  just imported, so threads left from the previous one are dropped. */
-  sync(opts?: { fresh?: boolean }): Promise<void>;
-  /** A workbook was loaded: forget the last reconcile. */
+  /** Reconcile now (coalesced with one in flight). */
+  sync(): Promise<void>;
+  /** A workbook was restored with the document: forget the last reconcile.
+   *  (An import keeps it, so the threads of the workbook it replaces are
+   *  deleted from the document.) */
   reset(): void;
   dispose(): void;
 }
@@ -513,8 +511,11 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
   let snap: Snapshot = new Map();
   let running: Promise<void> | null = null;
   let again = false;
-  let freshAgain = false;
   let disposed = false;
+  // A workbook without threads and a document without theirs: nothing can
+  // appear on either side until a workbook loads, so document changes cost
+  // nothing here (the engine is not asked, the comments are not read).
+  let idle = false;
 
   const rows = async (): Promise<EngineRow[]> => {
     const all: unknown = await host.document.collection("comments" as never);
@@ -641,48 +642,51 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
     return { changed, swaps };
   }
 
-  async function once(fresh: boolean): Promise<void> {
+  async function once(): Promise<void> {
     const engine = deps.engine();
     if (!engine?.listThreads || !engine.listSheets) return;
     const wb = readWorkbook(engine);
-    if (wb.length === 0 && snap.size === 0 && !fresh) return;
+    if (wb.length === 0 && snap.size === 0) {
+      idle = true;
+      return;
+    }
+    idle = false;
     const current = await rows();
     // The frames are read only when a thread has none in the document yet.
     const placed = new Set(current.filter(isCellRoot).map((r) => r.id));
     const frameList = wb.some((c) => c.id === c.rootId && !placed.has(c.id))
       ? await frames()
       : [];
-    const p = plan(wb, current, snap, () => frameList, fresh);
+    const p = plan(wb, current, snap, () => frameList);
     const w = writeWorkbook(engine, p);
     if (w.changed) deps.edited();
     const ok = await apply([...p.engine, ...w.swaps]);
     if (!ok) return;
     if (p.engine.length === 0 && w.swaps.length === 0 && !w.changed) {
       snap = snapshotOf(wb, current);
+      idle = wb.length === 0 && snap.size === 0;
       return;
     }
-    snap = snapshotOf(readWorkbook(engine), await rows());
+    const after = readWorkbook(engine);
+    snap = snapshotOf(after, await rows());
+    idle = after.length === 0 && snap.size === 0;
   }
 
-  function sync(opts: { fresh?: boolean } = {}): Promise<void> {
+  function sync(): Promise<void> {
     if (disposed) return Promise.resolve();
     if (running) {
       again = true;
-      freshAgain ||= !!opts.fresh;
       return running;
     }
-    let fresh = !!opts.fresh;
     running = (async () => {
       try {
         do {
           again = false;
           try {
-            await once(fresh);
+            await once();
           } catch (err) {
             host.log.debug("sheet comments: sync failed", err);
           }
-          fresh = freshAgain;
-          freshAgain = false;
         } while (again && !disposed);
       } finally {
         running = null;
@@ -691,12 +695,15 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
     return running;
   }
 
-  const sub = host.document.onDidChange(() => void sync());
+  const sub = host.document.onDidChange(() => {
+    if (!idle) void sync();
+  });
 
   return {
     sync,
     reset() {
       snap = new Map();
+      idle = false;
     },
     dispose() {
       disposed = true;
