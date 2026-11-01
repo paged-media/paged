@@ -132,6 +132,19 @@ Status (draw items, one line each; updated as they land):
   builders (`resolveGraphicPaint`, `graphicPaintFromStyle`, `withGraphicPaint`) are one
   implementation in `platform/shared/helpers`. The editor's tools and draw's tools each keep
   only their two reads (client / `BundleHost`), which cannot be shared.
+- Pathfinder: KEEP for now, MERGE first. The host panel (`pathfinder-panel.tsx`) has all ten
+  verbs, orders by real z and shows the engine's refusal, but it is the only host entry point:
+  no commands, no menu entries, no palette or scripting ids. Draw's ten commands and their
+  Draw > Pathfinder menu are those. Delete draw's once the host declares
+  `paged.pathfinder.*` commands (the `paged.object.*` layer is the model) and the panel calls them.
+- Colour guide: KEEP. The host colour wheel (`color-wheel-panel.tsx`) authors a harmony from the
+  wheel's own colour and adds swatches; draw's panel reads the selection's fill, offers the
+  shade/tint, warm/cool and vivid/muted variation grids and paints the selection from a chip.
+  Merging means adding those three things to the host wheel.
+- Measure: KEEP. The host has no Measure tool (`built-in-tools.ts` records its retirement in
+  favour of draw's); nothing to delete until the host builds one.
+- Copy appearance: KEEP. The host eyedropper samples one composited pixel into a swatch and
+  fills with it; draw's copies a whole appearance (fills, strokes, effects). Different feature.
 
 ### Reach (gaps between modules)
 
