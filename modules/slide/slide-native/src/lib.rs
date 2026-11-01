@@ -781,6 +781,10 @@ struct Builder<'a> {
     table_styles: Vec<(TableStyleKey, TableStyleDef)>,
     /// Region cell styles: id and fill.
     cell_styles: Vec<(String, String)>,
+    /// The character styles of list markers whose font, colour or size differ
+    /// from their text's (a bullet's `buFont` / `buClr` / `buSzPct`), keyed by
+    /// what they set.
+    bullet_styles: Vec<(String, CharacterStyleDef)>,
     /// The page each slide part became, for links to slides.
     page_of_part: BTreeMap<String, String>,
     /// Text hyperlinks: (number, destination).
@@ -1712,6 +1716,44 @@ impl Builder<'_> {
         Some(format!("HyperlinkTextSource/hl{k}"))
     }
 
+    /// The character style a list marker takes when its font, colour or size
+    /// is not its text's: one style per distinct look, made the first time it
+    /// is met. `text_size` is the size of the paragraph's first run, which a
+    /// size percentage scales.
+    fn marker_style(
+        &mut self,
+        font: Option<&str>,
+        rgb: Option<Rgb>,
+        size_percent: f64,
+        text_size: f64,
+    ) -> Option<String> {
+        let scaled = size_percent > 0.0 && (size_percent - 100.0).abs() > 0.5 && text_size > 0.0;
+        let font = font.map(clean_value).filter(|f| !f.is_empty());
+        if font.is_none() && rgb.is_none() && !scaled {
+            return None;
+        }
+        let size = scaled.then(|| text_size * size_percent / 100.0);
+        let key = format!("{font:?}|{rgb:?}|{size:?}");
+        if let Some((_, def)) = self.bullet_styles.iter().find(|(k, _)| *k == key) {
+            return Some(def.self_id.clone());
+        }
+        let id = format!(
+            "CharacterStyle/List marker {}",
+            self.bullet_styles.len() + 1
+        );
+        let fill_color = rgb.map(|c| self.run_color(c, None));
+        let def = CharacterStyleDef {
+            self_id: id.clone(),
+            name: Some(id["CharacterStyle/".len()..].to_string()),
+            font,
+            point_size: size.map(n),
+            fill_color,
+            ..CharacterStyleDef::default()
+        };
+        self.bullet_styles.push((key, def));
+        Some(id)
+    }
+
     fn paragraphs(&mut self, paras: &[Para]) -> Vec<Paragraph> {
         let mut out = Vec::with_capacity(paras.len());
         for p in paras {
@@ -1759,6 +1801,32 @@ impl Builder<'_> {
             }
             if let Some(Bullet::Number { scheme, start, .. }) = &p.bullet {
                 apply_numbering(&mut para, scheme, *start);
+            }
+            // The marker's own font, colour and size (`buFont`, `buClr`,
+            // `buSzPct`) as a character style on the paragraph.
+            let text_size = p
+                .runs
+                .iter()
+                .map(|r| r.size)
+                .find(|s| *s > 0.0)
+                .unwrap_or(0.0);
+            match &p.bullet {
+                Some(Bullet::Char {
+                    font,
+                    rgb,
+                    size_percent,
+                    ..
+                }) => {
+                    para.bullets_character_style =
+                        self.marker_style(font.as_deref(), *rgb, *size_percent, text_size);
+                }
+                Some(Bullet::Number {
+                    rgb, size_percent, ..
+                }) => {
+                    para.bullets_and_numbering_digits_character_style =
+                        self.marker_style(None, *rgb, *size_percent, text_size);
+                }
+                None => {}
             }
             // An empty paragraph's line is its size alone: no run.
             for r in &p.runs {
@@ -1907,6 +1975,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         elements: BTreeMap::new(),
         table_styles: Vec::new(),
         cell_styles: Vec::new(),
+        bullet_styles: Vec::new(),
         page_of_part: deck
             .slides
             .iter()
@@ -2195,6 +2264,9 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
                 ..CharacterStyleDef::default()
             },
         );
+    }
+    for (_, def) in w.bullet_styles.drain(..) {
+        styles.character_styles.insert(def.self_id.clone(), def);
     }
     let mut cell_style = |id: &str, name: &str, fill: Option<String>| {
         styles.cell_styles.insert(

@@ -410,6 +410,41 @@ fn date_and_time_fields_are_engine_fields_and_are_written_back_as_fields() {
 }
 
 #[test]
+fn a_bullets_font_colour_and_size_become_the_markers_character_style() {
+    let bytes = fixture("text");
+    let mut pkg = paged_ooxml::opc::OpcPackage::read(&bytes).unwrap();
+    let part = "ppt/slides/slide1.xml";
+    let xml = String::from_utf8(pkg.part(part).unwrap().to_vec()).unwrap();
+    let old = r#"<a:p><a:r><a:rPr lang="de-DE"/><a:t>List levels</a:t>"#;
+    assert!(xml.contains(old));
+    let with = r#"<a:p><a:pPr marL="285750" indent="-285750"><a:buClr><a:srgbClr val="FF0000"/></a:buClr><a:buSzPct val="80000"/><a:buFont typeface="Wingdings"/><a:buChar char="&#167;"/></a:pPr><a:r><a:rPr lang="de-DE" sz="2000"/><a:t>List levels</a:t>"#;
+    pkg.set_part(part, xml.replacen(old, with, 1).into_bytes());
+    let bytes = pkg.write().unwrap();
+    let doc = imported(&bytes);
+    let before = resolved(&bytes);
+    let title = story_of(&doc, 0, &format!("{}#4", before.slides[0].part));
+    let story = doc.stories.iter().find(|s| s.self_id == title).unwrap();
+    let para = &story.story.paragraphs[0];
+    let id = para
+        .bullets_character_style
+        .as_deref()
+        .expect("a marker style");
+    let def = &doc.styles.character_styles[id];
+    assert_eq!(def.font.as_deref(), Some("Wingdings"));
+    assert_eq!(def.point_size, Some(16.0), "80% of the 20 pt text");
+    assert!(def.fill_color.is_some());
+    // Bullets that look like their text get no style of their own.
+    assert!(
+        doc.stories
+            .iter()
+            .flat_map(|s| s.story.paragraphs.iter())
+            .filter(|p| p.bullets_character_style.is_some())
+            .count()
+            >= 1
+    );
+}
+
+#[test]
 fn edited_text_reads_back_and_untouched_paragraphs_keep_their_xml() {
     let bytes = fixture("text");
     let base = imported(&bytes);
