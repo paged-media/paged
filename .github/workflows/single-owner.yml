@@ -1,0 +1,44 @@
+name: single-owner
+
+# The single-owner ratchet (docs/adr/PM-0017): a capability has one owner, and
+# a new copy of one outside it fails here. tooling/single-owner.json lists the
+# rules and the copies that still exist; the baseline only shrinks.
+# `git grep` does the reading, so the job needs git and Bun and nothing else.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.rs"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.mjs"
+      - "tooling/single-owner.json"
+      - "tooling/js/single-owner.mjs"
+      - ".github/workflows/single-owner.yml"
+  pull_request:
+    paths:
+      - "**/*.rs"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.mjs"
+      - "tooling/single-owner.json"
+      - "tooling/js/single-owner.mjs"
+      - ".github/workflows/single-owner.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  single-owner:
+    name: single-owner ratchet
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: single-owner ratchet
+        run: bun tooling/js/single-owner.mjs

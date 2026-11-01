@@ -1,0 +1,178 @@
+{
+  "rules": [
+    {
+      "name": "xml-escape-by-hand",
+      "description": "escape XML with paged_ooxml::xml::escape_attr / escape_text, not a replace chain",
+      "owner": ["platform/shared/ooxml/src/xml.rs"],
+      "patterns": [
+        "replace\\(\\s*'&'\\s*,\\s*\"&amp;\"\\s*\\)",
+        "replace\\(\\s*/&/g\\s*,\\s*[\"']&amp;[\"']"
+      ],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "baseline": [
+        "apps/editor/apps/canvas/src/clipboard-commands.ts",
+        "apps/editor/apps/canvas/src/plugin-clipboard.ts",
+        "apps/editor/apps/canvas/tests/fidelity/dashboard.ts",
+        "engine/core/crates/paged-gen/src/samples/xref.rs",
+        "engine/core/crates/paged-store/src/package.rs",
+        "modules/data/packages/data-bundle/src/datamerge-export.ts",
+        "modules/doc/docx-conformance/src/first_fit.rs",
+        "modules/sheet/packages/sheet-host-model/src/grid.ts",
+        "modules/sheet/sheet-chart/tests/kinds.rs",
+        "modules/sheet/sheet-conformance/tests/it/locale.rs",
+        "modules/sheet/sheet-conformance/tests/it/oracle_fixes.rs",
+        "modules/sheet/sheet-js/src/core/csv.rs",
+        "modules/slide/slide-resolve/src/theme.rs",
+        "modules/web/packages/web-bundle/src/template-fields.ts",
+        "modules/web/packages/web-bundle/test/conformance/source-roundtrip.spec.ts",
+        "modules/web/packages/web-model/src/source-text.ts",
+        "modules/web/packages/web-model/src/transform.ts",
+        "platform/shared/test-kit/src/gestures/fixture-idml.ts",
+        "tooling/js/bun-junit.mjs"
+      ]
+    },
+    {
+      "name": "content-types-by-hand",
+      "description": "write and patch [Content_Types].xml with paged_ooxml::content_types",
+      "owner": ["platform/shared/ooxml/src/content_types.rs"],
+      "patterns": ["<Override PartName="],
+      "extensions": [".rs"],
+      "baseline": [
+        "modules/doc/docx-conformance/src/first_fit.rs",
+        "modules/doc/docx-conformance/src/lib.rs",
+        "modules/doc/docx-conformance/src/objects.rs",
+        "modules/doc/docx-conformance/src/structure.rs",
+        "modules/doc/docx-conformance/tests/it/line_spacing.rs",
+        "modules/doc/docx-conformance/tests/it/template_fields.rs",
+        "modules/doc/docx-export/src/review.rs",
+        "modules/doc/docx-export/src/structure.rs",
+        "modules/sheet/sheet-conformance/tests/it/chart_delete.rs",
+        "modules/sheet/sheet-conformance/tests/it/chart_write.rs",
+        "modules/sheet/sheet-conformance/tests/it/locale.rs",
+        "modules/sheet/sheet-conformance/tests/it/oracle_fixes.rs",
+        "modules/sheet/sheet-conformance/tests/it/spill_roundtrip.rs",
+        "modules/sheet/sheet-js/src/core.rs",
+        "modules/sheet/sheet-js/src/core/csv.rs",
+        "modules/sheet/sheet-js/tests/it/w2_annotations.rs",
+        "modules/sheet/sheet-js/tests/it/w5_files.rs",
+        "modules/sheet/sheet-js/tests/it/wave4_features.rs",
+        "modules/sheet/sheet-js/tests/it/wave6_format.rs",
+        "modules/sheet/sheet-js/tests/it/wave9_colors.rs",
+        "modules/sheet/sheet-xlsx/src/lib.rs",
+        "modules/sheet/sheet-xlsx/src/ods.rs",
+        "modules/sheet/sheet-xlsx/src/write.rs",
+        "modules/slide/pptx-export/src/presentation.rs",
+        "modules/slide/pptx-export/tests/comments.rs",
+        "modules/slide/slide-sheet/src/synth.rs"
+      ]
+    },
+    {
+      "name": "roman-numerals",
+      "description": "number with paged_model::roman (InDesign's forms, past 3999)",
+      "owner": ["engine/core/crates/paged-model/src/lib.rs"],
+      "patterns": ["\\(1000,\\s*\"M\"\\)"],
+      "extensions": [".rs"],
+      "baseline": []
+    },
+    {
+      "name": "srgb-transfer",
+      "description": "convert sRGB and linear light with paged_color::math",
+      "owner": [
+        "engine/core/crates/paged-color/src/math.rs",
+        "platform/shared/ooxml/src/colour.rs"
+      ],
+      "patterns": ["0\\.04045"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "baseline": [
+        "apps/editor/apps/canvas/scripts/demo-files.ts",
+        "apps/editor/apps/canvas/src/panels/info-readouts.ts",
+        "apps/editor/packages/ui/src/color/color-space.ts",
+        "engine/core/crates/paged-gpu/src/svg_filter.rs",
+        "engine/core/crates/paged-renderer/src/pipeline/placed_pdf.rs",
+        "engine/core/crates/paged-renderer/src/pipeline/placed_svg.rs",
+        "modules/draw/packages/draw-geometry/src/color-harmony.ts",
+        "modules/image/image-conformance/tests/it/filters_develop.rs",
+        "modules/image/image-kernels/src/families/adjust_ext.rs",
+        "modules/image/image-kernels/src/families/develop.rs",
+        "modules/image/image-kernels/src/families/select.rs"
+      ]
+    },
+    {
+      "name": "blend-mode-enum",
+      "description": "name blend modes with paged_blend::BlendMode",
+      "owner": ["engine/core/crates/paged-blend/"],
+      "patterns": ["enum\\s+\\w*Blend\\w*\\s*\\{"],
+      "extensions": [".rs"],
+      "baseline": [
+        "engine/core/crates/paged-compose/src/scene_layer.rs",
+        "engine/core/crates/paged-psd/src/abr/blend.rs",
+        "engine/core/crates/paged-psd/src/effects.rs",
+        "modules/image/image-kernels/src/compose_twin.rs",
+        "modules/web/packages/web-render/src/display_list.rs",
+        "modules/web/packages/web-render/src/wire.rs"
+      ]
+    },
+    {
+      "name": "fnv-hash",
+      "description": "no owner yet: platform/shared/helpers (TS) and a Rust util crate are planned (capability register, B9)",
+      "owner": [],
+      "patterns": [
+        "0xcbf29ce484222325",
+        "14695981039346656037",
+        "0x811c9dc5",
+        "2166136261"
+      ],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "baseline": [
+        "apps/editor/apps/canvas/tests/plugin-surface/draw.spec.ts",
+        "apps/editor/apps/canvas/tests/plugin-surface/menu-driver.ts",
+        "apps/editor/packages/client/src/journal/entry.ts",
+        "engine/core/crates/paged-renderer/src/bin/inspect.rs",
+        "engine/core/crates/paged-renderer/src/pipeline/geom.rs",
+        "modules/draw/packages/draw-bundle/src/commands/graphic-styles.ts",
+        "modules/draw/packages/draw-bundle/src/commands/image-trace-live.ts",
+        "modules/draw/packages/draw-bundle/src/recipe-store.ts",
+        "modules/sheet/packages/sheet-bundle/src/workbook-part.ts",
+        "modules/sheet/packages/sheet-host-model/src/binding.ts",
+        "modules/sheet/packages/sheet-host-model/src/cell-character-styles.ts",
+        "modules/sheet/packages/sheet-host-model/src/cell-paragraph-align.ts",
+        "modules/web/packages/web-bundle/src/bake-plan.ts",
+        "modules/web/packages/web-bundle/src/css-faces.ts"
+      ]
+    },
+    {
+      "name": "crc32-polynomial",
+      "description": "no owner yet: use the crc32fast crate in Rust and platform/shared/helpers in TypeScript",
+      "owner": ["platform/shared/helpers/"],
+      "patterns": ["0xEDB88320", "0xedb88320"],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "baseline": [
+        "apps/cli/test/cli-image-template.spec.ts",
+        "apps/editor/apps/canvas/scripts/demo-files.ts",
+        "apps/editor/apps/canvas/test/panels/generate-image-panel.dom.test.tsx",
+        "apps/editor/apps/canvas/tests/e2e/harness/build-min-idml.ts",
+        "apps/editor/packages/repository/test/library.test.ts",
+        "apps/editor/packages/repository/test/remote.test.ts",
+        "modules/data/packages/data-bundle/src/datamerge-export.ts",
+        "modules/doc/packages/doc-bundle/test/headless/pour-after-table.spec.ts",
+        "modules/sheet/packages/sheet-bundle/test/perf/build-idml.ts",
+        "modules/slide/packages/slide-bundle/test/headless/pictures.spec.ts",
+        "modules/web/packages/web-bundle/src/png.ts",
+        "platform/shared/test-kit/src/gestures/fixture-idml.ts"
+      ]
+    },
+    {
+      "name": "base64-alphabet",
+      "description": "use the base64 crate in Rust and platform/shared/helpers in TypeScript",
+      "owner": ["platform/shared/helpers/"],
+      "patterns": [
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\\+/"
+      ],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "baseline": [
+        "modules/sheet/sheet-js/src/core/annotations.rs",
+        "modules/sheet/sheet-xlsx/src/parts/protection.rs"
+      ]
+    }
+  ]
+}
