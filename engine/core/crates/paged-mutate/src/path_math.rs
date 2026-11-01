@@ -209,26 +209,14 @@ pub fn fit_polyline_to_anchors(points: &[PathAnchorSpec]) -> Vec<PathAnchorSpec>
 /// IDML `ItemTransform` packing: `[a, b, c, d, tx, ty]` representing
 /// the 2×3 affine matrix `| a c tx |` over `| b d ty |`. A point
 /// `(x, y)` maps to `(a*x + c*y + tx, b*x + d*y + ty)`.
-pub type Affine = [f32; 6];
+pub use paged_geom::affine::Affine;
 
-pub const AFFINE_IDENTITY: Affine = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+pub use paged_geom::affine::IDENTITY as AFFINE_IDENTITY;
 
 /// Compose two 2D affines: `M = A * B`. Apply order is "B first,
 /// then A": a point `p` maps to `A(B(p))`. Matches the IDML
 /// item_transform composition convention.
-pub fn affine_multiply(a: Affine, b: Affine) -> Affine {
-    // | a0 a2 a4 |   | b0 b2 b4 |
-    // | a1 a3 a5 | * | b1 b3 b5 |
-    // | 0  0  1  |   | 0  0  1  |
-    [
-        a[0] * b[0] + a[2] * b[1],        // m0 = a*b0 + c*b1
-        a[1] * b[0] + a[3] * b[1],        // m1
-        a[0] * b[2] + a[2] * b[3],        // m2
-        a[1] * b[2] + a[3] * b[3],        // m3
-        a[0] * b[4] + a[2] * b[5] + a[4], // m4 = a*tx_b + c*ty_b + tx_a
-        a[1] * b[4] + a[3] * b[5] + a[5], // m5
-    ]
-}
+pub use paged_geom::affine::multiply as affine_multiply;
 
 /// Invert a 2D affine. Returns `None` when the linear part is
 /// singular (det ≈ 0); callers fall back to identity.
