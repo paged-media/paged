@@ -40,9 +40,11 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
   orphaning; the host Comments panel and canvas pins; slide comments on engine threads; PDF
   comment annotations (`paged export --comments`). Oracles: PowerPoint opens the exported slide comments and
   re-saves them with every comment, reply and the resolved state intact; Word's review round trip is recorded in
-  `modules/doc/docx-conformance/fixtures/review.word.json`. Open: Excel threaded comments (editable) and
-  sheet notes sync, Word people, mentions and `commentsExtensible`, IDML notes, PDF annotation
-  import, the `comments@1` door, a sheet cell resolver.
+  `modules/doc/docx-conformance/fixtures/review.word.json`. Excel threaded comments are read and written in
+  `sheet-xlsx` (sheet ADR 528) and projected into the engine threads as cell anchors; Excel opens and keeps what
+  the panel's reply, edit and resolve produce. Open: starting a thread from the panel on a cell, plain notes as
+  threads, Word people, mentions and `commentsExtensible`, IDML notes, PDF annotation import, the `comments@1`
+  door.
 - **OOXML foundation:** one DrawingML theme reader (`paged-ooxml::drawingml::theme`) for sheet
   and doc; content-type and relationship writers (`render`, `patch`) in doc, slide and sheet
   exporters; HSL through `paged_ooxml::colour`; `paged_store::package::read_document` for
