@@ -117,11 +117,11 @@ export function stackValue(entries: readonly StackEntry[]) {
  *  the stack holds fewer than its limit. */
 export function canAdd(
   entries: readonly StackEntry[],
-  target: StackTarget,
+  target: StackTarget | "group",
   kind: EffectKind,
 ): boolean {
   const k = kindOf(kind);
-  if (!k || !k.targets.includes(target)) return false;
+  if (!k || !(k.targets as readonly string[]).includes(target)) return false;
   const held = entries.filter((e) => e.kind === kind).length;
   return k.maxPerStack === undefined || held < k.maxPerStack;
 }

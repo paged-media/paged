@@ -4923,6 +4923,12 @@ mod wasm {
         include!("retouch_doors.rs");
     }
 
+    /// WP8.2 — the generated-pixels doors (image ADR 485): what the host's
+    /// ML service answered, landed as a layer, a mask or an expanded canvas.
+    mod ml_doors {
+        include!("ml_doors.rs");
+    }
+
     /// Replace an engine-held image's pixels in place (same handle, same
     /// extent) and drop its mip pyramid, which the new pixels invalidate.
     /// [`set_image_pixels`] for a composite whose extent may differ from

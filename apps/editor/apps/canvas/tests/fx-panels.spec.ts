@@ -73,7 +73,12 @@ const CATALOG = JSON.parse(
     "utf8",
   ),
 ) as {
-  effectKinds: Array<{ kind: string; title: string; category: string }>;
+  effectKinds: Array<{
+    kind: string;
+    title: string;
+    category: string;
+    targets: string[];
+  }>;
 };
 
 const SEGMENTS: Record<string, string> = {
@@ -140,8 +145,16 @@ test.describe("Effects, Transparency and Appearance (editor ADR 309)", () => {
     // The families: one row and one command per core effect kind, each
     // clicked below.
     covers("menu:Object/Effects/*/*", "command:paged.effect.add.*");
-    const kinds = CATALOG.effectKinds;
+    // A kind that targets only groups (Pathfinder, engine ADR 1042) is
+    // applied to a group below: a lone rectangle's stack does not take it.
+    const kinds = CATALOG.effectKinds.filter((k) =>
+      k.targets.includes("object"),
+    );
+    const groupKinds = CATALOG.effectKinds.filter(
+      (k) => !k.targets.includes("object") && k.targets.includes("group"),
+    );
     expect(kinds.length).toBeGreaterThan(10);
+    expect(groupKinds.length).toBeGreaterThan(0);
     for (const k of kinds) {
       const path = menuPath(k);
       const command = `paged.effect.add.${k.kind}`;
@@ -179,6 +192,35 @@ test.describe("Effects, Transparency and Appearance (editor ADR 309)", () => {
       "paged.panel.show.paged.appearance",
     );
     await expect(page.locator('[data-appearance-panel="ready"]')).toBeVisible();
+    // The group-only rows: a group of two rectangles takes each, one undo
+    // step per row, on its own stack (`groupEffectStack`).
+    const made = (await mutate(page, {
+      op: "insertFrame",
+      args: { pageId: fx.pages[0]!.pageId, bounds: [0, 0, 400, 400] },
+    })) as { payload?: { createdId?: ElementRef } };
+    const second = made.payload?.createdId as ElementRef;
+    expect(second, "the second rectangle was made").toBeTruthy();
+    const grouped = (await mutate(page, {
+      op: "createGroup",
+      args: { memberIds: [ref, second] },
+    })) as { payload?: { createdId?: ElementRef } };
+    const group = grouped.payload?.createdId as ElementRef;
+    expect(group?.kind, "the group was made").toBe("group");
+    await selectElements(page, [group]);
+    const groupStack = () => stackKinds(page, group, "groupEffectStack");
+    for (const k of groupKinds) {
+      await clickEntry(page, menuPath(k), `paged.effect.add.${k.kind}`);
+      await expect
+        .poll(async () => (await groupStack()).at(-1), {
+          message: `${menuPath(k)} appends ${k.kind} to the group`,
+        })
+        .toBe(k.kind);
+    }
+    expect(await groupStack()).toEqual(groupKinds.map((k) => k.kind));
+    await undoOnce(page);
+    await expect
+      .poll(groupStack)
+      .toEqual(groupKinds.slice(0, -1).map((k) => k.kind));
   });
 
   test("FXP-MASK — make a mask, its thumbnail, Clip and Invert change the render, Edit Mask, Release @feat:editor-shell.panels.appearance-transparency @feat:effects-transparency.opacity-mask @level:happy", async ({

@@ -70,6 +70,8 @@ export interface PlaceCounts {
   text_frames: number;
   opacity_masks: number;
   gradients: number;
+  /** Paths filled with a native gradient mesh (a PDF mesh shading). */
+  meshes: number;
   colors: number;
 }
 

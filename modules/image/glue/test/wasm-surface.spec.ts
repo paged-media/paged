@@ -52,6 +52,7 @@ const WORKSPACE_TS = fileURLToPath(
 const SMART_TS = fileURLToPath(
   new URL("../src/smart-engine.ts", import.meta.url),
 );
+const ML_TS = fileURLToPath(new URL("../src/ml-engine.ts", import.meta.url));
 const WARP_TS = fileURLToPath(
   new URL("../src/warp-engine.ts", import.meta.url),
 );
@@ -114,6 +115,7 @@ function declaredInTs(): string[] {
     ...declaredIn(WORKSPACE_TS, "WorkspaceWasm"),
     ...declaredIn(SMART_TS, "SmartWasm"),
     ...declaredIn(WARP_TS, "WarpWasm"),
+    ...declaredIn(ML_TS, "MlWasm"),
   ];
 }
 

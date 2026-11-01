@@ -153,6 +153,29 @@ pub enum Paint {
         opacity: f32,
         extend: [bool; 2],
     },
+    /// A patch mesh: a PDF Coons-patch (type 6) or tensor-product (type 7)
+    /// shading, or a triangle mesh (types 4 and 5) with each triangle as a
+    /// Coons patch whose last edge has collapsed into its third vertex. A
+    /// fill only; it lowers to the engine's native gradient mesh (engine
+    /// ADR 1048, publish ADR 659).
+    Mesh {
+        /// In paint order: a later patch paints over an earlier one.
+        patches: Vec<MeshPatchIr>,
+        opacity: f32,
+    },
+}
+
+/// One patch of a [`Paint::Mesh`], in page space: its sixteen control
+/// points `points[i][j]` (`i` the row, running from the PDF's first edge
+/// `p00 … p03` to its opposite one; `j` the column) and its corner
+/// colours `[c00, c03, c30, c33]` — the layout of the engine's
+/// `paged_model::PatchInput`. `tensor` says the four interior points
+/// are the PDF's own (type 7); a Coons patch's are derived from its edges.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct MeshPatchIr {
+    pub points: [[[f32; 2]; 4]; 4],
+    pub colors: [[f32; 3]; 4],
+    pub tensor: bool,
 }
 
 /// One colour stop of a ramp: `offset` in `0.0..=1.0`.

@@ -93,6 +93,7 @@ import { ColorSection } from "./sections/color-section";
 import { NewGuideDialog, WorkspaceSection } from "./sections/workspace-section";
 import { DEFAULT_PPI, pxPerUnit } from "../workspace";
 import { RankLookupSection } from "./sections/rank-lookup-section";
+import { MlSection } from "./sections/ml-section";
 import { SelectModifySection } from "./sections/select-modify-section";
 import { MoveSection } from "./sections/move-section";
 import { PatternSection } from "./sections/pattern-section";
@@ -3524,6 +3525,15 @@ export function makeImagePanel(session: ImageSession) {
           radius={modifyRadius}
           onRadius={setModifyRadius}
           wand={s.wand}
+        />
+        <MlSection
+          session={session}
+          ml={s.ml}
+          canvas={
+            s.source && { width: s.source.width, height: s.source.height }
+          }
+          hasSelection={!!s.selection && s.selection.w > 0}
+          disabled={disabled}
         />
         <SmartObjectSection
           session={session}

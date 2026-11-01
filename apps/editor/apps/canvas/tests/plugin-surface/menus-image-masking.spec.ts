@@ -179,5 +179,33 @@ test.describe.serial(
         out.before,
       );
     });
+
+    test("Image/Selection/Select subject — runs selectSubject; with no image open it changes nothing", async () => {
+      covers("menu:Image/Selection/Select subject");
+      await expectGreyedAndInert(bare, "Image/Selection/Select subject");
+      const out = await clickEntry(
+        live,
+        "Image/Selection/Select subject",
+        "media.paged.image.command.selectSubject",
+      );
+      expect(out.shell).toEqual([]);
+      expect(out.after, "with no image open there is nothing to act on").toBe(
+        out.before,
+      );
+    });
+
+    test("Image/Selection/Select sky — runs selectSky; with no image open it changes nothing", async () => {
+      covers("menu:Image/Selection/Select sky");
+      await expectGreyedAndInert(bare, "Image/Selection/Select sky");
+      const out = await clickEntry(
+        live,
+        "Image/Selection/Select sky",
+        "media.paged.image.command.selectSky",
+      );
+      expect(out.shell).toEqual([]);
+      expect(out.after, "with no image open there is nothing to act on").toBe(
+        out.before,
+      );
+    });
   },
 );

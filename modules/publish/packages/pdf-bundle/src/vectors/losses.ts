@@ -30,6 +30,14 @@ const M = defineMessages("publish.pdfVectorLosses", {
     "{count, plural, one {# function shading was} other {# function shadings were}} sampled to an image",
   shadingMeshSampled:
     "{count, plural, one {# mesh shading was} other {# mesh shadings were}} sampled to an image",
+  shadingMeshTooLarge:
+    "{count, plural, one {# mesh shading with too many patches was} other {# mesh shadings with too many patches were}} sampled to an image",
+  shadingMeshFunction:
+    "{count, plural, one {# mesh shading maps} other {# mesh shadings map}} its colours through a curve; the native mesh blends the corner colours",
+  shadingMeshBackground:
+    "{count, plural, one {# mesh shading has} other {# mesh shadings have}} a background colour the native mesh does not paint",
+  shadingMeshPatches:
+    "{count, plural, one {# mesh arrives} other {# meshes arrive}} as separate patches, not as one editable grid",
   shadingFocalSampled:
     "{count, plural, one {# radial gradient with a moved centre was} other {# radial gradients with a moved centre were}} sampled to an image",
   shadingSkewedSampled:
@@ -103,6 +111,10 @@ const M = defineMessages("publish.pdfVectorLosses", {
 const KEYS: Record<string, string> = {
   "shading.function_sampled": M.shadingFunctionSampled,
   "shading.mesh_sampled": M.shadingMeshSampled,
+  "shading.mesh_too_large": M.shadingMeshTooLarge,
+  "shading.mesh_function": M.shadingMeshFunction,
+  "shading.mesh_background": M.shadingMeshBackground,
+  "shading.mesh_patches": M.shadingMeshPatches,
   "shading.focal_sampled": M.shadingFocalSampled,
   "shading.skewed_sampled": M.shadingSkewedSampled,
   "shading.degenerate": M.shadingDegenerate,

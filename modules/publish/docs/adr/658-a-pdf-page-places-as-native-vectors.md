@@ -1,6 +1,7 @@
 # ADR 658 — A PDF or Illustrator page places into the open document as native vectors
 
-- **Status:** Accepted 2026-10-27.
+- **Status:** Accepted 2026-10-27. Amended by [ADR 659](659-pdf-mesh-shadings-import-as-native-meshes.md)
+  (2026-11-01): mesh shadings, types 4–7, are no longer sampled but become native gradient meshes.
 - **Scope:** `crates/pdf-import` (`vectors/`, `lower.rs`, `snippet.rs`, `build.rs`,
   the wasm exports `pdf_inspect_wasm`, `pdf_place_wasm`, `pdf_to_paged_wasm`);
   `packages/pdf-bundle` (`src/vectors/`, the typed commands `media.paged.pdf.inspectPdf`,
