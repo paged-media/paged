@@ -164,6 +164,7 @@ const HOST_MENU = [
   "Layout/Move page…",
   "Layout/New master…",
   "Object/Effects/Global light…",
+  "Object/Generate image…",
   "File/Open as template…",
   "File/New document…",
   "File/New from a brief…",
@@ -258,6 +259,21 @@ const HOST_TOPS = [
   "Help",
 ] as const;
 
+/** The unit a row is dispatched in: Object ▸ Effects ▸ <group> rows are most
+ *  of the bar and one test each, every other row goes with its top menu. */
+const unitOf = (path: string) => {
+  const seg = path.split("/");
+  return seg[0] === "Object" && seg[1] === "Effects" && seg.length >= 4
+    ? seg.slice(0, 3).join("/")
+    : seg[0];
+};
+
+/** Every unit the registered host rows fall in (the inventory test holds the
+ *  live rows to these lists, so none is left out). */
+const DISPATCH_UNITS: readonly string[] = [
+  ...new Set([...HOST_MENU, ...EFFECT_ROWS].map(unitOf)),
+];
+
 const hostRows = (rows: MenuRow[]) =>
   rows.filter((r) => !isPluginCommand(r.command) && menuFamily(r) === null);
 
@@ -348,6 +364,9 @@ test.describe("the host menu bar", () => {
     await openShell(page, { doc: true });
     const live = hostRows(await liveMenu(page)).map((r) => r.path);
     expect([...live].sort()).toEqual([...HOST_MENU, ...EFFECT_ROWS].sort());
+    // The dispatch tests run per top-level menu: none may be left out.
+    for (const row of hostRows(await liveMenu(page)))
+      expect(DISPATCH_UNITS).toContain(unitOf(row.path));
   });
 
   for (const ctx of CONTEXTS) {
@@ -669,143 +688,156 @@ test.describe("the host menu bar", () => {
     }
   });
 
-  test("clicking an enabled row runs exactly its command", async ({ page }) => {
-    covers(
-      "menu:Help/Documentation",
-      "menu:Help/IDML format reference",
-      "menu:Help/Report an issue…",
-      "menu:Help/About",
-      "menu:File/Open PDF…",
-      "menu:File/Save (.paged)",
-      "menu:File/Save As IDML…",
-      "menu:Edit/Undo",
-      "menu:Edit/Redo",
-      "menu:View/Zoom in",
-      "menu:View/Zoom out",
-      "menu:View/Zoom to 100%",
-      "menu:View/Fit document",
-      "menu:View/Fit page in window",
-      "menu:View/Fit spread in window",
-      "menu:View/Fit selection in window",
-      "menu:Layout/First page",
-      "menu:Layout/Previous page",
-      "menu:Layout/Next page",
-      "menu:Layout/Last page",
-      "menu:View/Show text threads",
-      "menu:View/Snap to points",
-      "menu:View/Show heading anchors",
-      "menu:Edit/Select all",
-      "menu:Object/Bring to front",
-      "menu:Object/Bring forward",
-      "menu:Object/Send backward",
-      "menu:Object/Send to back",
-      "menu:Object/Group",
-      "menu:Object/Ungroup",
-      "menu:Object/Select parent group",
-      "menu:Object/Nudge left",
-      "menu:Object/Nudge right",
-      "menu:Object/Nudge up",
-      "menu:Object/Nudge down",
-      "menu:Object/Delete",
-      "menu:Object/Clipping mask/Make",
-      "menu:Object/Clipping mask/Release",
-      "menu:Object/Clipping mask/Edit contents",
-      "menu:Object/Lock",
-      "menu:Object/Unlock all on spread",
-      "menu:Object/Hide",
-      "menu:Object/Show all on spread",
-      "menu:Help/Keyboard shortcuts",
-      "menu:Object/Insert text frame",
-      "menu:Object/Insert rectangle",
-      "menu:Object/Insert ellipse",
-      "menu:Object/Insert line",
-      "menu:Object/Insert table",
-      "menu:File/Place…",
-      "menu:Layout/Add page",
-      "menu:Layout/Delete page",
-      "menu:Edit/Run command…",
-      "menu:Object/Insert field…",
-      "menu:Object/Insert hyperlink…",
-      "menu:Object/Insert anchored frame…",
-      "menu:Type/Set field value…",
-      "menu:Object/Path/Insert point…",
-      "menu:Object/Path/Remove point…",
-      "menu:Object/Path/Move point…",
-      "menu:Object/Path/Close path",
-      "menu:Object/Path/Join paths",
-      "menu:Object/Path/Outline stroke…",
-      "menu:Object/Path/Offset path…",
-      "menu:Object/Pathfinder/Keep or remove faces…",
-      "menu:Object/Type on a path/Attach…",
-      "menu:Object/Type on a path/Detach",
-      "menu:Object/Opacity mask/Make…",
-      "menu:Object/Opacity mask/Release",
-      "menu:Object/Step and repeat…",
-      "menu:Layout/Move page…",
-      "menu:Layout/New master…",
-      "menu:Object/Effects/Global light…",
-      "menu:File/Open as template…",
-      "menu:File/New document…",
-      "menu:File/New from a brief…",
-      "menu:File/Open recent",
-      "menu:File/Close",
-      "menu:File/Package…",
-      "menu:File/Print…",
-      "menu:Layout/Margins and columns…",
-      "menu:Layout/Ruler guides…",
-      "menu:Layout/Create guides…",
-      "menu:Layout/Numbering and section options…",
-      "menu:Type/Character…",
-      "menu:Type/Paragraph…",
-      "menu:Type/Tabs…",
-      "menu:Type/Bullets and numbering…",
-      "menu:Type/Paragraph styles",
-      "menu:Type/Character styles",
-      "menu:Type/Glyphs…",
-      "menu:Type/Text variables",
-      "menu:Object/Transform/Transform each…",
-      "menu:Object/Effects/Effects…",
-      "menu:File/Open…",
-      "menu:File/Export PDF…",
-      "menu:Help/Search commands…",
-      "menu:Data/Data sources…",
-      "menu:Data/Bindings…",
-      "menu:Data/Dataset preview…",
-    );
-    // An AI service answers (its proxy refuses a bare GET as anything but
-    // 503): New from a brief is offered only with one (ADR 252, F-25).
-    await page.route("**/api/ai/**", (route) =>
-      route.fulfill({ status: 405, body: "" }),
-    );
-    await openShell(page, { doc: true });
-    const rows = hostRows(await liveMenu(page));
-    const recorder = await recordCommands(page, [
-      ...new Set(rows.map((r) => r.command)),
-    ]);
-    const done = new Set<string>();
-    // Two contexts between them enable every row that can enable (the
-    // matrix shows a caret enables nothing new).
-    for (const setup of [
-      () => select(page, [SHELL.frame]),
-      () => select(page, []),
-    ]) {
-      await setup();
-      for (const row of hostRows(await liveMenu(page))) {
-        if (done.has(row.path) || !row.enabled) continue;
-        await clickMenuRow(page, domPathOf(row));
-        await expect
-          .poll(() => recorder.take().then((c) => c.join(",")))
-          .toBe(row.command);
-        done.add(row.path);
+  // One test per top-level menu, and per Object ▸ Effects group: the whole bar
+  // in one test took 2.1 min of its 3-minute CI budget on 2026-10-30 and passed
+  // it on 2026-11-01 as the Effects, Envelope, Brushes, ML, Mesh and Warps rows
+  // landed (176 s of 180 s locally). The cost grows with the row count, so a
+  // longer timeout would only postpone it, and a top menu alone (Object, 2 min)
+  // was still too close. Each test opens the shell once and clicks only its
+  // own unit's rows (unitOf).
+  for (const unit of DISPATCH_UNITS) {
+    test(`clicking an enabled row runs exactly its command: ${unit}`, async ({
+      page,
+    }) => {
+      covers(
+        "menu:Help/Documentation",
+        "menu:Help/IDML format reference",
+        "menu:Help/Report an issue…",
+        "menu:Help/About",
+        "menu:File/Open PDF…",
+        "menu:File/Save (.paged)",
+        "menu:File/Save As IDML…",
+        "menu:Edit/Undo",
+        "menu:Edit/Redo",
+        "menu:View/Zoom in",
+        "menu:View/Zoom out",
+        "menu:View/Zoom to 100%",
+        "menu:View/Fit document",
+        "menu:View/Fit page in window",
+        "menu:View/Fit spread in window",
+        "menu:View/Fit selection in window",
+        "menu:Layout/First page",
+        "menu:Layout/Previous page",
+        "menu:Layout/Next page",
+        "menu:Layout/Last page",
+        "menu:View/Show text threads",
+        "menu:View/Snap to points",
+        "menu:View/Show heading anchors",
+        "menu:Edit/Select all",
+        "menu:Object/Bring to front",
+        "menu:Object/Bring forward",
+        "menu:Object/Send backward",
+        "menu:Object/Send to back",
+        "menu:Object/Group",
+        "menu:Object/Ungroup",
+        "menu:Object/Select parent group",
+        "menu:Object/Nudge left",
+        "menu:Object/Nudge right",
+        "menu:Object/Nudge up",
+        "menu:Object/Nudge down",
+        "menu:Object/Delete",
+        "menu:Object/Clipping mask/Make",
+        "menu:Object/Clipping mask/Release",
+        "menu:Object/Clipping mask/Edit contents",
+        "menu:Object/Lock",
+        "menu:Object/Unlock all on spread",
+        "menu:Object/Hide",
+        "menu:Object/Show all on spread",
+        "menu:Help/Keyboard shortcuts",
+        "menu:Object/Insert text frame",
+        "menu:Object/Insert rectangle",
+        "menu:Object/Insert ellipse",
+        "menu:Object/Insert line",
+        "menu:Object/Insert table",
+        "menu:File/Place…",
+        "menu:Layout/Add page",
+        "menu:Layout/Delete page",
+        "menu:Edit/Run command…",
+        "menu:Object/Insert field…",
+        "menu:Object/Insert hyperlink…",
+        "menu:Object/Insert anchored frame…",
+        "menu:Type/Set field value…",
+        "menu:Object/Path/Insert point…",
+        "menu:Object/Path/Remove point…",
+        "menu:Object/Path/Move point…",
+        "menu:Object/Path/Close path",
+        "menu:Object/Path/Join paths",
+        "menu:Object/Path/Outline stroke…",
+        "menu:Object/Path/Offset path…",
+        "menu:Object/Pathfinder/Keep or remove faces…",
+        "menu:Object/Type on a path/Attach…",
+        "menu:Object/Type on a path/Detach",
+        "menu:Object/Opacity mask/Make…",
+        "menu:Object/Opacity mask/Release",
+        "menu:Object/Step and repeat…",
+        "menu:Layout/Move page…",
+        "menu:Layout/New master…",
+        "menu:Object/Effects/Global light…",
+        "menu:File/Open as template…",
+        "menu:File/New document…",
+        "menu:File/New from a brief…",
+        "menu:File/Open recent",
+        "menu:File/Close",
+        "menu:File/Package…",
+        "menu:File/Print…",
+        "menu:Layout/Margins and columns…",
+        "menu:Layout/Ruler guides…",
+        "menu:Layout/Create guides…",
+        "menu:Layout/Numbering and section options…",
+        "menu:Type/Character…",
+        "menu:Type/Paragraph…",
+        "menu:Type/Tabs…",
+        "menu:Type/Bullets and numbering…",
+        "menu:Type/Paragraph styles",
+        "menu:Type/Character styles",
+        "menu:Type/Glyphs…",
+        "menu:Type/Text variables",
+        "menu:Object/Transform/Transform each…",
+        "menu:Object/Effects/Effects…",
+        "menu:File/Open…",
+        "menu:File/Export PDF…",
+        "menu:Help/Search commands…",
+        "menu:Data/Data sources…",
+        "menu:Data/Bindings…",
+        "menu:Data/Dataset preview…",
+      );
+      // An AI service answers (its proxy refuses a bare GET as anything but
+      // 503): New from a brief is offered only with one (ADR 252, F-25).
+      await page.route("**/api/ai/**", (route) =>
+        route.fulfill({ status: 405, body: "" }),
+      );
+      await openShell(page, { doc: true });
+      const inUnit = (r: MenuRow) => unitOf(r.path) === unit;
+      const rows = hostRows(await liveMenu(page)).filter(inUnit);
+      const recorder = await recordCommands(page, [
+        ...new Set(rows.map((r) => r.command)),
+      ]);
+      const done = new Set<string>();
+      // Two contexts between them enable every row that can enable (the
+      // matrix shows a caret enables nothing new).
+      for (const setup of [
+        () => select(page, [SHELL.frame]),
+        () => select(page, []),
+      ]) {
+        await setup();
+        for (const row of hostRows(await liveMenu(page)).filter(inUnit)) {
+          if (done.has(row.path) || !row.enabled) continue;
+          await clickMenuRow(page, domPathOf(row));
+          await expect
+            .poll(() => recorder.take().then((c) => c.join(",")))
+            .toBe(row.command);
+          done.add(row.path);
+        }
       }
-    }
-    await recorder.restore();
-    // What never enabled is a seam or a label, nothing else.
-    const never = rows.filter((r) => !done.has(r.path));
-    expect(
-      never.filter((r) => !r.seam && r.kind !== "label").map((r) => r.path),
-    ).toEqual([]);
-  });
+      await recorder.restore();
+      // What never enabled is a seam or a label, nothing else.
+      expect(rows.length).toBeGreaterThan(0);
+      const never = rows.filter((r) => !done.has(r.path));
+      expect(
+        never.filter((r) => !r.seam && r.kind !== "label").map((r) => r.path),
+      ).toEqual([]);
+    });
+  }
 
   // Finding SH-8 (UX F-14), fixed (ADR 249): with nothing selected every
   // Object verb was enabled, and choosing one did nothing and said
