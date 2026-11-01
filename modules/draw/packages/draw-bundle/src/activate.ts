@@ -100,10 +100,6 @@ import {
   SHAPER_STROKE_COMMAND_ID,
 } from "./commands/shaper";
 import {
-  contributeAppearanceCommands,
-  APPEARANCE_COMMAND_IDS,
-} from "./commands/appearance";
-import {
   contributeAppearanceBakeCommands,
   APPEARANCE_BAKE_COMMAND_IDS,
 } from "./commands/appearance-bake";
@@ -526,10 +522,8 @@ export function activate(host: BundleHost): BundleHandle {
   const repeatCommandsSub = contributeRepeatCommands(host);
   // The corner presets (Rounded / Inverse rounded / Bevel / Fancy / None)
   // are the host's: `paged.corners.*`.
-  // Phase 9 (Tier B) — Appearance (multiple fills/strokes): a metadata
-  // stack baked to the frame's top layer (one-fill/one-stroke engine —
-  // gap B-24).
-  const appearanceCommandsSub = contributeAppearanceCommands(host);
+  // The appearance stack operations (Add fill / Add stroke / Clear / Remove
+  // layer / Move layer) are the host's: `paged.appearance.*`.
   // B-24 CLOSED — the GROUP BAKE: `bakeAppearance` lowers the metadata
   // stack onto real stacked page items (one derived path per paint,
   // sharing the source geometry, wrapped in a group with the source
@@ -741,7 +735,6 @@ export function activate(host: BundleHost): BundleHandle {
         COMPOUND_PATH_COMMAND_IDS.length +
         PATTERN_COMMAND_IDS.length +
         REPEAT_COMMAND_IDS.length +
-        APPEARANCE_COMMAND_IDS.length +
         APPEARANCE_BAKE_COMMAND_IDS.length +
         GRAPHIC_STYLES_COMMAND_IDS.length +
         GRAPHIC_STYLE_LIBRARY_COMMAND_IDS.length +
@@ -821,7 +814,6 @@ export function activate(host: BundleHost): BundleHandle {
       graphicStyleCommandsSub.dispose();
       graphicStyleLibraryCommandsSub.dispose();
       appearanceBakeCommandsSub.dispose();
-      appearanceCommandsSub.dispose();
       repeatCommandsSub.dispose();
       patternCommandsSub.dispose();
       compoundPathCommandsSub.dispose();

@@ -267,24 +267,7 @@ export const TWINS: readonly TwinSpec[] = [
   // Compound paths (Pathfinder is the host's).
   ...["makeCompoundPath", "releaseCompoundPath"].map(sel),
   // Appearance.
-  ...[
-    "appearanceAddFill",
-    "appearanceAddStroke",
-    "appearanceClear",
-    "bakeAppearance",
-    "releaseAppearance",
-  ].map(sel),
-  twin("appearanceRemoveLayer", {
-    ...T,
-    kind: enumOf(["fill", "stroke"]),
-    index: INT,
-  }),
-  twin("appearanceMoveLayer", {
-    ...T,
-    kind: enumOf(["fill", "stroke"]),
-    index: INT,
-    delta: INT,
-  }),
+  ...["bakeAppearance", "releaseAppearance"].map(sel),
   // Graphic styles.
   twin("saveGraphicStyle", { ...T, name: TEXT }),
   recipeVerb("applyGraphicStyle", "style", "graphicStyle", "styleId", T),

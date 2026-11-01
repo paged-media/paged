@@ -77,10 +77,7 @@ defineMessages("menu", {
   "Edit tile field": "Edit tile field",
   "Save as pattern swatch": "Save as pattern swatch",
   Appearance: "Appearance",
-  "Add fill": "Add fill",
-  "Add stroke": "Add stroke",
   Bake: "Bake",
-  Clear: "Clear",
   "Graphic style": "Graphic style",
   "Save from selection": "Save from selection",
   Apply: "Apply",
@@ -220,11 +217,8 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Pattern/Save as pattern swatch", "savePatternSwatch", "pattern"],
 
   // ── Appearance ──
-  ["Draw/Appearance/Add fill", "appearanceAddFill", "appearance-add"],
-  ["Draw/Appearance/Add stroke", "appearanceAddStroke", "appearance-add"],
   ["Draw/Appearance/Bake", "bakeAppearance", "appearance-edit"],
   ["Draw/Appearance/Release", "releaseAppearance", "appearance-edit"],
-  ["Draw/Appearance/Clear", "appearanceClear", "appearance-edit"],
 
   // ── Graphic styles ──
   ["Draw/Graphic style/Save from selection", "saveGraphicStyle", "gs"],

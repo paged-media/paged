@@ -44,7 +44,7 @@
 // a binding provider instead. So the contribution log holds eighteen tools + two
 // schema panels + thirty-four commands (4 dash + 2 group + 2
 // gradient-fill + 3 path-ops + 2 join/average + the Phase 9
-// Tier B 3 appearance + 3 select-same + the wave-2
+// Tier B 3 select-same + the wave-2
 // 4 insert-shape + blend + select-parent-group) + the edit context.
 
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
@@ -319,13 +319,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // SIBLING of pattern, not the same row.
         "command",
         "command",
-        "command",
-        "command",
-        "command",
-        "command",
-        "command",
-        // Phase 9 (Tier B) — Appearance (Add fill / Add stroke / Clear)
-        // + the panel's edit surface (Remove layer / Reorder layer).
         "command",
         "command",
         "command",

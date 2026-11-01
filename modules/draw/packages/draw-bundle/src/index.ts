@@ -734,24 +734,11 @@ export {
 // Phase 9 (Tier B) — Appearance model: the stack model + bake builders +
 // envelope round-trip helpers, exported for the conformance spec.
 export {
-  APPEARANCE_COMMAND_IDS,
-  APPEARANCE_COMMAND_CATEGORY,
-  APPEARANCE_ADD_FILL_COMMAND_ID,
-  APPEARANCE_ADD_STROKE_COMMAND_ID,
-  APPEARANCE_CLEAR_COMMAND_ID,
-  APPEARANCE_REMOVE_LAYER_COMMAND_ID,
-  APPEARANCE_MOVE_LAYER_COMMAND_ID,
   appearanceOf,
   withAppearance,
   bakeAppearanceMutations,
   commitAppearance,
-  removeAppearanceLayer,
-  moveAppearanceLayer,
-  applyAppearanceEdit,
-  applyAppearanceCommand,
-  contributeAppearanceCommands,
   type AppearanceStack,
-  type AppearanceKind,
   type AppearanceLayerKind,
   type FillLayer,
   type StrokeLayer,
@@ -804,10 +791,6 @@ export {
   readNativeAppearance,
   explicitLayers,
   appearanceMutation,
-  addNativeLayer,
-  extraLayerIndex,
-  removeNativeLayer,
-  moveNativeLayer,
 } from "./commands/appearance-native";
 export {
   graphicStyleFileOf,

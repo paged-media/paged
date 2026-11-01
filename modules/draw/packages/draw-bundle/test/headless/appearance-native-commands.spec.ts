@@ -17,9 +17,7 @@
  */
 
 // WP6.3 (draw ADR 367) through the REAL engine wasm: on an engine that
-// draws native appearance (engine ADR 1043), draw's appearance commands
-// write `frameAppearance` — every selected item in ONE batch, one undo
-// step — and a document's metadata stacks (draw ADR 354), plain or
+// draws native appearance (engine ADR 1043), a document's metadata stacks (draw ADR 354), plain or
 // group-baked, move onto it when it opens, in one undo step, once.
 // [frames-paths.native-appearance] [plugin-draw.appearance]
 
@@ -34,7 +32,6 @@ import {
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { covers } from "@paged-media/test-kit";
 
 import {
   appearanceBakeOf,
@@ -80,73 +77,6 @@ describe("draw appearance on the engine's native appearance (draw ADR 367) [fram
   beforeEach(async () => {
     await h.load(F1_MULTI_SHAPE.bytes());
     await h.host.selection.set([RECT]);
-  });
-
-  it("Add fill and Add stroke stack a native layer above their kind, one undo step each", async () => {
-    covers("command:media.paged.draw.command.appearanceAddFill");
-    covers("command:media.paged.draw.command.appearanceAddStroke");
-    await h.objects.invoke(`${C}.appearanceAddFill`, { targets: [] });
-    expect(await kinds(h)).toEqual(["frameFill", "fill", "frameStroke"]);
-    const fill = (await readNativeAppearance(h.host, RECT))![1]!;
-    // Seeded from the frame's own fill.
-    expect(fill.color).toBe("Color/Black");
-    await h.objects.invoke(`${C}.appearanceAddStroke`, { targets: [] });
-    expect(await kinds(h)).toEqual([
-      "frameFill",
-      "fill",
-      "frameStroke",
-      "stroke",
-    ]);
-    // Nothing went into the envelope.
-    expect(appearanceOf(await h.host.document.getMetadata(RECT))).toEqual({
-      fills: [],
-      strokes: [],
-    });
-    await h.host.document.undo();
-    expect(await kinds(h)).toEqual(["frameFill", "fill", "frameStroke"]);
-    await h.host.document.undo();
-    expect(await kinds(h)).toEqual([]);
-  });
-
-  it("Move layer, Remove layer and Clear edit the native list, one undo step each", async () => {
-    covers("command:media.paged.draw.command.appearanceMoveLayer");
-    covers("command:media.paged.draw.command.appearanceRemoveLayer");
-    covers("command:media.paged.draw.command.appearanceClear");
-    await h.objects.invoke(`${C}.appearanceAddFill`, { targets: [] });
-    await h.objects.invoke(`${C}.appearanceAddStroke`, { targets: [] });
-    // The extra fill (fill #0) one place up: above the frame's stroke.
-    const run = (id: string, payload: unknown) =>
-      (
-        h.contributions.find((c) => c.kind === "command" && c.id === id)!
-          .value as { handler: (p: unknown, a: unknown) => Promise<unknown> }
-      ).handler(undefined, payload);
-    await run(`${C}.appearanceMoveLayer`, {
-      kind: "fill",
-      index: 0,
-      direction: "up",
-    });
-    expect(await kinds(h)).toEqual([
-      "frameFill",
-      "frameStroke",
-      "fill",
-      "stroke",
-    ]);
-    await h.host.document.undo();
-    expect(await kinds(h)).toEqual([
-      "frameFill",
-      "fill",
-      "frameStroke",
-      "stroke",
-    ]);
-    await run(`${C}.appearanceRemoveLayer`, { kind: "stroke", index: 0 });
-    expect(await kinds(h)).toEqual(["frameFill", "fill", "frameStroke"]);
-    // A placeholder is the frame's own paint: not removable.
-    await run(`${C}.appearanceRemoveLayer`, { layer: 0 });
-    expect(await kinds(h)).toEqual(["frameFill", "fill", "frameStroke"]);
-    await run(`${C}.appearanceClear`, undefined);
-    expect(await kinds(h)).toEqual([]);
-    await h.host.document.undo();
-    expect(await kinds(h)).toEqual(["frameFill", "fill", "frameStroke"]);
   });
 
   it("Bake has nothing to bake on a native appearance, and says so", async () => {

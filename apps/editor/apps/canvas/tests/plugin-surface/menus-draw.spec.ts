@@ -644,61 +644,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     expect(out.after, "the selection holds no pattern field").toBe(out.before);
   });
 
-  test("Draw/Appearance/Add fill — adds a fill to the selection's appearance", async () => {
-    covers("menu:Draw/Appearance/Add fill");
-    await expectGreyedAndInert(bare, "Draw/Appearance/Add fill");
-    const out = await clickEntry(
-      live,
-      "Draw/Appearance/Add fill",
-      "media.paged.draw.command.appearanceAddFill",
-    );
-    expect(out.shell).toEqual([]);
-    expect(out.after, "Draw/Appearance/Add fill changes the document").not.toBe(
-      out.before,
-    );
-  });
-
-  test("MNU-2 — Draw/Appearance/Add fill: one Undo takes the click back", async () => {
-    const out = await clickEntry(
-      live,
-      "Draw/Appearance/Add fill",
-      "media.paged.draw.command.appearanceAddFill",
-    );
-    expect(out.after).not.toBe(out.before);
-    expect(
-      await undosToRestore(live, out.before),
-      "Undos it takes to take back one click on Draw/Appearance/Add fill",
-    ).toBe(1);
-  });
-
-  test("Draw/Appearance/Add stroke — adds a stroke to the selection's appearance", async () => {
-    covers("menu:Draw/Appearance/Add stroke");
-    await expectGreyedAndInert(bare, "Draw/Appearance/Add stroke");
-    const out = await clickEntry(
-      live,
-      "Draw/Appearance/Add stroke",
-      "media.paged.draw.command.appearanceAddStroke",
-    );
-    expect(out.shell).toEqual([]);
-    expect(
-      out.after,
-      "Draw/Appearance/Add stroke changes the document",
-    ).not.toBe(out.before);
-  });
-
-  test("MNU-2 — Draw/Appearance/Add stroke: one Undo takes the click back", async () => {
-    const out = await clickEntry(
-      live,
-      "Draw/Appearance/Add stroke",
-      "media.paged.draw.command.appearanceAddStroke",
-    );
-    expect(out.after).not.toBe(out.before);
-    expect(
-      await undosToRestore(live, out.before),
-      "Undos it takes to take back one click on Draw/Appearance/Add stroke",
-    ).toBe(1);
-  });
-
   test("Draw/Appearance/Bake — runs bakeAppearance; the rectangles carry no appearance stack, so it changes nothing", async () => {
     covers("menu:Draw/Appearance/Bake");
     await expectGreyedAndInert(bare, "Draw/Appearance/Bake");
@@ -720,20 +665,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
       live,
       "Draw/Appearance/Release",
       "media.paged.draw.command.releaseAppearance",
-    );
-    expect(out.shell).toEqual([]);
-    expect(out.after, "the rectangles carry no appearance stack").toBe(
-      out.before,
-    );
-  });
-
-  test("Draw/Appearance/Clear — runs appearanceClear; the rectangles carry no appearance stack, so it changes nothing", async () => {
-    covers("menu:Draw/Appearance/Clear");
-    await expectGreyedAndInert(bare, "Draw/Appearance/Clear");
-    const out = await clickEntry(
-      live,
-      "Draw/Appearance/Clear",
-      "media.paged.draw.command.appearanceClear",
     );
     expect(out.shell).toEqual([]);
     expect(out.after, "the rectangles carry no appearance stack").toBe(

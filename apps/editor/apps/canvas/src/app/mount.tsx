@@ -300,6 +300,11 @@ import {
   CLIPBOARD_MENU_ITEMS,
 } from "../clipboard-commands";
 import {
+  APPEARANCE_DIAGNOSTIC_SOURCE,
+  APPEARANCE_MENU_ITEMS,
+  buildAppearanceCommands,
+} from "../appearance-commands";
+import {
   buildCornerCommands,
   CORNER_DIAGNOSTIC_SOURCE,
   CORNER_MENU_ITEMS,
@@ -1510,6 +1515,15 @@ function CanvasAppIntegration() {
         ]),
       () => problemsSink.clear(CORNER_DIAGNOSTIC_SOURCE),
     );
+    // `paged.appearance.*` — the Appearance panel's stack operations.
+    const appearanceCommands = buildAppearanceCommands(
+      { client, getSelection: objectDeps.getSelection },
+      (message) =>
+        problemsSink.publish(APPEARANCE_DIAGNOSTIC_SOURCE, "appearance", [
+          { severity: "error", message, source: "appearance" },
+        ]),
+      () => problemsSink.clear(APPEARANCE_DIAGNOSTIC_SOURCE),
+    );
     // `paged.insert.*` — the object-authoring verbs (U7). Unlike the
     // object layer's deps bag, every runner reads its state (camera,
     // page layout, caret, edit context) off the LIVE `PagedEditor` the
@@ -1646,6 +1660,7 @@ function CanvasAppIntegration() {
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,
+      ...appearanceCommands,
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
@@ -1672,6 +1687,7 @@ function CanvasAppIntegration() {
       ...OBJECT_MENU_ITEMS,
       ...PATHFINDER_MENU_ITEMS,
       ...CORNER_MENU_ITEMS,
+      ...APPEARANCE_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,

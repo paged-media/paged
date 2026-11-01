@@ -85,7 +85,6 @@ import {
   withAppearanceBake,
   APPEARANCE_BAKE_COMMAND_ID,
   APPEARANCE_RELEASE_COMMAND_ID,
-  APPEARANCE_REMOVE_LAYER_COMMAND_ID,
   DRAW_METADATA_KEY,
   type AppearanceStack,
   type BakeLayer,
@@ -735,42 +734,6 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
         STACK,
       );
       await releaseAppearance(h.host, RECT);
-    });
-
-    it("an EDIT on a baked stack RE-BAKES (the page follows the model)", async () => {
-      const created = await bakeAppearance(h.host, RECT);
-      expect(created).toHaveLength(3);
-      await h.host.selection.set([RECT]);
-
-      // Remove the front-most fill through the panel's own command.
-      await commandFor(h, APPEARANCE_REMOVE_LAYER_COMMAND_ID).handler(
-        undefined,
-        { kind: "fill", index: 1 },
-      );
-
-      const env = await h.host.document.getMetadata(RECT);
-      expect(appearanceOf(env).fills).toEqual([{ color: "Color/Black" }]);
-      // Still baked — and with ONE FEWER derived path, rebuilt from the
-      // new stack (not the stale one).
-      const record = appearanceBakeOf(env);
-      expect(record).not.toBeNull();
-      const layers = await bakedLayersOf(h.host, RECT, record);
-      expect(layers).toHaveLength(2);
-      const group = await groupShape(h);
-      expect(group!.members).toEqual([RECT.id, ...layers]);
-      expect(await readProp(h, poly(layers[0]!), "frameFillColor")).toEqual({
-        type: "colorRef",
-        value: "Color/Black",
-      });
-      expect(await readProp(h, poly(layers[1]!), "frameStrokeColor")).toEqual({
-        type: "colorRef",
-        value: "Color/Black",
-      });
-
-      // Restore the fixture for the export tests below.
-      await releaseAppearance(h.host, RECT);
-      const prev = await h.host.document.getMetadata(RECT);
-      await commitAppearance(h.host, RECT, STACK, prev);
     });
 
     it("REFUSALS are honest no-ops (empty stack, already baked)", async () => {

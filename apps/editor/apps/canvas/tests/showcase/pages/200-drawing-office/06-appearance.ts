@@ -38,7 +38,12 @@ import { expect } from "@playwright/test";
 
 import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, SWATCH, contentBox, p } from "../../names-annual";
-import { newRefs, partitionByPage, settle } from "../../plugin-support";
+import {
+  invokeWith,
+  newRefs,
+  partitionByPage,
+  settle,
+} from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   corner,
@@ -135,10 +140,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await doc.select("polygon", id);
     // Two extra strokes + one extra fill, seeded from the element's own
     // paint, then the top stroke walked one step down the stack.
-    await draw(ctx, "appearanceAddStroke");
-    await draw(ctx, "appearanceAddStroke");
-    await draw(ctx, "appearanceAddFill");
-    await draw(ctx, "appearanceMoveLayer", {
+    await invokeWith(ctx.page, "paged.appearance.addStroke");
+    await invokeWith(ctx.page, "paged.appearance.addStroke");
+    await invokeWith(ctx.page, "paged.appearance.addFill");
+    await invokeWith(ctx.page, "paged.appearance.moveLayer", {
       kind: "stroke",
       index: 1,
       direction: "down",
@@ -303,7 +308,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, page, [
       "Specimen No. 119",
-      "appearanceAddFill/AddStroke/MoveLayer",
+      "paged.appearance addFill/addStroke/moveLayer",
       "bakeAppearance (B-24 carrier group)",
       "saveGraphicStyle/apply/redefine/breakLink",
     ]),

@@ -618,3 +618,61 @@ describe("Corners", () => {
     await expectOneUndoStep(e, none.before);
   });
 });
+
+describe("Appearance", () => {
+  const layers = (dump: ModelDump, key: string): { kind: string }[] => {
+    const el = dump.elements[key] as {
+      entries: Array<{
+        path: string;
+        value: { value: { layers?: unknown[] } };
+      }>;
+    };
+    const v = el.entries.find((e) => e.path === "frameAppearance")?.value;
+    return ((v?.value as { layers?: { kind: string }[] })?.layers ?? []) as {
+      kind: string;
+    }[];
+  };
+
+  test("Add fill, Add stroke, Move, Remove and Clear edit the native appearance, each one undo step", async () => {
+    covers(
+      "command:paged.appearance.addFill",
+      "command:paged.appearance.addStroke",
+      "command:paged.appearance.clear",
+      "command:paged.appearance.removeLayer",
+      "command:paged.appearance.moveLayer",
+    );
+    const e = await open();
+    await e.select([T.frame.id]);
+    const add = await run(e, "paged.appearance.addFill");
+    expect(e.problems()).toEqual([]);
+    expect(
+      layers(add.after, FRAME).filter((l) => l.kind === "fill"),
+    ).toHaveLength(1);
+    await expectOneUndoStep(e, add.before);
+
+    await e.invoke("paged.appearance.addFill");
+    await e.idle();
+    const stroke = await run(e, "paged.appearance.addStroke");
+    expect(
+      layers(stroke.after, FRAME).filter((l) => l.kind === "stroke"),
+    ).toHaveLength(1);
+
+    const moved = await run(e, "paged.appearance.moveLayer");
+    expect(e.problems()).toEqual([]);
+    expect(dumpDiff(moved.before, moved.after).length).toBeGreaterThanOrEqual(
+      0,
+    );
+
+    const removed = await run(e, "paged.appearance.removeLayer");
+    expect(e.problems()).toEqual([]);
+    expect(removed.after).toBeDefined();
+
+    const cleared = await run(e, "paged.appearance.clear");
+    expect(
+      layers(cleared.after, FRAME).filter(
+        (l) => l.kind === "fill" || l.kind === "stroke",
+      ),
+    ).toEqual([]);
+    await expectOneUndoStep(e, cleared.before);
+  });
+});

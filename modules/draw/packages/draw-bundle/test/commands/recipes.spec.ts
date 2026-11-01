@@ -697,128 +697,6 @@ describe("paged.draw commands, no engine — graphic styles", () => {
   });
 });
 
-describe("paged.draw commands, no engine — the appearance stack", () => {
-  const stackOf = (r: ReturnType<typeof unitRig>) =>
-    (
-      r.metaOf(A)?.data as {
-        appearance?: { fills: unknown[]; strokes: unknown[] };
-      }
-    )?.appearance;
-
-  it("Add fill stacks a fill seeded from the frame and paints the front-most layer (DRW-4: one batch); nothing selected sends nothing", async () => {
-    covers("command:media.paged.draw.command.appearanceAddFill");
-    const r = unitRig(doc(), { selection: [A] });
-    await r.run(`${C}.appearanceAddFill`);
-    expect(stackOf(r)?.fills).toEqual([{ color: "Color/Black", tint: 100 }]);
-    expect(ops(r.sent())).toEqual(["batch"]);
-    expect(ops(r.leaves())[0]).toBe("setPluginMetadata");
-    expect(r.steps()).toBe(1);
-    await refuses([], `${C}.appearanceAddFill`);
-  });
-
-  it("Add stroke stacks a stroke seeded from the frame (DRW-4: one batch); nothing selected sends nothing", async () => {
-    covers("command:media.paged.draw.command.appearanceAddStroke");
-    const r = unitRig(doc(), { selection: [A] });
-    await r.run(`${C}.appearanceAddStroke`);
-    expect(stackOf(r)?.strokes).toEqual([{ color: "Color/Black", weight: 1 }]);
-    expect(ops(r.sent())).toEqual(["batch"]);
-    expect(ops(r.leaves())[0]).toBe("setPluginMetadata");
-    expect(r.steps()).toBe(1);
-    await refuses([], `${C}.appearanceAddStroke`);
-  });
-
-  it("Clear appearance drops the stack in one write; nothing selected sends nothing", async () => {
-    covers("command:media.paged.draw.command.appearanceClear");
-    const r = unitRig(doc(), { selection: [A] });
-    await r.run(`${C}.appearanceAddFill`);
-    r.reset();
-    await r.run(`${C}.appearanceClear`);
-    expect(r.steps()).toBe(1);
-    expect(stackOf(r)).toBeUndefined();
-    await refuses([], `${C}.appearanceClear`);
-  });
-
-  it("Remove layer drops the addressed fill in one write; nothing selected sends nothing", async () => {
-    covers("command:media.paged.draw.command.appearanceRemoveLayer");
-    const r = unitRig(doc(), { selection: [A] });
-    await r.run(`${C}.appearanceAddFill`);
-    await r.run(`${C}.appearanceAddStroke`);
-    r.reset();
-    await r.run(`${C}.appearanceRemoveLayer`, { kind: "fill", index: 0 });
-    expect(stackOf(r)?.fills).toEqual([]);
-    expect(stackOf(r)?.strokes).toHaveLength(1);
-    await refuses([], `${C}.appearanceRemoveLayer`, { kind: "fill", index: 0 });
-  });
-
-  it("Move layer reorders the stack; nothing selected sends nothing", async () => {
-    covers("command:media.paged.draw.command.appearanceMoveLayer");
-    const r = unitRig(
-      [
-        {
-          ...rectEl("polygon", "ua", [100, 100, 300, 300]),
-          meta: {
-            v: 1,
-            data: {
-              appearance: {
-                fills: [
-                  { color: "Color/Black", tint: 100 },
-                  { color: "Color/Black", tint: 40 },
-                ],
-                strokes: [],
-              },
-            },
-          },
-        },
-      ],
-      { selection: [A] },
-    );
-    await r.run(`${C}.appearanceMoveLayer`, {
-      kind: "fill",
-      index: 0,
-      delta: 1,
-    });
-    expect(stackOf(r)?.fills).toEqual([
-      { color: "Color/Black", tint: 40 },
-      { color: "Color/Black", tint: 100 },
-    ]);
-    await refuses([], `${C}.appearanceMoveLayer`, {
-      kind: "fill",
-      index: 0,
-      delta: 1,
-    });
-  });
-
-  it("Bake appearance inserts one path per layer and groups them in one write (DRW-5); with no stack it sends nothing", async () => {
-    covers("command:media.paged.draw.command.bakeAppearance");
-    const r = unitRig(doc(), { selection: [A] });
-    await r.run(`${C}.appearanceAddFill`);
-    await r.run(`${C}.appearanceAddStroke`);
-    r.fake.setSelection([A]);
-    r.reset();
-    await r.run(`${C}.bakeAppearance`);
-    expect(r.steps()).toBe(1);
-    expect(count(r.leaves(), "insertPath")).toBe(2);
-    expect(ops(r.leaves()).at(-1)).toBe("createGroup");
-    await refuses([A], `${C}.bakeAppearance`);
-  });
-
-  it("Release appearance deletes the derived layers and gives the stack back to the frame, in one batch; an unbaked frame sends nothing", async () => {
-    covers("command:media.paged.draw.command.releaseAppearance");
-    const r = unitRig(doc(), { selection: [A] });
-    await r.run(`${C}.appearanceAddFill`);
-    await r.run(`${C}.appearanceAddStroke`);
-    r.fake.setSelection([A]);
-    await r.run(`${C}.bakeAppearance`);
-    r.fake.setSelection([A]);
-    r.reset();
-    await r.run(`${C}.releaseAppearance`);
-    expect(r.steps()).toBe(1);
-    expect(count(r.leaves(), "deleteFrame")).toBe(2);
-    expect(count(r.leaves(), "dissolveGroup")).toBe(1);
-    await refuses([A], `${C}.releaseAppearance`);
-  });
-});
-
 describe("paged.draw commands, no engine — Image Trace", () => {
   const IMAGE = { kind: "rectangle", id: "uimg" } as ElementId;
   const PNG = pngBytes(48, 48, ringPixels(48));
@@ -862,4 +740,55 @@ describe("paged.draw commands, no engine — Image Trace", () => {
       uninstall();
     }
   }, 30_000);
+});
+
+describe("paged.draw commands, no engine — the baked appearance", () => {
+  // The stack EDITS are the host's (`paged.appearance.*`, PM-0017); a stack
+  // arrives here as the plugin metadata an older document carries, which is
+  // what Bake and Release read.
+  const withStack = () =>
+    unitRig(
+      [
+        {
+          ...rectEl("polygon", "ua", [100, 100, 300, 300]),
+          meta: {
+            v: 1,
+            data: {
+              appearance: {
+                fills: [{ color: "Color/Black", tint: 100 }],
+                strokes: [{ color: "Color/Black", weight: 1 }],
+              },
+            },
+          },
+        },
+      ],
+      { selection: [A] },
+    );
+
+  it("Bake appearance inserts one path per layer and groups them in one write (DRW-5); with no stack it sends nothing", async () => {
+    covers("command:media.paged.draw.command.bakeAppearance");
+    const r = withStack();
+    await r.run(`${C}.bakeAppearance`);
+    expect(r.steps()).toBe(1);
+    expect(count(r.leaves(), "insertPath")).toBe(2);
+    expect(ops(r.leaves()).at(-1)).toBe("createGroup");
+    const bare = unitRig(doc(), { selection: [A] });
+    await bare.run(`${C}.bakeAppearance`);
+    expect(bare.sent()).toEqual([]);
+  });
+
+  it("Release appearance deletes the derived layers and gives the stack back to the frame, in one batch; an unbaked frame sends nothing", async () => {
+    covers("command:media.paged.draw.command.releaseAppearance");
+    const r = withStack();
+    await r.run(`${C}.bakeAppearance`);
+    r.fake.setSelection([A]);
+    r.reset();
+    await r.run(`${C}.releaseAppearance`);
+    expect(r.steps()).toBe(1);
+    expect(count(r.leaves(), "deleteFrame")).toBe(2);
+    expect(count(r.leaves(), "dissolveGroup")).toBe(1);
+    const bare = unitRig(doc(), { selection: [A] });
+    await bare.run(`${C}.releaseAppearance`);
+    expect(bare.sent()).toEqual([]);
+  });
 });

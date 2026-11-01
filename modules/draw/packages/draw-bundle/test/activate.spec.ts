@@ -177,11 +177,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.selectRepeatInstances",
       "media.paged.draw.command.expandRepeat",
       "media.paged.draw.command.releaseRepeat",
-      "media.paged.draw.command.appearanceAddFill",
-      "media.paged.draw.command.appearanceAddStroke",
-      "media.paged.draw.command.appearanceClear",
-      "media.paged.draw.command.appearanceRemoveLayer",
-      "media.paged.draw.command.appearanceMoveLayer",
       // B-24 — the group bake + its inverse.
       "media.paged.draw.command.bakeAppearance",
       "media.paged.draw.command.releaseAppearance",

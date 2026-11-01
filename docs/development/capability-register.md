@@ -146,13 +146,12 @@ Status (draw items, one line each; updated as they land):
   the canvas; draw's annotator shows the axis with a marker per stop and drags a stop along it
   (`GradientStopMachine`). The host's `gradient-editor.tsx` is a panel, not the canvas lane.
   Delete draw's when the host tool shows the axis and stops.
-- Appearance stack: KEEP. The host panel (`panel:paged.appearance`) replaced draw's panel (done
-  earlier) and covers add fill/stroke, clear, remove, reorder as panel gestures, but it has no
-  commands: draw's five `appearance*` commands are the only palette and scripting entry. The
-  metadata lane (`appearance-native.ts`, `appearance-migrate.ts`, `appearance-bake.ts`) is the
-  read path for documents written before the native appearance and the fallback of a host
-  without `document.appearance@1`; graphic styles build on it, and specs exercise it. Not a
-  duplicate to remove.
+- Appearance stack: MERGED 2026-11-01. The host declares `paged.appearance.*` (Add fill, Add
+  stroke, Clear, Remove layer, Move layer; `appearance-commands.ts`) over the panel's own list
+  functions, with Object > Appearance entries for the first three and draw's payload addressing.
+  Draw's five commands, their menu entries, typed twins, strings and the native list functions
+  that duplicated the panel's are gone (draw ADR 367 amended). Kept in draw: the stack model, the
+  conversion and migration of old metadata stacks, the group bake and release, the graphic styles.
 - Reflect / Transform again: KEEP. The host has rotate, scale and shear tools and Transform
   each, but no Reflect and no repeat-last-transform; nothing to delete.
 - Live corners: MERGED 2026-11-01. The host declares `paged.corners.*` (Rounded, Inverse rounded,

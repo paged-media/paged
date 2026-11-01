@@ -210,6 +210,54 @@
       "replacement": "menu:Object/Corners/None",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceAddFill",
+      "replacement": "command:paged.appearance.addFill",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceAddStroke",
+      "replacement": "command:paged.appearance.addStroke",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceClear",
+      "replacement": "command:paged.appearance.clear",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceRemoveLayer",
+      "replacement": "command:paged.appearance.removeLayer",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceMoveLayer",
+      "replacement": "command:paged.appearance.moveLayer",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Appearance/Add fill",
+      "replacement": "menu:Object/Appearance/Add fill",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Appearance/Add stroke",
+      "replacement": "menu:Object/Appearance/Add stroke",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Appearance/Clear",
+      "replacement": "menu:Object/Appearance/Clear",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }
