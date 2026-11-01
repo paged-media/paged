@@ -1,9 +1,8 @@
 # ADR 1056 — One theme model for every module: colour slots and a font scheme on the document
 
-- **Status:** Accepted 2026-11-01; **slice 1 built** (the model, its `.paged` encoding, slide's
-  import). Open: the `theme` collection and the theme operations (slice 2, they ride a protocol
-  bump), swatches that reference slots, doc and sheet lowering, export write-back from the model
-  (slice 3 onward). Part of the capability layering of PM-0014 and PM-0017
+- **Status:** Accepted 2026-11-01; **slices 1 and 2 built** (the model, its `.paged` encoding,
+  slide's import; the `theme` collection and the three operations, riding v78). Open: swatches
+  that reference slots, doc and sheet lowering, export write-back from the model (slice 3 onward). Part of the capability layering of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Themes"). Amends
   slide [ADR 713](../../../../modules/slide/docs/adr/713-live-theme.md) and
   [ADR 719](../../../../modules/slide/docs/adr/719-document-styles.md) (see Migration).
@@ -68,17 +67,32 @@ Fonts: a **theme font reference** (`major` / `minor`, per script) on a character
 style's font, resolved against the theme at composition time. Until slice 3 the references are
 the two slide character styles and the root paragraph styles, written as today.
 
-### Operations (slice 2, wire)
+### Operations (slice 2, built)
 
-Each is one named undo step (ADR 1030), over the wire and in the script bridge:
-`setTheme(theme)` (replace; used by a theme picker and by import), `setThemeColor(slot, value)`
-and `setThemeFonts(which, fonts)`. A change drops `source` (the theme is then re-rendered from the
-model), and recolours the referencing swatches in the same step.
+Each is one named undo step (ADR 1030), over the wire (`setTheme`, `setThemeColor`,
+`setThemeFonts`) and in the script bridge (`paged.setTheme`, `paged.setThemeColor`,
+`paged.setThemeFonts`): `setTheme(theme)` replaces the theme (a theme picker; creates one in a
+document that has none), `setThemeColor(slot, value)` sets one slot (`RRGGBB`, `#` allowed; a
+system colour becomes a fixed one; a slot the theme lacks is inserted in scheme order),
+`setThemeFonts(which, fonts)` replaces the `major` or `minor` set. The last two need a theme and
+refuse without one; an unknown slot, a bad colour, a duplicate slot or a `which` other than
+`major`/`minor` is refused and changes nothing. The inverse of all three is the inverse-only
+`RestoreTheme`, which carries the theme as it was.
+
+**The source after an edit (decided).** The source is kept and the theme is marked `edited`
+(`Theme.edited`, set by every theme operation, absent from the encoding while false). It is not
+cleared: the part holds the format scheme, extension lists and `objectDefaults` the model does not
+carry, which a clear would lose. A writer therefore has three cases: `source` and not `edited` ->
+re-emit byte for byte; `source` and `edited` -> patch the colour and font schemes of the source
+with the model (slide's `rewrite_theme_xml`); no `source` -> render a theme part from the model.
+`SetTheme` over a theme keeps its source, so a picker applying another theme to a Word, Excel or
+PowerPoint document still writes into that document's own part. Undo restores `edited` with the
+rest. Recolouring the referencing swatches in the same step is slice 3.
 
 ### Reads
 
-The collection `theme` (slice 2): one row, the model as above, without `source`'s data (its
-presence and format only). A host's theme picker reads it and sends `setTheme`; the list of
+The collection `theme` (slice 2, built): an array of zero or one row, the model as above with
+`source` reported as `{format, bytes}` (not its text) and `edited`. A host's theme picker reads it and sends `setTheme`; the list of
 available themes (the gallery) is the module's.
 
 ### Fidelity
@@ -97,12 +111,12 @@ is a reported loss. Word's and Excel's theme parts, and a `.thmx`, read into the
   with `dk1`/`lt1` system names, both font sets with their scripts, and the part as `source`.
 - Additive and byte-neutral: slide's swatches, "Theme" group, character styles and deck label are
   unchanged, and `pptx-export` still writes from them (its tests and goldens pass unchanged).
-- **No wire change**: no collection and no operation yet, so no schema, catalog or CLI regeneration
-  and no plugin-sdk bump. Slice 2 adds both with the full resync in one commit.
+- **No wire change** in slice 1. Slice 2 adds the collection and the three operations (rides v78,
+  before its first consumer sync) with the full resync in one commit.
 
 ### Slices after
 
-2. The `theme` collection and the three operations (a protocol bump). 3. Swatch and font theme
+2. (built) The `theme` collection and the three operations. 3. Swatch and font theme
 references; slide's `applyTheme` becomes `setTheme`; the Design panel reads the collection.
 4. doc and sheet lower onto it (their literal swatches become references; the doc's theme fonts
 leave the styles); export writes back from the model. 5. The format scheme.

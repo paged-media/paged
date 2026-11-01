@@ -6306,6 +6306,31 @@ pub enum Operation {
     SetPerson {
         person: PersonSpec,
     },
+    /// Engine ADR 1056 — replace the document's theme (colour slots, font
+    /// scheme) with `theme`, keeping the source part of the theme it replaces
+    /// (the format scheme lives there) and marking the theme edited.
+    /// Inverse: `RestoreTheme`.
+    SetTheme {
+        theme: ThemeSpec,
+    },
+    /// Engine ADR 1056 — set the colour of theme slot `slot` (`dk1` …
+    /// `folHlink`) to `value` (`RRGGBB`). Needs a theme. Inverse: `RestoreTheme`.
+    SetThemeColor {
+        slot: String,
+        value: String,
+    },
+    /// Engine ADR 1056 — set the `major` (headings) or `minor` (body) font
+    /// set of the theme. Needs a theme. Inverse: `RestoreTheme`.
+    SetThemeFonts {
+        which: String,
+        fonts: ThemeFontsSpec,
+    },
+    /// Inverse-only (engine ADR 1056) — set the document's theme to what it
+    /// was (`None`: no theme). Its inverse carries what it replaced.
+    RestoreTheme {
+        #[serde(default)]
+        theme_json: Option<String>,
+    },
     /// Inverse-only (engine ADR 1055) — set the document's comment threads
     /// and people list to what they were. Its inverse carries what it replaced.
     RestoreCommentThreads {
@@ -7325,6 +7350,65 @@ pub struct PersonSpec {
     pub user_id: Option<String>,
     #[serde(default)]
     pub provider_id: Option<String>,
+}
+
+/// Engine ADR 1056 — one colour slot of a theme, on the wire.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeColorSpec {
+    pub slot: String,
+    /// `RRGGBB`, with or without `#`.
+    pub value: String,
+    #[serde(default)]
+    pub system: Option<String>,
+}
+
+/// Engine ADR 1056 — the face a theme font set gives one script.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptFontSpec {
+    pub script: String,
+    pub typeface: String,
+}
+
+/// Engine ADR 1056 — one half of a theme's font scheme, on the wire.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeFontsSpec {
+    #[serde(default)]
+    pub latin: Option<String>,
+    #[serde(default)]
+    pub east_asian: Option<String>,
+    #[serde(default)]
+    pub complex: Option<String>,
+    #[serde(default)]
+    pub scripts: Vec<ScriptFontSpec>,
+}
+
+/// Engine ADR 1056 — a theme, on the wire (`SetTheme`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSpec {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub color_scheme_name: Option<String>,
+    #[serde(default)]
+    pub colors: Vec<ThemeColorSpec>,
+    #[serde(default)]
+    pub font_scheme_name: Option<String>,
+    #[serde(default)]
+    pub major: ThemeFontsSpec,
+    #[serde(default)]
+    pub minor: ThemeFontsSpec,
 }
 
 /// Engine ADR 1055 — what a comment thread is attached to, on the wire.

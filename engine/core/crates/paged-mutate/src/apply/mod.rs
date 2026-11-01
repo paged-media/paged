@@ -790,6 +790,10 @@ pub(crate) fn apply_inner(
             threads::apply_set_anchor(doc, thread_id, anchor)
         }
         Operation::SetPerson { person } => threads::apply_set_person(doc, person),
+        Operation::SetTheme { theme } => theme::apply_set_theme(doc, theme),
+        Operation::SetThemeColor { slot, value } => theme::apply_set_color(doc, slot, value),
+        Operation::SetThemeFonts { which, fonts } => theme::apply_set_fonts(doc, which, fonts),
+        Operation::RestoreTheme { theme_json } => theme::apply_restore(doc, theme_json.as_deref()),
         Operation::RestoreCommentThreads {
             threads_json,
             people_json,
@@ -1501,6 +1505,7 @@ mod note;
 pub mod permit;
 pub mod review;
 mod script;
+pub mod theme;
 pub mod threads;
 mod tracked_change;
 mod word;

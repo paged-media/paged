@@ -274,6 +274,10 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::InsertLayer { .. }
         | O::RemoveLayer { .. } => vec![doc(P::DocumentPages)],
         O::CreateSwatch { .. }
+        | O::SetTheme { .. }
+        | O::SetThemeColor { .. }
+        | O::SetThemeFonts { .. }
+        | O::RestoreTheme { .. }
         | O::EditSwatch { .. }
         | O::DeleteSwatch { .. }
         | O::CreateParagraphStyle { .. }

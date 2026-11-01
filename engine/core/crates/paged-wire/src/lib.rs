@@ -2630,6 +2630,25 @@ pub enum Mutation {
     SetPerson {
         person: paged_mutate::operation::PersonSpec,
     },
+    // rides v78 (added before first consumer sync): the ADR 1056 theme.
+    /// Engine ADR 1056 — replace the document's theme (twelve colour slots
+    /// and a font scheme); the theme's source part is kept, marked edited.
+    /// Undoable.
+    SetTheme {
+        theme: paged_mutate::operation::ThemeSpec,
+    },
+    /// Engine ADR 1056 — set one colour slot (`dk1` … `folHlink`) of the
+    /// theme to `value` (`RRGGBB`). Needs a theme. Undoable.
+    SetThemeColor {
+        slot: String,
+        value: String,
+    },
+    /// Engine ADR 1056 — set the `major` (headings) or `minor` (body) font
+    /// set of the theme. Needs a theme. Undoable.
+    SetThemeFonts {
+        which: String,
+        fonts: paged_mutate::operation::ThemeFontsSpec,
+    },
     // ── W0.5 wire-expansion ─────────────────────────────────────────
     /// W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local
     /// `bounds` `(top, left, bottom, right)`; the model resolves the
@@ -3311,6 +3330,9 @@ mutation_vocabulary! {
     InsertCommentThread,
     SetCommentAnchor,
     SetPerson,
+    SetTheme,
+    SetThemeColor,
+    SetThemeFonts,
     InsertOval,
     InsertGuide,
     MoveGuide,

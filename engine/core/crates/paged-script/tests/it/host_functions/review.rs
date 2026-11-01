@@ -191,3 +191,55 @@ fn set_person() {
         "true",
     );
 }
+
+#[test]
+fn set_theme() {
+    covers!("script:paged.setTheme");
+    let (mut m, _, _, _) = with_story("One two three");
+    refuses(&mut m, "paged.setTheme('nope')", "false");
+    refuses(
+        &mut m,
+        "paged.setTheme({name: 'T', colors: [{slot: 'accent9', value: 'FF0000'}]})",
+        "false",
+    );
+    writes(
+        &mut m,
+        "paged.setTheme({name: 'Mine', colors: [{slot: 'accent1', value: 'ff0000'}], \
+         major: {latin: 'Georgia'}})",
+        "true",
+    );
+}
+
+#[test]
+fn set_theme_color() {
+    covers!("script:paged.setThemeColor");
+    let (mut m, _, _, _) = with_story("One two three");
+    // No theme yet: refused.
+    refuses(&mut m, "paged.setThemeColor('accent1', 'FF0000')", "false");
+    ok(&mut m, "paged.setTheme({name: 'Mine', colors: []})");
+    refuses(&mut m, "paged.setThemeColor('accent9', 'FF0000')", "false");
+    refuses(&mut m, "paged.setThemeColor('accent1', 'red')", "false");
+    writes(&mut m, "paged.setThemeColor('accent1', '#00ff00')", "true");
+}
+
+#[test]
+fn set_theme_fonts() {
+    covers!("script:paged.setThemeFonts");
+    let (mut m, _, _, _) = with_story("One two three");
+    refuses(
+        &mut m,
+        "paged.setThemeFonts('major', {latin: 'Georgia'})",
+        "false",
+    );
+    ok(&mut m, "paged.setTheme({name: 'Mine', colors: []})");
+    refuses(
+        &mut m,
+        "paged.setThemeFonts('heading', {latin: 'Georgia'})",
+        "false",
+    );
+    writes(
+        &mut m,
+        "paged.setThemeFonts('minor', {latin: 'Verdana', scripts: [{script: 'Jpan', typeface: 'Yu Gothic'}]})",
+        "true",
+    );
+}

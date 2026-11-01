@@ -105,6 +105,13 @@ pub struct Theme {
     /// theme is edited.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceBlob>,
+    /// Set by every theme operation: the model no longer matches `source`.
+    /// A writer re-emits an unedited `source` byte for byte; an edited one
+    /// it patches with the model's colour and font schemes (keeping the
+    /// format scheme and everything else in the part), or renders from the
+    /// model when there is no `source`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub edited: bool,
 }
 
 impl Theme {
@@ -148,6 +155,7 @@ mod tests {
                 format: THEME_SOURCE_OOXML.into(),
                 data: "<a:theme/>".into(),
             }),
+            edited: true,
         }
     }
 

@@ -1439,6 +1439,18 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             2,
         )
         .function(guarded(paged_set_person), js_string!("setPerson"), 1)
+        // Engine ADR 1056.
+        .function(guarded(paged_set_theme), js_string!("setTheme"), 1)
+        .function(
+            guarded(paged_set_theme_color),
+            js_string!("setThemeColor"),
+            2,
+        )
+        .function(
+            guarded(paged_set_theme_fonts),
+            js_string!("setThemeFonts"),
+            2,
+        )
         // Engine ADRs 1018 and 1021.
         .function(guarded(paged_find), js_string!("find"), 2)
         .function(guarded(paged_find_replace), js_string!("findReplace"), 3)
@@ -4108,6 +4120,43 @@ fn paged_set_person(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsR
         return Ok(JsValue::from(false));
     };
     Ok(apply_bool(&Mutation::SetPerson { person }))
+}
+
+/// `paged.setTheme({ name, colors: [{slot, value, system?}], colorSchemeName?,
+/// fontSchemeName?, major?, minor? })` — replace the document's theme.
+fn paged_set_theme(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let Some(theme) = from_js::<paged_mutate::operation::ThemeSpec>(args.get_or_undefined(0), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::SetTheme { theme }))
+}
+
+/// `paged.setThemeColor(slot, 'RRGGBB')` — set one colour slot of the theme.
+fn paged_set_theme_color(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let slot = str_arg(args, 0, ctx)?;
+    let value = str_arg(args, 1, ctx)?;
+    Ok(apply_bool(&Mutation::SetThemeColor { slot, value }))
+}
+
+/// `paged.setThemeFonts('major' | 'minor', { latin?, eastAsian?, complex?,
+/// scripts?: [{script, typeface}] })` — set a font set of the theme.
+fn paged_set_theme_fonts(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let which = str_arg(args, 0, ctx)?;
+    let Some(fonts) =
+        from_js::<paged_mutate::operation::ThemeFontsSpec>(args.get_or_undefined(1), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::SetThemeFonts { which, fonts }))
 }
 
 /// `paged.deleteComment(commentId)` — a root takes its thread with it.

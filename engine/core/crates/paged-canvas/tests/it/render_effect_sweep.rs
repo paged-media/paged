@@ -4026,6 +4026,47 @@ fn style_cases(c: &mut Vec<Case>) {
             },
         },
     ));
+    c.push(inert(
+        "SetTheme",
+        "styles-cascade",
+        "the theme is a document resource; nothing references its slots yet (engine ADR 1056, slice 3 does)",
+        |_| Mutation::SetTheme {
+            theme: paged_mutate::operation::ThemeSpec {
+                name: "Probe".into(),
+                ..Default::default()
+            },
+        },
+    ));
+    c.push(inert(
+        "SetThemeColor",
+        "styles-cascade",
+        "the theme is a document resource; nothing references its slots yet (engine ADR 1056, slice 3 does)",
+        |m| {
+            m.apply_mutation(&Mutation::SetTheme {
+                theme: Default::default(),
+            })
+            .expect("seed a theme");
+            Mutation::SetThemeColor {
+                slot: "accent1".into(),
+                value: "FF0000".into(),
+            }
+        },
+    ));
+    c.push(inert(
+        "SetThemeFonts",
+        "styles-cascade",
+        "the theme is a document resource; nothing references its fonts yet (engine ADR 1056, slice 3 does)",
+        |m| {
+            m.apply_mutation(&Mutation::SetTheme {
+                theme: Default::default(),
+            })
+            .expect("seed a theme");
+            Mutation::SetThemeFonts {
+                which: "major".into(),
+                fonts: Default::default(),
+            }
+        },
+    ));
     c.push(paints("UpdateFields", "styles-cascade", |m| {
         let story_id = m.scene().stories[0].self_id.clone();
         m.apply_mutation(&Mutation::InsertField {

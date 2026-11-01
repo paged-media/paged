@@ -5052,6 +5052,89 @@
           ]
         },
         {
+          "description": "Engine ADR 1056 — replace the document's theme (twelve colour slots\nand a font scheme); the theme's source part is kept, marked edited.\nUndoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setTheme"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "theme": {
+                  "$ref": "#/$defs/ThemeSpec"
+                }
+              },
+              "required": [
+                "theme"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1056 — set one colour slot (`dk1` … `folHlink`) of the\ntheme to `value` (`RRGGBB`). Needs a theme. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setThemeColor"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "slot": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "slot",
+                "value"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1056 — set the `major` (headings) or `minor` (body) font\nset of the theme. Needs a theme. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setThemeFonts"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "which": {
+                  "type": "string"
+                },
+                "fonts": {
+                  "$ref": "#/$defs/ThemeFontsSpec"
+                }
+              },
+              "required": [
+                "which",
+                "fonts"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local\n`bounds` `(top, left, bottom, right)`; the model resolves the\nhost spread and mints the self id (mirrors `InsertFrame`).",
           "type": "object",
           "properties": {
@@ -13462,6 +13545,129 @@
       },
       "required": [
         "id"
+      ]
+    },
+    "ThemeSpec": {
+      "description": "Engine ADR 1056 — a theme, on the wire (`SetTheme`).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "colorSchemeName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "colors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThemeColorSpec"
+          },
+          "default": []
+        },
+        "fontSchemeName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "major": {
+          "$ref": "#/$defs/ThemeFontsSpec",
+          "default": {
+            "latin": null,
+            "eastAsian": null,
+            "complex": null,
+            "scripts": []
+          }
+        },
+        "minor": {
+          "$ref": "#/$defs/ThemeFontsSpec",
+          "default": {
+            "latin": null,
+            "eastAsian": null,
+            "complex": null,
+            "scripts": []
+          }
+        }
+      }
+    },
+    "ThemeColorSpec": {
+      "description": "Engine ADR 1056 — one colour slot of a theme, on the wire.",
+      "type": "object",
+      "properties": {
+        "slot": {
+          "type": "string"
+        },
+        "value": {
+          "description": "`RRGGBB`, with or without `#`.",
+          "type": "string"
+        },
+        "system": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "slot",
+        "value"
+      ]
+    },
+    "ThemeFontsSpec": {
+      "description": "Engine ADR 1056 — one half of a theme's font scheme, on the wire.",
+      "type": "object",
+      "properties": {
+        "latin": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "eastAsian": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "complex": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScriptFontSpec"
+          },
+          "default": []
+        }
+      }
+    },
+    "ScriptFontSpec": {
+      "description": "Engine ADR 1056 — the face a theme font set gives one script.",
+      "type": "object",
+      "properties": {
+        "script": {
+          "type": "string"
+        },
+        "typeface": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "script",
+        "typeface"
       ]
     },
     "GuideOrientationSpec": {

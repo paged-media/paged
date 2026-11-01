@@ -3299,6 +3299,9 @@ pub enum CollectionName {
     /// Engine ADR 1020 — the document's comments, threads in story order
     /// (each root followed by its replies).
     Comments,
+    /// Engine ADR 1056 — the document's theme: one row (the colour slots and
+    /// the font scheme, `source` as its format and size only), or none.
+    Theme,
     /// Concept 2 — the Ink Manager's ink list (one row per spot
     /// swatch, carrying its output-time settings).
     Inks,
@@ -3369,6 +3372,7 @@ impl CollectionName {
             Self::XmlElements => "xmlElements",
             Self::TrackedChanges => "trackedChanges",
             Self::Comments => "comments",
+            Self::Theme => "theme",
             Self::Endnotes => "endnotes",
             Self::Inks => "inks",
             Self::Sections => "sections",
@@ -3413,6 +3417,7 @@ impl CollectionName {
             "xmlElements" => Self::XmlElements,
             "trackedChanges" => Self::TrackedChanges,
             "comments" => Self::Comments,
+            "theme" => Self::Theme,
             "endnotes" => Self::Endnotes,
             "inks" => Self::Inks,
             "sections" => Self::Sections,

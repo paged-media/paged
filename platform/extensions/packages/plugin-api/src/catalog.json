@@ -1310,6 +1310,27 @@
       "summary": "Add or update an author of the document's people list that comments name. Undoable."
     },
     {
+      "name": "paged.setTheme",
+      "params": "({name, colors: [{slot, value, system?}], colorSchemeName?, fontSchemeName?, major?, minor?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Replace the document's theme: twelve colour slots (dk1, lt1, dk2, lt2, accent1-6, hlink, folHlink as RRGGBB) and the major (headings) and minor (body) font sets. The collection `theme` reads it. Undoable."
+    },
+    {
+      "name": "paged.setThemeColor",
+      "params": "(slot, value)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Set one colour slot of the document's theme to RRGGBB. Needs a theme. Undoable."
+    },
+    {
+      "name": "paged.setThemeFonts",
+      "params": "(which, {latin?, eastAsian?, complex?, scripts?: [{script, typeface}]})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Set the 'major' (headings) or 'minor' (body) font set of the document's theme. Needs a theme. Undoable."
+    },
+    {
       "name": "paged.find",
       "params": "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})",
       "returns": "string",
@@ -2190,6 +2211,9 @@
     "insertCommentThread",
     "setCommentAnchor",
     "setPerson",
+    "setTheme",
+    "setThemeColor",
+    "setThemeFonts",
     "insertOval",
     "insertGuide",
     "moveGuide",

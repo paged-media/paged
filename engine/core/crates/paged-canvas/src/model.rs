@@ -5810,6 +5810,17 @@ impl CanvasModel {
             Mutation::SetPerson { person } => Some(Operation::SetPerson {
                 person: person.clone(),
             }),
+            Mutation::SetTheme { theme } => Some(Operation::SetTheme {
+                theme: theme.clone(),
+            }),
+            Mutation::SetThemeColor { slot, value } => Some(Operation::SetThemeColor {
+                slot: slot.clone(),
+                value: value.clone(),
+            }),
+            Mutation::SetThemeFonts { which, fonts } => Some(Operation::SetThemeFonts {
+                which: which.clone(),
+                fonts: fonts.clone(),
+            }),
             Mutation::ResolveComment {
                 comment_id,
                 resolved,
@@ -12232,6 +12243,23 @@ impl CanvasModel {
         out
     }
 
+    /// Engine ADR 1056 — the `theme` collection: one row for the document's
+    /// theme, none without one. The source part is reported as its format
+    /// and size (`source: {format, bytes}`), not its text.
+    pub fn theme_rows(&self) -> Vec<serde_json::Value> {
+        let Some(t) = &self.scene.theme else {
+            return Vec::new();
+        };
+        let mut row = serde_json::to_value(t).unwrap_or_default();
+        if let (Some(obj), Some(src)) = (row.as_object_mut(), &t.source) {
+            obj.insert(
+                "source".into(),
+                serde_json::json!({ "format": src.format, "bytes": src.data.len() }),
+            );
+        }
+        vec![row]
+    }
+
     /// Engine ADR 1020 — the document's comments, threads in story order,
     /// each story's editorial notes (ADR 172) after its range comments as
     /// rows of kind `note` (ADR 1055).
@@ -13105,6 +13133,7 @@ impl CanvasModel {
             XmlElements => json(self.xml_elements()),
             TrackedChanges => json(self.tracked_changes()),
             Comments => json(self.comments()),
+            Theme => json(self.theme_rows()),
             Endnotes => json(self.endnotes()),
             Inks => json(self.inks()),
             Sections => json(self.sections()),
