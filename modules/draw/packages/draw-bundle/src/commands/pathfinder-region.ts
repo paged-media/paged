@@ -47,28 +47,17 @@
 // so a caller can put it in front of the user instead of showing an
 // empty result. The command lane logs it at WARN and publishes it on
 // the `media.paged.draw.pathfinderStatus` binding.
+//
+// The Pathfinder COMMANDS are the host's (`paged.pathfinder.*`, PM-0017);
+// what stays here is what draw's other tools build on: the paint-order
+// readers, the faces builder (Shape Builder) and the refusal reader.
 
 import type {
   BundleHost,
-  Disposable,
   ElementId,
   Mutation,
   SceneTreeNode,
 } from "@paged-media/plugin-api";
-
-import { registerCommand } from "../command-registry";
-import { defineMessages } from "@paged-media/strings";
-
-/** Command titles, message keys `registerCommand` reads in the editor's locale. */
-const M = defineMessages("draw.pathfinderRegion", {
-  divide: "Pathfinder: Divide",
-  trim: "Pathfinder: Trim",
-  merge: "Pathfinder: Merge",
-  crop: "Pathfinder: Crop",
-  outline: "Pathfinder: Outline",
-  minusBack: "Pathfinder: Minus back",
-});
-export const PATHFINDER_REGION_COMMAND_CATEGORY = "Pathfinder";
 
 /** The binding a refusal (or the last success) is published on, so a
  *  schema panel can show the engine's own words. */
@@ -83,54 +72,7 @@ export type PathfinderRegionVerb =
   | "pathfinderOutline"
   | "pathfinderMinusBack";
 
-export interface PathfinderRegionPreset {
-  /** The namespaced command id (under the manifest id). */
-  id: string;
-  title: string;
-  /** The wire op this preset commits. */
-  verb: PathfinderRegionVerb;
-}
-
-/** The six region-pathfinder commands, in registration order. */
-export const PATHFINDER_REGION_PRESETS: readonly PathfinderRegionPreset[] = [
-  {
-    id: "media.paged.draw.command.pathfinderDivide",
-    title: M.divide,
-    verb: "pathfinderDivide",
-  },
-  {
-    id: "media.paged.draw.command.pathfinderTrim",
-    title: M.trim,
-    verb: "pathfinderTrim",
-  },
-  {
-    id: "media.paged.draw.command.pathfinderMerge",
-    title: M.merge,
-    verb: "pathfinderMerge",
-  },
-  {
-    id: "media.paged.draw.command.pathfinderCrop",
-    title: M.crop,
-    verb: "pathfinderCrop",
-  },
-  {
-    id: "media.paged.draw.command.pathfinderOutline",
-    title: M.outline,
-    verb: "pathfinderOutline",
-  },
-  {
-    id: "media.paged.draw.command.pathfinderMinusBack",
-    title: M.minusBack,
-    verb: "pathfinderMinusBack",
-  },
-] as const;
-
-/** The contributed command ids, in registration order. */
-export const PATHFINDER_REGION_COMMAND_IDS = PATHFINDER_REGION_PRESETS.map(
-  (p) => p.id,
-);
-
-/** The `<verb>{ elementIds }` mutation one preset commits. `elementIds`
+/** The `<verb>{ elementIds }` mutation one verb commits. `elementIds`
  *  MUST already be top-to-bottom (see the module header). Exported so
  *  the conformance spec asserts the EXACT wire shape the live command
  *  emits (no second copy to drift from). */
@@ -255,55 +197,4 @@ export function regionRefusalReason(error: unknown): string | null {
   // "frame mutation failed: invalid value for FramePath on X: <reason>".
   const tail = /:\s*([^:]*(?:planar|face)[^"]*)$/.exec(raw);
   return (tail ? tail[1] : raw).trim() || null;
-}
-
-/** Apply one region preset over the selection, top-to-bottom. Fewer
- *  than two selected ⇒ an honest no-op (debug log, never a throw); a
- *  refusal ⇒ the engine's reason at WARN + on the status binding. */
-export async function applyPathfinderRegion(
-  host: BundleHost,
-  preset: PathfinderRegionPreset,
-): Promise<void> {
-  const selection = host.selection.get();
-  if (selection.length < 2) {
-    host.log.debug(
-      `${preset.id}: needs ≥ 2 selected elements (have ${selection.length}) — no-op`,
-    );
-    return;
-  }
-  const ordered = await selectionTopToBottom(host);
-  const outcome = await host.document.mutate(
-    pathfinderRegionMutationFor(preset.verb, ordered),
-  );
-  if (!outcome.applied) {
-    const reason =
-      regionRefusalReason(outcome.error) ?? "the engine refused the operation";
-    host.log.warn(`${preset.id} refused: ${reason}`);
-    host.bindings.publish(BIND_PATHFINDER_STATUS, reason);
-    return;
-  }
-  host.bindings.publish(BIND_PATHFINDER_STATUS, null);
-  // The verbs consume, replace and mint elements; naming a survivor
-  // would be a guess, so the selection is cleared rather than left
-  // pointing at ids that may no longer exist.
-  await host.selection.set([]);
-}
-
-/** Register the six region-pathfinder commands. */
-export function contributePathfinderRegionCommands(
-  host: BundleHost,
-): Disposable {
-  const disposers = PATHFINDER_REGION_PRESETS.map((preset) =>
-    registerCommand(host, {
-      id: preset.id,
-      title: preset.title,
-      category: PATHFINDER_REGION_COMMAND_CATEGORY,
-      handler: () => applyPathfinderRegion(host, preset),
-    }),
-  );
-  return {
-    dispose() {
-      for (const d of disposers) d.dispose();
-    },
-  };
 }

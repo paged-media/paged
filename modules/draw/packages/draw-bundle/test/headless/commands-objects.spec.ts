@@ -47,7 +47,6 @@ const RECT = el("rectangle", "urect");
 const POLY = el("polygon", "upoly");
 const LINE = el("graphicLine", "uline");
 const A = el("polygon", "ua");
-const B = el("polygon", "ub");
 const OUTER = el("polygon", "uouter");
 const INNER = el("polygon", "uinner");
 const F1 = () => F1_MULTI_SHAPE.bytes();
@@ -134,78 +133,6 @@ describe("paged.draw commands — objects (real engine)", () => {
     });
     if (!removed.applied) throw new Error("deleteFrame failed");
   }
-
-  describe("Pathfinder", () => {
-    it("Unite merges the two overlapping quads; one quad is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderUnite");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderUnite`);
-      await expectRefuses(rig, F4(), [A], `${C}.pathfinderUnite`);
-    });
-
-    it("Minus front cuts the front quad out of the back one; one quad is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderSubtract");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderSubtract`);
-      await expectRefuses(rig, F4(), [A], `${C}.pathfinderSubtract`);
-    });
-
-    it("Intersect keeps the overlap; one quad is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderIntersect");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderIntersect`);
-      await expectRefuses(rig, F4(), [A], `${C}.pathfinderIntersect`);
-    });
-
-    it("Exclude keeps everything but the overlap; one quad is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderExclude");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderExclude`);
-      await expectRefuses(rig, F4(), [A], `${C}.pathfinderExclude`);
-    });
-
-    it("Divide splits the pair into its faces; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderDivide");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderDivide`);
-      await expectRefuses(rig, F4(), [], `${C}.pathfinderDivide`);
-    });
-
-    it("Trim removes the hidden parts; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderTrim");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderTrim`);
-      await expectRefuses(rig, F4(), [], `${C}.pathfinderTrim`);
-    });
-
-    it("Merge trims and merges same-paint faces; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderMerge");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderMerge`);
-      await expectRefuses(rig, F4(), [], `${C}.pathfinderMerge`);
-    });
-
-    it("Crop keeps what the top quad covers; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderCrop");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderCrop`);
-      await expectRefuses(rig, F4(), [], `${C}.pathfinderCrop`);
-    });
-
-    it("Outline turns the faces into their edges; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderOutline");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderOutline`);
-      await expectRefuses(rig, F4(), [], `${C}.pathfinderOutline`);
-    });
-
-    it("Minus back cuts the back quad out of the front one; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.pathfinderMinusBack");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.pathfinderMinusBack`);
-      await expectRefuses(rig, F4(), [], `${C}.pathfinderMinusBack`);
-    });
-  });
 
   describe("compound paths", () => {
     it("Make compound path joins the ring pair into one element with a hole; one path is refused", async () => {

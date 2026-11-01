@@ -49,6 +49,7 @@ import { buildTransformEachDialogCommands } from "../../../src/panels/transform-
 import { buildCoreCommandEntries } from "../../../src/core-command-entries";
 import { buildInsertCommands } from "../../../src/insert-commands";
 import { buildObjectCommands } from "../../../src/object-commands";
+import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { buildSvgCommands } from "../../../src/svg-commands";
 import { buildAssetExportCommands } from "../../../src/asset-export/commands";
@@ -167,6 +168,7 @@ function tableIds(): string[] {
     ...buildAssetExportCommands(),
     CANVAS_CONTEXT_MENU_COMMAND,
     ...buildObjectCommands(noop),
+    ...buildPathfinderCommands(noop as never, noop, noop),
     ...buildInsertCommands(noop),
     ...buildCoreCommandEntries(),
     ...buildTransformCommands(noop),
@@ -254,6 +256,7 @@ describe("the host command inventory", () => {
       "buildAssetExportCommands()",
       "CANVAS_CONTEXT_MENU_COMMAND",
       "objectCommands",
+      "pathfinderCommands",
       "insertCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",

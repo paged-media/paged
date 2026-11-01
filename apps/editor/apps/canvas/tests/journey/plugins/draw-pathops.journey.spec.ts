@@ -119,7 +119,7 @@ test.describe("journey · paged.draw path ops", () => {
       ]);
       const countBefore = await designer.count("rectangle");
       const before = await designer.renderBytes();
-      await invokeCommand(page, "media.paged.draw.command.pathfinderSubtract");
+      await invokeCommand(page, "paged.pathfinder.subtract");
       await expect
         .poll(() => designer.count("rectangle"), { timeout: 8_000 })
         .toBeLessThan(countBefore);
@@ -136,8 +136,8 @@ test.describe("journey · paged.draw path ops", () => {
     // ── 2. PATHFINDER INTERSECT / EXCLUDE (collect) — same operand-
     //    consumption contract; render-collected. ──
     for (const [cmd, label] of [
-      ["media.paged.draw.command.pathfinderIntersect", "intersect"],
-      ["media.paged.draw.command.pathfinderExclude", "exclude"],
+      ["paged.pathfinder.intersect", "intersect"],
+      ["paged.pathfinder.exclude", "exclude"],
     ] as const) {
       try {
         const [a, b] = await twoOverlapping();

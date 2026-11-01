@@ -220,17 +220,9 @@ import {
 import { contributeCreateOutlinesCommands } from "./commands/create-outlines";
 import { contributeRasterizeCommand } from "./commands/rasterize";
 import {
-  contributePathfinderCommands,
-  PATHFINDER_COMMAND_IDS,
-} from "./commands/pathfinder";
-import {
   contributeTransformCommands,
   TRANSFORM_COMMAND_IDS,
 } from "./commands/transform";
-import {
-  contributePathfinderRegionCommands,
-  PATHFINDER_REGION_COMMAND_IDS,
-} from "./commands/pathfinder-region";
 import { vectorGraphicEditContext } from "./edit-context";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import {
@@ -502,14 +494,7 @@ export function activate(host: BundleHost): BundleHandle {
   // variant needs engine 0.65's `duplicateElements` and is probed, not
   // assumed (commands/transform.ts).
   const transformCommandsSub = contributeTransformCommands(host);
-  // Phase 4c — Pathfinder Unite/Subtract/Intersect/Exclude (the
-  // pathfinderBoolean wire consumers; first selected = kept).
-  const pathfinderCommandsSub = contributePathfinderCommands(host);
-  // B-22 (engine v57) — the REGION Pathfinder row: Divide / Trim /
-  // Merge / Crop / Outline / Minus back over the planar arrangement.
-  // `elementIds` is TOP-TO-BOTTOM, read from the scene tree's paint
-  // order rather than click order — see commands/pathfinder-region.ts.
-  const pathfinderRegionCommandsSub = contributePathfinderRegionCommands(host);
+  // Pathfinder (all ten verbs) is the host's: `paged.pathfinder.*`.
   // Illustrator Phase 2 — Make / Release COMPOUND PATH. No new wire op:
   // `framePath` replaces a whole anchor table (contour boundaries
   // included) and is the same door core's own `apply_pathfinder` uses.
@@ -759,8 +744,6 @@ export function activate(host: BundleHost): BundleHandle {
         JOIN_AVERAGE_COMMAND_IDS.length +
         REVERSE_PATH_COMMAND_IDS.length +
         TRANSFORM_COMMAND_IDS.length +
-        PATHFINDER_COMMAND_IDS.length +
-        PATHFINDER_REGION_COMMAND_IDS.length +
         COMPOUND_PATH_COMMAND_IDS.length +
         PATTERN_COMMAND_IDS.length +
         REPEAT_COMMAND_IDS.length +
@@ -850,8 +833,6 @@ export function activate(host: BundleHost): BundleHandle {
       repeatCommandsSub.dispose();
       patternCommandsSub.dispose();
       compoundPathCommandsSub.dispose();
-      pathfinderRegionCommandsSub.dispose();
-      pathfinderCommandsSub.dispose();
       transformCommandsSub.dispose();
       reversePathCommandsSub.dispose();
       createOutlinesCommandsSub.dispose();

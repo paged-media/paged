@@ -323,23 +323,12 @@ export {
   type RasterizeParams,
 } from "./commands/rasterize";
 export { rawTextOutlines, type TextOutlinesWire } from "./raw-wire";
-export {
-  PATHFINDER_PRESETS,
-  PATHFINDER_COMMAND_IDS,
-  PATHFINDER_COMMAND_CATEGORY,
-  pathfinderMutationFor,
-  applyPathfinder,
-  contributePathfinderCommands,
-  type PathfinderPreset,
-} from "./commands/pathfinder";
-// B-22 (engine v57) — the REGION Pathfinder row (Divide / Trim / Merge
-// / Crop / Outline / Minus back) + the shared v57 wire builders and the
+export { pathfinderMutationFor } from "./commands/pathfinder";
+// B-22 (engine v57) — the shared region-Pathfinder wire builders (the
+// commands are the host's) and the
 // refusal reader, exported for the conformance spec (no second copy to
 // drift from).
 export {
-  PATHFINDER_REGION_PRESETS,
-  PATHFINDER_REGION_COMMAND_IDS,
-  PATHFINDER_REGION_COMMAND_CATEGORY,
   BIND_PATHFINDER_STATUS,
   pathfinderRegionMutationFor,
   pathfinderFacesMutationFor,
@@ -348,9 +337,6 @@ export {
   backmostIndexOf,
   selectionTopToBottom,
   regionRefusalReason,
-  applyPathfinderRegion,
-  contributePathfinderRegionCommands,
-  type PathfinderRegionPreset,
   type PathfinderRegionVerb,
 } from "./commands/pathfinder-region";
 // Illustrator Phase 2 — COMPOUND PATHS (Make / Release). The wire

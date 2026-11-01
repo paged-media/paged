@@ -132,11 +132,13 @@ Status (draw items, one line each; updated as they land):
   builders (`resolveGraphicPaint`, `graphicPaintFromStyle`, `withGraphicPaint`) are one
   implementation in `platform/shared/helpers`. The editor's tools and draw's tools each keep
   only their two reads (client / `BundleHost`), which cannot be shared.
-- Pathfinder: KEEP for now, MERGE first. The host panel (`pathfinder-panel.tsx`) has all ten
-  verbs, orders by real z and shows the engine's refusal, but it is the only host entry point:
-  no commands, no menu entries, no palette or scripting ids. Draw's ten commands and their
-  Draw > Pathfinder menu are those. Delete draw's once the host declares
-  `paged.pathfinder.*` commands (the `paged.object.*` layer is the model) and the panel calls them.
+- Pathfinder: MERGED 2026-11-01. The host declares `paged.pathfinder.*` (all ten verbs,
+  `pathfinder-commands.ts`), with Object > Pathfinder menu entries and palette rows; the panel's
+  buttons run the same two functions. Draw's ten commands, its Draw > Pathfinder menu and its
+  strings are gone (ids left through the deprecation window); what stays in draw is what its
+  other tools build on (`pathfinderMutationFor`, the paint-order readers, the faces builder).
+  Neither side had keybindings. After a success the shape modes leave the kept object selected
+  and the region verbs clear the selection (draw's behaviour, now the host's).
 - Colour guide: KEEP. The host colour wheel (`color-wheel-panel.tsx`) authors a harmony from the
   wheel's own colour and adds swatches; draw's panel reads the selection's fill, offers the
   shade/tint, warm/cool and vivid/muted variation grids and paints the selection from a chip.

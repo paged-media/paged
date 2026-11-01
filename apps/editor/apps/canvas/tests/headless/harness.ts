@@ -130,6 +130,10 @@ import {
   type ObjectCommandDeps,
 } from "../../src/object-commands";
 import {
+  buildPathfinderCommands,
+  PATHFINDER_DIAGNOSTIC_SOURCE,
+} from "../../src/pathfinder-commands";
+import {
   buildClipboardCommands,
   CLIPBOARD_DIAGNOSTIC_SOURCE,
   CLIPBOARD_KEYBINDINGS,
@@ -965,6 +969,18 @@ export async function createHeadlessEditor(
     hide: fresh(() => hideSelection(objectDeps)),
     showAllOnSpread: fresh(() => showAllOnSpread(objectDeps)),
   });
+  const pathfinderCommands = buildPathfinderCommands(
+    {
+      client: objectDeps.client,
+      getSelection: objectDeps.getSelection,
+      setSelection: objectDeps.setSelection,
+    },
+    (message) =>
+      problemsSink.publish(PATHFINDER_DIAGNOSTIC_SOURCE, "pathfinder", [
+        { severity: "error", message, source: "pathfinder" },
+      ]),
+    () => problemsSink.clear(PATHFINDER_DIAGNOSTIC_SOURCE),
+  );
   const insertReport: InsertReport = (severity, message) =>
     problemsSink.publish(INSERT_DIAGNOSTIC_SOURCE, "insert", [
       { severity, message, source: "insert" },
@@ -1038,6 +1054,7 @@ export async function createHeadlessEditor(
       ...aiCommands,
       ...clipboardCommands,
       ...objectCommands,
+      ...pathfinderCommands,
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,

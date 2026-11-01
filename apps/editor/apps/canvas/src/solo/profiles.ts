@@ -213,7 +213,7 @@ const DRAW_PROFILE: SoloProfile = {
     return t(M.drawBlurb);
   },
   paletteSuggestions: [
-    "media.paged.draw.command.pathfinderUnite",
+    "paged.pathfinder.unite",
     "media.paged.draw.command.outlineStroke",
   ],
 };

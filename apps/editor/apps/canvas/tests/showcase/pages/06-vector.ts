@@ -103,7 +103,7 @@ const SVG_IMPORTER = "media.paged.draw.importer.svg";
 const MARK_CONTOURS = 5;
 
 const CMD = {
-  unite: "media.paged.draw.command.pathfinderUnite",
+  unite: "paged.pathfinder.unite",
   dash: "media.paged.draw.command.strokeDashDashed",
   corners: "media.paged.draw.command.cornersRounded",
   gridRepeat: "media.paged.draw.command.makeGridRepeat",

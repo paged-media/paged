@@ -16,122 +16,23 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Pathfinder — Unite / Subtract / Intersect / Exclude over the
-// selection, the `pathfinderBoolean` wire consumers (the dash.ts
-// command pattern).
-//
-// Semantics (InDesign's Pathfinder): the FIRST selected element is the
-// `kept` target — it receives the boolean result (and keeps its
-// styling/identity); every other selected element is consumed
-// (`others`, removed by the engine). One mutation = one undo step
-// (the engine restores the consumed elements on undo). Fewer than two
-// selected ⇒ no-op (a debug log, never a throw).
+// The `pathfinderBoolean` wire builder. The Pathfinder COMMANDS are the
+// host's (`paged.pathfinder.*`, the editor's pathfinder-commands.ts;
+// PM-0017); this stays because draw's brush tools compose the same op
+// (Blob Brush merge, handlers/brush.ts).
 
 import type {
-  BundleHost,
-  Disposable,
   ElementId,
   Mutation,
   PathfinderKind,
 } from "@paged-media/plugin-api";
 
-import { registerCommand } from "../command-registry";
-import { defineMessages } from "@paged-media/strings";
-
-/** Command titles, message keys `registerCommand` reads in the editor's locale. */
-const M = defineMessages("draw.pathfinder", {
-  unite: "Pathfinder: Unite",
-  subtract: "Pathfinder: Subtract",
-  intersect: "Pathfinder: Intersect",
-  exclude: "Pathfinder: Exclude overlap",
-});
-export const PATHFINDER_COMMAND_CATEGORY = "Pathfinder";
-
-export interface PathfinderPreset {
-  /** The namespaced command id (under the manifest id). */
-  id: string;
-  title: string;
-  /** The wire `PathfinderKind`. */
-  kind: PathfinderKind;
-}
-
-/** The four pathfinder commands, in registration order. */
-export const PATHFINDER_PRESETS: readonly PathfinderPreset[] = [
-  {
-    id: "media.paged.draw.command.pathfinderUnite",
-    title: M.unite,
-    kind: "union",
-  },
-  {
-    id: "media.paged.draw.command.pathfinderSubtract",
-    title: M.subtract,
-    kind: "subtract",
-  },
-  {
-    id: "media.paged.draw.command.pathfinderIntersect",
-    title: M.intersect,
-    kind: "intersect",
-  },
-  {
-    id: "media.paged.draw.command.pathfinderExclude",
-    title: M.exclude,
-    kind: "exclude",
-  },
-] as const;
-
-/** The contributed command ids, in registration order. */
-export const PATHFINDER_COMMAND_IDS = PATHFINDER_PRESETS.map((p) => p.id);
-
-/** The `pathfinderBoolean{ kept, others, kind }` mutation one preset
- *  commits. Exported so the conformance spec asserts the EXACT wire
- *  shape the live command emits (no second copy to drift from). */
+/** The `pathfinderBoolean{ kept, others, kind }` mutation: `kept` takes
+ *  the result and `others` are consumed. One mutation = one undo step. */
 export function pathfinderMutationFor(
   kept: ElementId,
   others: ElementId[],
   kind: PathfinderKind,
 ): Mutation {
   return { op: "pathfinderBoolean", args: { kept, others, kind } };
-}
-
-/** Apply one pathfinder preset: first selected = kept, rest consumed.
- *  On success the kept (result) element is re-selected. */
-export async function applyPathfinder(
-  host: BundleHost,
-  preset: PathfinderPreset,
-): Promise<void> {
-  const selection = host.selection.get();
-  if (selection.length < 2) {
-    host.log.debug(
-      `${preset.id}: needs ≥ 2 selected elements (have ${selection.length}) — no-op`,
-    );
-    return;
-  }
-  const [kept, ...others] = selection;
-  const outcome = await host.document.mutate(
-    pathfinderMutationFor(kept, others, preset.kind),
-  );
-  if (!outcome.applied) {
-    host.log.warn(
-      `${preset.id} rejected by engine: ${JSON.stringify(outcome.error)}`,
-    );
-    return;
-  }
-  await host.selection.set([kept]);
-}
-
-/** Register the four pathfinder commands. */
-export function contributePathfinderCommands(host: BundleHost): Disposable {
-  const disposers = PATHFINDER_PRESETS.map((preset) =>
-    registerCommand(host, {
-      id: preset.id,
-      title: preset.title,
-      category: PATHFINDER_COMMAND_CATEGORY,
-      handler: () => applyPathfinder(host, preset),
-    }),
-  );
-  return {
-    dispose() {
-      for (const d of disposers) d.dispose();
-    },
-  };
 }

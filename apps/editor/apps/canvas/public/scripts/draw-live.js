@@ -103,7 +103,7 @@ await fill(a, "Color/Rose");
 await fill(b, "Color/Violet");
 await editor.select([a, b], "replace");
 await demo.wait(900);
-await editor.runCommand("media.paged.draw.command.pathfinderUnite");
+await editor.runCommand("paged.pathfinder.unite");
 await demo.showInfo(
   "Pathfinder",
   "Two overlapping shapes, united into one path by Draw ▸ Pathfinder ▸ Unite.",

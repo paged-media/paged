@@ -63,17 +63,6 @@ defineMessages("menu", {
   "Remove brush": "Remove brush",
   "New brush from selection": "New brush from selection",
   "Update linked recipes": "Update linked recipes",
-  Pathfinder: "Pathfinder",
-  Unite: "Unite",
-  Subtract: "Subtract",
-  Intersect: "Intersect",
-  Exclude: "Exclude",
-  Divide: "Divide",
-  Trim: "Trim",
-  Merge: "Merge",
-  Crop: "Crop",
-  Outline: "Outline",
-  "Minus back": "Minus back",
   "Compound path": "Compound path",
   Make: "Make",
   Release: "Release",
@@ -217,19 +206,6 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Stroke/Brush options…", "brushOptions", "brushes"],
   ["Draw/Stroke/Remove brush", "removeBrush", "brushes"],
   ["Draw/Stroke/New brush from selection", "newBrush", "brushes"],
-
-  // ── Pathfinder — the ten boolean ops, in Illustrator's own order so
-  //    the muscle memory transfers. ──
-  ["Draw/Pathfinder/Unite", "pathfinderUnite", "pf-shape"],
-  ["Draw/Pathfinder/Subtract", "pathfinderSubtract", "pf-shape"],
-  ["Draw/Pathfinder/Intersect", "pathfinderIntersect", "pf-shape"],
-  ["Draw/Pathfinder/Exclude", "pathfinderExclude", "pf-shape"],
-  ["Draw/Pathfinder/Divide", "pathfinderDivide", "pf-path"],
-  ["Draw/Pathfinder/Trim", "pathfinderTrim", "pf-path"],
-  ["Draw/Pathfinder/Merge", "pathfinderMerge", "pf-path"],
-  ["Draw/Pathfinder/Crop", "pathfinderCrop", "pf-path"],
-  ["Draw/Pathfinder/Outline", "pathfinderOutline", "pf-path"],
-  ["Draw/Pathfinder/Minus back", "pathfinderMinusBack", "pf-path"],
 
   // ── Compound path ──
   ["Draw/Compound path/Make", "makeCompoundPath", "compound"],
