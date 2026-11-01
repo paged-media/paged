@@ -8,7 +8,8 @@
    "comments": [
     {
      "author": "Author A",
-     "text": "Check this"
+     "text": "Check this",
+     "date": "2026-10-29T10:00:00"
     }
    ]
   },
@@ -19,11 +20,13 @@
    "comments": [
     {
      "author": "Author A",
-     "text": "First remark"
+     "text": "First remark",
+     "date": "2026-10-02T09:00:00"
     },
     {
      "author": "Author B",
-     "text": "Agreed"
+     "text": "Agreed",
+     "date": "2026-10-02T09:00:00"
     }
    ]
   },
@@ -34,19 +37,23 @@
    "comments": [
     {
      "author": "Author A",
-     "text": "First remark"
+     "text": "First remark",
+     "date": "2026-10-02T09:00:00"
     },
     {
      "author": "Author B",
-     "text": "Agreed"
+     "text": "Agreed",
+     "date": "2026-10-02T09:00:00"
     },
     {
      "author": "Author B",
-     "text": "Done & dusted"
+     "text": "Done & dusted",
+     "date": "2026-10-29T09:00:00"
     },
     {
      "author": "Author A",
-     "text": "Spans two"
+     "text": "Spans two",
+     "date": "2026-10-02T09:00:00"
     }
    ]
   },
@@ -136,15 +143,18 @@
    "comments": [
     {
      "author": "Author A",
-     "text": "First remark"
+     "text": "First remark",
+     "date": "2026-10-02T09:00:00"
     },
     {
      "author": "Author B",
-     "text": "Agreed"
+     "text": "Agreed",
+     "date": "2026-10-02T09:00:00"
     },
     {
      "author": "Author A",
-     "text": "Spans two"
+     "text": "Spans two",
+     "date": "2026-10-02T09:00:00"
     }
    ]
   },
@@ -284,21 +294,61 @@
   {
    "file": "tracked-split.docx",
    "opensWithoutPrompt": true,
-   "revisions": null,
-   "comments": [],
-   "revisionCount": 1,
-   "note": "opened on a clean session by the single-file probe (1 revision); in the full run it followed a blocked session and timed out twice"
+   "revisions": [
+    {
+     "type": "revision insert",
+     "author": "Author A",
+     "text": ""
+    }
+   ],
+   "comments": []
   },
   {
    "file": "tracked.docx",
    "opensWithoutPrompt": true,
-   "revisions": null,
-   "comments": [],
-   "revisionCount": 8,
-   "note": "opened on a clean session by the single-file probe and in an earlier full run (8 revisions); in this run it followed a blocked session"
+   "revisions": [
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "inserted"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "deleted"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "moved "
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "moved"
+    },
+    {
+     "type": "revision insert",
+     "author": "Reviewer",
+     "text": "new"
+    },
+    {
+     "type": "revision delete",
+     "author": "Reviewer",
+     "text": "Gone paragraph"
+    },
+    {
+     "type": "revision property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    },
+    {
+     "type": "revision paragraph property",
+     "author": "Reviewer",
+     "text": "Bold now"
+    }
+   ],
+   "comments": []
   }
- ],
- "date": "2026-10-29",
- "source": "scripts/word-review-probe.sh: the saves of docx-conformance tests/it/review.rs",
- "notMeasured": "tracked_changes_docx() itself (a w:moveFrom and w:moveTo side by side in one paragraph): Word stops on it, so it is test input only"
+ ]
 }

@@ -95,6 +95,13 @@ pub struct CommentContentIn {
     pub initials: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
+    /// The exact UTC time; a comment made in paged has it in `date` (UTC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_utc: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
     #[serde(default)]
     pub resolved: bool,
 }

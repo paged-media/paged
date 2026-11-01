@@ -1554,6 +1554,10 @@ const REL_COMMENTS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments";
 const REL_EXTENDED: &str =
     "http://schemas.microsoft.com/office/2011/relationships/commentsExtended";
+const W16CEX_NS: &str = "http://schemas.microsoft.com/office/word/2018/wordml/cex";
+const REL_EXTENSIBLE: &str =
+    "http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible";
+const REL_PEOPLE: &str = "http://schemas.microsoft.com/office/2011/relationships/people";
 const REL_IDS: &str = "http://schemas.microsoft.com/office/2016/09/relationships/commentsIds";
 const CT_PREFIX: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.";
 
@@ -1710,6 +1714,49 @@ fn render_comment(c: &CommentContentIn, wid: i64, para_ids: &[String]) -> String
     s
 }
 
+/// The exact UTC time of a comment made in paged: `date_utc`, else `date`
+/// when it is a UTC time (`…Z`).
+fn utc_of(c: &CommentContentIn) -> Option<String> {
+    c.date_utc
+        .clone()
+        .or_else(|| c.date.clone().filter(|d| d.ends_with('Z')))
+}
+
+/// The provider and account id a comment of `author` carries: what the host
+/// read back, else the author's name with no provider (Word's own form for
+/// an account it cannot name).
+fn identity_of(read: &[CommentContentIn], author: &str) -> (String, Option<String>) {
+    read.iter()
+        .find(|c| c.author.as_deref() == Some(author) && c.user_id.is_some())
+        .map(|c| {
+            (
+                c.provider_id.clone().unwrap_or_else(|| "None".into()),
+                c.user_id.clone(),
+            )
+        })
+        .unwrap_or_else(|| ("None".into(), None))
+}
+
+/// The root's children named `name` of a part whose `key` attribute passes
+/// `keep`: (the key, the element's bytes), in order.
+fn kept_children(
+    xml: &str,
+    name: &str,
+    key: &str,
+    keep: impl Fn(&str) -> bool,
+) -> Vec<(String, String)> {
+    elements(xml.as_bytes(), name)
+        .into_iter()
+        .filter_map(|(span, attrs)| {
+            let k = attrs
+                .iter()
+                .find(|(a, _)| a.rsplit(':').next() == Some(key))
+                .map(|(_, v)| v.clone())?;
+            keep(&k).then(|| (k, xml[span.start..span.end].to_string()))
+        })
+        .collect()
+}
+
 /// The root's children of a part by local name, with their bytes.
 fn elements(xml: &[u8], name: &str) -> Vec<(Span, Vec<(String, String)>)> {
     let Ok((spans, _)) = root_children(xml) else {
@@ -1730,6 +1777,8 @@ struct CommentParts {
     comments: Option<String>,
     extended: Option<String>,
     ids: Option<String>,
+    extensible: Option<String>,
+    people: Option<String>,
 }
 
 /// Write the comment parts from the read-back comments (doc ADR 613).
@@ -1764,15 +1813,12 @@ pub fn save_comments(
     let part = |suffix: &str| {
         crate::structure::related_part(pkg, main_part, suffix).filter(|n| pkg.part(n).is_some())
     };
-    let parts = (
-        part("/comments"),
-        part("/commentsExtended"),
-        part("/commentsIds"),
-    );
     let parts = CommentParts {
-        comments: parts.0,
-        extended: parts.1,
-        ids: parts.2,
+        comments: part("/comments"),
+        extended: part("/commentsExtended"),
+        ids: part("/commentsIds"),
+        extensible: part("/commentsExtensible"),
+        people: part("/people"),
     };
     // What the document references now, in every part that can hold one.
     let mut referenced = referenced_comments(pkg.require(main_part)?);
@@ -1812,6 +1858,9 @@ pub fn save_comments(
         parent: Option<i64>,
         done: bool,
         durable: Option<String>,
+        author: Option<String>,
+        /// The UTC time of a comment made in paged.
+        date_utc: Option<String>,
     }
     let mut out: Vec<Out> = Vec::new();
     let by_wid = |wid: i64| read.iter().find(|c| ids.get(&c.id) == Some(wid));
@@ -1850,6 +1899,8 @@ pub fn save_comments(
                     parent: c.parent_id.as_deref().and_then(|p| ids.get(p)),
                     done: c.resolved,
                     durable: src_c.and_then(|s| s.durable_id.clone()),
+                    author: c.author.clone(),
+                    date_utc: None,
                 });
             }
             Some(c) => out.push(Out {
@@ -1859,6 +1910,8 @@ pub fn save_comments(
                 parent: c.parent_id.as_deref().and_then(|p| ids.get(p)),
                 done: c.resolved,
                 durable: src_c.and_then(|s| s.durable_id.clone()),
+                author: c.author.clone(),
+                date_utc: None,
             }),
             // Removed in paged but still referenced (a paragraph this
             // writer refused): kept as it was.
@@ -1869,6 +1922,8 @@ pub fn save_comments(
                 parent: src_c.and_then(|s| s.parent),
                 done: src_c.is_some_and(|s| s.done),
                 durable: src_c.and_then(|s| s.durable_id.clone()),
+                author: src_c.and_then(|s| s.author.clone()),
+                date_utc: None,
             }),
         }
     }
@@ -1898,6 +1953,8 @@ pub fn save_comments(
             parent: c.parent_id.as_deref().and_then(|p| ids.get(p)),
             done: c.resolved,
             durable: None,
+            author: c.author.clone(),
+            date_utc: utc_of(c),
         });
     }
     // A reply's thread is resolved with its first comment.
@@ -1977,18 +2034,22 @@ pub fn save_comments(
     );
     let idx = String::from_utf8_lossy(pkg.require(&ids_name)?).into_owned();
     let idx = declare(&idx, "w16cid", W16CID_NS);
+    let durable_of = |o: &Out| -> Option<String> {
+        let pid = o.para_id.as_ref()?;
+        Some(o.durable.clone().unwrap_or_else(|| {
+            format!(
+                "{:08X}",
+                (pid.bytes()
+                    .fold(0x2545_F491u32, |h, b| h.rotate_left(5) ^ b as u32))
+                    & 0x7FFF_FFFE
+            )
+        }))
+    };
     let id_entries: String = out
         .iter()
         .filter_map(|o| {
             let pid = o.para_id.as_ref()?;
-            let durable = o.durable.clone().unwrap_or_else(|| {
-                format!(
-                    "{:08X}",
-                    (pid.bytes()
-                        .fold(0x2545_F491u32, |h, b| h.rotate_left(5) ^ b as u32))
-                        & 0x7FFF_FFFE
-                )
-            });
+            let durable = durable_of(o)?;
             Some(format!(
                 "<w16cid:commentId w16cid:paraId=\"{pid}\" w16cid:durableId=\"{durable}\"/>"
             ))
@@ -1998,6 +2059,88 @@ pub fn save_comments(
         &ids_name,
         replace_root_children(&idx, &id_entries).into_bytes(),
     );
+
+    // commentsExtensible.xml: the exact UTC time of each comment made in
+    // paged; Word's own entries (dates, reactions) stay as they are.
+    let fresh_dates: Vec<(String, String)> = out
+        .iter()
+        .filter_map(|o| Some((durable_of(o)?, o.date_utc.clone()?)))
+        .collect();
+    if parts.extensible.is_some() || !fresh_dates.is_empty() {
+        let empty = format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<w16cex:commentsExtensible xmlns:w16cex=\"{W16CEX_NS}\"></w16cex:commentsExtensible>"
+        );
+        let cex_name = ensure_part(
+            pkg,
+            main_part,
+            parts.extensible.clone(),
+            "commentsExtensible.xml",
+            REL_EXTENSIBLE,
+            &format!("{CT_PREFIX}commentsExtensible+xml"),
+            empty,
+        );
+        let cex = String::from_utf8_lossy(pkg.require(&cex_name)?).into_owned();
+        let cex = declare(&cex, "w16cex", W16CEX_NS);
+        let kept = kept_children(&cex, "commentExtensible", "durableId", |d| {
+            out.iter().any(|o| durable_of(o).as_deref() == Some(d))
+        });
+        let mut inner: String = kept.iter().map(|(_, b)| b.as_str()).collect();
+        for (durable, utc) in &fresh_dates {
+            if !kept.iter().any(|(d, _)| d == durable) {
+                inner.push_str(&format!(
+                    "<w16cex:commentExtensible w16cex:durableId=\"{}\" w16cex:dateUtc=\"{}\"/>",
+                    esc(durable),
+                    esc(utc)
+                ));
+            }
+        }
+        pkg.set_part(&cex_name, replace_root_children(&cex, &inner).into_bytes());
+    }
+
+    // people.xml: every author once; Word's own identities stay.
+    let mut authors: Vec<String> = Vec::new();
+    for a in out.iter().filter_map(|o| o.author.clone()) {
+        if !a.is_empty() && !authors.contains(&a) {
+            authors.push(a);
+        }
+    }
+    if !authors.is_empty() {
+        let empty = format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<w15:people xmlns:w15=\"{W15_NS}\"></w15:people>"
+        );
+        let people_name = ensure_part(
+            pkg,
+            main_part,
+            parts.people.clone(),
+            "people.xml",
+            REL_PEOPLE,
+            &format!("{CT_PREFIX}people+xml"),
+            empty,
+        );
+        let people = String::from_utf8_lossy(pkg.require(&people_name)?).into_owned();
+        let people = declare(&people, "w15", W15_NS);
+        let kept = kept_children(&people, "person", "author", |_| true);
+        let mut inner: String = kept.iter().map(|(_, b)| b.as_str()).collect();
+        let before = inner.len();
+        for a in authors
+            .iter()
+            .filter(|a| !kept.iter().any(|(k, _)| k == *a))
+        {
+            let who = esc(a);
+            let (provider, user) = identity_of(read, a);
+            inner.push_str(&format!(
+                "<w15:person w15:author=\"{who}\"><w15:presenceInfo w15:providerId=\"{}\" w15:userId=\"{}\"/></w15:person>",
+                esc(&provider),
+                esc(&user.unwrap_or_else(|| a.clone()))
+            ));
+        }
+        if inner.len() != before || parts.people.is_none() {
+            pkg.set_part(
+                &people_name,
+                replace_root_children(&people, &inner).into_bytes(),
+            );
+        }
+    }
     Ok(skips)
 }
 

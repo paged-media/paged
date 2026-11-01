@@ -1194,6 +1194,9 @@ pub fn lower_comments(doc: &DocxDocument) -> Vec<ir::LoweredComment> {
             author: c.author.clone(),
             initials: c.initials.clone(),
             date: c.date.clone(),
+            date_utc: c.date_utc.clone(),
+            user_id: c.user_id.clone(),
+            provider_id: c.provider_id.clone(),
             text: c.text.clone(),
             resolved: match c.parent {
                 // A reply's thread is resolved when its first comment is.
