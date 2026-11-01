@@ -127,6 +127,11 @@ Status (draw items, one line each; updated as they land):
   (`opacityMask`), so draw's metadata stamp (`data.opacityMask`, only ever read by draw) is
   gone with its writer; a stale stamp in an old document is inert. Draw's command ids and
   its Draw > Opacity mask menu left through the deprecation window (`deprecated-ids.json`).
+- Graphic default paint: MERGED 2026-11-01. The decision (document defaults win, else the
+  document's `[Normal Graphics Frame]`, else InDesign's 1 pt black stroke) and the batch
+  builders (`resolveGraphicPaint`, `graphicPaintFromStyle`, `withGraphicPaint`) are one
+  implementation in `platform/shared/helpers`. The editor's tools and draw's tools each keep
+  only their two reads (client / `BundleHost`), which cannot be shared.
 
 ### Reach (gaps between modules)
 
