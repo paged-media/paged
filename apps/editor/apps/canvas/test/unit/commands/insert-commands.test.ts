@@ -158,6 +158,8 @@ function inserts(
     table: (p) => insertTable(p, report),
     deletePage: (p) => deleteCurrentPage(p, report),
     placeImage: (p, dropped) => placeImage(p, report, dropped),
+    // Generate Image has its own suite (panels/generate-image-panel).
+    generateImage: () => undefined,
     newPage: (p) => addPage(p, report),
   }))
     registry.register(c);

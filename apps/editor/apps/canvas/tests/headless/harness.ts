@@ -151,6 +151,7 @@ import {
   INSERT_MENU_ITEMS,
   type InsertReport,
 } from "../../src/insert-commands";
+import { generateImageHandler } from "../../src/ml/generate-image";
 import {
   SELECT_ALL_COMMAND,
   SELECT_ALL_KEYBINDINGS,
@@ -982,6 +983,14 @@ export async function createHeadlessEditor(
     line: freshInsert((p) => insertLine(p, insertReport)),
     table: freshInsert((p) => insertTable(p, insertReport)),
     placeImage: freshInsert((p) => placeImage(p, insertReport)),
+    // No ML service in the headless host: the command refuses in words.
+    generateImage: (p, payload) =>
+      generateImageHandler({
+        generate: async () => {
+          throw new Error("the ML service does not run in the headless host");
+        },
+        report: insertReport,
+      })(p, payload),
     newPage: freshInsert((p) => addPage(p, insertReport)),
   });
   const alignCommands = buildTransformCommands(
