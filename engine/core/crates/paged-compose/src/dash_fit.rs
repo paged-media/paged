@@ -126,7 +126,8 @@ fn round_half_down(x: f32) -> f32 {
     (x - 0.5).ceil()
 }
 
-/// Flatten one cubic, in page space, into `out` (start point excluded).
+/// Flatten one cubic, in page space, into `out` (start point excluded):
+/// a chord every 1.5 pt of control polygon, between 8 and 256 of them.
 fn flatten_cubic(
     p0: (f32, f32),
     c1: (f32, f32),
@@ -138,15 +139,7 @@ fn flatten_cubic(
         + (c2.0 - c1.0).hypot(c2.1 - c1.1)
         + (p1.0 - c2.0).hypot(p1.1 - c2.1);
     let steps = ((rough / 1.5).ceil() as usize).clamp(8, 256);
-    for k in 1..=steps {
-        let t = k as f32 / steps as f32;
-        let mt = 1.0 - t;
-        let (a, b, c, d) = (mt * mt * mt, 3.0 * mt * mt * t, 3.0 * mt * t * t, t * t * t);
-        out.push((
-            a * p0.0 + b * c1.0 + c * c2.0 + d * p1.0,
-            a * p0.1 + b * c1.1 + c * c2.1 + d * p1.1,
-        ));
-    }
+    paged_geom::flatten::flatten_cubic(p0, c1, c2, p1, steps as u32, out);
 }
 
 /// The path's contours as sides, in page space, each with its closed flag.
