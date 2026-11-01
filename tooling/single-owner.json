@@ -95,7 +95,6 @@
       "baseline": [
         "engine/core/crates/paged-compose/src/scene_layer.rs",
         "engine/core/crates/paged-psd/src/abr/blend.rs",
-        "engine/core/crates/paged-psd/src/effects.rs",
         "modules/image/image-kernels/src/compose_twin.rs",
         "modules/web/packages/web-render/src/display_list.rs",
         "modules/web/packages/web-render/src/wire.rs"

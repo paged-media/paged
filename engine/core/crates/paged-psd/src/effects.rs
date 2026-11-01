@@ -62,222 +62,14 @@ use serde::{Deserialize, Serialize};
 
 // ───────────────────────────── vocabulary ─────────────────────────────
 
-/// A blend mode, in the vocabulary of every module (`normal`,
-/// `linear_burn`, …): the 27 Photoshop modes plus Dissolve.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[cfg_attr(
-    feature = "serde",
-    derive(Serialize, Deserialize),
-    serde(rename_all = "snake_case")
-)]
-pub enum BlendMode {
-    #[default]
-    Normal,
-    Dissolve,
-    Darken,
-    Multiply,
-    ColorBurn,
-    LinearBurn,
-    DarkerColor,
-    Lighten,
-    Screen,
-    ColorDodge,
-    LinearDodge,
-    LighterColor,
-    Overlay,
-    SoftLight,
-    HardLight,
-    VividLight,
-    LinearLight,
-    PinLight,
-    HardMix,
-    Difference,
-    Exclusion,
-    Subtract,
-    Divide,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
-}
-
-/// (mode, wire name, the string id Photoshop 27 writes, the legacy
-/// four-character id, the layer-record key).
-const BLEND_TABLE: &[(BlendMode, &str, &str, &str, &[u8; 4])] = &[
-    (BlendMode::Normal, "normal", "normal", "Nrml", b"norm"),
-    (BlendMode::Dissolve, "dissolve", "dissolve", "Dslv", b"diss"),
-    (BlendMode::Darken, "darken", "darken", "Drkn", b"dark"),
-    (BlendMode::Multiply, "multiply", "multiply", "Mltp", b"mul "),
-    (
-        BlendMode::ColorBurn,
-        "color_burn",
-        "colorBurn",
-        "CBrn",
-        b"idiv",
-    ),
-    (
-        BlendMode::LinearBurn,
-        "linear_burn",
-        "linearBurn",
-        "",
-        b"lbrn",
-    ),
-    (
-        BlendMode::DarkerColor,
-        "darker_color",
-        "darkerColor",
-        "",
-        b"dkCl",
-    ),
-    (BlendMode::Lighten, "lighten", "lighten", "Lghn", b"lite"),
-    (BlendMode::Screen, "screen", "screen", "Scrn", b"scrn"),
-    (
-        BlendMode::ColorDodge,
-        "color_dodge",
-        "colorDodge",
-        "CDdg",
-        b"div ",
-    ),
-    (
-        BlendMode::LinearDodge,
-        "linear_dodge",
-        "linearDodge",
-        "",
-        b"lddg",
-    ),
-    (
-        BlendMode::LighterColor,
-        "lighter_color",
-        "lighterColor",
-        "",
-        b"lgCl",
-    ),
-    (BlendMode::Overlay, "overlay", "overlay", "Ovrl", b"over"),
-    (
-        BlendMode::SoftLight,
-        "soft_light",
-        "softLight",
-        "SftL",
-        b"sLit",
-    ),
-    (
-        BlendMode::HardLight,
-        "hard_light",
-        "hardLight",
-        "HrdL",
-        b"hLit",
-    ),
-    (
-        BlendMode::VividLight,
-        "vivid_light",
-        "vividLight",
-        "",
-        b"vLit",
-    ),
-    (
-        BlendMode::LinearLight,
-        "linear_light",
-        "linearLight",
-        "",
-        b"lLit",
-    ),
-    (BlendMode::PinLight, "pin_light", "pinLight", "", b"pLit"),
-    (BlendMode::HardMix, "hard_mix", "hardMix", "", b"hMix"),
-    (
-        BlendMode::Difference,
-        "difference",
-        "difference",
-        "Dfrn",
-        b"diff",
-    ),
-    (
-        BlendMode::Exclusion,
-        "exclusion",
-        "exclusion",
-        "Xclu",
-        b"smud",
-    ),
-    (
-        BlendMode::Subtract,
-        "subtract",
-        "blendSubtraction",
-        "",
-        b"fsub",
-    ),
-    (BlendMode::Divide, "divide", "blendDivide", "", b"fdiv"),
-    (BlendMode::Hue, "hue", "hue", "H   ", b"hue "),
-    (
-        BlendMode::Saturation,
-        "saturation",
-        "saturation",
-        "Strt",
-        b"sat ",
-    ),
-    (BlendMode::Color, "color", "color", "Clr ", b"colr"),
-    (
-        BlendMode::Luminosity,
-        "luminosity",
-        "luminosity",
-        "Lmns",
-        b"lum ",
-    ),
-];
-
-impl BlendMode {
-    fn row(
-        self,
-    ) -> &'static (
-        BlendMode,
-        &'static str,
-        &'static str,
-        &'static str,
-        &'static [u8; 4],
-    ) {
-        BLEND_TABLE
-            .iter()
-            .find(|r| r.0 == self)
-            .expect("every mode has a row")
-    }
-
-    /// The wire name (`linear_burn`) — the image module's `compose.*`
-    /// suffix.
-    pub fn name(self) -> &'static str {
-        self.row().1
-    }
-
-    pub fn from_name(name: &str) -> Option<BlendMode> {
-        BLEND_TABLE.iter().find(|r| r.1 == name).map(|r| r.0)
-    }
-
-    /// The layer-record key (`lbrn`).
-    pub fn layer_key(self) -> [u8; 4] {
-        *self.row().4
-    }
-
-    pub fn from_layer_key(k: &[u8; 4]) -> Option<BlendMode> {
-        BLEND_TABLE.iter().find(|r| r.4 == k).map(|r| r.0)
-    }
-
-    /// A descriptor `BlnM` enum value in either dialect (`Mltp` or
-    /// `multiply`; both occur, the corpus writes the first, Photoshop 27
-    /// the second [OBS]).
-    pub fn from_descriptor_id(id: &str) -> Option<BlendMode> {
-        BLEND_TABLE
-            .iter()
-            .find(|r| r.2 == id || (!r.3.is_empty() && r.3 == id))
-            .map(|r| r.0)
-    }
-
-    /// The string id Photoshop 27 writes.
-    pub fn descriptor_id(self) -> &'static str {
-        self.row().2
-    }
-}
+/// A blend mode: the engine's one enum (`paged-blend`, engine ADR 1034), in
+/// the vocabulary of every module (`normal`, `linear_burn`, …).
+pub use paged_blend::BlendMode;
 
 /// The descriptor enum value of a blend mode (`BlnM`) as the layer
 /// record's four-character key.
 pub fn blend_key_of(mode: &str) -> Option<[u8; 4]> {
-    BlendMode::from_descriptor_id(mode).map(BlendMode::layer_key)
+    BlendMode::from_descriptor(mode).map(|m| *m.psd_key())
 }
 
 /// One point of a contour, on Photoshop's 0–255 grid.
@@ -1632,7 +1424,7 @@ fn enum_id(d: &Descriptor, k: &[u8]) -> Option<String> {
 
 fn blend_of(d: &Descriptor, k: &[u8]) -> BlendMode {
     enum_id(d, k)
-        .and_then(|m| BlendMode::from_descriptor_id(&m))
+        .and_then(|m| BlendMode::from_descriptor(&m))
         .unwrap_or_default()
 }
 
@@ -2383,7 +2175,7 @@ impl Effects {
             Ok(ColorOverlay {
                 rgb: o.color,
                 cmyk: o.cmyk,
-                blend_key: o.blend.layer_key(),
+                blend_key: *o.blend.psd_key(),
                 opacity: (o.opacity.clamp(0.0, 100.0) * 255.0 / 100.0).round() as u8,
             })
         });
@@ -2398,6 +2190,128 @@ impl Effects {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// (mode, wire name, the string id Photoshop 27 writes, the legacy
+    /// four-character id, the layer-record key).
+    const PHOTOSHOP_BLEND_IDS: &[(BlendMode, &str, &str, &str, &[u8; 4])] = &[
+        (BlendMode::Normal, "normal", "normal", "Nrml", b"norm"),
+        (BlendMode::Dissolve, "dissolve", "dissolve", "Dslv", b"diss"),
+        (BlendMode::Darken, "darken", "darken", "Drkn", b"dark"),
+        (BlendMode::Multiply, "multiply", "multiply", "Mltp", b"mul "),
+        (
+            BlendMode::ColorBurn,
+            "color_burn",
+            "colorBurn",
+            "CBrn",
+            b"idiv",
+        ),
+        (
+            BlendMode::LinearBurn,
+            "linear_burn",
+            "linearBurn",
+            "",
+            b"lbrn",
+        ),
+        (
+            BlendMode::DarkerColor,
+            "darker_color",
+            "darkerColor",
+            "",
+            b"dkCl",
+        ),
+        (BlendMode::Lighten, "lighten", "lighten", "Lghn", b"lite"),
+        (BlendMode::Screen, "screen", "screen", "Scrn", b"scrn"),
+        (
+            BlendMode::ColorDodge,
+            "color_dodge",
+            "colorDodge",
+            "CDdg",
+            b"div ",
+        ),
+        (
+            BlendMode::LinearDodge,
+            "linear_dodge",
+            "linearDodge",
+            "",
+            b"lddg",
+        ),
+        (
+            BlendMode::LighterColor,
+            "lighter_color",
+            "lighterColor",
+            "",
+            b"lgCl",
+        ),
+        (BlendMode::Overlay, "overlay", "overlay", "Ovrl", b"over"),
+        (
+            BlendMode::SoftLight,
+            "soft_light",
+            "softLight",
+            "SftL",
+            b"sLit",
+        ),
+        (
+            BlendMode::HardLight,
+            "hard_light",
+            "hardLight",
+            "HrdL",
+            b"hLit",
+        ),
+        (
+            BlendMode::VividLight,
+            "vivid_light",
+            "vividLight",
+            "",
+            b"vLit",
+        ),
+        (
+            BlendMode::LinearLight,
+            "linear_light",
+            "linearLight",
+            "",
+            b"lLit",
+        ),
+        (BlendMode::PinLight, "pin_light", "pinLight", "", b"pLit"),
+        (BlendMode::HardMix, "hard_mix", "hardMix", "", b"hMix"),
+        (
+            BlendMode::Difference,
+            "difference",
+            "difference",
+            "Dfrn",
+            b"diff",
+        ),
+        (
+            BlendMode::Exclusion,
+            "exclusion",
+            "exclusion",
+            "Xclu",
+            b"smud",
+        ),
+        (
+            BlendMode::Subtract,
+            "subtract",
+            "blendSubtraction",
+            "",
+            b"fsub",
+        ),
+        (BlendMode::Divide, "divide", "blendDivide", "", b"fdiv"),
+        (BlendMode::Hue, "hue", "hue", "H   ", b"hue "),
+        (
+            BlendMode::Saturation,
+            "saturation",
+            "saturation",
+            "Strt",
+            b"sat ",
+        ),
+        (BlendMode::Color, "color", "color", "Clr ", b"colr"),
+        (
+            BlendMode::Luminosity,
+            "luminosity",
+            "luminosity",
+            "Lmns",
+            b"lum ",
+        ),
+    ];
 
     fn all_effects() -> LayerStyle {
         LayerStyle {
@@ -2652,15 +2566,22 @@ mod tests {
         assert_eq!(blend_key_of("multiply"), Some(*b"mul "));
         assert_eq!(blend_key_of("linearBurn"), Some(*b"lbrn"));
         assert_eq!(
-            BlendMode::from_name("linear_burn"),
+            BlendMode::from_id("linear_burn"),
             Some(BlendMode::LinearBurn)
         );
-        for row in BLEND_TABLE {
-            assert_eq!(BlendMode::from_layer_key(row.4), Some(row.0));
-            assert_eq!(
-                BlendMode::from_descriptor_id(row.0.descriptor_id()),
-                Some(row.0)
-            );
+        // The ids Photoshop writes, from the table this crate held before the
+        // engine's one enum replaced its copy: wire name, 27-era string id,
+        // legacy four-character id, layer-record key.
+        assert_eq!(PHOTOSHOP_BLEND_IDS.len(), 27);
+        for row in PHOTOSHOP_BLEND_IDS {
+            assert_eq!(row.0.id(), row.1);
+            assert_eq!(row.0.descriptor_id(), row.2);
+            assert_eq!(row.0.psd_key(), row.4);
+            assert_eq!(BlendMode::from_psd_key(row.4), Some(row.0));
+            assert_eq!(BlendMode::from_descriptor(row.2), Some(row.0));
+            if !row.3.is_empty() {
+                assert_eq!(BlendMode::from_descriptor(row.3), Some(row.0), "{}", row.3);
+            }
         }
     }
 }

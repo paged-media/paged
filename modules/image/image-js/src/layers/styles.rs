@@ -314,7 +314,7 @@ fn rgb01(c: [u8; 3]) -> [f32; 3] {
 }
 
 fn blend_def(b: BlendMode) -> &'static KernelDef {
-    crate::stroke::blend_kernel(b.name()).unwrap_or(&COMPOSE_NORMAL)
+    crate::stroke::blend_kernel(b.id()).unwrap_or(&COMPOSE_NORMAL)
 }
 
 // ───────────────────────────── the recorder ─────────────────────────────

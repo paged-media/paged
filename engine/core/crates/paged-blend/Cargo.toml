@@ -11,3 +11,9 @@ description = "The 27 blend modes (engine ADR 1034): the mode enum, its names, a
 workspace = true
 
 [dependencies]
+# The wire form of a mode (`color_burn`, the same text as `BlendMode::id`):
+# off by default, for the crates whose models carry a mode (paged-psd).
+serde = { workspace = true, optional = true }
+
+[features]
+serde = ["dep:serde"]
