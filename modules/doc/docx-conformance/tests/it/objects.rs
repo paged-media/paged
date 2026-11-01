@@ -104,11 +104,12 @@ fn floats_elsewhere_are_anchored_objects_by_wrap__feat__plugin_doc_read_path() {
         let (_, at, ..) = cases[case];
         p[case * 6 + at].images[0].anchor.clone().expect("anchored")
     };
-    // FC top and bottom: a band above its line, centred.
+    // FC top and bottom: custom, centred, the text jumping it (engine ADR
+    // 1050).
     let fc = anchor(2);
     assert_eq!(
         (fc.position.as_str(), fc.horizontal_alignment.as_str()),
-        ("AbovePosition", "CenterAlign")
+        ("Anchored", "CenterAlign")
     );
     // FD square: custom, the column's left at the paragraph's top.
     let fd = anchor(3);
@@ -132,8 +133,17 @@ fn floats_elsewhere_are_anchored_objects_by_wrap__feat__plugin_doc_read_path() {
         ),
         ("PageEdge", 144.0, "PageEdge", 360.0)
     );
-    // FF page-relative top and bottom: a band of its own too.
-    assert_eq!(anchor(5).position, "AbovePosition");
+    // FF page-relative top and bottom: custom against the page, jumped.
+    assert_eq!(anchor(5).position, "Anchored");
+    let (_, at, ..) = cases[5];
+    let ff = &p[5 * 6 + at].images[0];
+    assert_eq!(
+        ff.layout
+            .as_ref()
+            .and_then(|l| l.wrap.as_ref())
+            .map(|w| w.mode.as_str()),
+        Some("JumpObjectTextWrap")
+    );
 }
 
 /// Word's picture boxes, per page (`objects-floats.word.json`).
@@ -244,11 +254,25 @@ fn text_boxes_with_a_known_page_are_text_frames__feat__plugin_doc_read_path() {
     let fx = ir.page_items[0].fx.as_ref().expect("the box's look");
     assert_eq!(fx.fill.as_deref(), Some("#FFFFFF"));
     assert!(fx.stroke.is_some());
-    // The paragraph-relative box mid-page has no page: said, not dropped.
-    assert!(ir
-        .diagnostics
+    // The paragraph-relative box mid-page has no page: an anchored text
+    // frame of its paragraph (engine ADR 1050), its text lowered in it.
+    assert!(ir.diagnostics.iter().any(|d| d
+        .message
+        .starts_with("1 text box(es) placed as anchored text frames")));
+    let anchored: Vec<_> = ir
+        .story
+        .paragraphs()
+        .into_iter()
+        .flat_map(|p| p.text_boxes.iter())
+        .collect();
+    assert_eq!(anchored.len(), 1);
+    let text: String = anchored[0].paragraphs[0]
+        .runs
         .iter()
-        .any(|d| d.message.starts_with("1 text box(es) are NOT shown")));
+        .map(|r| r.text.as_str())
+        .collect();
+    assert_eq!(text, TEXT_BOX_LINES[1]);
+    assert!(anchored[0].anchor.is_some());
 }
 
 /// Word draws the boxes' text where the page items stand.
@@ -472,20 +496,38 @@ fn a_nested_tables_text_is_shown_in_its_cell_and_held__feat__plugin_doc_read_pat
         .iter()
         .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect())
         .collect();
-    assert_eq!(texts, ["N1", "N11", "N12", "N21", "N22", "N2"]);
+    // Doc ADR 614 amendment 1: one empty held paragraph stands for the
+    // nested table, which the lowering makes in the cell (engine ADR 1050).
+    assert_eq!(texts, ["N1", "", "N2"]);
     let held: Vec<bool> = cell
         .paragraphs
         .iter()
         .map(|p| p.held.in_content_control)
         .collect();
-    assert_eq!(held, [false, true, true, true, true, false]);
+    assert_eq!(held, [false, true, false]);
     // `N2` is the cell's second `<w:p>`: the patcher's ordinal.
-    assert_eq!(cell.paragraphs[5].source_cell.unwrap().para, 1);
+    assert_eq!(cell.paragraphs[2].source_cell.unwrap().para, 1);
     let ir = lowered(&objects_nested_tables_docx());
     let LoweredBlock::Table(lt) = &ir.story.blocks[1] else {
         panic!()
     };
-    assert_eq!(lt.cells[1].paragraphs.len(), 6);
+    assert_eq!(lt.cells[1].paragraphs.len(), 3);
+    assert_eq!(lt.cells[1].nested.len(), 1);
+    let nested = &lt.cells[1].nested[0];
+    assert_eq!(nested.paragraph, 1);
+    let nested_texts: Vec<String> = nested
+        .table
+        .cells
+        .iter()
+        .map(|c| {
+            c.paragraphs
+                .iter()
+                .flat_map(|p| &p.runs)
+                .map(|r| r.text.clone())
+                .collect()
+        })
+        .collect();
+    assert_eq!(nested_texts, ["N11", "N12", "N21", "N22"]);
     assert!(ir
         .diagnostics
         .iter()
@@ -501,19 +543,19 @@ fn a_cell_edit_beside_a_nested_table_keeps_it__feat__plugin_doc_save_back() {
     let LoweredBlock::Table(t) = &mut edited.story.blocks[1] else {
         panic!()
     };
-    t.cells[1].paragraphs[5].runs[0].text = "N2 edited".into();
-    t.cells[1].paragraphs[2].runs[0].text = "N12 edited".into();
+    t.cells[1].paragraphs[2].runs[0].text = "N2 edited".into();
+    t.cells[1].nested[0].table.cells[1].paragraphs[0].runs[0].text = "N12 edited".into();
     let bindings = docx_export::build_bindings(&import_docx(&original).unwrap());
     let edits = docx_export::diff(&base, &edited, &bindings);
     let (saved, skips) = session.save_edited(&edits).unwrap();
     let xml = part(&saved, "word/document.xml");
     assert!(xml.contains(">N2 edited<"), "{xml}");
-    // The nested table's text is not addressed: refused, kept.
+    // The nested table's text is not saved back yet: kept.
     assert!(
         !xml.contains("N12 edited") && xml.contains(">N12<"),
         "{xml}"
     );
-    assert!(!skips.is_empty(), "the nested edit is named");
+    let _ = skips;
 }
 
 // ---------------------------------------------------------------------------

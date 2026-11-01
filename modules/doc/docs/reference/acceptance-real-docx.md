@@ -589,3 +589,28 @@ least 14 pt: 43, ADR 617 amendment).
 **Not re-measured on the real documents:** Word's PDFs of 2026-10-02 are not in the corpus, so
 the round-14 table stands. The probe's own document is measured end to end instead
 (`packages/doc-bundle/test/headless/first-fit.spec.ts`).
+
+## Round 16 — 2026-10-31: Word tables and anchored objects (wave W4)
+
+Engine ADRs 1025 (rows split across pages, `cantSplit`, autofit) and 1050 (anchored floats,
+anchored text frames, objects in cells), doc ADR 614 amendment 1. Measured headless as in round
+14 (`packages/doc-bundle/test/headless/real-docx-measure.spec.ts`, Word's faces registered),
+against Word's PDFs of 2026-10-02 (the same input files, byte for byte).
+
+| Document      | Word pages | Ours | Page starts | Paragraphs aligned |
+| ------------- | ---------- | ---- | ----------- | ------------------ |
+| parentinvguid | 61         | 59   | 13.1%       | 624 of 628         |
+| Bug50936_3    | 50         | 48   | 2.0%        | 810 of 810         |
+| bug59058      | 52         | 31   | see below   | 173 of 175         |
+
+- The run found a defect and it is fixed: a picture anchored in a table cell was invisible to
+  the engine's id minter, so the next one in another cell took its id, and the whole cell batch
+  of bug59058's table was refused as a duplicate (it laid out 16 pages). The minter now scans
+  cell paragraphs (engine ADR 1050).
+- **bug59058 is not measurable by page starts any more.** Its pages are mostly table rows; the
+  method attributes a page to the body paragraph its first line belongs to, and table cell text
+  is no longer poured as story paragraphs (the tall-row fallback is gone), so neither Word's nor
+  our pages have a start paragraph the comparison can name. Its page count (31 of Word's 52) is
+  the measure that stands; the comparison needs cell paragraphs to report tables.
+- **The 95 % target is not met.** Parentinvguid and Bug50936_3 are unchanged from round 14: their
+  differences are vertical (round 13's list), not tables or floats.

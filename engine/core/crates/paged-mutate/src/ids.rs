@@ -102,18 +102,7 @@ pub fn highest_u_hex_id(doc: &Document) -> u64 {
     for story in &doc.stories {
         scan_u_hex_id(&mut max, Some(&story.self_id));
         for para in &story.story.paragraphs {
-            if let Some(table) = &para.table {
-                scan_u_hex_id(&mut max, table.self_id.as_deref());
-            }
-            for anchored in &para.anchored_frames {
-                scan_anchored(&mut max, anchored);
-            }
-            for note in &para.footnotes {
-                scan_u_hex_id(&mut max, note.self_id.as_deref());
-            }
-            for note in &para.notes {
-                scan_u_hex_id(&mut max, Some(&note.id));
-            }
+            scan_paragraph(&mut max, para);
         }
         // Engine ADR 1022 — the text destinations (Word's bookmarks).
         for dest in &story.story.destinations {
@@ -177,6 +166,30 @@ fn scan_spread(max: &mut u64, s: &paged_model::Spread) {
     // Engine ADR 1039 — instances are page items on the same line.
     for i in &s.instances {
         scan_u_hex_id(max, i.self_id.as_deref());
+    }
+}
+
+/// A paragraph's ids, and those of its table's cells: a cell's paragraphs
+/// hold anchored frames, notes and nested tables of their own (engine ADR
+/// 1050), which a fresh mint must not hand out again.
+fn scan_paragraph(max: &mut u64, para: &paged_model::Paragraph) {
+    if let Some(table) = &para.table {
+        scan_u_hex_id(max, table.self_id.as_deref());
+        for cell in &table.cells {
+            scan_u_hex_id(max, cell.self_id.as_deref());
+            for p in &cell.paragraphs {
+                scan_paragraph(max, p);
+            }
+        }
+    }
+    for anchored in &para.anchored_frames {
+        scan_anchored(max, anchored);
+    }
+    for note in &para.footnotes {
+        scan_u_hex_id(max, note.self_id.as_deref());
+    }
+    for note in &para.notes {
+        scan_u_hex_id(max, Some(&note.id));
     }
 }
 
