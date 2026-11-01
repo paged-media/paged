@@ -34,7 +34,7 @@ import { expect } from "@playwright/test";
 
 import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, SWATCH, contentBox, p } from "../../names-annual";
-import { newRefs, settle } from "../../plugin-support";
+import { invokeWith, newRefs, settle } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   corner,
@@ -262,13 +262,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // the trigger is the presets' dash-array: a zero-length dash
   // segment looping stroke dashing. Solid and Dashed demonstrate the
   // command lane; the margin banks the dotted pair.
-  const presets = ["strokeDashSolid", "strokeDashDashed"] as const;
+  const presets = ["dashSolid", "dashDashed"] as const;
   const dashIds: string[] = [];
   for (const [i, preset] of presets.entries()) {
     const id = await dashLine(528 + i * 14);
     dashIds.push(id);
     await doc.select("graphicLine", id);
-    await draw(ctx, preset);
+    await invokeWith(ctx.page, `paged.stroke.${preset}`);
   }
   await expect
     .poll(

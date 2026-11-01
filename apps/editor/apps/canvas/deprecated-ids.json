@@ -258,6 +258,30 @@
       "replacement": "menu:Object/Appearance/Clear",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashSolid",
+      "replacement": "command:paged.stroke.dashSolid",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDashed",
+      "replacement": "command:paged.stroke.dashDashed",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDotted",
+      "replacement": "command:paged.stroke.dashDotted",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDashDot",
+      "replacement": "command:paged.stroke.dashDashDot",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

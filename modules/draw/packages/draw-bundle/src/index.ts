@@ -49,21 +49,16 @@ export {
   vectorGraphicEditContext,
   VECTOR_GRAPHIC_CONTEXT,
 } from "./edit-context";
-// B-12 — the stroke DASH presets + their mutation builder, exported for
+// B-12 — the stroke DASH editor's builders (the preset commands are the
+// host's), exported for
 // the conformance spec (so it asserts the EXACT mutation a command
 // emits — no second copy to drift from).
 export {
-  DASH_PRESETS,
-  DASH_COMMAND_IDS,
-  DASH_COMMAND_CATEGORY,
   dashMutationFor,
-  applyDashPreset,
   applyDashArray,
   dashArrayFrom,
   dashBatchFor,
   MAX_DASH_PAIRS,
-  contributeDashCommands,
-  type DashPreset,
 } from "./commands/dash";
 // The B-04 GROUP wire shapes, composed by Pattern / Symbols / Image
 // Trace and exported for the conformance spec. The user-facing Group /

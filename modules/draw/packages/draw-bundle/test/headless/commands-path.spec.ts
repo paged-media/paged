@@ -53,38 +53,6 @@ describe("paged.draw commands — path, stroke and fill (real engine)", () => {
   }, 60_000);
   afterAll(() => rig?.dispose());
 
-  describe("stroke dashes", () => {
-    it("Stroke: Solid clears the dash array; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.strokeDashSolid");
-      await rig.open(F1(), [RECT]);
-      await rig.run(`${C}.strokeDashDashed`);
-      await expectApplies(rig, `${C}.strokeDashSolid`);
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashSolid`);
-    });
-
-    it("Stroke: Dashed sets a 6/3 dash; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.strokeDashDashed");
-      await rig.open(F1(), [RECT]);
-      const { after } = await expectApplies(rig, `${C}.strokeDashDashed`);
-      expect(after).toContain('"frameStrokeDashArray"');
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashDashed`);
-    });
-
-    it("Stroke: Dotted sets a 1/3 dash; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.strokeDashDotted");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.strokeDashDotted`);
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashDotted`);
-    });
-
-    it("Stroke: Dash-dot sets a 6/3/1/3 dash; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.strokeDashDashDot");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.strokeDashDashDot`);
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashDashDot`);
-    });
-  });
-
   describe("gradient fills", () => {
     it("Fill: Linear gradient refuses an empty selection", async () => {
       covers("command:media.paged.draw.command.fillGradientLinear");
@@ -174,12 +142,6 @@ describe("paged.draw commands — path, stroke and fill (real engine)", () => {
     // DRW-3 (fixed): these commands commit the whole selection in ONE
     // batch, so one undo takes both elements back.
     const TWO = [RECT, POLY];
-
-    it("DRW-3 — Stroke: Dashed on two elements is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.strokeDashDashed");
-      await rig.open(F1(), TWO);
-      await expectApplies(rig, `${C}.strokeDashDashed`);
-    });
 
     it("DRW-3 — Outline stroke on two paths is ONE undo step", async () => {
       covers("command:media.paged.draw.command.outlineStroke");

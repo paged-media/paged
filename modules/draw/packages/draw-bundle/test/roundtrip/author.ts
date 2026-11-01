@@ -63,6 +63,7 @@ import {
   applyAttachTextToPath,
   commitAppearance,
   cornerStyleMutationFor,
+  dashMutationFor,
   drawBundle,
   gradientAxisMutationFor,
   groupMutationFor,
@@ -648,18 +649,14 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     id: "dash-presets",
     row: "dash presets",
     async author(ctx) {
-      const presets = [
-        "strokeDashSolid",
-        "strokeDashDashed",
-        "strokeDashDotted",
-        "strokeDashDashDot",
-      ];
-      for (const [i, preset] of presets.entries()) {
+      // The runs the editor's `paged.stroke.dash*` presets write (PM-0017).
+      const presets = [[], [6, 3], [1, 3], [6, 3, 1, 3]];
+      for (const [i, lengths] of presets.entries()) {
         const y = 150 + i * 100;
         const id = await ctx.pen([{ at: [100, y] }, { at: [500, y] }], false);
         await ctx.strokeWeight(id, 4);
         await ctx.select([id]);
-        await ctx.command(D + preset);
+        await ctx.mutate(dashMutationFor(id, lengths), "dash preset");
       }
     },
   },

@@ -1356,27 +1356,7 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "command:media.paged.draw.command.strokeDashDashDot",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.strokeDashDashed",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.strokeDashDotted",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "command:media.paged.draw.command.strokeDashOptions",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.strokeDashSolid",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -4397,6 +4377,26 @@
     },
     {
       "id": "command:paged.sample.hello",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.stroke.dashDashDot",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.stroke.dashDashed",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.stroke.dashDotted",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.stroke.dashSolid",
       "kind": "command",
       "owner": "editor"
     },
@@ -10272,6 +10272,30 @@
     {
       "id": "menu:Draw/Appearance/Clear",
       "replacement": "menu:Object/Appearance/Clear",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashSolid",
+      "replacement": "command:paged.stroke.dashSolid",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDashed",
+      "replacement": "command:paged.stroke.dashDashed",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDotted",
+      "replacement": "command:paged.stroke.dashDotted",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDashDot",
+      "replacement": "command:paged.stroke.dashDashDot",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

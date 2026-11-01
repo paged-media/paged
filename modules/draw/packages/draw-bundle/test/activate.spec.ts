@@ -119,10 +119,6 @@ describe("drawBundle.activate", () => {
     // plugins build on. A `media.paged.draw.command.groupSelection`
     // reappearing here would be the duplication coming back.
     expect(fake.ids("commands")).toEqual([
-      "media.paged.draw.command.strokeDashSolid",
-      "media.paged.draw.command.strokeDashDashed",
-      "media.paged.draw.command.strokeDashDotted",
-      "media.paged.draw.command.strokeDashDashDot",
       "media.paged.draw.command.fillGradientLinear",
       "media.paged.draw.command.fillGradientRadial",
       "media.paged.draw.command.outlineStroke",

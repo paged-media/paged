@@ -64,47 +64,6 @@ const set = (
 ): { elementId?: ElementId; path?: string; value?: unknown } =>
   (m as unknown as { args: Record<string, never> }).args;
 
-describe("paged.draw commands, no engine — stroke dashes", () => {
-  const dash = async (id: string, lengths: number[]) => {
-    const r = rig([RECT]);
-    await r.run(id);
-    expect(r.leaves()).toEqual([
-      {
-        op: "setElementProperty",
-        args: {
-          elementId: RECT,
-          path: "frameStrokeDashArray",
-          value: { type: "lengths", value: lengths },
-        },
-      },
-    ]);
-    expect(r.steps()).toBe(1);
-    const none = rig([]);
-    await none.run(id);
-    expect(none.sent()).toEqual([]);
-  };
-
-  it("Stroke: Solid writes an empty dash array to the selection; nothing selected sends nothing", async () => {
-    covers("command:media.paged.draw.command.strokeDashSolid");
-    await dash(`${C}.strokeDashSolid`, []);
-  });
-
-  it("Stroke: Dashed writes 6/3", async () => {
-    covers("command:media.paged.draw.command.strokeDashDashed");
-    await dash(`${C}.strokeDashDashed`, [6, 3]);
-  });
-
-  it("Stroke: Dotted writes 1/3", async () => {
-    covers("command:media.paged.draw.command.strokeDashDotted");
-    await dash(`${C}.strokeDashDotted`, [1, 3]);
-  });
-
-  it("Stroke: Dash-dot writes 6/3/1/3", async () => {
-    covers("command:media.paged.draw.command.strokeDashDashDot");
-    await dash(`${C}.strokeDashDashDot`, [6, 3, 1, 3]);
-  });
-});
-
 describe("paged.draw commands, no engine — gradient fills", () => {
   const gradient = async (id: string, type: string) => {
     const r = rig([RECT]);

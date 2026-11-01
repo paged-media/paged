@@ -152,10 +152,6 @@ const PANELS = [
 ] as const;
 
 const COMMANDS = [
-  "media.paged.draw.command.strokeDashSolid",
-  "media.paged.draw.command.strokeDashDashed",
-  "media.paged.draw.command.strokeDashDotted",
-  "media.paged.draw.command.strokeDashDashDot",
   "media.paged.draw.command.fillGradientLinear",
   "media.paged.draw.command.fillGradientRadial",
   "media.paged.draw.command.outlineStroke",
@@ -752,7 +748,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(46);
     expect(PANELS).toHaveLength(14);
-    expect(COMMANDS).toHaveLength(150);
+    expect(COMMANDS).toHaveLength(146);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────

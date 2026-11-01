@@ -300,6 +300,10 @@ import {
   CLIPBOARD_MENU_ITEMS,
 } from "../clipboard-commands";
 import {
+  buildStrokeDashCommands,
+  STROKE_DASH_DIAGNOSTIC_SOURCE,
+} from "../stroke-dash-commands";
+import {
   APPEARANCE_DIAGNOSTIC_SOURCE,
   APPEARANCE_MENU_ITEMS,
   buildAppearanceCommands,
@@ -1524,6 +1528,15 @@ function CanvasAppIntegration() {
         ]),
       () => problemsSink.clear(APPEARANCE_DIAGNOSTIC_SOURCE),
     );
+    // `paged.stroke.dash*` — the four dash presets.
+    const strokeDashCommands = buildStrokeDashCommands(
+      { client, getSelection: objectDeps.getSelection },
+      (message) =>
+        problemsSink.publish(STROKE_DASH_DIAGNOSTIC_SOURCE, "stroke", [
+          { severity: "error", message, source: "stroke" },
+        ]),
+      () => problemsSink.clear(STROKE_DASH_DIAGNOSTIC_SOURCE),
+    );
     // `paged.insert.*` — the object-authoring verbs (U7). Unlike the
     // object layer's deps bag, every runner reads its state (camera,
     // page layout, caret, edit context) off the LIVE `PagedEditor` the
@@ -1661,6 +1674,7 @@ function CanvasAppIntegration() {
       ...pathfinderCommands,
       ...cornerCommands,
       ...appearanceCommands,
+      ...strokeDashCommands,
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,

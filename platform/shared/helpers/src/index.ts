@@ -48,6 +48,7 @@ export {
   labelKey,
   type LabelEnvelope,
 } from "./label.ts";
+export { DASH_PRESET_LENGTHS, dashArrayOp } from "./dash.ts";
 export {
   LIVE_CORNER_KINDS,
   cornerPresetOps,

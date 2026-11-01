@@ -129,7 +129,6 @@ import {
   contributeCompoundPathCommands,
   COMPOUND_PATH_COMMAND_IDS,
 } from "./commands/compound-path";
-import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
 import {
   contributeCutCommands,
   CUT_COMMAND_IDS,
@@ -434,11 +433,7 @@ export function activate(host: BundleHost): BundleHandle {
     icon: "ui-sparkle",
     ...makeBrushesPanel(host),
   });
-  // B-12 — the stroke DASH presets as commands (the schema binding
-  // ceiling is scalar, a dash array is a vector → command-driven). Each
-  // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
-  // the selection through the document door.
-  const dashCommandsSub = contributeDashCommands(host);
+  // B-12 — the stroke dash PRESET commands are the host's: `paged.stroke.dash*`.
   // NOTE — no Group / Ungroup / Select parent group here. Those three
   // are the HOST's commands now (`paged.object.*`): basic object
   // operations are what plugins build on, and shipping them from a
@@ -725,7 +720,6 @@ export function activate(host: BundleHost): BundleHandle {
   host.log.info(
     `activated — ${tools.length} tools + 3 schema panels + 13 React panels + ` +
       `${
-        DASH_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
         PATH_OPS_COMMAND_IDS.length +
         PATH_OPTIONS_COMMAND_IDS.length +
@@ -825,7 +819,6 @@ export function activate(host: BundleHost): BundleHandle {
       pathOptionsCommandsSub.dispose();
       pathOpsCommandsSub.dispose();
       fillGradientCommandsSub.dispose();
-      dashCommandsSub.dispose();
     },
   };
 }
