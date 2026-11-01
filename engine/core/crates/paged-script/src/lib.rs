@@ -1427,6 +1427,18 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             1,
         )
         .function(guarded(paged_edit_comment), js_string!("editComment"), 3)
+        // Engine ADR 1055: document-level comment threads and their people.
+        .function(
+            guarded(paged_insert_comment_thread),
+            js_string!("insertCommentThread"),
+            3,
+        )
+        .function(
+            guarded(paged_set_comment_anchor),
+            js_string!("setCommentAnchor"),
+            2,
+        )
+        .function(guarded(paged_set_person), js_string!("setPerson"), 1)
         // Engine ADRs 1018 and 1021.
         .function(guarded(paged_find), js_string!("find"), 2)
         .function(guarded(paged_find_replace), js_string!("findReplace"), 3)
@@ -4037,6 +4049,65 @@ fn paged_resolve_comment(
         comment_id,
         resolved,
     }))
+}
+
+/// `paged.insertCommentThread(anchor, { text, id?, author?, initials?, date? },
+/// kind = "comment")` — a thread on an item, a page point, a region or a
+/// module's address (engine ADR 1055). `anchor` is `{ kind: "item", item }`,
+/// `{ kind: "page", page, at }`, `{ kind: "region", item, rect }` or
+/// `{ kind: "cell", item, address }`; `kind` is `"comment"` or `"note"`.
+fn paged_insert_comment_thread(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let Some(anchor) =
+        from_js::<paged_mutate::operation::CommentAnchorSpec>(args.get_or_undefined(0), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let Some(comment) = from_js::<paged_mutate::CommentSpec>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    let thread_kind = match args.get_or_undefined(2) {
+        v if v.is_undefined() || v.is_null() => None,
+        v => Some(v.to_string(ctx)?.to_std_string_escaped()),
+    };
+    Ok(apply_bool(&Mutation::InsertCommentThread {
+        anchor,
+        thread_kind,
+        comment,
+    }))
+}
+
+/// `paged.setCommentAnchor(threadId, anchor)` — move a thread (also how an
+/// orphaned one is anchored again).
+fn paged_set_comment_anchor(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let thread_id = str_arg(args, 0, ctx)?;
+    let Some(anchor) =
+        from_js::<paged_mutate::operation::CommentAnchorSpec>(args.get_or_undefined(1), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::SetCommentAnchor {
+        thread_id,
+        anchor,
+    }))
+}
+
+/// `paged.setPerson({ id, name, initials?, userId?, providerId? })` — add or
+/// update an author of the document's people list.
+fn paged_set_person(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let Some(person) =
+        from_js::<paged_mutate::operation::PersonSpec>(args.get_or_undefined(0), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::SetPerson { person }))
 }
 
 /// `paged.deleteComment(commentId)` — a root takes its thread with it.

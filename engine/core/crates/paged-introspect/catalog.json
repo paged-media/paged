@@ -1289,6 +1289,27 @@
       "summary": "Rewrite a comment's text. Undoable."
     },
     {
+      "name": "paged.insertCommentThread",
+      "params": "(anchor, {text, id?, author?, initials?, date?}, kind?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Start a comment thread on an item {kind:'item', item}, a page point {kind:'page', page, at}, a region {kind:'region', item, rect} or a module's address {kind:'cell', item, address}; kind is 'comment' or 'note'. Undoable."
+    },
+    {
+      "name": "paged.setCommentAnchor",
+      "params": "(threadId, anchor)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Move a comment thread to a new anchor (also how an orphaned thread is anchored again). Undoable."
+    },
+    {
+      "name": "paged.setPerson",
+      "params": "({id, name, initials?, userId?, providerId?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Add or update an author of the document's people list that comments name. Undoable."
+    },
+    {
       "name": "paged.find",
       "params": "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})",
       "returns": "string",
