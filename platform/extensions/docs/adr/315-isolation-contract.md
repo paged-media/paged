@@ -1,7 +1,8 @@
 # ADR 315 — The isolation contract: a plugin depends only on the published contract; a gap becomes a host door
 
-- **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `d90f727`;
-  plugin repositories at plugin-sheets `71f37d7`, plugin-data `6b96ce5`, plugin-doc `76e1d06`,
+- **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `d90f727`.
+  Retired for the built-ins on 2026-11-01 by [PM-0017](../../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md);
+  it still binds third-party extensions. Recorded from the plugin repositories at plugin-sheets `71f37d7`, plugin-data `6b96ce5`, plugin-doc `76e1d06`,
   plugin-image `f7d21e5`, plugin-web `653a95e`, plugin-draw `0d12bf8`, plugin-publish `6994ad1`.
 - **Scope:** what a first-party plugin may depend on, and what happens when the contract
   lacks something it needs.
@@ -108,3 +109,18 @@ contains any more (`plugin-draw: CLAUDE.md:440` records its retirement).
 
 - [ADR 300](300-type-only-contract.md), [ADR 307](307-contract-as-peer-dependency.md), [ADR 305](305-doors-always-present.md), [ADR 314](314-plugin-shape.md), [ADR 319](319-trust-line.md) — the contract packages; how a plugin detects a door; the build shape; what the raw handle means for trust
 - [ADR 014](https://github.com/paged-media/plugin-data/blob/main/docs/adr/014-data-provider-arrow-seam.md), [ADR 650](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/650-mutual-git-revision-pins.md) — the cross-plugin data door; the adapter that pins the engine
+
+## Amendment (2026-11-01): the isolation contract is retired for built-ins
+
+The eight built-in modules are part of the core
+([PM-0017](../../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md)). For them "zero core
+contact AND zero inter-plugin contact" no longer holds: their Rust may path-depend on the engine,
+on `platform/shared/*` and on another built-in (acyclic, declared in `moon.yml`), and a capability
+another consumer needs sits in the engine or in `platform/shared`, never in a copy (the capability
+register, `docs/development/capability-register.md`). The two guards above (the `deny.toml`
+registry rule and the per-repository import script) belonged to the separate repositories and are
+gone; the monorepo's `bun lint` import boundaries replace them (a module's TypeScript is still
+limited there to the contract, `platform/shared/*`, its own packages and react). What still holds: a third-party
+extension depends only on the published contract (`plugin-api`, `plugin-sdk`) and reaches a missing
+capability through a host door, probed with `supports()` ([ADR 305](305-doors-always-present.md)).
+Built-ins stop probing doors that are always present and drop "module absent" fallbacks.
