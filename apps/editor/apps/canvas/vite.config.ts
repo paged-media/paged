@@ -762,6 +762,10 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   optimizeDeps: {
+    // The ML worker imports onnxruntime-web on first use; found only then,
+    // the dev server re-optimises and reloads the page under a running
+    // test (Models panel e2e: the first attempt lost its install state).
+    include: ["onnxruntime-web/webgpu"],
     // No `exclude`: every @paged-media package is a workspace package,
     // linked to its source directory outside node_modules, and Vite never
     // pre-bundles a linked dependency (it serves it through the module

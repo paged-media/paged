@@ -147,6 +147,8 @@ const PANELS = [
   // WP6.4 — brushes and width profiles as live stroke styles.
   "media.paged.draw.panel.brushes",
   "media.paged.draw.panel.properties",
+  // WP8.3 — Text to vector and Generative recolor (draw ADR 369).
+  "media.paged.draw.panel.generative",
 ] as const;
 
 const COMMANDS = [
@@ -299,6 +301,11 @@ const COMMANDS = [
   "media.paged.draw.command.recolorArtwork",
   "media.paged.draw.command.recolorArtworkOptions",
   "media.paged.draw.command.applyGuideColor",
+  // WP8.3 — Text to vector and Generative recolor, with their panel raisers.
+  "media.paged.draw.command.textToVector",
+  "media.paged.draw.command.textToVectorOptions",
+  "media.paged.draw.command.generativeRecolor",
+  "media.paged.draw.command.generativeRecolorOptions",
   // WP6.4 — brushes and width profiles as live stroke styles.
   "media.paged.draw.command.applyBrush",
   "media.paged.draw.command.removeBrush",
@@ -427,6 +434,7 @@ const PANEL_MARKER: Record<string, string> = {
   // ADR 323 — object properties as host PropertyFields (a schema panel).
   "media.paged.draw.panel.properties":
     '[data-schema-panel="media.paged.draw.panel.properties"]',
+  "media.paged.draw.panel.generative": "[data-draw-generative-panel]",
 };
 
 // ── helpers ─────────────────────────────────────────────────────────
@@ -765,8 +773,8 @@ test.describe("plugin surface · paged.draw", () => {
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(46);
-    expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(168);
+    expect(PANELS).toHaveLength(14);
+    expect(COMMANDS).toHaveLength(172);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────

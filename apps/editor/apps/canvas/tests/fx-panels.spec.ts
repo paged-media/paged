@@ -78,6 +78,7 @@ const CATALOG = JSON.parse(
     title: string;
     category: string;
     targets: string[];
+    strokeStyle?: boolean;
   }>;
 };
 
@@ -147,8 +148,10 @@ test.describe("Effects, Transparency and Appearance (editor ADR 309)", () => {
     covers("menu:Object/Effects/*/*", "command:paged.effect.add.*");
     // A kind that targets only groups (Pathfinder, engine ADR 1042) is
     // applied to a group below: a lone rectangle's stack does not take it.
-    const kinds = CATALOG.effectKinds.filter((k) =>
-      k.targets.includes("object"),
+    // The stroke styles (brush, width profile; engine ADR 1053) are the
+    // Brushes panel's: the Effect menu has no row for them.
+    const kinds = CATALOG.effectKinds.filter(
+      (k) => !k.strokeStyle && k.targets.includes("object"),
     );
     const groupKinds = CATALOG.effectKinds.filter(
       (k) => !k.targets.includes("object") && k.targets.includes("group"),
