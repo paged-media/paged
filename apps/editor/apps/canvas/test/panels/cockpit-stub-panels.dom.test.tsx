@@ -17,57 +17,20 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Comments (paged.comments) and the component Library
-// (paged.component-library): Review mode's and the component system's
-// panels, honest stubs until the collaboration backend and the component
-// system land. What is asserted is the honesty: the coming-soon card says
+// The component Library (paged.component-library): the component
+// system's panel, an honest stub until the component system lands. What is asserted is the honesty: the coming-soon card says
 // what is missing, nothing on them pretends to work (no enabled control),
-// and they send nothing to the engine, with or without a document.
+// and it sends nothing to the engine, with or without a document.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
-import {
-  CommentsPanel,
-  ComponentLibraryPanel,
-} from "../../src/panels/cockpit/stub-panels";
+import { ComponentLibraryPanel } from "../../src/panels/cockpit/stub-panels";
 import { richScene } from "./fixtures";
 import { mountPanel, unmountAll } from "./harness";
 import { comingSoonTitles, enabledControls } from "./support/cockpit";
 
 afterEach(unmountAll);
-
-describe("Comments panel", () => {
-  test("says comments land with the collaboration backend, on any document", async () => {
-    covers("panel:paged.comments");
-    for (const document of ["none", "blank"] as const) {
-      const h = await mountPanel(CommentsPanel, {
-        id: "paged.comments",
-        document,
-      });
-      expect(h.root.querySelector("[data-comments-panel]")).not.toBeNull();
-      expect(comingSoonTitles(h.root)).toEqual(["No comments yet"]);
-      expect(h.root.textContent).toContain(
-        "Threaded review comments, approvals and version compare land with the collaboration backend.",
-      );
-      h.unmount();
-    }
-  });
-
-  test("offers no control and sends nothing, even with a selection", async () => {
-    covers("panel:paged.comments");
-    const h = await mountPanel(CommentsPanel, {
-      id: "paged.comments",
-      scene: richScene,
-    });
-    const from = h.mark();
-    await h.select([h.scene.rect]);
-    await h.caret(h.scene.storyId, 1);
-    expect(enabledControls(h.root)).toEqual([]);
-    expect(h.mutations(from)).toEqual([]);
-    expect(comingSoonTitles(h.root)).toEqual(["No comments yet"]);
-  });
-});
 
 describe("Component library panel", () => {
   test("says the component library is coming, on any document", async () => {

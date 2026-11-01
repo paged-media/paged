@@ -121,6 +121,7 @@ export type {
   LayoutCacheStats,
   ArticleSummary,
   BookmarkSummary,
+  CommentSummary,
   CellStyleSummary,
   ColorGroupSummary,
   ColorPreview,

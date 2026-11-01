@@ -18,7 +18,7 @@
  */
 
 // Cockpit — the styled-shell panels for product surfaces whose
-// backends don't exist yet. Each is the kit's composition with the
+// backends don't exist yet (the Comments panel is real since engine ADR 1055). Each is the kit's composition with the
 // brand's honest empty-state language — a stub is visibly a stub
 // (no fake data, no dead interactive chrome).
 
@@ -26,11 +26,6 @@ import { CockpitPanelHeader, ComingSoon } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.cockpitStubPanels", {
-  comments: "Comments",
-  noComments: "No comments yet",
-  commentsBody:
-    "Threaded review comments, approvals and version compare land with the " +
-    "collaboration backend.",
   library: "Library",
   librarySoon: "Component library coming soon",
   libraryBody:
@@ -41,20 +36,6 @@ const M = defineMessages("app.cockpitStubPanels", {
 // StoriesPanel moved to `./stories-panel` (W2.12 — now a real story
 // list off `paged.stories()`). DataMappingPanel deleted (U8 — the
 // live paged.data bindings panel superseded the stub).
-
-/** Review mode — threaded comments. Needs the collaboration
- * backend. */
-export function CommentsPanel() {
-  const strings = useStrings();
-  return (
-    <div data-comments-panel style={{ overflowY: "auto", height: "100%" }}>
-      <CockpitPanelHeader title={strings.t(M.comments)} />
-      <ComingSoon icon="ui-comment" title={strings.t(M.noComments)}>
-        {strings.t(M.commentsBody)}
-      </ComingSoon>
-    </div>
-  );
-}
 
 /** Component library — reusable layout components. */
 export function ComponentLibraryPanel() {
