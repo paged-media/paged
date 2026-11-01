@@ -88,20 +88,13 @@ pub struct CustomShowPlan {
 
 /// Set the content type of the main part `/{part}`.
 pub fn set_main_content_type(ct_xml: &str, part: &str, ct: &str) -> String {
-    let key = format!(r#"<Override PartName="/{part}""#);
-    let Some(i) = ct_xml.find(&key) else {
-        return ct_xml.replace(
-            "</Types>",
-            &format!(r#"<Override PartName="/{part}" ContentType="{ct}"/></Types>"#),
-        );
-    };
-    let Some(j) = ct_xml[i..].find("/>").map(|j| i + j + 2) else {
-        return ct_xml.to_string();
-    };
-    format!(
-        r#"{}<Override PartName="/{part}" ContentType="{ct}"/>{}"#,
-        &ct_xml[..i],
-        &ct_xml[j..]
+    let part = format!("/{part}");
+    paged_ooxml::content_types::patch(
+        ct_xml,
+        &paged_ooxml::content_types::Patch {
+            set_overrides: vec![(part.as_str(), ct)],
+            ..Default::default()
+        },
     )
 }
 
