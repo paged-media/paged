@@ -95,7 +95,9 @@ Chart label width ×2 → `dml-chart`. Number and date formats: `paged-numfmt` o
 
 Hand-written relationships remain in sheet links and chart_write; `sheet-xlsx` keeps its own
 `opc.rs` and `rels.rs`. Theme readers: `pptx-import` and `slide-resolve` still have their own;
-the engine model has no theme (colour slots, font and format schemes as swatches and styles).
+the engine model has a theme since engine ADR 1056 (slice 1: colour slots and font scheme on
+`Document.theme`, filled by slide's import; the collection, operations, swatch references and
+doc/sheet lowering are open; the format scheme is not modelled).
 Writable XML tree ×4. Minimal `.xlsx` writer ×3 (`slide-sheet`, `sheet-js` csv, ods). ODF layer
 shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 

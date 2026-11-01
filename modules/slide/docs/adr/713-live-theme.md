@@ -94,3 +94,11 @@ plugin concept over engine styles.
 - The engine stays without a theme type, as the plan decided. Masters and layouts (engine
   ADR 1026) are another wave's; when a deck has two masters with two themes, a theme applies to
   both.
+
+## Amendment 2026-11-01 (engine ADR 1056)
+
+"The engine has no theme" no longer holds: the document carries `Document.theme` (twelve colour
+slots, the font scheme with its scripts, the theme part as a source), filled by this import next to
+everything above, which is unchanged. The swatch-by-key convention, the "Theme" group, the
+theme-font styles and the deck label's `theme` remain until the engine's theme operations and
+swatch references land (ADR 1056, slices 2 and 3); then the label keeps only the variant.
