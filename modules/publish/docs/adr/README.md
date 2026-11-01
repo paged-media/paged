@@ -23,7 +23,8 @@ earlier; their status says so.
 | [655](655-pdfium-reader.md) | PDFium is the PDF reader | Accepted, recorded retroactively 2026-10-02 |
 | [656](656-pdf-opens-as-native-document.md) | A PDF opens as a native document: editable first, page images as the fallback | Accepted, recorded retroactively 2026-10-02 |
 | [657](657-one-bundle-per-format.md) | One repo for foreign formats, one bundle per format | Accepted, recorded retroactively 2026-10-02 |
-| [658](658-a-pdf-page-places-as-native-vectors.md) | A PDF or Illustrator page places into the open document as native vectors | Accepted 2026-10-27 |
+| [658](658-a-pdf-page-places-as-native-vectors.md) | A PDF or Illustrator page places into the open document as native vectors | Accepted 2026-10-27 (amended by 659) |
+| [659](659-pdf-mesh-shadings-import-as-native-meshes.md) | PDF mesh shadings (types 4–7) import as the engine's native gradient mesh | Accepted 2026-11-01 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

@@ -48,6 +48,8 @@ fileGroups:
     - "/engine/core/Cargo.toml"
     - "/engine/core/crates/**/*.rs"
     - "/engine/core/crates/**/Cargo.toml"
+    # pdf-import's mesh round trip reads the engine's exported mesh PDFs.
+    - "/engine/core/crates/paged-export-pdf/tests/fixtures/mesh-oracle/**"
 
 tasks:
   rust-build:

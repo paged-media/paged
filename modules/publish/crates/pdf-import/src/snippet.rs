@@ -81,6 +81,8 @@ pub struct Counts {
     pub text_frames: usize,
     pub opacity_masks: usize,
     pub gradients: usize,
+    /// Paths filled with a native gradient mesh (a PDF mesh shading).
+    pub meshes: usize,
     pub colors: usize,
 }
 
@@ -239,6 +241,11 @@ pub fn place(bytes: &[u8], req: &PlaceRequest) -> Result<PlaceResult, PlaceError
         text_frames: spread.text_frames.len(),
         opacity_masks: spread.opacity_masks.len(),
         gradients: palette.graphic.gradients.len(),
+        meshes: spread
+            .polygons
+            .iter()
+            .filter(|p| p.fill_mesh.is_some())
+            .count(),
         colors: palette.graphic.colors.len(),
     };
     let text = stories

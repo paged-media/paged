@@ -30,7 +30,9 @@
 //!   stroke's cap, join, miter limit and dashes, the fill's and stroke's
 //!   own opacity, the item's opacity and blend mode; an axial or radial
 //!   ramp becomes a gradient swatch with the ramp's start, angle and
-//!   length on the item (`GradientFillStart`/`Angle`/`Length`);
+//!   length on the item (`GradientFillStart`/`Angle`/`Length`); a patch
+//!   or triangle mesh becomes the frame's native gradient mesh (engine
+//!   ADR 1048, publish ADR 659), its swatch the mesh's mean colour;
 //! - an image becomes a `Rectangle` holding its bytes, its transform the
 //!   image's (a rotated or sheared image keeps its placement);
 //! - a group becomes a `Group`: a clip group (engine ADR 1010) when it
@@ -48,8 +50,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use kurbo::{Affine, BezPath, Point, Shape, Vec2};
 use paged_model::{
     Bounds, CharacterRun, ColorEntry, ColorModel, ColorSpace, FrameRef, GradientEntry,
-    GradientKind, GradientStopRef, Graphic, Group, OpacityMask, OpacityMaskType, Paragraph,
-    PathAnchor, Polygon, Rectangle, Spread, Story, TargetTransparency, TextFrame,
+    GradientKind, GradientMesh, GradientStopRef, Graphic, Group, MeshColor, MeshFill, OpacityMask,
+    OpacityMaskType, Paragraph, PatchInput, PathAnchor, Polygon, Rectangle, Spread, Story,
+    TargetTransparency, TextFrame,
 };
 use paged_scene::ParsedStory;
 
@@ -368,6 +371,10 @@ impl<'a> Lowering<'a> {
                     self.loss("stroke.gradient");
                     stops.first().map_or([0.0; 3], |s| s.rgb)
                 }
+                Paint::Mesh { patches, .. } => {
+                    self.loss("stroke.gradient");
+                    mean_color(patches)
+                }
             };
             poly.stroke_color = Some(self.palette.color_id(rgb));
             poly.stroke_weight = Some((s.width as f64 * self.scale) as f32);
@@ -468,6 +475,44 @@ impl<'a> Lowering<'a> {
                 poly.fill_color = Some(self.palette.gradient_id(GradientKind::Radial, stops));
                 poly.gradient_fill_start = Some([c.x as f32, c.y as f32]);
                 poly.gradient_fill_length = Some((*radius as f64 * self.scale) as f32);
+                if *opacity < 0.9999 {
+                    poly.fill_transparency = Some(TargetTransparency {
+                        opacity: Some(opacity * 100.0),
+                        ..Default::default()
+                    });
+                }
+            }
+            Paint::Mesh { patches, opacity } => {
+                // The polygon's inner coordinates are the placement's
+                // space (its transform is the identity), and a patch's
+                // control points map affinely, so the mesh is exact under
+                // any placement.
+                let inputs: Vec<PatchInput> = patches
+                    .iter()
+                    .map(|p| PatchInput {
+                        points: p.points.map(|row| {
+                            row.map(|q| {
+                                let (x, y) = self.pt(q);
+                                [x, y]
+                            })
+                        }),
+                        colors: p
+                            .colors
+                            .map(|c| MeshColor::rgb(c[0] * 255.0, c[1] * 255.0, c[2] * 255.0)),
+                        tensor: p.tensor,
+                    })
+                    .collect();
+                if inputs.is_empty() {
+                    return;
+                }
+                let mesh = GradientMesh::from_patches(inputs);
+                if mesh.grids.len() > 1 {
+                    self.loss("shading.mesh_patches");
+                }
+                // The swatch stays beside the mesh (engine ADR 1048): it
+                // is what IDML and InDesign show.
+                poly.fill_color = Some(self.palette.color_id(mean_color(patches)));
+                poly.fill_mesh = Some(Box::new(MeshFill::Mesh(mesh)));
                 if *opacity < 0.9999 {
                     poly.fill_transparency = Some(TargetTransparency {
                         opacity: Some(opacity * 100.0),
@@ -837,8 +882,25 @@ fn paint_opacity(p: &Paint) -> f32 {
     match p {
         Paint::Solid { opacity, .. }
         | Paint::Linear { opacity, .. }
-        | Paint::Radial { opacity, .. } => *opacity,
+        | Paint::Radial { opacity, .. }
+        | Paint::Mesh { opacity, .. } => *opacity,
     }
+}
+
+/// The mean of a mesh's corner colours: the swatch its frame keeps.
+fn mean_color(patches: &[crate::vectors::ir::MeshPatchIr]) -> [f32; 3] {
+    let mut sum = [0.0f32; 3];
+    let mut n = 0.0f32;
+    for c in patches.iter().flat_map(|p| p.colors.iter()) {
+        for k in 0..3 {
+            sum[k] += c[k];
+        }
+        n += 1.0;
+    }
+    if n == 0.0 {
+        return [0.0; 3];
+    }
+    sum.map(|v| v / n)
 }
 
 /// An item's own opacity (0..=100, `None` = opaque) and blend mode.
