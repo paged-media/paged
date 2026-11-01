@@ -263,9 +263,11 @@ describe.skipIf(!RUN_BUDGETS)(
     // twice; both panels read the engine only once it runs.
     // Data issues (data ADR 564): +1 — supports("diagnostics.publish@1"),
     // asked once here so no command and no edit pays for it.
+    // The door probes are gone (ADR 305, PM-0017): importer, edit context,
+    // schema panel and object model are static — −4 supports() calls.
     const W7: Measured = onLabelled(
       {
-        hostCalls: 44,
+        hostCalls: 40,
         hostReads: 2,
         mutates: 0,
         mutationOps: 0,
@@ -279,7 +281,7 @@ describe.skipIf(!RUN_BUDGETS)(
         fingerprints: 0,
         storeQueries: 0,
       },
-      { hostCalls: 45, hostReads: 4 },
+      { hostCalls: 41, hostReads: 4 },
     );
     it("W7 activates without booting either engine [data.perf.gates]", async () => {
       h = await openRealHost();

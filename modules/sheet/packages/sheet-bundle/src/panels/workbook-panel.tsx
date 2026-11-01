@@ -235,7 +235,9 @@ export function makeWorkbookPanel(
     // The Sheet properties panel carries number format, font, fill,
     // alignment and iterative calculation; where the host renders it, the
     // format section points there instead of repeating them.
-    const openProperties = () => host.shell.openPanel(PROPERTIES_PANEL_ID);
+    const openProperties = host.supports("contribute.schemaPanel@1")
+      ? () => host.shell.openPanel(PROPERTIES_PANEL_ID)
+      : undefined;
 
     const [placeMsg, setPlaceMsg] = useState<string | null>(null);
     const onPlace = () => {
