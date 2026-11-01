@@ -762,13 +762,38 @@ pub(crate) fn apply_inner(
         Operation::ResolveComment {
             comment_id,
             resolved,
-        } => review::apply_resolve_comment(doc, comment_id, *resolved),
-        Operation::DeleteComment { comment_id } => review::apply_delete_comment(doc, comment_id),
+        } => match threads::resolve(doc, comment_id, *resolved) {
+            Some(applied) => Ok(applied),
+            None => review::apply_resolve_comment(doc, comment_id, *resolved),
+        },
+        Operation::DeleteComment { comment_id } => match threads::delete(doc, comment_id) {
+            Some(applied) => Ok(applied),
+            None => review::apply_delete_comment(doc, comment_id),
+        },
         Operation::EditComment {
             comment_id,
             text,
             date,
-        } => review::apply_edit_comment(doc, comment_id, text, date.as_deref()),
+        } => match threads::edit(doc, comment_id, text, date.as_deref()) {
+            Some(applied) => Ok(applied),
+            None => review::apply_edit_comment(doc, comment_id, text, date.as_deref()),
+        },
+        Operation::InsertCommentThread {
+            anchor,
+            thread_kind,
+            comment,
+        } => threads::apply_insert_thread(doc, anchor, thread_kind.as_deref(), comment),
+        Operation::ReplyCommentThread { thread_id, comment } => {
+            threads::apply_reply(doc, thread_id, comment)
+        }
+        Operation::SetCommentAnchor { thread_id, anchor } => {
+            threads::apply_set_anchor(doc, thread_id, anchor)
+        }
+        Operation::SetPerson { person } => threads::apply_set_person(doc, person),
+        Operation::RestoreCommentThreads {
+            threads_json,
+            people_json,
+        } => threads::apply_restore(doc, threads_json, people_json),
         Operation::RestoreStoryReview {
             story_id,
             paragraphs_json,
@@ -1476,6 +1501,7 @@ mod note;
 pub mod permit;
 pub mod review;
 mod script;
+pub mod threads;
 mod tracked_change;
 mod word;
 pub mod word_structure;

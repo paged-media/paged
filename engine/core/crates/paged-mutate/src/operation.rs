@@ -6275,6 +6275,43 @@ pub enum Operation {
         #[serde(default)]
         date: Option<String>,
     },
+    // rides v78 (added before first consumer sync): the ADR 1055 comment threads.
+    /// Engine ADR 1055 — a comment thread on something other than a text
+    /// range: a page item, a page point, a region or a module address. The
+    /// root is `comment`; its id is the thread's. Inverse:
+    /// `RestoreCommentThreads`.
+    InsertCommentThread {
+        anchor: CommentAnchorSpec,
+        /// `"comment"` (default) or `"note"`.
+        #[serde(default)]
+        thread_kind: Option<String>,
+        comment: CommentSpec,
+    },
+    /// Engine ADR 1055 — a reply in thread `thread_id` (a document thread;
+    /// a text thread is replied to with `InsertComment` and a `parentId`).
+    /// A note takes no replies. Inverse: `RestoreCommentThreads`.
+    ReplyCommentThread {
+        thread_id: String,
+        comment: CommentSpec,
+    },
+    /// Engine ADR 1055 — move thread `thread_id` to a new anchor (also how a
+    /// thread whose target was deleted is re-anchored). Inverse:
+    /// `RestoreCommentThreads`.
+    SetCommentAnchor {
+        thread_id: String,
+        anchor: CommentAnchorSpec,
+    },
+    /// Engine ADR 1055 — add or update an author of the people list.
+    /// Inverse: `RestoreCommentThreads`.
+    SetPerson {
+        person: PersonSpec,
+    },
+    /// Inverse-only (engine ADR 1055) — set the document's comment threads
+    /// and people list to what they were. Its inverse carries what it replaced.
+    RestoreCommentThreads {
+        threads_json: String,
+        people_json: String,
+    },
     /// Inverse-only (engines ADR 1040 / 1020) — set story `story_id`'s
     /// paragraphs (when `paragraphs_json` is set) and comment threads to
     /// what they were. Its inverse carries what it replaced.
@@ -7202,6 +7239,99 @@ pub struct CommentSpec {
     pub resolved: bool,
     #[serde(default)]
     pub parent_id: Option<String>,
+    /// Engine ADR 1055 — when the comment was last edited (ISO 8601).
+    #[serde(default)]
+    pub modified: Option<String>,
+    /// The author as an id of the people list.
+    #[serde(default)]
+    pub person: Option<String>,
+    #[serde(default)]
+    pub mentions: Vec<MentionSpec>,
+    #[serde(default)]
+    pub task: Option<CommentTaskSpec>,
+    #[serde(default)]
+    pub reactions: Vec<ReactionSpec>,
+    /// A PDF review state: `accepted`, `rejected`, `cancelled`, `completed`.
+    #[serde(default)]
+    pub review_state: Option<String>,
+}
+
+/// Engine ADR 1055 — a mention of a person inside a comment's text.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MentionSpec {
+    pub person: String,
+    pub start: u32,
+    pub end: u32,
+}
+
+/// Engine ADR 1055 — a reaction to a comment.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactionSpec {
+    pub person: String,
+    pub emoji: String,
+}
+
+/// Engine ADR 1055 — a task attached to a comment.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentTaskSpec {
+    #[serde(default)]
+    pub assignee: Option<String>,
+    #[serde(default)]
+    pub due: Option<String>,
+    #[serde(default)]
+    pub priority: Option<u8>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+/// Engine ADR 1055 — an author of the people list.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonSpec {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub initials: Option<String>,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    #[serde(default)]
+    pub provider_id: Option<String>,
+}
+
+/// Engine ADR 1055 — what a comment thread is attached to, on the wire.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CommentAnchorSpec {
+    /// A page item, optionally at a point in the item's space.
+    #[serde(rename_all = "camelCase")]
+    Item {
+        item: String,
+        #[serde(default)]
+        at: Option<[f64; 2]>,
+    },
+    /// A point on a page or artboard.
+    #[serde(rename_all = "camelCase")]
+    Page { page: String, at: [f64; 2] },
+    /// A rectangle `[x, y, width, height]` of an item.
+    #[serde(rename_all = "camelCase")]
+    Region { item: String, rect: [f64; 4] },
+    /// An address only the owning module resolves (an Excel cell).
+    #[serde(rename_all = "camelCase")]
+    Cell { item: String, address: String },
 }
 
 /// W0.5 — character- vs paragraph-level style application for

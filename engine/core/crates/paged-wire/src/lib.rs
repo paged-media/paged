@@ -2608,6 +2608,28 @@ pub enum Mutation {
         #[serde(default)]
         date: Option<String>,
     },
+    // rides v78 (added before first consumer sync): the ADR 1055 comment threads.
+    /// Engine ADR 1055 — a comment thread on a page item, a page point, a
+    /// region of an item or a module address (not on text: that is
+    /// `InsertComment`). `threadKind` is `"comment"` (default) or `"note"`. The
+    /// reply's `createdId` is the thread's id. Undoable.
+    InsertCommentThread {
+        anchor: paged_mutate::operation::CommentAnchorSpec,
+        #[serde(default)]
+        thread_kind: Option<String>,
+        comment: paged_mutate::operation::CommentSpec,
+    },
+    /// Engine ADR 1055 — move thread `threadId` to a new anchor (also how an
+    /// orphaned thread is re-anchored). Undoable.
+    SetCommentAnchor {
+        thread_id: String,
+        anchor: paged_mutate::operation::CommentAnchorSpec,
+    },
+    /// Engine ADR 1055 — add or update an author of the people list that
+    /// comments name. Undoable.
+    SetPerson {
+        person: paged_mutate::operation::PersonSpec,
+    },
     // ── W0.5 wire-expansion ─────────────────────────────────────────
     /// W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local
     /// `bounds` `(top, left, bottom, right)`; the model resolves the
@@ -3286,6 +3308,9 @@ mutation_vocabulary! {
     ResolveComment,
     DeleteComment,
     EditComment,
+    InsertCommentThread,
+    SetCommentAnchor,
+    SetPerson,
     InsertOval,
     InsertGuide,
     MoveGuide,

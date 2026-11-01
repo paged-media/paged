@@ -182,6 +182,8 @@ pub fn build_document_from(ir: &DocumentIr, source: Option<&[u8]>) -> Result<Doc
         styles: Default::default(),
         anchors: Vec::new(),
         symbols: Vec::new(),
+        comment_threads: Vec::new(),
+        people: Vec::new(),
     };
     document.rebuild_indexes();
     Ok(document)

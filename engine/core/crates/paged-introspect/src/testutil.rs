@@ -138,5 +138,7 @@ pub fn document_with_one_textframe(self_id: &str) -> Document {
         styles: StyleSheet::default(),
         anchors: Vec::new(),
         symbols: Vec::new(),
+        comment_threads: Vec::new(),
+        people: Vec::new(),
     }
 }

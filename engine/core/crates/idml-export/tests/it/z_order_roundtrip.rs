@@ -109,6 +109,8 @@ fn open(package: &[u8]) -> Document {
         styles: Default::default(),
         anchors: Vec::new(),
         symbols: Vec::new(),
+        comment_threads: Vec::new(),
+        people: Vec::new(),
     }
 }
 

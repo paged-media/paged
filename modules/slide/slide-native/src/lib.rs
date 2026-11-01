@@ -2328,6 +2328,8 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         styles,
         anchors: Vec::new(),
         symbols: Vec::new(),
+        comment_threads: Vec::new(),
+        people: Vec::new(),
     };
     Built {
         document,

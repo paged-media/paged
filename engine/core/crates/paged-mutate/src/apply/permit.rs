@@ -427,7 +427,14 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
                 None => vec![doc(P::TextEdit)],
             }
         }
-        O::ResolveComment { .. } | O::DeleteComment { .. } | O::EditComment { .. } => {
+        O::ResolveComment { .. }
+        | O::DeleteComment { .. }
+        | O::EditComment { .. }
+        | O::InsertCommentThread { .. }
+        | O::ReplyCommentThread { .. }
+        | O::SetCommentAnchor { .. }
+        | O::SetPerson { .. }
+        | O::RestoreCommentThreads { .. } => {
             vec![doc(P::TextEdit)]
         }
         O::CreateEndnoteStory { .. } => vec![doc(P::DocumentAddItem)],

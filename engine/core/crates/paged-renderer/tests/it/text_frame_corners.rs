@@ -81,6 +81,8 @@ fn document(items: &str) -> paged_scene::Document {
         styles: paged_model::StyleSheet::default(),
         anchors: Vec::new(),
         symbols: Vec::new(),
+        comment_threads: Vec::new(),
+        people: Vec::new(),
     }
 }
 

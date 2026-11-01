@@ -5750,6 +5750,18 @@ impl CanvasModel {
                 },
             }),
             Mutation::ReplyComment { parent_id, comment } => {
+                // A reply into a document thread (engine ADR 1055): the thread
+                // is the parent's, whichever comment of it was replied to.
+                if let Some((ti, _)) = paged_mutate::thread_comment(&self.scene, parent_id) {
+                    return Some(Operation::ReplyCommentThread {
+                        thread_id: self.scene.comment_threads[ti].id.clone(),
+                        comment: paged_mutate::CommentSpec {
+                            id: comment.id.clone(),
+                            parent_id: None,
+                            ..comment.clone()
+                        },
+                    });
+                }
                 let story_id = paged_mutate::comment_story(&self.scene, parent_id)?;
                 // A reply to a reply joins its thread's root, as Word's do.
                 let root = self
@@ -5775,6 +5787,29 @@ impl CanvasModel {
                     },
                 })
             }
+            Mutation::InsertCommentThread {
+                anchor,
+                thread_kind,
+                comment,
+            } => Some(Operation::InsertCommentThread {
+                anchor: anchor.clone(),
+                thread_kind: thread_kind.clone(),
+                comment: paged_mutate::CommentSpec {
+                    id: comment
+                        .id
+                        .clone()
+                        .or_else(|| Some(paged_mutate::next_comment_id(&self.scene))),
+                    parent_id: None,
+                    ..comment.clone()
+                },
+            }),
+            Mutation::SetCommentAnchor { thread_id, anchor } => Some(Operation::SetCommentAnchor {
+                thread_id: thread_id.clone(),
+                anchor: anchor.clone(),
+            }),
+            Mutation::SetPerson { person } => Some(Operation::SetPerson {
+                person: person.clone(),
+            }),
             Mutation::ResolveComment {
                 comment_id,
                 resolved,
@@ -12195,6 +12230,7 @@ impl CanvasModel {
             .stories
             .iter()
             .flat_map(|s| crate::review::comment_rows(&s.self_id, &s.story))
+            .chain(crate::review::thread_rows(&self.scene))
             .collect()
     }
 

@@ -338,6 +338,8 @@ pub fn import_idml_archive(archive: &SourceArchive) -> Result<paged_scene::Docum
         styles,
         anchors: Vec::new(),
         symbols: Vec::new(),
+        comment_threads: Vec::new(),
+        people: Vec::new(),
     };
     restore_patterns(&mut document);
     document.rebuild_indexes();

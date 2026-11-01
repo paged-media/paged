@@ -111,6 +111,25 @@ pub struct Comment {
     /// Word's "Resolve" (`w15:done`).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub resolved: bool,
+    /// Engine ADR 1055 — when the comment was last edited (ISO 8601, to the
+    /// millisecond when the format gives it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified: Option<String>,
+    /// The author as a [`crate::Person::id`] of the document's people list;
+    /// `author` stays the display name the format wrote.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub person: Option<String>,
+    /// People named in the text (`@mentions`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mentions: Vec<crate::Mention>,
+    /// A task attached to the comment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<crate::CommentTask>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<crate::Reaction>,
+    /// A PDF annotation's review state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_state: Option<crate::ReviewState>,
 }
 
 /// How tracked changes and comments show (Word's Review ▸ Display for

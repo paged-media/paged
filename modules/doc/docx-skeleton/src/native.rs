@@ -274,6 +274,8 @@ pub fn skeleton_document_with(
         styles: styles(),
         anchors: Vec::new(),
         symbols: Vec::new(),
+        comment_threads: Vec::new(),
+        people: Vec::new(),
     }
 }
 

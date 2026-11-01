@@ -107,6 +107,14 @@ pub struct Document {
     /// native encoding when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub symbols: Vec<paged_model::SymbolDefinition>,
+    /// Engine ADR 1055 — the comment threads that are not on a text range
+    /// (those are [`paged_model::Story::comments`]): on a page item, a page
+    /// point, a region or a module address.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comment_threads: Vec<paged_model::CommentThread>,
+    /// Engine ADR 1055 — the authors comments name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub people: Vec<paged_model::Person>,
 }
 
 /// A spread plus the path it came from in the container.

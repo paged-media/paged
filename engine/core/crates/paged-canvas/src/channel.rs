@@ -4329,6 +4329,25 @@ pub struct CommentSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
     pub resolved: bool,
+    /// Engine ADR 1055 — the thread this comment belongs to, when the thread
+    /// is not on a text range (then `storyId` is empty and `anchor` says
+    /// what it is attached to).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<paged_mutate::operation::CommentAnchorSpec>,
+    /// `"comment"` or `"note"` (document threads).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_kind: Option<String>,
+    /// The author's id in the people list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub person: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified: Option<String>,
+    /// True while the thread's anchor target is gone and the thread waits to
+    /// be re-anchored or deleted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub orphaned: bool,
 }
 
 /// Engine ADR 1040 — a tracked change as the content read names it.

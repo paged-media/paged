@@ -31,6 +31,7 @@
 //! compile unchanged.
 
 pub mod appearance;
+pub mod comments;
 pub mod content_control;
 pub mod effect_stack;
 pub mod fitting;
@@ -45,6 +46,10 @@ pub mod script;
 pub mod vector_effect;
 pub mod winding;
 pub mod word_field;
+pub use comments::{
+    CommentAnchor, CommentTask, CommentThread, Mention, Person, Reaction, ReviewState, SourceBlob,
+    ThreadKind,
+};
 pub use content_control::{ContentControl, ContentControlKind, ListItem};
 pub use review::{
     author_slot, review_color, review_color_id, review_highlight_id, Change, ChangeKind, Comment,

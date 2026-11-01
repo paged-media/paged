@@ -407,6 +407,12 @@ pub(crate) fn comment_rows(story_id: &str, story: &paged_model::Story) -> Vec<Co
             initials: c.initials.clone(),
             date: c.date.clone(),
             resolved: c.resolved,
+            thread_id: None,
+            anchor: None,
+            thread_kind: None,
+            person: c.person.clone(),
+            modified: c.modified.clone(),
+            orphaned: false,
         }
     };
     let mut out = Vec::new();
@@ -418,6 +424,67 @@ pub(crate) fn comment_rows(story_id: &str, story: &paged_model::Story) -> Vec<Co
             .filter(|c| c.parent.as_deref() == Some(root.id.as_str()))
         {
             out.push(row(reply, &root.id));
+        }
+    }
+    out
+}
+
+/// The anchor of a document thread as the wire names it.
+fn anchor_spec(a: &paged_model::CommentAnchor) -> paged_mutate::operation::CommentAnchorSpec {
+    use paged_model::CommentAnchor as A;
+    use paged_mutate::operation::CommentAnchorSpec as S;
+    match a {
+        A::Item { item, at } => S::Item {
+            item: item.clone(),
+            at: *at,
+        },
+        A::Page { page, at } => S::Page {
+            page: page.clone(),
+            at: *at,
+        },
+        A::Region { item, rect } => S::Region {
+            item: item.clone(),
+            rect: *rect,
+        },
+        A::Cell { item, address } => S::Cell {
+            item: item.clone(),
+            address: address.clone(),
+        },
+    }
+}
+
+/// The comments of the document's threads (engine ADR 1055): each thread's root
+/// followed by its replies, the thread's anchor on every row.
+pub(crate) fn thread_rows(doc: &paged_scene::Document) -> Vec<CommentSummary> {
+    let mut out = Vec::new();
+    for t in &doc.comment_threads {
+        let resolved = t.is_resolved();
+        for c in &t.comments {
+            out.push(CommentSummary {
+                id: c.id.clone(),
+                story_id: String::new(),
+                parent_id: c.parent.clone(),
+                start: None,
+                end: None,
+                anchor_text: String::new(),
+                text: c.text.clone(),
+                author: c.author.clone(),
+                initials: c.initials.clone(),
+                date: c.date.clone(),
+                resolved,
+                thread_id: Some(t.id.clone()),
+                anchor: t.anchor.as_ref().map(anchor_spec),
+                thread_kind: Some(
+                    match t.kind {
+                        paged_model::ThreadKind::Comment => "comment",
+                        paged_model::ThreadKind::Note => "note",
+                    }
+                    .to_string(),
+                ),
+                person: c.person.clone(),
+                modified: c.modified.clone(),
+                orphaned: t.anchor.is_none() || t.orphaned.is_some(),
+            });
         }
     }
     out

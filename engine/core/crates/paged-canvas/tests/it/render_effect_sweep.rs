@@ -3975,6 +3975,57 @@ fn style_cases(c: &mut Vec<Case>) {
             }
         },
     ));
+    fn seed_thread(m: &mut CanvasModel) {
+        m.apply_mutation(&Mutation::InsertCommentThread {
+            anchor: paged_mutate::operation::CommentAnchorSpec::Item {
+                item: "u1".into(),
+                at: None,
+            },
+            thread_kind: None,
+            comment: sweep_comment("t1"),
+        })
+        .expect("seed a comment thread");
+    }
+    c.push(inert(
+        "InsertCommentThread",
+        "styles-cascade",
+        "a thread on an item, a page point or a module address is drawn by the host's pins and panel, not on the page",
+        |_| Mutation::InsertCommentThread {
+            anchor: paged_mutate::operation::CommentAnchorSpec::Item {
+                item: "u1".into(),
+                at: None,
+            },
+            thread_kind: None,
+            comment: sweep_comment("t1"),
+        },
+    ));
+    c.push(inert(
+        "SetCommentAnchor",
+        "styles-cascade",
+        "moving a thread moves its host pin, not a mark on the page",
+        |m| {
+            seed_thread(m);
+            Mutation::SetCommentAnchor {
+                thread_id: "t1".into(),
+                anchor: paged_mutate::operation::CommentAnchorSpec::Page {
+                    page: "p1".into(),
+                    at: [10.0, 10.0],
+                },
+            }
+        },
+    ));
+    c.push(inert(
+        "SetPerson",
+        "styles-cascade",
+        "an author of the people list is shown in the host's panel, never on the page",
+        |_| Mutation::SetPerson {
+            person: paged_mutate::operation::PersonSpec {
+                id: "p-ann".into(),
+                name: "Ann Author".into(),
+                ..Default::default()
+            },
+        },
+    ));
     c.push(paints("UpdateFields", "styles-cascade", |m| {
         let story_id = m.scene().stories[0].self_id.clone();
         m.apply_mutation(&Mutation::InsertField {

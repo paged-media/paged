@@ -1,6 +1,7 @@
 # ADR 1055 — One comment model for every module, compatible with Adobe and Microsoft review
 
-- **Status:** Proposed 2026-11-01. Extends [ADR 1020](1020-range-comments-with-threads.md) (range
+- **Status:** Accepted 2026-11-01; the engine part is built (below, "Built so far"), the format readers and
+  writers, the host panel and the door follow. Extends [ADR 1020](1020-range-comments-with-threads.md) (range
   comments with threads) and [ADR 172](172-editorial-notes.md) (InDesign notes). Part of the
   capability layering of PM-0014 and PM-0017.
 - **Scope:** `paged-model` (`review.rs`), `paged-mutate`, `paged-wire`, `paged-canvas` (the
@@ -137,6 +138,28 @@ Each reader and writer lives with the format's owner; all of them read and write
   catalog are regenerated.
 - The model is larger than any one format needs. A format that cannot carry a field reports it.
 - plugin-sdk gains a public door; its version moves as the contract rule says.
+
+## Built so far
+
+Rides protocol v78 (added before its first consumer sync; governance rule 4).
+
+- `paged-model` (`comments.rs`): `Person`, `CommentAnchor` (`Item`, `Page`, `Region`, `Cell`),
+  `CommentThread`, `ThreadKind`, `SourceBlob`, `ReviewState`, `CommentTask`, `Mention`,
+  `Reaction`; `Comment` gains `modified`, `person`, `mentions`, `task`, `reactions`,
+  `review_state`. `Document` (paged-scene) holds `comment_threads` and `people`, absent from the
+  native encoding when empty, so older documents read unchanged.
+- `paged-mutate` (`apply/threads.rs`): `InsertCommentThread`, `ReplyCommentThread`,
+  `SetCommentAnchor`, `SetPerson`, and the inverse-only `RestoreCommentThreads`, which carries
+  both lists as they were. ADR 1020's `ResolveComment`, `EditComment` and `DeleteComment` find a
+  comment in the stories first and in the thread store second; ids are minted past both stores.
+  A reply to a resolved thread reopens it; a note takes no replies.
+- `paged-wire`: the mutations `insertCommentThread` (`threadKind`, because `kind` is the tag),
+  `setCommentAnchor`, `setPerson`; `replyComment` into a document thread lowers to
+  `ReplyCommentThread`. The schema, the introspect catalog and the CLI surface are regenerated.
+- `paged-canvas`: the `comments` collection lists thread comments after the text comments, with
+  `threadId`, `anchor`, `threadKind`, `person`, `modified` and `orphaned` on every row.
+- Not yet: orphaning when an anchor's target is deleted, the format readers and writers, the
+  host panel and pins, `comments@1`, the CLI verbs, PDF annotations.
 
 ## Verification
 

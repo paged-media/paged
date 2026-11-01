@@ -147,6 +147,7 @@ mod template_fields;
 mod template_policy_wire;
 mod template_styled_alternates;
 mod text_variable_authoring;
+mod thread_ops;
 mod toc_ops;
 mod tracked_change_ops;
 mod translate_gesture;

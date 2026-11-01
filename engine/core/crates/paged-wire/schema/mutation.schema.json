@@ -4962,6 +4962,96 @@
           ]
         },
         {
+          "description": "Engine ADR 1055 — a comment thread on a page item, a page point, a\nregion of an item or a module address (not on text: that is\n`InsertComment`). `threadKind` is `\"comment\"` (default) or `\"note\"`. The\nreply's `createdId` is the thread's id. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "insertCommentThread"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "anchor": {
+                  "$ref": "#/$defs/CommentAnchorSpec"
+                },
+                "threadKind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "comment": {
+                  "$ref": "#/$defs/CommentSpec"
+                }
+              },
+              "required": [
+                "anchor",
+                "comment"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1055 — move thread `threadId` to a new anchor (also how an\norphaned thread is re-anchored). Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setCommentAnchor"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "threadId": {
+                  "type": "string"
+                },
+                "anchor": {
+                  "$ref": "#/$defs/CommentAnchorSpec"
+                }
+              },
+              "required": [
+                "threadId",
+                "anchor"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1055 — add or update an author of the people list that\ncomments name. Undoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setPerson"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "person": {
+                  "$ref": "#/$defs/PersonSpec"
+                }
+              },
+              "required": [
+                "person"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local\n`bounds` `(top, left, bottom, right)`; the model resolves the\nhost spread and mints the self id (mirrors `InsertFrame`).",
           "type": "object",
           "properties": {
@@ -13070,8 +13160,281 @@
             "null"
           ],
           "default": null
+        },
+        "modified": {
+          "description": "Engine ADR 1055 — when the comment was last edited (ISO 8601).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "person": {
+          "description": "The author as an id of the people list.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "mentions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MentionSpec"
+          },
+          "default": []
+        },
+        "task": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommentTaskSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReactionSpec"
+          },
+          "default": []
+        },
+        "reviewState": {
+          "description": "A PDF review state: `accepted`, `rejected`, `cancelled`, `completed`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       }
+    },
+    "MentionSpec": {
+      "description": "Engine ADR 1055 — a mention of a person inside a comment's text.",
+      "type": "object",
+      "properties": {
+        "person": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "person",
+        "start",
+        "end"
+      ]
+    },
+    "CommentTaskSpec": {
+      "description": "Engine ADR 1055 — a task attached to a comment.",
+      "type": "object",
+      "properties": {
+        "assignee": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "due": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "minimum": 0,
+          "maximum": 255,
+          "default": null
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "ReactionSpec": {
+      "description": "Engine ADR 1055 — a reaction to a comment.",
+      "type": "object",
+      "properties": {
+        "person": {
+          "type": "string"
+        },
+        "emoji": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "person",
+        "emoji"
+      ]
+    },
+    "CommentAnchorSpec": {
+      "description": "Engine ADR 1055 — what a comment thread is attached to, on the wire.",
+      "oneOf": [
+        {
+          "description": "A page item, optionally at a point in the item's space.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "item"
+            },
+            "item": {
+              "type": "string"
+            },
+            "at": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "minItems": 2,
+              "maxItems": 2,
+              "default": null
+            }
+          },
+          "required": [
+            "kind",
+            "item"
+          ]
+        },
+        {
+          "description": "A point on a page or artboard.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "page"
+            },
+            "page": {
+              "type": "string"
+            },
+            "at": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "required": [
+            "kind",
+            "page",
+            "at"
+          ]
+        },
+        {
+          "description": "A rectangle `[x, y, width, height]` of an item.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "region"
+            },
+            "item": {
+              "type": "string"
+            },
+            "rect": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "minItems": 4,
+              "maxItems": 4
+            }
+          },
+          "required": [
+            "kind",
+            "item",
+            "rect"
+          ]
+        },
+        {
+          "description": "An address only the owning module resolves (an Excel cell).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "cell"
+            },
+            "item": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "item",
+            "address"
+          ]
+        }
+      ]
+    },
+    "PersonSpec": {
+      "description": "Engine ADR 1055 — an author of the people list.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "default": ""
+        },
+        "initials": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "providerId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id"
+      ]
     },
     "GuideOrientationSpec": {
       "description": "W0.5 — wire mirror of `paged_model::GuideOrientation`\n(which is `Deserialize` but lives in the parse crate; kept here so\nthe operation wire type doesn't depend on the parser's\nserialization shape).",

@@ -72,6 +72,7 @@ pub use apply::apply;
 pub use apply::apply_checked;
 pub use apply::is_locked;
 pub use apply::review::{comment_story, next_change_id, next_comment_id, resolve_changes};
+pub use apply::threads::find as thread_comment;
 pub use apply::{duplicate_demand, duplicate_roots, DuplicateDemand};
 pub use apply::{
     expand_symbols_for_interchange, restore_symbols_from_labels, symbol_break_demand,
@@ -86,12 +87,13 @@ pub use error::OperationError;
 pub use history::{History, DEFAULT_HISTORY_CAPACITY};
 pub use notify::Notifier;
 pub use operation::{
-    AppliedOperation, ChangeSpec, ChangeSpecKind, ColorGroupSpec, CommentSpec, FaceSelectMode,
-    FieldKind, FreeformPointSpec, GradientSpec, GradientStopSpec, GroupSpec, GuideOrientationSpec,
-    InvalidationHint, MeshColorSpec, MeshFillSpec, MeshGridSpec, MeshNodeSpec, NestedParent,
-    NodeId, NodeSpec, NumberingLevelSpec, NumberingListSpec, OpacityMaskMode, Operation,
-    ParagraphListState, PathPointAddress, PathPointRole, PathfinderKind, PathfinderRegionVerb,
-    PatternColorSpec, PatternItemSpec, PatternSpec, PropertyPath, StopColorSpec, StyleCollection,
+    AppliedOperation, ChangeSpec, ChangeSpecKind, ColorGroupSpec, CommentAnchorSpec, CommentSpec,
+    CommentTaskSpec, FaceSelectMode, FieldKind, FreeformPointSpec, GradientSpec, GradientStopSpec,
+    GroupSpec, GuideOrientationSpec, InvalidationHint, MentionSpec, MeshColorSpec, MeshFillSpec,
+    MeshGridSpec, MeshNodeSpec, NestedParent, NodeId, NodeSpec, NumberingLevelSpec,
+    NumberingListSpec, OpacityMaskMode, Operation, ParagraphListState, PathPointAddress,
+    PathPointRole, PathfinderKind, PathfinderRegionVerb, PatternColorSpec, PatternItemSpec,
+    PatternSpec, PersonSpec, PropertyPath, ReactionSpec, StopColorSpec, StyleCollection,
     StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
@@ -331,6 +333,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         }
     }
 
@@ -1943,6 +1947,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         }
     }
 
@@ -2143,6 +2149,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         }
     }
 
@@ -2260,6 +2268,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         };
         Project::new(doc)
     }
@@ -2430,6 +2440,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         };
         let mut project = Project::new(doc);
         let node = NodeId::GraphicLine("GraphicLine/l1".to_string());
@@ -2839,6 +2851,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         }
     }
 
@@ -3202,6 +3216,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         }
     }
 
@@ -4092,6 +4108,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         });
         // Two rectangles: A = [0..20, 0..20], B = [10..30, 10..30].
         // A \ B is an L-shape of 6 corner vertices.
@@ -4677,6 +4695,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         });
         // Insert a fresh rectangle (the InsertNode arm fills in the
         // full struct including default `end_cap: None`).
@@ -4740,6 +4760,8 @@ mod tests {
             styles: StyleSheet::default(),
             anchors: Vec::new(),
             symbols: Vec::new(),
+            comment_threads: Vec::new(),
+            people: Vec::new(),
         });
         project
             .apply(Operation::InsertNode {
@@ -8163,6 +8185,8 @@ mod tests {
                 styles: StyleSheet::default(),
                 anchors: Vec::new(),
                 symbols: Vec::new(),
+                comment_threads: Vec::new(),
+                people: Vec::new(),
             }
         }
 
@@ -9123,6 +9147,8 @@ mod tests {
                 styles: StyleSheet::default(),
                 anchors: Vec::new(),
                 symbols: Vec::new(),
+                comment_threads: Vec::new(),
+                people: Vec::new(),
             }
         }
 

@@ -106,11 +106,7 @@ pub fn next_change_id(doc: &Document) -> String {
 
 /// A comment id no comment of the document carries yet.
 pub fn next_comment_id(doc: &Document) -> String {
-    next_numeric(
-        doc.stories
-            .iter()
-            .flat_map(|s| s.story.comments.iter().map(|c| c.id.as_str())),
-    )
+    super::threads::next_id(doc)
 }
 
 /// The story holding comment `id`.
@@ -661,15 +657,7 @@ fn capture_review(doc: &Document, si: usize, with_text: bool) -> Operation {
 }
 
 fn comment_of(spec: &CommentSpec, id: String) -> Comment {
-    Comment {
-        id,
-        parent: spec.parent_id.clone(),
-        author: spec.author.clone(),
-        initials: spec.initials.clone(),
-        date: spec.date.clone(),
-        text: spec.text.replace("\r\n", "\n").replace('\r', "\n"),
-        resolved: spec.resolved,
-    }
+    super::threads::comment_from(spec, id)
 }
 
 pub(super) fn apply_insert_comment(
