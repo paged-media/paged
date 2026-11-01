@@ -278,6 +278,15 @@ fn apply_run_changes(
             }
             "characterBaselineShift" => to.baseline_half_pts = new.baseline_half_pts,
             "characterTracking" => to.spacing_twips = new.spacing_twips,
+            // Doc ADR 620 — script slots and direction.
+            "characterEastAsianFont" => to.font_east_asia = new.font_east_asia.clone(),
+            "characterComplexFont" => to.font_cs = new.font_cs.clone(),
+            "characterComplexFontSize" => to.size_cs_half_pts = new.size_cs_half_pts,
+            "characterComplexBold" => to.bold_cs = new.bold_cs,
+            "characterComplexItalic" => to.italic_cs = new.italic_cs,
+            "characterComplexScript" => to.complex_script = new.complex_script,
+            "characterDirection" => to.rtl = new.rtl,
+            "characterFontHint" => to.font_hint = new.font_hint.clone(),
             _ => {}
         }
     }
@@ -307,6 +316,7 @@ fn apply_para_changes(to: &mut ParaProps, changed: &[(String, Option<PropValue>)
             "paragraphSpaceBefore" => to.space_before = new.space_before,
             "paragraphSpaceAfter" => to.space_after = new.space_after,
             "paragraphKeepLinesTogether" => to.keep_lines = new.keep_lines.or(Some(false)),
+            "paragraphDirection" => to.bidi = new.bidi,
             _ => {}
         }
     }

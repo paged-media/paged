@@ -3437,6 +3437,45 @@ const REVIEW_PROBES: Probe[] = [
   },
 ];
 
+// ── content controls (engine ADR 1052), on `text` ────────────────
+// Controls come from a Word import and no IDML fixture holds one, so each
+// probe names a control that is not there: the engine's refusal is the
+// classification (a real control is covered by the engine's script tests).
+const CONTENT_CONTROL_PROBES: Probe[] = [
+  {
+    op: "setContentControlValue",
+    build: async ({ fx }) =>
+      fx.firstStory && {
+        op: "setContentControlValue",
+        args: {
+          storyId: fx.firstStory.selfId,
+          controlId: "probe-control",
+          value: "Probe",
+        },
+      },
+  },
+  {
+    op: "toggleContentControl",
+    build: async ({ fx }) =>
+      fx.firstStory && {
+        op: "toggleContentControl",
+        args: { storyId: fx.firstStory.selfId, controlId: "probe-control" },
+      },
+  },
+  {
+    op: "chooseContentControlItem",
+    build: async ({ fx }) =>
+      fx.firstStory && {
+        op: "chooseContentControlItem",
+        args: {
+          storyId: fx.firstStory.selfId,
+          controlId: "probe-control",
+          index: 0,
+        },
+      },
+  },
+];
+
 // ── a page item's hyperlink (engine ADR 1026), on `geometry` ─────
 const ITEM_LINK_PROBES: Probe[] = [
   {
@@ -3612,6 +3651,7 @@ test("AC-E2E-CAPS — every wire op's engine support matches the table", async (
 
   const reviewFx = await loadFixture(page, "text");
   await runProbes(page, REVIEW_PROBES, reviewFx, results);
+  await runProbes(page, CONTENT_CONTROL_PROBES, reviewFx, results);
 
   const mastersFx = await loadFixture(page, "masters");
   await runProbes(page, MASTER_PROBES, mastersFx, results);

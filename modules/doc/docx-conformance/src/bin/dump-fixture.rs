@@ -63,6 +63,8 @@ fn main() {
         "first-fit" => docx_conformance::first_fit_docx(),
         "first-fit-cases" => docx_conformance::first_fit_cases_json().into_bytes(),
         "objects-floats" => docx_conformance::objects_floats_docx(),
+        "w4b-scripts" => docx_conformance::w4b_scripts_docx(),
+        "w4b-controls" => docx_conformance::w4b_controls_docx(),
         "objects-text-boxes" => docx_conformance::objects_text_boxes_docx(),
         "objects-nested-tables" => docx_conformance::objects_nested_tables_docx(),
         "objects-table-look" => docx_conformance::objects_table_look_docx(),

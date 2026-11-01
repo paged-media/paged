@@ -505,14 +505,15 @@ fn paged_inspect_story_range_returns_character_entries() {
     // ADR 158 + the hyphenation zone, the applied numbering list and the
     // applied conditions, written and now read too (R1) = 64 entries; + the
     // five character additions and six shading / border paths of engine
-    // ADR 1018 = 75.
-    assert!(entries_line.contains("75"), "got: {entries_line}");
+    // ADR 1018 = 75; + the paragraph direction and eight script paths of
+    // engine ADR 1051 and the content control of engine ADR 1052 = 85.
+    assert!(entries_line.contains("85"), "got: {entries_line}");
     let path_lines: Vec<&String> = result
         .output
         .iter()
         .filter(|l| l.starts_with("[log] path"))
         .collect();
-    assert_eq!(path_lines.len(), 75, "got: {:?}", path_lines);
+    assert_eq!(path_lines.len(), 85, "got: {:?}", path_lines);
     for needle in [
         "characterFontSize",
         "characterLeading",
