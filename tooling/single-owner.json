@@ -171,6 +171,34 @@
         "modules/sheet/sheet-js/src/core/annotations.rs",
         "modules/sheet/sheet-xlsx/src/parts/protection.rs"
       ]
+    },
+    {
+      "name": "bezier-kappa",
+      "description": "no owner yet: arcs and ellipses come from kurbo / paged-geom (capability register, geometry)",
+      "owner": [],
+      "patterns": ["0?\\.55228"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "baseline": [
+        "engine/core/crates/paged-renderer/src/pipeline/shapes.rs",
+        "modules/draw/packages/draw-bundle/test/oracle/perspective-grid.spec.ts",
+        "modules/draw/packages/draw-bundle/test/roundtrip/author.ts",
+        "modules/draw/packages/draw-geometry/test/bench-data.ts",
+        "modules/draw/packages/draw-geometry/test/polygon.spec.ts",
+        "modules/draw/packages/draw-geometry/test/warp/liquify.spec.ts",
+        "modules/web/packages/web-bundle/src/bake-plan.ts",
+        "modules/web/packages/web-bundle/test/bake-fidelity.spec.ts"
+      ]
+    },
+    {
+      "name": "sha2-constants",
+      "description": "hash with the sha2 crate in Rust and Web Crypto / platform/shared/helpers in TypeScript",
+      "owner": [],
+      "patterns": ["0x428a2f98"],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "baseline": [
+        "modules/image/image-conformance/src/abr_corpus/sha256.rs",
+        "modules/sheet/sheet-xlsx/src/parts/protection.rs"
+      ]
     }
   ]
 }
