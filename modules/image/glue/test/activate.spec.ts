@@ -320,6 +320,8 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.saveSelection",
       "media.paged.image.command.loadSelection",
       "media.paged.image.command.makeWorkPath",
+      "media.paged.image.command.selectSubject",
+      "media.paged.image.command.selectSky",
       "media.paged.image.command.fillPath",
       "media.paged.image.command.strokePath",
       "media.paged.image.command.saveWorkPath",
@@ -417,6 +419,7 @@ describe("imageBundle.activate", () => {
       // selection slot), WP5.5.
       "media.paged.image.tool.magneticLasso",
       "media.paged.image.tool.refineEdge",
+      "media.paged.image.tool.objectSelection",
       // Vectors inside the image (WP5.11): the pen slot, the path
       // selection slot and the shape slot.
       "media.paged.image.tool.pen",

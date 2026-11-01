@@ -56,7 +56,7 @@ import {
 /** Wrap a closed image-px polyline as a DASHED ToolPreviewPath (straight
  *  segments: handles collapse onto the anchors) — the marching-ants
  *  overlay signal. */
-function dashedPath(
+export function dashedPath(
   pageId: string,
   points: Array<[number, number]>,
 ): ToolPreviewPath {

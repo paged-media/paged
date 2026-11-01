@@ -58,6 +58,9 @@ export const MK = defineMessages("image.masking", {
  *  trimap (0 background, 128 unknown, 255 foreground), an alpha per
  *  pixel, or null to leave the classical solve in charge. */
 export interface MattingProvider {
+  /** Whether a model answers right now (the hint the panel shows); absent
+   *  means it always does. */
+  available?(): boolean;
   solve(
     rgba: Uint8Array,
     width: number,
@@ -662,7 +665,13 @@ export function createMaskingController(deps: MaskingDeps): MaskingController {
         brushRadius: 10,
         alpha: null,
       };
-      deps.setStatus(t(matting ? MK.refineOpen : MK.matting));
+      deps.setStatus(
+        t(
+          matting && (matting.available?.() ?? true)
+            ? MK.refineOpen
+            : MK.matting,
+        ),
+      );
       try {
         e.viewSet({ kind: "matte", mode: "overlay", opacity: 0.5 });
         ui.view = { kind: "matte", mode: "overlay", opacity: 0.5 };

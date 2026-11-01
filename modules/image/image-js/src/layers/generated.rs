@@ -153,7 +153,12 @@ mod tests {
         let mut s = LayerStack::from_image(4, 2, px(4, 2, 200)).expect("stack");
         let mask = vec![0, 255, 255, 0, 0, 255, 255, 0];
         let at = s
-            .add_generated("Generative Fill", "a red door", px(4, 2, 9), Some(mask.clone()))
+            .add_generated(
+                "Generative Fill",
+                "a red door",
+                px(4, 2, 9),
+                Some(mask.clone()),
+            )
             .expect("add");
         assert_eq!((s.len(), s.active_index(), at), (2, 1, 1));
         let l = &s.layers()[at];
@@ -165,10 +170,13 @@ mod tests {
         assert!(s.undo().is_some());
         assert_eq!(s.len(), 1, "one undo takes the layer and its mask back");
         // Without a mask: Generate Image.
-        s.add_generated("Generate Image", "g", px(4, 2, 1), None).expect("add");
+        s.add_generated("Generate Image", "g", px(4, 2, 1), None)
+            .expect("add");
         assert!(s.layers()[1].mask.is_none());
         // A mis-sized mask or buffer changes nothing.
-        assert!(s.add_generated("x", "x", px(4, 2, 1), Some(vec![0; 3])).is_err());
+        assert!(s
+            .add_generated("x", "x", px(4, 2, 1), Some(vec![0; 3]))
+            .is_err());
         assert!(s.add_generated("x", "x", px(2, 2, 1), None).is_err());
         assert_eq!(s.len(), 2);
     }
@@ -182,16 +190,36 @@ mod tests {
         // x 0..2 and the new border is x 2..4.
         let mask: Vec<u8> = (0..8).map(|i| if i % 4 >= 2 { 255 } else { 0 }).collect();
         let at = s
-            .expand_generated("Generative Expand", "Expand", 4, 2, 0, 1, px(4, 2, 7), mask.clone())
+            .expand_generated(
+                "Generative Expand",
+                "Expand",
+                4,
+                2,
+                0,
+                1,
+                px(4, 2, 7),
+                mask.clone(),
+            )
             .expect("expand");
         assert_eq!((s.width(), s.height(), s.len(), at), (4, 2, 2, 1));
         let bg = s.layers()[0].rgba.to_rgba8();
         assert_eq!(&bg[0..4], &[200, 200, 200, 200]);
-        assert_eq!(bg[2 * 4 + 3], 0, "the added canvas is transparent on the old layer");
-        assert_eq!(s.layers()[1].mask.as_ref().expect("mask").canvas().data(), &mask[..]);
+        assert_eq!(
+            bg[2 * 4 + 3],
+            0,
+            "the added canvas is transparent on the old layer"
+        );
+        assert_eq!(
+            s.layers()[1].mask.as_ref().expect("mask").canvas().data(),
+            &mask[..]
+        );
         assert_eq!(s.undo_label(), Some("Generative Expand"));
         assert!(s.undo().is_some());
-        assert_eq!((s.width(), s.height(), s.len()), (2, 2, 1), "one undo restores both");
+        assert_eq!(
+            (s.width(), s.height(), s.len()),
+            (2, 2, 1),
+            "one undo restores both"
+        );
         // Not a growth: refused, nothing changes.
         assert!(s
             .expand_generated("x", "x", 2, 2, 1, 1, px(2, 2, 0), vec![0; 4])
@@ -206,9 +234,17 @@ mod tests {
     #[allow(non_snake_case)]
     fn remove_background_sets_the_layer_mask_in_one_step__feat__image_ml_remove_background() {
         let mut s = LayerStack::from_image(2, 1, px(2, 1, 200)).expect("stack");
-        s.set_generated_mask("Remove Background", 0, vec![255, 0]).expect("mask");
-        assert_eq!(s.layers()[0].mask.as_ref().expect("mask").canvas().data(), &[255, 0]);
-        assert_eq!(&*s.layers()[0].rgba.to_rgba8(), &px(2, 1, 200)[..], "pixels untouched");
+        s.set_generated_mask("Remove Background", 0, vec![255, 0])
+            .expect("mask");
+        assert_eq!(
+            s.layers()[0].mask.as_ref().expect("mask").canvas().data(),
+            &[255, 0]
+        );
+        assert_eq!(
+            &*s.layers()[0].rgba.to_rgba8(),
+            &px(2, 1, 200)[..],
+            "pixels untouched"
+        );
         assert!(s.undo().is_some());
         assert!(s.layers()[0].mask.is_none());
         assert!(s.set_generated_mask("x", 0, vec![1]).is_err());

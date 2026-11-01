@@ -33,6 +33,7 @@ interface HandleWasm {
 }
 
 export interface MlWasm {
+  ml_select(label: string, bytes: Uint8Array, mode: number): void;
   ml_layer_add(
     handle: number,
     label: string,
@@ -67,6 +68,9 @@ export interface MlWasm {
 
 /** The facade the session calls. */
 export interface MlEngine<Info> {
+  /** The selection from coverage under `mode` (a `SelectionMode` code),
+   *  ONE undo step labelled `label`. */
+  mlSelect(label: string, coverage: Uint8Array, mode: number): void;
   /** A new pixel layer above the active one (canvas-extent RGBA8), with
    *  `mask` (canvas-extent coverage) as its layer mask when given. */
   mlLayerAdd(
@@ -110,6 +114,7 @@ export function wrapMl<Info>(
   info: (h: HandleWasm) => Info,
 ): MlEngine<Info> {
   return {
+    mlSelect: (label, coverage, mode) => wasm.ml_select(label, coverage, mode),
     async mlLayerAdd(handle, label, name, rgba, mask) {
       return info(
         await wasm.ml_layer_add(handle, label, name, rgba, mask ?? EMPTY),

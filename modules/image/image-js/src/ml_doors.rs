@@ -40,9 +40,20 @@ use image_core::Region;
 use wasm_bindgen::prelude::*;
 
 use super::{
-    ingest_err, read_depth_reduced, read_display, set_image_extent, set_image_pixels,
-    with_stack_async, DecodedHandle, GPU, LAYERS, SELECTION,
+    decode_mode, ingest_err, note_selection, read_depth_reduced, read_display, set_image_extent, set_image_pixels,
+    with_selection, with_stack_async, DecodedHandle, GPU, LAYERS, SELECTION,
 };
+
+/// A selection from coverage bytes (the image's pixel count) under `mode`,
+/// recorded as ONE undo step labelled `label` (Select Subject, Object
+/// Selection): the model's mask becomes an ordinary selection.
+#[wasm_bindgen]
+pub fn ml_select(label: String, bytes: &[u8], mode: u32) -> Result<(), JsValue> {
+    let mode = decode_mode(mode)?;
+    with_selection(|s| s.apply_coverage(bytes, mode))?;
+    note_selection(Some(&label), None);
+    Ok(())
+}
 
 fn bound(handle: u32) -> Result<(), JsValue> {
     let ok = LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) == Some(handle);

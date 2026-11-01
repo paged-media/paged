@@ -59,6 +59,7 @@ import type {
   IndexedPalette,
   ProofTarget,
 } from "./mode-engine";
+import { makeMlFeatures, type MlFeatures } from "./ml-features";
 import {
   initialRetouch,
   makeRetouch,
@@ -687,6 +688,9 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
    *  Select and Mask, Quick Mask, channels, paths, the display view
    *  (image ADR 470). */
   masking(): MaskingController;
+  /** The ML features over the host's ML doors: Select Subject, Select
+   *  Sky, Object Selection and the matting hook (image ADR 485). */
+  ml(): MlFeatures;
   /** Vectors inside the image: the paths the Pen and the shape tools
    *  draw, vector masks and shape layers (image ADR 476). */
   vectors(): VectorController;
@@ -4179,6 +4183,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     wand: () => state.wand,
   });
   const masking = maskingRef;
+  // WP8.2 (image ADR 485): the ML features. The matting hook is given to
+  // Select and Mask once; it asks the host's door on every call.
+  const mlFeatures = makeMlFeatures({
+    host,
+    state: () => state,
+    engine: () => engine,
+    emit,
+    setStatus,
+    refreshSelection: () => api.refreshSelection(),
+  });
+  masking.setMattingProvider(mlFeatures.mattingProvider());
   // ── CURVES ▸ TARGETED ADJUSTMENT (I-55) ─────────────────────────────
   const curvesTarget: {
     armed: boolean;
@@ -4399,6 +4414,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     ...presetOps,
     ...retouch,
     masking: () => masking,
+    ml: () => mlFeatures,
     vectors: () => vectors,
     workspace: () => workspace,
     smart: () => smart,

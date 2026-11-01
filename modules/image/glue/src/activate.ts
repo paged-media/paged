@@ -55,6 +55,7 @@ import { createImageSession } from "./session";
 import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { contributeMasking } from "./masking-contrib";
+import { contributeMl } from "./ml-contrib";
 import { contributeMode } from "./mode-contrib";
 import { BG, type BlurKind } from "./filters-blur-gallery";
 import {
@@ -2068,6 +2069,8 @@ export function activate(host: BundleHost): BundleHandle {
   // Mask, Quick Mask, Grow / Similar, Focus Area, channels and paths,
   // the Magnetic Lasso and the Refine Edge brush.
   const maskingSub = contributeMasking(host, session, command, PANEL_ID);
+  // WP8.2 (image ADR 485): Select Subject, Select Sky, Object Selection.
+  const mlSub = contributeMl(host, session, command);
   // Vectors inside the image (ADR 476): the pen and shape tools, the
   // Paths panel's verbs, Layer ▸ Vector Mask.
   const vectorsSub = contributeVectors(host, session, command, PANEL_ID);
@@ -2452,6 +2455,7 @@ export function activate(host: BundleHost): BundleHandle {
       retouchSettingsSub?.dispose();
       menuSub.dispose();
       maskingSub.dispose();
+      mlSub.dispose();
       modeSub.dispose();
       vectorsSub.dispose();
       workspaceSub.dispose();
