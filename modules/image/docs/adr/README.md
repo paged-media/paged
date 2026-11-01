@@ -49,6 +49,7 @@ stood, for decisions made earlier; their status says so.
 | [483](483-transform-and-warp-on-pixels.md) | Warps on pixels are backward maps from `paged-warp`, sampled by three kernels | Accepted 2026-10-30 (WP5.6; amends 467) |
 | [484](484-float-documents-and-the-single-image-modes.md) | 32-bit float documents, Lab and Grayscale in their own numbers, and the single-image modes | Accepted 2026-10-30 (WP5.13; amends 455, 478, 479 and 481) |
 | [485](485-ml-features.md) | ML features: Select Subject, Object Selection, matting, live Remove, generative fill and expand, neural filters | Accepted 2026-11-01 (WP8.2) |
+| [486](486-ml-followups.md) | ML follow-ups: the contextual task bar, face-aware Liquify, reference images for Generative Fill | Accepted 2026-11-01 (WP8.2; completes 485) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

@@ -218,7 +218,13 @@ export function contributeMl(
     }),
   );
   prompted("generativeFill", t(CMD.generativeFill), (a, prompt) =>
-    session.ml().generativeFill(prompt, options(a)),
+    session.ml().generativeFill(prompt, {
+      ...options(a),
+      // Layer ids whose pixels guide the fill (image ADR 486).
+      ...(Array.isArray(a.references)
+        ? { references: a.references.filter((v) => typeof v === "number") }
+        : {}),
+    }),
   );
   prompted("generativeExpand", t(CMD.generativeExpand), (a, prompt) => {
     const w = session.state().source;

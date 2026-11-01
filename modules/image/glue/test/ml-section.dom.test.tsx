@@ -36,16 +36,34 @@ function harness(
     skinSmoothing: mock(rec("skinSmoothing")),
     superZoom: mock(rec("superZoom")),
     removeJpegArtifacts: mock(rec("removeJpegArtifacts")),
+    setReferences: mock((ids: number[]) => {
+      calls.push(["setReferences", ids]);
+      return true;
+    }),
     placeCandidate: mock(rec("placeCandidate")),
     clearCandidates: mock(() => {
       calls.push(["clearCandidates"]);
     }),
   };
-  const session = { ml: () => features } as unknown as ImageSession;
+  const session = {
+    ml: () => features,
+    state: () => ({
+      layers: { layers: [{ id: 7, index: 1, kind: "smart" }] },
+    }),
+    smart: () => ({
+      info: () => ({ file: { name: "ref.png", available: true } }),
+    }),
+  } as unknown as ImageSession;
   const view = render(
     <MlSection
       session={session}
-      ml={{ busy: false, candidates: [], note: null, ...o.ml }}
+      ml={{
+        busy: false,
+        candidates: [],
+        note: null,
+        references: [],
+        ...o.ml,
+      }}
       canvas={{ width: 400, height: 200 }}
       hasSelection={o.hasSelection ?? true}
       disabled={o.disabled ?? false}
@@ -138,6 +156,12 @@ describe("the ML section", () => {
     for (const k of ["generate", "fill", "removeBg", "sky", "jpeg"])
       expect(q(`data-image-ml="${k}"`)!.disabled).toBe(true);
     expect(view.container.textContent).toMatch(/Working with the local/);
+  });
+
+  it("picks the Links panel's smart objects as references", () => {
+    const { q, calls } = harness({ ml: { references: [] } });
+    fireEvent.click(q("data-image-ml-reference")!);
+    expect(calls).toContainEqual(["setReferences", [7]]);
   });
 });
 

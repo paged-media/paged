@@ -96,7 +96,10 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   Fill, Generative Expand, Remove (selection) and Remove Background, Generate Image with
   variations, Sky Replacement, Colorize and Skin Smoothing, each a masked pixel layer in one undo
   step; the neural filters Super Zoom and JPEG Artifact Removal; the panel's Generate section.
-  Not yet: the contextual task bar, face-aware Liquify, reference-image edits.
+  A contextual task bar under a selection (Generative fill with a prompt, Remove, Select
+  subject), Liquify's faces mode (landmarks from `ml.landmarks`; eye size, nose, smile, face width,
+  chin and forehead sliders that run as Liquify strokes) and Generative fill's reference images
+  (the Links panel's smart objects, up to ten) are in [ADR 486](adr/486-ml-followups.md).
 - **Transform and warp** ([ADR 483](adr/483-transform-and-warp-on-pixels.md)). Free Transform
   of a layer or a selection, with Edit ▸ Transform ▸ Free distort and Perspective opening the box
   in that mode; Warp… (the fifteen styles or a custom mesh dragged on the canvas,
@@ -469,7 +472,7 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
   Lookup layers, text (`TySh`, WP5.10), vector masks and shapes (WP5.11).
 - Transform and warp (ADR 483): the Warp styles are paged-warp's closed forms, not Photoshop's
   (recorded, large distances on a square); Perspective Warp, Lens Correction, Adaptive Wide Angle,
-  Vanishing Point and Liquify's face-aware tools are not offered; Puppet Warp has no pin depth or
+  Vanishing Point are not offered (Liquify's faces mode is, ADR 486); Puppet Warp has no pin depth or
   rotation; Content-Aware Scale has no Protect Skin Tones or interactive box.
 - Smart objects (ADR 482): a warp (`customEnvelopeWarp`) is read and kept, not drawn; smart
   filters blend in Normal mode only and run at 8 bits; the filter mask is set from the selection,

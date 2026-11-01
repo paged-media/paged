@@ -60,3 +60,6 @@ section holds the prompt, seed, steps, variations and the strip. The commands ar
 
 **Not here.** The contextual task bar over a selection, face-aware Liquify and reference-image
 edits (the Links panel) are follow-ups.
+
+**Amended 2026-11-01:** the task bar, face-aware Liquify and reference-image edits are in
+[ADR 486](486-ml-followups.md).

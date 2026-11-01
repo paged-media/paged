@@ -49,6 +49,29 @@ export function layerOfLink(
   return i < 0 ? null : i;
 }
 
+/** The rows the Links panel lists: one per smart object with a file. */
+function smartLinkRows(session: ImageSession): ProvidedLinkRow[] {
+  const rows: ProvidedLinkRow[] = [];
+  for (const l of session.state().layers.layers) {
+    if (l.kind !== "smart") continue;
+    const info = session.smart().info(l.index);
+    const f = info?.file;
+    if (!f) continue;
+    rows.push({
+      hostSelfId: linkRowId(l.id),
+      hostKind: "smartObject",
+      uri: f.path ?? f.name,
+      status: !f.available ? "missing" : f.linked ? "ok" : "embedded",
+      actions: {
+        relink: `${C}smartRelink`,
+        ...(f.linked ? { update: `${C}smartUpdateLinked` } : {}),
+        ...(f.linked ? { embed: `${C}smartEmbed` } : {}),
+      },
+    });
+  }
+  return rows;
+}
+
 export function makeLinksBindingProvider(session: ImageSession): {
   provider: BindingProvider;
 } {
@@ -58,24 +81,7 @@ export function makeLinksBindingProvider(session: ImageSession): {
       if (request.collection !== "links") {
         return { kind: "decline", reason: "only the links collection" };
       }
-      const rows: ProvidedLinkRow[] = [];
-      for (const l of session.state().layers.layers) {
-        if (l.kind !== "smart") continue;
-        const info = session.smart().info(l.index);
-        const f = info?.file;
-        if (!f) continue;
-        rows.push({
-          hostSelfId: linkRowId(l.id),
-          hostKind: "smartObject",
-          uri: f.path ?? f.name,
-          status: !f.available ? "missing" : f.linked ? "ok" : "embedded",
-          actions: {
-            relink: `${C}smartRelink`,
-            ...(f.linked ? { update: `${C}smartUpdateLinked` } : {}),
-            ...(f.linked ? { embed: `${C}smartEmbed` } : {}),
-          },
-        });
-      }
+      const rows = smartLinkRows(session);
       // No files: decline, so the panel shows the document's own links.
       if (rows.length === 0)
         return { kind: "decline", reason: "no smart object has a file" };
@@ -83,4 +89,19 @@ export function makeLinksBindingProvider(session: ImageSession): {
     },
   };
   return { provider };
+}
+
+/** The smart objects the Links panel lists, as Generative Fill reference
+ *  candidates (image ADR 486): the layer id and the file's name or path.
+ *  Read from the same rows the provider serves, so the picker and the
+ *  panel agree. */
+export function referenceCandidates(
+  session: ImageSession,
+): Array<{ id: number; uri: string }> {
+  const out: Array<{ id: number; uri: string }> = [];
+  for (const r of smartLinkRows(session)) {
+    const m = /^smart:(\d+)$/.exec(r.hostSelfId);
+    if (m) out.push({ id: Number(m[1]), uri: r.uri });
+  }
+  return out;
 }

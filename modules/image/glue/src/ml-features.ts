@@ -23,7 +23,7 @@
 // is bundled or downloaded by it: the host's registry owns that, and every
 // refusal is the registry's own message ("local image model not running"…).
 
-import type { BundleHost } from "@paged-media/plugin-api";
+import type { BundleHost, MlFace } from "@paged-media/plugin-api";
 import { defineMessages, t } from "@paged-media/strings";
 
 import {
@@ -50,6 +50,11 @@ const S = defineMessages("image.ml", {
   matted: "{what} masked the layer with {provider}, one undo step.",
   variations: "{count} variations ready: place one.",
   tooBig: "{what}: the area is too large for the model (at most 4096 px).",
+  tooManyReferences: "At most {max} reference images.",
+  noFaceModel:
+    "No landmarks model is available: install one in Settings to use the " +
+    "face sliders. Nothing is downloaded from here.",
+  noFaces: "The model found no face with usable landmarks in this image.",
 });
 
 const SUBJECT = "Select Subject";
@@ -104,6 +109,8 @@ export interface MlFeatureDeps {
   adoptExtent(wh: { width: number; height: number }): Promise<void>;
   /** Index of the layer edits land in. */
   activeLayer(): number;
+  /** The open stack's rows (a reference image names a layer by its id). */
+  layers(): ReadonlyArray<{ id: number; index: number; kind: string }>;
   /** Drop an in-flight stroke engine-side. */
   discardStroke(): void;
   /** The classical fallback of Remove over a selection. */
@@ -222,10 +229,16 @@ export interface MlUiState {
   candidates: MlCandidate[];
   /** The feature running, or the last refusal's text. */
   note: string | null;
+  /** The layer ids picked as reference images for Generative Fill (the
+   *  Links panel's smart objects), at most {@link MAX_REFERENCES}. */
+  references: number[];
 }
 
+/** The most reference images `ml.edit` takes. */
+export const MAX_REFERENCES = 10;
+
 export function initialMl(): MlUiState {
-  return { busy: false, candidates: [], note: null };
+  return { busy: false, candidates: [], note: null, references: [] };
 }
 
 /** Options of the prompt-driven features. */
@@ -233,6 +246,9 @@ export interface GenerateOptions {
   seed?: number;
   steps?: number;
   strength?: number;
+  /** Layer ids whose pixels guide the edit (at most ten); absent: the
+   *  panel's picked ones. */
+  references?: readonly number[];
 }
 
 /** An Object Selection gesture: a box, or a point, in image pixels. */
@@ -429,6 +445,40 @@ export function makeMlFeatures(d: MlFeatureDeps) {
     height: number;
   }) => d.engine()!.tile(src.handle, 0, 0, src.width, src.height);
 
+  /** The pixels of the layers `ids` name, each fitted to the model's size
+   *  (the layer's own pixels over the canvas, not the composite). A layer
+   *  that is gone or has no pixels is skipped. */
+  const referenceImages = (
+    ids: readonly number[] | undefined,
+  ): Array<{ width: number; height: number; data: Uint8ClampedArray }> => {
+    const src = d.state().source;
+    if (!ids || ids.length === 0 || !src) return [];
+    if (ids.length > MAX_REFERENCES)
+      throw new Error(t(S.tooManyReferences, { max: MAX_REFERENCES }));
+    const out: Array<{
+      width: number;
+      height: number;
+      data: Uint8ClampedArray;
+    }> = [];
+    for (const id of ids) {
+      const row = d.layers().find((l) => l.id === id);
+      if (!row) continue;
+      const px = d
+        .engine()!
+        .layersWindow(row.index, 0, 0, src.width, src.height);
+      if (px.length !== src.width * src.height * 4) continue;
+      const ws = workSize(src.width, src.height);
+      out.push({
+        width: ws.width,
+        height: ws.height,
+        data: new Uint8ClampedArray(
+          resizeRgba(px, src.width, src.height, ws.width, ws.height),
+        ),
+      });
+    }
+    return out;
+  };
+
   /** Ask `ml.edit` to change the masked part of `box`: the region (with its
    *  context) is shrunk to the model's size, edited, and enlarged back.
    *  Answers canvas-extent RGBA (transparent outside `box`). */
@@ -455,6 +505,7 @@ export function makeMlFeatures(d: MlFeatureDeps) {
       ws.width,
       ws.height,
     );
+    const references = referenceImages(o.references);
     const res = await d.host.ml.edit(
       {
         prompt,
@@ -464,6 +515,7 @@ export function makeMlFeatures(d: MlFeatureDeps) {
           data: new Uint8ClampedArray(image),
         },
         mask: { width: ws.width, height: ws.height, data: m },
+        ...(references.length > 0 ? { references } : {}),
         ...(o.seed !== undefined ? { seed: o.seed } : {}),
         ...(o.steps !== undefined ? { steps: o.steps } : {}),
         ...(o.strength !== undefined ? { strength: o.strength } : {}),
@@ -649,7 +701,46 @@ export function makeMlFeatures(d: MlFeatureDeps) {
     /** GENERATIVE FILL: the selection filled by `ml.edit` from `prompt`, a
      *  new layer masked by the selection. */
     generativeFill(prompt: string, o: GenerateOptions = {}): Promise<boolean> {
-      return fillLayer(FILL, prompt, o);
+      return fillLayer(FILL, prompt, {
+        ...o,
+        references: o.references ?? d.state().ml.references,
+      });
+    },
+
+    /** Pick the layers (smart objects of the Links panel) whose pixels
+     *  guide Generative Fill: at most ten, ids of the open stack. */
+    setReferences(ids: readonly number[]): boolean {
+      if (ids.length > MAX_REFERENCES) {
+        d.setStatus(t(S.tooManyReferences, { max: MAX_REFERENCES }));
+        return false;
+      }
+      d.state().ml.references = [...new Set(ids)];
+      d.emit();
+      return true;
+    },
+
+    /** The faces `ml.landmarks` finds in the open image, for face-aware
+     *  Liquify: `unavailable` when no model answers (the hint says so),
+     *  `none` when it found no face it can read. Nothing is downloaded. */
+    async detectFaces(): Promise<
+      | { status: "found"; faces: MlFace[] }
+      | { status: "none" | "unavailable"; faces: [] }
+    > {
+      const src = d.state().source;
+      if (!src || !d.engine()) return { status: "none", faces: [] };
+      let faces: readonly MlFace[];
+      try {
+        faces = (await d.host.ml.landmarks({ image: imageOf(src) })).faces;
+      } catch (err) {
+        d.host.log.debug("landmarks unavailable", err);
+        d.setStatus(t(S.noFaceModel));
+        return { status: "unavailable", faces: [] };
+      }
+      if (faces.length === 0) {
+        d.setStatus(t(S.noFaces));
+        return { status: "none", faces: [] };
+      }
+      return { status: "found", faces: [...faces] };
     },
 
     /** GENERATIVE EXPAND: the canvas grown to `width`×`height` at the anchor

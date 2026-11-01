@@ -46,10 +46,31 @@ const M = defineMessages("image.filterDialog", {
   liquifyOnCanvas:
     "Drag on the image with the chosen tool and brush; Freeze mask " +
     "protects an area from the other tools. Reset restores the image.",
+  facesDetecting: "Looking for faces…",
+  facesFound:
+    "The sliders above (eye size to forehead) move the faces found in this " +
+    "image; they run as Liquify strokes, with the brush strokes.",
+  facesNone:
+    "No face with readable landmarks was found; the face sliders do nothing.",
+  facesUnavailable:
+    "No landmarks model is available, so the face sliders do nothing. " +
+    "Install one in Settings; nothing is downloaded from here.",
   onCanvas:
     "Drag the pins and handles on the canvas; with Field blur on, a click " +
     "on the image adds a pin and Alt-click removes one.",
 });
+
+/** The faces detection's state (`FACES_*` of filters-warp). */
+const facesStatus = (values: Readonly<Record<string, FilterValue>>): number => {
+  const v = values.facesStatus;
+  return Array.isArray(v) ? (v[0] ?? 0) : 0;
+};
+const FACES_HINT: Record<number, string> = {
+  1: M.facesDetecting,
+  2: M.facesFound,
+  3: M.facesNone,
+  4: M.facesUnavailable,
+};
 
 /** Is `p` shown at these values (its `showIf` condition)? */
 export function paramShown(
@@ -555,6 +576,11 @@ export function FilterDialog({
       {def.id === "warp" && <div style={note}>{t(M.warpOnCanvas)}</div>}
       {def.id === "puppetWarp" && <div style={note}>{t(M.puppetOnCanvas)}</div>}
       {def.id === "liquify" && <div style={note}>{t(M.liquifyOnCanvas)}</div>}
+      {def.id === "liquify" && FACES_HINT[facesStatus(dialog.values)] && (
+        <div style={note} data-liquify-faces={facesStatus(dialog.values)}>
+          {t(FACES_HINT[facesStatus(dialog.values)]!)}
+        </div>
+      )}
       <div style={{ ...row, borderBottom: "none", flexWrap: "wrap" }}>
         <label style={{ font: `12px ${font.sans}` }}>
           <input

@@ -38,6 +38,12 @@ import {
   type ParamSpec,
 } from "./filters-schema";
 import {
+  FACE_SLIDERS,
+  faceCount,
+  faceStrokes,
+  type FaceSlider,
+} from "./faces-liquify";
+import {
   LIQUIFY_TOOLS,
   WARP_STYLES,
   type LiquifyStroke,
@@ -110,6 +116,14 @@ export const W = defineMessages("image.warp", {
   height: "Height",
   amount: "Amount",
   protect: "Protect the selection",
+  faces: "Faces",
+  faceCount: "{count, plural, =0 {no face} one {# face} other {# faces}}",
+  faceEyes: "Eye size",
+  faceNose: "Nose size",
+  faceSmile: "Smile",
+  faceWidth: "Face width",
+  faceChin: "Chin",
+  faceForehead: "Forehead",
 });
 
 /** The Warp dialog's style choice: 0 none, 1 custom, 2… the styles. */
@@ -349,10 +363,43 @@ const LIQUIFY: FilterDef = {
       count: strokeCount,
       countLabel: W.strokeCount,
     }),
+    // The faces mode (WP8.2): the sliders act on the faces the dialog found
+    // when it opened; they run as strokes after the hand-made ones.
+    ...FACE_SLIDERS.map((k) => range(k, W[k], -100, 100, 1, 0)),
+    data("faces", W.faces, {
+      default: [],
+      count: faceCount,
+      countLabel: W.faceCount,
+    }),
+    data("facesStatus", W.faces, { default: [0] }),
   ],
   run: (e, h, v, ctx) =>
-    e.applyLiquify(h, liquifyStrokes(v, ctx.width, ctx.height)),
+    e.applyLiquify(h, [
+      ...liquifyStrokes(v, ctx.width, ctx.height),
+      ...liquifyFaceStrokes(v, ctx.width, ctx.height),
+    ]),
 };
+
+/** The face sliders' strokes at these values (none without faces). */
+export function liquifyFaceStrokes(
+  v: FilterValues,
+  w: number,
+  h: number,
+): LiquifyStroke[] {
+  const faces = list(v, "faces");
+  if (faces.length === 0) return [];
+  const sliders = Object.fromEntries(
+    FACE_SLIDERS.map((k) => [k, num(v, k)]),
+  ) as Record<FaceSlider, number>;
+  return faceStrokes(faces, sliders, w, h);
+}
+
+/** What the faces detection reported (the `facesStatus` value). */
+export const FACES_IDLE = 0;
+export const FACES_DETECTING = 1;
+export const FACES_FOUND = 2;
+export const FACES_NONE = 3;
+export const FACES_UNAVAILABLE = 4;
 
 // ── Content-Aware Scale ───────────────────────────────────────────────
 

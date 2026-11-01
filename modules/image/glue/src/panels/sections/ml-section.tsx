@@ -27,7 +27,8 @@ import { useState } from "react";
 
 import { defineMessages, t } from "@paged-media/strings";
 
-import type { MlUiState } from "../../ml-features";
+import { referenceCandidates } from "../../binding-provider/links-provider";
+import { MAX_REFERENCES, type MlUiState } from "../../ml-features";
 import type { ImageSession } from "../../session";
 import { mono, note, row, sectionTitle } from "./styles";
 
@@ -51,6 +52,10 @@ const M = defineMessages("image.mlPanel", {
   superZoom: "Super zoom ×2",
   superZoom4: "Super zoom ×4",
   jpeg: "JPEG artifact removal",
+  references: "Reference images (from the Links panel)",
+  referencesNone:
+    "Smart objects with a file in the Links panel can guide Generative fill " +
+    "(up to {max}).",
   place: "Place",
   discard: "Discard",
   working: "Working with the local image model…",
@@ -87,6 +92,55 @@ function Thumb({ c }: { c: MlUiState["candidates"][number] }) {
           );
       }}
     />
+  );
+}
+
+/** The Links panel's smart objects as Generative Fill references. */
+function References({
+  session,
+  ml,
+  disabled,
+}: {
+  session: ImageSession;
+  ml: MlUiState;
+  disabled: boolean;
+}) {
+  const links = referenceCandidates(session);
+  if (links.length === 0)
+    return (
+      <div style={note} data-image-ml="referencesNone">
+        {t(M.referencesNone, { max: MAX_REFERENCES })}
+      </div>
+    );
+  return (
+    <div data-image-ml="references">
+      <div style={row}>{t(M.references)}</div>
+      {links.map((l) => {
+        const on = ml.references.includes(l.id);
+        return (
+          <label key={l.id} style={row}>
+            <input
+              type="checkbox"
+              data-image-ml-reference={l.id}
+              checked={on}
+              disabled={
+                disabled || (!on && ml.references.length >= MAX_REFERENCES)
+              }
+              onChange={(e) =>
+                session
+                  .ml()
+                  .setReferences(
+                    e.target.checked
+                      ? [...ml.references, l.id]
+                      : ml.references.filter((x) => x !== l.id),
+                  )
+              }
+            />{" "}
+            <span style={mono}>{l.uri}</span>
+          </label>
+        );
+      })}
+    </div>
   );
 }
 
@@ -190,6 +244,7 @@ export function MlSection({
           {t(M.removeBg)}
         </button>
       </div>
+      <References session={session} ml={ml} disabled={off} />
       {ml.candidates.length > 0 && (
         <div style={row} data-image-ml="strip">
           {ml.candidates.map((c) => (

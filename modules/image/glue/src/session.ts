@@ -173,8 +173,13 @@ import {
 } from "./type-layer";
 import { claimImageTiles } from "./tile-provider";
 import { gradientKindLabel, warpKindLabel } from "./words";
+import { FACE_SLIDERS, facesToList } from "./faces-liquify";
 import {
   CANVAS_WARPS,
+  FACES_DETECTING,
+  FACES_FOUND,
+  FACES_NONE,
+  FACES_UNAVAILABLE,
   puppetOptions,
   puppetPins,
   warpMesh,
@@ -4193,8 +4198,33 @@ export function createImageSession(host: BundleHost): ImageSession {
   const masking = maskingRef;
   // WP8.2 (image ADR 485): the ML features. The matting hook is given to
   // Select and Mask once; it asks the host's door on every call.
+  /** Face-aware Liquify (image ADR 486): ask `ml.landmarks` for the faces
+   *  of the open image and hand the dialog their points, or the reason
+   *  there are none (no model, no face); the sliders then do nothing. */
+  const detectLiquifyFaces = async (): Promise<void> => {
+    const dialog = openFilter();
+    const src = state.source;
+    if (!dialog || dialog.id !== "liquify" || !src) return;
+    const found = await mlFeatures.detectFaces();
+    const d = openFilter();
+    // Closed, or another dialog opened, while the model worked.
+    if (d !== dialog) return;
+    const list = facesToList(found.faces, src.width, src.height);
+    const none = found.status === "found" && list.length === 0;
+    api.setFilterValues({
+      faces: list,
+      facesStatus: [
+        found.status === "unavailable"
+          ? FACES_UNAVAILABLE
+          : found.status === "none" || none
+            ? FACES_NONE
+            : FACES_FOUND,
+      ],
+    });
+  };
   const mlFeatures = makeMlFeatures({
     host,
+    layers: () => state.layers.layers,
     state: () => state,
     engine: () => engine,
     emit,
@@ -4714,8 +4744,18 @@ export function createImageSession(host: BundleHost): ImageSession {
         }
         preset = warpPreset(bounds, src.width, src.height);
       } else if (id === "puppetWarp") preset = { pins: [] };
-      else if (id === "liquify") preset = { strokes: [] };
-      return api.openFilterDialog(id, preset);
+      else if (id === "liquify")
+        // The faces of an earlier image and the last sliders do not carry
+        // over; detection follows once the dialog is up.
+        preset = {
+          strokes: [],
+          faces: [],
+          facesStatus: [FACES_DETECTING],
+          ...Object.fromEntries(FACE_SLIDERS.map((k) => [k, 0])),
+        };
+      const opened = await api.openFilterDialog(id, preset);
+      if (opened && id === "liquify") await detectLiquifyFaces();
+      return opened;
     },
 
     async commitPerspectiveCrop(quad, width, height) {

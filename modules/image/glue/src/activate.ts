@@ -106,6 +106,7 @@ import {
   makeBrushPresetsPanel,
 } from "./panels/brush-presets-panel";
 import { makeTypeGesture } from "./type-tool";
+import { makeTaskBarOverlay } from "./ml-taskbar";
 import { makeTypeOverlay } from "./type-overlay";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
@@ -453,6 +454,17 @@ export function activate(host: BundleHost): BundleHandle {
     });
   } catch (err) {
     host.log.debug("type overlay: the host has no overlay layer", err);
+  }
+
+  // WP8.2 — the contextual task bar over a selection (image ADR 486).
+  try {
+    host.contribute.overlay({
+      id: "media.paged.image.overlay.taskBar",
+      render: makeTaskBarOverlay(host, session, PANEL_ID),
+      z: 150,
+    });
+  } catch (err) {
+    host.log.debug("task bar: the host has no overlay layer", err);
   }
 
   contributePanel(host, {
