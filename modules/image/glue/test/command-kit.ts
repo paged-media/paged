@@ -23,6 +23,7 @@ import {
   createHeadlessHost,
   loadBundle,
   type HeadlessHost,
+  type MlBackend,
   type ToolSettingsBackend,
 } from "@paged-media/plugin-sdk";
 import { waitFor } from "@paged-media/test-kit";
@@ -135,6 +136,8 @@ export async function bundleOnFake(
     toolSettings?: ToolSettingsBackend;
     /** The bundle's key-value store (a shared one outlives a session). */
     storage?: ReturnType<typeof mapBacking>;
+    /** The shared ML backend (`createMlRegistry`): the bundle's `host.ml`. */
+    ml?: MlBackend;
   } = {},
 ) {
   const fake = makeFakeEditor();
@@ -159,6 +162,7 @@ export async function bundleOnFake(
     storage: options.storage ?? mapBacking(),
     shell,
     ...(options.toolSettings ? { toolSettings: options.toolSettings } : {}),
+    ...(options.ml ? { ml: options.ml } : {}),
     onEditContextRegistered: (c: EditContextContribution) => {
       contexts.push(c);
       return { dispose() {} };

@@ -23,7 +23,7 @@
 // submenu per Effect menu group that holds a kind, one row per kind, so a
 // kind the engine adds appears here without a change to the editor (plan
 // C16). A row appends the effect, at its defaults, to the OBJECT stack of
-// every selected item that takes it — all of them in one batch, so one
+// every selected item that takes it (a group takes the Pathfinder effect) — all of them in one batch, so one
 // undo step — and raises the Appearance panel, where its parameters are.
 //
 // The rows apply in every edit context (WP10.7): an effect is a property
@@ -109,9 +109,20 @@ export const APPEARANCE_PANEL_ID = "paged.appearance";
 /** The page items whose object target carries a stack. */
 const STACK_KINDS = new Set(["textFrame", "rectangle", "oval", "polygon"]);
 
+/** A group's stack (engine ADR 1042): it takes the group-only kinds, the
+ *  Pathfinder effect. A page item's object stack never takes those, so on
+ *  a lone rectangle the Pathfinder row applies nothing. */
+const GROUP_KIND = "group";
+const GROUP_STACK_PATH = "groupEffectStack";
+
 type ElementRef = { kind: string; id: string };
 
 const addressOf = (e: ElementRef) => `${e.kind}:${e.id}`;
+
+const targetOf = (address: string) =>
+  address.startsWith(`${GROUP_KIND}:`) ? GROUP_KIND : "object";
+const pathOf = (address: string) =>
+  targetOf(address) === GROUP_KIND ? GROUP_STACK_PATH : STACK_PATHS.object;
 
 /** The batch that appends `kind` to each read stack that takes it, or
  *  `null` when none does. Pure: the command reads, this plans. */
@@ -120,12 +131,12 @@ export function planAddEffect(
   kind: string,
 ): { op: "batch"; args: { ops: unknown[] } } | null {
   const ops = stacks
-    .filter((s) => canAdd(s.entries, "object", kind))
+    .filter((s) => canAdd(s.entries, targetOf(s.address), kind))
     .map((s) => ({
       op: "set",
       args: {
         address: s.address,
-        path: STACK_PATHS.object,
+        path: pathOf(s.address),
         value: stackValue(add(s.entries, kind)),
       },
     }));
@@ -146,7 +157,7 @@ async function readStack(
   const reply = (await paged.client
     .send({
       kind: "requestGet",
-      payload: { address, path: STACK_PATHS.object },
+      payload: { address, path: pathOf(address) },
     } as never)
     .catch(() => null)) as {
     kind: string;
@@ -165,7 +176,7 @@ export async function applyEffect(
   const selected = (paged.selection.elementSelection ?? []) as ElementRef[];
   const stacks: { address: string; entries: StackEntry[] }[] = [];
   for (const e of selected) {
-    if (!STACK_KINDS.has(e.kind)) continue;
+    if (!STACK_KINDS.has(e.kind) && e.kind !== GROUP_KIND) continue;
     const address = addressOf(e);
     const entries = await readStack(paged, address);
     if (entries) stacks.push({ address, entries });

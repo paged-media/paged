@@ -251,8 +251,13 @@ export function makeRetouch(d: RetouchDeps) {
   /** The sampling area, one byte per image pixel (not in the state: it is
    *  image-sized). */
   let sampleMask: Uint8Array | null = null;
-  let provider: InpaintProvider | null = hostInpaintProvider(d.host);
-  st().inpaintProvider = provider?.id ?? null;
+  // An explicit provider (setInpaintProvider) wins; otherwise the host's
+  // `ml.inpaint` door is looked up on EVERY call, so a model installed or
+  // stopped after the bundle loaded is honoured.
+  let override: InpaintProvider | null | undefined;
+  const current = (): InpaintProvider | null =>
+    override !== undefined ? override : hostInpaintProvider(d.host);
+  st().inpaintProvider = current()?.id ?? null;
 
   const need = (what: string, selection: boolean): boolean => {
     const s = d.state();
@@ -596,7 +601,7 @@ export function makeRetouch(d: RetouchDeps) {
     /** Replace the provider the Remove tool asks first (null = classical
      *  PatchMatch only). */
     setInpaintProvider(p: InpaintProvider | null) {
-      provider = p;
+      override = p;
       st().inpaintProvider = p?.id ?? null;
       d.emit();
     },
@@ -609,6 +614,11 @@ export function makeRetouch(d: RetouchDeps) {
       const eng = d.engine()!;
       const src = s.source!;
       if (points.length < 2) return false;
+      const provider = current();
+      if (st().inpaintProvider !== (provider?.id ?? null)) {
+        st().inpaintProvider = provider?.id ?? null;
+        d.emit();
+      }
       if (provider) {
         try {
           const mask = eng.removeHole(src.handle, points, size);
