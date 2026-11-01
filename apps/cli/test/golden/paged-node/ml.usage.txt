@@ -1,0 +1,11 @@
+$ paged-node ml
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node ml <health|generate|edit> [prompt]",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

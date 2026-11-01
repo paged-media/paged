@@ -57,6 +57,7 @@
 // Exit 1 when over budget; prints the full inventory either way.
 
 import {
+  existsSync,
   readdirSync,
   readFileSync,
   statSync,
@@ -132,8 +133,19 @@ function shippedWasm(pkgDir) {
   return out;
 }
 
-/** The import specifiers of `@paged-media` packages in the JS/TS sources
- *  under `dir` (value imports only: `import type` loads nothing). */
+/** Third-party packages the page loads WebAssembly from, by name: each is a
+ *  reviewed dependency, so a new one is a change to this list, measured like
+ *  the first-party ones (only the wasm the page's imports reach).
+ *  onnxruntime-web: the ML worker's runtime (editor ADR 290). */
+const THIRD_PARTY_WASM = ["onnxruntime-web"];
+
+const measured = (spec) =>
+  spec.startsWith("@paged-media/") ||
+  THIRD_PARTY_WASM.some((n) => spec === n || spec.startsWith(`${n}/`));
+
+/** The import specifiers of `@paged-media` packages (and the third-party
+ *  packages above) in the JS/TS sources under `dir` (value imports only:
+ *  `import type` loads nothing). */
 function pagedSpecifiers(dir, out = new Set(), depth = 0) {
   if (depth > 12) return out;
   let entries;
@@ -152,11 +164,11 @@ function pagedSpecifiers(dir, out = new Set(), depth = 0) {
     if (!/\.(m?[jt]sx?)$/.test(e.name) || e.name.endsWith(".d.ts")) continue;
     const text = readFileSync(p, "utf8");
     const re =
-      /\b(import|export)(\s+type\b)?[^'"`;]*?\bfrom\s*['"](@paged-media\/[^'"]+)['"]|\bimport\s*\(\s*['"](@paged-media\/[^'"]+)['"]|\bimport\s*['"](@paged-media\/[^'"]+)['"]/g;
+      /\b(import|export)(\s+type\b)?[^'"`;]*?\bfrom\s*['"]([@a-z][^'"]*)['"]|\bimport\s*\(\s*['"]([@a-z][^'"]*)['"]|\bimport\s*['"]([@a-z][^'"]*)['"]/g;
     for (const m of text.matchAll(re)) {
       if (m[2]) continue; // `import type` / `export type`
       const spec = m[3] ?? m[4] ?? m[5];
-      if (spec) out.add(spec.replace(/\?.*$/, ""));
+      if (spec && measured(spec)) out.add(spec.replace(/\?.*$/, ""));
     }
   }
   return out;
@@ -301,6 +313,20 @@ export function collect() {
         owners: [],
       };
       if (!entry.owners.includes(pkg)) entry.owners.push(pkg);
+      byReal.set(real, entry);
+    }
+  }
+
+  for (const name of THIRD_PARTY_WASM) {
+    const dir = join(APP, "node_modules", name);
+    if (!existsSync(dir)) continue;
+    for (const f of loadedWasm(dir, name, specifiers)) {
+      const real = realpathSync(f);
+      const entry = byReal.get(real) ?? {
+        bytes: statSync(real).size,
+        owners: [],
+      };
+      if (!entry.owners.includes(name)) entry.owners.push(name);
       byReal.set(real, entry);
     }
   }

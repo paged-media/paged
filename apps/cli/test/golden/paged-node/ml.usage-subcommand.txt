@@ -1,0 +1,11 @@
+$ paged-node ml paint x
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "ml: \"paint\" is not health, generate or edit",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

@@ -129,6 +129,22 @@
             "run": { "type": "boolean" }
           }
         },
+        "ml": {
+          "type": "array",
+          "description": "The ML doors (host.ml, ml.<capability>@1, extensions ADR 1100): the capabilities the bundle calls. The host's ML service answers them with small in-browser models (Tier A) or the local generative host (Tier B); nothing leaves the machine.",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "segment",
+              "matting",
+              "inpaint",
+              "superres",
+              "landmarks",
+              "generate",
+              "edit"
+            ]
+          }
+        },
         "storage": {
           "type": "object",
           "description": "Persistent binary storage (K-4 / S-08). 'blob' gates the OPFS-backed host.blob byte store; 'quotaBytes' requests a ceiling (host enforces the stricter of it and its hard per-plugin cap).",

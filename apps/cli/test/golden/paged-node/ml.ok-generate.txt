@@ -1,0 +1,14 @@
+$ paged-node ml generate 'a lighthouse' -o <TMP>/ml-gen.png --width 64 --height 64
+# exit 0
+# stdout
+{
+  "ok": true,
+  "provider": "paged.ml-host",
+  "tier": "B",
+  "model": "qwen-image-2.1",
+  "width": 4,
+  "height": 2,
+  "wrote": "<TMP>/ml-gen.png"
+}
+# stderr
+(empty)

@@ -84,6 +84,7 @@ import type {
   BindingProviderHandle,
 } from "./binding-provider.js";
 import type { ClipboardSurface } from "./clipboard.js";
+import type { MlSurface } from "./ml.js";
 import type { MutationInput } from "./mutations.js";
 import type { PluginManifest, WasmArtifact } from "./manifest.js";
 import type { SchemaPanelContribution } from "./panel-schema.js";
@@ -3745,6 +3746,13 @@ export interface BundleHost {
    *  wires no action registry `register` throws, `list` is empty and
    *  `supports("actions@1")` is false. */
   readonly actions: ActionsSurface;
+  /** The ML doors (extensions ADR 1100): segmentation, matting, inpainting,
+   *  super resolution, face landmarks, text-to-image and image editing,
+   *  answered by the host's ML service (small in-browser models and the
+   *  local generative host), gated on `capabilities.ml`. Always present;
+   *  `supports("ml.<capability>@1")` is true only while a provider for it
+   *  is installed and healthy, and a call without one rejects. */
+  readonly ml: MlSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** ADR 025 — the local flight recorder. Probe `supports("journal@1")`
    *  before relying on it reaching a buffer; calling it is always safe. */
