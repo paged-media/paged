@@ -497,28 +497,23 @@ fn tessellate_anchors(anchors: &[PathAnchor], samples_per_segment: u32) -> Vec<P
         let (p1x, p1y) = to.anchor;
         let mut prev_x = p0x;
         let mut prev_y = p0y;
-        for i in 1..=n {
-            let t = i as f32 / n as f32;
-            let mt = 1.0 - t;
-            // Cubic Bezier evaluation. When the control points
-            // collapse onto the anchors (the common straight-line
-            // case), this reduces exactly to a linear interpolation
-            // — degenerate but correct.
-            let x = mt * mt * mt * p0x
-                + 3.0 * mt * mt * t * c1x
-                + 3.0 * mt * t * t * c2x
-                + t * t * t * p1x;
-            let y = mt * mt * mt * p0y
-                + 3.0 * mt * mt * t * c1y
-                + 3.0 * mt * t * t * c2y
-                + t * t * t * p1y;
-            let dx = x - prev_x;
-            let dy = y - prev_y;
-            cum += (dx * dx + dy * dy).sqrt();
-            samples.push(PathSample { x, y, cum });
-            prev_x = x;
-            prev_y = y;
-        }
+        // When the control points collapse onto the anchors (the common
+        // straight-line case) the cubic reduces to a linear interpolation.
+        paged_geom::flatten::sample_cubic(
+            (p0x, p0y),
+            (c1x, c1y),
+            (c2x, c2y),
+            (p1x, p1y),
+            n,
+            |(x, y)| {
+                let dx = x - prev_x;
+                let dy = y - prev_y;
+                cum += (dx * dx + dy * dy).sqrt();
+                samples.push(PathSample { x, y, cum });
+                prev_x = x;
+                prev_y = y;
+            },
+        );
     }
     samples
 }
