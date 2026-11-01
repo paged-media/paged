@@ -26,10 +26,37 @@
 //! still resolve. The crate depends on the model's `PathAnchor` and the two
 //! curve libraries only: the read-only viewer may link it.
 
+/// The cubic control-point distance, in radii, of a quarter circle: the one
+/// constant every ellipse, oval and rounded-corner builder reads
+/// (`4/3 * (sqrt 2 - 1)`, rounded to `f64`).
+pub const KAPPA: f64 = 0.552_284_749_830_793_4;
+
+/// [`KAPPA`] in single precision: the same `f32` the `0.552_284_8` literals
+/// it replaces denote (checked by `tests::kappa_f32_is_the_old_literal`).
+pub const KAPPA_F32: f32 = KAPPA as f32;
+
+pub mod affine;
 pub mod bezier_conv;
+pub mod flatten;
 pub mod kurbo_kernel;
 pub mod orientation;
 pub mod pathfinder;
 pub mod planar;
 mod planar_dcel;
 pub mod stroke_kernel;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kappa_f32_is_the_old_literal() {
+        assert_eq!(KAPPA_F32.to_bits(), 0.552_284_8_f32.to_bits());
+    }
+
+    #[test]
+    fn kappa_is_the_quarter_circle_distance() {
+        let exact = 4.0 / 3.0 * (2.0_f64.sqrt() - 1.0);
+        assert!((KAPPA - exact).abs() < 1e-15);
+    }
+}
