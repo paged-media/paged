@@ -1,6 +1,7 @@
 # ADR 613 — Tracked changes and comments
 
-- **Status:** Accepted 2026-10-29.
+- **Status:** Accepted 2026-10-29. Extended 2026-11-01 by [ADR 622](622-word-comment-identity-and-exact-dates.md)
+  (author identity and exact times) toward engine ADR 1055 (one comment model for every module).
 - **Builds on:** engine ADRs 1040 (change tracking: `recordChange`, `acceptChange`,
   `rejectChange`, `documentTrackChanges`, the markup views) and 1020 (range comments:
   `insertComment`, `replyComment`, `resolveComment`, `deleteComment`), and the story read's

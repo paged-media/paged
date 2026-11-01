@@ -232,6 +232,7 @@ The shared crate owns the **format-mechanical** layer; each plugin keeps its **s
 respects the platform's isolation-superset rule (a plugin depends only on `@paged-media/plugin-api`,
 `plugin-sdk`, and **published** contracts — never on another plugin), so `paged-ooxml` ships as its own
 **published** crate/package, not a cross-plugin source dep.
+(Since 2026-11-01 the isolation-superset rule no longer binds the built-ins, [PM-0017](../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md); the shared crate is `platform/shared/ooxml`, ADR 607. The layering stands: format mechanics shared, semantics per module.)
 
 ```
           ┌──────────────────────────────────────────────┐
