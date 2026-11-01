@@ -279,7 +279,7 @@ pub(crate) fn write_rels_bytes(r: &Relationships) -> Vec<u8> {
 }
 
 fn write_rels(r: &Relationships) -> Vec<u8> {
-    r.to_xml().into_bytes()
+    r.render().into_bytes()
 }
 
 /// Set or clear the slide root's `show="0"`.

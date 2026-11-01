@@ -113,7 +113,7 @@ impl Relationships {
 }
 
 impl Relationships {
-    /// An empty graph (fill it with [`add`](Self::add) and write it with [`to_xml`](Self::to_xml)).
+    /// An empty graph (fill it with [`add`](Self::add) and write it with [`render`](Self::render)).
     pub fn new() -> Relationships {
         Relationships::default()
     }
@@ -147,7 +147,7 @@ impl Relationships {
     }
 
     /// The whole `.rels` part, in order.
-    pub fn to_xml(&self) -> String {
+    pub fn render(&self) -> String {
         let mut out = String::from(XML_DECL);
         out.push_str(&format!(r#"<Relationships xmlns="{NS}">"#));
         for r in &self.items {
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(r.add_next("t/styles", "styles.xml", false), "rId1");
         assert_eq!(r.add_next("t/hyperlink", "http://x/?a=1&b=2", true), "rId2");
         r.add("rIdStyles", "t/s", "s.xml", false);
-        let back = Relationships::try_parse(r.to_xml().as_bytes()).unwrap();
+        let back = Relationships::try_parse(r.render().as_bytes()).unwrap();
         assert_eq!(back.items, r.items);
         assert_eq!(back.items[1].target_mode.as_deref(), Some("External"));
         assert_eq!(back.target_of("rId2"), Some("http://x/?a=1&b=2"));
