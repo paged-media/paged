@@ -88,11 +88,15 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   the final vote on the GPU (`geom.patch_vote`) or its CPU twin;
   presets from an `.abr` brush library. The type tool paints a shaped run of text into the
   active layer with font bytes the host serves for the document's fonts.
-- **ML features, Tier A** ([ADR 485](adr/485-ml-features.md)). Select ▸ Select subject and Select
+- **ML features** ([ADR 485](adr/485-ml-features.md)). Select ▸ Select subject and Select
   sky, the Object Selection tool (box or click, Shift adds, Alt subtracts), the hair-matting
   hook of Select and Mask, and the Remove tool asking the host's inpaint door on every stroke.
   They call the host's ML doors (`capabilities.ml`); no model ships in the bundle and a missing
-  model is reported with the registry's message.
+  model is reported with the registry's message. Tier B (a local generative host): Generative
+  Fill, Generative Expand, Remove (selection) and Remove Background, Generate Image with
+  variations, Sky Replacement, Colorize and Skin Smoothing, each a masked pixel layer in one undo
+  step; the neural filters Super Zoom and JPEG Artifact Removal; the panel's Generate section.
+  Not yet: the contextual task bar, face-aware Liquify, reference-image edits.
 - **Transform and warp** ([ADR 483](adr/483-transform-and-warp-on-pixels.md)). Free Transform
   of a layer or a selection, with Edit ▸ Transform ▸ Free distort and Perspective opening the box
   in that mode; Warp… (the fifteen styles or a custom mesh dragged on the canvas,

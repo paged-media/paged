@@ -286,6 +286,16 @@
       "media.paged.image.command.similar",
       "media.paged.image.command.selectSubject",
       "media.paged.image.command.selectSky",
+      "media.paged.image.command.generateImage",
+      "media.paged.image.command.generativeFill",
+      "media.paged.image.command.generativeExpand",
+      "media.paged.image.command.removeHq",
+      "media.paged.image.command.removeBackground",
+      "media.paged.image.command.skyReplacement",
+      "media.paged.image.command.colorize",
+      "media.paged.image.command.skinSmoothing",
+      "media.paged.image.command.superZoom",
+      "media.paged.image.command.jpegArtifacts",
       "media.paged.image.command.focusArea",
       "media.paged.image.command.saveSelection",
       "media.paged.image.command.loadSelection",
@@ -2479,6 +2489,86 @@
         {
           "id": "media.paged.image.command.selectSky",
           "title": "Select sky (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.generateImage",
+          "title": "Generate image… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.generativeFill",
+          "title": "Generative fill… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.generativeExpand",
+          "title": "Generative expand… (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.removeHq",
+          "title": "Remove selection (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.removeBackground",
+          "title": "Remove background (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.skyReplacement",
+          "title": "Sky replacement (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.colorize",
+          "title": "Colorize (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.skinSmoothing",
+          "title": "Skin smoothing (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.superZoom",
+          "title": "Super zoom (image)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.jpegArtifacts",
+          "title": "JPEG artifact removal (image)",
           "args": {
             "kind": "struct",
             "fields": {}

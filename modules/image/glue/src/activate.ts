@@ -2070,7 +2070,7 @@ export function activate(host: BundleHost): BundleHandle {
   // the Magnetic Lasso and the Refine Edge brush.
   const maskingSub = contributeMasking(host, session, command, PANEL_ID);
   // WP8.2 (image ADR 485): Select Subject, Select Sky, Object Selection.
-  const mlSub = contributeMl(host, session, command);
+  const mlSub = contributeMl(host, session, command, PANEL_ID);
   // Vectors inside the image (ADR 476): the pen and shape tools, the
   // Paths panel's verbs, Layer ▸ Vector Mask.
   const vectorsSub = contributeVectors(host, session, command, PANEL_ID);

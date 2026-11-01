@@ -43,7 +43,26 @@ export const OBJECT_SELECTION_TOOL_ID =
 const CMD = defineMessages("image.command", {
   selectSubject: "Select subject (image)",
   selectSky: "Select sky (image)",
+  generateImage: "Generate image… (image)",
+  generativeFill: "Generative fill… (image)",
+  generativeExpand: "Generative expand… (image)",
+  removeHq: "Remove selection (image)",
+  removeBackground: "Remove background (image)",
+  skyReplacement: "Sky replacement (image)",
+  colorize: "Colorize (image)",
+  skinSmoothing: "Skin smoothing (image)",
+  superZoom: "Super zoom (image)",
+  jpegArtifacts: "JPEG artifact removal (image)",
 });
+
+/** A command payload as a plain record (a menu click carries none). */
+const argsOf = (payload: unknown): Record<string, unknown> =>
+  payload && typeof payload === "object"
+    ? (payload as Record<string, unknown>)
+    : {};
+const num = (v: unknown): number | undefined =>
+  typeof v === "number" && Number.isFinite(v) ? v : undefined;
+const text = (v: unknown): string => (typeof v === "string" ? v : "");
 
 const TOOL = defineMessages("image.tool", {
   objectSelection: "Object selection",
@@ -137,6 +156,7 @@ export function contributeMl(
   host: BundleHost,
   session: ImageSession,
   command: (c: CommandContribution) => Disposable,
+  panelId: string,
 ): Disposable {
   const handles: Disposable[] = [];
   handles.push(
@@ -158,6 +178,94 @@ export function contributeMl(
         void session.ml().selectSky();
       },
     }),
+  );
+  // The prompt-driven commands take their prompt from the payload (a
+  // script, a template run); a menu click carries none and opens the
+  // panel's Generate section, where the prompt is typed.
+  const prompted = (
+    id: string,
+    title: string,
+    run: (a: Record<string, unknown>, prompt: string) => Promise<unknown>,
+  ) =>
+    handles.push(
+      command({
+        id: `media.paged.image.command.${id}`,
+        title,
+        category: "Image",
+        handler: (_paged: unknown, payload?: unknown) => {
+          const a = argsOf(payload);
+          const prompt = text(a.prompt);
+          if (prompt === "") {
+            void host.shell.openPanel(panelId);
+            return;
+          }
+          void run(a, prompt);
+        },
+      }),
+    );
+  const options = (a: Record<string, unknown>) => ({
+    ...(num(a.seed) !== undefined ? { seed: num(a.seed)! } : {}),
+    ...(num(a.steps) !== undefined ? { steps: num(a.steps)! } : {}),
+  });
+  prompted("generateImage", t(CMD.generateImage), (a, prompt) =>
+    session.ml().generateImage(prompt, {
+      ...options(a),
+      ...(num(a.width) !== undefined ? { width: num(a.width)! } : {}),
+      ...(num(a.height) !== undefined ? { height: num(a.height)! } : {}),
+      ...(num(a.variations) !== undefined
+        ? { variations: num(a.variations)! }
+        : {}),
+    }),
+  );
+  prompted("generativeFill", t(CMD.generativeFill), (a, prompt) =>
+    session.ml().generativeFill(prompt, options(a)),
+  );
+  prompted("generativeExpand", t(CMD.generativeExpand), (a, prompt) => {
+    const w = session.state().source;
+    const width = num(a.width) ?? Math.round((w?.width ?? 0) * 1.5);
+    const height = num(a.height) ?? Math.round((w?.height ?? 0) * 1.5);
+    return session.ml().generativeExpand(
+      prompt,
+      {
+        width,
+        height,
+        anchorX: num(a.anchorX) ?? 1,
+        anchorY: num(a.anchorY) ?? 1,
+      },
+      options(a),
+    );
+  });
+  const plain = (
+    id: string,
+    title: string,
+    run: (a: Record<string, unknown>) => Promise<unknown>,
+  ) =>
+    handles.push(
+      command({
+        id: `media.paged.image.command.${id}`,
+        title,
+        category: "Image",
+        handler: (_paged: unknown, payload?: unknown) => {
+          void run(argsOf(payload));
+        },
+      }),
+    );
+  plain("removeHq", t(CMD.removeHq), () => session.ml().removeSelection());
+  plain("removeBackground", t(CMD.removeBackground), () =>
+    session.ml().removeBackground(),
+  );
+  plain("skyReplacement", t(CMD.skyReplacement), (a) =>
+    session.ml().skyReplacement(text(a.prompt), options(a)),
+  );
+  plain("colorize", t(CMD.colorize), (a) => session.ml().colorize(options(a)));
+  plain("skinSmoothing", t(CMD.skinSmoothing), (a) =>
+    session.ml().skinSmoothing(options(a)),
+  );
+  plain("superZoom", t(CMD.superZoom), (a) =>
+    session.ml().superZoom(num(a.scale) === 4 ? 4 : 2),
+  );
+  plain("jpegArtifacts", t(CMD.jpegArtifacts), () =>
+    session.ml().removeJpegArtifacts(),
   );
   handles.push(
     contributeTool(host, {
