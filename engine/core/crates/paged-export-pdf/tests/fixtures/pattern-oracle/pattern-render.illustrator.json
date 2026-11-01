@@ -1,0 +1,101 @@
+{
+  "fixture": "pattern-render",
+  "produced_by": {
+    "app": "Adobe Illustrator",
+    "version": "30.1.0",
+    "build": "136R",
+    "locale": "de_DE",
+    "script": "scripts/illustrator/probes/pattern-render.jsx",
+    "script_sha256": "140d0c2784f1b7f99b5c823e356e94c74562e432240d6630772c0ecf21c98d56",
+    "runner": "scripts/illustrator/run-probe.sh (PAGED_PROBE_WRITER=write-render-fixture.mjs)",
+    "recorded_at": "2026-10-29T13:42:06.862Z",
+    "host_os": "macOS 26.4"
+  },
+  "units": "pt",
+  "coordinates": "page-local, origin top-left of the artboard, Y down; 1 png pixel = 1 pt",
+  "operation": "open the engine's PDF tiling pattern; export PNG24 at 100 %; save as PDF",
+  "files": {
+    "grid-turned.png": "28ceb0d6dfa628d89c5fb3a7a161e05989307f289c2bcc9d602e7ad020b535b0",
+    "grid-turned.ai.pdf": "7389948a78600106a5e188a235fde90f91a8d482eda6eede7b1ee48e8dd9beb5",
+    "brick-row.png": "ad166b16af0f807866247ade442b930b8ccf2bf79e8b925788fdc033e6477d84",
+    "brick-row.ai.pdf": "f1a563f8b0d195fa4d4b49e724f1b2b340fac3d16ee14785c8a07968e6295a8a",
+    "hex-overlap.png": "baa4d4baac4fe19a0612c5df8062c96751abe19d4e281a4b1cfa3f426e331d98",
+    "hex-overlap.ai.pdf": "2b8e37bd926b5aaf30949cce7d9e54557acac26c48a1f76d65a9673b0c5a617d",
+    "stroke-brick.png": "954ddbb768053e0419d3f746415a2e9bfdd7284a59b601f98950a6b36cddf590",
+    "stroke-brick.ai.pdf": "163aaf369939bb55fd87d4efd4b5326501f209a56722cff0bac727a60a75874f"
+  },
+  "cases": [
+    {
+      "id": "grid-turned",
+      "input": "grid-turned.pdf",
+      "pattern_swatches": 1,
+      "path_items": 1,
+      "raster_items": 0,
+      "pattern_fills": 1,
+      "pattern_strokes": 0,
+      "document_color_space": "DocumentColorSpace.RGB",
+      "artboard_rect_app": [
+        0,
+        300,
+        400,
+        0
+      ],
+      "png": "grid-turned.png",
+      "pdf": "grid-turned.ai.pdf"
+    },
+    {
+      "id": "brick-row",
+      "input": "brick-row.pdf",
+      "pattern_swatches": 1,
+      "path_items": 1,
+      "raster_items": 0,
+      "pattern_fills": 1,
+      "pattern_strokes": 0,
+      "document_color_space": "DocumentColorSpace.RGB",
+      "artboard_rect_app": [
+        0,
+        300,
+        400,
+        0
+      ],
+      "png": "brick-row.png",
+      "pdf": "brick-row.ai.pdf"
+    },
+    {
+      "id": "hex-overlap",
+      "input": "hex-overlap.pdf",
+      "pattern_swatches": 1,
+      "path_items": 1,
+      "raster_items": 0,
+      "pattern_fills": 1,
+      "pattern_strokes": 0,
+      "document_color_space": "DocumentColorSpace.RGB",
+      "artboard_rect_app": [
+        0,
+        300,
+        400,
+        0
+      ],
+      "png": "hex-overlap.png",
+      "pdf": "hex-overlap.ai.pdf"
+    },
+    {
+      "id": "stroke-brick",
+      "input": "stroke-brick.pdf",
+      "pattern_swatches": 1,
+      "path_items": 1,
+      "raster_items": 0,
+      "pattern_fills": 0,
+      "pattern_strokes": 1,
+      "document_color_space": "DocumentColorSpace.RGB",
+      "artboard_rect_app": [
+        0,
+        300,
+        400,
+        0
+      ],
+      "png": "stroke-brick.png",
+      "pdf": "stroke-brick.ai.pdf"
+    }
+  ]
+}

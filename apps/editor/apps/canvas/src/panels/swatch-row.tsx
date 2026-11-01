@@ -76,6 +76,9 @@ const M = defineMessages("app.swatchRow", {
   spot: "spot",
   tint: "tint",
   gradient: "gradient",
+  pattern: "pattern",
+  patternChip:
+    "Pattern swatch: apply it as a fill or a stroke like a colour; edit it in pattern editing mode",
 });
 
 /** The swatch kinds the row names in words; another kind shows as is. */
@@ -84,6 +87,7 @@ const KINDS: Readonly<Record<string, string>> = {
   spot: M.spot,
   tint: M.tint,
   gradient: M.gradient,
+  pattern: M.pattern,
 };
 
 const RESERVED = new Set(["none", "paper", "black", "registration"]);
@@ -136,6 +140,9 @@ export function SwatchRow({
   const [mix, setMix] = useState<MixerValue | null>(null);
   const rowRef = useRef<HTMLLIElement | null>(null);
   const reserved = isReservedKind(swatch.kind);
+  // Engine ADR 1041 — a pattern swatch has no colour: its chip shows a
+  // tile glyph, and the colour editor and rename (colour specs) are off.
+  const pattern = swatch.kind === "pattern";
 
   useEffect(() => {
     let cancelled = false;
@@ -184,7 +191,7 @@ export function SwatchRow({
   }, [client, swatch.selfId]);
 
   const openEditor = () => {
-    if (reserved || !canEdit) return;
+    if (reserved || pattern || !canEdit) return;
     // Seed the mixer from the RAW authored channels (lossless — a
     // Lab swatch edits in Lab); display-derived fallbacks only when
     // the raw read is absent.
@@ -248,25 +255,39 @@ export function SwatchRow({
         type="button"
         data-action="edit-swatch"
         data-swatch-preview={
-          previewResolved === false ? "unresolved" : undefined
+          pattern
+            ? "pattern"
+            : previewResolved === false
+              ? "unresolved"
+              : undefined
         }
         title={
-          previewResolved === false
-            ? strings.t(M.unresolved)
-            : reserved
-              ? strings.t(M.reserved)
-              : canEdit
-                ? strings.t(M.editColour)
-                : strings.t(M.noEdits)
+          pattern
+            ? strings.t(M.patternChip)
+            : previewResolved === false
+              ? strings.t(M.unresolved)
+              : reserved
+                ? strings.t(M.reserved)
+                : canEdit
+                  ? strings.t(M.editColour)
+                  : strings.t(M.noEdits)
         }
-        disabled={reserved || !canEdit}
+        disabled={reserved || pattern || !canEdit}
         onClick={openEditor}
         className="w-5 h-5 rounded border border-input shrink-0"
-        style={{
-          background: preview?.rgbHex ?? "#d1d5db",
-          borderStyle: previewResolved === false ? "dashed" : undefined,
-          cursor: reserved || !canEdit ? "default" : "pointer",
-        }}
+        style={
+          pattern
+            ? {
+                background:
+                  "repeating-conic-gradient(#6b7280 0% 25%, #f3f4f6 0% 50%) 0 0 / 8px 8px",
+                cursor: "default",
+              }
+            : {
+                background: preview?.rgbHex ?? "#d1d5db",
+                borderStyle: previewResolved === false ? "dashed" : undefined,
+                cursor: reserved || !canEdit ? "default" : "pointer",
+              }
+        }
       />
       {renaming ? (
         <input
@@ -288,11 +309,13 @@ export function SwatchRow({
           onClick={
             onApply ? (e) => onApply(swatch.selfId, e.altKey) : undefined
           }
-          onDoubleClick={() => !reserved && canEdit && setRenaming(true)}
+          onDoubleClick={() =>
+            !reserved && !pattern && canEdit && setRenaming(true)
+          }
           title={
             onApply
               ? strings.t(M.clickApplies)
-              : reserved
+              : reserved || pattern
                 ? undefined
                 : canEdit
                   ? strings.t(M.doubleClickRename)

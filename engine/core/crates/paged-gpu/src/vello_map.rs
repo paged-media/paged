@@ -92,11 +92,117 @@ pub(crate) fn fill_of(rule: FillRule) -> peniko::Fill {
     }
 }
 
-/// A resolved paint: a solid colour or a gradient, in page space.
+/// A resolved paint: a solid colour, a gradient, or a repeated pattern
+/// raster, in page space.
 #[derive(Clone)]
 pub(crate) enum PaintBrush {
     Solid(PenikoColor),
     Gradient(PenikoGradient),
+    /// Engine ADR 1041 — a pattern's period raster, repeated; `to_page`
+    /// takes its pixel grid to page space.
+    Pattern {
+        raster: std::sync::Arc<crate::pattern_raster::PatternRaster>,
+        to_page: Affine,
+    },
+}
+
+impl PaintBrush {
+    /// The brush's own transform (raster pixels → page), for the image
+    /// brush of a pattern; `None` for colours and gradients, which are
+    /// already in page space. (The CPU lane sets it as a paint transform.)
+    #[cfg(feature = "vello-backend")]
+    pub(crate) fn brush_transform(&self) -> Option<Affine> {
+        match self {
+            PaintBrush::Pattern { to_page, .. } => Some(*to_page),
+            _ => None,
+        }
+    }
+}
+
+/// Engine ADR 1041 — the brush for the pattern use `id` drawn by a
+/// command whose transform is `transform`, at `page_to_px`.
+pub(crate) fn pattern_brush(
+    list: &DisplayList,
+    id: paged_compose::PatternId,
+    transform: &Transform,
+    page_to_px: Affine,
+) -> Option<PaintBrush> {
+    let p = list.pattern(id)?;
+    tile_brush(&p.tile, &p.to_local, transform, page_to_px)
+}
+
+/// The period of `tile` rasterised at the display scale (the largest
+/// stretch from pattern space to device pixels), placed so its pixel grid
+/// lands on pattern space.
+fn tile_brush(
+    tile: &paged_compose::PatternTile,
+    to_local: &Transform,
+    transform: &Transform,
+    page_to_px: Affine,
+) -> Option<PaintBrush> {
+    let pattern_to_page = affine_of(transform) * affine_of(to_local);
+    let scale = max_stretch(page_to_px * pattern_to_page) as f32;
+    let raster = crate::pattern_raster::pattern_raster(tile, scale)?;
+    let (sx, sy) = raster.px_to_pattern;
+    let to_page = pattern_to_page * Affine::scale_non_uniform(sx, sy);
+    to_page
+        .as_coeffs()
+        .iter()
+        .all(|v| v.is_finite())
+        .then_some(PaintBrush::Pattern { raster, to_page })
+}
+
+/// Engine ADR 1041 — for the CPU lane's ink planes (ADR 106): one brush
+/// per CMYK item paint of the pattern use `id` (an item's fill and its
+/// stroke apart), each a pattern of that paint alone over the same
+/// lattice, paired with the paint it splats.
+#[cfg(feature = "cpu")]
+pub(crate) fn pattern_ink_brushes(
+    list: &DisplayList,
+    id: paged_compose::PatternId,
+    transform: &Transform,
+    page_to_px: Affine,
+) -> Vec<(Paint, PaintBrush)> {
+    let Some(p) = list.pattern(id) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for item in &p.tile.items {
+        let parts = [
+            item.fill
+                .filter(|f| matches!(f, Paint::Cmyk { .. }))
+                .map(|f| {
+                    (
+                        f,
+                        paged_compose::PatternShape {
+                            path: item.path.clone(),
+                            fill: Some(f),
+                            stroke: None,
+                        },
+                    )
+                }),
+            item.stroke
+                .filter(|(s, _)| matches!(s, Paint::Cmyk { .. }))
+                .map(|(s, st)| {
+                    (
+                        s,
+                        paged_compose::PatternShape {
+                            path: item.path.clone(),
+                            fill: None,
+                            stroke: Some((s, st)),
+                        },
+                    )
+                }),
+        ];
+        for (ink, shape) in parts.into_iter().flatten() {
+            let tile =
+                paged_compose::PatternTile::new(p.tile.period, vec![shape], p.tile.copies.clone());
+            if let Some(brush) = tile_brush(&tile, &p.to_local, transform, page_to_px) {
+                out.push((ink, brush));
+            }
+        }
+    }
+    out
 }
 
 /// Convert a display-list `Paint` into a brush. Gradient endpoints in
@@ -108,6 +214,7 @@ pub(crate) fn resolve_paint(
     paint: &Paint,
     list: &DisplayList,
     transform: &Transform,
+    page_to_px: Affine,
 ) -> Option<PaintBrush> {
     let stops_of = |stops: &[paged_compose::GradientStop]| -> Vec<PenikoColorStop> {
         stops
@@ -188,6 +295,7 @@ pub(crate) fn resolve_paint(
                 .with_stops(stops.as_slice()),
             ))
         }
+        Paint::Pattern(id) => pattern_brush(list, *id, transform, page_to_px),
     }
 }
 

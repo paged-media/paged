@@ -16,27 +16,27 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// PATTERN EDITING v1 — A RE-EDITABLE TILE FIELD. NOT A PATTERN SWATCH.
-// Read this whole header before reading the code, and before believing
-// the feature name.
+// PATTERN EDITING — A RE-EDITABLE TILE FIELD ("pattern artwork") AND,
+// SINCE WP6.9, THE PATTERN SWATCH IT SAVES.
 //
-// ------------------------------------------------ the hard boundary
-// "SAVE AS A PATTERN SWATCH" IS NOT BUILDABLE ON THIS ENGINE, and v1
-// does not fake it. IDML gives a page item a `FillColor` that resolves
-// to a Color / Gradient / Mixed-Ink swatch. There is no pattern paint
-// type in the FORMAT, none in `paged_model::Graphic`, and none on the
-// WIRE — `SwatchSpec` and `GradientSpec` are the only two shapes
-// `createSwatch` / `createGradient` accept. Inventing a third swatch
-// kind would render nothing and lie on save, which is the same wall
-// `commands/group.ts` records for clipping masks. Filed as RFI **C-31**:
-// closing it is a new paint kind in the engine, renderer support for it,
-// AND an IDML representation decision — core work, not a plugin gap.
+// ------------------------------------------------ two things, one panel
+// A FIELD is ARTWORK: real page items — the sources and their copies on a
+// lattice — that you can re-plan, release or un-bake. It is the preview
+// of pattern editing mode: the copies show what the tile does.
 //
-// So v1 delivers the EDITING MODE, not the swatch. What it does deliver
-// is everything the catalog row asks for EXCEPT the swatch: real
-// parameters (grid / brick / hex layout, tile size, spacing, overlap
-// order, copy counts, dimming), an artboard-aware tile count, and a
-// field you can re-plan, release or un-bake without reaching for undo.
+// A PATTERN SWATCH is a PAINT: the engine's pattern paint (engine ADR
+// 1041), a `Pattern/…` swatch in the document's palette that any frame
+// names as its fill or stroke, drawn by both canvas lanes, written to PDF
+// as a tiling pattern. `createSwatch` takes it as `SwatchSpec.pattern`
+// (`supports("document.patternPaint@1")`). Save swatch
+// (`applySavePatternSwatch`) maps the field's tile, lattice, spacing and
+// overlap onto it in one undo step; Done saves and removes the copies.
+// Before ADR 1041 this was RFI C-31's wall — no pattern paint in the
+// format, the model or the wire — and the field was all there was.
+//
+// IDML still has no pattern swatch: the engine's IDML export gives the
+// frame a stand-in colour, keeps the pattern in the frame's label (a
+// paged import restores it) and reports the loss.
 //
 // ----------------------------------------------- what v1 fixes in v0
 // v0 was a fixed 3 × 3 step-and-repeat with the parameters hard-coded
@@ -239,6 +239,8 @@ const M = defineMessages("draw.pattern", {
   selectTiles: "Pattern: Select the field's tiles",
   deleteTiles: "Pattern: Delete the tiles (un-bake; the sources are kept)",
   release: "Pattern: Release the field (keep the artwork, drop the recipe)",
+  saveSwatch:
+    "Pattern: Save the field as a pattern swatch (a fill or stroke any object can take)",
 });
 export const PATTERN_COMMAND_CATEGORY = "Pattern";
 
@@ -253,6 +255,12 @@ export const DELETE_PATTERN_TILES_COMMAND_ID =
 export const RELEASE_PATTERN_COMMAND_ID =
   "media.paged.draw.command.releasePatternField";
 
+/** WP6.9 — Pattern Options' "Save swatch" / "Done": the field's tile,
+ *  lattice and placement become an engine PATTERN SWATCH (engine ADR
+ *  1041), which the Swatches panel applies as a fill or a stroke. */
+export const SAVE_PATTERN_SWATCH_COMMAND_ID =
+  "media.paged.draw.command.savePatternSwatch";
+
 /** The contributed command ids, in registration order. */
 export const PATTERN_COMMAND_IDS = [
   MAKE_PATTERN_COMMAND_ID,
@@ -260,7 +268,13 @@ export const PATTERN_COMMAND_IDS = [
   SELECT_PATTERN_TILES_COMMAND_ID,
   DELETE_PATTERN_TILES_COMMAND_ID,
   RELEASE_PATTERN_COMMAND_ID,
+  SAVE_PATTERN_SWATCH_COMMAND_ID,
 ];
+
+/** The flag a host sets when its engine has the pattern paint (engine
+ *  ADR 1041): `createSwatch` takes a `pattern`, and a frame's fill or
+ *  stroke may name a `Pattern/…` swatch. */
+export const PATTERN_PAINT_FEATURE = "document.patternPaint@1";
 
 /** The container part the recipes live in, RELATIVE to this plugin's
  *  `paged/media.paged.draw/` namespace (the host prepends it). */
@@ -299,16 +313,15 @@ export const PATTERN_SPACING_PT = 6;
  *  shows it and the conformance spec pins the WORDING — an honesty note
  *  that can be edited away silently is not a guarantee. */
 export const PATTERN_SWATCH_NOTE =
-  "THIS IS NOT A PATTERN SWATCH, and one cannot be built on this engine. " +
-  "IDML gives a page item a FillColor that resolves to a Color, Gradient or " +
-  "Mixed-Ink swatch; there is no pattern paint type in the format, none in " +
-  "the engine's Graphic model, and none the editor can create — colour " +
-  "and gradient swatches are the only two kinds it accepts. " +
-  "Inventing a third kind would render nothing and lie on save. So what a " +
-  "field here produces is ARTWORK: real page items you can re-plan, release " +
-  "or delete, but NOT a fill you can apply to another object. Closing that " +
-  "gap needs a new paint kind in the engine, renderer support for it and an " +
-  "IDML representation decision, so it is not supported yet.";
+  "A FIELD IS PATTERN ARTWORK, NOT A PATTERN SWATCH: real page items you " +
+  "can re-plan, release or delete — the copies are the preview of pattern " +
+  "editing mode. Save swatch turns the field's tile, lattice, spacing and " +
+  "overlap into a pattern swatch in the document (the engine's pattern " +
+  "paint, engine ADR 1041), which the Swatches panel applies as a fill or " +
+  "a stroke to any object; Done saves it and removes the copies. IDML has " +
+  "no pattern swatch: an IDML export shows a stand-in colour in InDesign, " +
+  "keeps the pattern in the frame's label so paged reopens it, and reports " +
+  "the loss. Save as .paged to keep it everywhere.";
 
 // ---------------------------------------------------------------- model
 
@@ -363,6 +376,9 @@ export interface PatternField {
   id: string;
   name: string;
   params: PatternParams;
+  /** The pattern swatch Save swatch last wrote (`Pattern/…`); a later
+   *  save updates it in place. Absent until the first save. */
+  swatch?: string;
   /** The ORDERED source ids the copies are emitted from. */
   sources: { kind: string; id: string }[];
 }
@@ -659,11 +675,13 @@ export function parsePatternLibrary(bytes: Uint8Array | null): PatternLibrary {
       const id = strOrNull(s.id);
       if (kind && id) sources.push({ kind, id });
     }
+    const swatch = strOrNull(f.swatch);
     fields.push({
       id: f.id,
       name: typeof f.name === "string" && f.name.length > 0 ? f.name : f.id,
       params: patternParamsFrom(f.params),
       sources,
+      ...(swatch ? { swatch } : {}),
     });
   }
   return { v: PATTERN_LIBRARY_VERSION, fields };
@@ -1589,8 +1607,8 @@ export async function applyMakePattern(
         ? "The parameters are saved, so the field can be re-planned."
         : "The parameters were NOT saved (no container writer) — the field " +
           "can be released or un-baked, but a re-plan must name them again.") +
-      " This is ARTWORK, not a pattern swatch — pattern fills are not " +
-      "supported yet.",
+      " This is pattern ARTWORK; Save swatch turns it into a pattern " +
+      "swatch any object can take as a fill.",
   );
   return tiles;
 }
@@ -1846,17 +1864,235 @@ export async function applyReleasePattern(
   return true;
 }
 
+// ------------------------------------------------- WP6.9: pattern swatch
+
+type CreateSwatch = Extract<Mutation, { op: "createSwatch" }>;
+/** The engine's pattern spec (`SwatchSpec.pattern`, engine ADR 1041). */
+export type PatternSwatchSpec = NonNullable<
+  CreateSwatch["args"]["spec"]["pattern"]
+>;
+type PatternSwatchItem = PatternSwatchSpec["items"][number];
+
+/** A colour reference a pattern item can carry: a document colour, not
+ *  "no paint", a gradient or another pattern. */
+const tileColour = (ref: string | null): { swatch: string } | null =>
+  ref &&
+  ref !== "Swatch/None" &&
+  ref !== "Color/None" &&
+  !ref.startsWith("Gradient/") &&
+  !ref.startsWith("Pattern/")
+    ? { swatch: ref }
+    : null;
+
+/** The engine pattern a field's plan describes — the SAME lattice its
+ *  copies preview (WP6.9). The tile is `params.tile` or the sources'
+ *  bounds, its origin the bounds' top-left; the items are the sources'
+ *  contours in that space with their fill, stroke and weight. `grid` is
+ *  the engine's Grid; `brick` is BrickByRow with the row shift as its
+ *  brick offset; `hex` is BrickByRow too, its vertical spacing chosen so
+ *  the row pitch is the preview's `(tile + spacing) × √3/2`. Overlap maps
+ *  one to one. Returns null when no source has a colour a tile can carry
+ *  (a gradient fill is dropped: a tile item paints a colour). Pure. */
+export function patternSwatchSpecFor(
+  plan: Pick<PatternPlan, "params" | "bounds" | "sources">,
+): PatternSwatchSpec | null {
+  const { params, bounds } = plan;
+  const size: [number, number] = [
+    bounds.right - bounds.left,
+    bounds.bottom - bounds.top,
+  ];
+  const [w, h] = params.tile ?? size;
+  if (!(w > 0 && h > 0)) return null;
+  const step = patternStepFor(params, size);
+  const items: PatternSwatchItem[] = [];
+  for (const source of plan.sources) {
+    const fill = tileColour(source.paint.fill);
+    const weight = source.paint.weight ?? 0;
+    const stroke = weight > 0 ? tileColour(source.paint.stroke) : null;
+    if (!fill && !stroke) continue;
+    const item: PatternSwatchItem = {
+      anchors: source.table.anchors.map((a) => ({
+        anchor: [a.anchor[0] - bounds.left, a.anchor[1] - bounds.top],
+        left: [a.left[0] - bounds.left, a.left[1] - bounds.top],
+        right: [a.right[0] - bounds.left, a.right[1] - bounds.top],
+      })),
+      subpathStarts: [...source.table.subpathStarts],
+    };
+    if (source.table.subpathOpen?.length) {
+      item.subpathOpen = [...source.table.subpathOpen];
+    }
+    if (fill) item.fill = fill;
+    if (stroke) {
+      item.stroke = stroke;
+      item.strokeWeight = weight;
+    }
+    items.push(item);
+  }
+  if (items.length === 0) return null;
+  const spec: PatternSwatchSpec = {
+    width: w,
+    height: h,
+    items,
+    tileType: params.layout === "grid" ? "Grid" : "BrickByRow",
+    hSpacing: params.spacing[0],
+    vSpacing: step[1] - h,
+    hOverlap:
+      params.overlap.horizontal === "leftInFront"
+        ? "LeftInFront"
+        : "RightInFront",
+    vOverlap:
+      params.overlap.vertical === "topInFront" ? "TopInFront" : "BottomInFront",
+  };
+  if (params.layout !== "grid") spec.brickOffset = params.offset;
+  return spec;
+}
+
+/** The next free `Pattern/<slug>` id among `taken`. Pure. */
+export function patternSwatchIdFor(
+  name: string,
+  taken: ReadonlySet<string>,
+): string {
+  const slug =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "pattern";
+  let id = `Pattern/${slug}`;
+  for (let n = 2; taken.has(id); n++) id = `Pattern/${slug}-${n}`;
+  return id;
+}
+
+/**
+ * **SAVE SWATCH** (WP6.9, engine ADR 1041) — the field becomes a pattern
+ * swatch: one `createSwatch` (the first save) or `editSwatch` (a later
+ * one, the id the recipe remembers) ⇒ ONE undo step. The field's saved
+ * parameters, merged with the payload's (the Pattern Options panel sends
+ * its draft), describe the tile; the sources' CURRENT geometry and paint
+ * are its items. With `exit: true` it is Illustrator's **Done**: the
+ * copies are removed afterwards (a second undo step) and the sources
+ * stay. Payload `{ patternId?, name?, exit?, …params }`. Returns the
+ * swatch id, or null on a refusal (always logged).
+ */
+export async function applySavePatternSwatch(
+  host: BundleHost,
+  payload?: unknown,
+): Promise<string | null> {
+  const label = SAVE_PATTERN_SWATCH_COMMAND_ID;
+  if (!host.supports(PATTERN_PAINT_FEATURE)) {
+    host.log.warn(
+      `${label}: this editor's engine has no pattern paint ` +
+        `(supports("${PATTERN_PAINT_FEATURE}") is false) — the field stays ` +
+        "pattern artwork",
+    );
+    return null;
+  }
+  const p = (payload && typeof payload === "object" ? payload : {}) as Record<
+    string,
+    unknown
+  >;
+  const field = await resolvePatternField(host, p.patternId);
+  if (field === null) {
+    host.log.warn(
+      `${label}: no pattern field resolved — make one from the selection first`,
+    );
+    return null;
+  }
+  const library = await readPatternLibrary(host);
+  const saved = findPatternField(library, field);
+  const links = await patternLinks(host, field);
+  const sourceIds =
+    links.sources.length > 0
+      ? links.sources.map((s) => s.id)
+      : (saved?.sources.map((s) => ({ kind: s.kind, id: s.id }) as ElementId) ??
+        []);
+  if (sourceIds.length === 0) {
+    host.log.warn(`${label}: "${field}" names no source elements — no-op`);
+    return null;
+  }
+  const params = patternParamsFrom(p, saved?.params ?? PATTERN_DEFAULTS);
+  // The plan is read for its sources and bounds; no copy is emitted.
+  const plan = await patternPlanFor(host, {
+    field,
+    params: { ...params, columns: 1, rows: 1, fitToArtboard: false },
+    ids: sourceIds,
+    label,
+  });
+  if (!plan) return null;
+  const spec = patternSwatchSpecFor(plan);
+  if (!spec) {
+    host.log.warn(
+      `${label}: no source has a colour fill or stroke a tile can carry ` +
+        "(a gradient or None paints nothing in a pattern) — no swatch written",
+    );
+    return null;
+  }
+  const name =
+    typeof p.name === "string" && p.name.trim().length > 0
+      ? p.name.trim()
+      : (saved?.name ?? field);
+  let swatches: readonly { selfId: string }[] = [];
+  try {
+    swatches = (await host.document.collection("swatches")) as readonly {
+      selfId: string;
+    }[];
+  } catch {
+    /* an empty listing: the id below is still free of known ones */
+  }
+  const taken = new Set(swatches.map((s) => s.selfId));
+  const existing =
+    saved?.swatch && taken.has(saved.swatch) ? saved.swatch : null;
+  const swatchId = existing ?? patternSwatchIdFor(name, taken);
+  const swatchSpec = {
+    selfId: swatchId,
+    name,
+    space: "",
+    value: [],
+    model: null,
+    alternateSpace: null,
+    alternateValue: [],
+    tint: null,
+    alpha: null,
+    pattern: spec,
+  };
+  const outcome = await host.document.mutate(
+    existing
+      ? { op: "editSwatch", args: { swatchId, spec: swatchSpec } }
+      : { op: "createSwatch", args: { spec: swatchSpec } },
+  );
+  if (!outcome.applied) {
+    host.log.warn(
+      `${label}: the engine refused the pattern swatch: ${JSON.stringify(outcome.error)}`,
+    );
+    return null;
+  }
+  if (saved) {
+    await writePatternLibrary(
+      host,
+      upsertPatternField(library, { ...saved, params, swatch: swatchId }),
+    );
+  }
+  host.log.info(
+    `${label}: "${name}" ${existing ? "updated" : "saved"} as the pattern ` +
+      `swatch ${swatchId} (${spec.tileType}, ${spec.items.length} item(s), ` +
+      `tile ${spec.width} × ${spec.height} pt)`,
+  );
+  if (p.exit === true) {
+    await applyDeletePatternTiles(host, { patternId: field });
+  }
+  return swatchId;
+}
+
 // ------------------------------------------------------------- commands
 
-/** Register the five pattern commands. Every title carries what the
- *  contract has no description field to say — and the FIRST one carries
- *  the hard boundary, because a name that only said "Make pattern" would
- *  promise Illustrator's live swatch, which this engine has no paint
- *  type for (RFI C-31, {@link PATTERN_SWATCH_NOTE}).
+/** Register the six pattern commands. Every title carries what the
+ *  contract has no description field to say — the FIRST one that a field
+ *  is artwork, the last one that the swatch is a paint
+ *  ({@link PATTERN_SWATCH_NOTE}).
  *
  *  Payloads: make `{ name?, …params }`, re-plan `{ patternId?, name?,
  *  …params }`, select `{ patternId?, includeSources? }`, delete tiles /
- *  release `{ patternId? }`. */
+ *  release `{ patternId? }`, save swatch `{ patternId?, name?, exit?,
+ *  …params }`. */
 export function contributePatternCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
@@ -1893,6 +2129,13 @@ export function contributePatternCommands(host: BundleHost): Disposable {
       category: PATTERN_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReleasePattern(host, payload).then(() => undefined),
+    }),
+    registerCommand(host, {
+      id: SAVE_PATTERN_SWATCH_COMMAND_ID,
+      title: M.saveSwatch,
+      category: PATTERN_COMMAND_CATEGORY,
+      handler: (_paged, payload) =>
+        applySavePatternSwatch(host, payload).then(() => undefined),
     }),
   ];
   return {

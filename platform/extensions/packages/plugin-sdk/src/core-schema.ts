@@ -808,6 +808,10 @@ export const CORE_PATHS: Record<
   // Engine ADR 1048: the frame's gradient mesh or freeform
   // gradient, whole (`{ type: "fillMesh", value: MeshFillSpec | null }`).
   frameFillMesh: V71,
+  // Engine ADR 1041 (protocol 76): the frame's own placement of a pattern
+  // fill or stroke, `[a b c d tx ty]` in the frame's box space (`null` is
+  // identity).
+  framePatternTransform: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",
