@@ -794,6 +794,10 @@
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.image.tool.objectSelection",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.brush",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },
