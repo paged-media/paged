@@ -30,6 +30,8 @@ export interface ZipEntry {
 }
 
 /** A placed text field to turn into a Data Merge placeholder. */
+
+import { escapeXmlAttr, escapeXmlText } from "@paged-media/helpers";
 export interface TextField {
   /** The story's `Self` as the engine lists it (`Story/u0` or `u0`). */
   storyId: string;
@@ -75,14 +77,8 @@ export interface MergeTemplateResult {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-const escAttr = (s: string) =>
-  s
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-const escText = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const escAttr = escapeXmlAttr;
+const escText = escapeXmlText;
 const unescText = (s: string) =>
   s
     .replace(/&lt;/g, "<")

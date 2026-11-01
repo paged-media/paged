@@ -56,6 +56,7 @@
 // offset by InDesign's default step of 1p0 (12 pt) right and down, directly
 // above each source, one undo step (`duplicateElements`).
 
+import { escapeXmlAttr } from "@paged-media/helpers";
 import type {
   CommandContribution,
   KeybindingContribution,
@@ -181,14 +182,6 @@ export const pageItemClipboard = {
   },
 };
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function toBase64(s: string): string {
   const bytes = new TextEncoder().encode(s);
   let bin = "";
@@ -220,7 +213,7 @@ export function clipHtml(c: PageItemClip): string {
     c.snippet.length <= SNIPPET_IN_HTML_MAX
       ? ` ${SNIPPET_ATTR}="${toBase64(c.snippet)}"`
       : "";
-  const body = escapeHtml(c.text).replace(/\n/g, "<br>");
+  const body = escapeXmlAttr(c.text).replace(/\n/g, "<br>");
   return `<div ${MARKER_ATTR}="${c.token}"${carry}>${body}</div>`;
 }
 
