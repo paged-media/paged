@@ -302,6 +302,9 @@ export function makeAppearanceKind(
           style,
           supported,
           prev: env,
+          // Draw ADR 367: a native part the element already has is not
+          // written again.
+          current: (await readGraphicAppearance(host, el)).appearance,
         });
         mutations.push(...(batch.op === "batch" ? batch.args.ops : [batch]));
         continue;

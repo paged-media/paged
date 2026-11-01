@@ -205,6 +205,7 @@ export function makeGraphicStyleKind(
         style,
         supported: read.supported,
         prev: read.envelope,
+        current: read.appearance,
       });
       out.push(...(batch.op === "batch" ? batch.args.ops : [batch]));
     }

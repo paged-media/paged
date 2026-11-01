@@ -21,7 +21,8 @@
 //! A vector effect is an entry of an item's ordered effect stack (ADR
 //! 1008) that changes the item's GEOMETRY: Roughen, Zig Zag, Pucker &
 //! Bloat, Twist, Tweak, Transform (copies), Free Distort, Warp, Offset
-//! Path, Outline Stroke, Round Corners, Scribble, Convert to Shape, and
+//! Path, Outline Stroke, Round Corners, Scribble, Convert to Shape, the
+//! Envelope (a Bézier patch mesh, draw ADR 367), and
 //! on a group the Pathfinder shape modes. The model keeps the source
 //! path and the parameters; this crate computes the effected outline.
 //!
@@ -38,6 +39,7 @@
 pub mod bake;
 pub mod cache;
 pub mod distort;
+pub mod envelope;
 pub mod path;
 pub mod rng;
 pub mod scribble;
@@ -93,6 +95,7 @@ pub fn apply_effect(shape: &Shape, effect: &Effect, ctx: &Context, paint: &mut P
         Effect::TransformCopies(p) => distort::transform_copies(shape, p),
         Effect::FreeDistort(p) => distort::free_distort(shape, p),
         Effect::Warp(p) => warp::warp(shape, p),
+        Effect::Envelope(p) => envelope::envelope(shape, p),
         Effect::OffsetPath(p) => path::offset_path(shape, p),
         Effect::OutlinePath(_) => {
             // The stroke the outline outlines is the item's, once: an

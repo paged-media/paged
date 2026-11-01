@@ -24,6 +24,7 @@
 
 mod bake;
 mod effects;
+mod envelope;
 mod illustrator_oracle;
 mod properties;
 

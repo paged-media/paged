@@ -193,11 +193,13 @@ const DRAW_PROFILE: SoloProfile = {
     // column is a host id.
     left: "paged.layers",
     // The host Stroke panel carries draw's stroke rows (dashes,
-    // arrowheads) since paged.draw's own "Vector stroke" merged into it.
+    // arrowheads) since paged.draw's own "Vector stroke" merged into it,
+    // and the host Appearance panel every fill and stroke since draw's own
+    // Appearance panel was retired (draw ADR 367, editor ADR 312).
     tabs: [
       "paged.properties",
       "paged.stroke",
-      "media.paged.draw.panel.appearance",
+      "paged.appearance",
       "paged.swatches",
     ],
   },

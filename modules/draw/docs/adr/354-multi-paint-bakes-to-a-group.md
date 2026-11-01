@@ -96,3 +96,9 @@ survives an IDML save and re-import with the envelope on the carrier
 A bake is one batch and one undo step, and a re-bake two
 ([ADR 360](360-records-name-no-minted-ids.md)): the bake record no longer lists its layers; they
 are the carrier's group members whose `appearanceLayer` marker names the carrier.
+
+## Amendment 2026-10-31
+
+On a host whose engine draws native appearance (engine ADR 1043) this is the fallback lane: the
+commands write `frameAppearance`, a document's stacks — baked or not — move onto it when it opens,
+and the bake has nothing left to bake ([ADR 367](367-envelopes-and-graphic-styles-on-native-appearance.md)).
