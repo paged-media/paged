@@ -256,8 +256,13 @@ pub(crate) fn sweep_rotation(t: &Transform) -> f32 {
 /// agrees with for every separable mode and for Hue / Saturation /
 /// Color / Luminosity; they part company only in edge cases of
 /// HardLight, SoftLight and ColorBurn over a non-opaque backdrop.
+///
+/// Photoshop's eleven modes (engine ADR 1034) have no `Mix`. Both lanes
+/// composite a GROUP in one of them themselves, against its backdrop,
+/// and never ask for its `Mix`; anything else that carries one (an
+/// effect stamp's own blend) draws the nearest native mode.
 pub(crate) fn blend_to_peniko(m: ComposeBlendMode) -> PenikoBlendMode {
-    let mix = match m {
+    let mix = match m.nearest_native() {
         ComposeBlendMode::Normal => Mix::Normal,
         ComposeBlendMode::Multiply => Mix::Multiply,
         ComposeBlendMode::Screen => Mix::Screen,
@@ -274,6 +279,8 @@ pub(crate) fn blend_to_peniko(m: ComposeBlendMode) -> PenikoBlendMode {
         ComposeBlendMode::Saturation => Mix::Saturation,
         ComposeBlendMode::Color => Mix::Color,
         ComposeBlendMode::Luminosity => Mix::Luminosity,
+        // `nearest_native` returned one of the sixteen.
+        _ => Mix::Normal,
     };
     PenikoBlendMode::new(mix, Compose::SrcOver)
 }

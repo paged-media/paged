@@ -292,9 +292,24 @@ Eyedropper) and `k` (a dead Measure). The current global picture:
   WP6.7's ten distortion tools (the Liquify flyout, Puppet Warp, the
   Perspective Grid / Selection pair) are KEYLESS for that reason: their
   Illustrator keys (`shift+r`, `shift+p`, `shift+v`) are all held.
+  WP6.3's Envelope Mesh tool (draw ADR 367) is KEYLESS too, in the host's
+  Free Transform flyout beside Puppet Warp.
   WP6.8's eight Symbolism tools (the Sprayer, Shifter, Scruncher, Sizer,
   Spinner, Stainer, Screener and the 9-Slice Guides tool, one `symbolism`
   flyout) are KEYLESS too: Illustrator's `shift+s` is draw's already.
+
+**APPEARANCE RUNS ON THE ENGINE (WP6.3, ADR 367).** On a host with
+`document.appearance@1` the appearance commands write the native
+`frameAppearance` (engine ADR 1043) and there is no draw Appearance panel —
+the host's lists every fill and stroke (editor ADR 312). Metadata stacks
+(ADR 354), baked or not, and the graphic-style library move over on open
+(`commands/appearance-migrate.ts`, one undo step). Envelope Distort is an
+effect-stack entry (`warp`, or the engine's `envelope` mesh), made by the
+Object ▸ Envelope distort rows and bent with the Envelope Mesh tool;
+graphic styles carry the native layers, the object effects and the targets,
+and import / export / merge as a library file. Specs of the metadata lane run
+through `withoutNativeAppearance` (test/headless/host.ts); the unit rig
+answers no native appearance.
 
 **LIVE SYMBOLS (WP6.8, ADR 365) run on the engine's instance node**
 (`document.symbols@1`, engine ADR 1039). The Symbolism tools change only

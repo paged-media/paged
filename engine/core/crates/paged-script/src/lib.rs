@@ -1453,6 +1453,22 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("deleteTextAnchor"),
             1,
         )
+        // Engine ADR 1052.
+        .function(
+            guarded(paged_set_content_control_value),
+            js_string!("setContentControlValue"),
+            3,
+        )
+        .function(
+            guarded(paged_toggle_content_control),
+            js_string!("toggleContentControl"),
+            2,
+        )
+        .function(
+            guarded(paged_choose_content_control_item),
+            js_string!("chooseContentControlItem"),
+            3,
+        )
         .function(
             guarded(paged_insert_cross_reference),
             js_string!("insertCrossReference"),
@@ -3653,6 +3669,9 @@ fn paged_insert_anchored_frame(
         width,
         height,
         image_uri,
+        kind: None,
+        layout: None,
+        cell: None,
     }))
 }
 
@@ -4250,6 +4269,9 @@ fn paged_insert_table(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> J
         footer_rows: spec.footer_rows,
         column_widths: spec.column_widths,
         row_heights: spec.row_heights,
+        cell: None,
+        word: None,
+        paragraph: None,
     }))
 }
 
@@ -4271,6 +4293,7 @@ fn paged_set_row_height(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
         table_id,
         row,
         height,
+        auto_grow: None,
     }))
 }
 
@@ -4984,6 +5007,49 @@ fn paged_insert_text_anchor(
         .next()
         .map(|id| JsValue::from(js_string!(id.as_str())))
         .unwrap_or(JsValue::null()))
+}
+
+/// `paged.setContentControlValue(storyId, controlId, value)` — set a content
+/// control's value (text, an item, a `YYYY-MM-DD` date, a checkbox's
+/// `true` / `false`); `true` when applied (engine ADR 1052).
+fn paged_set_content_control_value(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    Ok(apply_bool(&Mutation::SetContentControlValue {
+        story_id: arg_string(args, 0, ctx)?,
+        control_id: arg_string(args, 1, ctx)?,
+        value: arg_string(args, 2, ctx)?,
+    }))
+}
+
+/// `paged.toggleContentControl(storyId, controlId)` — flip a checkbox
+/// control (engine ADR 1052).
+fn paged_toggle_content_control(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    Ok(apply_bool(&Mutation::ToggleContentControl {
+        story_id: arg_string(args, 0, ctx)?,
+        control_id: arg_string(args, 1, ctx)?,
+    }))
+}
+
+/// `paged.chooseContentControlItem(storyId, controlId, index)` — choose
+/// item `index` of a drop-down or combo box control (engine ADR 1052).
+fn paged_choose_content_control_item(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let index = args.get_or_undefined(2).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::ChooseContentControlItem {
+        story_id: arg_string(args, 0, ctx)?,
+        control_id: arg_string(args, 1, ctx)?,
+        index,
+    }))
 }
 
 /// `paged.deleteTextAnchor(anchorId)` — delete a bookmark (engine ADR 1022).

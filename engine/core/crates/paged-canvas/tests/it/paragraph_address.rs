@@ -190,6 +190,9 @@ fn a_picture_alone_in_its_paragraph_anchors_there_through_undo_and_redo() {
         height: 30.0,
         image_uri: None,
         paragraph: Some(2),
+        kind: None,
+        layout: None,
+        cell: None,
     })
     .expect("anchor in the second blank paragraph");
     assert_eq!(frames_per_paragraph(&m, &story), [0, 0, 1, 0]);

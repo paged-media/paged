@@ -28,12 +28,15 @@
 // and blend mode, which the front-most bake never wrote, go to the frame's
 // fill and stroke targets (`frameFillOpacity`, `frameFillBlendMode`, …).
 //
-// The commands, the Appearance panel, the group bake and the graphic styles
-// still read the metadata stack; moving them onto the native appearance is
-// plan WP6.3. These helpers are its engine side, and what a document opened
-// from before the switch migrates through.
+// WP6.3 (draw ADR 367) moved the appearance commands and the graphic
+// styles onto the native appearance when the host's engine has it
+// (`document.appearance@1`): the list helpers below are what they edit,
+// and `installAppearanceMigration` (appearance-migrate.ts) moves a
+// document's metadata stacks over when it opens. The metadata stack stays
+// the lane of a host without the flag.
 
 import type {
+  BundleHost,
   ElementId,
   Mutation,
   PluginMetadataEnvelope,
@@ -48,14 +51,157 @@ import {
 } from "./appearance";
 import { stampDrawMetadata } from "./appearance-bake";
 
-/** One layer of the engine's appearance (`PaintLayerSpec` on the wire). */
+/** One layer of the engine's appearance (`PaintLayerSpec` on the wire);
+ *  the fields this module does not edit ride along untouched. */
 export interface NativePaintLayer {
   kind: "fill" | "stroke" | "frameFill" | "frameStroke";
+  enabled?: boolean;
   color?: string;
   tint?: number;
   opacityPct?: number;
   blendMode?: string;
   weight?: number;
+  [field: string]: unknown;
+}
+
+/** The feature a host's engine advertises when it draws native
+ *  appearance (engine ADR 1043). */
+export const NATIVE_APPEARANCE_FEATURE = "document.appearance@1";
+
+/** The page items that carry `frameAppearance`. */
+export const APPEARANCE_KINDS: ReadonlySet<string> = new Set([
+  "textFrame",
+  "rectangle",
+  "oval",
+  "polygon",
+]);
+
+/** Whether the host's engine draws native appearance. */
+export function nativeAppearanceOn(host: BundleHost): boolean {
+  try {
+    return host.supports(NATIVE_APPEARANCE_FEATURE);
+  } catch {
+    return false;
+  }
+}
+
+/** The layers of a read `appearance` value (`{ type, value: { layers } }`,
+ *  or the list itself), or null. */
+export function layersOfValue(value: unknown): NativePaintLayer[] | null {
+  if (Array.isArray(value)) return value as NativePaintLayer[];
+  if (!value || typeof value !== "object") return null;
+  const v = value as { type?: string; value?: unknown; layers?: unknown };
+  const inner = v.type === "appearance" ? v.value : v;
+  const layers = (inner as { layers?: unknown } | null)?.layers;
+  return Array.isArray(layers) ? (layers as NativePaintLayer[]) : null;
+}
+
+/** `id`'s native appearance as stored (empty: the frame as it always
+ *  was), or null when the item carries none. */
+export async function readNativeAppearance(
+  host: BundleHost,
+  id: ElementId,
+): Promise<NativePaintLayer[] | null> {
+  if (!APPEARANCE_KINDS.has(id.kind)) return null;
+  const props = await host.document.elementProperties(id).catch(() => null);
+  const row = props?.entries.find((e) => e.path === "frameAppearance");
+  if (!row) return null;
+  return layersOfValue(row.value) ?? [];
+}
+
+/** The list with its placeholders made explicit: the empty list is the
+ *  frame's fill under its stroke; a list that names only one gets the
+ *  other where the engine implies it (the fill at the bottom, the stroke
+ *  right above it). */
+export function explicitLayers(
+  layers: readonly NativePaintLayer[],
+): NativePaintLayer[] {
+  const out = layers.map((l) => ({ ...l }));
+  const hasFill = out.some((l) => l.kind === "frameFill");
+  const hasStroke = out.some((l) => l.kind === "frameStroke");
+  if (!hasFill) out.unshift({ kind: "frameFill" });
+  if (!hasStroke) {
+    const at = out.findIndex((l) => l.kind === "frameFill");
+    out.splice(at + 1, 0, { kind: "frameStroke" });
+  }
+  return out;
+}
+
+/** The whole-list write (one undo step). */
+export function appearanceMutation(
+  id: ElementId,
+  layers: readonly NativePaintLayer[],
+): Mutation {
+  return {
+    op: "setElementProperty",
+    args: {
+      elementId: id,
+      path: "frameAppearance",
+      value: { type: "appearance", value: { layers: [...layers] } },
+    },
+  } as Mutation;
+}
+
+const isFillKind = (l: NativePaintLayer) =>
+  l.kind === "fill" || l.kind === "frameFill";
+const isStrokeKind = (l: NativePaintLayer) =>
+  l.kind === "stroke" || l.kind === "frameStroke";
+
+/** Add a fill or stroke the way Illustrator's Add New Fill / Stroke does:
+ *  directly above the topmost layer of its kind. */
+export function addNativeLayer(
+  layers: readonly NativePaintLayer[],
+  layer: NativePaintLayer,
+): NativePaintLayer[] {
+  const out = explicitLayers(layers);
+  const same = layer.kind === "stroke" ? isStrokeKind : isFillKind;
+  let at = -1;
+  out.forEach((l, i) => {
+    if (same(l)) at = i;
+  });
+  out.splice(at + 1, 0, layer);
+  return out;
+}
+
+/** The list index of the `n`-th extra layer of `kind` (bottom to top),
+ *  -1 when there is none. */
+export function extraLayerIndex(
+  layers: readonly NativePaintLayer[],
+  kind: "fill" | "stroke",
+  n: number,
+): number {
+  let seen = -1;
+  for (let i = 0; i < layers.length; i++)
+    if (layers[i]!.kind === kind && ++seen === n) return i;
+  return -1;
+}
+
+/** Drop the layer at `index` (a placeholder is the frame's own paint and
+ *  stays: an out-of-range or placeholder index changes nothing). */
+export function removeNativeLayer(
+  layers: readonly NativePaintLayer[],
+  index: number,
+): NativePaintLayer[] {
+  const out = explicitLayers(layers);
+  const l = out[index];
+  if (!l || l.kind === "frameFill" || l.kind === "frameStroke") return out;
+  out.splice(index, 1);
+  return out;
+}
+
+/** Move the layer at `index` by `delta` places (clamped; placeholders
+ *  move too — the order IS what draws on top). */
+export function moveNativeLayer(
+  layers: readonly NativePaintLayer[],
+  index: number,
+  delta: number,
+): NativePaintLayer[] {
+  const out = explicitLayers(layers);
+  const to = Math.max(0, Math.min(out.length - 1, index + delta));
+  if (!out[index] || to === index) return out;
+  const [l] = out.splice(index, 1);
+  out.splice(to, 0, l!);
+  return out;
 }
 
 function fillLayer(f: FillLayer): NativePaintLayer {

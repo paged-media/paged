@@ -164,19 +164,39 @@ pub fn render_rpr(props: &RunProps, rstyle: Option<&str>) -> Vec<u8> {
     if let Some(id) = rstyle {
         s.push_str(&format!("<w:rStyle w:val=\"{}\"/>", escape(id)));
     }
-    if let Some(font) = &props.font {
-        match &props.font_theme {
-            // The theme font, by reference and by name (doc ADR 609).
-            Some(slot) => s.push_str(&format!(
-                "<w:rFonts w:ascii=\"{0}\" w:hAnsi=\"{0}\" w:asciiTheme=\"{1}\" w:hAnsiTheme=\"{1}\"/>",
-                escape(font),
-                escape(slot)
-            )),
-            None => s.push_str(&format!("<w:rFonts w:ascii=\"{}\"/>", escape(font))),
+    if props.font.is_some()
+        || props.font_east_asia.is_some()
+        || props.font_cs.is_some()
+        || props.font_hint.is_some()
+    {
+        s.push_str("<w:rFonts");
+        if let Some(font) = &props.font {
+            match &props.font_theme {
+                // The theme font, by reference and by name (doc ADR 609).
+                Some(slot) => s.push_str(&format!(
+                    " w:ascii=\"{0}\" w:hAnsi=\"{0}\" w:asciiTheme=\"{1}\" w:hAnsiTheme=\"{1}\"",
+                    escape(font),
+                    escape(slot)
+                )),
+                None => s.push_str(&format!(" w:ascii=\"{}\"", escape(font))),
+            }
         }
+        // Doc ADR 620 — the East Asian and complex-script faces, the hint.
+        if let Some(f) = &props.font_east_asia {
+            s.push_str(&format!(" w:eastAsia=\"{}\"", escape(f)));
+        }
+        if let Some(f) = &props.font_cs {
+            s.push_str(&format!(" w:cs=\"{}\"", escape(f)));
+        }
+        if let Some(h) = &props.font_hint {
+            s.push_str(&format!(" w:hint=\"{}\"", escape(h)));
+        }
+        s.push_str("/>");
     }
     toggle(&mut s, "b", props.bold);
+    toggle(&mut s, "bCs", props.bold_cs);
     toggle(&mut s, "i", props.italic);
+    toggle(&mut s, "iCs", props.italic_cs);
     toggle(&mut s, "caps", props.caps);
     toggle(&mut s, "smallCaps", props.small_caps);
     toggle(&mut s, "strike", props.strike);
@@ -203,6 +223,9 @@ pub fn render_rpr(props: &RunProps, rstyle: Option<&str>) -> Vec<u8> {
     if let Some(sz) = props.size_half_pts {
         s.push_str(&format!("<w:sz w:val=\"{sz}\"/>"));
     }
+    if let Some(sz) = props.size_cs_half_pts {
+        s.push_str(&format!("<w:szCs w:val=\"{sz}\"/>"));
+    }
     match props.underline {
         Some(true) => s.push_str("<w:u w:val=\"single\"/>"),
         Some(false) => s.push_str("<w:u w:val=\"none\"/>"),
@@ -216,6 +239,8 @@ pub fn render_rpr(props: &RunProps, rstyle: Option<&str>) -> Vec<u8> {
         };
         s.push_str(&format!("<w:vertAlign w:val=\"{v}\"/>"));
     }
+    toggle(&mut s, "rtl", props.rtl);
+    toggle(&mut s, "cs", props.complex_script);
     s.push_str("</w:rPr>");
     s.into_bytes()
 }
@@ -238,6 +263,12 @@ pub fn render_ppr(props: &ParaProps, pstyle: Option<&str>) -> Vec<u8> {
     match props.page_break_before {
         Some(true) => s.push_str("<w:pageBreakBefore/>"),
         Some(false) => s.push_str("<w:pageBreakBefore w:val=\"0\"/>"),
+        None => {}
+    }
+    // Doc ADR 620 — a right-to-left paragraph.
+    match props.bidi {
+        Some(true) => s.push_str("<w:bidi/>"),
+        Some(false) => s.push_str("<w:bidi w:val=\"0\"/>"),
         None => {}
     }
     // <w:spacing> carries before/after together.
@@ -638,16 +669,36 @@ fn changed_elements(from: &RunFormat, to: &RunFormat) -> Vec<(&'static str, Opti
             }
         };
     }
-    if (&a.font, &a.font_theme) != (&b.font, &b.font_theme) {
+    if (
+        &a.font,
+        &a.font_theme,
+        &a.font_east_asia,
+        &a.font_cs,
+        &a.font_hint,
+    ) != (
+        &b.font,
+        &b.font_theme,
+        &b.font_east_asia,
+        &b.font_cs,
+        &b.font_hint,
+    ) {
         let props = RunProps {
             font: b.font.clone(),
             font_theme: b.font_theme.clone(),
+            font_east_asia: b.font_east_asia.clone(),
+            font_cs: b.font_cs.clone(),
+            font_hint: b.font_hint.clone(),
             ..RunProps::default()
         };
         out.push(("rFonts", one(&props, None)));
     }
     field!(bold, "b");
+    field!(bold_cs, "bCs");
     field!(italic, "i");
+    field!(italic_cs, "iCs");
+    field!(size_cs_half_pts, "szCs");
+    field!(rtl, "rtl");
+    field!(complex_script, "cs");
     field!(caps, "caps");
     field!(small_caps, "smallCaps");
     field!(strike, "strike");

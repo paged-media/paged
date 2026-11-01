@@ -17,7 +17,7 @@ their status says so.
 | [351](351-shapes-are-native-page-items.md) | Drawn shapes are native page items; the plugin owns no content type | Accepted, recorded retroactively 2026-10-02 |
 | [352](352-basic-operations-belong-to-the-host.md) | Basic object operations belong to the host | Accepted, recorded retroactively 2026-10-02 |
 | [353](353-path-algebra-runs-in-the-engine.md) | Path algebra that changes a document path runs in the engine | Accepted, recorded retroactively 2026-10-02 |
-| [354](354-multi-paint-bakes-to-a-group.md) | A multi-paint appearance bakes to a group of single-paint items | Accepted, recorded retroactively 2026-10-02 (partially superseded 2026-10-24 by 361) |
+| [354](354-multi-paint-bakes-to-a-group.md) | A multi-paint appearance bakes to a group of single-paint items | Accepted, recorded retroactively 2026-10-02 (partially superseded 2026-10-24 by 361; the metadata lane since 367) |
 | [355](355-libraries-in-container-parts.md) | Document-level libraries and recipes live in container parts | Accepted, recorded retroactively 2026-10-02 |
 | [356](356-live-constructs-are-recipes.md) | Live constructs are a stored recipe plus artwork that can be regenerated | Accepted, recorded retroactively 2026-10-02 (partially superseded 2026-10-24 by 361) |
 | [357](357-image-trace-rust-lane.md) | Image Trace is the one Rust lane | Accepted, recorded retroactively 2026-10-02 |
@@ -29,6 +29,7 @@ their status says so.
 | [363](363-distortion-tools.md) | The distortion tools rewrite paths; their maths is pure warp geometry; the grid is a view setting | Accepted 2026-10-24 |
 | [364](364-interchange-rides-the-engines-doors.md) | Interchange rides the engine's doors: one SVG reader and writer, DXF through SVG, AI and EPS through the host | Accepted 2026-10-28 (amends 357) |
 | [365](365-live-symbols-on-the-engine-node.md) | Live symbols run on the engine's instance node; the Symbolism tools change what an instance carries | Accepted 2026-10-29 |
+| [367](367-envelopes-and-graphic-styles-on-native-appearance.md) | Draw's appearance runs on the engine: the host panel, envelopes as stack entries, graphic styles on native appearance | Accepted 2026-10-31 (amends 354, 355) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

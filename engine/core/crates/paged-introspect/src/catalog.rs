@@ -132,6 +132,55 @@ pub struct ApiCatalog {
     pub effect_kinds: Vec<crate::effect_kinds::EffectKindRow>,
     /// The Effect menu's groups, in menu order.
     pub effect_categories: &'static [&'static str],
+    /// Engine ADR 1034 — the 27 blend modes, in Photoshop's menu order,
+    /// with every spelling a surface needs: the one list the editor's
+    /// menus and the modules' schemas read instead of keeping their own.
+    pub blend_modes: Vec<BlendModeRow>,
+}
+
+/// One blend mode as the catalog publishes it (`paged_blend::BlendMode`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlendModeRow {
+    /// The model spelling — the value of `frameBlendMode` and its kin.
+    pub name: &'static str,
+    /// The canonical snake_case id (paged.image's `compose.<id>`).
+    pub id: &'static str,
+    /// English display name (Photoshop's).
+    pub label: &'static str,
+    /// Photoshop's menu group, 0–5.
+    pub group: usize,
+    /// One of the sixteen PDF / InDesign modes.
+    pub native: bool,
+    /// What an IDML export writes for it (itself, or the nearest).
+    pub idml: &'static str,
+    /// The PDF `/BM` name, when PDF has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pdf: Option<&'static str>,
+    /// The CSS `mix-blend-mode` keyword, when CSS has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub css: Option<&'static str>,
+    /// The PSD layer-record key.
+    pub psd: &'static str,
+    pub separable: bool,
+}
+
+fn blend_modes() -> Vec<BlendModeRow> {
+    paged_blend::BlendMode::MENU
+        .into_iter()
+        .map(|m| BlendModeRow {
+            name: m.name(),
+            id: m.id(),
+            label: m.display_name(),
+            group: m.menu_group(),
+            native: m.is_native(),
+            idml: m.idml_name(),
+            pdf: m.pdf_name(),
+            css: m.css_name(),
+            psd: std::str::from_utf8(m.psd_key()).unwrap_or("norm"),
+            separable: !m.is_non_separable(),
+        })
+        .collect()
 }
 
 /// One settable path that answers to two names.
@@ -159,6 +208,7 @@ pub fn api_catalog() -> ApiCatalog {
         path_aliases: path_aliases(),
         property_schemas: crate::virtual_paths::property_schemas(),
         object_schemas: crate::object_schema::object_schemas(),
+        blend_modes: blend_modes(),
         effect_kinds: crate::effect_kinds::effect_kinds(),
         effect_categories: crate::effect_kinds::EFFECT_CATEGORIES,
     }
@@ -550,6 +600,12 @@ fn host_functions() -> Vec<HostFn> {
            "Word's Insert Bookmark: a named text destination at a story offset, which REF and PAGEREF fields and cross-references name. Returns its id."),
         f!("paged.deleteTextAnchor", "(anchorId)", "bool", "author",
            "Delete a bookmark (a text destination). Undoable."),
+        f!("paged.setContentControlValue", "(storyId, controlId, value)", "bool", "author",
+           "Set a content control's value: a text or rich text control's text, a drop-down or combo box item, a date (YYYY-MM-DD) or a checkbox's true / false; the control's text becomes the value's. Refused for a locked control or a value its kind does not take (engine ADR 1052). Undoable."),
+        f!("paged.toggleContentControl", "(storyId, controlId)", "bool", "author",
+           "Flip a checkbox content control (engine ADR 1052). Undoable."),
+        f!("paged.chooseContentControlItem", "(storyId, controlId, index)", "bool", "author",
+           "Choose item index (0-based) of a drop-down or combo box content control (engine ADR 1052). Undoable."),
         f!("paged.insertCrossReference", "(storyId, offset, {bookmark} | {storyId, paragraph}, {referTo?: text|pageNumber|aboveBelow, hyperlink?})", "bool", "author",
            "Word's Insert Cross-reference: a REF or PAGEREF field with its result, to a bookmark or to a paragraph (which gets a hidden _Ref bookmark). One undo step."),
         f!("paged.insertTableOfContents", "(storyId, offset, [{style, level}], {title?, tocStyleName?, pageNumbers?, leader?, tabPosition?})", "bool", "author",
@@ -1034,6 +1090,16 @@ property_paths! {
         CharacterUnderlineType => "characterUnderlineType" : enum_open(UNDERLINE_KINDS).default_text("single").idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, UnderlineType)]),
         CharacterUnderlineColor => "characterUnderlineColor" : color().idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, UnderlineColor)]),
         CharacterDoubleStrikethrough => "characterDoubleStrikethrough" : bool_().default_bool(false).idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, StrikeThroughType)]),
+        ParagraphDirection => "paragraphDirection" : enum_(PARAGRAPH_DIRECTIONS).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphDirection)]),
+        CharacterDirection => "characterDirection" : enum_(CHARACTER_DIRECTIONS).idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, CharacterDirection)]),
+        CharacterEastAsianFont => "characterEastAsianFont" : reference(RefKind::Font),
+        CharacterComplexFont => "characterComplexFont" : reference(RefKind::Font),
+        CharacterComplexFontSize => "characterComplexFontSize" : length().range(0.1, 1296.0),
+        CharacterComplexBold => "characterComplexBold" : bool_(),
+        CharacterComplexItalic => "characterComplexItalic" : bool_(),
+        CharacterComplexScript => "characterComplexScript" : bool_().default_bool(false),
+        CharacterFontHint => "characterFontHint" : enum_(FONT_HINTS).default_text("default"),
+        CharacterContentControl => "characterContentControl" : text(),
         ParagraphShadingOn => "paragraphShadingOn" : bool_().default_bool(false).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingOn)]),
         ParagraphShadingColor => "paragraphShadingColor" : color().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingColor)]),
         ParagraphShadingTint => "paragraphShadingTint" : pct().idml(idml![attr(ParagraphStyleRange | ParagraphStyle, ParagraphShadingTint)]),
@@ -1558,8 +1624,11 @@ mod tests {
         // 274 -> 275: ADR 1048 — a frame's gradient mesh or freeform
         // gradient.
         //
-        // 275 -> 276: ADR 1027 — a frame's medium (movie and sound items).
-        assert_eq!(cat.settable_paths.len(), 276, "settable path count drifted");
+        // 275 -> 285: ADR 1051 — the paragraph direction and the eight
+        // script paths; ADR 1052 — a range's content control.
+        //
+        // 285 -> 286: ADR 1027 — a frame's medium (movie and sound items).
+        assert_eq!(cat.settable_paths.len(), 286, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

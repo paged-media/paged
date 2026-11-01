@@ -1345,6 +1345,27 @@
       "summary": "Delete a bookmark (a text destination). Undoable."
     },
     {
+      "name": "paged.setContentControlValue",
+      "params": "(storyId, controlId, value)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Set a content control's value: a text or rich text control's text, a drop-down or combo box item, a date (YYYY-MM-DD) or a checkbox's true / false; the control's text becomes the value's. Refused for a locked control or a value its kind does not take (engine ADR 1052). Undoable."
+    },
+    {
+      "name": "paged.toggleContentControl",
+      "params": "(storyId, controlId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Flip a checkbox content control (engine ADR 1052). Undoable."
+    },
+    {
+      "name": "paged.chooseContentControlItem",
+      "params": "(storyId, controlId, index)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Choose item index (0-based) of a drop-down or combo box content control (engine ADR 1052). Undoable."
+    },
+    {
       "name": "paged.insertCrossReference",
       "params": "(storyId, offset, {bookmark} | {storyId, paragraph}, {referTo?: text|pageNumber|aboveBelow, hyperlink?})",
       "returns": "bool",
@@ -1931,6 +1952,16 @@
     "characterUnderlineType",
     "characterUnderlineColor",
     "characterDoubleStrikethrough",
+    "paragraphDirection",
+    "characterDirection",
+    "characterEastAsianFont",
+    "characterComplexFont",
+    "characterComplexFontSize",
+    "characterComplexBold",
+    "characterComplexItalic",
+    "characterComplexScript",
+    "characterFontHint",
+    "characterContentControl",
     "paragraphShadingOn",
     "paragraphShadingColor",
     "paragraphShadingTint",
@@ -2171,7 +2202,10 @@
     "removeFooterRow",
     "setCellSpan",
     "insertTable",
-    "deleteTable"
+    "deleteTable",
+    "setContentControlValue",
+    "toggleContentControl",
+    "chooseContentControlItem"
   ],
   "elements": [
     {
@@ -5150,17 +5184,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -5361,17 +5406,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -5527,17 +5583,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -6003,17 +6070,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -6448,17 +6526,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -6510,17 +6599,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -6572,17 +6672,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -6634,17 +6745,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -6772,17 +6894,28 @@
         "kind": "enum",
         "members": [
           "Normal",
+          "Dissolve",
+          "Darken",
           "Multiply",
+          "ColorBurn",
+          "LinearBurn",
+          "DarkerColor",
+          "Lighten",
           "Screen",
+          "ColorDodge",
+          "LinearDodge",
+          "LighterColor",
           "Overlay",
           "SoftLight",
           "HardLight",
-          "ColorDodge",
-          "ColorBurn",
-          "Darken",
-          "Lighten",
+          "VividLight",
+          "LinearLight",
+          "PinLight",
+          "HardMix",
           "Difference",
           "Exclusion",
+          "Subtract",
+          "Divide",
           "Hue",
           "Saturation",
           "Color",
@@ -8154,6 +8287,153 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl",
+          "auto"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyleRange",
+          "attribute": "ParagraphDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyleRange",
+          "attribute": "CharacterDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterEastAsianFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexFontSize",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.1,
+        "max": 1296.0
+      },
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexBold",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexItalic",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterComplexScript",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterFontHint",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "default",
+          "eastAsia",
+          "cs"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "default",
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "characterContentControl",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
     },
     {
       "addressKind": "storyRange",
@@ -12079,6 +12359,205 @@
     {
       "addressKind": "style",
       "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "CharacterDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterEastAsianFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexFontSize",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.1,
+        "max": 1296.0
+      },
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexBold",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexItalic",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterComplexScript",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "characterFontHint",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "default",
+          "eastAsia",
+          "cs"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "default",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl",
+          "auto"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "ParagraphStyle",
+          "attribute": "ParagraphDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
         "character"
       ],
       "path": "characterFontSize",
@@ -12614,6 +13093,175 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterDirection",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "ltr",
+          "rtl"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "idml": [
+        {
+          "element": "CharacterStyle",
+          "attribute": "CharacterDirection",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterEastAsianFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexFont",
+      "type": {
+        "kind": "ref",
+        "to": "font"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexFontSize",
+      "type": {
+        "kind": "length",
+        "unit": "pt"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.1,
+        "max": 1296.0
+      },
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexBold",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexItalic",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterComplexScript",
+      "type": {
+        "kind": "bool"
+      },
+      "wire": "bool",
+      "nullable": false,
+      "default": false,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "character"
+      ],
+      "path": "characterFontHint",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "default",
+          "eastAsia",
+          "cs"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "default",
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
     },
     {
       "addressKind": "style",
@@ -19122,17 +19770,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -19329,17 +19988,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -19492,17 +20162,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -19958,17 +20639,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -20393,17 +21085,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -20454,17 +21157,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -20515,17 +21229,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -20576,17 +21301,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -20719,17 +21455,28 @@
           "kind": "enum",
           "members": [
             "Normal",
+            "Dissolve",
+            "Darken",
             "Multiply",
+            "ColorBurn",
+            "LinearBurn",
+            "DarkerColor",
+            "Lighten",
             "Screen",
+            "ColorDodge",
+            "LinearDodge",
+            "LighterColor",
             "Overlay",
             "SoftLight",
             "HardLight",
-            "ColorDodge",
-            "ColorBurn",
-            "Darken",
-            "Lighten",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
             "Difference",
             "Exclusion",
+            "Subtract",
+            "Divide",
             "Hue",
             "Saturation",
             "Color",
@@ -22989,6 +23736,152 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "paragraphDirection",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "ltr",
+            "rtl",
+            "auto"
+          ]
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "ParagraphStyleRange",
+            "attribute": "ParagraphDirection",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterDirection",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "ltr",
+            "rtl"
+          ]
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "CharacterStyleRange",
+            "attribute": "CharacterDirection",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterEastAsianFont",
+        "type": {
+          "kind": "ref",
+          "to": "font"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexFont",
+        "type": {
+          "kind": "ref",
+          "to": "font"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexFontSize",
+        "type": {
+          "kind": "length"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.1,
+          "max": 1296.0
+        },
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexBold",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexItalic",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterComplexScript",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterFontHint",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "default",
+            "eastAsia",
+            "cs"
+          ]
+        },
+        "nullable": true,
+        "default": "default",
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
+        "path": "characterContentControl",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
       },
       {
         "addressKind": "storyRange",
@@ -25886,6 +26779,217 @@
           {
             "element": "ParagraphStyle",
             "attribute": "ParagraphBorderWeight",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterDirection",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "ltr",
+            "rtl"
+          ]
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "CharacterDirection",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "CharacterDirection",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterEastAsianFont",
+        "type": {
+          "kind": "ref",
+          "to": "font"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexFont",
+        "type": {
+          "kind": "ref",
+          "to": "font"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexFontSize",
+        "type": {
+          "kind": "length"
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.1,
+          "max": 1296.0
+        },
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "length"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexBold",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexItalic",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterComplexScript",
+        "type": {
+          "kind": "bool"
+        },
+        "nullable": false,
+        "default": false,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "bool"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph",
+          "character"
+        ],
+        "path": "characterFontHint",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "default",
+            "eastAsia",
+            "cs"
+          ]
+        },
+        "nullable": true,
+        "default": "default",
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphDirection",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "ltr",
+            "rtl",
+            "auto"
+          ]
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text",
+        "idml": [
+          {
+            "element": "ParagraphStyle",
+            "attribute": "ParagraphDirection",
             "kind": "attr"
           }
         ]
@@ -29062,6 +30166,58 @@
         }
       ],
       "vector": true
+    },
+    {
+      "kind": "envelope",
+      "title": "Envelope mesh",
+      "category": "distortAndTransform",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "rows",
+          "title": "Rows",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 50.0
+          },
+          "default": 1.0
+        },
+        {
+          "field": "columns",
+          "title": "Columns",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 50.0
+          },
+          "default": 1.0
+        },
+        {
+          "field": "mesh",
+          "title": "Mesh",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "list",
+              "of": {
+                "kind": "number"
+              }
+            }
+          }
+        }
+      ],
+      "vector": true
     }
   ],
   "effectCategories": [
@@ -29075,5 +30231,309 @@
     "warp",
     "convertToShape",
     "rasterize"
+  ],
+  "blendModes": [
+    {
+      "name": "Normal",
+      "id": "normal",
+      "label": "Normal",
+      "group": 0,
+      "native": true,
+      "idml": "Normal",
+      "pdf": "Normal",
+      "css": "normal",
+      "psd": "norm",
+      "separable": true
+    },
+    {
+      "name": "Dissolve",
+      "id": "dissolve",
+      "label": "Dissolve",
+      "group": 0,
+      "native": false,
+      "idml": "Normal",
+      "psd": "diss",
+      "separable": true
+    },
+    {
+      "name": "Darken",
+      "id": "darken",
+      "label": "Darken",
+      "group": 1,
+      "native": true,
+      "idml": "Darken",
+      "pdf": "Darken",
+      "css": "darken",
+      "psd": "dark",
+      "separable": true
+    },
+    {
+      "name": "Multiply",
+      "id": "multiply",
+      "label": "Multiply",
+      "group": 1,
+      "native": true,
+      "idml": "Multiply",
+      "pdf": "Multiply",
+      "css": "multiply",
+      "psd": "mul ",
+      "separable": true
+    },
+    {
+      "name": "ColorBurn",
+      "id": "color_burn",
+      "label": "Color Burn",
+      "group": 1,
+      "native": true,
+      "idml": "ColorBurn",
+      "pdf": "ColorBurn",
+      "css": "color-burn",
+      "psd": "idiv",
+      "separable": true
+    },
+    {
+      "name": "LinearBurn",
+      "id": "linear_burn",
+      "label": "Linear Burn",
+      "group": 1,
+      "native": false,
+      "idml": "Multiply",
+      "psd": "lbrn",
+      "separable": true
+    },
+    {
+      "name": "DarkerColor",
+      "id": "darker_color",
+      "label": "Darker Color",
+      "group": 1,
+      "native": false,
+      "idml": "Darken",
+      "psd": "dkCl",
+      "separable": false
+    },
+    {
+      "name": "Lighten",
+      "id": "lighten",
+      "label": "Lighten",
+      "group": 2,
+      "native": true,
+      "idml": "Lighten",
+      "pdf": "Lighten",
+      "css": "lighten",
+      "psd": "lite",
+      "separable": true
+    },
+    {
+      "name": "Screen",
+      "id": "screen",
+      "label": "Screen",
+      "group": 2,
+      "native": true,
+      "idml": "Screen",
+      "pdf": "Screen",
+      "css": "screen",
+      "psd": "scrn",
+      "separable": true
+    },
+    {
+      "name": "ColorDodge",
+      "id": "color_dodge",
+      "label": "Color Dodge",
+      "group": 2,
+      "native": true,
+      "idml": "ColorDodge",
+      "pdf": "ColorDodge",
+      "css": "color-dodge",
+      "psd": "div ",
+      "separable": true
+    },
+    {
+      "name": "LinearDodge",
+      "id": "linear_dodge",
+      "label": "Linear Dodge (Add)",
+      "group": 2,
+      "native": false,
+      "idml": "Screen",
+      "psd": "lddg",
+      "separable": true
+    },
+    {
+      "name": "LighterColor",
+      "id": "lighter_color",
+      "label": "Lighter Color",
+      "group": 2,
+      "native": false,
+      "idml": "Lighten",
+      "psd": "lgCl",
+      "separable": false
+    },
+    {
+      "name": "Overlay",
+      "id": "overlay",
+      "label": "Overlay",
+      "group": 3,
+      "native": true,
+      "idml": "Overlay",
+      "pdf": "Overlay",
+      "css": "overlay",
+      "psd": "over",
+      "separable": true
+    },
+    {
+      "name": "SoftLight",
+      "id": "soft_light",
+      "label": "Soft Light",
+      "group": 3,
+      "native": true,
+      "idml": "SoftLight",
+      "pdf": "SoftLight",
+      "css": "soft-light",
+      "psd": "sLit",
+      "separable": true
+    },
+    {
+      "name": "HardLight",
+      "id": "hard_light",
+      "label": "Hard Light",
+      "group": 3,
+      "native": true,
+      "idml": "HardLight",
+      "pdf": "HardLight",
+      "css": "hard-light",
+      "psd": "hLit",
+      "separable": true
+    },
+    {
+      "name": "VividLight",
+      "id": "vivid_light",
+      "label": "Vivid Light",
+      "group": 3,
+      "native": false,
+      "idml": "HardLight",
+      "psd": "vLit",
+      "separable": true
+    },
+    {
+      "name": "LinearLight",
+      "id": "linear_light",
+      "label": "Linear Light",
+      "group": 3,
+      "native": false,
+      "idml": "HardLight",
+      "psd": "lLit",
+      "separable": true
+    },
+    {
+      "name": "PinLight",
+      "id": "pin_light",
+      "label": "Pin Light",
+      "group": 3,
+      "native": false,
+      "idml": "HardLight",
+      "psd": "pLit",
+      "separable": true
+    },
+    {
+      "name": "HardMix",
+      "id": "hard_mix",
+      "label": "Hard Mix",
+      "group": 3,
+      "native": false,
+      "idml": "HardLight",
+      "psd": "hMix",
+      "separable": true
+    },
+    {
+      "name": "Difference",
+      "id": "difference",
+      "label": "Difference",
+      "group": 4,
+      "native": true,
+      "idml": "Difference",
+      "pdf": "Difference",
+      "css": "difference",
+      "psd": "diff",
+      "separable": true
+    },
+    {
+      "name": "Exclusion",
+      "id": "exclusion",
+      "label": "Exclusion",
+      "group": 4,
+      "native": true,
+      "idml": "Exclusion",
+      "pdf": "Exclusion",
+      "css": "exclusion",
+      "psd": "smud",
+      "separable": true
+    },
+    {
+      "name": "Subtract",
+      "id": "subtract",
+      "label": "Subtract",
+      "group": 4,
+      "native": false,
+      "idml": "Difference",
+      "psd": "fsub",
+      "separable": true
+    },
+    {
+      "name": "Divide",
+      "id": "divide",
+      "label": "Divide",
+      "group": 4,
+      "native": false,
+      "idml": "ColorDodge",
+      "psd": "fdiv",
+      "separable": true
+    },
+    {
+      "name": "Hue",
+      "id": "hue",
+      "label": "Hue",
+      "group": 5,
+      "native": true,
+      "idml": "Hue",
+      "pdf": "Hue",
+      "css": "hue",
+      "psd": "hue ",
+      "separable": false
+    },
+    {
+      "name": "Saturation",
+      "id": "saturation",
+      "label": "Saturation",
+      "group": 5,
+      "native": true,
+      "idml": "Saturation",
+      "pdf": "Saturation",
+      "css": "saturation",
+      "psd": "sat ",
+      "separable": false
+    },
+    {
+      "name": "Color",
+      "id": "color",
+      "label": "Color",
+      "group": 5,
+      "native": true,
+      "idml": "Color",
+      "pdf": "Color",
+      "css": "color",
+      "psd": "colr",
+      "separable": false
+    },
+    {
+      "name": "Luminosity",
+      "id": "luminosity",
+      "label": "Luminosity",
+      "group": 5,
+      "native": true,
+      "idml": "Luminosity",
+      "pdf": "Luminosity",
+      "css": "luminosity",
+      "psd": "lum ",
+      "separable": false
+    }
   ]
 }

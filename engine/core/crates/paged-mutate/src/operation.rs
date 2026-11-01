@@ -1763,6 +1763,42 @@ pub enum PropertyPath {
     /// An oval's pie end angle (Illustrator's Pie End Angle):
     /// `Value::Length`, `None` is 360.
     FrameShapePieEnd,
+
+    // ---- engine ADR 1051 — direction and script slots -----------------
+    /// A paragraph's base direction: `Value::Text` of `ltr`, `rtl` or
+    /// `auto` (from the first strong character); `""` clears (inherit).
+    /// On a `StoryRange` or a paragraph style. Reflows.
+    ParagraphDirection,
+    /// A run's direction (Word's `w:rtl`): `Value::Text` of `ltr` or `rtl`,
+    /// `""` clears. A right-to-left run is complex script throughout.
+    /// Reflows.
+    CharacterDirection,
+    /// The face of a run's East Asian characters (`w:rFonts/@w:eastAsia`):
+    /// `Value::Text` of a family, `""` clears (the run's own font).
+    CharacterEastAsianFont,
+    /// The face of a run's complex-script characters (`w:rFonts/@w:cs`):
+    /// `Value::Text`, `""` clears.
+    CharacterComplexFont,
+    /// The size of a run's complex-script characters in pt (`w:szCs`):
+    /// `Value::Length`, `None` clears.
+    CharacterComplexFontSize,
+    /// Bold for a run's complex-script characters (`w:bCs`): `Value::Bool`,
+    /// `Text("")` clears.
+    CharacterComplexBold,
+    /// Italic for a run's complex-script characters (`w:iCs`).
+    CharacterComplexItalic,
+    /// The whole run is complex script (`w:cs`): `Value::Bool`.
+    CharacterComplexScript,
+    /// Which slot shared characters take (`w:rFonts/@w:hint`):
+    /// `Value::Text` of `default`, `eastAsia` or `cs`; `""` clears.
+    CharacterFontHint,
+
+    // ---- engine ADR 1052 — content controls ---------------------------
+    /// Make a run range a content control (Word's inline `w:sdt`):
+    /// `Value::Text` of a JSON `paged_model::ContentControl`; `""` makes it
+    /// ordinary text again. Every run of the range carries the control.
+    /// On a `StoryRange` only. Paint-only (the text is the runs').
+    CharacterContentControl,
     // ---- engine ADR 1007 — paint model v2 ---------------------------
     /// How the frame's gradient stroke maps onto the stroke:
     /// `Value::Text` `"Within"` (IDML's mode, the default), `"Along"`
@@ -2195,6 +2231,16 @@ impl PropertyPath {
             PropertyPath::FrameShapeStarInset => "frame.shapeStarInset",
             PropertyPath::FrameShapePieStart => "frame.shapePieStart",
             PropertyPath::FrameShapePieEnd => "frame.shapePieEnd",
+            PropertyPath::ParagraphDirection => "paragraph.direction",
+            PropertyPath::CharacterDirection => "character.direction",
+            PropertyPath::CharacterEastAsianFont => "character.eastAsianFont",
+            PropertyPath::CharacterComplexFont => "character.complexFont",
+            PropertyPath::CharacterComplexFontSize => "character.complexFontSize",
+            PropertyPath::CharacterComplexBold => "character.complexBold",
+            PropertyPath::CharacterComplexItalic => "character.complexItalic",
+            PropertyPath::CharacterComplexScript => "character.complexScript",
+            PropertyPath::CharacterFontHint => "character.fontHint",
+            PropertyPath::CharacterContentControl => "character.contentControl",
             PropertyPath::FrameGradientStrokeMode => "frame.gradientStrokeMode",
             PropertyPath::FrameFillMesh => "frame.fillMesh",
         }
@@ -2353,10 +2399,12 @@ pub enum EffectKind {
     Scribble,
     ConvertToShape,
     Pathfinder,
+    // Envelope Distort (draw ADR 367): a Bézier patch mesh.
+    Envelope,
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 31] = [
+    pub const ALL: [EffectKind; 32] = [
         EffectKind::DropShadow,
         EffectKind::InnerShadow,
         EffectKind::OuterGlow,
@@ -2388,6 +2436,7 @@ impl EffectKind {
         EffectKind::Scribble,
         EffectKind::ConvertToShape,
         EffectKind::Pathfinder,
+        EffectKind::Envelope,
     ];
 
     fn indesign(self) -> Option<paged_model::effect_stack::IndesignEffect> {
@@ -2440,6 +2489,7 @@ impl EffectKind {
             EffectKind::Scribble => "scribble",
             EffectKind::ConvertToShape => "convertToShape",
             EffectKind::Pathfinder => "pathfinder",
+            EffectKind::Envelope => "envelope",
         }
     }
 
@@ -2482,6 +2532,7 @@ impl EffectKind {
 /// | `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |
 /// | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
 /// | `pathfinder` | `op` (on a group's stack only) |
+/// | `envelope` | `rows`, `columns`, `mesh` (the patches' control net, `(3·rows+1) × (3·columns+1)` `[x, y]` in the box's unit square, row-major) |
 ///
 /// InDesign's kinds carry no parameters here: theirs are the per-field
 /// paths (`frameInnerShadowSize`, …), and the stack keeps them.
@@ -2623,6 +2674,12 @@ pub struct EffectEntrySpec {
     pub corner_radius: Option<f32>,
     #[serde(default)]
     pub op: Option<String>,
+    #[serde(default)]
+    pub rows: Option<u32>,
+    #[serde(default)]
+    pub columns: Option<u32>,
+    #[serde(default)]
+    pub mesh: Option<Vec<[f32; 2]>>,
 }
 
 /// Engine ADR 1008 — the wire value of a target's effect stack as the
@@ -2716,6 +2773,9 @@ impl EffectEntrySpec {
             height: None,
             corner_radius: None,
             op: None,
+            rows: None,
+            columns: None,
+            mesh: None,
         }
     }
 
@@ -3763,6 +3823,19 @@ pub enum NodeSpec {
         column_widths: Vec<f32>,
         #[serde(default)]
         row_heights: Vec<f32>,
+        /// Engine ADR 1050 — the cell the table goes into (a nested
+        /// table); `None`: the story's end, as before.
+        #[serde(default)]
+        cell: Option<CellAddr>,
+        /// Engine ADR 1050 — with `cell`: the cell paragraph the table
+        /// takes when it is empty, else a new paragraph inserted there.
+        /// `None`: the cell's last paragraph when empty, else a new one at
+        /// its end.
+        #[serde(default)]
+        cell_paragraph: Option<u32>,
+        /// Engine ADR 1025 — lay the table out by Word's rules.
+        #[serde(default)]
+        word: Option<WordTableSpec>,
     },
 }
 
@@ -3832,6 +3905,8 @@ impl NodeSpec {
             footer_rows,
             column_widths,
             row_heights,
+            word,
+            ..
         } = self
         else {
             unreachable!("to_parse_table called on a non-Table NodeSpec");
@@ -3870,6 +3945,7 @@ impl NodeSpec {
             }
         }
         paged_model::Table {
+            word: word.as_ref().map(WordTableSpec::to_model),
             self_id: Some(self_id.clone()),
             header_row_count: header,
             footer_row_count: footer,
@@ -5284,6 +5360,25 @@ pub enum Operation {
         topics_json: String,
         parents_json: String,
     },
+    /// Engine ADR 1052 — set content control `control_id` of story
+    /// `story_id` to `value`: free text, a list item's value or display
+    /// text, a date (`YYYY-MM-DD`) or a checkbox state (`true` / `false`).
+    /// The control's runs become one run with the value's text. Inverse:
+    /// `RestoreContentControl`. // rides v78.
+    SetContentControlValue {
+        story_id: String,
+        control_id: String,
+        value: String,
+    },
+    /// Engine ADR 1052 — inverse-only: content control `control_id`'s runs
+    /// replaced by `runs_json` (a JSON `CharacterRun` list, each carrying
+    /// the control). Inverse: the same op with the runs it replaced.
+    /// // rides v78.
+    RestoreContentControl {
+        story_id: String,
+        control_id: String,
+        runs_json: String,
+    },
     /// Engine ADR 1022 — create, replace (`def_json`: a JSON `TOCStyleDef`)
     /// or delete (`None`) TOC style `toc_style_id`. Inverse: the same op
     /// with the prior definition. // rides v77.
@@ -5597,12 +5692,31 @@ pub enum Operation {
         /// picture alone on its line) has no offset of its own otherwise.
         #[serde(default)]
         paragraph: Option<u32>,
-        /// Engine ADR 1045 — the frame whole, as JSON, when this insert is
-        /// a `RemoveAnchoredFrame`'s inverse: undo puts back the frame that
-        /// was removed (its look, its setting, its children), not a bare
-        /// picture box. A forward insert carries none.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        /// Engine ADR 1050 — a graphic frame (the v52 default) or a TEXT
+        /// frame holding its own story, `frame_story`.
+        #[serde(default)]
+        frame_kind: AnchoredFrameInsertKind,
+        /// Engine ADR 1050 — the story a text frame holds, minted by the
+        /// wire layer. Created empty when it does not exist (the insert's
+        /// inverse then removes it again); an existing story is attached,
+        /// which is how the undo of a removal gets its text back.
+        #[serde(default)]
+        frame_story: Option<String>,
+        /// Engine ADR 1050 — wrap, z-order, overlap and a text frame's
+        /// insets. `None`: none of them (the v52 frame).
+        #[serde(default)]
+        layout: Option<AnchoredLayoutSpec>,
+        /// Inverse-only: the whole frame a `RemoveAnchoredFrame` took out
+        /// (JSON of `paged_model::AnchoredFrame`), put back verbatim — its
+        /// anchoring settings, look and layout included. Wins over the
+        /// fields above.
+        #[serde(default)]
         restore: Option<String>,
+        /// Engine ADR 1050 — the table cell whose paragraphs `paragraph`
+        /// and `offset` address (a picture in a cell); `None`: the story's
+        /// body.
+        #[serde(default)]
+        cell: Option<CellAddr>,
     },
     /// v52 — inverse-only companion to `InsertAnchoredFrame`: remove the
     /// anchored frame `self_id` from whichever paragraph of `story_id` holds
@@ -6327,6 +6441,14 @@ pub enum Operation {
         row: u32,
         #[serde(default)]
         height: Option<f32>,
+        /// Engine ADR 1025 — `Some(false)` holds the row at exactly
+        /// `height` (InDesign's `AutoGrow="false"`, Word's `hRule="exact"`),
+        /// `Some(true)` lets it grow from it; `None` leaves it.
+        #[serde(default)]
+        auto_grow: Option<bool>,
+        /// Inverse-only: put `AutoGrow` back to unset.
+        #[serde(default)]
+        clear_auto_grow: bool,
     },
     /// W3.A1 — set column `col`'s `SingleColumnWidth` to `width` pt.
     /// `None` clears the override. Inverse carries the prior width.
@@ -6456,6 +6578,185 @@ pub struct CellAddr {
     pub table_id: String,
     pub row: u32,
     pub col: u32,
+}
+
+/// Engine ADR 1025 — a preferred width as Word states it (`w:tblW`, `w:tcW`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "unit", content = "value", rename_all = "camelCase")]
+pub enum TableWidthSpec {
+    Auto,
+    /// pt.
+    Points(f32),
+    /// Percent of the room the table stands in (of the table, for a cell).
+    Percent(f32),
+}
+
+impl TableWidthSpec {
+    fn to_model(self) -> paged_model::TableWidth {
+        match self {
+            Self::Auto => paged_model::TableWidth::Auto,
+            Self::Points(v) => paged_model::TableWidth::Points(v),
+            Self::Percent(v) => paged_model::TableWidth::Percent(v),
+        }
+    }
+}
+
+/// Engine ADR 1025 — one cell's preferred width.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct CellWidthSpec {
+    pub row: u32,
+    pub col: u32,
+    pub width: TableWidthSpec,
+}
+
+/// Engine ADR 1025 — a table laid out by Word's rules
+/// (`paged_model::WordTableLayout` on the wire): rows split across frames
+/// unless listed in `cant_split_rows`, columns autofit their content when
+/// `autofit`, the table indented by `indent` pt.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct WordTableSpec {
+    #[serde(default)]
+    pub indent: f32,
+    #[serde(default)]
+    pub autofit: bool,
+    #[serde(default)]
+    pub width: Option<TableWidthSpec>,
+    #[serde(default)]
+    pub cell_widths: Vec<CellWidthSpec>,
+    #[serde(default)]
+    pub cant_split_rows: Vec<u32>,
+}
+
+impl WordTableSpec {
+    /// The model's layout this spec describes.
+    pub fn to_model(&self) -> paged_model::WordTableLayout {
+        paged_model::WordTableLayout {
+            indent: self.indent,
+            autofit: self.autofit,
+            width: self.width.map(TableWidthSpec::to_model),
+            cell_widths: self
+                .cell_widths
+                .iter()
+                .map(|c| paged_model::CellWidth {
+                    row: c.row,
+                    col: c.col,
+                    width: c.width.to_model(),
+                })
+                .collect(),
+            cant_split_rows: self.cant_split_rows.clone(),
+        }
+    }
+}
+
+/// Engine ADR 1050 — what [`Operation::InsertAnchoredFrame`] makes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum AnchoredFrameInsertKind {
+    /// A graphic frame (a rectangle, with the image when one is named).
+    #[default]
+    Graphic,
+    /// A text frame with its own story: a Word text box.
+    Text,
+}
+
+/// Engine ADR 1050 — the text wrap an anchored object makes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct AnchoredWrapSpec {
+    /// IDML's `TextWrapMode`: `BoundingBoxTextWrap`, `ContourTextWrap`,
+    /// `JumpObjectTextWrap`, `NextColumnTextWrap` or `None`.
+    pub mode: String,
+    /// `[top, left, bottom, right]` in pt: how far the text keeps away.
+    #[serde(default)]
+    pub offsets: [f32; 4],
+    /// IDML's `TextWrapSide` (`BothSides`, `LeftSide`, `RightSide`,
+    /// `LargestArea`, …); absent: both sides.
+    #[serde(default)]
+    pub side: Option<String>,
+    /// A contour wrap's outline, points in pt from the frame's top-left
+    /// (Word's `wp:wrapPolygon`); empty: the frame's box.
+    #[serde(default)]
+    pub polygon: Vec<[f32; 2]>,
+}
+
+/// Engine ADR 1050 — how an anchored object stands among its story's
+/// text (`paged_model::AnchoredLayout` on the wire).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct AnchoredLayoutSpec {
+    /// The wrap the object makes; a custom-positioned object only.
+    #[serde(default)]
+    pub wrap: Option<AnchoredWrapSpec>,
+    /// Drawn under its story's text (Word's `behindDoc`).
+    #[serde(default)]
+    pub behind_text: bool,
+    /// `false`: moved down clear of the story's objects already on the
+    /// page (Word's `allowOverlap="0"`). Absent: may overlap.
+    #[serde(default)]
+    pub allow_overlap: Option<bool>,
+    /// A text frame's insets, `[top, left, bottom, right]` pt.
+    #[serde(default)]
+    pub insets: Option<[f32; 4]>,
+    /// A text frame's `VerticalJustification` (`TopAlign`,
+    /// `CenterAlign`, `BottomAlign`).
+    #[serde(default)]
+    pub vertical_justification: Option<String>,
+}
+
+impl AnchoredLayoutSpec {
+    /// The model's layout this spec describes.
+    pub fn to_model(&self) -> paged_model::AnchoredLayout {
+        let wrap = self.wrap.as_ref();
+        paged_model::AnchoredLayout {
+            text_wrap: wrap.map(|w| paged_model::TextWrap {
+                mode: paged_model::TextWrapMode::from_idml(&w.mode),
+                offsets: w.offsets,
+                invert: None,
+                contour_type: None,
+                include_inside_edges: None,
+                side: w
+                    .side
+                    .as_deref()
+                    .and_then(paged_model::TextWrapSide::from_idml),
+                apply_to_master_page_only: None,
+            }),
+            wrap_polygon: wrap.map(|w| w.polygon.clone()).unwrap_or_default(),
+            behind_text: self.behind_text,
+            allow_overlap: self.allow_overlap,
+            inset_spacing: self.insets,
+            vertical_justification: self.vertical_justification.clone(),
+        }
+    }
+
+    /// The spec of a model layout (what an inverse carries).
+    pub fn from_model(layout: &paged_model::AnchoredLayout) -> Self {
+        Self {
+            wrap: layout.text_wrap.map(|w| AnchoredWrapSpec {
+                mode: w.mode.as_idml().to_string(),
+                offsets: w.offsets,
+                side: w.side.map(|s| s.as_idml().to_string()),
+                polygon: layout.wrap_polygon.clone(),
+            }),
+            behind_text: layout.behind_text,
+            allow_overlap: layout.allow_overlap,
+            insets: layout.inset_spacing,
+            vertical_justification: layout.vertical_justification.clone(),
+        }
+    }
 }
 
 /// Engine ADR 1040 — what [`Operation::RecordChange`] records.

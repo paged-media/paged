@@ -222,8 +222,8 @@ describe("the layer session (real engine wasm, no GPU in Node)", () => {
     expect(session.state().layers.layers[1].locked).toBe(true);
     // An unregistered mode is a clean refusal carrying the engine's own
     // reason — never a silent fall back to normal.
-    expect(await session.setLayerBlend(1, "dissolve")).toBe(false);
-    expect(session.state().status).toContain("dissolve");
+    expect(await session.setLayerBlend(1, "not-a-mode")).toBe(false);
+    expect(session.state().status).toContain("not-a-mode");
     expect(session.state().layers.layers[1].blend).toBe("multiply");
     handle.dispose();
   });

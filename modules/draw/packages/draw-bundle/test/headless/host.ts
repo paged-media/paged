@@ -150,3 +150,17 @@ export function withoutEngineSymbols(h: HeadlessHost): HeadlessHost {
   ) => feature !== "document.symbols@1" && supports(feature);
   return h;
 }
+
+/** Engine ADR 1043 — a host whose engine is taken to draw no native
+ *  appearance, so the draw bundle runs its metadata lane (draw ADR 354):
+ *  the stack in the envelope, the front-most-layer bake and the group
+ *  bake, which the specs of that lane pin. Call it AFTER `loadBundle`.
+ *  Without it, the bundle's commands write `frameAppearance` and a
+ *  document's stacks migrate on open (draw ADR 367). */
+export function withoutNativeAppearance(h: HeadlessHost): HeadlessHost {
+  const supports = h.host.supports.bind(h.host);
+  (h.host as { supports: (feature: string) => boolean }).supports = (
+    feature: string,
+  ) => feature !== "document.appearance@1" && supports(feature);
+  return h;
+}

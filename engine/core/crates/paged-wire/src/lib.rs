@@ -1241,6 +1241,23 @@ pub enum Mutation {
         /// and is clamped into that paragraph. Names an empty paragraph.
         #[serde(default)]
         paragraph: Option<u32>,
+        /// Engine ADR 1050 (additive) — `text` makes an anchored TEXT frame
+        /// with a story of its own, minted with the frame (a batch handle
+        /// bound to the frame names that story in a `storyId` position);
+        /// absent or `graphic`: the v52 graphic frame.
+        #[serde(default)]
+        kind: Option<paged_mutate::operation::AnchoredFrameInsertKind>,
+        /// Engine ADR 1050 (additive) — the object's text wrap (a
+        /// custom-positioned object wraps the lines of its story set after
+        /// it), behind-text z-order, overlap and a text frame's insets.
+        #[serde(default)]
+        layout: Option<paged_mutate::operation::AnchoredLayoutSpec>,
+        /// Engine ADR 1050 (additive) — anchor the frame in this table
+        /// cell's paragraphs (a picture in a cell): `paragraph` and `offset`
+        /// then count the cell's paragraphs and characters. The cell's
+        /// `tableId` may name a nested table.
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
     },
     /// v53 — the hyperlink CREATE door: make the story range `[start, end)`
     /// (contiguous char offsets, the `ApplyStyle` address space) a native
@@ -2936,6 +2953,11 @@ pub enum Mutation {
         row: u32,
         #[serde(default)]
         height: Option<f32>,
+        /// Engine ADR 1025 (additive) — `false` holds the row at exactly
+        /// `height` (Word's `hRule="exact"`), `true` lets it grow from it;
+        /// absent leaves it as it is.
+        #[serde(default)]
+        auto_grow: Option<bool>,
     },
     /// W3.A1 — set a table column's width in pt. Routes to
     /// `Operation::SetColumnWidth`.
@@ -3033,6 +3055,22 @@ pub enum Mutation {
         column_widths: Vec<f32>,
         #[serde(default)]
         row_heights: Vec<f32>,
+        /// Engine ADR 1050 (additive) — make the table in this cell (a
+        /// nested table) instead of at the story's end: in the cell's last
+        /// paragraph when that is empty, else in a new one after its
+        /// content. The cell's `tableId` may itself name a nested table,
+        /// as every cell address may.
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        /// Engine ADR 1050 (additive) — with `cell`: the cell paragraph
+        /// (0-based) the table takes when it is empty, else a new paragraph
+        /// inserted at that index.
+        #[serde(default)]
+        paragraph: Option<u32>,
+        /// Engine ADR 1025 (additive) — lay the table out by Word's rules:
+        /// rows split across frames, autofit columns, an indent.
+        #[serde(default)]
+        word: Option<paged_mutate::operation::WordTableSpec>,
     },
     /// Delete a whole `<Table>` — the inverse of `InsertTable`, which
     /// the wire could create but not take away (a plugin replacing its
@@ -3043,6 +3081,30 @@ pub enum Mutation {
     DeleteTable {
         story_id: String,
         table_id: String,
+    },
+    /// Engine ADR 1052 — set content control `controlId` of story `storyId`
+    /// to `value`: free text (plain / rich text), an item's value or
+    /// display text (drop-down, combo box), a date `YYYY-MM-DD`, or a
+    /// checkbox's `true` / `false`. The control's text becomes the value's.
+    /// Refused for a locked control or a value its kind does not take.
+    /// Undoable in one step. // rides v78.
+    SetContentControlValue {
+        story_id: String,
+        control_id: String,
+        value: String,
+    },
+    /// Engine ADR 1052 — toggle checkbox control `controlId`: its glyph
+    /// and state flip. Undoable in one step. // rides v78.
+    ToggleContentControl {
+        story_id: String,
+        control_id: String,
+    },
+    /// Engine ADR 1052 — choose item `index` (0-based) of drop-down or
+    /// combo box control `controlId`. Undoable in one step. // rides v78.
+    ChooseContentControlItem {
+        story_id: String,
+        control_id: String,
+        index: u32,
     },
 }
 
@@ -3263,6 +3325,9 @@ mutation_vocabulary! {
     SetCellSpan,
     InsertTable,
     DeleteTable,
+    SetContentControlValue,
+    ToggleContentControl,
+    ChooseContentControlItem,
 }
 
 #[cfg(feature = "mutations")]

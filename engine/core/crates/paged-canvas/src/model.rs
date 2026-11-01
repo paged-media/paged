@@ -716,8 +716,18 @@ fn created_element_id(
     }
     // v52 — an inserted anchored frame is a Rectangle; report its minted id so
     // the caller can address it (e.g. offset the anchor after placement).
-    if let paged_mutate::Operation::InsertAnchoredFrame { self_id, .. } = op {
-        return Some(ElementId::Rectangle(self_id.clone()));
+    if let paged_mutate::Operation::InsertAnchoredFrame {
+        self_id,
+        frame_story,
+        ..
+    } = op
+    {
+        // Engine ADR 1050 — an anchored text frame is a text frame.
+        return Some(if frame_story.is_some() {
+            ElementId::TextFrame(self_id.clone())
+        } else {
+            ElementId::Rectangle(self_id.clone())
+        });
     }
     // Engine ADR 1026 — an insert on a master reports what it made.
     if let paged_mutate::Operation::OnMaster { op, .. } = op {
@@ -791,6 +801,8 @@ fn created_story_id(op: &paged_mutate::Operation) -> Option<String> {
             },
             _ => None,
         },
+        // Engine ADR 1050 — an anchored text frame's own story.
+        paged_mutate::Operation::InsertAnchoredFrame { frame_story, .. } => frame_story.clone(),
         _ => None,
     }
 }
@@ -2375,6 +2387,42 @@ fn decoration_values(
     ]
 }
 
+/// Engine ADR 1051 — a level's script slots and direction as the setters
+/// read them back (`""` / `None` unset).
+fn script_values(
+    s: &paged_model::ScriptProperties,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 8] {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let flag = |o: Option<bool>| o.map(V::Bool).unwrap_or(V::Text(String::new()));
+    let text = |o: &Option<String>| V::Text(o.clone().unwrap_or_default());
+    [
+        (
+            P::CharacterDirection,
+            V::Text(s.direction.map(|d| d.as_name()).unwrap_or("").to_string()),
+        ),
+        (P::CharacterEastAsianFont, text(&s.east_asian_font)),
+        (P::CharacterComplexFont, text(&s.complex_font)),
+        (P::CharacterComplexFontSize, V::Length(s.complex_point_size)),
+        (P::CharacterComplexBold, flag(s.complex_bold)),
+        (P::CharacterComplexItalic, flag(s.complex_italic)),
+        (P::CharacterComplexScript, flag(s.complex)),
+        (
+            P::CharacterFontHint,
+            V::Text(s.hint.map(|h| h.as_name()).unwrap_or("").to_string()),
+        ),
+    ]
+}
+
+/// Engine ADR 1051 — a paragraph's base direction, read back.
+fn direction_value(
+    d: Option<paged_model::ParagraphDirection>,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 1] {
+    [(
+        paged_mutate::PropertyPath::ParagraphDirection,
+        paged_mutate::Value::Text(d.map(|d| d.as_name()).unwrap_or("").to_string()),
+    )]
+}
+
 /// Engine ADR 1018 — a level's shading and border paths, read back.
 fn shading_border_values(
     s: &paged_model::ParagraphShading,
@@ -2417,6 +2465,7 @@ fn character_style_entries(
         paged_mutate::Value::Bool(d.no_break.unwrap_or(false)),
     ));
     pairs.extend(decoration_values(&d.decorations));
+    pairs.extend(script_values(&d.script));
     into_entries(pairs)
 }
 
@@ -2433,6 +2482,8 @@ fn paragraph_style_entries(
     let mut pairs = style_run_entries!(d);
     pairs.extend(decoration_values(&d.decorations));
     pairs.extend(shading_border_values(&d.shading, &d.border));
+    pairs.extend(script_values(&d.script));
+    pairs.extend(direction_value(d.direction));
     pairs.extend([
         (
             P::ParagraphJustification,
@@ -4208,7 +4259,14 @@ impl CanvasModel {
                 .chain(self.scene.master_spreads.values().map(|m| &m.spread))
                 .flat_map(|spread| spread.text_frames.iter())
                 .find(|f| f.self_id.as_deref() == Some(frame_id.as_str()))
-                .and_then(|f| f.parent_story.clone()),
+                .and_then(|f| f.parent_story.clone())
+                // Engine ADR 1050 — an anchored text frame's own story.
+                .or_else(|| {
+                    self.scene.stories.iter().find_map(|s| {
+                        paged_model::anchored_frame_in(&s.story.paragraphs, frame_id)
+                            .and_then(|af| af.parent_story.clone())
+                    })
+                }),
             ElementId::StoryRange { story_id, .. }
             | ElementId::Table { story_id, .. }
             | ElementId::TableCell { story_id, .. } => Some(story_id.clone()),
@@ -4307,6 +4365,23 @@ impl CanvasModel {
     /// gets N distinct ids instead of N copies of `u<max+1>`. Top-level
     /// callers pass `&mut 0`; the `Batch` arm threads the SAME counter
     /// through every child so the ids stay unique across the batch.
+    /// Engine ADR 1052 — content control `control_id` of story `story_id`.
+    fn content_control(
+        &self,
+        story_id: &str,
+        control_id: &str,
+    ) -> Option<paged_model::ContentControl> {
+        self.scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)?
+            .story
+            .paragraphs
+            .iter()
+            .flat_map(|p| &p.runs)
+            .find_map(|r| r.control.as_ref().filter(|c| c.id == control_id).cloned())
+    }
+
     fn try_translate_frame_mutation_to_operation(
         &self,
         mutation: &Mutation,
@@ -5413,6 +5488,9 @@ impl CanvasModel {
                 footer_rows,
                 column_widths,
                 row_heights,
+                cell,
+                paragraph,
+                word,
             } => Some(Operation::InsertNode {
                 parent: NodeId::Story(story_id.clone()),
                 position: 0,
@@ -5424,6 +5502,13 @@ impl CanvasModel {
                     footer_rows: *footer_rows,
                     column_widths: column_widths.clone(),
                     row_heights: row_heights.clone(),
+                    cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                        table_id: c.table_id.clone(),
+                        row: c.row,
+                        col: c.col,
+                    }),
+                    cell_paragraph: *paragraph,
+                    word: word.clone(),
                 },
                 z_slot: None,
             }),
@@ -5438,16 +5523,36 @@ impl CanvasModel {
                 height,
                 image_uri,
                 paragraph,
-            } => Some(Operation::InsertAnchoredFrame {
-                paragraph: *paragraph,
-                story_id: story_id.clone(),
-                offset: *offset,
-                width: *width,
-                height: *height,
-                image_uri: image_uri.clone(),
-                self_id: self.mint_page_item_id_with_offset(mint_offset),
-                restore: None,
-            }),
+                kind,
+                layout,
+                cell,
+            } => {
+                let kind = kind.unwrap_or_default();
+                // Engine ADR 1050 — a text frame's story, numbered past
+                // every minted story at this child's offset (as
+                // `insertTextFrame` does), before the frame takes its id.
+                let frame_story = (kind == paged_mutate::operation::AnchoredFrameInsertKind::Text)
+                    .then(|| self.mint_story_ids(1, *mint_offset).remove(0));
+                let self_id = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::InsertAnchoredFrame {
+                    paragraph: *paragraph,
+                    story_id: story_id.clone(),
+                    offset: *offset,
+                    width: *width,
+                    height: *height,
+                    image_uri: image_uri.clone(),
+                    self_id,
+                    frame_kind: kind,
+                    frame_story,
+                    layout: layout.clone(),
+                    restore: None,
+                    cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                        table_id: c.table_id.clone(),
+                        row: c.row,
+                        col: c.col,
+                    }),
+                })
+            }
             Mutation::InsertHyperlink {
                 story_id,
                 start,
@@ -6182,11 +6287,14 @@ impl CanvasModel {
                 table_id,
                 row,
                 height,
+                auto_grow,
             } => Some(Operation::SetRowHeight {
                 story_id: story_id.clone(),
                 table_id: table_id.clone(),
                 row: *row,
                 height: *height,
+                auto_grow: *auto_grow,
+                clear_auto_grow: false,
             }),
             Mutation::SetColumnWidth {
                 story_id,
@@ -6209,6 +6317,43 @@ impl CanvasModel {
                 at: *at,
                 restore: None,
             }),
+            // Engine ADR 1052 — content controls: each one value set.
+            Mutation::SetContentControlValue {
+                story_id,
+                control_id,
+                value,
+            } => Some(Operation::SetContentControlValue {
+                story_id: story_id.clone(),
+                control_id: control_id.clone(),
+                value: value.clone(),
+            }),
+            Mutation::ToggleContentControl {
+                story_id,
+                control_id,
+            } => Some(Operation::SetContentControlValue {
+                story_id: story_id.clone(),
+                control_id: control_id.clone(),
+                value: "toggle".to_string(),
+            }),
+            Mutation::ChooseContentControlItem {
+                story_id,
+                control_id,
+                index,
+            } => {
+                let item =
+                    self.content_control(story_id, control_id)
+                        .and_then(|c| match c.kind {
+                            paged_model::ContentControlKind::DropDown { items, .. } => {
+                                items.get(*index as usize).map(|i| i.value.clone())
+                            }
+                            _ => None,
+                        })?;
+                Some(Operation::SetContentControlValue {
+                    story_id: story_id.clone(),
+                    control_id: control_id.clone(),
+                    value: item,
+                })
+            }
             Mutation::DeleteTable { story_id, table_id } => Some(Operation::RemoveNode {
                 node: NodeId::Table {
                     story_id: story_id.clone(),
@@ -7740,6 +7885,7 @@ impl CanvasModel {
         out.extend(crate::export_losses::appearance_losses(&self.scene));
         out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
         out.extend(crate::export_losses::media_losses(&self.scene));
+        out.extend(crate::export_losses::blend_mode_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -10038,6 +10184,10 @@ impl CanvasModel {
         // Engine ADR 1018.
         let mut decorations = Vec::new();
         let mut shadings = Vec::new();
+        // Engine ADR 1051.
+        let mut scripts = Vec::new();
+        let mut controls = Vec::new();
+        let mut directions = Vec::new();
         let mut ligatures: Vec<Option<bool>> = Vec::new();
         let mut space_before: Vec<Option<f32>> = Vec::new();
         let mut space_after: Vec<Option<f32>> = Vec::new();
@@ -10134,6 +10284,7 @@ impl CanvasModel {
                 };
                 space_before.push(rp.space_before);
                 shadings.push(shading_border_values(&rp.shading, &rp.border));
+                directions.push(direction_value(rp.direction));
                 space_after.push(rp.space_after);
                 first_line_indent.push(rp.first_line_indent);
                 applied_paragraph_styles.push(para.paragraph_style.clone().unwrap_or_default());
@@ -10217,6 +10368,17 @@ impl CanvasModel {
                 strikethrus.push(rr.strikethru);
                 no_breaks.push(rr.no_break);
                 decorations.push(decoration_values(&rr.decorations));
+                scripts.push(script_values(&rr.script));
+                // Engine ADR 1052 — the run's own control, as its JSON.
+                controls.push([(
+                    paged_mutate::PropertyPath::CharacterContentControl,
+                    paged_mutate::Value::Text(
+                        run.control
+                            .as_ref()
+                            .and_then(|c| serde_json::to_string(c).ok())
+                            .unwrap_or_default(),
+                    ),
+                )]);
                 ligatures.push(rr.ligatures_on);
                 applied_conditions.push(run.applied_conditions.join(" "));
             }
@@ -10635,6 +10797,19 @@ impl CanvasModel {
             &shadings,
             shading_border_values(&Default::default(), &Default::default()),
         ));
+        // Engine ADR 1051 — script slots per run, the direction per paragraph.
+        entries.extend(collapsed_entries(
+            &scripts,
+            script_values(&Default::default()),
+        ));
+        entries.extend(collapsed_entries(&directions, direction_value(None)));
+        entries.extend(collapsed_entries(
+            &controls,
+            [(
+                paged_mutate::PropertyPath::CharacterContentControl,
+                paged_mutate::Value::Text(String::new()),
+            )],
+        ));
 
         Some(ElementProperties {
             id: id.clone(),
@@ -10648,11 +10823,7 @@ impl CanvasModel {
     /// inspector read-side. Returns the host paragraph's table ref.
     fn find_table_read(&self, story_id: &str, table_id: &str) -> Option<&paged_model::Table> {
         let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
-        story.story.paragraphs.iter().find_map(|p| {
-            p.table
-                .as_ref()
-                .filter(|t| t.self_id.as_deref() == Some(table_id))
-        })
+        paged_model::table_in(&story.story.paragraphs, table_id)
     }
 
     /// W3.A1 — table-scoped property snapshot (the `AppliedTableStyle`
@@ -13138,19 +13309,12 @@ impl CanvasModel {
         let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
         let paragraphs: &[paged_model::Paragraph] = match cell {
             None => &story.story.paragraphs,
-            Some(addr) => {
-                let table = story
-                    .story
-                    .paragraphs
-                    .iter()
-                    .filter_map(|p| p.table.as_ref())
-                    .find(|t| t.self_id.as_deref() == Some(addr.table_id.as_str()))?;
-                &table
-                    .cells
-                    .iter()
-                    .find(|c| c.coords() == Some((addr.col, addr.row)))?
-                    .paragraphs
-            }
+            Some(addr) => paged_model::cell_paragraphs_in(
+                &story.story.paragraphs,
+                &addr.table_id,
+                addr.col,
+                addr.row,
+            )?,
         };
         let mut text = String::new();
         for (i, para) in paragraphs.iter().enumerate() {
@@ -17045,6 +17209,7 @@ pub(crate) fn paragraph_content(para: &paged_model::Paragraph) -> crate::channel
         paragraph_style: para.paragraph_style.clone(),
         runs: para.runs.iter().map(run_content).collect(),
         toc: para.toc.clone(),
+        direction: para.direction.map(|d| d.as_name().to_string()),
         mark_change: para
             .mark_revision
             .as_ref()
@@ -17085,7 +17250,56 @@ pub(crate) fn run_content(run: &paged_model::CharacterRun) -> crate::channel::Ru
                 before: Box::new(run_content(&fc.before)),
             }),
         comments: run.comments.clone(),
+        script: script_content(&run.script),
+        control: run.control.as_ref().map(control_content),
     }
+}
+
+/// Engine ADR 1052 — a content control as the story read gives it.
+fn control_content(c: &paged_model::ContentControl) -> crate::channel::ContentControlContent {
+    use paged_model::ContentControlKind as K;
+    let (items, value, date_format) = match &c.kind {
+        K::DropDown { items, value, .. } => (
+            items
+                .iter()
+                .map(|i| crate::channel::ContentControlItem {
+                    display: i.display.clone(),
+                    value: i.value.clone(),
+                })
+                .collect(),
+            value.clone(),
+            None,
+        ),
+        K::Date { format, value } => (Vec::new(), value.clone(), format.clone()),
+        _ => (Vec::new(), None, None),
+    };
+    crate::channel::ContentControlContent {
+        id: c.id.clone(),
+        kind: c.kind_name().to_string(),
+        tag: c.tag.clone(),
+        alias: c.alias.clone(),
+        lock: c.lock.clone(),
+        showing_placeholder: c.showing_placeholder,
+        checked: c.checked(),
+        items,
+        value,
+        date_format,
+    }
+}
+
+/// Engine ADR 1051 — a run's script properties as the story read gives
+/// them; `None` when it sets none.
+fn script_content(s: &paged_model::ScriptProperties) -> Option<crate::channel::RunScriptContent> {
+    (!s.is_unset()).then(|| crate::channel::RunScriptContent {
+        direction: s.direction.map(|d| d.as_name().to_string()),
+        east_asian_font: s.east_asian_font.clone(),
+        complex_font: s.complex_font.clone(),
+        complex_point_size: s.complex_point_size,
+        complex_bold: s.complex_bold,
+        complex_italic: s.complex_italic,
+        complex: s.complex,
+        hint: s.hint.map(|h| h.as_name().to_string()),
+    })
 }
 
 #[cfg(test)]

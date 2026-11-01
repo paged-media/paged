@@ -132,6 +132,25 @@ pub use vello::Scene as VelloScene;
 #[cfg(feature = "vello-backend")]
 pub use vello_rs::VelloRasterizer;
 
+/// A group in one of Photoshop's eleven blend modes, composited by the CPU
+/// lane (`vcpu`) for a lane that cannot read its backdrop (engine ADR 1034).
+///
+/// `rgba` is what the surface the group composited onto holds over the
+/// page-pixel rectangle `(x, y, w, h)` (the group's buffer, cut to the
+/// page) right after the composite: the backdrop with the group blended
+/// into it, premultiplied, without the paper. A lane that draws its
+/// backdrop the way this one does replaces that rectangle with it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlendBake {
+    /// Index of the group's `BeginBlendGroup` / `PushLayer`.
+    pub begin: usize,
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+    pub rgba: Vec<u8>,
+}
+
 /// Knobs every rasterizer respects.
 #[derive(Debug, Clone, Copy)]
 pub struct RasterOptions {
@@ -208,4 +227,76 @@ pub trait PathRasterizer {
     /// can't currently render a particular `DisplayCommand` should
     /// log + skip it rather than fail the whole render.
     fn rasterize(&self, list: &DisplayList, options: &RasterOptions) -> Vec<u8>;
+}
+
+/// Test scenes shared by both lanes' blend-mode tests (engine ADR 1034).
+#[cfg(all(test, feature = "cpu"))]
+pub(crate) mod blend_fixtures {
+    use paged_compose::{BlendMode, Color, DisplayCommand, DisplayList, Paint, Rect, Transform};
+
+    pub const W: f32 = 64.0;
+    pub const H: f32 = 48.0;
+
+    fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
+        Rect { x, y, w, h }
+    }
+
+    /// The backdrop: four colour bands, the lowest half transparent, so a
+    /// mode meets painted and empty pixels alike.
+    pub fn backdrop(list: &mut DisplayList) {
+        let bands = [
+            Color::rgba(0.9, 0.1, 0.05, 1.0),
+            Color::rgba(0.05, 0.6, 0.2, 1.0),
+            Color::rgba(0.2, 0.2, 0.8, 0.6),
+            Color::rgba(1.0, 1.0, 1.0, 1.0),
+        ];
+        for (i, c) in bands.into_iter().enumerate() {
+            paged_compose::emit_rect(
+                rect(i as f32 * 16.0, 0.0, 16.0, 30.0),
+                Paint::Solid(c),
+                list,
+            );
+        }
+    }
+
+    /// The source: an opaque warm rectangle and a translucent cool ellipse
+    /// (antialiased edges), across every band and the empty strip.
+    pub fn source(list: &mut DisplayList) {
+        paged_compose::emit_rect(
+            rect(6.0, 8.0, 52.0, 12.0),
+            Paint::Solid(Color::rgba(0.8, 0.45, 0.1, 1.0)),
+            list,
+        );
+        paged_compose::emit_ellipse(
+            rect(10.5, 14.3, 40.0, 30.0),
+            Paint::Solid(Color::rgba(0.1, 0.5, 0.9, 0.7)),
+            list,
+        );
+    }
+
+    /// Backdrop, then the source in a group of `mode` at `opacity`.
+    pub fn scene(mode: BlendMode, opacity: f32) -> DisplayList {
+        let mut list = DisplayList::new();
+        backdrop(&mut list);
+        list.commands.push(DisplayCommand::BeginBlendGroup {
+            bounds: rect(0.0, 0.0, W, H),
+            blend_mode: mode,
+            opacity,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        });
+        source(&mut list);
+        list.commands
+            .push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+        list
+    }
+
+    /// Photoshop's eleven.
+    pub fn photoshop_modes() -> Vec<BlendMode> {
+        BlendMode::MENU
+            .into_iter()
+            .filter(|m| !m.is_native())
+            .collect()
+    }
 }

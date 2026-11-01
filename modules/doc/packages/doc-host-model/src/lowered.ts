@@ -88,6 +88,18 @@ export interface LoweredRun {
   formatChange?: LoweredFormatChange | null;
   /** Doc ADR 613 — the comments (`docx-c<w:id>`) whose range covers it. */
   comments?: string[];
+  /** Doc ADR 614 — the inline content control the run is content of, in the
+   *  engine's JSON shape (`paged_model::ContentControl`, engine ADR 1052):
+   *  the pour sets it on the run's range (`characterContentControl`). */
+  control?: LoweredContentControl | null;
+}
+
+/** Doc ADR 614 — an inline content control (its `id` and `kind` are what the
+ *  bundle reads; the rest rides to the engine as it stands). */
+export interface LoweredContentControl {
+  id: string;
+  kind: { type: string; [key: string]: unknown };
+  [key: string]: unknown;
 }
 
 /** Doc ADR 613 — one tracked change, as `recordChange` records it. */
@@ -179,6 +191,31 @@ export interface LoweredParagraph {
   markChange?: LoweredChange | null;
   /** Doc ADR 613 — the tracked change of the paragraph's properties. */
   propsChange?: LoweredPropsChange | null;
+  /** Engine ADR 1050 — text boxes anchored in the paragraph that are not
+   *  page items: anchored text frames with stories of their own. */
+  textBoxes?: LoweredTextBox[];
+}
+
+/** Engine ADR 1050 — a float's layout among its story's text. */
+export interface LoweredFloatLayout {
+  wrap?: LoweredWrap;
+  /** Word's `behindDoc`. */
+  behind?: boolean;
+  /** Word's `allowOverlap="0"`. */
+  noOverlap?: boolean;
+}
+
+/** Engine ADR 1050 — a text box anchored in its paragraph. */
+export interface LoweredTextBox {
+  at?: number;
+  widthPt: number;
+  heightPt: number;
+  /** Absent for an inline box (a character of its line). */
+  anchor?: LoweredAnchor;
+  layout?: LoweredFloatLayout;
+  insetsPt: [number, number, number, number];
+  paragraphs: LoweredParagraph[];
+  fx?: NativeFx;
 }
 
 /** A list paragraph's list identity. */
@@ -219,6 +256,8 @@ export interface LoweredImage {
   fx?: NativeFx;
   /** What the engine cannot hold of the look, one line per kind. */
   losses?: string[];
+  /** Engine ADR 1050 — a float's wrap, z-order and overlap. */
+  layout?: LoweredFloatLayout;
 }
 
 /** `dml_native::native::NativeFx` (doc ADR 618): the lowering kit's own
@@ -312,6 +351,9 @@ export interface LoweredCell {
   vAlign?: string;
   /** Doc ADR 614 — Word's borders and shading on the cell's edges. */
   look?: LoweredCellLook;
+  /** Engine ADR 1050 — tables nested in the cell, each on the empty cell
+   *  paragraph `paragraph` that stands for it. */
+  nested?: { paragraph: number; table: LoweredTable }[];
 }
 
 export interface LoweredSection {

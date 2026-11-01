@@ -593,6 +593,26 @@ pub fn describe(kind: EffectKind) -> EffectKindRow {
                 None,
             )],
         ),
+        K::Envelope => vector(
+            kind,
+            "Envelope mesh",
+            "distortAndTransform",
+            vec![
+                count("rows", "Rows", 50.0, 1.0),
+                count("columns", "Columns", 50.0, 1.0),
+                p(
+                    "mesh",
+                    "Mesh",
+                    ContractType::List {
+                        of: Box::new(ContractType::List {
+                            of: Box::new(num(None)),
+                        }),
+                    },
+                    None,
+                    None,
+                ),
+            ],
+        ),
         K::Warp => vector(
             kind,
             "Warp",

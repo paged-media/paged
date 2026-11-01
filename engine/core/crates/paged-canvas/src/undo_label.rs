@@ -154,6 +154,9 @@ fn mutation_text(name: &str) -> Option<&'static str> {
         "DeleteComment" => "Delete comment",
         "EditComment" => "Edit comment",
         "DeleteTextAnchor" => "Delete bookmark",
+        "SetContentControlValue" => "Set content control",
+        "ToggleContentControl" => "Toggle checkbox",
+        "ChooseContentControlItem" => "Choose list item",
         _ => return None,
     })
 }
@@ -362,6 +365,8 @@ fn operation_name(op: &Operation) -> &'static str {
         Operation::SetStyleBasedOn { .. } => "SetStyleBasedOn",
         Operation::InsertTextAnchor { .. } => "InsertTextAnchor",
         Operation::DeleteTextAnchor { .. } => "DeleteTextAnchor",
+        Operation::SetContentControlValue { .. } => "SetContentControlValue",
+        Operation::RestoreContentControl { .. } => "RestoreContentControl",
         Operation::SetStoryDestinations { .. } => "SetStoryDestinations",
         Operation::InsertIndexMarker { .. } => "InsertIndexMarker",
         Operation::RestoreIndexMarkers { .. } => "RestoreIndexMarkers",

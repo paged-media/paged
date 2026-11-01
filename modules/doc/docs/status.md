@@ -7,6 +7,7 @@ then `wasm-opt -Oz`):
 
 |                       | bytes                |
 | --------------------- | -------------------- |
+| raw (2026-10-30, W4)  | 7,721,704 (7.36 MiB) |
 | raw (2026-10-29, W4a) | 7,686,229 (7.33 MiB) |
 | raw (2026-10-25, W5)  | 7,321,347 (6.98 MiB) |
 | raw                   | 6,879,227 (6.56 MiB) |
@@ -30,6 +31,62 @@ and `flat-opc`). So dropping schemas the plugin never reads means forking the
 crate. That is the next lever if later waves outgrow the headroom.
 `opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
 fifth slower (see `Cargo.toml`).
+
+## W4b: right-to-left and East Asian text, content controls (2026-10-30)
+
+Doc ADRs [620](adr/620-right-to-left-and-east-asian-text.md) and
+[614](adr/614-floating-objects-and-content-controls.md) (content controls), on engine ADRs 1051
+(paragraph direction, script font slots) and 1052 (content controls).
+
+| Area             | Built                                                                                                                                                                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Direction        | `w:bidi` → `paragraphDirection` (alignment, indents, tabs and the list marker from the right edge); `w:rtl` → `characterDirection` (the run's neutrals embedded, complex script throughout)                                                                                                                     |
+| Script fonts     | `w:rFonts` eastAsia / cs / hint, `w:szCs`, `w:bCs`, `w:iCs`, `w:cs` → the engine's script slots; East Asian and complex-script characters drawn in their faces, an unset slot in the run's own                                                                                                                  |
+| Content controls | Inline `w:sdt`: plain / rich text, checkbox, drop-down, combo box, date read with tag, alias, id, lock and placeholder; poured as the engine's controls; the Content control panel (caret-opened) toggles, chooses, sets; a changed value saved into its `w:sdt`, `w:sdtPr` byte for byte but the changed state |
+| Save-back        | Edited script properties written as Word's `w:rPr`; a style's direction as `w:bidi`; zero-edit saves byte-identical                                                                                                                                                                                             |
+
+Evidence: `docx-conformance/tests/it/w4b.rs`, `docx-export/src/controls.rs`,
+`doc-host-model/test/controls.spec.ts`, `doc-bundle/test/content-controls.spec.ts`; the engine's
+`word_direction.rs` (renderer, IDML), `content_controls.rs` (canvas), `word_model.rs` (mutate).
+
+Word's answers (Word 16 for Mac, 2026-10-31; `scripts/word-objects-probe.sh <out> w4b-scripts
+w4b-controls`, recorded as `fixtures/w4b-*.word.json`): in a `w:bidi` paragraph `w:jc` and
+`w:ind` are logical (`left` against the right margin, a left indent off the right margin,
+`right` against the left margin), as the lowering and the engine read them; every inline control
+draws as text of its line (the checkbox glyph, the shown item, date and placeholder). Word opened
+the saved files of a script edit and of changed control values (`W4B_DUMP`) without a repair
+prompt (their PDFs are the evidence). Tests: `w4b.rs`
+`right_to_left_alignment_and_indents_are_logical_as_in_word`,
+`controls_draw_as_text_of_their_line_as_in_word`.
+
+Not yet: a paragraph's own `w:bidi` changed on the canvas is written back only through its
+style; Word's `w:b`-not-for-complex-script rule; mirrored neutral glyphs; controls in headers,
+footers, notes and text boxes edited; data-bound controls; PDF form fields.
+
+## W4: the engine's floats, text boxes, nested tables and Word tables (2026-10-30)
+
+Doc ADR [614](adr/614-floating-objects-and-content-controls.md) amendment 1, on engine ADRs
+1050 (anchored objects that wrap, anchored text frames, tables and objects in cells) and 1025
+(Word tables), riding protocol 78.
+
+| Area          | Built                                                                                                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Floats        | Every float that is not a page item is an anchored object at Word's position with Word's wrap (bounding box, contour on `wp:wrapPolygon`, jump object), behind the text, kept clear of other floats; no band |
+| Text boxes    | A box with no known page is an anchored text frame of its paragraph with its own story, poured in the same batch; its edits are not saved back yet                                                           |
+| Nested tables | Native tables in their cells, on the one empty held paragraph that stands for each; unedited saves are byte-identical; edits inside them are not saved back yet                                              |
+| Cells         | Pictures in cells are shown (inline ones grow their row; floats stand against the cell)                                                                                                                      |
+| Tables        | Word's layout on every table: rows split across pages (`cantSplit` holds), autofit columns from `tblW` / `tcW`, `tblInd`, exact rows; the tall-row fallback that poured a table as paragraphs is gone        |
+
+Tests: `docx-conformance/tests/it/{objects,floats,tall_rows}.rs` (updated to the new contract),
+`doc-host-model/test/mutations.spec.ts` (Word layout, exact rows),
+`doc-bundle/test/headless/objects.spec.ts` (an anchored text box's story, a nested table in its
+cell, unedited saves byte-identical).
+
+Pagination acceptance (round 16 of `reference/acceptance-real-docx.md`, 2026-10-31, against
+Word's PDFs of 2026-10-02): page starts 13.1 % (parentinvguid), 2.0 % (Bug50936_3); bug59058 lays
+out 31 of Word's 52 pages and has no page starts the method can name now that its tables are
+native. The 95 % target is not met. The run found and fixed an engine id clash that refused a
+table's pictures in cells.
 
 ## W3 (files): tracked changes and comments read and saved back (2026-10-29)
 

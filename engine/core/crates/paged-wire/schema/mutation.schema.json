@@ -256,6 +256,42 @@
                   "format": "uint32",
                   "minimum": 0,
                   "default": null
+                },
+                "kind": {
+                  "description": "Engine ADR 1050 (additive) — `text` makes an anchored TEXT frame\nwith a story of its own, minted with the frame (a batch handle\nbound to the frame names that story in a `storyId` position);\nabsent or `graphic`: the v52 graphic frame.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/AnchoredFrameInsertKind"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "layout": {
+                  "description": "Engine ADR 1050 (additive) — the object's text wrap (a\ncustom-positioned object wraps the lines of its story set after\nit), behind-text z-order, overlap and a text frame's insets.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/AnchoredLayoutSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "cell": {
+                  "description": "Engine ADR 1050 (additive) — anchor the frame in this table\ncell's paragraphs (a picture in a cell): `paragraph` and `offset`\nthen count the cell's paragraphs and characters. The cell's\n`tableId` may name a nested table.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextCellAddr"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -6257,6 +6293,14 @@
                   ],
                   "format": "float",
                   "default": null
+                },
+                "autoGrow": {
+                  "description": "Engine ADR 1025 (additive) — `false` holds the row at exactly\n`height` (Word's `hRule=\"exact\"`), `true` lets it grow from it;\nabsent leaves it as it is.",
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -6674,6 +6718,40 @@
                     "format": "float"
                   },
                   "default": []
+                },
+                "cell": {
+                  "description": "Engine ADR 1050 (additive) — make the table in this cell (a\nnested table) instead of at the story's end: in the cell's last\nparagraph when that is empty, else in a new one after its\ncontent. The cell's `tableId` may itself name a nested table,\nas every cell address may.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/TextCellAddr"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "paragraph": {
+                  "description": "Engine ADR 1050 (additive) — with `cell`: the cell paragraph\n(0-based) the table takes when it is empty, else a new paragraph\ninserted at that index.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "word": {
+                  "description": "Engine ADR 1025 (additive) — lay the table out by Word's rules:\nrows split across frames, autofit columns, an indent.",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/WordTableSpec"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -6709,6 +6787,103 @@
               "required": [
                 "storyId",
                 "tableId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1052 — set content control `controlId` of story `storyId`\nto `value`: free text (plain / rich text), an item's value or\ndisplay text (drop-down, combo box), a date `YYYY-MM-DD`, or a\ncheckbox's `true` / `false`. The control's text becomes the value's.\nRefused for a locked control or a value its kind does not take.\nUndoable in one step. // rides v78.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setContentControlValue"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "controlId": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "storyId",
+                "controlId",
+                "value"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1052 — toggle checkbox control `controlId`: its glyph\nand state flip. Undoable in one step. // rides v78.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "toggleContentControl"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "controlId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "storyId",
+                "controlId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1052 — choose item `index` (0-based) of drop-down or\ncombo box control `controlId`. Undoable in one step. // rides v78.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "chooseContentControlItem"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "controlId": {
+                  "type": "string"
+                },
+                "index": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "storyId",
+                "controlId",
+                "index"
               ]
             }
           },
@@ -6845,6 +7020,125 @@
           ],
           "additionalProperties": false
         }
+      ]
+    },
+    "AnchoredFrameInsertKind": {
+      "description": "Engine ADR 1050 — what [`Operation::InsertAnchoredFrame`] makes.",
+      "oneOf": [
+        {
+          "description": "A graphic frame (a rectangle, with the image when one is named).",
+          "type": "string",
+          "const": "graphic"
+        },
+        {
+          "description": "A text frame with its own story: a Word text box.",
+          "type": "string",
+          "const": "text"
+        }
+      ]
+    },
+    "AnchoredLayoutSpec": {
+      "description": "Engine ADR 1050 — how an anchored object stands among its story's\ntext (`paged_model::AnchoredLayout` on the wire).",
+      "type": "object",
+      "properties": {
+        "wrap": {
+          "description": "The wrap the object makes; a custom-positioned object only.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnchoredWrapSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "behindText": {
+          "description": "Drawn under its story's text (Word's `behindDoc`).",
+          "type": "boolean",
+          "default": false
+        },
+        "allowOverlap": {
+          "description": "`false`: moved down clear of the story's objects already on the\npage (Word's `allowOverlap=\"0\"`). Absent: may overlap.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "insets": {
+          "description": "A text frame's insets, `[top, left, bottom, right]` pt.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": null
+        },
+        "verticalJustification": {
+          "description": "A text frame's `VerticalJustification` (`TopAlign`,\n`CenterAlign`, `BottomAlign`).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "AnchoredWrapSpec": {
+      "description": "Engine ADR 1050 — the text wrap an anchored object makes.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "IDML's `TextWrapMode`: `BoundingBoxTextWrap`, `ContourTextWrap`,\n`JumpObjectTextWrap`, `NextColumnTextWrap` or `None`.",
+          "type": "string"
+        },
+        "offsets": {
+          "description": "`[top, left, bottom, right]` in pt: how far the text keeps away.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "side": {
+          "description": "IDML's `TextWrapSide` (`BothSides`, `LeftSide`, `RightSide`,\n`LargestArea`, …); absent: both sides.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "polygon": {
+          "description": "A contour wrap's outline, points in pt from the frame's top-left\n(Word's `wp:wrapPolygon`); empty: the frame's box.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "mode"
       ]
     },
     "PageId": {
@@ -8900,6 +9194,56 @@
           "const": "frameShapePieEnd"
         },
         {
+          "description": "A paragraph's base direction: `Value::Text` of `ltr`, `rtl` or\n`auto` (from the first strong character); `\"\"` clears (inherit).\nOn a `StoryRange` or a paragraph style. Reflows.",
+          "type": "string",
+          "const": "paragraphDirection"
+        },
+        {
+          "description": "A run's direction (Word's `w:rtl`): `Value::Text` of `ltr` or `rtl`,\n`\"\"` clears. A right-to-left run is complex script throughout.\nReflows.",
+          "type": "string",
+          "const": "characterDirection"
+        },
+        {
+          "description": "The face of a run's East Asian characters (`w:rFonts/@w:eastAsia`):\n`Value::Text` of a family, `\"\"` clears (the run's own font).",
+          "type": "string",
+          "const": "characterEastAsianFont"
+        },
+        {
+          "description": "The face of a run's complex-script characters (`w:rFonts/@w:cs`):\n`Value::Text`, `\"\"` clears.",
+          "type": "string",
+          "const": "characterComplexFont"
+        },
+        {
+          "description": "The size of a run's complex-script characters in pt (`w:szCs`):\n`Value::Length`, `None` clears.",
+          "type": "string",
+          "const": "characterComplexFontSize"
+        },
+        {
+          "description": "Bold for a run's complex-script characters (`w:bCs`): `Value::Bool`,\n`Text(\"\")` clears.",
+          "type": "string",
+          "const": "characterComplexBold"
+        },
+        {
+          "description": "Italic for a run's complex-script characters (`w:iCs`).",
+          "type": "string",
+          "const": "characterComplexItalic"
+        },
+        {
+          "description": "The whole run is complex script (`w:cs`): `Value::Bool`.",
+          "type": "string",
+          "const": "characterComplexScript"
+        },
+        {
+          "description": "Which slot shared characters take (`w:rFonts/@w:hint`):\n`Value::Text` of `default`, `eastAsia` or `cs`; `\"\"` clears.",
+          "type": "string",
+          "const": "characterFontHint"
+        },
+        {
+          "description": "Make a run range a content control (Word's inline `w:sdt`):\n`Value::Text` of a JSON `paged_model::ContentControl`; `\"\"` makes it\nordinary text again. Every run of the range carries the control.\nOn a `StoryRange` only. Paint-only (the text is the runs').",
+          "type": "string",
+          "const": "characterContentControl"
+        },
+        {
           "description": "How the frame's gradient stroke maps onto the stroke:\n`Value::Text` `\"Within\"` (IDML's mode, the default), `\"Along\"`\n(the ramp runs along the path) or `\"Across\"` (from one edge of the\nstroke to the other); `\"\"` clears to `\"Within\"`. On a TextFrame,\nRectangle, Oval, Polygon or GraphicLine. No IDML attribute carries\nit: the IDML export writes the stroke `Within` and reports the\nloss. Paint-only (`frame_style`).",
           "type": "string",
           "const": "frameGradientStrokeMode"
@@ -10137,7 +10481,7 @@
       ]
     },
     "EffectEntrySpec": {
-      "description": "Engine ADR 1008 — one entry of an effect stack on the wire. Every\nentry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`\nand `opacityPct`. The parameter fields are flat and optional; each\nkind reads its own and an absent one takes the kind's default:\n\n| kind | fields |\n| --- | --- |\n| `gaussianBlur` | `radiusPt` (σ, pt) |\n| `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |\n| `colorOverlay` | `color` |\n| `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |\n| `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |\n| `softEdge` | `sizePt` |\n| `noise` | `amountPct`, `monochromatic` |\n| `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |\n\nThe live vector effects (engine ADR 1042) and their fields:\n\n| kind | fields |\n| --- | --- |\n| `roughen` | `size`, `relative`, `detailPerInch`, `smooth`, `seed` |\n| `zigZag` | `size`, `relative`, `ridges`, `smooth` |\n| `puckerBloat` | `amountPct` (−200..200; positive bloats) |\n| `twist` | `angleDeg` |\n| `tweak` | `amountH`, `amountV`, `relative`, `anchors`, `inHandles`, `outHandles`, `seed` |\n| `transformCopies` | `scaleHPct`, `scaleVPct`, `moveH`, `moveV`, `rotateDeg`, `reflectX`, `reflectY`, `copies`, `origin` |\n| `freeDistort` | `corners` (four `[x, y]` in the box's unit square) |\n| `warp` | `style`, `horizontal`, `bendPct`, `distortHPct`, `distortVPct` |\n| `offsetPath` | `offset`, `join`, `miterLimit` |\n| `outlinePath` | — (the item's own stroke) |\n| `roundCorners` | `radius` |\n| `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |\n| `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |\n| `pathfinder` | `op` (on a group's stack only) |\n\nInDesign's kinds carry no parameters here: theirs are the per-field\npaths (`frameInnerShadowSize`, …), and the stack keeps them.",
+      "description": "Engine ADR 1008 — one entry of an effect stack on the wire. Every\nentry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`\nand `opacityPct`. The parameter fields are flat and optional; each\nkind reads its own and an absent one takes the kind's default:\n\n| kind | fields |\n| --- | --- |\n| `gaussianBlur` | `radiusPt` (σ, pt) |\n| `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |\n| `colorOverlay` | `color` |\n| `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |\n| `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |\n| `softEdge` | `sizePt` |\n| `noise` | `amountPct`, `monochromatic` |\n| `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |\n\nThe live vector effects (engine ADR 1042) and their fields:\n\n| kind | fields |\n| --- | --- |\n| `roughen` | `size`, `relative`, `detailPerInch`, `smooth`, `seed` |\n| `zigZag` | `size`, `relative`, `ridges`, `smooth` |\n| `puckerBloat` | `amountPct` (−200..200; positive bloats) |\n| `twist` | `angleDeg` |\n| `tweak` | `amountH`, `amountV`, `relative`, `anchors`, `inHandles`, `outHandles`, `seed` |\n| `transformCopies` | `scaleHPct`, `scaleVPct`, `moveH`, `moveV`, `rotateDeg`, `reflectX`, `reflectY`, `copies`, `origin` |\n| `freeDistort` | `corners` (four `[x, y]` in the box's unit square) |\n| `warp` | `style`, `horizontal`, `bendPct`, `distortHPct`, `distortVPct` |\n| `offsetPath` | `offset`, `join`, `miterLimit` |\n| `outlinePath` | — (the item's own stroke) |\n| `roundCorners` | `radius` |\n| `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |\n| `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |\n| `pathfinder` | `op` (on a group's stack only) |\n| `envelope` | `rows`, `columns`, `mesh` (the patches' control net, `(3·rows+1) × (3·columns+1)` `[x, y]` in the box's unit square, row-major) |\n\nInDesign's kinds carry no parameters here: theirs are the per-field\npaths (`frameInnerShadowSize`, …), and the stack keeps them.",
       "type": "object",
       "properties": {
         "kind": {
@@ -10650,6 +10994,40 @@
             "null"
           ],
           "default": null
+        },
+        "rows": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "columns": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "mesh": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "default": null
         }
       },
       "required": [
@@ -10690,7 +11068,8 @@
         "roundCorners",
         "scribble",
         "convertToShape",
-        "pathfinder"
+        "pathfinder",
+        "envelope"
       ]
     },
     "MeshFillSpec": {
@@ -12368,6 +12747,125 @@
           "type": "string",
           "const": "evenPage"
         }
+      ]
+    },
+    "WordTableSpec": {
+      "description": "Engine ADR 1025 — a table laid out by Word's rules\n(`paged_model::WordTableLayout` on the wire): rows split across frames\nunless listed in `cant_split_rows`, columns autofit their content when\n`autofit`, the table indented by `indent` pt.",
+      "type": "object",
+      "properties": {
+        "indent": {
+          "type": "number",
+          "format": "float",
+          "default": 0.0
+        },
+        "autofit": {
+          "type": "boolean",
+          "default": false
+        },
+        "width": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TableWidthSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cellWidths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CellWidthSpec"
+          },
+          "default": []
+        },
+        "cantSplitRows": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "default": []
+        }
+      }
+    },
+    "TableWidthSpec": {
+      "description": "Engine ADR 1025 — a preferred width as Word states it (`w:tblW`, `w:tcW`).",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "type": "string",
+              "const": "auto"
+            }
+          },
+          "required": [
+            "unit"
+          ]
+        },
+        {
+          "description": "pt.",
+          "type": "object",
+          "properties": {
+            "unit": {
+              "type": "string",
+              "const": "points"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "unit",
+            "value"
+          ]
+        },
+        {
+          "description": "Percent of the room the table stands in (of the table, for a cell).",
+          "type": "object",
+          "properties": {
+            "unit": {
+              "type": "string",
+              "const": "percent"
+            },
+            "value": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "required": [
+            "unit",
+            "value"
+          ]
+        }
+      ]
+    },
+    "CellWidthSpec": {
+      "description": "Engine ADR 1025 — one cell's preferred width.",
+      "type": "object",
+      "properties": {
+        "row": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "col": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "width": {
+          "$ref": "#/$defs/TableWidthSpec"
+        }
+      },
+      "required": [
+        "row",
+        "col",
+        "width"
       ]
     }
   }

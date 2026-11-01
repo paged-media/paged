@@ -1831,6 +1831,114 @@ test.describe.serial("plugin menus — paged.draw", () => {
     await runCommand(live, "paged.tool.activate.paged.tool.select");
   });
 
+  // ── WP6.3 (draw ADR 367) — Object ▸ Envelope distort, Object ▸ Expand
+  //    appearance, and the graphic-style library as a file. ──
+
+  for (const [row, command, what] of [
+    [
+      "Object/Envelope distort/Make with warp",
+      "envelopeMakeWithWarp",
+      "a warp",
+    ],
+    [
+      "Object/Envelope distort/Make with mesh",
+      "envelopeMakeWithMesh",
+      "a 4 × 4 mesh",
+    ],
+    [
+      "Object/Envelope distort/Make with top object",
+      "envelopeMakeWithTopObject",
+      "the front rectangle's outline (which goes)",
+    ],
+  ] as const) {
+    test(`${row} — gives the selection ${what} as a live envelope, and one Undo takes it back`, async () => {
+      covers(`menu:${row}`);
+      await expectGreyedAndInert(bare, row);
+      const out = await clickEntry(
+        live,
+        row,
+        `media.paged.draw.command.${command}`,
+      );
+      expect(out.after, `${row} changes the document`).not.toBe(out.before);
+      expect(
+        await undosToRestore(live, out.before),
+        `Undos it takes to take back one click on ${row}`,
+      ).toBe(1);
+    });
+  }
+
+  for (const [row, command] of [
+    ["Object/Envelope distort/Edit contents", "envelopeEditContents"],
+    ["Object/Envelope distort/Expand", "envelopeExpand"],
+    ["Object/Expand appearance", "expandAppearance"],
+  ] as const) {
+    test(`${row} — the rectangles carry no envelope or live effect, so it changes nothing`, async () => {
+      covers(`menu:${row}`);
+      await expectGreyedAndInert(bare, row);
+      const out = await clickEntry(
+        live,
+        row,
+        `media.paged.draw.command.${command}`,
+      );
+      expect(out.after).toBe(out.before);
+    });
+  }
+
+  test("Object/Envelope distort/Expand — after Make with top object, expands it, and one Undo takes it back", async () => {
+    await clickEntry(
+      live,
+      "Object/Envelope distort/Make with top object",
+      "media.paged.draw.command.envelopeMakeWithTopObject",
+    );
+    const out = await clickEntry(
+      live,
+      "Object/Envelope distort/Expand",
+      "media.paged.draw.command.envelopeExpand",
+    );
+    expect(out.after).not.toBe(out.before);
+    expect(await undosToRestore(live, out.before)).toBe(1);
+  });
+
+  test("Object/Envelope distort/Envelope mesh tool — switches to the Envelope Mesh tool and leaves the document alone", async () => {
+    const row = "Object/Envelope distort/Envelope mesh tool";
+    covers(`menu:${row}`);
+    await expectGreyedAndInert(bare, row);
+    const before = await documentDigest(live);
+    const m = await mark(live);
+    const item = await openLeaf(live, routeOf(row));
+    expect(await isGreyed(item)).toBe(false);
+    await item.click();
+    await expect
+      .poll(async () =>
+        (await recordedSince(live, m)).runs
+          .filter((r) => r.phase === "started")
+          .map((r) => r.id),
+      )
+      .toEqual([
+        "media.paged.draw.command.envelopeMeshTool",
+        "paged.tool.activate.media.paged.draw.tool.envelopeMesh",
+      ]);
+    await closeMenus(live);
+    expect(await documentDigest(live)).toBe(before);
+    await runCommand(live, "paged.tool.activate.paged.tool.select");
+  });
+
+  for (const [row, command] of [
+    ["Draw/Graphic style/Import library", "importGraphicStyles"],
+    ["Draw/Graphic style/Export library", "exportGraphicStyles"],
+  ] as const) {
+    test(`${row} — goes through the host's file door and leaves the document alone`, async () => {
+      covers(`menu:${row}`);
+      await expectGreyedAndInert(bare, row);
+      const out = await clickEntry(
+        live,
+        row,
+        `media.paged.draw.command.${command}`,
+      );
+      expect(out.after).toBe(out.before);
+    });
+  }
+
   test("Object/Perspective/Attach to active plane — projects the selection onto the grid's active plane, and one Undo takes it back", async () => {
     covers("menu:Object/Perspective/Attach to active plane");
     await expectGreyedAndInert(

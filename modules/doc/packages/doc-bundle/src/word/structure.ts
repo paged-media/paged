@@ -140,6 +140,8 @@ export const STRUCTURE_COMMANDS = [
 
 /** The References panel (`panels/references-panel.tsx`). */
 export const REFERENCES_PANEL = "media.paged.doc.panel.references";
+/** Doc ADR 614 — the Content control panel. */
+export const CONTROL_PANEL = "media.paged.doc.panel.contentControl";
 export type StructureCommandName = (typeof STRUCTURE_COMMANDS)[number];
 
 /** The commands the header/footer bar shows (editor ADR 301). */

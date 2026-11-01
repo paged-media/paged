@@ -103,6 +103,11 @@ pub enum OperationError {
     #[error("XML structure: {reason}")]
     InvalidXmlStructure { reason: String },
 
+    /// Engine ADR 1052 — a content control refused a value: a locked
+    /// control, an item not in its list, a date that does not read.
+    #[error("content control {control_id}: {reason}")]
+    InvalidControlValue { control_id: String, reason: String },
+
     #[error("batch failed at index {failed_at}: {source}")]
     BatchFailed {
         failed_at: usize,

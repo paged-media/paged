@@ -8512,7 +8512,8 @@ pub(crate) fn paragraph_attr_patch(
             })
             .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_ABOVE, &p.rule_above))
             .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_BELOW, &p.rule_below))
-            .or_else(|| crate::emit::shading_border_patch(key, raw, &p.shading, &p.border)),
+            .or_else(|| crate::emit::shading_border_patch(key, raw, &p.shading, &p.border))
+            .or_else(|| crate::emit::direction_patch(key, raw, Some(p.direction), None)),
     }
 }
 
@@ -8605,7 +8606,8 @@ fn character_attr_patch(key: &[u8], raw: &[u8], r: &CharacterRun) -> Option<Patc
         b"StrikeThru" => Some(opt_bool_patch(r.strikethru)),
         b"Ligatures" => Some(opt_bool_patch(r.ligatures_on)),
         b"NoBreak" => Some(opt_bool_patch(r.no_break)),
-        _ => crate::emit::decoration_patch(key, raw, &r.decorations, r.underline),
+        _ => crate::emit::decoration_patch(key, raw, &r.decorations, r.underline)
+            .or_else(|| crate::emit::direction_patch(key, raw, None, Some(&r.script))),
     }
 }
 
@@ -8640,6 +8642,8 @@ fn character_extras(r: &CharacterRun) -> Vec<(&'static str, String)> {
         r.strikethru,
         r.point_size,
     );
+    // Engine ADR 1051 — appended only where the source has none.
+    crate::emit::character_direction_attrs(&mut out, &r.script);
     out
 }
 
@@ -9746,6 +9750,35 @@ mod tests {
         assert_eq!(back.fill_tint, Some(40.0));
         assert_eq!(back.opacity, Some(60.0));
         assert_eq!(back.blend_mode.as_deref(), Some("Multiply"));
+    }
+
+    /// Engine ADR 1034 — a Photoshop blend mode is written as the
+    /// nearest of InDesign's sixteen (the canvas's `idml_export_losses`
+    /// names the change); the sixteen are written as they are.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_photoshop_blend_mode_is_written_as_the_nearest_indesign_mode__feat__effects_transparency_blend_modes_27(
+    ) {
+        for (model, written) in [
+            ("LinearBurn", "Multiply"),
+            ("Dissolve", "Normal"),
+            ("Divide", "ColorDodge"),
+            ("Screen", "Screen"),
+        ] {
+            let mut spread = grouped();
+            let mut p = inserted_polygon(&spread, "u5", None);
+            p.blend_mode = Some(model.to_string());
+            spread.polygons.push(p);
+            spread
+                .frames_in_order
+                .push(idml_import::FrameRef::Polygon(1));
+            let out = rewrite_spread(GROUP_SPREAD, &spread).expect("rewrite");
+            let s = String::from_utf8(out).unwrap();
+            assert!(
+                s.contains(&format!(r#"<BlendingSetting BlendMode="{written}"/>"#)),
+                "{model}: {s}"
+            );
+        }
     }
 
     /// THE BAKE SHAPE: a group over one SOURCE carrier (paint cleared,
