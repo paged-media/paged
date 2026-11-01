@@ -1443,10 +1443,7 @@ fn finish_cell(
 // ─────────────────────────────────────────────────────────── writing
 
 fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+    paged_ooxml::xml::escape_attr(s)
 }
 
 fn col_name(mut c: u32) -> String {

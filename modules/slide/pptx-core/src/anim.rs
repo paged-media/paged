@@ -771,17 +771,7 @@ impl Timing {
 
 /// XML attribute escaping.
 pub fn esc(s: &str) -> String {
-    let mut o = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => o.push_str("&amp;"),
-            '<' => o.push_str("&lt;"),
-            '>' => o.push_str("&gt;"),
-            '"' => o.push_str("&quot;"),
-            _ => o.push(c),
-        }
-    }
-    o
+    paged_ooxml::xml::escape_attr(s)
 }
 
 struct Tag<'a> {

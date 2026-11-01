@@ -505,64 +505,101 @@ pub fn rgb_hex(c: [u8; 3]) -> String {
 /// RGB to hue (degrees), saturation, lightness (0..1).
 pub fn rgb_hsl(c: [u8; 3]) -> (f64, f64, f64) {
     let [r, g, b] = c.map(|v| v as f64 / 255.0);
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let l = (max + min) / 2.0;
-    if (max - min).abs() < 1e-12 {
-        return (0.0, 0.0, l);
-    }
-    let d = max - min;
-    let s = if l > 0.5 {
-        d / (2.0 - max - min)
-    } else {
-        d / (max + min)
-    };
-    let h = if max == r {
-        (g - b) / d + if g < b { 6.0 } else { 0.0 }
-    } else if max == g {
-        (b - r) / d + 2.0
-    } else {
-        (r - g) / d + 4.0
-    };
-    (h * 60.0, s, l)
+    let (h, s, l) = paged_ooxml::colour::rgb_to_hsl(r, g, b);
+    (h * 360.0, s, l)
 }
 
+/// Hue (degrees), saturation and lightness (0..1) to RGB.
 pub fn hsl_rgb(h: f64, s: f64, l: f64) -> [u8; 3] {
-    let h = h.rem_euclid(360.0) / 360.0;
-    if s <= 0.0 {
-        let v = (l * 255.0).round() as u8;
-        return [v, v, v];
-    }
-    let q = if l < 0.5 {
-        l * (1.0 + s)
-    } else {
-        l + s - l * s
-    };
-    let p = 2.0 * l - q;
-    let f = |mut t: f64| {
-        if t < 0.0 {
-            t += 1.0;
-        }
-        if t > 1.0 {
-            t -= 1.0;
-        }
-        let v = if t < 1.0 / 6.0 {
-            p + (q - p) * 6.0 * t
-        } else if t < 0.5 {
-            q
-        } else if t < 2.0 / 3.0 {
-            p + (q - p) * (2.0 / 3.0 - t) * 6.0
-        } else {
-            p
-        };
-        (v.clamp(0.0, 1.0) * 255.0).round() as u8
-    };
-    [f(h + 1.0 / 3.0), f(h), f(h - 1.0 / 3.0)]
+    let (r, g, b) = paged_ooxml::colour::hsl_to_rgb(h.rem_euclid(360.0) / 360.0, s, l);
+    let q = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    [q(r), q(g), q(b)]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RGB to hue (degrees), saturation, lightness (0..1).
+    fn reference_rgb_hsl(c: [u8; 3]) -> (f64, f64, f64) {
+        let [r, g, b] = c.map(|v| v as f64 / 255.0);
+        let max = r.max(g).max(b);
+        let min = r.min(g).min(b);
+        let l = (max + min) / 2.0;
+        if (max - min).abs() < 1e-12 {
+            return (0.0, 0.0, l);
+        }
+        let d = max - min;
+        let s = if l > 0.5 {
+            d / (2.0 - max - min)
+        } else {
+            d / (max + min)
+        };
+        let h = if max == r {
+            (g - b) / d + if g < b { 6.0 } else { 0.0 }
+        } else if max == g {
+            (b - r) / d + 2.0
+        } else {
+            (r - g) / d + 4.0
+        };
+        (h * 60.0, s, l)
+    }
+
+    fn reference_hsl_rgb(h: f64, s: f64, l: f64) -> [u8; 3] {
+        let h = h.rem_euclid(360.0) / 360.0;
+        if s <= 0.0 {
+            let v = (l * 255.0).round() as u8;
+            return [v, v, v];
+        }
+        let q = if l < 0.5 {
+            l * (1.0 + s)
+        } else {
+            l + s - l * s
+        };
+        let p = 2.0 * l - q;
+        let f = |mut t: f64| {
+            if t < 0.0 {
+                t += 1.0;
+            }
+            if t > 1.0 {
+                t -= 1.0;
+            }
+            let v = if t < 1.0 / 6.0 {
+                p + (q - p) * 6.0 * t
+            } else if t < 0.5 {
+                q
+            } else if t < 2.0 / 3.0 {
+                p + (q - p) * (2.0 / 3.0 - t) * 6.0
+            } else {
+                p
+            };
+            (v.clamp(0.0, 1.0) * 255.0).round() as u8
+        };
+        [f(h + 1.0 / 3.0), f(h), f(h - 1.0 / 3.0)]
+    }
+
+    /// The shared HSL arithmetic gives the colours the slide's own copy did.
+    #[test]
+    fn hsl_through_the_shared_arithmetic_matches_the_old_copy() {
+        for r in (0..=255u16).step_by(15) {
+            for g in (0..=255u16).step_by(15) {
+                for b in (0..=255u16).step_by(15) {
+                    let c = [r as u8, g as u8, b as u8];
+                    let (h, s, l) = rgb_hsl(c);
+                    let (h0, s0, l0) = reference_rgb_hsl(c);
+                    assert!(
+                        (h - h0).abs() < 1e-9 && (s - s0).abs() < 1e-12 && (l - l0).abs() < 1e-12
+                    );
+                    assert_eq!(hsl_rgb(h0, s0, l0), reference_hsl_rgb(h0, s0, l0), "{c:?}");
+                    for dl in [-0.3, 0.2] {
+                        let l2 = (l + dl).clamp(0.0, 1.0);
+                        assert_eq!(hsl_rgb(h0, s0, l2), reference_hsl_rgb(h0, s0, l2));
+                    }
+                }
+            }
+        }
+        assert_eq!(hsl_rgb(-60.0, 1.0, 0.5), reference_hsl_rgb(-60.0, 1.0, 0.5));
+    }
 
     #[test]
     fn reads_colours() {
