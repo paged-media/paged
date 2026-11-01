@@ -41,8 +41,9 @@ import { defineMessages, useStrings } from "@paged-media/strings";
 
 import {
   anchorDetail,
-  deleteMutation,
-  editMutation,
+  deleteFor,
+  editFor,
+  isStoryNote,
   filterThreads,
   groupThreads,
   initialsOf,
@@ -351,7 +352,7 @@ function ThreadCard({
                   type="button"
                   data-edit-save
                   onClick={() => {
-                    void write(editMutation(c.id, editText, now));
+                    void write(editFor(c, editText, now));
                     setEditing(null);
                   }}
                 >
@@ -382,7 +383,7 @@ function ThreadCard({
               <button
                 type="button"
                 data-delete
-                onClick={() => void write(deleteMutation(c.id))}
+                onClick={() => void write(deleteFor(c))}
               >
                 {strings.t(M.remove)}
               </button>
@@ -413,15 +414,17 @@ function ThreadCard({
             {strings.t(M.reply)}
           </button>
         )}
-        <button
-          type="button"
-          data-resolve
-          onClick={() =>
-            void write(resolveMutation(thread.root.id, !thread.resolved))
-          }
-        >
-          {strings.t(thread.resolved ? M.reopen : M.resolve)}
-        </button>
+        {isStoryNote(thread.root) ? null : (
+          <button
+            type="button"
+            data-resolve
+            onClick={() =>
+              void write(resolveMutation(thread.root.id, !thread.resolved))
+            }
+          >
+            {strings.t(thread.resolved ? M.reopen : M.resolve)}
+          </button>
+        )}
       </div>
     </article>
   );

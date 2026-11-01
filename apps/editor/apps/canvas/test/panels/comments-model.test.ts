@@ -25,8 +25,11 @@ import { covers } from "@paged-media/test-kit";
 
 import {
   anchorDetail,
+  deleteFor,
   deleteMutation,
+  editFor,
   editMutation,
+  isStoryNote,
   filterThreads,
   groupThreads,
   initialsOf,
@@ -185,5 +188,35 @@ describe("Comments panel model", () => {
     });
     expect(newTargetOf(null, [{ id: "a" }, { id: "b" }])).toBeNull();
     expect(newTargetOf(null, [])).toBeNull();
+  });
+
+  test("an InDesign note is edited and removed with the note operations", () => {
+    covers("panel:paged.comments");
+    const note = row({
+      id: "n1",
+      storyId: "u9",
+      threadKind: "note",
+    } as never);
+    const docNote = row({
+      id: "t9",
+      threadId: "t9",
+      threadKind: "note",
+    } as never);
+    expect(isStoryNote(note)).toBe(true);
+    // A document thread of kind note is a thread: the comment operations.
+    expect(isStoryNote(docNote)).toBe(false);
+    expect(isStoryNote(row({ id: "1", storyId: "u9" }))).toBe(false);
+    expect(editFor(note, "new", now)).toEqual({
+      op: "editNote",
+      args: { noteId: "n1", text: "new", date: "2026-11-01T10:00:00Z" },
+    });
+    expect(deleteFor(note)).toEqual({
+      op: "deleteNote",
+      args: { noteId: "n1" },
+    });
+    expect(editFor(docNote, "new", now)).toEqual(
+      editMutation("t9", "new", now),
+    );
+    expect(deleteFor(docNote)).toEqual(deleteMutation("t9"));
   });
 });
