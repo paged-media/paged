@@ -345,6 +345,8 @@ pub enum Effect {
     TransformCopies(crate::vector_effect::TransformCopiesParams),
     FreeDistort(crate::vector_effect::FreeDistortParams),
     Warp(crate::vector_effect::WarpParams),
+    /// Envelope Distort: the box bent through a Bézier patch mesh.
+    Envelope(crate::vector_effect::EnvelopeParams),
     OffsetPath(crate::vector_effect::OffsetPathParams),
     OutlinePath(crate::vector_effect::OutlinePathParams),
     RoundCorners(crate::vector_effect::RoundCornersParams),
@@ -405,6 +407,7 @@ impl Effect {
             Effect::TransformCopies(_) => "transformCopies",
             Effect::FreeDistort(_) => "freeDistort",
             Effect::Warp(_) => "warp",
+            Effect::Envelope(_) => "envelope",
             Effect::OffsetPath(_) => "offsetPath",
             Effect::OutlinePath(_) => "outlinePath",
             Effect::RoundCorners(_) => "roundCorners",
@@ -519,6 +522,7 @@ impl Effect {
             "transformCopies" => Effect::TransformCopies(v::TransformCopiesParams::default()),
             "freeDistort" => Effect::FreeDistort(v::FreeDistortParams::default()),
             "warp" => Effect::Warp(v::WarpParams::default()),
+            "envelope" => Effect::Envelope(v::EnvelopeParams::default()),
             "offsetPath" => Effect::OffsetPath(v::OffsetPathParams::default()),
             "outlinePath" => Effect::OutlinePath(v::OutlinePathParams::default()),
             "roundCorners" => Effect::RoundCorners(v::RoundCornersParams::default()),
@@ -542,6 +546,7 @@ impl Effect {
                 | Effect::TransformCopies(_)
                 | Effect::FreeDistort(_)
                 | Effect::Warp(_)
+                | Effect::Envelope(_)
                 | Effect::OffsetPath(_)
                 | Effect::OutlinePath(_)
                 | Effect::RoundCorners(_)

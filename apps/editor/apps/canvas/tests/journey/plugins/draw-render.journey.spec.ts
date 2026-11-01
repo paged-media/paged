@@ -145,8 +145,8 @@ test.describe("journey · paged.draw render output", () => {
       "the gradient fill rendered onto the frame",
     ).toBeGreaterThan(64);
 
-    // ── 2. STROKE (plugin) — the Appearance command bakes the front-most
-    //    layer onto the frame's real frameStrokeWeight; the stroke edge must
+    // ── 2. STROKE (plugin) — the Appearance command adds a stroke layer to
+    //    the engine's native appearance (draw ADR 367); its edge must
     //    RENDER around the now-filled rectangle. ──
     const beforeStroke = await designer.renderBytes();
     await invokeCommand(page, "media.paged.draw.command.appearanceAddStroke");
@@ -156,9 +156,10 @@ test.describe("journey · paged.draw render output", () => {
           const v = await propOf(
             page,
             { kind: "rectangle", id: r1 },
-            "frameStrokeWeight",
+            "frameAppearance",
           );
-          return v?.type === "length" ? ((v.value as number) ?? 0) : 0;
+          const layers = (v?.value as { layers?: { kind: string }[] })?.layers;
+          return (layers ?? []).filter((l) => l.kind === "stroke").length;
         },
         { timeout: 6_000 },
       )

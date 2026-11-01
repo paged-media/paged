@@ -139,6 +139,7 @@ import {
   type StrokeLayer,
 } from "./appearance";
 import { bindMinted, mutateMinting } from "./minted";
+import { nativeAppearanceOn } from "./appearance-native";
 import {
   bindCreatedMutationFor,
   handleElementId,
@@ -870,8 +871,28 @@ export function contributeAppearanceBakeCommands(host: BundleHost): Disposable {
       title: M.bake,
       category: "Appearance",
       handler: () =>
-        forEachSelectedCarrier(host, APPEARANCE_BAKE_COMMAND_ID, (carrier) =>
-          bakeAppearance(host, carrier),
+        forEachSelectedCarrier(
+          host,
+          APPEARANCE_BAKE_COMMAND_ID,
+          async (carrier) => {
+            // Draw ADR 367: on an engine with native appearance there is no
+            // metadata stack to bake — the engine draws every fill and
+            // stroke, and IDML export bakes them. A stack the migration has
+            // not moved yet still bakes.
+            if (nativeAppearanceOn(host)) {
+              const env = await host.document
+                .getMetadata(carrier)
+                .catch(() => null);
+              const stack = appearanceOf(env);
+              if (stack.fills.length === 0 && stack.strokes.length === 0) {
+                host.log.info(
+                  `${APPEARANCE_BAKE_COMMAND_ID}: the appearance is native — the engine draws every fill and stroke and IDML export bakes them; Object ▸ Expand appearance makes live effects artwork`,
+                );
+                return;
+              }
+            }
+            await bakeAppearance(host, carrier);
+          },
         ),
     }),
     registerCommand(host, {

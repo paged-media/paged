@@ -26,6 +26,9 @@
 //   FXP-MASK      Transparency: Make a mask from two items, its thumbnail,
 //                 Clip and Invert (the render changes), Edit Mask, Release;
 //   FXP-APPEAR    Appearance: the object stack and the fill's own stack;
+//   FXP-LAYERS    editor ADR 312 — Add new fill puts a fill layer in the
+//                 item's native appearance (engine ADR 1043) as one write,
+//                 the panel lists it, and one undo restores the item;
 //   FXP-CONTEXT   plan WP10.7 — inside each module's edit context (doc,
 //                 slide, sheet, draw) and in a publish document, the three
 //                 panels open on the selection and the Effect menu applies.
@@ -98,6 +101,14 @@ async function stackKinds(
     entries?: Array<{ kind: string }>;
   } | null;
   return (v?.entries ?? []).map((e) => e.kind);
+}
+
+/** The kinds of an item's appearance layers, bottom to top. */
+async function layerKinds(page: Page, ref: ElementRef) {
+  const v = (await engineGet(page, addr(ref), "frameAppearance")) as {
+    layers?: Array<{ kind: string; color?: string | null }>;
+  } | null;
+  return (v?.layers ?? []).map((l) => l.kind);
 }
 
 async function blackRect(page: Page): Promise<LoadedFixture> {
@@ -272,6 +283,48 @@ test.describe("Effects, Transparency and Appearance (editor ADR 309)", () => {
     await expect
       .poll(async () => stackKinds(page, ref, "frameFillEffectStack"))
       .toEqual(["innerGlow"]);
+  });
+
+  test("FXP-LAYERS — Add new fill stacks a fill on the item's appearance, one undo restores it @feat:editor-shell.panels.appearance-transparency @feat:frames-paths.native-appearance @level:happy", async ({
+    page,
+  }) => {
+    covers("panel:paged.appearance");
+    const fx = await blackRect(page);
+    const ref = fx.firstRectangle as ElementRef;
+    await selectElements(page, [ref]);
+    await openPanel(page, "paged.appearance");
+    const panel = page.locator('[data-appearance-panel="ready"]');
+    await expect(panel).toBeVisible();
+    expect(await layerKinds(page, ref)).toEqual([]);
+    const fills = panel.locator(
+      '[data-appearance-section="layer"][data-appearance-kind="fill"]',
+    );
+    await expect(fills).toHaveCount(0);
+
+    await panel
+      .locator('[data-appearance-actions] [data-appearance-action="add-fill"]')
+      .click();
+    // Directly above the frame's own fill, seeded with its colour.
+    await expect
+      .poll(async () => layerKinds(page, ref))
+      .toEqual(["frameFill", "fill", "frameStroke"]);
+    const v = (await engineGet(page, addr(ref), "frameAppearance")) as {
+      layers: Array<{ kind: string; color?: string | null }>;
+    };
+    expect(v.layers[1]!.color).toBe("Color/Black");
+    // The panel lists it between the frame's stroke and its fill.
+    await expect(fills).toHaveCount(1);
+    const order = await panel
+      .locator("[data-appearance-section]")
+      .evaluateAll((els) =>
+        els.map((e) => e.getAttribute("data-appearance-section")),
+      );
+    expect(order.slice(0, 3)).toEqual(["stroke", "layer", "fill"]);
+
+    // One undo step.
+    await undoOnce(page);
+    await expect.poll(async () => layerKinds(page, ref)).toEqual([]);
+    await expect(fills).toHaveCount(0);
   });
 
   // Plan WP10.7: the shared host panels in every module's edit context.

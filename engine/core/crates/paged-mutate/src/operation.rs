@@ -2389,10 +2389,12 @@ pub enum EffectKind {
     Scribble,
     ConvertToShape,
     Pathfinder,
+    // Envelope Distort (draw ADR 367): a Bézier patch mesh.
+    Envelope,
 }
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 31] = [
+    pub const ALL: [EffectKind; 32] = [
         EffectKind::DropShadow,
         EffectKind::InnerShadow,
         EffectKind::OuterGlow,
@@ -2424,6 +2426,7 @@ impl EffectKind {
         EffectKind::Scribble,
         EffectKind::ConvertToShape,
         EffectKind::Pathfinder,
+        EffectKind::Envelope,
     ];
 
     fn indesign(self) -> Option<paged_model::effect_stack::IndesignEffect> {
@@ -2476,6 +2479,7 @@ impl EffectKind {
             EffectKind::Scribble => "scribble",
             EffectKind::ConvertToShape => "convertToShape",
             EffectKind::Pathfinder => "pathfinder",
+            EffectKind::Envelope => "envelope",
         }
     }
 
@@ -2518,6 +2522,7 @@ impl EffectKind {
 /// | `scribble` | `angleDeg`, `pathOverlap`, `pathOverlapVariation`, `strokeWidth`, `curvinessPct`, `curvinessVariationPct`, `spacing`, `spacingVariation`, `seed` |
 /// | `convertToShape` | `shape`, `relative`, `extraWidth`, `extraHeight`, `width`, `height`, `cornerRadius` |
 /// | `pathfinder` | `op` (on a group's stack only) |
+/// | `envelope` | `rows`, `columns`, `mesh` (the patches' control net, `(3·rows+1) × (3·columns+1)` `[x, y]` in the box's unit square, row-major) |
 ///
 /// InDesign's kinds carry no parameters here: theirs are the per-field
 /// paths (`frameInnerShadowSize`, …), and the stack keeps them.
@@ -2659,6 +2664,12 @@ pub struct EffectEntrySpec {
     pub corner_radius: Option<f32>,
     #[serde(default)]
     pub op: Option<String>,
+    #[serde(default)]
+    pub rows: Option<u32>,
+    #[serde(default)]
+    pub columns: Option<u32>,
+    #[serde(default)]
+    pub mesh: Option<Vec<[f32; 2]>>,
 }
 
 /// Engine ADR 1008 — the wire value of a target's effect stack as the
@@ -2752,6 +2763,9 @@ impl EffectEntrySpec {
             height: None,
             corner_radius: None,
             op: None,
+            rows: None,
+            columns: None,
+            mesh: None,
         }
     }
 
