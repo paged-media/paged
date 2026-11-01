@@ -32,3 +32,11 @@ can register their own profiles via Document Colour Settings.
    apps/canvas/public/fonts/Inter.ttf
    Copyright (c) The Inter Project Authors
    Licence: SIL Open Font License 1.1 — apps/canvas/public/fonts/OFL-inter.txt
+
+4. ONNX Runtime Web (onnxruntime-web 1.30.0, the ML worker's runtime)
+   Copyright (c) Microsoft Corporation
+   Licence: MIT — https://github.com/microsoft/onnxruntime/blob/main/LICENSE
+   Bundled as published on npm (its JavaScript and the WebGPU build's
+   WebAssembly), loaded only when a model runs (docs/adr/290).
+   No model weights are bundled: models are installed by the user, with
+   consent, each under its own licence (Settings ▸ Models).

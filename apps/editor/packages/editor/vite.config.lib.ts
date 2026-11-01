@@ -92,6 +92,10 @@ function engineFromDependency(): Plugin {
     name: "paged-editor:engine-from-dependency",
     enforce: "pre",
     resolveId(id) {
+      // Editor ADR 290: the embed ships without the ML worker, and so
+      // without onnxruntime-web (its runtime alone is 26 MB): Tier A
+      // answers unavailable, Tier B (the local host) still works.
+      if (/(^|\/)ml-worker\.ts\?worker$/.test(id)) return NO_URL;
       if (
         /^@paged-media\/canvas-wasm\/(repo\/)?paged_(canvas|repo)_wasm_bg\.wasm\?url$/.test(
           id,

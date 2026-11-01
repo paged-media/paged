@@ -29,7 +29,11 @@ import type {
   ObjectWriteResult,
   ValueType,
 } from "@paged-media/plugin-api";
-import { normalizeAddress, parseSelector } from "@paged-media/plugin-sdk";
+import {
+  checkMlRequest,
+  normalizeAddress,
+  parseSelector,
+} from "@paged-media/plugin-sdk";
 
 import { AI_OPTIONS, parsePageSize, runAiVerb } from "./ai";
 import {
@@ -53,6 +57,7 @@ import {
   type MergeResult,
 } from "./data";
 import { BIN, CliError, EXIT } from "./errors";
+import { cliMlBackend, decodePng, encodePng, mlHostUrl } from "./ml";
 import {
   baseName,
   openSession,
@@ -151,6 +156,11 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
     name: "engine-from",
     value: "dir",
     help: "resolve the engine (@paged-media/paged) from this directory",
+  },
+  {
+    name: "ml-host",
+    value: "url",
+    help: "the local image model host (paged-ml-host; default PAGED_ML_HOST_URL or http://127.0.0.1:7861)",
   },
   { name: "text", help: "human-readable output instead of JSON" },
   { name: "help", short: "h", help: "show help" },
@@ -1529,6 +1539,194 @@ const ai: Verb = {
   },
 };
 
+const ML_OPTIONS: readonly OptionSpec[] = [
+  {
+    name: "out",
+    short: "o",
+    value: "file.png",
+    help: "write the image here (generate, edit)",
+  },
+  {
+    name: "width",
+    value: "px",
+    help: "image width, a multiple of 8 (generate; default 1024)",
+  },
+  {
+    name: "height",
+    value: "px",
+    help: "image height, a multiple of 8 (generate; default 1024)",
+  },
+  { name: "seed", value: "n", help: "the seed (-1: random)" },
+  { name: "steps", value: "n", help: "denoising steps" },
+  {
+    name: "negative",
+    value: "text",
+    help: "what to keep out of the image (generate)",
+  },
+  { name: "image", value: "in.png", help: "the image to edit (edit)" },
+  {
+    name: "mask",
+    value: "mask.png",
+    help: "white where the edit may change the image (edit)",
+  },
+  {
+    name: "ref",
+    value: "ref.png",
+    repeat: true,
+    help: "a reference image, up to 10 (edit)",
+  },
+  {
+    name: "strength",
+    value: "0..1",
+    help: "how far the masked region may move (edit)",
+  },
+  OUTPUT_FORMAT,
+];
+
+const ml: Verb = {
+  name: "ml",
+  usage: "<health|generate|edit> [prompt]",
+  summary:
+    "the local image model (paged-ml-host on this machine, extensions ADR 1100): its health, text to image, and an image edited by a prompt (mask, references); nothing leaves the machine",
+  min: 1,
+  max: 2,
+  options: ML_OPTIONS,
+  reaches: [],
+  async run({ args, cwd }) {
+    const [sub, prompt] = args.positionals as [string, string | undefined];
+    const { backend, client } = cliMlBackend(
+      mlHostUrl(flagStr(args, "ml-host")),
+    );
+    if (sub === "health") {
+      try {
+        const health = await client.health();
+        return {
+          json: { host: client.baseUrl, ...health },
+          text: health.ready
+            ? `paged-ml-host ${health.version} at ${client.baseUrl}: ready (${health.model.id})`
+            : `paged-ml-host ${health.version} at ${client.baseUrl}: not ready (runtime ${health.runtime.found ? "found" : "missing"}, model ${health.model.configured ? "configured" : "not configured"})`,
+          exit: health.ready ? 0 : EXIT.failed,
+        };
+      } catch (err) {
+        return {
+          json: {
+            host: client.baseUrl,
+            ok: false,
+            error: (err as Error).message,
+          },
+          text: (err as Error).message,
+          exit: EXIT.failed,
+        };
+      }
+    }
+    if (sub !== "generate" && sub !== "edit")
+      throw new CliError(
+        EXIT.usage,
+        `ml: "${sub}" is not health, generate or edit`,
+      );
+    if (!prompt)
+      throw new CliError(EXIT.usage, `ml ${sub}: the prompt is missing`);
+    const out = flagStr(args, "out");
+    if (!out)
+      throw new CliError(EXIT.usage, `ml ${sub}: --out <file.png> is missing`);
+    const num = (name: string): number | undefined => {
+      const v = flagStr(args, name);
+      if (v === undefined) return undefined;
+      const n = Number(v);
+      if (!Number.isFinite(n))
+        throw new CliError(EXIT.usage, `--${name} ${v} is not a number`);
+      return n;
+    };
+    const seed = num("seed");
+    const steps = num("steps");
+    const common = {
+      ...(seed !== undefined ? { seed } : {}),
+      ...(steps !== undefined ? { steps } : {}),
+    };
+    const readPng = async (flag: string, path: string) => {
+      const full = resolve(cwd, path);
+      if (!existsSync(full))
+        throw new CliError(EXIT.usage, `--${flag} ${path}: no such file`);
+      return decodePng(new Uint8Array(readFileSync(full)));
+    };
+    let result;
+    try {
+      if (sub === "generate") {
+        const negative = flagStr(args, "negative");
+        const request = {
+          prompt,
+          width: num("width") ?? 1024,
+          height: num("height") ?? 1024,
+          ...(negative ? { negativePrompt: negative } : {}),
+          ...common,
+        };
+        checkMlRequest("generate", request);
+        result = await backend.run("generate", request);
+      } else {
+        const image = flagStr(args, "image");
+        if (!image)
+          throw new CliError(
+            EXIT.usage,
+            "ml edit: --image <in.png> is missing",
+          );
+        const mask = flagStr(args, "mask");
+        const refs = flagList(args, "ref");
+        const strength = num("strength");
+        const maskImage = mask ? await readPng("mask", mask) : null;
+        const request = {
+          prompt,
+          image: await readPng("image", image),
+          ...(maskImage
+            ? {
+                mask: {
+                  width: maskImage.width,
+                  height: maskImage.height,
+                  data: Uint8Array.from(
+                    { length: maskImage.width * maskImage.height },
+                    (_, i) => maskImage.data[i * 4]!,
+                  ),
+                },
+              }
+            : {}),
+          ...(refs.length
+            ? {
+                references: await Promise.all(
+                  refs.map((r) => readPng("ref", r)),
+                ),
+              }
+            : {}),
+          ...(strength !== undefined ? { strength } : {}),
+          ...common,
+        };
+        checkMlRequest("edit", request);
+        result = await backend.run("edit", request);
+      }
+    } catch (err) {
+      if (err instanceof CliError) throw err;
+      const message = (err as Error).message;
+      return {
+        json: { ok: false, error: message, wrote: null },
+        text: message,
+        exit: err instanceof TypeError ? EXIT.usage : EXIT.failed,
+      };
+    }
+    const wrote = resolve(cwd, out);
+    writeFileSync(wrote, await encodePng(result.image));
+    return {
+      json: {
+        ok: true,
+        provider: result.provider,
+        tier: result.tier,
+        model: result.model ?? null,
+        width: result.image.width,
+        height: result.image.height,
+        wrote,
+      },
+      text: `wrote ${wrote} (${result.image.width}×${result.image.height}, ${result.provider}${result.model ? ` ${result.model}` : ""})`,
+    };
+  },
+};
+
 const describe: Verb = {
   name: "describe",
   usage: "[doc]",
@@ -1627,6 +1825,7 @@ export const VERBS: readonly Verb[] = [
   plugins,
   describe,
   template,
+  ml,
   mcp,
 ];
 
@@ -1648,7 +1847,9 @@ export function sessionOptions(args: ParsedArgs, cwd: string): SessionOptions {
     );
   const cmykProfile = flagStr(args, "cmyk-profile");
   const engineFrom = flagStr(args, "engine-from");
+  const mlHost = flagStr(args, "ml-host");
   return {
+    ...(mlHost ? { mlHost } : {}),
     cwd,
     ...(plugins ? { plugins } : {}),
     ...(font ? { font } : {}),

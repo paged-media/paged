@@ -24,6 +24,8 @@
 
 import type { PropertySchema, ValueType } from "@paged-media/plugin-api";
 
+import { toBase64 } from "./bytes.js";
+
 export const VALUE_TYPE_KINDS = [
   "bool",
   "number",
@@ -316,10 +318,7 @@ export function assetFromBytes(bytes: Uint8Array | ArrayBuffer): string {
             : at(0, 0x42, 0x4d)
               ? "image/bmp"
               : "application/octet-stream";
-  let bin = "";
-  for (let i = 0; i < b.length; i += 0x8000)
-    bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
-  return `data:${mime};base64,${btoa(bin)}`;
+  return `data:${mime};base64,${toBase64(b)}`;
 }
 
 /**
