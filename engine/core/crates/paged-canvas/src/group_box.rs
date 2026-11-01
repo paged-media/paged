@@ -41,9 +41,7 @@
 
 use paged_model::{Bounds, FrameRef, PathAnchor, Spread};
 
-type Affine = [f32; 6];
-
-const IDENTITY: Affine = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+use paged_geom::affine::{apply, multiply, Affine, IDENTITY};
 
 /// The box of the group at `group_idx` in `spread`: bounds in the group's
 /// own space and the composed transform that places them in spread space
@@ -231,22 +229,6 @@ fn union(a: Bounds, b: Bounds) -> Bounds {
         bottom: a.bottom.max(b.bottom),
         right: a.right.max(b.right),
     }
-}
-
-fn apply(m: &Affine, x: f32, y: f32) -> (f32, f32) {
-    (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
-}
-
-/// `a ∘ b`: `b` applies first.
-fn multiply(a: Affine, b: Affine) -> Affine {
-    [
-        a[0] * b[0] + a[2] * b[1],
-        a[1] * b[0] + a[3] * b[1],
-        a[0] * b[2] + a[2] * b[3],
-        a[1] * b[2] + a[3] * b[3],
-        a[0] * b[4] + a[2] * b[5] + a[4],
-        a[1] * b[4] + a[3] * b[5] + a[5],
-    ]
 }
 
 fn invert(m: Affine) -> Option<Affine> {

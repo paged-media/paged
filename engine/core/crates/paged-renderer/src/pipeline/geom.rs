@@ -142,10 +142,7 @@ pub(super) fn char_at_byte(bytes: &[u8], i: usize) -> Option<char> {
 /// Apply a 6-element IDML affine `[a b c d e f]` to `(x, y)`.
 /// Per IDML spec §10.3.3 the matrix maps inner→parent coords:
 /// `x' = a*x + c*y + e`, `y' = b*x + d*y + f`.
-pub(super) fn apply_matrix(m: &[f32; 6], x: f32, y: f32) -> (f32, f32) {
-    let [a, b, c, d, e, f] = *m;
-    (a * x + c * y + e, b * x + d * y + f)
-}
+pub(super) use paged_geom::affine::apply as apply_matrix;
 
 /// Transform an axis-aligned `Bounds` by an IDML affine and return
 /// the AABB of the result. Identity (`None`) is the no-op.
