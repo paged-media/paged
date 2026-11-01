@@ -45,12 +45,7 @@ import type {
 
 import { defineMessages, t } from "@paged-media/strings";
 import { bootInterchange, type InterchangeReport } from "../interchange-wasm";
-import {
-  EXPORT_SVG_FEATURE,
-  IMPORT_SVG_FEATURE,
-  exportFileName,
-  importSvgFile,
-} from "./svg";
+import { exportFileName, importSvgFile } from "./svg";
 
 const M = defineMessages("draw.dxf", {
   importerTitle: "DXF (AutoCAD drawing exchange)",
@@ -143,42 +138,22 @@ export async function exportDxf(
  *  its registry door and the engine's SVG door it rides. */
 export function contributeDxfIo(host: BundleHost): Disposable {
   const disposers: Disposable[] = [];
-  if (
-    host.supports("contribute.importer@1") &&
-    host.supports(IMPORT_SVG_FEATURE)
-  ) {
-    disposers.push(
-      host.contribute.importer({
-        id: DXF_IMPORTER_ID,
-        title: t(M.importerTitle),
-        extensions: [".dxf"],
-        mimeTypes: [DXF_MIME, "application/dxf"],
-        import: (file) => void importDxf(host, file),
-      }),
-    );
-  } else {
-    host.log.warn(
-      `${DXF_IMPORTER_ID}: the host has no importer registry or no ${IMPORT_SVG_FEATURE} door — not registered`,
-    );
-  }
-  if (
-    host.supports("contribute.exporter@1") &&
-    host.supports(EXPORT_SVG_FEATURE)
-  ) {
-    disposers.push(
-      host.contribute.exporter({
-        id: DXF_EXPORTER_ID,
-        title: t(M.exporterTitle),
-        extension: ".dxf",
-        mimeType: DXF_MIME,
-        export: () => exportDxf(host),
-      }),
-    );
-  } else {
-    host.log.warn(
-      `${DXF_EXPORTER_ID}: the host has no exporter registry or no ${EXPORT_SVG_FEATURE} door — not registered`,
-    );
-  }
+  disposers.push(
+    host.contribute.importer({
+      id: DXF_IMPORTER_ID,
+      title: t(M.importerTitle),
+      extensions: [".dxf"],
+      mimeTypes: [DXF_MIME, "application/dxf"],
+      import: (file) => void importDxf(host, file),
+    }),
+    host.contribute.exporter({
+      id: DXF_EXPORTER_ID,
+      title: t(M.exporterTitle),
+      extension: ".dxf",
+      mimeType: DXF_MIME,
+      export: () => exportDxf(host),
+    }),
+  );
   return {
     dispose() {
       for (const d of disposers) d.dispose();

@@ -187,9 +187,7 @@ export async function migrateAppearanceStacks(
   }
   if (stamps.length > 0) {
     const amend =
-      typeof appliedSeq === "number" && host.supports("document.mutate.amend@1")
-        ? { amend: appliedSeq, label }
-        : { label };
+      typeof appliedSeq === "number" ? { amend: appliedSeq, label } : { label };
     const out = await host.document.mutate(batchMutationFor(stamps), amend);
     if (!out.applied)
       host.log.warn(

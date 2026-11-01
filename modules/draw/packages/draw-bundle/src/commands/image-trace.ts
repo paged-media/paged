@@ -1104,13 +1104,6 @@ async function traceSourceFor(
     );
     return null;
   }
-  if (!host.supports("assets.images@1")) {
-    host.log.warn(
-      `${label}: the host serves no placed-image bytes ` +
-        `(supports("assets.images@1") is false) — no-op`,
-    );
-    return null;
-  }
   const asset = await host.assets.getPlacedImage(elementId).catch(() => null);
   if (!asset) {
     host.log.warn(

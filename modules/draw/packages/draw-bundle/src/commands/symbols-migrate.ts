@@ -314,9 +314,7 @@ export async function migrateSymbolLibrary(
     ...deletes,
   ]);
   const amend =
-    typeof appliedSeq === "number" && host.supports("document.mutate.amend@1")
-      ? { amend: appliedSeq, label }
-      : { label };
+    typeof appliedSeq === "number" ? { amend: appliedSeq, label } : { label };
   const out = await host.document.mutate(phase2, amend);
   if (!out.applied) {
     host.log.warn(

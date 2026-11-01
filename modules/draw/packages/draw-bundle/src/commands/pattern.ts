@@ -1978,14 +1978,6 @@ export async function applySavePatternSwatch(
   payload?: unknown,
 ): Promise<string | null> {
   const label = SAVE_PATTERN_SWATCH_COMMAND_ID;
-  if (!host.supports(PATTERN_PAINT_FEATURE)) {
-    host.log.warn(
-      `${label}: this editor's engine has no pattern paint ` +
-        `(supports("${PATTERN_PAINT_FEATURE}") is false) — the field stays ` +
-        "pattern artwork",
-    );
-    return null;
-  }
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<
     string,
     unknown

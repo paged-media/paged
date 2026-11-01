@@ -233,11 +233,8 @@ export async function applyInsertStar(
   const table = starTableFor(params);
   if (table.anchors.length < 3) return null;
   const paint = await graphicPaintFor(host).catch(() => null);
-  // A live star where the engine has live shapes; the plain path where
-  // it has not, or where the star is not one the engine draws.
-  const live = host.supports("document.liveShapes@1")
-    ? liveStarMutationFor(page, params)
-    : null;
+  // A live star; the plain path where the star is not one the engine draws.
+  const live = liveStarMutationFor(page, params);
   const outcome = await host.document.mutate(
     withGraphicPaint(
       live ?? insertPathMutationFor(page, table.anchors, false),

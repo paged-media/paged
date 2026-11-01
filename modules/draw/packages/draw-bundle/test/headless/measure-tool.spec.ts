@@ -239,33 +239,6 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
       handler.onDeactivate("switch");
     });
 
-    it("WITHOUT the flag the frozen measurement keeps the LINE", () => {
-      // The degraded branch is still REACHABLE and still supported: an
-      // editor older than this SDK serves no `overlay.text@1`. It just
-      // needs a synthetic host to reach now — the mirror image of what
-      // the with-flag test needed before the repin.
-      const plainHost = {
-        ...h.host,
-        supports: (feature: string) =>
-          feature === OVERLAY_TEXT_FEATURE ? false : h.host.supports(feature),
-      } as unknown as BundleHost;
-
-      const handler = createMeasureHandler(plainHost);
-      handler.onActivate(undefined as never);
-      handler.onPointerDown(pointer([10, 10]));
-      handler.onPointerUp(pointer([110, 10]));
-      const frozen = h.lastToolPreview() as ToolPreviewPolyline;
-      expect(frozen.points).toEqual([
-        [10, 10],
-        [110, 10],
-      ]);
-      // The binding is the ONLY readout on such a host.
-      expect(
-        (h.host.bindings.get(BIND_MEASURE_READOUT) as MeasureReadout).distance,
-      ).toBeCloseTo(100);
-      handler.onDeactivate("switch");
-    });
-
     it("WITH text AND the multi-shape sink the line and its readout are ONE publish — while dragging and frozen", () => {
       expect(h.host.supports(OVERLAY_MULTI_FEATURE)).toBe(true);
       const { host, work } = countingHost(h.host);
@@ -305,11 +278,7 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
       const textHost = {
         ...h.host,
         supports: (feature: string) =>
-          feature === OVERLAY_TEXT_FEATURE
-            ? true
-            : feature === OVERLAY_MULTI_FEATURE
-              ? false
-              : h.host.supports(feature),
+          feature === OVERLAY_MULTI_FEATURE ? false : h.host.supports(feature),
       } as unknown as BundleHost;
 
       const handler = createMeasureHandler(textHost);

@@ -63,10 +63,6 @@ export const SVG_IMPORTER_ID = "media.paged.draw.importer.svg";
 export const SVG_EXPORTER_ID = "media.paged.draw.exporter.svg";
 export const SVG_MIME = "image/svg+xml";
 
-/** The host features of the engine's SVG lane (engine ADR 1031). */
-export const IMPORT_SVG_FEATURE = "document.importSvg@1";
-export const EXPORT_SVG_FEATURE = "document.exportSvg@1";
-
 /**
  * The largest file handed to the engine's SVG door. The door carries the
  * bytes as a JSON number array, and a 96 MB file (a corpus `.ai` handed to
@@ -102,12 +98,6 @@ export async function importSvgFile(
   bytes: Uint8Array,
   options: SvgImportRequest = {},
 ): Promise<SvgFileImport> {
-  if (!host.supports(IMPORT_SVG_FEATURE)) {
-    host.log.warn(
-      `${source}: the host has no ${IMPORT_SVG_FEATURE} door — ${name} not imported`,
-    );
-    return { result: null, ids: [] };
-  }
   if (bytes.byteLength > MAX_SVG_BYTES) {
     host.log.warn(
       `${source}: ${name} is larger than ${MAX_SVG_BYTES >> 20} MB — not imported`,
@@ -203,42 +193,22 @@ export async function exportSvg(
  *  door. Returns a Disposable dropping both. */
 export function contributeSvgIo(host: BundleHost): Disposable {
   const disposers: Disposable[] = [];
-  if (
-    host.supports("contribute.importer@1") &&
-    host.supports(IMPORT_SVG_FEATURE)
-  ) {
-    disposers.push(
-      host.contribute.importer({
-        id: SVG_IMPORTER_ID,
-        title: t(M.importerTitle),
-        extensions: [".svg"],
-        mimeTypes: [SVG_MIME],
-        import: (file) => void importSvg(host, file),
-      }),
-    );
-  } else {
-    host.log.warn(
-      `${SVG_IMPORTER_ID}: the host has no importer registry or no ${IMPORT_SVG_FEATURE} door — not registered`,
-    );
-  }
-  if (
-    host.supports("contribute.exporter@1") &&
-    host.supports(EXPORT_SVG_FEATURE)
-  ) {
-    disposers.push(
-      host.contribute.exporter({
-        id: SVG_EXPORTER_ID,
-        title: t(M.exporterTitle),
-        extension: ".svg",
-        mimeType: SVG_MIME,
-        export: () => exportSvg(host),
-      }),
-    );
-  } else {
-    host.log.warn(
-      `${SVG_EXPORTER_ID}: the host has no exporter registry or no ${EXPORT_SVG_FEATURE} door — not registered`,
-    );
-  }
+  disposers.push(
+    host.contribute.importer({
+      id: SVG_IMPORTER_ID,
+      title: t(M.importerTitle),
+      extensions: [".svg"],
+      mimeTypes: [SVG_MIME],
+      import: (file) => void importSvg(host, file),
+    }),
+    host.contribute.exporter({
+      id: SVG_EXPORTER_ID,
+      title: t(M.exporterTitle),
+      extension: ".svg",
+      mimeType: SVG_MIME,
+      export: () => exportSvg(host),
+    }),
+  );
   return {
     dispose() {
       for (const d of disposers) d.dispose();

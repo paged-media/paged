@@ -54,7 +54,7 @@ import {
 } from "../commands/batch-handles";
 import { mutateMinting, mintedIds } from "../commands/minted";
 import { resolveTargetPage } from "../target-page";
-import { EXPORT_SVG_FEATURE, IMPORT_SVG_FEATURE, importSvgFile } from "./svg";
+import { importSvgFile } from "./svg";
 
 const M = defineMessages("draw.vectorFiles", {
   aiTitle: "Illustrator (PDF-compatible .ai)",
@@ -230,16 +230,7 @@ export async function importEps(
     return [];
   }
   const frame = mintedIds(placed)[0];
-  if (
-    !frame ||
-    !host.supports(EXPORT_SVG_FEATURE) ||
-    !host.supports(IMPORT_SVG_FEATURE)
-  ) {
-    host.log.warn(
-      `${EPS_IMPORTER_ID}: ${file.name} placed as PostScript artwork (the host cannot convert it to paths)`,
-    );
-    return frame ? [frame] : [];
-  }
+  if (!frame) return [];
   const svg = await host.document.exportSvg({
     elementIds: [frame],
     region: [at[0], at[1], size[0], size[1]],
@@ -259,7 +250,7 @@ export async function importEps(
   // undo step in all), deleted otherwise.
   const seq = placed.outcome.applied ? placed.outcome.appliedSeq : undefined;
   let undone = false;
-  if (seq !== undefined && host.supports("document.undoLog@1")) {
+  if (seq !== undefined) {
     const log = await host.document.undoLog({ limit: 1 });
     if (log.undo[log.undo.length - 1]?.appliedSeq === seq) {
       await host.document.undo();
@@ -287,12 +278,6 @@ export async function importEps(
 /** Register the `.ai` and `.eps` importers (K-2). */
 export function contributeVectorFileImporters(host: BundleHost): Disposable {
   const disposers: Disposable[] = [];
-  if (!host.supports("contribute.importer@1")) {
-    host.log.warn(
-      `${AI_IMPORTER_ID}, ${EPS_IMPORTER_ID}: host predates contribute.importer@1 — not registered`,
-    );
-    return { dispose() {} };
-  }
   disposers.push(
     host.contribute.importer({
       id: AI_IMPORTER_ID,

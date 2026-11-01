@@ -195,11 +195,9 @@ export function createMeasureHandler(host: BundleHost): GestureHandler {
   let machine: MeasureMachine | null = null;
   let pageId: string | null = null;
 
-  // Probed ONCE per handler: the host either has the overlay TEXT
-  // primitive / the multi-shape sink or it doesn't — the answer cannot
-  // change mid-gesture.
-  const canDrawText = host.supports(OVERLAY_TEXT_FEATURE);
-  const canDrawBoth = canDrawText && host.supports(OVERLAY_MULTI_FEATURE);
+  // Probed ONCE per handler: the host either has the multi-shape sink or
+  // it doesn't — the answer cannot change mid-gesture.
+  const canDrawBoth = host.supports(OVERLAY_MULTI_FEATURE);
 
   const render = (snapshot: MeasureSnapshot) => {
     if (!snapshot.line || !pageId) {
@@ -221,7 +219,7 @@ export function createMeasureHandler(host: BundleHost): GestureHandler {
           ? [line, measureTextPreview(pageId, snapshot.readout)]
           : [line],
       );
-    } else if (canDrawText && !snapshot.measuring && snapshot.readout) {
+    } else if (!snapshot.measuring && snapshot.readout) {
       // A single-slot host: the frozen numbers replace the frozen line.
       host.overlay.setToolPreview(measureTextPreview(pageId, snapshot.readout));
     } else {

@@ -210,12 +210,6 @@ export async function applyRasterize(
     );
     return null;
   }
-  if (!host.supports(RASTERIZE_FEATURE)) {
-    host.log.warn(
-      `${RASTERIZE_COMMAND_ID}: this editor cannot draw objects to pixels (${RASTERIZE_FEATURE})`,
-    );
-    return null;
-  }
   const pixels = await rasterizeElements(host, selected, {
     ppi,
     background,

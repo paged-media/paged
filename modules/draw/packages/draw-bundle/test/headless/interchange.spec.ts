@@ -49,7 +49,7 @@ import {
   leafIdsOf,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost, withoutSvgDoors } from "./host";
+import { openHost } from "./host";
 
 const built = existsSync(
   join(
@@ -508,27 +508,5 @@ describe("draw interchange through the engine's doors [plugin-draw.interchange-v
     });
     expect(placed).toBeNull();
     expect(warnings.join("\n")).toMatch(/art\.ai not imported/);
-  });
-});
-
-describe("a host without the engine's SVG doors [plugin-draw.interchange-v2]", () => {
-  let h: HeadlessHost;
-  beforeAll(async () => {
-    h = await openHost();
-    await h.load(F1_MULTI_SHAPE.bytes());
-  });
-  afterAll(() => h?.dispose());
-
-  it("gets no SVG or DXF importer — a refusal, never a second SVG reader", async () => {
-    const { host, warnings } = logging(withoutSvgDoors(h.host));
-    const ids = await importSvg(
-      host,
-      file(
-        "a.svg",
-        `<svg xmlns="http://www.w3.org/2000/svg"><rect width="5" height="5"/></svg>`,
-      ),
-    );
-    expect(ids).toEqual([]);
-    expect(warnings.join("\n")).toMatch(/no document\.importSvg@1 door/);
   });
 });
