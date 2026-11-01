@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 900,
+    "command": 905,
     "keybinding": 167,
-    "menu": 642,
-    "panel": 149,
+    "menu": 645,
+    "panel": 151,
     "tool": 130
   },
   "features": [
@@ -911,6 +911,16 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.generativeRecolor",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.generativeRecolorOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.globalEdit",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1482,6 +1492,16 @@
     },
     {
       "id": "command:media.paged.draw.command.symbolOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.textToVector",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.textToVectorOptions",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -4156,6 +4176,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.insert.generateImage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.insert.line",
       "kind": "command",
       "owner": "editor"
@@ -5916,6 +5941,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Text to vector…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Transform/Reflect horizontally",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -5979,6 +6009,11 @@
       "id": "menu:Edit/Duplicate",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Edit colors/Generative recolor…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
     },
     {
       "id": "menu:Edit/Edit colors/Recolor artwork…",
@@ -7811,6 +7846,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Object/Generate image…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Group",
       "kind": "menu",
       "owner": "editor"
@@ -8651,6 +8691,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "panel:media.paged.draw.panel.generative",
+      "kind": "panel",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "panel:media.paged.draw.panel.graphicStyles",
       "kind": "panel",
       "owner": "media.paged.draw"
@@ -9002,6 +9047,11 @@
     },
     {
       "id": "panel:paged.frame-fitting",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.generate-image",
       "kind": "panel",
       "owner": "editor"
     },

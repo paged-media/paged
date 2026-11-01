@@ -1,6 +1,9 @@
 {
   "description": "Module-level mutable state that stays at module scope in apps/canvas/src and packages/shell/src, one reason per name (scripts/instance-guard.mjs; docs/composable-editor-plan.md, E1). Everything an editor keeps lives in its instance (apps/canvas/src/app/instance.tsx) or its scope (packages/shell/src/state/editor-scope.tsx); what is listed here is the page's by nature, or is keyed by a per-editor object so it is per editor by construction. A new entry needs the same: say why two editors on one page may share it.",
   "allowed": {
+    "apps/canvas/src/ml/ml-worker.ts": {
+      "handle": "The ML worker's message handler: module scope in a dedicated worker is that worker's own scope, and each editor spawns its own worker (editor ADR 290), so it holds nothing shared between editors."
+    },
     "apps/canvas/src/panels/journal-panel.tsx": {
       "view": "A memo of the page's one journal (journal-sink.ts), keyed by the journal's version: derived from page state, holds nothing of an editor."
     },

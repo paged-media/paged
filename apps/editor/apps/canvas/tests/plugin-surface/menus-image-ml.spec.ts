@@ -31,7 +31,7 @@ import { clickEntry, expectGreyedAndInert, openMenuPages } from "./menu-driver";
 
 test.describe.serial(
   "plugin menus — paged.image generate and neural filters",
-  { tag: ["@feat:image.ml.generate-image"] },
+  { tag: ["@feat:image.ml.features"] },
   () => {
     let bare: Page;
     let live: Page;
