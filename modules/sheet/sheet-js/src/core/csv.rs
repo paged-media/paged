@@ -328,9 +328,27 @@ pub fn csv_to_xlsx_at(
         }
     }
     let xf_count = XF_FIRST_EXTRA as usize + extra.len();
+    let mut ct = paged_ooxml::content_types::ContentTypes::new();
+    ct.add_default(
+        "rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
+    );
+    ct.add_default("xml", "application/xml");
+    ct.add_override(
+        "/xl/workbook.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    );
+    ct.add_override(
+        "/xl/worksheets/sheet1.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+    );
+    ct.add_override(
+        "/xl/styles.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
+    );
+    let content_types = ct.render_with_decl_newline();
     let files: [(&str, String); 7] = [
-        ("[Content_Types].xml", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>"#.to_string()),
+        ("[Content_Types].xml", content_types),
         ("_rels/.rels", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#.to_string()),
         ("xl/workbook.xml", format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

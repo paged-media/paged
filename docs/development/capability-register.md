@@ -25,7 +25,7 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
 | Capability                     | Owner                                                    | Copies outside it (baseline)                                          |
 | ------------------------------ | -------------------------------------------------------- | --------------------------------------------------------------------- |
 | XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`         | 19 (open)                                                             |
-| `[Content_Types].xml`          | `paged-ooxml` `content_types`                            | 26 (open); the exporters' main parts moved, tests and sheet-js remain |
+| `[Content_Types].xml`          | `paged-ooxml` `content_types`                            | 18 (open); every writer moved, what remains is test fixtures and the in-test tables of three src files |
 | Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                          | 0 (done)                                                              |
 | sRGB transfer                  | `paged-color::math`, `paged-ooxml::colour`               | 11 (open)                                                             |
 | Blend modes                    | `paged-blend`                                            | 6 (open)                                                              |
@@ -38,7 +38,9 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
 - **Comments** (engine ADR 1055): one model for every module. Document threads with item, page,
   region and cell anchors; people; tasks, reactions, review state; source blobs; derived
   orphaning; the host Comments panel and canvas pins; slide comments on engine threads; PDF
-  comment annotations (`paged export --comments`). Open: Excel threaded comments (editable) and
+  comment annotations (`paged export --comments`). Oracles: PowerPoint opens the exported slide comments and
+  re-saves them with every comment, reply and the resolved state intact; Word's review round trip is recorded in
+  `modules/doc/docx-conformance/fixtures/review.word.json`. Open: Excel threaded comments (editable) and
   sheet notes sync, Word people, mentions and `commentsExtensible`, IDML notes, PDF annotation
   import, the `comments@1` door, a sheet cell resolver.
 - **OOXML foundation:** one DrawingML theme reader (`paged-ooxml::drawingml::theme`) for sheet

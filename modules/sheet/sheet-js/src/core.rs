@@ -2643,12 +2643,23 @@ fn parse_range(range: &str) -> Result<CellRange, SessionError> {
 
 /// The embedded minimal one-sheet ("Sheet1") XLSX package for [`SheetSession::new`].
 fn empty_workbook_bytes() -> Vec<u8> {
+    let mut ct = paged_ooxml::content_types::ContentTypes::new();
+    ct.add_default(
+        "rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
+    );
+    ct.add_default("xml", "application/xml");
+    ct.add_override(
+        "/xl/workbook.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    );
+    ct.add_override(
+        "/xl/worksheets/sheet1.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+    );
+    let content_types = ct.render_with_decl_newline();
     let parts: [(&str, &str); 5] = [
-        (
-            "[Content_Types].xml",
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#,
-        ),
+        ("[Content_Types].xml", &content_types),
         (
             "_rels/.rels",
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

@@ -141,7 +141,18 @@ impl ContentTypes {
 
     /// The whole `[Content_Types].xml`: defaults, then overrides, in order.
     pub fn render(&self) -> String {
+        self.render_with_eol("")
+    }
+
+    /// [`render`](Self::render) with a line break after the XML declaration, the
+    /// layout of packages written before this writer existed (their pinned bytes keep it).
+    pub fn render_with_decl_newline(&self) -> String {
+        self.render_with_eol("\n")
+    }
+
+    fn render_with_eol(&self, eol: &str) -> String {
         let mut out = String::from(XML_DECL);
+        out.push_str(eol);
         out.push_str(&format!(r#"<Types xmlns="{NS}">"#));
         for (ext, ct) in &self.defaults {
             out.push_str(&format!(
@@ -176,6 +187,9 @@ pub struct Patch<'a> {
     pub add_overrides: Vec<(&'a str, &'a str)>,
     /// `(extension, content type)` defaults to add (skipped when the extension has one).
     pub add_defaults: Vec<(&'a str, &'a str)>,
+    /// `(absolute part name, content type)` overrides to set: the content type of an
+    /// existing override changes in place (its position stays), a missing one is added at the end.
+    pub set_overrides: Vec<(&'a str, &'a str)>,
 }
 
 /// Edit an existing `[Content_Types].xml` as text: every byte the edit does not
@@ -190,6 +204,20 @@ pub fn patch(xml: &str, edit: &Patch<'_>) -> String {
             tag_attr(t, "PartName").is_some_and(|v| v.eq_ignore_ascii_case(part))
         }) {
             out.replace_range(start..end, "");
+        }
+    }
+    for (part, ct) in &edit.set_overrides {
+        let tag = format!(
+            r#"<Override PartName="{}" ContentType="{}"/>"#,
+            escape_attr(part),
+            escape_attr(ct)
+        );
+        let found = find_tag(&out, "Override", |t| {
+            tag_attr(t, "PartName").is_some_and(|v| v.eq_ignore_ascii_case(part))
+        });
+        match found {
+            Some((start, end)) => out.replace_range(start..end, &tag),
+            None => insert_child(&mut out, &tag, Where::AtEnd),
         }
     }
     for (ext, ct) in &edit.add_defaults {
@@ -388,6 +416,18 @@ mod tests {
     }
 
     #[test]
+    fn render_with_decl_newline_only_adds_the_line_break() {
+        let mut t = ContentTypes::new();
+        t.add_default("xml", "application/xml");
+        t.add_override("/a.xml", "A");
+        let plain = t.render();
+        assert_eq!(
+            t.render_with_decl_newline(),
+            plain.replacen("?>", "?>\n", 1)
+        );
+    }
+
+    #[test]
     fn a_patch_changes_only_the_tags_it_names() {
         let out = patch(
             TABLE,
@@ -395,6 +435,7 @@ mod tests {
                 remove_overrides: vec!["/b.xml"], // case-insensitive, single quotes, paired close
                 add_overrides: vec![("/a.xml", "dup"), ("/c.xml", "C&D")],
                 add_defaults: vec![("png", "image/png"), ("XML", "dup")],
+                ..Patch::default()
             },
         );
         let t = ContentTypes::parse(out.as_bytes()).unwrap();
@@ -415,6 +456,34 @@ mod tests {
         ));
         assert!(out.starts_with(r#"<?xml version="1.0"?><Types"#));
         assert!(out.ends_with(r#"<Override PartName="/c.xml" ContentType="C&amp;D"/></Types>"#));
+    }
+
+    #[test]
+    fn set_overrides_replace_in_place_or_append() {
+        let out = patch(
+            TABLE,
+            &Patch {
+                set_overrides: vec![("/a.xml", "A2"), ("/new.xml", "N")],
+                ..Patch::default()
+            },
+        );
+        let t = ContentTypes::parse(out.as_bytes()).unwrap();
+        assert_eq!(t.content_type_of("/a.xml"), Some("A2"));
+        assert_eq!(t.content_type_of("/new.xml"), Some("N"));
+        assert_eq!(t.overrides.len(), TABLE.matches("<Override").count() + 1);
+        assert!(out.ends_with(r#"<Override PartName="/new.xml" ContentType="N"/></Types>"#));
+        // Setting what is there leaves the order alone.
+        let again = patch(
+            &out,
+            &Patch {
+                set_overrides: vec![("/a.xml", "A2")],
+                ..Patch::default()
+            },
+        );
+        assert_eq!(
+            ContentTypes::parse(again.as_bytes()).unwrap().overrides,
+            t.overrides
+        );
     }
 
     #[test]
