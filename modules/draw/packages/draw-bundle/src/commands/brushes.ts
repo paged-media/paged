@@ -729,7 +729,17 @@ export function contributeBrushCommands(host: BundleHost): Disposable {
       id: APPLY_BRUSH_COMMAND_ID,
       title: M.applyBrush,
       category: BRUSH_COMMAND_CATEGORY,
-      handler: (_paged, payload) => applyBrush(host, payload),
+      // Run bare (a palette row, a payload-free invoke) it names no brush
+      // and says so; the Brushes panel is where a brush is picked.
+      handler: async (_paged, payload) => {
+        if (payload === undefined) {
+          host.log.info(
+            `${APPLY_BRUSH_COMMAND_ID}: name a brush (\`brush\`) — the Brushes panel picks one`,
+          );
+          return undefined;
+        }
+        return applyBrush(host, payload);
+      },
     }),
     registerCommand(host, {
       id: REMOVE_BRUSH_COMMAND_ID,
@@ -792,7 +802,15 @@ export function contributeBrushCommands(host: BundleHost): Disposable {
       id: APPLY_WIDTH_PROFILE_COMMAND_ID,
       title: M.applyWidthProfile,
       category: BRUSH_COMMAND_CATEGORY,
-      handler: (_paged, payload) => applyWidthProfileStyle(host, payload),
+      handler: async (_paged, payload) => {
+        if (payload === undefined) {
+          host.log.info(
+            `${APPLY_WIDTH_PROFILE_COMMAND_ID}: name a width profile (\`profile\`) or give its \`points\``,
+          );
+          return undefined;
+        }
+        return applyWidthProfileStyle(host, payload);
+      },
     }),
   ];
   return {
