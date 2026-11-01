@@ -343,8 +343,11 @@ fn pipeline_options_default_uses_gray_fallback() {
             assert_eq!(c.r, c.g);
             assert_eq!(c.g, c.b);
         }
-        Paint::LinearGradient(_) | Paint::RadialGradient(_) | Paint::SweepGradient(_) => {
-            panic!("default should be a solid grey, not a gradient")
+        Paint::LinearGradient(_)
+        | Paint::RadialGradient(_)
+        | Paint::SweepGradient(_)
+        | Paint::Pattern(_) => {
+            panic!("default should be a solid grey, not a gradient or a pattern")
         }
         Paint::Cmyk { .. } => {
             panic!("default should be a solid grey, not a CMYK paint")

@@ -509,6 +509,7 @@ impl<'a> Lower<'a> {
                             alternate_value: Vec::new(),
                             tint: None,
                             alpha: None,
+                            pattern: None,
                         },
                     });
                     break;

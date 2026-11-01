@@ -506,6 +506,11 @@ pub fn color_id_to_paint_with_list_dir(
     gradient_length_pt: Option<f32>,
     path_dims_pt: Option<(f32, f32)>,
 ) -> Option<Paint> {
+    // Engine ADR 1041 — a pattern swatch, placed in box space; the fill
+    // and stroke modules rebase it onto the path.
+    if let Some(pattern) = palette.patterns.get(id) {
+        return super::pattern_paint::pattern_paint(pattern, palette, color_ctx, list);
+    }
     if let Some(grad) = palette.gradients.get(id) {
         // Resolve raw stop colors. For CMYK swatches, also keep the
         // raw CMYK percentages so we can interpolate in CMYK space

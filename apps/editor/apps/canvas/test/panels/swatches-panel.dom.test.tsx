@@ -170,6 +170,58 @@ describe("Swatches panel: controls", () => {
     expect(row(h, created!).textContent).toContain("New swatch");
   });
 
+  test("a pattern swatch (engine ADR 1041) lists with a tile chip; no colour editor, no colour rename", async () => {
+    covers("panel:paged.swatches");
+    const h = await mount();
+    const corner = (x: number, y: number) => ({
+      anchor: [x, y],
+      left: [x, y],
+      right: [x, y],
+    });
+    await h.mutate({
+      op: "createSwatch",
+      args: {
+        spec: {
+          selfId: "Pattern/dots",
+          name: "Dots",
+          space: "",
+          value: [],
+          pattern: {
+            width: 10,
+            height: 10,
+            items: [
+              {
+                anchors: [
+                  corner(0, 0),
+                  corner(5, 0),
+                  corner(5, 5),
+                  corner(0, 5),
+                ],
+                fill: { space: "RGB", value: [255, 0, 0] },
+              },
+            ],
+          },
+        },
+      },
+    } as never);
+    await h.settle();
+    const r = row(h, "Pattern/dots");
+    expect(r.textContent).toContain("Dots");
+    const chip = r.querySelector<HTMLButtonElement>(
+      '[data-action="edit-swatch"]',
+    )!;
+    expect(chip.dataset.swatchPreview).toBe("pattern");
+    expect(chip.disabled).toBe(true);
+    expect(r.querySelector('[data-swatch-kind="pattern"]')).not.toBeNull();
+    // A double-click on the name opens no rename for a pattern.
+    const name = r.querySelector<HTMLElement>("[data-swatch-name]")!;
+    name.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await h.settle();
+    expect(
+      row(h, "Pattern/dots").querySelector("[data-swatch-rename-input]"),
+    ).toBeNull();
+  });
+
   test("✕ deletes the swatch from the document and the grid", async () => {
     covers("panel:paged.swatches");
     const h = await mount();
