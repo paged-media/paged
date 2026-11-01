@@ -265,11 +265,10 @@ bytes (`DocSession::open_file`) and turns each into the `.docx` the session work
 - **Styled paste**: `media.paged.doc.command.pasteRtf` pours RTF at the caret. Paste from
   the system clipboard needs contract C8 (`host.clipboard` carries text and tabular data
   only); that is a follow-up.
-- **Tagged PDF (checked, not changed):** two engine gaps.
-  - Headings are tagged `P`: the PDF export maps a paragraph to `H1`–`H6` only from the
-    style's `pdf_export_tag`, which no wire property sets.
-  - The PDF has no outline from the headings: it comes only from document bookmarks, and
-    the Word lowering creates none.
+- **Tagged PDF:** the two gaps found here are closed by [ADR 621](adr/621-word-headings-tag-a-pdf.md)
+  (2026-11-01): Word `heading 1`–`6` styles (and styles based on them) carry the PDF export tag,
+  so a tagged PDF writes `H1`–`H6`, and "Outline from headings" in Export PDF writes the outline
+  from them (engine ADR 1054).
 - Wasm: 6.98 MiB raw (+0.43 MiB).
 - Tests: `docx-rtf` (8), `docx-odt` (4), `docx-conformance/tests/it/files.rs` (8),
   `packages/doc-bundle/test/headless/files.spec.ts` (7).

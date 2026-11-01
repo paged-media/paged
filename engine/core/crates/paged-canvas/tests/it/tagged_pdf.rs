@@ -171,3 +171,54 @@ fn writes_the_tagged_pdf() {
     }
     std::fs::write(path, session.finish().expect("finish").pdf_bytes).expect("write");
 }
+
+/// Engine ADR 1054: a style's PDF export tag set over the wire role-maps
+/// its paragraphs to `H1`, and `headingOutline` writes the outline from
+/// them, in place of the bookmarks.
+#[test]
+fn heading_tags_and_the_heading_outline() {
+    use paged_canvas::Mutation;
+    use paged_mutate::{PropertyPath, StyleCollection, Value};
+    let font = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf"),
+    )
+    .expect("Inter");
+    let idml = paged_gen::write_idml(&paged_gen::samples::navigation::build()).expect("idml");
+    let mut m = CanvasModel::load(
+        "nav",
+        &idml,
+        CanvasOptions {
+            fonts: vec![font],
+            ..CanvasOptions::default()
+        },
+    )
+    .expect("load");
+    m.apply_mutation(&Mutation::SetStyleProperty {
+        collection: StyleCollection::Paragraph,
+        style_id: "ParagraphStyle/Heading".into(),
+        path: PropertyPath::ParagraphStylePdfExportTag,
+        value: Value::Text("H1".into()),
+    })
+    .expect("tag");
+    let run = |wire: ExportPdfWireOptions| {
+        let (mut session, pages) = CanvasExportSession::begin(&m, &wire).expect("begin");
+        for _ in 0..pages {
+            session.export_next_page().expect("page");
+        }
+        String::from_utf8_lossy(&session.finish().expect("finish").pdf_bytes).into_owned()
+    };
+    let pdf = run(ExportPdfWireOptions {
+        tagged: true,
+        heading_outline: true,
+        ..ExportPdfWireOptions::default()
+    });
+    assert!(pdf.contains("/Heading /H1"), "the style role-maps to H1");
+    assert!(pdf.contains("/Outlines"), "an outline from the headings");
+    assert!(pdf.contains("/Title ("), "an outline item");
+    // Without the option there is no outline, as before.
+    let plain = run(ExportPdfWireOptions {
+        tagged: true,
+        ..ExportPdfWireOptions::default()
+    });
+    assert!(!plain.contains("/Outlines"));
+}

@@ -94,6 +94,7 @@ interface FormState {
   colorBars: boolean;
   downsample: "off" | "300" | "150";
   bookmarks: boolean;
+  headingOutline: boolean;
   tagged: boolean;
 }
 
@@ -111,6 +112,7 @@ const DEFAULTS: FormState = {
   colorBars: false,
   downsample: "off",
   bookmarks: false,
+  headingOutline: false,
   tagged: false,
 };
 
@@ -305,6 +307,7 @@ export function ExportPdfDialog() {
       downsamplePpi: form.downsample === "off" ? null : Number(form.downsample),
       title: docName,
       bookmarks: form.bookmarks,
+      headingOutline: form.headingOutline,
       tagged: form.tagged,
     };
     const fileName = `${docName}.pdf`;
@@ -569,6 +572,16 @@ export function ExportPdfDialog() {
                   onChange={(e) => set("bookmarks", e.target.checked)}
                 />
                 {strings.t(EXPORT_PDF.bookmarks)}
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  data-export-heading-outline
+                  checked={form.headingOutline}
+                  disabled={exporting}
+                  onChange={(e) => set("headingOutline", e.target.checked)}
+                />
+                {strings.t(EXPORT_PDF.headingOutline)}
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input

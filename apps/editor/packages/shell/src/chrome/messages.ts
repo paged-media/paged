@@ -235,6 +235,7 @@ export const EXPORT_PDF = defineMessages("shell.exportPdf", {
   colorBars: "Color bars",
   include: "Include",
   bookmarks: "Bookmarks",
+  headingOutline: "Outline from headings",
   tagged: "Create Tagged PDF",
   downsample: "Downsample images",
   downsampleOff: "Off (preserve)",

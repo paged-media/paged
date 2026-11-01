@@ -31,6 +31,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [618](618-picture-looks-through-the-shared-drawingml-mapper.md) | Pictures' DrawingML looks (fill, outline, alpha, effects) read and lowered through the shared reader and mapper; carried in the IR, reported until anchored frames hold them (amends 606) | Accepted 2026-10-28 |
 | [619](619-picture-looks-drawn-on-their-anchored-frames.md) | Pictures' looks drawn on their anchored frames: the pour binds each frame and writes its look through the lowering kit; colours and gradients as document swatches | Accepted 2026-10-29 |
 | [620](620-right-to-left-and-east-asian-text.md) | Right-to-left and East Asian text: `w:bidi`, `w:rtl`, the East Asian and complex-script fonts and their size and weight on the engine's direction and script slots, written back where edited | Accepted 2026-10-30 |
+| [621](621-word-headings-tag-a-pdf.md) | Word headings tag the PDF and give it an outline: `heading N` styles carry the PDF export tag (engine ADR 1054) | Accepted 2026-11-01 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

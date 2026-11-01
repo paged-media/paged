@@ -1064,6 +1064,12 @@ pub struct ExportPdfWireOptions {
     /// print presets.
     #[serde(default)]
     pub bookmarks: bool,
+    /// Engine ADR 1054 — write the PDF's outline from the document's
+    /// headings (paragraphs whose style role-maps to `H1`-`H6`, nested by
+    /// level) instead of its bookmarks: Word's "Create bookmarks using
+    /// Headings". Off by default; takes precedence over `bookmarks`.
+    #[serde(default)]
+    pub heading_outline: bool,
     /// ADR 182 — Create Tagged PDF: the document's logical structure
     /// (stories and their paragraphs) with `/MarkInfo` and `/Lang`. Off
     /// by default, as in InDesign's print presets.

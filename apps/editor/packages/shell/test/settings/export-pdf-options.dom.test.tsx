@@ -61,6 +61,7 @@ const DEFAULTS = {
   colorBars: false,
   downsample: "off",
   bookmarks: false,
+  headingOutline: false,
   tagged: false,
 };
 
@@ -184,6 +185,7 @@ describe("setting paged.exportPdf.options.v1", () => {
         cropMarks: true,
         downsample: "150",
         tagged: true,
+        headingOutline: true,
         useDocumentBleed: false,
         bleedPt: "9",
       }),
@@ -203,6 +205,7 @@ describe("setting paged.exportPdf.options.v1", () => {
       cropMarks: true,
       downsamplePpi: 150,
       tagged: true,
+      headingOutline: true,
       bleedOverridePt: [9, 9, 9, 9],
       pageFrom: null,
       pageTo: null,

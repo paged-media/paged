@@ -2499,6 +2499,7 @@ fn paragraph_style_entries(
         (P::ParagraphLeftIndent, V::Length(d.left_indent)),
         (P::ParagraphRightIndent, V::Length(d.right_indent)),
         (P::ParagraphStyleNextStyle, text(&d.next_style)),
+        (P::ParagraphStylePdfExportTag, text(&d.pdf_export_tag)),
         (
             P::ParagraphHyphenation,
             V::Bool(d.hyphenation.unwrap_or(true)),

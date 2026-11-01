@@ -91,7 +91,9 @@ impl CanvasExportSession {
         let built = model
             .build_for_export()
             .map_err(|e| format!("export build failed: {e}"))?;
-        if wire.bookmarks {
+        if wire.heading_outline {
+            options.bookmarks = pdf_heading_outline(model.scene(), &built);
+        } else if wire.bookmarks {
             options.bookmarks = pdf_bookmarks(model.scene(), &built);
         }
         if wire.tagged {
@@ -366,6 +368,66 @@ pub(crate) fn pdf_bookmarks(
             })
         })
         .collect()
+}
+
+/// Engine ADR 1054 — the PDF outline from the document's headings: every
+/// paragraph whose style role-maps to `H1`-`H6` (`H` is level 1), in story
+/// order, titled with its text and going to the page it is laid out on.
+/// A heading nests under the nearest shallower one; a level skipped (an
+/// `H3` straight after an `H1`) nests one deeper than its parent, never
+/// more. A paragraph with no text or no page is left out.
+pub(crate) fn pdf_heading_outline(
+    scene: &paged_scene::Document,
+    built: &paged_renderer::BuiltDocument,
+) -> Vec<paged_export_pdf::PdfBookmark> {
+    let laid_out = built.paragraph_pages();
+    let mut out = Vec::new();
+    // The levels of the open headings, outermost first.
+    let mut open: Vec<u32> = Vec::new();
+    for s in &scene.stories {
+        let Some(pages) = laid_out.get(&s.self_id) else {
+            continue;
+        };
+        for (i, p) in s.story.paragraphs.iter().enumerate() {
+            let id = p
+                .paragraph_style
+                .as_deref()
+                .unwrap_or("ParagraphStyle/$ID/[No paragraph style]");
+            let tag = scene
+                .styles
+                .paragraph_styles
+                .get(id)
+                .and_then(|d| d.pdf_export_tag.as_deref());
+            let level = match paged_renderer::pipeline::structure_role(tag) {
+                "H" | "H1" => 1,
+                "H2" => 2,
+                "H3" => 3,
+                "H4" => 4,
+                "H5" => 5,
+                "H6" => 6,
+                _ => continue,
+            };
+            let title: String = p.runs.iter().map(|r| r.text.as_str()).collect();
+            let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+            let Some(page_index) = pages.get(&i).copied() else {
+                continue;
+            };
+            if title.is_empty() {
+                continue;
+            }
+            while open.last().is_some_and(|&l| l >= level) {
+                open.pop();
+            }
+            let depth = open.len() as u32;
+            open.push(level);
+            out.push(paged_export_pdf::PdfBookmark {
+                title,
+                depth,
+                page_index,
+            });
+        }
+    }
+    out
 }
 
 /// ADR 182 — the document's language for a tagged PDF's `/Lang`: the

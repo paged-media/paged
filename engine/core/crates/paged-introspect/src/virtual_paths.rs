@@ -759,6 +759,7 @@ pub fn style_paths(family: &str) -> &'static [P] {
             P::ParagraphFirstLineIndent,
             P::ParagraphJustification,
             P::ParagraphStyleNextStyle,
+            P::ParagraphStylePdfExportTag,
             P::ParagraphLeftIndent,
             P::ParagraphRightIndent,
             P::ParagraphHyphenationZone,

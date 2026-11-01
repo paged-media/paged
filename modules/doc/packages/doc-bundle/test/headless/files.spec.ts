@@ -22,6 +22,7 @@
 // from Word.
 
 import { afterEach, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 
 import type {
@@ -92,6 +93,16 @@ describe.skipIf(!docxPresent)(
       h = await createHeadlessHost({
         resolveFrom: ENGINE_ANCHOR,
         console: silent,
+        // A face to lay the text out with (the PDF carries no headings
+        // without text).
+        defaultFont: new Uint8Array(
+          readFileSync(
+            new URL(
+              "../../../../../../engine/core/corpus/fonts/Inter.ttf",
+              import.meta.url,
+            ),
+          ),
+        ),
       });
       const bundle = options ? docBundleWith(options) : docBundle;
       const handle = createBundleHost(
@@ -220,6 +231,29 @@ describe.skipIf(!docxPresent)(
         engine.dispose();
       }
     }, 60_000);
+
+    it("a Word heading gives the tagged PDF its outline (doc ADR 621)", async () => {
+      covers("importer:media.paged.doc.importer.docx");
+      await start();
+      await importer()!.import({
+        name: "memo.rtf",
+        bytes: fixture("memo.rtf"),
+        mimeType: "text/rtf",
+      });
+      const pdf = text(
+        (
+          await h.exportDocument("pdf", {
+            pdf: { tagged: true, headingOutline: true },
+          })
+        ).bytes,
+      );
+      expect(pdf).toContain("/Outlines");
+      expect(pdf).toContain("/Title (Memo)");
+      const plain = text(
+        (await h.exportDocument("pdf", { pdf: { tagged: true } })).bytes,
+      );
+      expect(plain).not.toContain("/Outlines");
+    }, 120_000);
 
     it("OpenDocument text opens only behind its flag", async () => {
       await start();

@@ -157,6 +157,7 @@
   "shell.exportPdf.allPages": "Alle ({count})",
   "shell.exportPdf.bleed": "Anschnitt",
   "shell.exportPdf.bookmarks": "Lesezeichen",
+  "shell.exportPdf.headingOutline": "Gliederung aus Überschriften",
   "shell.exportPdf.cancel": "Abbrechen",
   "shell.exportPdf.color": "Farbe",
   "shell.exportPdf.colorBars": "Farbkontrollstreifen",

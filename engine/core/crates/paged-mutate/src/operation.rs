@@ -563,6 +563,13 @@ pub enum PropertyPath {
     /// typing time (Enter at paragraph end). The renderer never acts
     /// on it. Additive — no consumer breakage, no bump on its own.
     ParagraphStyleNextStyle,
+    /// Engine ADR 1054 — a paragraph style's PDF export tag
+    /// (`StyleExportTagMap ExportType="PDF"`): the standard structure type
+    /// a tagged PDF role-maps the style to (`H`, `H1`-`H6`, anything else
+    /// is `P`). `Value::Text`; the empty string clears it.
+    /// STYLE-DEFINITION path only (`SetStyleProperty` against
+    /// `StyleCollection::Paragraph`). Additive, no bump on its own.
+    ParagraphStylePdfExportTag,
     /// W1.22 (engine gap 22) — a paragraph's `AppliedNumberingList`
     /// reference. Wire value is `Value::Text(String)` carrying the
     /// `NumberingList/<id>` self id (empty string clears it).
@@ -1893,6 +1900,7 @@ impl PropertyPath {
             PropertyPath::FrameInsetSpacing => "textFrame.insetSpacing",
             PropertyPath::ParagraphJustification => "paragraph.justification",
             PropertyPath::ParagraphStyleNextStyle => "paragraphStyle.nextStyle",
+            PropertyPath::ParagraphStylePdfExportTag => "paragraphStyle.pdfExportTag",
             PropertyPath::ParagraphAppliedNumberingList => "paragraph.appliedNumberingList",
             PropertyPath::FrameStrokeEndCap => "frame.strokeEndCap",
             PropertyPath::FrameTextWrapMode => "frame.textWrapMode",

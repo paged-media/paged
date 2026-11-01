@@ -1747,6 +1747,7 @@
     "appliedConditions",
     "frameInsetSpacing",
     "paragraphJustification",
+    "paragraphStylePdfExportTag",
     "paragraphStyleNextStyle",
     "paragraphAppliedNumberingList",
     "frameStrokeEndCap",
@@ -3272,6 +3273,17 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "storyRange",
+      "path": "paragraphStylePdfExportTag",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
     },
     {
       "addressKind": "storyRange",
@@ -10890,6 +10902,24 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "style",
+      "appliesTo": [
+        "paragraph"
+      ],
+      "path": "paragraphStylePdfExportTag",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "virtual": {
+        "op": "setStyleProperty",
+        "field": "value"
+      },
+      "bindable": true
     },
     {
       "addressKind": "style",
@@ -23313,6 +23343,17 @@
       },
       {
         "addressKind": "storyRange",
+        "path": "paragraphStylePdfExportTag",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "storyRange",
         "path": "paragraphStyleNextStyle",
         "type": {
           "kind": "ref",
@@ -25277,6 +25318,24 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "style",
+        "appliesTo": [
+          "paragraph"
+        ],
+        "path": "paragraphStylePdfExportTag",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "virtual": {
+          "op": "setStyleProperty",
+          "field": "value"
+        },
+        "bindable": true,
+        "wire": "text"
       },
       {
         "addressKind": "style",
