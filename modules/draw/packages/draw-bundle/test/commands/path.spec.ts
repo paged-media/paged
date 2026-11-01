@@ -64,47 +64,6 @@ const set = (
 ): { elementId?: ElementId; path?: string; value?: unknown } =>
   (m as unknown as { args: Record<string, never> }).args;
 
-describe("paged.draw commands, no engine — stroke dashes", () => {
-  const dash = async (id: string, lengths: number[]) => {
-    const r = rig([RECT]);
-    await r.run(id);
-    expect(r.leaves()).toEqual([
-      {
-        op: "setElementProperty",
-        args: {
-          elementId: RECT,
-          path: "frameStrokeDashArray",
-          value: { type: "lengths", value: lengths },
-        },
-      },
-    ]);
-    expect(r.steps()).toBe(1);
-    const none = rig([]);
-    await none.run(id);
-    expect(none.sent()).toEqual([]);
-  };
-
-  it("Stroke: Solid writes an empty dash array to the selection; nothing selected sends nothing", async () => {
-    covers("command:media.paged.draw.command.strokeDashSolid");
-    await dash(`${C}.strokeDashSolid`, []);
-  });
-
-  it("Stroke: Dashed writes 6/3", async () => {
-    covers("command:media.paged.draw.command.strokeDashDashed");
-    await dash(`${C}.strokeDashDashed`, [6, 3]);
-  });
-
-  it("Stroke: Dotted writes 1/3", async () => {
-    covers("command:media.paged.draw.command.strokeDashDotted");
-    await dash(`${C}.strokeDashDotted`, [1, 3]);
-  });
-
-  it("Stroke: Dash-dot writes 6/3/1/3", async () => {
-    covers("command:media.paged.draw.command.strokeDashDashDot");
-    await dash(`${C}.strokeDashDashDot`, [6, 3, 1, 3]);
-  });
-});
-
 describe("paged.draw commands, no engine — gradient fills", () => {
   const gradient = async (id: string, type: string) => {
     const r = rig([RECT]);
@@ -262,65 +221,6 @@ describe("paged.draw commands, no engine — path operations", () => {
     const oval = rig([OVAL]);
     await oval.run(`${C}.reversePathDirection`);
     expect(oval.sent()).toEqual([]);
-  });
-});
-
-describe("paged.draw commands, no engine — live corners", () => {
-  const corners = async (id: string, option: string) => {
-    const r = rig([RECT]);
-    await r.run(id);
-    const writes = r.leaves().filter((m) => m.op === "setElementProperty");
-    // The option and the radius of all four corners…
-    expect(writes.map((m) => set(m).path).sort()).toEqual(
-      [
-        "frameCornerOptionBottomLeft",
-        "frameCornerOptionBottomRight",
-        "frameCornerOptionTopLeft",
-        "frameCornerOptionTopRight",
-        "frameCornerRadiusBottomLeft",
-        "frameCornerRadiusBottomRight",
-        "frameCornerRadiusTopLeft",
-        "frameCornerRadiusTopRight",
-      ].sort(),
-    );
-    expect(
-      writes
-        .filter((m) => String(set(m).path).startsWith("frameCornerOption"))
-        .map((m) => (set(m).value as { value: string }).value),
-    ).toEqual([option, option, option, option]);
-    // …and the live marker that lets the panel read the preset back
-    // (DRW-2: a second write).
-    const marker = r.metaOf(RECT)?.data as { liveCorners?: unknown };
-    if (option === "") expect(marker?.liveCorners).toBeUndefined();
-    else expect(marker?.liveCorners).toMatchObject({ style: option });
-    const line = rig([LINE]);
-    await line.run(id);
-    expect(line.sent()).toEqual([]);
-  };
-
-  it("Corners: Rounded rounds all four corners and stamps the live marker; a line sends nothing", async () => {
-    covers("command:media.paged.draw.command.cornersRounded");
-    await corners(`${C}.cornersRounded`, "RoundedCorner");
-  });
-
-  it("Corners: Inverse rounded", async () => {
-    covers("command:media.paged.draw.command.cornersInverseRounded");
-    await corners(`${C}.cornersInverseRounded`, "InverseRoundedCorner");
-  });
-
-  it("Corners: Bevel", async () => {
-    covers("command:media.paged.draw.command.cornersBevel");
-    await corners(`${C}.cornersBevel`, "BeveledCorner");
-  });
-
-  it("Corners: Fancy", async () => {
-    covers("command:media.paged.draw.command.cornersFancy");
-    await corners(`${C}.cornersFancy`, "FancyCorner");
-  });
-
-  it("Corners: None clears the corners (empty option, zero radius) and the marker", async () => {
-    covers("command:media.paged.draw.command.cornersNone");
-    await corners(`${C}.cornersNone`, "");
   });
 });
 

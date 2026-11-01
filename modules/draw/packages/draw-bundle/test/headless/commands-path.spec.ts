@@ -53,38 +53,6 @@ describe("paged.draw commands — path, stroke and fill (real engine)", () => {
   }, 60_000);
   afterAll(() => rig?.dispose());
 
-  describe("stroke dashes", () => {
-    it("Stroke: Solid clears the dash array; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.strokeDashSolid");
-      await rig.open(F1(), [RECT]);
-      await rig.run(`${C}.strokeDashDashed`);
-      await expectApplies(rig, `${C}.strokeDashSolid`);
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashSolid`);
-    });
-
-    it("Stroke: Dashed sets a 6/3 dash; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.strokeDashDashed");
-      await rig.open(F1(), [RECT]);
-      const { after } = await expectApplies(rig, `${C}.strokeDashDashed`);
-      expect(after).toContain('"frameStrokeDashArray"');
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashDashed`);
-    });
-
-    it("Stroke: Dotted sets a 1/3 dash; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.strokeDashDotted");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.strokeDashDotted`);
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashDotted`);
-    });
-
-    it("Stroke: Dash-dot sets a 6/3/1/3 dash; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.strokeDashDashDot");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.strokeDashDashDot`);
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashDashDot`);
-    });
-  });
-
   describe("gradient fills", () => {
     it("Fill: Linear gradient refuses an empty selection", async () => {
       covers("command:media.paged.draw.command.fillGradientLinear");
@@ -170,84 +138,10 @@ describe("paged.draw commands — path, stroke and fill (real engine)", () => {
     });
   });
 
-  describe("live corners", () => {
-    // DRW-2 (fixed): a corner preset is ONE batch — the corner geometry
-    // and the live-corner marker in the plugin metadata together.
-    it("Corners: Rounded refuses a graphic line (no corners to round)", async () => {
-      covers("command:media.paged.draw.command.cornersRounded");
-      await expectRefuses(rig, F1(), [LINE], `${C}.cornersRounded`);
-    });
-
-    it("DRW-2 — Corners: Rounded is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.cornersRounded");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.cornersRounded`);
-    });
-
-    it("Corners: Inverse rounded refuses a graphic line", async () => {
-      covers("command:media.paged.draw.command.cornersInverseRounded");
-      await expectRefuses(rig, F1(), [LINE], `${C}.cornersInverseRounded`);
-    });
-
-    it("DRW-2 — Corners: Inverse rounded is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.cornersInverseRounded");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.cornersInverseRounded`);
-    });
-
-    it("Corners: Bevel refuses a graphic line", async () => {
-      covers("command:media.paged.draw.command.cornersBevel");
-      await expectRefuses(rig, F1(), [LINE], `${C}.cornersBevel`);
-    });
-
-    it("DRW-2 — Corners: Bevel is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.cornersBevel");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.cornersBevel`);
-    });
-
-    it("Corners: Fancy refuses a graphic line", async () => {
-      covers("command:media.paged.draw.command.cornersFancy");
-      await expectRefuses(rig, F1(), [LINE], `${C}.cornersFancy`);
-    });
-
-    it("DRW-2 — Corners: Fancy is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.cornersFancy");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.cornersFancy`);
-    });
-
-    it("Corners: None refuses a graphic line", async () => {
-      covers("command:media.paged.draw.command.cornersNone");
-      await expectRefuses(rig, F1(), [LINE], `${C}.cornersNone`);
-    });
-
-    it("DRW-2 — Corners: None is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.cornersNone");
-      await rig.open(F1(), [RECT]);
-      await rig.run(`${C}.cornersRounded`);
-      await expectApplies(rig, `${C}.cornersNone`);
-    });
-
-    it("DRW-2 (fixed): a corner preset takes one undo step to take back", async () => {
-      covers("command:media.paged.draw.command.cornersRounded");
-      await rig.open(F1(), [RECT]);
-      expect(await undoStepsOf(rig, () => rig.run(`${C}.cornersRounded`))).toBe(
-        1,
-      );
-    });
-  });
-
   describe("one undo step for the whole selection", () => {
     // DRW-3 (fixed): these commands commit the whole selection in ONE
     // batch, so one undo takes both elements back.
     const TWO = [RECT, POLY];
-
-    it("DRW-3 — Stroke: Dashed on two elements is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.strokeDashDashed");
-      await rig.open(F1(), TWO);
-      await expectApplies(rig, `${C}.strokeDashDashed`);
-    });
 
     it("DRW-3 — Outline stroke on two paths is ONE undo step", async () => {
       covers("command:media.paged.draw.command.outlineStroke");

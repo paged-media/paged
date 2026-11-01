@@ -234,21 +234,9 @@ const recipeVerb = (
   );
 
 export const TWINS: readonly TwinSpec[] = [
-  // Stroke dashes / gradient fills / live corners — presets on the selection.
-  ...[
-    "strokeDashSolid",
-    "strokeDashDashed",
-    "strokeDashDotted",
-    "strokeDashDashDot",
-  ].map(sel),
+  // Gradient fills — presets on the selection (stroke dashes and corners are
+  // the host's).
   ...["fillGradientLinear", "fillGradientRadial"].map(sel),
-  ...[
-    "cornersRounded",
-    "cornersInverseRounded",
-    "cornersBevel",
-    "cornersFancy",
-    "cornersNone",
-  ].map(sel),
   // Path ops (the v30 kernels) — full parameters.
   twin("outlineStroke", {
     ...T,
@@ -273,24 +261,7 @@ export const TWINS: readonly TwinSpec[] = [
   // Compound paths (Pathfinder is the host's).
   ...["makeCompoundPath", "releaseCompoundPath"].map(sel),
   // Appearance.
-  ...[
-    "appearanceAddFill",
-    "appearanceAddStroke",
-    "appearanceClear",
-    "bakeAppearance",
-    "releaseAppearance",
-  ].map(sel),
-  twin("appearanceRemoveLayer", {
-    ...T,
-    kind: enumOf(["fill", "stroke"]),
-    index: INT,
-  }),
-  twin("appearanceMoveLayer", {
-    ...T,
-    kind: enumOf(["fill", "stroke"]),
-    index: INT,
-    delta: INT,
-  }),
+  ...["bakeAppearance", "releaseAppearance"].map(sel),
   // Graphic styles.
   twin("saveGraphicStyle", { ...T, name: TEXT }),
   recipeVerb("applyGraphicStyle", "style", "graphicStyle", "styleId", T),

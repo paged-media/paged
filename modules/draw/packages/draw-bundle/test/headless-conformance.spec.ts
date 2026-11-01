@@ -42,9 +42,9 @@
 // subject left this bundle with ADR 023 phase D — the Layers PANEL is
 // retired and paged.draw now resolves the HOST panel's values through
 // a binding provider instead. So the contribution log holds eighteen tools + two
-// schema panels + thirty-four commands (4 dash + 2 group + 2
+// schema panels + thirty commands (2 group + 2
 // gradient-fill + 3 path-ops + 2 join/average + the Phase 9
-// Tier B 5 live-corner + 3 appearance + 3 select-same + the wave-2
+// Tier B 3 select-same + the wave-2
 // 4 insert-shape + blend + select-parent-group) + the edit context.
 
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
@@ -243,8 +243,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "panel",
         "panel",
         "panel",
-        // B-12 — the stroke dash-preset commands (Solid / Dashed /
-        // Dotted / Dash-dot).
+        // (The stroke dash-preset commands are the host's.)
         // WP6.1 part 2 — six gesture/insert commands and two "…" raisers
         // (registered among the rest; the kinds are what is counted);
         // Object ▸ Rasterize and its "…" raiser (extensions ADR 338);
@@ -253,7 +252,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Symbol Options (draw ADR 365); WP6.3 — the seven Envelope
         // distort / Expand appearance commands and the graphic-style
         // library's import / export / merge (draw ADR 367).
-        ...Array<string>(41).fill("command"),
+        ...Array<string>(37).fill("command"),
         "command",
         "command",
         "command",
@@ -319,20 +318,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // SIBLING of pattern, not the same row.
         "command",
         "command",
-        "command",
-        "command",
-        "command",
-        "command",
-        "command",
-        // Phase 9 (Tier B) — Live Corners (Rounded / Inverse / Bevel /
-        // Fancy / None).
-        "command",
-        "command",
-        "command",
-        "command",
-        "command",
-        // Phase 9 (Tier B) — Appearance (Add fill / Add stroke / Clear)
-        // + the panel's edit surface (Remove layer / Reorder layer).
         "command",
         "command",
         "command",

@@ -152,10 +152,6 @@ const PANELS = [
 ] as const;
 
 const COMMANDS = [
-  "media.paged.draw.command.strokeDashSolid",
-  "media.paged.draw.command.strokeDashDashed",
-  "media.paged.draw.command.strokeDashDotted",
-  "media.paged.draw.command.strokeDashDashDot",
   "media.paged.draw.command.fillGradientLinear",
   "media.paged.draw.command.fillGradientRadial",
   "media.paged.draw.command.outlineStroke",
@@ -179,16 +175,6 @@ const COMMANDS = [
   "media.paged.draw.command.selectRepeatInstances",
   "media.paged.draw.command.expandRepeat",
   "media.paged.draw.command.releaseRepeat",
-  "media.paged.draw.command.cornersRounded",
-  "media.paged.draw.command.cornersInverseRounded",
-  "media.paged.draw.command.cornersBevel",
-  "media.paged.draw.command.cornersFancy",
-  "media.paged.draw.command.cornersNone",
-  "media.paged.draw.command.appearanceAddFill",
-  "media.paged.draw.command.appearanceAddStroke",
-  "media.paged.draw.command.appearanceClear",
-  "media.paged.draw.command.appearanceRemoveLayer",
-  "media.paged.draw.command.appearanceMoveLayer",
   "media.paged.draw.command.bakeAppearance",
   "media.paged.draw.command.releaseAppearance",
   "media.paged.draw.command.saveGraphicStyle",
@@ -762,7 +748,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(46);
     expect(PANELS).toHaveLength(14);
-    expect(COMMANDS).toHaveLength(172);
+    expect(COMMANDS).toHaveLength(146);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
@@ -994,12 +980,12 @@ test.describe("plugin surface · paged.draw", () => {
       panel.locator('[data-appearance-section="layer"]').count();
 
     // ADD a fill and a stroke: two extra layers of the native appearance.
-    await designer.runCommand("media.paged.draw.command.appearanceAddFill");
-    await designer.runCommand("media.paged.draw.command.appearanceAddStroke");
+    await designer.runCommand("paged.appearance.addFill");
+    await designer.runCommand("paged.appearance.addStroke");
     await expect.poll(layers, { timeout: 8_000 }).toBe(2);
 
     // REORDER keeps both.
-    await designer.runCommand("media.paged.draw.command.appearanceMoveLayer");
+    await designer.runCommand("paged.appearance.moveLayer");
     await expect.poll(layers, { timeout: 8_000 }).toBe(2);
 
     // BAKE has nothing to bake on a native appearance: the item count
@@ -1010,7 +996,7 @@ test.describe("plugin surface · paged.draw", () => {
     expect(await artworkCount(page)).toBe(items);
 
     // CLEAR brings it back to the frame's own fill and stroke.
-    await designer.runCommand("media.paged.draw.command.appearanceClear");
+    await designer.runCommand("paged.appearance.clear");
     await expect.poll(layers, { timeout: 8_000 }).toBe(0);
   });
 

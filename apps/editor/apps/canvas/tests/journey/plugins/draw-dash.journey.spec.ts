@@ -129,7 +129,7 @@ test.describe("journey · paged.draw stroke dash", () => {
     await designer.selectElement("rectangle", ref.id);
 
     // ── 2. SOLID baseline — the Solid preset CLEARS the dash array. ──
-    await invokeCommand(page, "media.paged.draw.command.strokeDashSolid");
+    await invokeCommand(page, "paged.stroke.dashSolid");
     await expect
       .poll(() => dashArrayOf(page, ref), { timeout: 6_000 })
       .toEqual([]);
@@ -137,7 +137,7 @@ test.describe("journey · paged.draw stroke dash", () => {
 
     // ── 3. DASHED — commits a 6/3 on/off run; the gaps drop ink, so the
     //    rendered stroke VISIBLY changes vs the solid baseline. ──
-    await invokeCommand(page, "media.paged.draw.command.strokeDashDashed");
+    await invokeCommand(page, "paged.stroke.dashDashed");
     await expect
       .poll(() => dashArrayOf(page, ref), { timeout: 6_000 })
       .toEqual([6, 3]);
@@ -145,19 +145,19 @@ test.describe("journey · paged.draw stroke dash", () => {
 
     // ── 4. DOTTED / DASH-DOT — assert each preset bakes its documented
     //    wire run (the §12.3 shape, read back from the engine). ──
-    await invokeCommand(page, "media.paged.draw.command.strokeDashDotted");
+    await invokeCommand(page, "paged.stroke.dashDotted");
     await expect
       .poll(() => dashArrayOf(page, ref), { timeout: 6_000 })
       .toEqual([1, 3]);
 
-    await invokeCommand(page, "media.paged.draw.command.strokeDashDashDot");
+    await invokeCommand(page, "paged.stroke.dashDashDot");
     await expect
       .poll(() => dashArrayOf(page, ref), { timeout: 6_000 })
       .toEqual([6, 3, 1, 3]);
 
     // ── 5. BACK TO SOLID — the Solid preset clears the array again (the
     //    gate is reversible, not one-shot). ──
-    await invokeCommand(page, "media.paged.draw.command.strokeDashSolid");
+    await invokeCommand(page, "paged.stroke.dashSolid");
     await expect
       .poll(() => dashArrayOf(page, ref), { timeout: 6_000 })
       .toEqual([]);

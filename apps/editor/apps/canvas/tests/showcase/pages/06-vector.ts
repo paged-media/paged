@@ -104,8 +104,8 @@ const MARK_CONTOURS = 5;
 
 const CMD = {
   unite: "paged.pathfinder.unite",
-  dash: "media.paged.draw.command.strokeDashDashed",
-  corners: "media.paged.draw.command.cornersRounded",
+  dash: "paged.stroke.dashDashed",
+  corners: "paged.corners.rounded",
   gridRepeat: "media.paged.draw.command.makeGridRepeat",
 } as const;
 

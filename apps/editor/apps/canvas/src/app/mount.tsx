@@ -300,6 +300,20 @@ import {
   CLIPBOARD_MENU_ITEMS,
 } from "../clipboard-commands";
 import {
+  buildStrokeDashCommands,
+  STROKE_DASH_DIAGNOSTIC_SOURCE,
+} from "../stroke-dash-commands";
+import {
+  APPEARANCE_DIAGNOSTIC_SOURCE,
+  APPEARANCE_MENU_ITEMS,
+  buildAppearanceCommands,
+} from "../appearance-commands";
+import {
+  buildCornerCommands,
+  CORNER_DIAGNOSTIC_SOURCE,
+  CORNER_MENU_ITEMS,
+} from "../corner-commands";
+import {
   buildPathfinderCommands,
   PATHFINDER_DIAGNOSTIC_SOURCE,
   PATHFINDER_MENU_ITEMS,
@@ -1496,6 +1510,33 @@ function CanvasAppIntegration() {
         ]),
       () => problemsSink.clear(PATHFINDER_DIAGNOSTIC_SOURCE),
     );
+    // `paged.corners.*` — the five corner presets.
+    const cornerCommands = buildCornerCommands(
+      { client, getSelection: objectDeps.getSelection },
+      (message) =>
+        problemsSink.publish(CORNER_DIAGNOSTIC_SOURCE, "corners", [
+          { severity: "error", message, source: "corners" },
+        ]),
+      () => problemsSink.clear(CORNER_DIAGNOSTIC_SOURCE),
+    );
+    // `paged.appearance.*` — the Appearance panel's stack operations.
+    const appearanceCommands = buildAppearanceCommands(
+      { client, getSelection: objectDeps.getSelection },
+      (message) =>
+        problemsSink.publish(APPEARANCE_DIAGNOSTIC_SOURCE, "appearance", [
+          { severity: "error", message, source: "appearance" },
+        ]),
+      () => problemsSink.clear(APPEARANCE_DIAGNOSTIC_SOURCE),
+    );
+    // `paged.stroke.dash*` — the four dash presets.
+    const strokeDashCommands = buildStrokeDashCommands(
+      { client, getSelection: objectDeps.getSelection },
+      (message) =>
+        problemsSink.publish(STROKE_DASH_DIAGNOSTIC_SOURCE, "stroke", [
+          { severity: "error", message, source: "stroke" },
+        ]),
+      () => problemsSink.clear(STROKE_DASH_DIAGNOSTIC_SOURCE),
+    );
     // `paged.insert.*` — the object-authoring verbs (U7). Unlike the
     // object layer's deps bag, every runner reads its state (camera,
     // page layout, caret, edit context) off the LIVE `PagedEditor` the
@@ -1631,6 +1672,9 @@ function CanvasAppIntegration() {
       CANVAS_CONTEXT_MENU_COMMAND,
       ...objectCommands,
       ...pathfinderCommands,
+      ...cornerCommands,
+      ...appearanceCommands,
+      ...strokeDashCommands,
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
@@ -1656,6 +1700,8 @@ function CanvasAppIntegration() {
       ...ASSET_EXPORT_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...PATHFINDER_MENU_ITEMS,
+      ...CORNER_MENU_ITEMS,
+      ...APPEARANCE_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,

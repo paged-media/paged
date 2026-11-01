@@ -114,7 +114,7 @@ describe("typed twins lower to the untyped payload", () => {
       tolerance: 0.5,
     });
     expect(
-      payloadFor(twin("strokeDashDashed"), { targets: [] }),
+      payloadFor(twin("fillGradientLinear"), { targets: [] }),
     ).toBeUndefined();
     expect(
       payloadFor(twin("applyGraphicStyle"), { targets: [], style: "gs-3" }),

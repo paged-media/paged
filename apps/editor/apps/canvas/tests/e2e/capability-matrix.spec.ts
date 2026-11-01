@@ -3343,6 +3343,7 @@ const TRACKED_PROBES: Probe[] = [
 // change first (setupUndo 1), so the classification is the engine's.
 const PROBE_COMMENT = "9001";
 const PROBE_CHANGE = "probe-change";
+const PROBE_THREAD = "9101";
 
 const scratchComment = (fx: LoadedFixture) =>
   fx.firstStory && {
@@ -3415,6 +3416,49 @@ const REVIEW_PROBES: Probe[] = [
         args: { commentId: PROBE_COMMENT },
       }),
     setupUndo: 1,
+  },
+  {
+    op: "insertCommentThread",
+    build: async ({ fx }) => ({
+      op: "insertCommentThread",
+      args: {
+        anchor: { kind: "page", page: fx.pages[0].pageId, at: [10, 10] },
+        comment: { id: PROBE_THREAD, author: "Probe", text: "Probe thread" },
+      },
+    }),
+  },
+  {
+    op: "setCommentAnchor",
+    build: async ({ page, fx }) =>
+      after(
+        page,
+        {
+          op: "insertCommentThread",
+          args: {
+            anchor: { kind: "page", page: fx.pages[0].pageId, at: [10, 10] },
+            comment: {
+              id: PROBE_THREAD,
+              author: "Probe",
+              text: "Probe thread",
+            },
+          },
+        },
+        {
+          op: "setCommentAnchor",
+          args: {
+            threadId: PROBE_THREAD,
+            anchor: { kind: "page", page: fx.pages[0].pageId, at: [20, 20] },
+          },
+        },
+      ),
+    setupUndo: 1,
+  },
+  {
+    op: "setPerson",
+    build: async () => ({
+      op: "setPerson",
+      args: { person: { id: "probe-person", name: "Probe Person" } },
+    }),
   },
   { op: "recordChange", build: async ({ fx }) => scratchChange(fx) },
   {

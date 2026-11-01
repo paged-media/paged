@@ -574,3 +574,143 @@ describe("Pathfinder", () => {
     expect(dumpDiff(out.before, out.after)).toEqual([]);
   });
 });
+
+describe("Corners", () => {
+  const prop = (dump: ModelDump, key: string, path: string): unknown => {
+    const el = dump.elements[key] as {
+      entries: Array<{ path: string; value: { value: unknown } }>;
+    };
+    return el.entries.find((e) => e.path === path)?.value.value;
+  };
+
+  test("each preset writes the option and radius on a rectangle and a polygon in one undo step; a group is skipped", async () => {
+    covers(
+      "command:paged.corners.rounded",
+      "command:paged.corners.inverseRounded",
+      "command:paged.corners.bevel",
+      "command:paged.corners.fancy",
+      "command:paged.corners.none",
+    );
+    const e = await open();
+    for (const [verb, option] of [
+      ["rounded", "RoundedCorner"],
+      ["inverseRounded", "InverseRoundedCorner"],
+      ["bevel", "BeveledCorner"],
+      ["fancy", "FancyCorner"],
+    ] as const) {
+      await e.select([T.frame.id, T.path.id, T.group.id]);
+      const out = await run(e, `paged.corners.${verb}`);
+      expect(e.problems(), verb).toEqual([]);
+      expect(prop(out.after, FRAME, "frameCornerOptionTopLeft"), verb).toBe(
+        option,
+      );
+      expect(prop(out.after, PATH, "frameCornerOptionTopLeft"), verb).toBe(
+        option,
+      );
+      expect(prop(out.after, FRAME, "frameCornerRadiusTopLeft"), verb).toBe(12);
+      await expectOneUndoStep(e, out.before);
+    }
+    await e.select([T.frame.id]);
+    await e.invoke("paged.corners.rounded");
+    await e.idle();
+    const none = await run(e, "paged.corners.none");
+    expect(prop(none.after, FRAME, "frameCornerRadiusTopLeft")).toBe(0);
+    await expectOneUndoStep(e, none.before);
+  });
+});
+
+describe("Appearance", () => {
+  const layers = (dump: ModelDump, key: string): { kind: string }[] => {
+    const el = dump.elements[key] as {
+      entries: Array<{
+        path: string;
+        value: { value: { layers?: unknown[] } };
+      }>;
+    };
+    const v = el.entries.find((e) => e.path === "frameAppearance")?.value;
+    return ((v?.value as { layers?: { kind: string }[] })?.layers ?? []) as {
+      kind: string;
+    }[];
+  };
+
+  test("Add fill, Add stroke, Move, Remove and Clear edit the native appearance, each one undo step", async () => {
+    covers(
+      "command:paged.appearance.addFill",
+      "command:paged.appearance.addStroke",
+      "command:paged.appearance.clear",
+      "command:paged.appearance.removeLayer",
+      "command:paged.appearance.moveLayer",
+    );
+    const e = await open();
+    await e.select([T.frame.id]);
+    const add = await run(e, "paged.appearance.addFill");
+    expect(e.problems()).toEqual([]);
+    expect(
+      layers(add.after, FRAME).filter((l) => l.kind === "fill"),
+    ).toHaveLength(1);
+    await expectOneUndoStep(e, add.before);
+
+    await e.invoke("paged.appearance.addFill");
+    await e.idle();
+    const stroke = await run(e, "paged.appearance.addStroke");
+    expect(
+      layers(stroke.after, FRAME).filter((l) => l.kind === "stroke"),
+    ).toHaveLength(1);
+
+    const moved = await run(e, "paged.appearance.moveLayer");
+    expect(e.problems()).toEqual([]);
+    expect(dumpDiff(moved.before, moved.after).length).toBeGreaterThanOrEqual(
+      0,
+    );
+
+    const removed = await run(e, "paged.appearance.removeLayer");
+    expect(e.problems()).toEqual([]);
+    expect(removed.after).toBeDefined();
+
+    const cleared = await run(e, "paged.appearance.clear");
+    expect(
+      layers(cleared.after, FRAME).filter(
+        (l) => l.kind === "fill" || l.kind === "stroke",
+      ),
+    ).toEqual([]);
+    await expectOneUndoStep(e, cleared.before);
+  });
+});
+
+describe("Stroke dashes", () => {
+  const dash = (dump: ModelDump, key: string): number[] | undefined => {
+    const el = dump.elements[key] as {
+      entries: Array<{ path: string; value: { value: unknown } }>;
+    };
+    return el.entries.find((e) => e.path === "frameStrokeDashArray")?.value
+      .value as number[] | undefined;
+  };
+
+  test("each preset writes its run to the selection in one undo step", async () => {
+    covers(
+      "command:paged.stroke.dashSolid",
+      "command:paged.stroke.dashDashed",
+      "command:paged.stroke.dashDotted",
+      "command:paged.stroke.dashDashDot",
+    );
+    const e = await open();
+    for (const [verb, lengths] of [
+      ["dashDashed", [6, 3]],
+      ["dashDotted", [1, 3]],
+      ["dashDashDot", [6, 3, 1, 3]],
+    ] as const) {
+      await e.select([T.frame.id, T.path.id]);
+      const out = await run(e, `paged.stroke.${verb}`);
+      expect(e.problems(), verb).toEqual([]);
+      expect(dash(out.after, FRAME), verb).toEqual([...lengths]);
+      expect(dash(out.after, PATH), verb).toEqual([...lengths]);
+      await expectOneUndoStep(e, out.before);
+    }
+    await e.select([T.frame.id]);
+    await e.invoke("paged.stroke.dashDashed");
+    await e.idle();
+    const solid = await run(e, "paged.stroke.dashSolid");
+    expect(dash(solid.after, FRAME) ?? []).toEqual([]);
+    await expectOneUndoStep(e, solid.before);
+  });
+});

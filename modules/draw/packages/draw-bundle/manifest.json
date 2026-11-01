@@ -95,10 +95,6 @@
       "media.paged.draw.panel.properties"
     ],
     "commands": [
-      "media.paged.draw.command.strokeDashSolid",
-      "media.paged.draw.command.strokeDashDashed",
-      "media.paged.draw.command.strokeDashDotted",
-      "media.paged.draw.command.strokeDashDashDot",
       "media.paged.draw.command.fillGradientLinear",
       "media.paged.draw.command.fillGradientRadial",
       "media.paged.draw.command.outlineStroke",
@@ -141,16 +137,6 @@
       "media.paged.draw.command.selectRepeatInstances",
       "media.paged.draw.command.expandRepeat",
       "media.paged.draw.command.releaseRepeat",
-      "media.paged.draw.command.cornersRounded",
-      "media.paged.draw.command.cornersInverseRounded",
-      "media.paged.draw.command.cornersBevel",
-      "media.paged.draw.command.cornersFancy",
-      "media.paged.draw.command.cornersNone",
-      "media.paged.draw.command.appearanceAddFill",
-      "media.paged.draw.command.appearanceAddStroke",
-      "media.paged.draw.command.appearanceClear",
-      "media.paged.draw.command.appearanceRemoveLayer",
-      "media.paged.draw.command.appearanceMoveLayer",
       "media.paged.draw.command.bakeAppearance",
       "media.paged.draw.command.releaseAppearance",
       "media.paged.draw.command.saveGraphicStyle",
@@ -1586,70 +1572,6 @@
       ],
       "commands": [
         {
-          "id": "media.paged.draw.command.strokeDashSolid",
-          "title": "Stroke dash solid",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.strokeDashDashed",
-          "title": "Stroke dash dashed",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.strokeDashDotted",
-          "title": "Stroke dash dotted",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.strokeDashDashDot",
-          "title": "Stroke dash dash dot",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
           "id": "media.paged.draw.command.fillGradientLinear",
           "title": "Fill gradient linear",
           "args": {
@@ -1668,86 +1590,6 @@
         {
           "id": "media.paged.draw.command.fillGradientRadial",
           "title": "Fill gradient radial",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersRounded",
-          "title": "Corners rounded",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersInverseRounded",
-          "title": "Corners inverse rounded",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersBevel",
-          "title": "Corners bevel",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersFancy",
-          "title": "Corners fancy",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersNone",
-          "title": "Corners none",
           "args": {
             "kind": "struct",
             "fields": {
@@ -2021,54 +1863,6 @@
           }
         },
         {
-          "id": "media.paged.draw.command.appearanceAddFill",
-          "title": "Appearance add fill",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.appearanceAddStroke",
-          "title": "Appearance add stroke",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.appearanceClear",
-          "title": "Appearance clear",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
           "id": "media.paged.draw.command.bakeAppearance",
           "title": "Bake appearance",
           "args": {
@@ -2096,58 +1890,6 @@
                   "kind": "ref",
                   "to": "frame"
                 }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.appearanceRemoveLayer",
-          "title": "Appearance remove layer",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              },
-              "kind": {
-                "kind": "enum",
-                "members": ["fill", "stroke"]
-              },
-              "index": {
-                "kind": "number",
-                "integer": true
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.appearanceMoveLayer",
-          "title": "Appearance move layer",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              },
-              "kind": {
-                "kind": "enum",
-                "members": ["fill", "stroke"]
-              },
-              "index": {
-                "kind": "number",
-                "integer": true
-              },
-              "delta": {
-                "kind": "number",
-                "integer": true
               }
             }
           }

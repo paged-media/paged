@@ -708,6 +708,21 @@ export const CAPABILITIES: Capability[] = [
     note: "proto 78, doc ADR 613; {commentId}; probed on a scratch comment",
   },
   {
+    op: "insertCommentThread",
+    status: "supported",
+    note: "proto 78, engine ADR 1055; {anchor, threadKind?, comment}; probed with a page anchor",
+  },
+  {
+    op: "setCommentAnchor",
+    status: "supported",
+    note: "proto 78, engine ADR 1055; {threadId, anchor}; probed on a scratch thread",
+  },
+  {
+    op: "setPerson",
+    status: "supported",
+    note: "proto 78, engine ADR 1055; {person}; the document's people list",
+  },
+  {
     op: "recordChange",
     status: "supported",
     note: "proto 78, doc ADR 613; {storyId, start, end, cell?, paragraph?, change}; probed on the text fixture's first story",

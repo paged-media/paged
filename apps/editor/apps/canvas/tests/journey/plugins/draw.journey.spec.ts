@@ -259,7 +259,7 @@ test.describe("journey · paged.draw plugin", () => {
     // ── 5. STROKE (best-effort) — the bundle's Appearance command stacks
     //    a stroke layer and BAKES the front-most layer onto the frame's
     //    real frameStrokeWeight; assert the baked weight became positive. ──
-    await invokeCommand(page, "media.paged.draw.command.appearanceAddStroke");
+    await invokeCommand(page, "paged.appearance.addStroke");
     try {
       await expect
         .poll(() => strokeWeightOf(page, ref), { timeout: 6_000 })

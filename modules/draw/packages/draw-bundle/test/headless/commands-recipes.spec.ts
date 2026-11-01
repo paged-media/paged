@@ -46,9 +46,15 @@ import {
   undoStepsOf,
   type CommandRig,
 } from "./command-kit";
+import { commitAppearance, type AppearanceStack } from "../../src";
 import { installPngRealm } from "./raster-realm";
 
 const C = "media.paged.draw.command";
+/** A two-layer stack for the bake and release cases. */
+const STACK: AppearanceStack = {
+  fills: [{ color: "Color/Black" }],
+  strokes: [{ color: "Color/Black", weight: 1 }],
+};
 const RECT = el("rectangle", "urect");
 const POLY = el("polygon", "upoly");
 const A = el("polygon", "ua");
@@ -618,98 +624,9 @@ describe("paged.draw commands — recipes (real engine)", () => {
   });
 
   describe("the appearance stack", () => {
-    // DRW-4 (fixed): an appearance edit writes the stack in the plugin
-    // metadata and paints its front-most layer onto the frame in ONE batch.
-    it("Add fill refuses an empty selection", async () => {
-      covers("command:media.paged.draw.command.appearanceAddFill");
-      await expectRefuses(rig, F1(), [], `${C}.appearanceAddFill`);
-    });
-
-    it("DRW-4 — Add fill is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.appearanceAddFill");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.appearanceAddFill`);
-    });
-
-    it("Add stroke refuses an empty selection", async () => {
-      covers("command:media.paged.draw.command.appearanceAddStroke");
-      await expectRefuses(rig, F1(), [], `${C}.appearanceAddStroke`);
-    });
-
-    it("DRW-4 — Add stroke is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.appearanceAddStroke");
-      await rig.open(F1(), [RECT]);
-      await expectApplies(rig, `${C}.appearanceAddStroke`);
-    });
-
-    it("DRW-4 (fixed): Add fill and Add stroke take one undo step each", async () => {
-      covers(
-        "command:media.paged.draw.command.appearanceAddFill",
-        "command:media.paged.draw.command.appearanceAddStroke",
-      );
-      await rig.open(F1(), [RECT]);
-      expect(
-        await undoStepsOf(rig, () => rig.run(`${C}.appearanceAddFill`)),
-      ).toBe(1);
-      await rig.open(F1(), [RECT]);
-      expect(
-        await undoStepsOf(rig, () => rig.run(`${C}.appearanceAddStroke`)),
-      ).toBe(1);
-    });
-
-    it("Clear appearance empties the stack; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.appearanceClear");
-      await rig.open(F1(), [RECT]);
-      await rig.run(`${C}.appearanceAddFill`);
-      await expectApplies(rig, `${C}.appearanceClear`);
-      await expectRefuses(rig, F1(), [], `${C}.appearanceClear`);
-    });
-
-    it("Remove layer drops one fill from the stack; nothing selected is refused", async () => {
-      covers("command:media.paged.draw.command.appearanceRemoveLayer");
-      await rig.open(F1(), [RECT]);
-      await rig.run(`${C}.appearanceAddFill`);
-      await expectApplies(rig, `${C}.appearanceRemoveLayer`, {
-        kind: "fill",
-        index: 0,
-      });
-      await expectRefuses(rig, F1(), [], `${C}.appearanceRemoveLayer`, {
-        kind: "fill",
-        index: 0,
-      });
-    });
-
-    it("Move layer refuses an empty selection", async () => {
-      covers("command:media.paged.draw.command.appearanceMoveLayer");
-      await expectRefuses(rig, F1(), [], `${C}.appearanceMoveLayer`, {
-        kind: "fill",
-        index: 0,
-        delta: 1,
-      });
-    });
-
-    it("DRW-4 — Move layer is ONE undo step", async () => {
-      covers("command:media.paged.draw.command.appearanceMoveLayer");
-      await rig.open(F1(), [RECT]);
-      await rig.h.host.document.setMetadata(RECT, {
-        v: 1,
-        data: {
-          appearance: {
-            fills: [
-              { color: "Color/Black", tint: 100 },
-              { color: "Color/Black", tint: 40 },
-            ],
-            strokes: [],
-          },
-        },
-      });
-      await expectApplies(rig, `${C}.appearanceMoveLayer`, {
-        kind: "fill",
-        index: 0,
-        delta: 1,
-      });
-    });
-
+    // The stack EDITS (Add fill / Add stroke / Clear / Remove / Move) are
+    // the host's, `paged.appearance.*` (PM-0017); a stack here is written
+    // through `commitAppearance`, the model the bake reads.
     // DRW-5 (fixed, ADR 360): the bake is one batch, its layers addressed
     // by handle and found again by their markers.
     it("Bake appearance refuses an empty selection", async () => {
@@ -720,8 +637,7 @@ describe("paged.draw commands — recipes (real engine)", () => {
     it("DRW-5 — Bake appearance is ONE undo step", async () => {
       covers("command:media.paged.draw.command.bakeAppearance");
       await rig.open(F1(), [RECT]);
-      await rig.run(`${C}.appearanceAddFill`);
-      await rig.run(`${C}.appearanceAddStroke`);
+      await commitAppearance(rig.h.host, RECT, STACK, null);
       await rig.h.host.selection.set([RECT]);
       await expectApplies(rig, `${C}.bakeAppearance`);
     });
@@ -729,8 +645,7 @@ describe("paged.draw commands — recipes (real engine)", () => {
     it("Release appearance gives the baked stack back; nothing selected is refused", async () => {
       covers("command:media.paged.draw.command.releaseAppearance");
       await rig.open(F1(), [RECT]);
-      await rig.run(`${C}.appearanceAddFill`);
-      await rig.run(`${C}.appearanceAddStroke`);
+      await commitAppearance(rig.h.host, RECT, STACK, null);
       await rig.h.host.selection.set([RECT]);
       await rig.run(`${C}.bakeAppearance`);
       await rig.h.host.selection.set([RECT]);

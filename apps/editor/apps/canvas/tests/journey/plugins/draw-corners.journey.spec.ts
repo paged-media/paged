@@ -136,7 +136,7 @@ test.describe("journey · paged.draw live corners", () => {
 
     // ── 2. ROUNDED — bakes RoundedCorner + a 12pt radius on all four
     //    corners; the corner ink is carved away → the page changes. ──
-    await invokeCommand(page, "media.paged.draw.command.cornersRounded");
+    await invokeCommand(page, "paged.corners.rounded");
     await expect
       .poll(
         async () => (await propOf(page, ref, TOP_LEFT_OPTION))?.value ?? "",
@@ -159,12 +159,9 @@ test.describe("journey · paged.draw live corners", () => {
     // ── 3. BEVEL / INVERSE / FANCY — assert each preset bakes its IDML
     //    corner-option token (the wire shape, read off the engine). ──
     for (const [cmd, token] of [
-      ["media.paged.draw.command.cornersBevel", "BeveledCorner"],
-      [
-        "media.paged.draw.command.cornersInverseRounded",
-        "InverseRoundedCorner",
-      ],
-      ["media.paged.draw.command.cornersFancy", "FancyCorner"],
+      ["paged.corners.bevel", "BeveledCorner"],
+      ["paged.corners.inverseRounded", "InverseRoundedCorner"],
+      ["paged.corners.fancy", "FancyCorner"],
     ] as const) {
       await invokeCommand(page, cmd);
       await expect
@@ -179,7 +176,7 @@ test.describe("journey · paged.draw live corners", () => {
 
     // ── 4. NONE — squares the corners back (empty option text + 0
     //    radius), restoring the square silhouette. ──
-    await invokeCommand(page, "media.paged.draw.command.cornersNone");
+    await invokeCommand(page, "paged.corners.none");
     await expect
       .poll(
         async () =>

@@ -119,10 +119,6 @@ describe("drawBundle.activate", () => {
     // plugins build on. A `media.paged.draw.command.groupSelection`
     // reappearing here would be the duplication coming back.
     expect(fake.ids("commands")).toEqual([
-      "media.paged.draw.command.strokeDashSolid",
-      "media.paged.draw.command.strokeDashDashed",
-      "media.paged.draw.command.strokeDashDotted",
-      "media.paged.draw.command.strokeDashDashDot",
       "media.paged.draw.command.fillGradientLinear",
       "media.paged.draw.command.fillGradientRadial",
       "media.paged.draw.command.outlineStroke",
@@ -177,16 +173,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.selectRepeatInstances",
       "media.paged.draw.command.expandRepeat",
       "media.paged.draw.command.releaseRepeat",
-      "media.paged.draw.command.cornersRounded",
-      "media.paged.draw.command.cornersInverseRounded",
-      "media.paged.draw.command.cornersBevel",
-      "media.paged.draw.command.cornersFancy",
-      "media.paged.draw.command.cornersNone",
-      "media.paged.draw.command.appearanceAddFill",
-      "media.paged.draw.command.appearanceAddStroke",
-      "media.paged.draw.command.appearanceClear",
-      "media.paged.draw.command.appearanceRemoveLayer",
-      "media.paged.draw.command.appearanceMoveLayer",
       // B-24 — the group bake + its inverse.
       "media.paged.draw.command.bakeAppearance",
       "media.paged.draw.command.releaseAppearance",

@@ -49,21 +49,16 @@ export {
   vectorGraphicEditContext,
   VECTOR_GRAPHIC_CONTEXT,
 } from "./edit-context";
-// B-12 — the stroke DASH presets + their mutation builder, exported for
+// B-12 — the stroke DASH editor's builders (the preset commands are the
+// host's), exported for
 // the conformance spec (so it asserts the EXACT mutation a command
 // emits — no second copy to drift from).
 export {
-  DASH_PRESETS,
-  DASH_COMMAND_IDS,
-  DASH_COMMAND_CATEGORY,
   dashMutationFor,
-  applyDashPreset,
   applyDashArray,
   dashArrayFrom,
   dashBatchFor,
   MAX_DASH_PAIRS,
-  contributeDashCommands,
-  type DashPreset,
 } from "./commands/dash";
 // The B-04 GROUP wire shapes, composed by Pattern / Symbols / Image
 // Trace and exported for the conformance spec. The user-facing Group /
@@ -726,40 +721,19 @@ export {
 // Phase 9 (Tier B) — Live Corners: the per-corner wire-shape builders +
 // the metadata "live" marker, exported for the conformance spec.
 export {
-  LIVE_CORNER_PRESETS,
-  LIVE_CORNER_COMMAND_IDS,
-  LIVE_CORNERS_COMMAND_CATEGORY,
-  DEFAULT_CORNER_RADIUS_PT,
   supportsLiveCorners,
   cornerStyleMutationFor,
   cornerRadiiMutationFor,
-  withLiveCornerMarker,
-  applyLiveCornerPreset,
-  contributeLiveCornerCommands,
-  type LiveCornerPreset,
   type CornerStyleToken,
 } from "./commands/live-corners";
 // Phase 9 (Tier B) — Appearance model: the stack model + bake builders +
 // envelope round-trip helpers, exported for the conformance spec.
 export {
-  APPEARANCE_COMMAND_IDS,
-  APPEARANCE_COMMAND_CATEGORY,
-  APPEARANCE_ADD_FILL_COMMAND_ID,
-  APPEARANCE_ADD_STROKE_COMMAND_ID,
-  APPEARANCE_CLEAR_COMMAND_ID,
-  APPEARANCE_REMOVE_LAYER_COMMAND_ID,
-  APPEARANCE_MOVE_LAYER_COMMAND_ID,
   appearanceOf,
   withAppearance,
   bakeAppearanceMutations,
   commitAppearance,
-  removeAppearanceLayer,
-  moveAppearanceLayer,
-  applyAppearanceEdit,
-  applyAppearanceCommand,
-  contributeAppearanceCommands,
   type AppearanceStack,
-  type AppearanceKind,
   type AppearanceLayerKind,
   type FillLayer,
   type StrokeLayer,
@@ -812,10 +786,6 @@ export {
   readNativeAppearance,
   explicitLayers,
   appearanceMutation,
-  addNativeLayer,
-  extraLayerIndex,
-  removeNativeLayer,
-  moveNativeLayer,
 } from "./commands/appearance-native";
 export {
   graphicStyleFileOf,

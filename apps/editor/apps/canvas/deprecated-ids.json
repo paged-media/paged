@@ -150,6 +150,138 @@
       "replacement": "menu:Object/Pathfinder/Minus back",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersRounded",
+      "replacement": "command:paged.corners.rounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/Rounded",
+      "replacement": "menu:Object/Corners/Rounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersInverseRounded",
+      "replacement": "command:paged.corners.inverseRounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/Inverse rounded",
+      "replacement": "menu:Object/Corners/Inverse rounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersBevel",
+      "replacement": "command:paged.corners.bevel",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/Bevel",
+      "replacement": "menu:Object/Corners/Bevel",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersFancy",
+      "replacement": "command:paged.corners.fancy",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/Fancy",
+      "replacement": "menu:Object/Corners/Fancy",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersNone",
+      "replacement": "command:paged.corners.none",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Corners/None",
+      "replacement": "menu:Object/Corners/None",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceAddFill",
+      "replacement": "command:paged.appearance.addFill",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceAddStroke",
+      "replacement": "command:paged.appearance.addStroke",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceClear",
+      "replacement": "command:paged.appearance.clear",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceRemoveLayer",
+      "replacement": "command:paged.appearance.removeLayer",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.appearanceMoveLayer",
+      "replacement": "command:paged.appearance.moveLayer",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Appearance/Add fill",
+      "replacement": "menu:Object/Appearance/Add fill",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Appearance/Add stroke",
+      "replacement": "menu:Object/Appearance/Add stroke",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Appearance/Clear",
+      "replacement": "menu:Object/Appearance/Clear",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashSolid",
+      "replacement": "command:paged.stroke.dashSolid",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDashed",
+      "replacement": "command:paged.stroke.dashDashed",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDotted",
+      "replacement": "command:paged.stroke.dashDotted",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDashDot",
+      "replacement": "command:paged.stroke.dashDashDot",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }
