@@ -3,6 +3,9 @@
 - **Status:** Accepted 2026-10-24. Amends the isolation contract: `CLAUDE.md` ("ISOLATION
   CONTRACT"), [`concept.md` §2.1](../concept.md) and [ADR 456](456-codecs.md). Follows from
   [PM-0014](../../../../docs/adr/PM-0014-capability-layering.md).
+  Superseded in part 2026-11-01 by [PM-0017](../../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md): the isolation contract is retired for
+  every part of the module, TypeScript included, and the limits below ("nothing else in the
+  engine", "TypeScript unchanged") fall away.
 - **Scope:** the module's Rust workspace (`Cargo.toml`, `deny.toml`, `moon.yml`), `image-core`,
   `image-psd`, `image-codecs`, `image-cms`, `image-kernels`; the guards in
   `.github/workflows/image-ci.yml`
@@ -68,3 +71,14 @@ modules already path-depend on the engine's model crates (doc ADR 606, slide ADR
 - [PM-0014](../../../../docs/adr/PM-0014-capability-layering.md) — the layering this applies
 - [ADR 456](456-codecs.md), [ADR 458](458-psd-preservation.md), [ADR 451](451-one-kernel-definition.md) — the codecs, PSD and kernels that move
 - [ADR 315](../../../../platform/extensions/docs/adr/315-isolation-contract.md) — the contract extensions keep
+
+## Amendment (2026-11-01): the isolation contract is retired altogether
+
+[PM-0017](../../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md) makes the built-in modules part of the core. Two limits of this record no longer hold:
+"nothing else in the engine, and nothing in the editor, is a dependency" and "TypeScript:
+unchanged". The module's Rust may path-depend on any `engine/core` crate, on `platform/shared/*`
+and on another built-in (acyclic, declared in `moon.yml`). Its TypeScript still imports the
+contract, `platform/shared/*`, its own packages and react (the lint rule of PM-0003), and reaches
+other modules through the host's doors, but the module's `CLAUDE.md` no longer calls this an
+isolation contract. What holds: the raster crates live in the engine and the aliases keep the
+old crate names; the guards that move with a crate stay with it.

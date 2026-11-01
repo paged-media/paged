@@ -29,7 +29,7 @@ stood, for decisions made earlier; their status says so.
 | [463](463-one-undo-list.md) | One undo list for pixels and the layer stack, reachable from the host | Accepted 2026-10-04 |
 | [464](464-layers-at-their-own-bounds.md) | Layers live at their own bounds | Accepted 2026-10-05 |
 | [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450; amended 2026-10-23: a mask as data) |
-| [466](466-core-raster-crates-are-shared.md) | The engine's raster crates are shared: the module's Rust may depend on them | Accepted 2026-10-24 (amends the isolation contract and 456) |
+| [466](466-core-raster-crates-are-shared.md) | The engine's raster crates are shared: the module's Rust may depend on them | Accepted 2026-10-24 (amends the isolation contract and 456); superseded in part 2026-11-01 (PM-0017: no isolation contract left) |
 | [467](467-cpu-resample-for-headless-actions.md) | The CPU resample is a supported backend for headless and batch actions | Accepted 2026-10-25 (an exception to 450) |
 | [468](468-the-module-reads-and-writes-through-paged-raster.md) | The module reads and writes every raster through `paged-raster` | Accepted 2026-10-25 (amends 456) |
 | [469](469-patchmatch-retouching.md) | Retouching searches with multi-resolution PatchMatch; the vote is a kernel with a CPU twin | Accepted 2026-10-24 (amends 450 for that twin) |
