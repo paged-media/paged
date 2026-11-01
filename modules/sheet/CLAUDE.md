@@ -91,16 +91,16 @@ Rules for every code change in this repo:
   output into host mutations. **Never implement an Excel-like operation
   in TypeScript** — if the bundle seems to need one, the missing piece
   is a `sheet-js` API.
-- **ISOLATION CONTRACT, superset (§2.1).** Zero core contact AND zero
-  inter-plugin contact: the only `@paged-media/*` dependencies are
-  `plugin-api`, `plugin-sdk`, and published package contracts — never
-  `plugin-image` or any other plugin, not at build time, runtime, or via
-  side channels, even co-installed. (`paged.draw` chart lowering in T2
-  is a CORE SDK surface, not a plugin.) TS guard: the
-  contract-import lint rule (`/bunfig.toml`, PM-0003); Rust guard: `deny.toml`
-  [sources] + the cargo-tree CI guards. SDK gaps become
-  RFI §6 entries / plugin-platform RFCs — NEVER core
-  modifications from this project.
+- **BUILT-IN, PART OF THE CORE (PM-0017).** The Rust crates may path-depend on
+  `platform/shared/*`, on the engine and on other built-ins, at the same commit
+  and without cycles (declared in `moon.yml`); paged.slide already builds on
+  `sheet-core`, `sheet-calc`, `sheet-format`, `sheet-chart` and `sheet-xlsx` for
+  its live charts (slide ADR 715). The TS packages import only `plugin-api`,
+  `plugin-sdk` and `platform/shared/*` (the contract-import lint rule,
+  `/bunfig.toml`, PM-0003); what they need from another module comes through the
+  host's doors. A capability another module or the engine also needs (themes,
+  comments, DrawingML paint, chart layout primitives) belongs in the engine or in
+  `platform/shared`, not here (PM-0014, PM-0017).
 - **REGISTRY-DRIVEN DISPATCH (§7/§12.2).** The function table is
   generated at build time from `registry/functions/*.yaml`
   (`sheet-core/build.rs` emits the name→id table; `sheet-fn/build.rs`

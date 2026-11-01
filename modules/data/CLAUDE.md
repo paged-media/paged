@@ -117,18 +117,18 @@ Rules for every code change in this repo:
   file input, and translating the engine's already-computed output into host
   mutations. **Never implement a binding/expression operation in TypeScript** —
   if the bundle seems to need one, the missing piece is a `data-js` API.
-- **ISOLATION CONTRACT, superset (§2.1).** Zero core contact AND zero
-  inter-plugin contact: the only `@paged-media/*` dependencies are `plugin-api`,
-  `plugin-sdk`, and published package contracts — never `plugin-image`,
-  `plugin-sheet`, or any other plugin, not at build time, runtime, or via side
-  channels, even co-installed. Overlaps resolve through CORE SDK surfaces
-  (image placeholders → the core asset mechanism; dynamic tables → the core
-  native table contract via OUR OWN lowering code; charts → `paged.draw`),
-  never a sibling plugin. The §7.1 data-provider role is a CORE SDK contract —
-  `paged.data` registers a provider and never knows its consumers. TS guard: the
-  contract-import lint rule (`/bunfig.toml`, PM-0003); Rust guard: `deny.toml` [sources] + the
-  cargo-tree CI guards. SDK gaps become RFI §6 entries /
-  plugin-platform RFCs — NEVER core modifications from this project.
+- **BUILT-IN, PART OF THE CORE (PM-0017).** The Rust crates may path-depend on
+  the engine, on `platform/shared/*` and on other built-ins, at the same commit
+  and without cycles (declared in `moon.yml`); the data engine's crates already
+  live in `engine/core/crates/paged-data-*` (PM-0015). The TS packages import only
+  `plugin-api`, `plugin-sdk` and `platform/shared/*` (the contract-import lint
+  rule, `/bunfig.toml`, PM-0003); what they need from another module (image
+  placeholders → the core asset mechanism; dynamic tables → the core native table
+  contract; charts → `paged.draw`; sheet data → `data@1`) comes through the host's
+  doors. The §7.1 data-provider role is a CORE SDK contract — `paged.data`
+  registers a provider and never knows its consumers. A capability another module
+  or the engine also needs belongs in the engine or in `platform/shared`
+  (PM-0014, PM-0017).
 - **LICENSE-BOUNDARY GATE (§3 — unique to this plugin, decisive).** NO
   source-available / ELv2 / SSPL / proprietary data engine is ever embedded,
   linked, or redistributed. Such tools are integrated, if at all, ONLY by

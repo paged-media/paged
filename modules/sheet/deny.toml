@@ -1,10 +1,10 @@
 # cargo-deny configuration for paged.sheet.
 # Run:  cargo deny check          (CI runs `check licenses bans sources`)
 #
-# This doubles as the SDK-only rule's Rust half (spec §2.1 / §4 dep
-# rule 4): [sources] denies unknown registries/git, so a path/git
-# reach-around into core/editor internals — or into another plugin —
-# cannot land silently.
+# [sources] denies unknown registries and git sources, so a dependency cannot
+# arrive from somewhere unvetted. It does not check path dependencies (cargo-deny
+# cannot); which built-ins and engine crates this workspace may path-depend on
+# is PM-0017's rule, kept by review and the cargo-tree CI guards.
 
 [advisories]
 version = 2

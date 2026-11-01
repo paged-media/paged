@@ -62,18 +62,18 @@ Rules for every code change in this repo:
   Lowered IR into host mutations. **Never implement a DOCX operation in
   TypeScript** — if the bundle seems to need one, the missing piece is a `docx-js`
   API.
-- **ISOLATION CONTRACT, built-in form (PM-0002).** Zero inter-plugin contact:
-  the TS packages depend only on `plugin-api`, `plugin-sdk`, `platform/shared/*`
-  and published contracts — never another plugin, not at build time, runtime, or
-  via side channels. In Rust ONE crate reaches the engine: `docx-skeleton` builds
-  the standalone-open skeleton with the engine's model crates (`paged-model`,
-  `paged-scene`, `paged-store`, path dependencies at the same commit, ADR 606).
-  Everything else stays engine-free: `docx-lower` is pure model→IR and reaches
-  the engine's model crate only for its value types, through the shared
-  DrawingML mapper `dml-native` (doc ADR 618); the open document is reached
-  only through the host (`host.document.mutate`, `host.nativeDocument.open`). Rust guard: `deny.toml`
-  `[sources]`. TS guard: the contract-import lint rule (`/bunfig.toml`, PM-0003).
-  SDK gaps become RFI entries, not engine changes made from here.
+- **BUILT-IN, PART OF THE CORE (PM-0017).** The Rust crates may path-depend on the
+  engine (`paged-model`, `paged-scene`, `paged-store`, …), on `platform/shared/*`
+  and on other built-ins, at the same commit and without cycles (declared in
+  `moon.yml`). Today `docx-skeleton` builds the standalone-open skeleton with the
+  engine's model crates (ADR 606), and `docx-lower` reaches the model crate through
+  the shared DrawingML mapper `dml-native` (ADR 618); `docx-lower` stays pure
+  `docx-core → LoweredDoc`, and the open document is reached only through the host
+  (`host.document.mutate`, `host.nativeDocument.open`). The TS packages import only
+  `plugin-api`, `plugin-sdk` and `platform/shared/*` (the contract-import lint rule,
+  `/bunfig.toml`, PM-0003); what they need from another module comes through the
+  host's doors. A capability another module or the engine also needs belongs in the
+  engine or in `platform/shared`, not here (PM-0014, PM-0017).
 - **PURE LOWERING.** `docx-lower` is pure `docx-core → LoweredDoc`;
   `doc-host-model` is pure `LoweredDoc → Mutation[]`. Every behavior change lands
   with a test.
