@@ -4872,7 +4872,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/rewrite.rs",
-        "line": 8667
+        "line": 8673
       }
     },
     {
@@ -17204,7 +17204,7 @@
       ],
       "source": {
         "file": "crates/idml-import/src/lib.rs",
-        "line": 460
+        "line": 462
       },
       "exportSource": {
         "file": "crates/idml-export/src/emit.rs",
@@ -24641,7 +24641,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/rewrite.rs",
-        "line": 8608
+        "line": 8614
       }
     },
     {
@@ -25031,7 +25031,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/rewrite.rs",
-        "line": 8561
+        "line": 8567
       }
     },
     {
@@ -25749,7 +25749,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/rewrite.rs",
-        "line": 8609
+        "line": 8615
       }
     },
     {
