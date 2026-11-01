@@ -26,9 +26,31 @@ const P2: &str = "{66666666-7777-8888-9999-000000000000}";
 const T1: &str = "{AAAAAAAA-0000-0000-0000-000000000001}";
 const T2: &str = "{AAAAAAAA-0000-0000-0000-000000000002}";
 
-const CT_HEAD: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>"#;
-const CT_BASE: &str = r#"<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>"#;
+/// `[Content_Types].xml` of the fixtures, written with the shared owner.
+fn content_types(with_thread: bool) -> String {
+    let mut ct = paged_ooxml::content_types::ContentTypes::new();
+    ct.add_default(
+        "rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
+    );
+    ct.add_default("xml", "application/xml");
+    ct.add_override(
+        "/xl/workbook.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    );
+    ct.add_override(
+        "/xl/worksheets/sheet1.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+    );
+    if with_thread {
+        ct.add_default("vml", crate::comment_edit::CT_VML);
+        ct.add_override("/xl/comments1.xml", crate::comment_edit::CT_COMMENTS);
+        ct.add_override("/xl/threadedComments/threadedComment1.xml", CT_THREADED);
+        ct.add_override("/xl/persons/person.xml", CT_PERSON);
+    }
+    ct.render()
+}
+
 const RELS_HEAD: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#;
 
@@ -46,12 +68,12 @@ fn zip_of(parts: &[(String, String)]) -> Vec<u8> {
     buf
 }
 
-fn common(ct_extra: &str, wb_rels_extra: &str) -> Vec<(String, String)> {
+fn common(with_thread: bool, wb_rels_extra: &str) -> Vec<(String, String)> {
     let s = |a: &str, b: String| (a.to_string(), b);
     vec![
         s(
             "[Content_Types].xml",
-            format!("{CT_HEAD}{CT_BASE}{ct_extra}</Types>"),
+            content_types(with_thread),
         ),
         s(
             "_rels/.rels",
@@ -76,7 +98,7 @@ fn common(ct_extra: &str, wb_rels_extra: &str) -> Vec<(String, String)> {
 
 /// A workbook with no comments at all.
 fn plain() -> Vec<u8> {
-    let mut p = common("", "");
+    let mut p = common(false, "");
     p.push((
         "xl/worksheets/sheet1.xml".into(),
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -90,7 +112,7 @@ fn plain() -> Vec<u8> {
 /// a reply, two persons, the paired note and its VML shape.
 fn threaded() -> Vec<u8> {
     let mut p = common(
-        "<Default Extension=\"vml\" ContentType=\"application/vnd.openxmlformats-officedocument.vmlDrawing\"/><Override PartName=\"/xl/comments1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml\"/><Override PartName=\"/xl/threadedComments/threadedComment1.xml\" ContentType=\"application/vnd.ms-excel.threadedcomments+xml\"/><Override PartName=\"/xl/persons/person.xml\" ContentType=\"application/vnd.ms-excel.person+xml\"/>",
+        true,
         "<Relationship Id=\"rId2\" Type=\"http://schemas.microsoft.com/office/2017/10/relationships/person\" Target=\"persons/person.xml\"/>",
     );
     let s = |a: &str, b: String| (a.to_string(), b);
