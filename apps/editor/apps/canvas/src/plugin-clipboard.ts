@@ -56,6 +56,7 @@
 // throw the SDK door swallows (read → null, write → logged no-op), so this
 // module never has to special-case them.
 
+import { escapeXmlText } from "@paged-media/helpers";
 import type { ClipboardBackend } from "@paged-media/plugin-sdk";
 import type {
   ClipboardPayload,
@@ -99,18 +100,15 @@ function tsvToRows(text: string): string[][] {
   return body.split("\n").map((line) => line.split("\t"));
 }
 
-/** Escape a cell's text for safe inclusion in the HTML `<table>` body. */
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 /** Rows → a minimal `<table>` HTML fragment. Excel/Sheets/Word read this
  *  as a real grid on paste (cells become cells, not tab text). */
 function rowsToHtmlTable(rows: readonly (readonly string[])[]): string {
   const body = rows
     .map(
       (r) =>
-        "<tr>" + r.map((c) => `<td>${escapeHtml(c)}</td>`).join("") + "</tr>",
+        "<tr>" +
+        r.map((c) => `<td>${escapeXmlText(c)}</td>`).join("") +
+        "</tr>",
     )
     .join("");
   return `<table>${body}</table>`;

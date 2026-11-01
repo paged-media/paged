@@ -103,6 +103,24 @@ function mount(rows: CommentSummary[], scale = 2) {
 const settle = () => act(() => new Promise((r) => setTimeout(r, 0)));
 
 describe("comment pins [editor-shell.comments]", () => {
+  test("a cell thread stands at its cell when the owning module resolves the address", () => {
+    const cell = row({
+      id: "c1",
+      threadId: "c1",
+      page: "p1",
+      at: [40, 50],
+      anchor: { kind: "cell", item: "s1", address: "Sheet1!B3" },
+    } as never);
+    const resolve = (item: string, address: string) =>
+      item === "s1" && address === "Sheet1!B3"
+        ? { rect: [30, 12, 60, 18] }
+        : null;
+    expect(pinsOf([cell], resolve)[0]!.at).toEqual([70, 62]);
+    // An address nobody resolves, or no resolver at all: the item's top-left.
+    expect(pinsOf([cell], () => null)[0]!.at).toEqual([40, 50]);
+    expect(pinsOf([cell])[0]!.at).toEqual([40, 50]);
+  });
+
   test("a pin per document thread that stands on a page, with its reply count", () => {
     expect(pinsOf(ROWS)).toEqual([
       {

@@ -54,9 +54,45 @@ export interface CommentPin {
   replies: number;
 }
 
+/** Where a module's address of an item points (`contribute.commentAnchor`,
+ *  extensions ADR 1101): the shared registry the canvas injects into every
+ *  bundle host. */
+export interface CommentAnchorLookup {
+  resolve(item: string, address: string): { rect?: number[] } | null;
+  onDidChange(listener: () => void): { dispose(): void };
+}
+
+let lookup: CommentAnchorLookup | null = null;
+let lookupVersion = 0;
+const lookupListeners = new Set<() => void>();
+let lookupSubscription: { dispose(): void } | null = null;
+
+/** The canvas hands over the registry once, at mount. */
+export function setCommentAnchorLookup(next: CommentAnchorLookup | null) {
+  lookupSubscription?.dispose();
+  lookup = next;
+  lookupSubscription =
+    next?.onDidChange(() => {
+      lookupVersion += 1;
+      for (const l of [...lookupListeners]) l();
+    }) ?? null;
+  lookupVersion += 1;
+  for (const l of [...lookupListeners]) l();
+}
+
+const subscribeLookup = (l: () => void) => {
+  lookupListeners.add(l);
+  return () => void lookupListeners.delete(l);
+};
+
 /** The pins of a `comments` collection: one per document thread that stands
- *  on a page, in the engine's order. */
-export function pinsOf(rows: readonly CommentSummary[]): CommentPin[] {
+ *  on a page, in the engine's order. A `cell` thread stands at its cell when
+ *  the owning module can say where the address is, else at its item's
+ *  top-left. */
+export function pinsOf(
+  rows: readonly CommentSummary[],
+  resolve: CommentAnchorLookup["resolve"] | null = null,
+): CommentPin[] {
   const replies = new Map<string, number>();
   for (const r of rows) {
     if (r.parentId) replies.set(r.parentId, (replies.get(r.parentId) ?? 0) + 1);
@@ -64,10 +100,16 @@ export function pinsOf(rows: readonly CommentSummary[]): CommentPin[] {
   const pins: CommentPin[] = [];
   for (const r of rows) {
     if (r.parentId || !r.threadId || r.orphaned || !r.page || !r.at) continue;
+    let at: [number, number] = [r.at[0], r.at[1]];
+    const anchor = r.anchor;
+    if (resolve && anchor?.kind === "cell") {
+      const rect = resolve(anchor.item, anchor.address)?.rect;
+      if (rect && rect.length >= 2) at = [at[0] + rect[0]!, at[1] + rect[1]!];
+    }
     pins.push({
       id: r.id,
       page: r.page,
-      at: [r.at[0], r.at[1]],
+      at,
       initials: initialsOf(r),
       resolved: r.resolved,
       replies: replies.get(r.id) ?? 0,
@@ -98,7 +140,15 @@ function CommentPinsRender(props: OverlayProps) {
     () => getFocusedThread(scope),
     () => null,
   );
-  const pins = pinsOf(rows ?? []);
+  useSyncExternalStore(
+    subscribeLookup,
+    () => lookupVersion,
+    () => 0,
+  );
+  const pins = pinsOf(
+    rows ?? [],
+    lookup ? (i, a) => lookup!.resolve(i, a) : null,
+  );
   const inv = 1 / props.camera.scale;
 
   return (

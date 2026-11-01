@@ -1620,6 +1620,9 @@ dependencies = [
 [[package]]
 name = "paged-blend"
 version = "0.0.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "paged-color"

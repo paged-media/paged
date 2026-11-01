@@ -64,6 +64,11 @@ pub mod formulas;
 /// sixteen PDF modes first, as the display list always had them — and
 /// carries no meaning; [`BlendMode::MENU`] is the order a picker lists.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
 pub enum BlendMode {
     #[default]
     Normal,

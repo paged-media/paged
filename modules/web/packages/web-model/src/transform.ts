@@ -44,6 +44,7 @@
 // avoid.
 // =================================================================
 
+import { escapeXmlText } from "@paged-media/helpers";
 import type { WebDiagnostic } from "./diagnose";
 import type { TemplateVars, WebFrameSource } from "./source";
 
@@ -327,8 +328,5 @@ export function boundNamesIn(
 }
 
 function escapeHtmlText(v: unknown): string {
-  return String(v)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return escapeXmlText(String(v));
 }

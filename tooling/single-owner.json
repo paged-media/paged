@@ -3,28 +3,26 @@
     {
       "name": "xml-escape-by-hand",
       "description": "escape XML with paged_ooxml::xml::escape_attr / escape_text, not a replace chain",
-      "owner": ["platform/shared/ooxml/src/xml.rs"],
+      "owner": [
+        "platform/shared/ooxml/src/xml.rs",
+        "platform/shared/helpers/src/escape.ts"
+      ],
       "patterns": [
         "replace\\(\\s*'&'\\s*,\\s*\"&amp;\"\\s*\\)",
         "replace\\(\\s*/&/g\\s*,\\s*[\"']&amp;[\"']"
       ],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
       "baseline": [
-        "apps/editor/apps/canvas/src/clipboard-commands.ts",
-        "apps/editor/apps/canvas/src/plugin-clipboard.ts",
         "apps/editor/apps/canvas/tests/fidelity/dashboard.ts",
         "engine/core/crates/paged-gen/src/samples/xref.rs",
         "engine/core/crates/paged-store/src/package.rs",
-        "modules/data/packages/data-bundle/src/datamerge-export.ts",
         "modules/doc/docx-conformance/src/first_fit.rs",
         "modules/sheet/packages/sheet-host-model/src/grid.ts",
         "modules/sheet/sheet-chart/tests/kinds.rs",
         "modules/sheet/sheet-conformance/tests/it/locale.rs",
         "modules/sheet/sheet-conformance/tests/it/oracle_fixes.rs",
-        "modules/web/packages/web-bundle/src/template-fields.ts",
         "modules/web/packages/web-bundle/test/conformance/source-roundtrip.spec.ts",
         "modules/web/packages/web-model/src/source-text.ts",
-        "modules/web/packages/web-model/src/transform.ts",
         "platform/shared/test-kit/src/gestures/fixture-idml.ts",
         "tooling/js/bun-junit.mjs"
       ]
@@ -95,7 +93,6 @@
       "baseline": [
         "engine/core/crates/paged-compose/src/scene_layer.rs",
         "engine/core/crates/paged-psd/src/abr/blend.rs",
-        "engine/core/crates/paged-psd/src/effects.rs",
         "modules/image/image-kernels/src/compose_twin.rs",
         "modules/web/packages/web-render/src/display_list.rs",
         "modules/web/packages/web-render/src/wire.rs"

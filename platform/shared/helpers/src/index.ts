@@ -41,6 +41,7 @@ export {
   labelKey,
   type LabelEnvelope,
 } from "./label.ts";
+export { escapeXmlAttr, escapeXmlText } from "./escape.ts";
 export { zip, type ZipOptions } from "./zip.ts";
 export {
   isApprovedScript,

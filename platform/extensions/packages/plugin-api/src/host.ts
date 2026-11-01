@@ -86,6 +86,7 @@ import type {
 } from "./binding-provider.js";
 import type { ClipboardSurface } from "./clipboard.js";
 import type { MlSurface } from "./ml.js";
+import type { CommentAnchorContribution, CommentsSurface } from "./comments.js";
 import type { MutationInput } from "./mutations.js";
 import type { PluginManifest, WasmArtifact } from "./manifest.js";
 import type { SchemaPanelContribution } from "./panel-schema.js";
@@ -510,6 +511,11 @@ export interface ContributionSurface {
    */
   menu(contribution: MenuContribution): Disposable;
   overlay(contribution: OverlayContribution): Disposable;
+  /** Tell the host where a `cell` comment anchor of an item this module
+   *  owns points (extensions ADR 1101). Probe
+   *  `supports("contribute.commentAnchor@1")`: true when the host reads
+   *  the resolvers; otherwise a no-op. */
+  commentAnchor(contribution: CommentAnchorContribution): Disposable;
   /**
    * Register an EDIT CONTEXT (W3.2, closes B-02): a double-click (or
    * programmatic) entry on a content type that pushes a scoped context
@@ -3811,6 +3817,12 @@ export interface BundleHost {
    *  `supports("ml.<capability>@1")` is true only while a provider for it
    *  is installed and healthy, and a call without one rejects. */
   readonly ml: MlSurface;
+  /** The COMMENTS door (extensions ADR 1101): the document's comment threads
+   *  (engine ADR 1055) and six writes, backed by the document door. Always
+   *  present; `supports("comments@1")`. Reads need
+   *  `capabilities.document.read`; a write without
+   *  `capabilities.document.write` answers `{ ok: false, reason }`. */
+  readonly comments: CommentsSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** ADR 025 — the local flight recorder. Probe `supports("journal@1")`
    *  before relying on it reaching a buffer; calling it is always safe. */

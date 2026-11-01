@@ -75,6 +75,14 @@ export {
   type FakeMlProvider,
   type FakeMlProviderOptions,
 } from "./testing.js";
+// Extensions ADR 1101 — the comments door's surface builder, the shared
+// anchor registry behind `contribute.commentAnchor`, and the row grouping.
+export {
+  createCommentAnchorRegistry,
+  createCommentsSurface,
+  threadsOf,
+  type CommentAnchorBackend,
+} from "./doors-comments.js";
 // Extensions ADR 1100 — the ML doors' shared backend, the request checks,
 // and the client of the local generative host (Tier B) with its provider.
 export {

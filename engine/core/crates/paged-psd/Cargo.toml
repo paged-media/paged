@@ -24,7 +24,7 @@ miniz_oxide = "0.9"
 serde = { workspace = true, optional = true }
 
 [features]
-serde = ["dep:serde"]
+serde = ["dep:serde", "paged-blend/serde"]
 
 [dev-dependencies]
 # The optional Photoshop-presets lane (tests/it/presets_photoshop.rs).

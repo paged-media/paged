@@ -41,6 +41,7 @@
 // loads), and content that no longer fits the frame answers the field's
 // problem: the value stays written, as an overset story stays typed.
 
+import { escapeXmlText } from "@paged-media/helpers";
 import { defineMessages, t } from "@paged-media/strings";
 import type {
   Address,
@@ -206,8 +207,7 @@ function valueName(field: TemplateFieldRef): string | null {
 
 /** Markup in a value would reach the HTML lane as markup (author variables
  *  are not escaped): the value is stored as text. */
-const escapeText = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const escapeText = escapeXmlText;
 const unescapeText = (s: string) =>
   s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
