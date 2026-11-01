@@ -130,6 +130,29 @@ impl EffectEntrySpec {
                 self.corner_radius = Some(p.corner_radius);
             }
             Effect::Pathfinder(p) => self.op = Some(enum_name(p.op)),
+            Effect::WidthProfile(p) => {
+                self.width_points = Some(p.points.iter().map(|w| [w.t, w.width]).collect());
+            }
+            Effect::Brush(p) => {
+                self.brush_type = Some(enum_name(p.brush_type));
+                if !p.art.is_empty() {
+                    self.art_nodes = Some(p.art.nodes.clone());
+                    self.art_starts = Some(p.art.starts.clone());
+                    self.art_closed = Some(p.art.closed.clone());
+                }
+                self.scale_pct = Some(p.scale_pct);
+                self.spacing_pct = Some(p.spacing_pct);
+                self.scatter_pct = Some(p.scatter_pct);
+                self.rotate_deg = Some(p.rotate_deg);
+                self.rotate_variation_deg = Some(p.rotate_variation_deg);
+                self.size_min_pct = Some(p.size_min_pct);
+                self.flip_along = Some(p.flip_along);
+                self.flip_across = Some(p.flip_across);
+                self.tile_aspect = Some(p.tile_aspect);
+                self.bristles = Some(p.bristles);
+                self.bristle_thickness_pct = Some(p.bristle_thickness_pct);
+                self.seed = Some(p.seed);
+            }
             Effect::Envelope(p) => {
                 // The whole net, the flat one included: a reader edits
                 // points, not an absence.
@@ -315,6 +338,71 @@ impl EffectEntrySpec {
                     "`add`, `subtract`, `intersect` or `exclude`",
                 )?,
             }),
+            EffectKind::WidthProfile => {
+                let pts = self.width_points.clone().unwrap_or_default();
+                if pts.len() > MAX_WIDTH_POINTS {
+                    return Err(format!(
+                        "`widthPoints` holds at most {MAX_WIDTH_POINTS} points, not {}",
+                        pts.len()
+                    ));
+                }
+                if pts.iter().flatten().any(|v| !v.is_finite()) {
+                    return Err("`widthPoints` must be finite".to_string());
+                }
+                if pts.iter().any(|p| p[1] < 0.0) {
+                    return Err("a width point's width is never negative".to_string());
+                }
+                Effect::WidthProfile(
+                    WidthProfileParams {
+                        points: pts
+                            .into_iter()
+                            .map(|[t, width]| WidthPoint { t, width })
+                            .collect(),
+                    }
+                    .normalized(),
+                )
+            }
+            EffectKind::Brush => {
+                let d = BrushParams::default();
+                Effect::Brush(BrushParams {
+                    brush_type: parse_enum(
+                        "brushType",
+                        self.brush_type.as_deref(),
+                        "`art`, `scatter`, `pattern` or `bristle`",
+                    )?,
+                    art: self.brush_art()?,
+                    scale_pct: clamped("scalePct", self.scale_pct, 1.0, 10_000.0)?
+                        .unwrap_or(d.scale_pct),
+                    spacing_pct: clamped("spacingPct", self.spacing_pct, 1.0, 10_000.0)?
+                        .unwrap_or(d.spacing_pct),
+                    scatter_pct: clamped("scatterPct", self.scatter_pct, 0.0, 10_000.0)?
+                        .unwrap_or(0.0),
+                    rotate_deg: clamped("rotateDeg", self.rotate_deg, -360.0, 360.0)?
+                        .unwrap_or(0.0),
+                    rotate_variation_deg: clamped(
+                        "rotateVariationDeg",
+                        self.rotate_variation_deg,
+                        0.0,
+                        180.0,
+                    )?
+                    .unwrap_or(0.0),
+                    size_min_pct: clamped("sizeMinPct", self.size_min_pct, 0.0, 100.0)?
+                        .unwrap_or(d.size_min_pct),
+                    flip_along: self.flip_along.unwrap_or(false),
+                    flip_across: self.flip_across.unwrap_or(false),
+                    tile_aspect: clamped("tileAspect", self.tile_aspect, 0.01, 100.0)?
+                        .unwrap_or(d.tile_aspect),
+                    bristles: self.bristles.map(|b| b.clamp(1, 200)).unwrap_or(d.bristles),
+                    bristle_thickness_pct: clamped(
+                        "bristleThicknessPct",
+                        self.bristle_thickness_pct,
+                        0.1,
+                        100.0,
+                    )?
+                    .unwrap_or(d.bristle_thickness_pct),
+                    seed: self.seed.unwrap_or(0),
+                })
+            }
             EffectKind::Envelope => {
                 let max = EnvelopeParams::MAX_CELLS;
                 let side = |name: &str, v: Option<u32>| match v {
@@ -353,6 +441,48 @@ impl EffectEntrySpec {
                 })
             }
             other => return Err(format!("`{}` is not a vector effect", other.name())),
+        })
+    }
+}
+
+impl EffectEntrySpec {
+    /// A brush's artwork from the flat fields: absent is the kind's
+    /// built-in artwork.
+    fn brush_art(&self) -> Result<BrushArt, String> {
+        let Some(nodes) = &self.art_nodes else {
+            return Ok(BrushArt::default());
+        };
+        if nodes.len() > MAX_ART_NODES {
+            return Err(format!(
+                "`artNodes` holds at most {MAX_ART_NODES} anchors, not {}",
+                nodes.len()
+            ));
+        }
+        if nodes.iter().flatten().any(|v| !v.is_finite()) {
+            return Err("`artNodes` must be finite".to_string());
+        }
+        let starts = self.art_starts.clone().unwrap_or_default();
+        if starts.iter().any(|&s| s as usize >= nodes.len().max(1))
+            || starts.windows(2).any(|w| w[0] >= w[1])
+        {
+            return Err("`artStarts` are increasing indices into `artNodes`".to_string());
+        }
+        let contours = starts.len().max(1);
+        let closed = self
+            .art_closed
+            .clone()
+            .unwrap_or_else(|| vec![true; contours]);
+        if closed.len() != contours {
+            return Err(format!(
+                "`artClosed` names {contours} contour{}, not {}",
+                if contours == 1 { "" } else { "s" },
+                closed.len()
+            ));
+        }
+        Ok(BrushArt {
+            nodes: nodes.clone(),
+            starts,
+            closed,
         })
     }
 }

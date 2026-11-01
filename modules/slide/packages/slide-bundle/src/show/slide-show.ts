@@ -36,6 +36,8 @@ import { createCompositor, type Compositor } from "./compositor.js";
 import { frameScale, type FrameSource, type SceneSource } from "./frames.js";
 import type { SlideScene } from "./scene-source.js";
 import { createInk, type Ink, type Stroke } from "./ink.js";
+import type { MediaReader } from "../media.js";
+import { MediaPlayer } from "./media-player.js";
 import {
   current,
   keyAction,
@@ -269,6 +271,9 @@ export interface ShowViewOptions {
   scenes?: SceneSource;
   /** A player for an animated slide's timing, once its layers are drawn. */
   player?(slide: ShowSlide, scene: SlideScene): Promise<Player | null>;
+  /** Reads the slides' video and audio (slide ADR 718); absent, the
+   *  surface plays none (the presenter console: the audience plays them). */
+  media?: MediaReader;
   now?: () => number;
 }
 
@@ -277,6 +282,8 @@ export interface ShowViewOptions {
 export class ShowView {
   readonly compositor: Compositor;
   readonly ink: Ink;
+  /** The slide's video and audio, when the surface plays them. */
+  readonly media: MediaPlayer | null;
   private readonly end: HTMLElement;
   private readonly win: Window;
   private shown: string | null = null;
@@ -341,11 +348,26 @@ export class ShowView {
     });
     this.end.textContent = t(SHOW.endOfShow);
     container.appendChild(this.end);
-    const click = (e: MouseEvent) => opts.onClick?.(this.hitTrigger(e));
+    this.media = opts.media
+      ? new MediaPlayer(container, win, opts.media, () => {
+          // The compositor's box is in the container's CSS px.
+          const b = this.compositor.box();
+          return { x: b.x, y: b.y, width: b.width, height: b.height };
+        })
+      : null;
+    const click = (e: MouseEvent) => {
+      // A click on a video or audio plays or pauses it (slide ADR 718).
+      if (this.media && this.slide) {
+        const at = this.pagePoint(e);
+        if (at && this.media.click(at[0], at[1])) return;
+      }
+      opts.onClick?.(this.hitTrigger(e));
+    };
     container.addEventListener("click", click);
     const resize = () => {
       this.compositor.resize();
       this.ink.layout(this.compositor.box());
+      this.media?.layout();
     };
     win.addEventListener("resize", resize);
     this.offs.push(
@@ -364,6 +386,19 @@ export class ShowView {
       },
       this.win.devicePixelRatio || 1,
     );
+  }
+
+  /** A click's point on the slide up, pt; null without a slide. */
+  pagePoint(e: { clientX: number; clientY: number }): [number, number] | null {
+    if (!this.slide) return null;
+    const r = this.container.getBoundingClientRect?.();
+    const b = this.compositor.box();
+    const k = b.width / (this.slide.sizePt[0] || 1);
+    if (!(k > 0)) return null;
+    return [
+      (e.clientX - (r?.left ?? 0) - b.x) / k,
+      (e.clientY - (r?.top ?? 0) - b.y) / k,
+    ];
   }
 
   /** The trigger shape under a click, if the slide up has one there. */
@@ -400,6 +435,11 @@ export class ShowView {
     this.compositor.kick();
   }
 
+  /** The media follow the build step. */
+  private followMedia(v: ViewSnapshot): void {
+    this.media?.setStep(v.step);
+  }
+
   private el(): HTMLElement {
     return this.container;
   }
@@ -420,6 +460,7 @@ export class ShowView {
       this.slide = null;
       this.anim?.dispose();
       this.anim = null;
+      this.media?.show(null);
       this.ink.setStrokes([]);
       return;
     }
@@ -434,6 +475,8 @@ export class ShowView {
       this.anim = null;
       this.triggersSeen = 0;
       el.dataset.step = String(v.step);
+      // Leaving a slide stops its media; the new slide's start at its step.
+      this.media?.show(slide, v.step);
       if (next?.anim) this.opts.scenes?.prefetch(next, this.scale(next));
       const { scenes, player } = this.opts;
       if (slide.anim && scenes && player) {
@@ -464,14 +507,17 @@ export class ShowView {
             v.advanced ? slide.transition : null,
           );
           this.ink.layout(this.compositor.box());
+          this.media?.layout();
           el.dataset.frame = "animated";
         })();
       } else {
         this.showFrame(slide, scale, aspect, v.advanced, seq);
       }
-      if (next) this.opts.frames.prefetch(next.pageId, this.scale(next));
+      if (next)
+        this.opts.frames.prefetch(next.pageId, this.scale(next), next.hide);
     } else {
       this.follow(v);
+      this.followMedia(v);
     }
     this.ink.setStrokes(v.strokes);
   }
@@ -485,10 +531,11 @@ export class ShowView {
   ): void {
     const el = this.container;
     {
-      void this.opts.frames.frame(slide.pageId, scale).then((f) => {
+      void this.opts.frames.frame(slide.pageId, scale, slide.hide).then((f) => {
         if (seq !== this.seq) return;
         this.compositor.show(f, aspect, advanced ? slide.transition : null);
         this.ink.layout(this.compositor.box());
+        this.media?.layout();
         el.dataset.frame = f ? "drawn" : "none";
       });
     }
@@ -498,6 +545,7 @@ export class ShowView {
     for (const off of this.offs.splice(0)) off();
     this.anim?.dispose();
     this.anim = null;
+    this.media?.dispose();
     this.compositor.dispose();
     this.ink.dispose();
     this.end.remove();
@@ -589,6 +637,8 @@ export interface ShowSurfaceDeps {
   frames: FrameSource;
   scenes?: SceneSource;
   player?(slide: ShowSlide, scene: SlideScene): Promise<Player | null>;
+  /** The slides' video and audio (slide ADR 718). */
+  media?: MediaReader;
   thumbnail(pageId: string): string | null;
   /** The show is over: leave the presentation. */
   exit(): void;
@@ -610,6 +660,7 @@ export function mountShow(
     frames: deps.frames,
     scenes: deps.scenes,
     player: deps.player,
+    media: deps.media,
     interactive: true,
     onStroke: (pageId, s) => ctl.addStroke(pageId, s),
     onClick: (trigger) => {
@@ -685,7 +736,7 @@ export function mountAudience(
     onMessage(h: (m: unknown) => void): { dispose(): void };
   },
   frames: FrameSource,
-  anims: Pick<ShowSurfaceDeps, "scenes" | "player"> = {},
+  anims: Pick<ShowSurfaceDeps, "scenes" | "player" | "media"> = {},
 ): () => void {
   const doc = el.ownerDocument;
   const stage = doc.createElement("div");
@@ -696,6 +747,7 @@ export function mountAudience(
     frames,
     scenes: anims.scenes,
     player: anims.player,
+    media: anims.media,
     interactive: false,
     onClick: (trigger) =>
       channel.post(

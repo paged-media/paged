@@ -34,6 +34,7 @@ import {
 } from "@paged-media/wasm-boot";
 
 import type {
+  PathSeg,
   EffectList,
   GalleryPreset,
   PlayerEvent,
@@ -597,6 +598,16 @@ export class SlideEngine {
   editTiming(timing: Timing | null, edit: TimingEdit): Timing | null {
     return this.anim<{ timing: Timing | null }>({ op: "edit", timing, edit })
       .timing;
+  }
+
+  /** A motion path as segments the canvas editor shows (absolute slide
+   *  fractions from where the shape stands), and back (slide ADR 714). */
+  pathSegments(path: string): PathSeg[] {
+    return this.anim({ op: "pathSegments", path });
+  }
+
+  pathWrite(segments: readonly PathSeg[]): string {
+    return this.anim({ op: "pathWrite", segments });
   }
 
   /** A player for one slide's timing: compiled once, evaluated per frame. */

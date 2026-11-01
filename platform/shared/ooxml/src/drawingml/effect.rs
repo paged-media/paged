@@ -39,6 +39,14 @@ pub struct Effects {
     pub reflection: Option<Reflection>,
     pub blur: Option<Blur>,
     pub fill_overlay: Option<FillOverlay>,
+    /// The shape's 3-D look (`a:scene3d`, `a:sp3d`), read beside the
+    /// effect list from the same properties ([`three_d`]).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub three_d: Option<Shape3d>,
+    /// The properties held a 3-D look and no effect list: the list is
+    /// inherited (from a shape style's effect reference), the 3-D look not.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub three_d_only: bool,
     /// Local names of the children not modelled, in file order.
     #[cfg_attr(feature = "serde", serde(default))]
     pub unknown: Vec<String>,
@@ -55,7 +63,101 @@ impl Effects {
             && self.reflection.is_none()
             && self.blur.is_none()
             && self.fill_overlay.is_none()
+            && self.three_d.as_ref().is_none_or(Shape3d::is_flat)
     }
+}
+
+/// A shape's 3-D properties: the scene it is seen in (`a:scene3d`) and
+/// its own depth (`a:sp3d`, ECMA-376 §20.1.5.12). Lengths in EMU.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Shape3d {
+    /// `a:camera prst` (`orthographicFront` is the flat view).
+    pub camera: Option<String>,
+    /// The camera carries a rotation (`a:camera/a:rot`) or a field of view.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub camera_turned: bool,
+    /// `a:lightRig rig` and `dir` (`threePt`, `t` by default).
+    pub light_rig: Option<String>,
+    pub light_dir: Option<String>,
+    /// `a:bevelT`, `a:bevelB`.
+    pub bevel_top: Option<Bevel>,
+    pub bevel_bottom: Option<Bevel>,
+    /// `extrusionH`, `contourW`, `z` (EMU) and `prstMaterial`.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub extrusion: i64,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub contour: i64,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub z: i64,
+    pub material: Option<String>,
+}
+
+impl Shape3d {
+    /// Nothing 3-D to draw: no bevel, extrusion or contour.
+    pub fn is_flat(&self) -> bool {
+        self.bevel_top.is_none()
+            && self.bevel_bottom.is_none()
+            && self.extrusion == 0
+            && self.contour == 0
+    }
+}
+
+/// `a:bevelT` / `a:bevelB`: `w` and `h` in EMU (6 pt each by default),
+/// `prst` one of the twelve bevel presets (`circle` by default).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Bevel {
+    pub w: i64,
+    pub h: i64,
+    pub preset: String,
+}
+
+fn bevel(el: Option<&El>) -> Option<Bevel> {
+    let b = el?;
+    Some(Bevel {
+        w: b.attr_i64("w").unwrap_or(76_200),
+        h: b.attr_i64("h").unwrap_or(76_200),
+        preset: b.attr("prst").unwrap_or("circle").to_string(),
+    })
+}
+
+/// The 3-D properties among a shape's properties (`a:spPr`, an
+/// `a:effectStyle`), `None` when it has neither `a:scene3d` nor `a:sp3d`.
+pub fn three_d(parent: &El) -> Option<Shape3d> {
+    let scene = parent.child(Ns::A, "scene3d");
+    let sp = parent.child(Ns::A, "sp3d");
+    if scene.is_none() && sp.is_none() {
+        return None;
+    }
+    let camera = scene.and_then(|s| s.child(Ns::A, "camera"));
+    let rig = scene.and_then(|s| s.child(Ns::A, "lightRig"));
+    Some(Shape3d {
+        camera: camera.and_then(|c| c.attr("prst")).map(str::to_string),
+        camera_turned: camera
+            .is_some_and(|c| c.child(Ns::A, "rot").is_some() || c.attr("fov").is_some()),
+        light_rig: rig.and_then(|r| r.attr("rig")).map(str::to_string),
+        light_dir: rig.and_then(|r| r.attr("dir")).map(str::to_string),
+        bevel_top: bevel(sp.and_then(|s| s.child(Ns::A, "bevelT"))),
+        bevel_bottom: bevel(sp.and_then(|s| s.child(Ns::A, "bevelB"))),
+        extrusion: sp.and_then(|s| s.attr_i64("extrusionH")).unwrap_or(0),
+        contour: sp.and_then(|s| s.attr_i64("contourW")).unwrap_or(0),
+        z: sp.and_then(|s| s.attr_i64("z")).unwrap_or(0),
+        material: sp.and_then(|s| s.attr("prstMaterial")).map(str::to_string),
+    })
+}
+
+/// A shape's effects and 3-D look: [`effects_in`] with [`three_d`]
+/// beside it; `None` when it has neither.
+pub fn shape_effects(parent: &El, rels: Rels) -> Option<Effects> {
+    let mut fx = container(parent).map(|e| effects(e, rels));
+    if let Some(t) = three_d(parent) {
+        let only = fx.is_none();
+        let fx = fx.get_or_insert_with(Effects::default);
+        fx.three_d = Some(t);
+        fx.three_d_only = only;
+    }
+    fx
 }
 
 /// `a:outerShdw` / `a:innerShdw`. The scale, skew and alignment are the

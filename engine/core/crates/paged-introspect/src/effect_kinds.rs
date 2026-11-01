@@ -107,6 +107,13 @@ pub struct EffectKindRow {
     /// and `expandAppearance` keeps its result.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub vector: bool,
+    /// Engine ADR 1053 — a stroke style: a vector effect that draws the
+    /// item's STROKE as artwork along the path (a width profile, a
+    /// brush). Applied from the Stroke and Brushes panels and the Width
+    /// tool, not the Effect menu: its category ("stroke") is not one of
+    /// [`EFFECT_CATEGORIES`].
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub stroke_style: bool,
 }
 
 const ALL_TARGETS: &[&str] = &["object", "fill", "stroke", "content"];
@@ -219,6 +226,7 @@ fn indesign(kind: EffectKind, title: &'static str, stem: &str) -> EffectKindRow 
         enable_path,
         field_paths,
         vector: false,
+        stroke_style: false,
     }
 }
 
@@ -240,6 +248,7 @@ fn stack_only(
         enable_path: None,
         field_paths: Vec::new(),
         vector: false,
+        stroke_style: false,
     }
 }
 
@@ -278,6 +287,29 @@ const WARP_STYLES: &[&str] = &[
 ];
 const SHAPES: &[&str] = &["rectangle", "roundedRectangle", "ellipse"];
 const PATHFINDER_OPS: &[&str] = &["add", "subtract", "intersect", "exclude"];
+const BRUSH_TYPES: &[&str] = &["art", "scatter", "pattern", "bristle"];
+
+/// Engine ADR 1053 — a stroke style's row.
+fn stroke_style(kind: EffectKind, title: &'static str, params: Vec<EffectParam>) -> EffectKindRow {
+    EffectKindRow {
+        stroke_style: true,
+        ..vector(kind, title, "stroke", params)
+    }
+}
+
+fn list_of_lists(field: &'static str, title: &'static str) -> EffectParam {
+    p(
+        field,
+        title,
+        ContractType::List {
+            of: Box::new(ContractType::List {
+                of: Box::new(num(None)),
+            }),
+        },
+        None,
+        None,
+    )
+}
 
 fn bool_p(field: &'static str, title: &'static str, default: bool) -> EffectParam {
     p(
@@ -718,6 +750,73 @@ pub fn describe(kind: EffectKind) -> EffectKindRow {
                 vec![choice("op", "Shape mode", PATHFINDER_OPS, "add")],
             )
         },
+        K::WidthProfile => stroke_style(
+            kind,
+            "Width profile",
+            vec![list_of_lists("widthPoints", "Width points")],
+        ),
+        K::Brush => stroke_style(
+            kind,
+            "Brush",
+            vec![
+                choice("brushType", "Brush type", BRUSH_TYPES, "art"),
+                list_of_lists("artNodes", "Artwork"),
+                p(
+                    "artStarts",
+                    "Artwork contours",
+                    ContractType::List {
+                        of: Box::new(num(None)),
+                    },
+                    None,
+                    None,
+                ),
+                p(
+                    "artClosed",
+                    "Closed contours",
+                    ContractType::List {
+                        of: Box::new(ContractType::Bool),
+                    },
+                    None,
+                    None,
+                ),
+                ranged("scalePct", "Size", Some("percent"), (1.0, 10_000.0), 100.0),
+                ranged(
+                    "spacingPct",
+                    "Spacing",
+                    Some("percent"),
+                    (1.0, 10_000.0),
+                    100.0,
+                ),
+                ranged(
+                    "scatterPct",
+                    "Scatter",
+                    Some("percent"),
+                    (0.0, 10_000.0),
+                    0.0,
+                ),
+                ranged("rotateDeg", "Rotation", Some("deg"), (-360.0, 360.0), 0.0),
+                ranged(
+                    "rotateVariationDeg",
+                    "Rotation variation",
+                    Some("deg"),
+                    (0.0, 180.0),
+                    0.0,
+                ),
+                pct("sizeMinPct", "Smallest size", 100.0),
+                bool_p("flipAlong", "Flip along", false),
+                bool_p("flipAcross", "Flip across", false),
+                ranged("tileAspect", "Tile proportion", None, (0.01, 100.0), 1.0),
+                count("bristles", "Bristles", 200.0, 24.0),
+                ranged(
+                    "bristleThicknessPct",
+                    "Bristle thickness",
+                    Some("percent"),
+                    (0.1, 100.0),
+                    12.0,
+                ),
+                seed(),
+            ],
+        ),
     }
 }
 
@@ -745,7 +844,12 @@ mod tests {
         assert_eq!(rows.len(), EffectKind::ALL.len());
         for (row, kind) in rows.iter().zip(EffectKind::ALL) {
             assert_eq!(row.kind, kind.name());
-            assert!(EFFECT_CATEGORIES.contains(&row.category), "{}", row.kind);
+            assert!(
+                EFFECT_CATEGORIES.contains(&row.category)
+                    || (row.stroke_style && row.category == "stroke"),
+                "{}",
+                row.kind
+            );
             assert!(!row.targets.is_empty());
         }
     }

@@ -26,6 +26,9 @@
 //     (fill = the document's creation-default fill, stroke none).
 //   · Blob Brush — the same sweep, then `pathfinderBoolean` UNITE with
 //     a same-fill SELECTED element (honest v0 scope below).
+//   · Live (WP6.4, both painting tools' `result: live` option) — the
+//     centreline stays, stroked, its widths a live width profile
+//     (engine ADR 1053), instead of the filled outline.
 //   · Eraser — a UNIFORM round-nib sweep → `outlineStroke` →
 //     `pathfinderBoolean` SUBTRACT from each SELECTED path element.
 //
@@ -78,6 +81,7 @@ import {
   supportsPathOps,
 } from "../commands/path-ops";
 import { pathfinderMutationFor } from "../commands/pathfinder";
+import { stackMutationFor, widthProfileEntryFor } from "../commands/brushes";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -352,6 +356,54 @@ async function insertSweptShape(
   }
   await mutateLogged(host, label, restoreDefaults, "restore defaults");
   return { created, fill };
+}
+
+/** WP6.4 — a LIVE stroke (the tools' `result: live` option): the
+ *  centreline itself, stroked with the sweep's paint at the nib's widest,
+ *  its per-stop widths a live width profile (engine ADR 1053) — so the
+ *  Width tool and the Brushes panel keep editing it. One batch: defaults
+ *  → insert → bind → stack → restore. */
+export function liveStrokeOpsFor(
+  pageId: string,
+  commit: BrushCommit,
+  style: SweepStyle,
+): MutationInput[] {
+  const weight = Math.max(0.1, ...commit.widths.filter(Number.isFinite));
+  const n = commit.widths.length;
+  const points = commit.widths.map(
+    (w, i) => [n > 1 ? i / (n - 1) : 0, w / weight] as [number, number],
+  );
+  return [
+    {
+      op: "setDocumentDefaults",
+      args: { fillColor: null, strokeColor: style.fill, strokeWeight: weight },
+    },
+    insertPathMutationFor(pageId, commit.anchors, commit.open),
+    bindCreatedMutationFor(SWEEP_HANDLE),
+    stackMutationFor(handleElementId(SWEEP_HANDLE), [
+      widthProfileEntryFor(points),
+    ]),
+    style.restore,
+  ];
+}
+
+async function commitLiveStroke(
+  host: BundleHost,
+  label: string,
+  pageId: string,
+  commit: BrushCommit,
+): Promise<void> {
+  const style = await readSweepStyle(host);
+  const outcome = await host.document.mutate(
+    batchMutationFor(liveStrokeOpsFor(pageId, commit, style)),
+  );
+  if (!outcome.applied) {
+    host.log.warn(
+      `${label}: the live stroke was refused: ${JSON.stringify(outcome.error)}`,
+    );
+    return;
+  }
+  if (outcome.createdId) await host.selection.set([outcome.createdId]);
 }
 
 async function commitPaintbrush(
@@ -643,7 +695,11 @@ export function createPaintbrushHandler(host: BundleHost): GestureHandler {
       nib: nibFromOptions(options),
       // closeTolerance stays 0 — see the ENGINE NOTE in the header.
     }),
-    commit: (page, c) => commitPaintbrush(host, page, c),
+    commit: (page, c) =>
+      options.select("result") === "live" &&
+      host.supports("document.strokeStyles@1")
+        ? commitLiveStroke(host, "paintbrush", page, c)
+        : commitPaintbrush(host, page, c),
   }));
 }
 
@@ -654,7 +710,11 @@ export function createBlobBrushHandler(host: BundleHost): GestureHandler {
       tolerance: host.viewport.pxToPt(options.number("fidelity")),
       nib: nibFromOptions(options),
     }),
-    commit: (page, c) => commitBlobBrush(host, page, c),
+    commit: (page, c) =>
+      options.select("result") === "live" &&
+      host.supports("document.strokeStyles@1")
+        ? commitLiveStroke(host, "blobBrush", page, c)
+        : commitBlobBrush(host, page, c),
   }));
 }
 

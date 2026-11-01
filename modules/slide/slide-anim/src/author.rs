@@ -144,6 +144,18 @@ pub enum Edit {
         from: TargetRef,
         to: TargetRef,
     },
+    /// A motion path edited on the canvas (slide ADR 714, amendment
+    /// 2026-10-30): the effect's `p:animMotion` paths take `path` (slide
+    /// fractions from where the shape stands), and `locked` sets Path
+    /// lock (`pathEditMode="fixed"`; unlocked is `relative`).
+    #[serde(rename_all = "camelCase")]
+    Path {
+        index: usize,
+        #[serde(default)]
+        path: Option<String>,
+        #[serde(default)]
+        locked: Option<bool>,
+    },
 }
 
 /// Do two targets name the same shape?
@@ -490,6 +502,38 @@ pub fn apply(timing: Option<&Timing>, edit: &Edit) -> Result<Option<Timing>, Str
                 e.trigger = t.as_ref().map(TargetRef::sp);
             }
         }
+        Edit::Path {
+            index,
+            path,
+            locked,
+        } => {
+            check(*index)?;
+            let mut found = false;
+            f.effects[*index].node.walk_mut(&mut |n| {
+                if let TimeNode::AnimMotion {
+                    path: p,
+                    path_edit_mode,
+                    pts_types,
+                    ..
+                } = n
+                {
+                    found = true;
+                    if let Some(new) = path {
+                        // The point types name the old path's points.
+                        if p.as_deref() != Some(new.as_str()) {
+                            *pts_types = None;
+                        }
+                        *p = Some(new.clone());
+                    }
+                    if let Some(l) = locked {
+                        *path_edit_mode = Some(if *l { "fixed" } else { "relative" }.into());
+                    }
+                }
+            });
+            if !found {
+                return Err("the effect has no motion path".into());
+            }
+        }
         Edit::Option {
             index,
             preset_subtype,
@@ -803,5 +847,42 @@ mod tests {
         assert!(t
             .to_xml()
             .contains(r#"<p:bldP spid="2" grpId="0" build="p" animBg="1"/>"#));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_motion_path_edit_writes_the_path_and_its_lock__feat__plugin_slide_animations() {
+        let t = add(None, "4", "path", 2, Start::Click);
+        let (list, _) = crate::flat::list(Some(&t));
+        let before = list[0].path.clone().expect("a motion path");
+        assert!(!list[0].path_locked);
+        let edited = apply(
+            Some(&t),
+            &Edit::Path {
+                index: 0,
+                path: Some("M 0 0 C 0.1 0 0.2 0.1 0.25 0.2 E".into()),
+                locked: Some(true),
+            },
+        )
+        .unwrap()
+        .unwrap();
+        let (list, _) = crate::flat::list(Some(&edited));
+        assert_ne!(list[0].path.as_deref(), Some(before.as_str()));
+        assert_eq!(
+            list[0].path.as_deref(),
+            Some("M 0 0 C 0.1 0 0.2 0.1 0.25 0.2 E")
+        );
+        assert!(list[0].path_locked);
+        // An effect without a motion path refuses.
+        let fade = add(None, "4", "entr", 10, Start::Click);
+        assert!(apply(
+            Some(&fade),
+            &Edit::Path {
+                index: 0,
+                path: Some("M 0 0 E".into()),
+                locked: None
+            }
+        )
+        .is_err());
     }
 }

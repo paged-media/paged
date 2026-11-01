@@ -28,6 +28,7 @@ mod envelope;
 mod illustrator_oracle;
 mod offset_ray_collisions;
 mod properties;
+mod stroke_style;
 
 use paged_model::PathAnchor;
 use paged_vector_fx::Shape;

@@ -21,7 +21,7 @@
 //! written by the caller ([`ColorXml`]), so a module that knows its theme
 //! can write `a:schemeClr` where the colour still is a theme slot.
 
-use super::resolved::{Effects, Paint, Rgb, Shadow};
+use super::resolved::{BevelSide, Effects, Paint, Rgb, Shadow, ThreeD};
 use crate::units::{deg_to_angle, fraction_to_pct, pt_to_emu};
 use crate::xml::escape_attr;
 
@@ -79,7 +79,11 @@ fn shadow(tag: &str, s: &Shadow, color: ColorXml, outer: bool) -> String {
 /// softEdge); `None` when there is no effect. A fill overlay is written
 /// when its paint is a solid colour or a linear gradient.
 pub fn effects(fx: &Effects, color: ColorXml) -> Option<String> {
-    if fx.is_empty() {
+    let list = Effects {
+        three_d: None,
+        ..fx.clone()
+    };
+    if list.is_empty() {
         return None;
     }
     let mut out = String::from("<a:effectLst>");
@@ -162,6 +166,43 @@ pub fn effects(fx: &Effects, color: ColorXml) -> Option<String> {
     }
     out.push_str("</a:effectLst>");
     Some(out)
+}
+
+/// `a:scene3d` and `a:sp3d` for a 3-D look, in that order (they follow
+/// the effect list among a shape's properties).
+pub fn three_d(t: &ThreeD) -> String {
+    let bevel = |tag: &str, b: &BevelSide| {
+        format!(
+            r#"<a:{tag} w="{}" h="{}" prst="{}"/>"#,
+            pt_to_emu(b.width),
+            pt_to_emu(b.height),
+            escape_attr(&b.preset)
+        )
+    };
+    let mut sp = String::from("<a:sp3d");
+    if t.extrusion > 0.0 {
+        sp.push_str(&format!(r#" extrusionH="{}""#, pt_to_emu(t.extrusion)));
+    }
+    if t.contour > 0.0 {
+        sp.push_str(&format!(r#" contourW="{}""#, pt_to_emu(t.contour)));
+    }
+    if let Some(m) = &t.material {
+        sp.push_str(&format!(r#" prstMaterial="{}""#, escape_attr(m)));
+    }
+    sp.push('>');
+    if let Some(b) = &t.bevel_top {
+        sp.push_str(&bevel("bevelT", b));
+    }
+    if let Some(b) = &t.bevel_bottom {
+        sp.push_str(&bevel("bevelB", b));
+    }
+    sp.push_str("</a:sp3d>");
+    format!(
+        r#"<a:scene3d><a:camera prst="{}"/><a:lightRig rig="{}" dir="{}"/></a:scene3d>{sp}"#,
+        escape_attr(&t.camera),
+        escape_attr(&t.light_rig),
+        escape_attr(&t.light_dir)
+    )
 }
 
 #[cfg(test)]
@@ -299,5 +340,38 @@ mod tests {
             srgb([1, 2, 255], 0.5),
             r#"<a:srgbClr val="0102FF"><a:alpha val="50000"/></a:srgbClr>"#
         );
+    }
+
+    #[test]
+    fn a_bevel_and_its_scene_read_back() {
+        let sp = r#"<p:spPr xmlns:p="p" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:prstGeom prst="rect"/><a:scene3d><a:camera prst="orthographicFront"/><a:lightRig rig="threePt" dir="t"/></a:scene3d><a:sp3d><a:bevelT w="228600" prst="angle"/></a:sp3d></p:spPr>"#;
+        let el = crate::tree::parse(sp.as_bytes()).unwrap();
+        let fx = effect::shape_effects(&el, &|_: &str| None).expect("3-D read");
+        let t = crate::drawingml::resolved::three_d(fx.three_d.as_ref().unwrap()).unwrap();
+        assert!(t.is_front());
+        let top = t.bevel_top.clone().unwrap();
+        assert_eq!(
+            (top.width, top.height, top.preset.as_str()),
+            (18.0, 6.0, "angle")
+        );
+        // Written back and read again: the same look; no empty effect list.
+        let resolved = Effects {
+            three_d: Some(t.clone()),
+            ..Effects::default()
+        };
+        assert!(effects(&resolved, &|rgb, a| srgb(rgb, a)).is_none());
+        let xml = format!(
+            r#"<p:spPr xmlns:p="p" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{}</p:spPr>"#,
+            three_d(&t)
+        );
+        let el = crate::tree::parse(xml.as_bytes()).unwrap();
+        let back = effect::three_d(&el).unwrap();
+        assert_eq!(crate::drawingml::resolved::three_d(&back), Some(t));
+        // A flat scene alone draws nothing.
+        let flat = r#"<p:spPr xmlns:p="p" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:scene3d><a:camera prst="orthographicFront"/><a:lightRig rig="threePt" dir="t"/></a:scene3d><a:sp3d/></p:spPr>"#;
+        let el = crate::tree::parse(flat.as_bytes()).unwrap();
+        assert!(effect::shape_effects(&el, &|_: &str| None)
+            .unwrap()
+            .is_empty());
     }
 }

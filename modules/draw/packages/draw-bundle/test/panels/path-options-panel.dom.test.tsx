@@ -942,6 +942,9 @@ describe("Path options panel — rendered against the engine", () => {
         "textToVectorOptions",
         "generativeRecolorOptions",
         "symbolOptions",
+        // WP6.4 — the Brushes panel, raised by Brushes… and Brush options….
+        "brushes",
+        "brushOptions",
       ]);
       const ellipsis = MENU_ENTRIES.filter(([path]) => path.endsWith("…"));
       expect(ellipsis.map(([path]) => path)).toEqual([
@@ -951,6 +954,8 @@ describe("Path options panel — rendered against the engine", () => {
         "Draw/Transform/Reflect…",
         "Draw/Stroke/Dashes…",
         "Draw/Stroke/Width profile…",
+        "Draw/Stroke/Brushes…",
+        "Draw/Stroke/Brush options…",
         "Draw/Symbol/Symbol options…",
         "Object/Insert arc…",
         "Object/Insert spiral…",

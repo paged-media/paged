@@ -34,7 +34,11 @@ import {
   sectionsOf,
 } from "../sections.js";
 import { createFrameSource } from "../show/frames.js";
-import { attachAnimations, showSlides } from "../show/contribute.js";
+import {
+  attachAnimations,
+  attachMedia,
+  showSlides,
+} from "../show/contribute.js";
 import { drawScene } from "../show/scene-source.js";
 import { readSlides, type Slide, type SlidesStore } from "../slides-model.js";
 import {
@@ -252,6 +256,12 @@ export class Output {
     } catch {
       // Without them the slides are drawn whole.
     }
+    // Their video and audio play in it (slide ADR 718).
+    try {
+      await attachMedia(this.host, show);
+    } catch {
+      // Without them the posters show and the video is silent.
+    }
     const title = await this.deps.deckName();
     const opts: VideoOptions = {
       height: height as VideoOptions["height"],
@@ -266,6 +276,9 @@ export class Output {
         const v = await renderVideo(show, frames, opts, {
           signal,
           onProgress: (p) => progress(p.done, p.total),
+          media: this.host.supports("document.media@1")
+            ? (id) => this.host.media.read(id)
+            : undefined,
           animation: async (slide, scale) => {
             if (!slide.anim) return null;
             const scene = await drawScene(

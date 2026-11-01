@@ -19,7 +19,7 @@
 
 // PLUGIN MENUS — paged.draw (modules/draw/packages/draw-bundle/src/menu.ts).
 //
-// A hundred and five entries: most under the Draw menu (folded into Plugins ▸
+// A hundred and nine entries: most under the Draw menu (folded into Plugins ▸
 // Draw, and shown as a context menu while artwork is selected), the
 // insert verbs filed under Object (Arc…, Spiral…, Rectangular grid…, Polar
 // grid…, Star…, Flare…) beside Rasterize…, Puppet warp and Perspective, the
@@ -424,6 +424,61 @@ test.describe.serial("plugin menus — paged.draw", () => {
       { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
     ]);
     expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  // WP6.4 — brushes and width profiles as live stroke styles (draw ADR
+  // 366): the panel raisers, and the two verbs that need no panel row.
+  const raisesBrushes = async (row: string, command: string) => {
+    await expectGreyedAndInert(bare, row);
+    const out = await clickEntry(live, row, command);
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.brushes" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  };
+
+  test("Draw/Stroke/Brushes… — raises the Brushes panel", async () => {
+    covers("menu:Draw/Stroke/Brushes…");
+    await raisesBrushes(
+      "Draw/Stroke/Brushes…",
+      "media.paged.draw.command.brushes",
+    );
+  });
+
+  test("Draw/Stroke/Brush options… — raises the Brushes panel at its options", async () => {
+    covers("menu:Draw/Stroke/Brush options…");
+    await raisesBrushes(
+      "Draw/Stroke/Brush options…",
+      "media.paged.draw.command.brushOptions",
+    );
+  });
+
+  test("Draw/Stroke/Remove brush — runs removeBrush; the rectangles carry no brush, so it changes nothing", async () => {
+    covers("menu:Draw/Stroke/Remove brush");
+    await expectGreyedAndInert(bare, "Draw/Stroke/Remove brush");
+    const out = await clickEntry(
+      live,
+      "Draw/Stroke/Remove brush",
+      "media.paged.draw.command.removeBrush",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "nothing selected has a brush").toBe(out.before);
+  });
+
+  test("Draw/Stroke/New brush from selection — keeps the artwork as a document brush; the page is unchanged", async () => {
+    covers("menu:Draw/Stroke/New brush from selection");
+    await expectGreyedAndInert(bare, "Draw/Stroke/New brush from selection");
+    const out = await clickEntry(
+      live,
+      "Draw/Stroke/New brush from selection",
+      "media.paged.draw.command.newBrush",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "a brush library write is not a page edit").toBe(
       out.before,
     );
   });
@@ -1884,25 +1939,28 @@ test.describe.serial("plugin menus — paged.draw", () => {
   // ── WP6.3 (draw ADR 367) — Object ▸ Envelope distort, Object ▸ Expand
   //    appearance, and the graphic-style library as a file. ──
 
-  for (const [row, command, what] of [
+  for (const [row, command, what, cover] of [
     [
       "Object/Envelope distort/Make with warp",
       "envelopeMakeWithWarp",
       "a warp",
+      () => covers("menu:Object/Envelope distort/Make with warp"),
     ],
     [
       "Object/Envelope distort/Make with mesh",
       "envelopeMakeWithMesh",
       "a 4 × 4 mesh",
+      () => covers("menu:Object/Envelope distort/Make with mesh"),
     ],
     [
       "Object/Envelope distort/Make with top object",
       "envelopeMakeWithTopObject",
       "the front rectangle's outline (which goes)",
+      () => covers("menu:Object/Envelope distort/Make with top object"),
     ],
   ] as const) {
     test(`${row} — gives the selection ${what} as a live envelope, and one Undo takes it back`, async () => {
-      covers(`menu:${row}`);
+      cover();
       await expectGreyedAndInert(bare, row);
       const out = await clickEntry(
         live,
@@ -1917,13 +1975,25 @@ test.describe.serial("plugin menus — paged.draw", () => {
     });
   }
 
-  for (const [row, command] of [
-    ["Object/Envelope distort/Edit contents", "envelopeEditContents"],
-    ["Object/Envelope distort/Expand", "envelopeExpand"],
-    ["Object/Expand appearance", "expandAppearance"],
+  for (const [row, command, cover] of [
+    [
+      "Object/Envelope distort/Edit contents",
+      "envelopeEditContents",
+      () => covers("menu:Object/Envelope distort/Edit contents"),
+    ],
+    [
+      "Object/Envelope distort/Expand",
+      "envelopeExpand",
+      () => covers("menu:Object/Envelope distort/Expand"),
+    ],
+    [
+      "Object/Expand appearance",
+      "expandAppearance",
+      () => covers("menu:Object/Expand appearance"),
+    ],
   ] as const) {
     test(`${row} — the rectangles carry no envelope or live effect, so it changes nothing`, async () => {
-      covers(`menu:${row}`);
+      cover();
       await expectGreyedAndInert(bare, row);
       const out = await clickEntry(
         live,
@@ -1951,7 +2021,7 @@ test.describe.serial("plugin menus — paged.draw", () => {
 
   test("Object/Envelope distort/Envelope mesh tool — switches to the Envelope Mesh tool and leaves the document alone", async () => {
     const row = "Object/Envelope distort/Envelope mesh tool";
-    covers(`menu:${row}`);
+    covers("menu:Object/Envelope distort/Envelope mesh tool");
     await expectGreyedAndInert(bare, row);
     const before = await documentDigest(live);
     const m = await mark(live);
@@ -1973,12 +2043,20 @@ test.describe.serial("plugin menus — paged.draw", () => {
     await runCommand(live, "paged.tool.activate.paged.tool.select");
   });
 
-  for (const [row, command] of [
-    ["Draw/Graphic style/Import library", "importGraphicStyles"],
-    ["Draw/Graphic style/Export library", "exportGraphicStyles"],
+  for (const [row, command, cover] of [
+    [
+      "Draw/Graphic style/Import library",
+      "importGraphicStyles",
+      () => covers("menu:Draw/Graphic style/Import library"),
+    ],
+    [
+      "Draw/Graphic style/Export library",
+      "exportGraphicStyles",
+      () => covers("menu:Draw/Graphic style/Export library"),
+    ],
   ] as const) {
     test(`${row} — goes through the host's file door and leaves the document alone`, async () => {
-      covers(`menu:${row}`);
+      cover();
       await expectGreyedAndInert(bare, row);
       const out = await clickEntry(
         live,

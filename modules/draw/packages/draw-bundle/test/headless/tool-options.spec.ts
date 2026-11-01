@@ -365,10 +365,12 @@ describe("tool options — the read door", () => {
       angle: 45,
       roundness: 30,
       fidelity: 2,
+      result: "outline",
     });
     expect(store.writes.map((w) => w[1]).sort()).toEqual([
       "angle",
       "fidelity",
+      "result",
       "roundness",
     ]);
     // A second activation writes nothing.
@@ -616,10 +618,12 @@ describe("tool options — width tool (real engine, F1)", () => {
     await h.load(F1_MULTI_SHAPE.bytes());
     await h.host.selection.set([POLY]);
     const handler = createWidthHandler(h.host);
-    const store = settingsStore(
-      values ? { [WIDTH_OPTIONS.toolId]: values } : {},
-    );
-    handler.onActivate((values ? store.paged : undefined) as never);
+    // The v0 bake lane these cases measure is the tool's `outline` mode
+    // (WP6.4 made live width points the default).
+    const store = settingsStore({
+      [WIDTH_OPTIONS.toolId]: { mode: "outline", ...(values ?? {}) },
+    });
+    handler.onActivate(store.paged as never);
     handler.onPointerDown(pointer([250, 600]));
     handler.onPointerMove(pointer([250, 580], 30));
     handler.onPointerUp(pointer([250, 580], 30));

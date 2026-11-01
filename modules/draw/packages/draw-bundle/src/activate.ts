@@ -258,6 +258,12 @@ import { makeImageTracePanel } from "./panels/image-trace-panel";
 import { makeRecolorPanel } from "./panels/recolor-panel";
 import { makeGenerativePanel } from "./panels/generative-panel";
 import { makeColorGuidePanel } from "./panels/color-guide-panel";
+import { makeBrushesPanel } from "./panels/brushes-panel";
+import {
+  BRUSHES_PANEL_ID,
+  BRUSH_COMMAND_IDS,
+  contributeBrushCommands,
+} from "./commands/brushes";
 import { contributeSvgIo } from "./io/svg";
 import { contributeDxfIo } from "./io/dxf";
 import { contributeVectorFileImporters } from "./io/vector-files";
@@ -440,6 +446,13 @@ export function activate(host: BundleHost): BundleHandle {
     id: COLOR_GUIDE_PANEL_ID,
     icon: "ui-sun",
     ...makeColorGuidePanel(host),
+  });
+  // WP6.4 — the BRUSHES panel: brush libraries, Brush Options and the
+  // width profile library (live stroke styles, engine ADR 1053).
+  host.contribute.panel({
+    id: BRUSHES_PANEL_ID,
+    icon: "ui-sparkle",
+    ...makeBrushesPanel(host),
   });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
@@ -686,6 +699,8 @@ export function activate(host: BundleHost): BundleHandle {
   // WP6.5 — Recolor Artwork and the Color Guide's apply.
   const recolorCommandsSub = contributeRecolorCommands(host);
   const generativeCommandsSub = contributeGenerativeCommands(host);
+  // WP6.4 — brushes and width profiles as live stroke styles.
+  const brushCommandsSub = contributeBrushCommands(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
@@ -751,7 +766,7 @@ export function activate(host: BundleHost): BundleHandle {
       publishDrawPropertyLists(host))
     : null;
   host.log.info(
-    `activated — ${tools.length} tools + 3 schema panels + 12 React panels + ` +
+    `activated — ${tools.length} tools + 3 schema panels + 13 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
@@ -780,6 +795,7 @@ export function activate(host: BundleHost): BundleHandle {
         IMAGE_TRACE_COMMAND_IDS.length +
         RECOLOR_COMMAND_IDS.length +
         GENERATIVE_COMMAND_IDS.length +
+        BRUSH_COMMAND_IDS.length +
         BLEND_COMMAND_IDS.length +
         OBJECTS_ON_PATH_COMMAND_IDS.length +
         CUT_COMMAND_IDS.length +
@@ -820,6 +836,7 @@ export function activate(host: BundleHost): BundleHandle {
       liveRetraceSub.dispose();
       recolorCommandsSub.dispose();
       generativeCommandsSub.dispose();
+      brushCommandsSub.dispose();
       objectsOnPathCommandsSub.dispose();
       blendCommandsSub.dispose();
       insertShapeCommandsSub.dispose();

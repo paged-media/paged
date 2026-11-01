@@ -26,6 +26,7 @@
 // Without an audience window (refused, or asked for one screen) the
 // console runs alone.
 
+import type { MediaReader } from "../media.js";
 import { t } from "@paged-media/strings";
 
 import { SHOW } from "../messages.js";
@@ -52,6 +53,8 @@ export interface ConsoleDeps {
   frames: FrameSource;
   scenes?: SceneSource;
   player?(slide: ShowSlide, scene: SlideScene): Promise<Player | null>;
+  /** The slides' video and audio (slide ADR 718). */
+  media?: MediaReader;
   thumbnail(pageId: string): string | null;
   /** Re-render when a thumbnail lands. */
   subscribeThumbnails(fn: () => void): () => void;
@@ -238,6 +241,8 @@ export function mountConsole(
     frames: deps.frames,
     scenes: deps.scenes,
     player: deps.player,
+    // Slide ADR 718: with an audience window the audience plays the media.
+    media: deps.audience ? undefined : deps.media,
     interactive: true,
     onClick: (trigger) => {
       if (ctl.state().tool !== "arrow") return;

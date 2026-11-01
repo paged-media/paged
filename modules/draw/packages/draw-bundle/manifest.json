@@ -91,6 +91,7 @@
       "media.paged.draw.panel.recolorArtwork",
       "media.paged.draw.panel.generative",
       "media.paged.draw.panel.colorGuide",
+      "media.paged.draw.panel.brushes",
       "media.paged.draw.panel.properties"
     ],
     "commands": [
@@ -259,7 +260,13 @@
       "media.paged.draw.command.textToVector",
       "media.paged.draw.command.generativeRecolor",
       "media.paged.draw.command.textToVectorOptions",
-      "media.paged.draw.command.generativeRecolorOptions"
+      "media.paged.draw.command.generativeRecolorOptions",
+      "media.paged.draw.command.applyBrush",
+      "media.paged.draw.command.removeBrush",
+      "media.paged.draw.command.brushOptions",
+      "media.paged.draw.command.brushes",
+      "media.paged.draw.command.newBrush",
+      "media.paged.draw.command.applyWidthProfile"
     ],
     "importers": [
       "media.paged.draw.importer.svg",
@@ -316,6 +323,12 @@
       },
       {
         "type": "perspectiveGrid",
+        "role": "spec",
+        "format": "json",
+        "linkable": false
+      },
+      {
+        "type": "brushLibrary",
         "role": "spec",
         "format": "json",
         "linkable": false
@@ -4281,6 +4294,153 @@
               },
               "stroke": {
                 "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.applyBrush",
+          "title": "Apply brush",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "brush": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.brushes",
+          "title": "Brushes",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.draw.command.removeBrush",
+          "title": "Remove brush",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.brushOptions",
+          "title": "Brush options",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "scalePct": {
+                "kind": "number"
+              },
+              "spacingPct": {
+                "kind": "number"
+              },
+              "scatterPct": {
+                "kind": "number"
+              },
+              "rotateDeg": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "rotateVariationDeg": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "sizeMinPct": {
+                "kind": "number"
+              },
+              "flipAlong": {
+                "kind": "bool"
+              },
+              "flipAcross": {
+                "kind": "bool"
+              },
+              "tileAspect": {
+                "kind": "number"
+              },
+              "bristles": {
+                "kind": "number",
+                "integer": true
+              },
+              "bristleThicknessPct": {
+                "kind": "number"
+              },
+              "seed": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.applyWidthProfile",
+          "title": "Apply width profile",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "profile": {
+                "kind": "text"
+              },
+              "points": {
+                "kind": "list",
+                "of": {
+                  "kind": "point"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.newBrush",
+          "title": "New brush",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "type": {
+                "kind": "enum",
+                "members": ["art", "scatter", "pattern"]
+              },
+              "name": {
+                "kind": "text"
               }
             }
           }

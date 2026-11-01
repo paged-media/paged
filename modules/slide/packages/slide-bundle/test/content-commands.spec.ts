@@ -69,6 +69,12 @@ function fakeHost(opts: { selection?: ElementId[] } = {}) {
         return { dispose: () => keys.splice(keys.indexOf(k), 1) };
       },
     },
+    media: {
+      store: async (_b: Uint8Array, o: { mime: string }) => ({
+        type: "part",
+        path: `paged/core/media/abc.${o.mime.startsWith("audio") ? "m4a" : "mp4"}`,
+      }),
+    },
     document: {
       collection: async () => [{ selfId: "p1", sizePt: [960, 540] }],
       mutateWithBytes: async (m: unknown) => {
@@ -140,21 +146,86 @@ describe("slide W4 content commands", () => {
       Object.values(CONTENT_CMD).sort(),
     );
     expect(f.menus.map((m) => m.path)).toEqual(CONTENT_MENU.map(([p]) => p));
-    expect(f.keys.map((k) => `${k.key}→${k.command}`)).toEqual(
-      FORMAT_KEYS.map(([k, c]) => `${k}→${c}`),
-    );
+    // Esc puts the Format Painter down (ADR 723), then the copy and paste
+    // keys.
+    expect(f.keys.map((k) => `${k.key}→${k.command}`)).toEqual([
+      `escape→${CONTENT_CMD.formatPainterOff}`,
+      ...FORMAT_KEYS.map(([k, c]) => `${k}→${c}`),
+    ]);
     // The keys live in the deck's context; paste waits for a copy.
     expect(
       f.keys.every(
         (k) => (k.scope as { editContext: string }).editContext === "slideDeck",
       ),
     ).toBe(true);
+    // Esc's command applies only while the Format Painter is armed.
+    covers("command:media.paged.slide.command.formatPainterOff");
+    expect(f.commands.get(CONTENT_CMD.formatPainterOff)!.when!()).toBe(false);
     expect(f.commands.get(CONTENT_CMD.copyFormat)!.when!()).toBe(true);
     expect(f.commands.get(CONTENT_CMD.pasteFormat)!.when!()).toBe(false);
     clip.copied = { shape: [], text: [] };
     expect(f.commands.get(CONTENT_CMD.pasteFormat)!.when!()).toBe(true);
     h.dispose();
     expect(f.commands.size + f.menus.length + f.keys.length).toBe(0);
+  });
+
+  it("the typed twins insert a video and a sound: the medium stored, poster and medium in one batch", async () => {
+    covers(
+      "command:media.paged.slide.command.insertVideo",
+      "command:media.paged.slide.command.insertAudio",
+    );
+    const f = fakeHost();
+    const cmds = new Map(
+      contentTypedCommands(f.host, deps(), new FormatClipboard()).map((c) => [
+        c.id,
+        c,
+      ]),
+    );
+    const run = (id: string, a: unknown) =>
+      (cmds.get(id)!.handler as (c: unknown, a: unknown) => Promise<unknown>)(
+        null,
+        a,
+      );
+    const data = Buffer.from([0, 0, 0, 0x18]).toString("base64");
+    expect(
+      await run(CONTENT_CMD.insertVideo, {
+        data,
+        name: "clip.mp4",
+        play: "auto",
+      }),
+    ).toEqual({ media: expect.stringContaining("r1") });
+    const batch = f.mutations[0] as {
+      args: { ops: { op: string; args: Record<string, unknown> }[] };
+    };
+    expect(batch.args.ops.map((o) => o.op)).toEqual([
+      "insertFrame",
+      "bindCreated",
+      "replaceImageBytes",
+      "setElementProperty",
+    ]);
+    const set = batch.args.ops[3]!.args as {
+      path: string;
+      value: { type: string; value: Record<string, unknown> };
+    };
+    expect(set.path).toBe("frameMedia");
+    expect(set.value.value).toMatchObject({
+      kind: "movie",
+      mime: "video/mp4",
+      play: "auto",
+      source: { type: "part", path: "paged/core/media/abc.mp4" },
+    });
+    expect(
+      await run(CONTENT_CMD.insertAudio, { data, name: "tone.m4a" }),
+    ).toHaveProperty("media");
+    const sound = (
+      f.mutations[1] as {
+        args: { ops: { args: { value?: { value: { kind: string } } } }[] };
+      }
+    ).args.ops[3]!.args.value!.value;
+    expect(sound.kind).toBe("sound");
+    await expect(
+      run(CONTENT_CMD.insertVideo, { data, name: "notes.txt" }),
+    ).rejects.toThrow(/could not be inserted/);
   });
 
   it("the typed twins insert a picture, refuse a raster icon and answer the pane", async () => {
@@ -174,8 +245,16 @@ describe("slide W4 content commands", () => {
         c,
       ]),
     );
+    // The Format Painter is the palette's alone: it waits for a click.
+    const paletteOnly = new Set<string>([
+      CONTENT_CMD.formatPainter,
+      CONTENT_CMD.formatPainterOff,
+    ]);
     expect([...cmds.keys()].sort()).toEqual(
-      [...Object.values(CONTENT_CMD), ...Object.values(CONTENT_TYPED)].sort(),
+      [
+        ...Object.values(CONTENT_CMD).filter((c) => !paletteOnly.has(c)),
+        ...Object.values(CONTENT_TYPED),
+      ].sort(),
     );
     const run = (id: string, a: unknown) =>
       (cmds.get(id)!.handler as (c: unknown, a: unknown) => Promise<unknown>)(
