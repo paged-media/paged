@@ -152,6 +152,38 @@ export interface CommentInfo {
   threaded?: boolean;
 }
 
+/** One comment of an Excel threaded comment (sheet ADR 528). */
+export interface ThreadCommentInfo {
+  /** The comment's GUID, braces and upper case as Excel writes it. */
+  id: string;
+  /** The root's id for a reply, absent on the root. */
+  parentId?: string | null;
+  personId: string;
+  displayName?: string | null;
+  userId?: string | null;
+  providerId?: string | null;
+  /** Excel's `dT`, as written (`YYYY-MM-DDThh:mm:ss.ff`). */
+  timestamp: string;
+  text: string;
+  done: boolean;
+}
+
+/** The thread on one cell: the root first, then the replies. */
+export interface CellThreadInfo {
+  sheet: number;
+  row: number;
+  col: number;
+  resolved: boolean;
+  comments: ThreadCommentInfo[];
+}
+
+/** Who writes a thread comment (an Excel person, found or made by account). */
+export interface ThreadAuthor {
+  displayName: string;
+  userId: string;
+  providerId: string;
+}
+
 /** W2.3 — one hyperlink of a sheet. */
 export interface HyperlinkInfo {
   sheet: number;
@@ -682,6 +714,35 @@ export interface SheetEngine
     text: string,
   ): void;
   deleteNote?(sheet: number, row: number, col: number): boolean;
+  /** Sheet ADR 528 — the threaded comments of a sheet and their edits. The
+   *  ids and times come from the caller (`seed` feeds the GUIDs). */
+  listThreads?(sheet: number): CellThreadInfo[];
+  addThread?(
+    sheet: number,
+    row: number,
+    col: number,
+    author: ThreadAuthor,
+    timestamp: string,
+    text: string,
+    seed: number,
+  ): string;
+  replyThread?(
+    sheet: number,
+    row: number,
+    col: number,
+    author: ThreadAuthor,
+    timestamp: string,
+    text: string,
+    seed: number,
+  ): string;
+  editThreadComment?(sheet: number, id: string, text: string): boolean;
+  deleteThreadComment?(sheet: number, id: string): boolean;
+  setThreadDone?(
+    sheet: number,
+    row: number,
+    col: number,
+    done: boolean,
+  ): boolean;
   /** W2.3 — the pictures of a sheet and a picture's bytes. */
   listPictures?(sheet: number): PictureInfo[];
   pictureBytes?(media: string): Uint8Array;
@@ -1345,6 +1406,37 @@ export interface SheetWasmEngine
     text: string,
   ): void;
   delete_note?(sheet: number, row: number, col: number): boolean;
+  list_threads?(sheet: number): CellThreadInfo[];
+  add_thread?(
+    sheet: number,
+    row: number,
+    col: number,
+    display_name: string,
+    user_id: string,
+    provider_id: string,
+    timestamp: string,
+    text: string,
+    seed: number,
+  ): string;
+  reply_thread?(
+    sheet: number,
+    row: number,
+    col: number,
+    display_name: string,
+    user_id: string,
+    provider_id: string,
+    timestamp: string,
+    text: string,
+    seed: number,
+  ): string;
+  edit_thread_comment?(sheet: number, id: string, text: string): boolean;
+  delete_thread_comment?(sheet: number, id: string): boolean;
+  set_thread_done?(
+    sheet: number,
+    row: number,
+    col: number,
+    done: boolean,
+  ): boolean;
   list_pictures?(sheet: number): PictureInfo[];
   picture_bytes?(media: string): Uint8Array;
   cf_rules?(sheet: number): CfRuleInfo[];
@@ -1592,6 +1684,37 @@ export function wrapEngine(
     },
     deleteNote: (sheet, row, col) =>
       need("delete_note")(sheet, row, col) as boolean,
+    listThreads: (sheet) => need("list_threads")(sheet) as CellThreadInfo[],
+    addThread: (sheet, row, col, a, timestamp, text, seed) =>
+      need("add_thread")(
+        sheet,
+        row,
+        col,
+        a.displayName,
+        a.userId,
+        a.providerId,
+        timestamp,
+        text,
+        seed,
+      ) as string,
+    replyThread: (sheet, row, col, a, timestamp, text, seed) =>
+      need("reply_thread")(
+        sheet,
+        row,
+        col,
+        a.displayName,
+        a.userId,
+        a.providerId,
+        timestamp,
+        text,
+        seed,
+      ) as string,
+    editThreadComment: (sheet, id, text) =>
+      need("edit_thread_comment")(sheet, id, text) as boolean,
+    deleteThreadComment: (sheet, id) =>
+      need("delete_thread_comment")(sheet, id) as boolean,
+    setThreadDone: (sheet, row, col, done) =>
+      need("set_thread_done")(sheet, row, col, done) as boolean,
     listPictures: (sheet) => need("list_pictures")(sheet) as PictureInfo[],
     pictureBytes: (media) => need("picture_bytes")(media) as Uint8Array,
     cfRules: (sheet) => need("cf_rules")(sheet) as CfRuleInfo[],

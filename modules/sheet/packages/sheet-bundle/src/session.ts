@@ -145,6 +145,7 @@ import type {
   NamedStyleUsage,
 } from "./engine-docstyles";
 import { readKnownSwatchIds } from "./swatch-mints";
+import { createSheetComments } from "./comments-model";
 import {
   csvBytes,
   type CsvExportOptions,
@@ -484,6 +485,10 @@ export interface WorkbookSession extends DataToolsApi {
    *  frame on a host that never announced the document): waits for a
    *  restore in flight, else restores. Whether a workbook is loaded. */
   ensureRestored(): Promise<boolean>;
+  /** Reconcile the workbook's threaded comments with the document's comment
+   *  threads now (sheet ADR 528; it also runs after a load and on every
+   *  document change). Resolves when the reconcile has finished. */
+  syncComments(): Promise<void>;
   /** Set which sheet is active (and default its range to the used
    *  extent). */
   setActiveSheet(id: number): void;
@@ -3490,6 +3495,15 @@ export function createWorkbookSession(
     scheduleWindowFit();
   });
 
+  // Sheet ADR 528 / engine ADR 1055 — the workbook's threaded comments and the
+  // document's comment threads, kept in step (comments-model.ts).
+  const sheetComments = createSheetComments({
+    host,
+    engine: () => state.engine,
+    ownWrite,
+    edited: schedulePersist,
+  });
+
   let windowFitTimer: ReturnType<typeof setTimeout> | null = null;
   /** Check every window frame's fit, after the document settles. */
   function scheduleWindowFit(): void {
@@ -4571,6 +4585,10 @@ export function createWorkbookSession(
     // ADR 524 — a mapping naming a style this document lacks falls back.
     await syncDocStyleAvailability();
     emitter.emit();
+    // The workbook's threads join the document's comments; an import drops
+    // the threads left from the workbook it replaced.
+    sheetComments.reset();
+    void sheetComments.sync({ fresh: persist });
     return true;
   }
 
@@ -7624,6 +7642,10 @@ export function createWorkbookSession(
       return findNext(lastFind.needle, lastFind.opts, backwards);
     },
 
+    syncComments() {
+      return sheetComments.sync();
+    },
+
     requestFind() {
       state.findRequest += 1;
       emitter.emit();
@@ -7632,6 +7654,7 @@ export function createWorkbookSession(
     dispose() {
       historySub.dispose();
       foreignChangeSub.dispose();
+      sheetComments.dispose();
       if (chainTimer !== null) clearTimeout(chainTimer);
       if (windowFitTimer !== null) clearTimeout(windowFitTimer);
       if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);

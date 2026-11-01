@@ -2,7 +2,7 @@
 
 - **Status:** Accepted, 2026-11-01. Amends 526 (decision 3: threads were preserved and their note refused).
 - **Scope:** `sheet-xlsx/src/threaded/`, `sheet-xlsx/src/comment_edit.rs`,
-  `sheet-js/src/core/annotations.rs` (the session and wasm doors; no editor wiring yet).
+  `sheet-js/src/core/annotations.rs` (the session and wasm doors); the editor wiring is the amendment at the end.
 
 ## Context
 
@@ -79,8 +79,28 @@ package, not from the scripting reply.
 
 ## Consequences
 
-- Threads are readable and editable in Rust; the editor wiring is a later step.
+- Threads are readable and editable in Rust and, through the amendment below, in the host's Comments panel.
 - A workbook another tool left with a thread but no note (or the reverse) gets its note
   rebuilt on the next thread write to that cell; reads never write.
 - Sharing the same seed in two calls on the same workbook cannot collide ids: a drawn id is
   checked against the part's existing ids.
+
+## Amendment 2026-11-01 — the Comments panel (engine ADR 1055)
+
+`sheet-bundle/src/comments-model.ts` keeps the workbook's threads and the document's comment threads in
+step. A thread on a cell is an engine thread anchored `Cell { item, address }`: `item` is the sheet frame
+that shows the cell (else the first frame of that sheet), `address` is `Sheet1!B3` (sheet names quoted as
+in a formula). Comment ids are the workbook's GUIDs, so no mapping table is kept; the person ids are the
+workbook's person ids. The workbook stays the truth of the xlsx and is saved as the document's container
+part as before; the document's threads are what the panel reads and writes.
+
+`sync` reconciles three ways against the snapshot of the last reconcile (kept in memory): a workbook-side
+change is edited into the document, a panel-side change (reply, edit, resolve, reopen, delete) is written
+to the workbook through the thread doors and queues its save; the workbook wins when both moved the same
+text. It runs after a workbook is loaded and on every document change. A reply made in the panel gets the
+workbook's GUID in place of the panel's id. Deleting the sheet frame orphans its threads (the engine's
+rule); the workbook keeps them.
+
+Not done: a thread started from the panel on a cell (the panel starts item, page and text threads), plain
+notes as threads, thread edits in the sheet's own undo journal (the document's undo covers the panel's
+side and the reconcile mirrors it), a sheet no frame shows (its threads wait for one).
