@@ -25,7 +25,6 @@
 //! the container); this only resolves colours for what the engine REPORTS.
 
 use crate::error::XlsxError;
-use crate::opc::attr;
 
 /// The twelve scheme colours, in the order a SpreadsheetML `theme="N"` index
 /// names them: 0 `lt1`, 1 `dk1`, 2 `lt2`, 3 `dk2` (the light/dark pairs are
@@ -46,46 +45,11 @@ impl ThemePalette {
     /// `a:sysClr lastClr` (the system colour's last value, which Excel
     /// writes for `windowText` / `window`).
     pub fn parse(xml: &[u8]) -> Result<ThemePalette, XlsxError> {
-        use quick_xml::events::Event;
-        let mut reader = quick_xml::Reader::from_reader(xml);
-        let mut buf = Vec::new();
+        let theme = paged_ooxml::drawingml::Theme::parse(xml)
+            .ok_or_else(|| XlsxError::Structure("theme part has no a:themeElements".into()))?;
         let mut out = ThemePalette::default();
-        let mut in_scheme = false;
-        let mut slot: Option<usize> = None;
-        loop {
-            match reader.read_event_into(&mut buf)? {
-                Event::Start(e) | Event::Empty(e) => {
-                    let local = e.local_name();
-                    let name = std::str::from_utf8(local.as_ref()).unwrap_or("");
-                    if name == "clrScheme" {
-                        in_scheme = true;
-                    } else if in_scheme {
-                        if let Some(i) = SLOT_NAMES.iter().position(|s| *s == name) {
-                            slot = Some(i);
-                        } else if let Some(i) = slot {
-                            let val = match name {
-                                "srgbClr" => attr(&e, b"val")?,
-                                "sysClr" => attr(&e, b"lastClr")?,
-                                _ => None,
-                            };
-                            if let Some(v) = val.and_then(|v| hex6(&v)) {
-                                out.slots[i].get_or_insert(v);
-                            }
-                        }
-                    }
-                }
-                Event::End(e) => {
-                    let local = e.local_name();
-                    match local.as_ref() {
-                        b"clrScheme" => in_scheme = false,
-                        n if SLOT_NAMES.iter().any(|s| s.as_bytes() == n) => slot = None,
-                        _ => {}
-                    }
-                }
-                Event::Eof => break,
-                _ => {}
-            }
-            buf.clear();
+        for (i, name) in SLOT_NAMES.iter().enumerate() {
+            out.slots[i] = theme.hex(name).map(|h| format!("#{h}"));
         }
         Ok(out)
     }
@@ -118,12 +82,6 @@ impl ThemePalette {
 }
 
 /// `#RRGGBB` from a 6-hex-digit value (case-normalised); `None` otherwise.
-fn hex6(v: &str) -> Option<String> {
-    let v = v.trim();
-    (v.len() == 6 && v.bytes().all(|b| b.is_ascii_hexdigit()))
-        .then(|| format!("#{}", v.to_ascii_uppercase()))
-}
-
 /// Apply a SpreadsheetML `tint` (−1.0..=1.0) to `#RRGGBB`: the colour's HSL
 /// luminance moves toward black (`tint < 0`: `L·(1+tint)`) or white
 /// (`tint > 0`: `L·(1−tint) + tint`), hue and saturation kept

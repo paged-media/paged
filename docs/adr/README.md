@@ -33,3 +33,4 @@ keeps its text.
 | [PM-0014](PM-0014-capability-layering.md) | A capability lives at the lowest layer every consumer can reach; modules may path-depend on engine crates (amended 2026-10-25: DrawingML geometry in `platform/shared/dml-geom`) |
 | [PM-0015](PM-0015-data-and-actions-are-platform-layers.md) | Data and actions are platform layers: bindings in the engine, `data@1` and `actions@1`, Turso replaces DuckDB, one script interpreter |
 | [PM-0016](PM-0016-extensions-adr-range.md) | The extensions' records continue at 1100–1199; 300–349 keep their numbers |
+| [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) | The built-in modules are part of the core: one build, modules stay; isolation ends; one workspace gated on a spike (amends PM-0002, PM-0005, PM-0014) |

@@ -1,0 +1,147 @@
+# ADR 1055 — One comment model for every module, compatible with Adobe and Microsoft review
+
+- **Status:** Proposed 2026-11-01. Extends [ADR 1020](1020-range-comments-with-threads.md) (range
+  comments with threads) and [ADR 172](172-editorial-notes.md) (InDesign notes). Part of the
+  capability layering of PM-0014 and PM-0017.
+- **Scope:** `paged-model` (`review.rs`), `paged-mutate`, `paged-wire`, `paged-canvas` (the
+  `comments` collection), `idml-import` / `idml-export`, `paged-export-pdf`; for the readers and
+  writers per format: doc (`docx-*`, ADR 613), slide (`pptx-*`), sheet (`sheet-xlsx`), publish
+  (`pdf-import`); the host's Comments panel (apps/editor) and the public door `comments@1`
+  (plugin-sdk).
+
+## Context
+
+Review comments exist five times, in different shapes:
+
+| Where | Model | Limit |
+|---|---|---|
+| Engine, ADR 172 | an InDesign note: a point in the text | no threads |
+| Engine, ADR 1020 | a thread over a text range of a story (`Story.comments`, `CharacterRun.comments`) | anchored to text only |
+| slide, ADR 711 (amendment) | the plugin's own model, panel and markers, kept in a container part | not in the document, not undoable, invisible to export and the CLI |
+| sheet, ADR 526 | Excel notes edited by XML splice; threaded comments preserved, never editable | a cell address is the only anchor |
+| PDF | export writes `Link` annotations only; import reads none | no review round trip with Acrobat |
+
+A comment on a shape, a slide, a cell, a page, a raster region or a vector object has no home in
+the engine. The host's Comments panel is a stub. Word, Excel, PowerPoint, InDesign and Acrobat
+all have comments, and each carries more than the engine's `Comment` (author identity, mentions,
+status, tasks, reactions, a modification time).
+
+## Decision
+
+### One model, at document level
+
+`Document.comments` holds every thread. ADR 1020's per-run ids remain the mechanism that makes a
+**text** anchor follow its text through edits; every other anchor is a field of the thread.
+
+```
+Thread { id, anchor, kind, comments: [Comment], status, source }
+Comment { id, author: PersonRef, created, modified, body, mentions, reactions, task }
+Anchor = TextRange { story, … }          // ADR 1020, by the runs that name the thread
+       | TextPoint { story, offset }      // an InDesign note, a Word comment at a caret
+       | Item { item, at: Option<Point> } // a shape, frame or group; a point in item space
+       | Page { page, at: Point }         // a page or artboard point (slide position, PDF sticky)
+       | Region { item, rect }            // a raster area, PDF markup rectangles
+       | Cell { item, address }           // an opaque module address the owner resolves (below)
+```
+
+- **Kind.** `comment` is a threaded comment (Word, PowerPoint modern, Excel threaded, Acrobat
+  replies). `note` is a single, unthreaded annotation (Excel legacy note, InDesign note, PDF sticky
+  note). A note can be converted to a thread, and the other way when it has no replies.
+- **People.** A document **people list** holds each author once: name, initials, `userId`,
+  `providerId`. Comments refer to it. Word's `people.xml`, Excel's `persons` and PowerPoint's
+  `authors.xml` map onto it; a PDF's `/T` string maps to a person without ids.
+- **Body.** Paragraphs of runs with bold, italic, underline and links, as the formats carry them,
+  and **mentions** (a person and the span of text that names them). Plain text stays the least
+  common form: it is the body with no marks.
+- **Times.** Created and modified, to the millisecond, UTC with the offset the file gave.
+- **Status.** `open`, `resolved`, `closed` for a thread; for a PDF, the review state of an
+  annotation (`Accepted`, `Rejected`, `Cancelled`, `Completed`, `None`) as a separate field.
+- **Task** (optional, per comment): assignee (person), due date, priority, title. PowerPoint modern
+  comments and Excel threaded comments carry them.
+- **Reactions** (optional): a person and an emoji.
+- **Resolving a thread** resolves it for all of its comments, as Word's Resolve does (ADR 1020).
+
+### Fidelity: each thread keeps its source
+
+A thread carries `source`: for each format that wrote it, the original XML element or PDF
+dictionary, and which comment ids it covers. The writers act on it as slide ADR 711 and doc ADR 613
+already do:
+- A thread that is unchanged is **re-emitted byte for byte**.
+- A thread edited in paged is re-rendered from the model, keeping the source's markers and any
+  fields the model does not carry (extension elements, `commentsExtensible` data, likes).
+- A field a target format cannot carry (replies in IDML, tasks in Word) is a **reported loss**, never a
+  silent drop. The export diagnostics name the thread.
+
+### Operations
+
+Each is one named undo step (ADR 1030), over the wire and in the script bridge:
+`insertComment(anchor, body, author?)`, `replyComment`, `editComment`, `resolveComment`,
+`reopenComment`, `moveCommentAnchor`, `deleteComment`, `setCommentTask`, `reactComment`,
+`setPeople`. ADR 1020's operations are these with a text-range anchor. A thread whose anchor target
+is deleted is not deleted with it: it becomes **orphaned** (kept, listed, and shown at its last
+position) and the host offers to re-anchor or delete it. A range comment whose text is deleted
+reads without a range, as ADR 1020 already says.
+
+`documentCollection:comments` lists every thread with its anchor resolved to **geometry** (page,
+rect) so a host can draw a pin or a balloon. For a `Cell` anchor the engine asks the owning
+module for the geometry through a resolver contribution (below).
+
+### The door, the host and the command line
+
+- **`comments@1`** in plugin-sdk (public, with the harness fake): list, add, reply, resolve,
+  edit, delete, subscribe to changes, and `contribute.commentAnchorResolver` for a module that owns
+  an address space (sheet: cell and range → rect on the sheet frame).
+- **One host Comments panel** replaces the stub: threads grouped by page or by anchor, filters
+  (open, resolved, mine, mentions), reply, resolve, and a **pin** on the canvas for every non-text
+  anchor. Text anchors keep the margin band (editor ADR 300, extensions ADR 349). Every module's
+  edit context shows the panel; no module draws its own.
+- **CLI and MCP:** `paged comments list | add | reply | resolve | export`, with JSON output in
+  the model's shape.
+
+### Format compatibility
+
+Each reader and writer lives with the format's owner; all of them read and write this model.
+
+| Format | Reads and writes | Owner |
+|---|---|---|
+| Word (`.docx`) | `comments.xml`, `commentsExtended` (`w15:done`, `paraIdParent`), `commentsIds` (`w16cid`), `commentsExtensible` (`w16cex` `dateUtc`), `people.xml` | doc |
+| Excel (`.xlsx`) | legacy `comments` plus the VML note, **and** `threadedComments` plus `persons` with mentions; kept paired as Excel requires (a note for each thread) | sheet |
+| PowerPoint (`.pptx`) | modern `modernComment_*` (p188) plus `authors.xml`; legacy `p:cmLst` read, written as modern | slide |
+| OpenDocument | `office:annotation` (and its reply chain) | doc (`docx-odt`), sheet (`ods`) |
+| InDesign (IDML) | `Note`; replies are folded into the note text, reported | engine (`idml-*`) |
+| PDF / Acrobat | `/Text`, `/FreeText`, `/Highlight` (`/QuadPoints`), `/Popup`, replies by `/IRT`, `/State` with `/StateModel`, `/T`, `/M`; export option "comments as annotations" | `paged-export-pdf`, `pdf-import` |
+| Illustrator (`.ai`) | through its PDF stream | publish |
+| Photoshop (`.psd`) | the annotation resource, if the corpus has one | `paged-psd`, later |
+
+## Migration
+
+1. **doc.** ADR 1020's `Comment` becomes the new `Comment`; `Story.comments` stays the text-anchor
+   index, `Document.comments` the thread store. Existing `.paged` documents read unchanged
+   (an old comment is a `TextRange` thread whose person has no ids).
+2. **slide.** `comments/comments.json` is read on open, converted to threads, and dropped on the
+   next save; the plugin's panel and overlay markers go; `pptx-export` writes from the model.
+   Slide ADR 711's amendment is superseded for the model and kept for the file format details.
+3. **sheet.** Notes and threads become `Cell` threads on the sheet frame; the resolver turns
+   addresses into rects; threaded comments become editable; the notes and threads stay paired.
+4. **engine and publish.** IDML notes become `note` threads; PDF annotations in and out.
+5. **image, draw, web, data.** They gain comments through the host panel with no module code.
+   image supplies `Region` geometry for a raster area.
+
+## Consequences
+
+- A feature made engine-native appears in every module's output and export at once; the five
+  per-module models, the slide plugin's panel and its container part go away.
+- A comment survives a trip through formats it does not belong to (a Word comment exported to PDF
+  shows in Acrobat as a thread; a PowerPoint comment survives `.paged` → `.pptx`).
+- A new engine type and ops ride a protocol bump (`paged-wire`), and the wire and the introspect
+  catalog are regenerated.
+- The model is larger than any one format needs. A format that cannot carry a field reports it.
+- plugin-sdk gains a public door; its version moves as the contract rule says.
+
+## Verification
+
+- Round trips against the oracles: Word, Excel and PowerPoint 16 open what paged writes with no
+  repair prompt and keep threads, replies, status, authors and mentions; Acrobat shows the
+  annotations and states; InDesign opens the IDML with its notes.
+- Goldens for unchanged threads (byte identity) and for edited ones (re-render keeps markers).
+- The SDK harness covers `comments@1`; the CLI verbs have goldens.

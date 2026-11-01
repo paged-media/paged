@@ -22,7 +22,7 @@
 
 use docx_core::{theme::tinted, RunProps, Shading, Theme, ThemeColorRef, ThemeFonts};
 use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_wordprocessingml_2006_main as wml;
-use paged_ooxml::tree::{self, El, Ns};
+
 use paged_ooxml::{part_dir, rels, resolve_target, OpcPackage};
 
 /// The theme part name (via the main document's `.rels`).
@@ -36,58 +36,28 @@ pub(crate) fn theme_part(pkg: &OpcPackage, main_part: &str) -> Option<String> {
 /// Read a theme part (`a:theme`): its colour scheme and font scheme. `None`
 /// when it does not parse or has no colour scheme.
 pub(crate) fn parse_theme(bytes: &[u8]) -> Option<Theme> {
-    let root = tree::parse(bytes).ok()?;
-    let elements = root.child(Ns::A, "themeElements")?;
-    let scheme = elements.child(Ns::A, "clrScheme")?;
-    let mut colors = Vec::new();
-    for (word, element) in docx_core::theme::SCHEME_SLOTS {
-        if let Some(hex) = scheme.child(Ns::A, element).and_then(color_value) {
-            colors.push((word.to_string(), hex));
-        }
-    }
+    let shared = paged_ooxml::drawingml::Theme::parse(bytes)?;
+    let colors: Vec<(String, String)> = docx_core::theme::SCHEME_SLOTS
+        .iter()
+        .filter_map(|(word, element)| Some((word.to_string(), shared.hex(element)?)))
+        .collect();
     if colors.is_empty() {
         return None;
     }
-    let fonts = elements.child(Ns::A, "fontScheme");
-    let half = |name: &str| {
-        fonts
-            .and_then(|f| f.child(Ns::A, name))
-            .map(|h| {
-                let face = |n: &str| {
-                    h.child(Ns::A, n)
-                        .and_then(|e| e.attr("typeface"))
-                        .filter(|t| !t.is_empty())
-                        .map(str::to_string)
-                };
-                ThemeFonts {
-                    latin: face("latin"),
-                    east_asia: face("ea"),
-                    complex_script: face("cs"),
-                }
-            })
-            .unwrap_or_default()
+    let fonts = |f: &paged_ooxml::drawingml::FontSet| ThemeFonts {
+        latin: f.latin.clone(),
+        east_asia: f.east_asian.clone(),
+        complex_script: f.complex.clone(),
     };
     Some(Theme {
-        name: root.attr("name").map(str::to_string),
+        name: shared.name,
         colors,
-        major: half("majorFont"),
-        minor: half("minorFont"),
+        major: fonts(&shared.major_font),
+        minor: fonts(&shared.minor_font),
         mapping: Vec::new(),
     })
 }
 
-/// A scheme slot's colour: `a:srgbClr/@val`, or `a:sysClr/@lastClr` (the
-/// colour the system colour had when the file was saved).
-fn color_value(slot: &El) -> Option<String> {
-    let hex = if let Some(c) = slot.child(Ns::A, "srgbClr") {
-        c.attr("val")?
-    } else {
-        slot.child(Ns::A, "sysClr")?.attr("lastClr")?
-    };
-    (hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit())).then(|| hex.to_ascii_uppercase())
-}
-
-/// `w:clrSchemeMapping` as `(Word slot, scheme slot)` pairs.
 pub(crate) fn color_mapping(m: &wml::ColorSchemeMapping) -> Vec<(String, String)> {
     let pairs = [
         ("background1", m.background1),

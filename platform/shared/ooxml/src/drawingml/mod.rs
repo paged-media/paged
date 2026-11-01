@@ -29,6 +29,7 @@
 //!   `a:blipFill` with every picture effect of its `a:blip`, `a:grpFill`,
 //!   and `a:ln`;
 //! - [`effect`], `a:effectLst` (or an `a:effectDag`'s direct effects);
+//! - [`theme`], the `a:theme` colour scheme and font scheme, read once;
 //! - [`resolved`], the NEUTRAL resolved IR (points, degrees, fractions,
 //!   sRGB bytes) the modules lower from, and the resolution into it;
 //! - [`write`], the resolved IR back as DrawingML, for the save paths.
@@ -43,6 +44,7 @@ pub mod effect;
 pub mod paint;
 pub mod pattern;
 pub mod resolved;
+pub mod theme;
 pub mod write;
 
 pub use color::{color, color_in, resolve, Color, ColorBase, Rgba, SchemeColors};
@@ -54,6 +56,7 @@ pub use paint::{
     blip, fill, fill_in, gradient, line, rect_attrs, Blip, BlipEffect, Fill, Gradient,
     GradientStop, Line, LineEnd, Pattern, RelRect, Rels, Shade, Tile,
 };
+pub use theme::{FontSet, Theme};
 
 use crate::tree::{El, Ns};
 
