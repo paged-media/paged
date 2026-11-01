@@ -1,3 +1,4 @@
+import { fnv1a32Hex } from "@paged-media/helpers";
 /*
  * This file is part of paged (https://paged.media).
  *
@@ -250,13 +251,7 @@ function copyChain(c: ChainRecord): ChainRecord {
  *  workbook lowers to now. Not cryptographic: it guards a refresh, it does
  *  not authenticate anything. */
 export function contentHash(value: unknown): string {
-  const text = JSON.stringify(value) ?? "";
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
+  return fnv1a32Hex(JSON.stringify(value) ?? "");
 }
 
 /** Defensive parse of a {@link TableRecord}; null unless well-formed. */

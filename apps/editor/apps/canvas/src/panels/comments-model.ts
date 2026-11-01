@@ -130,6 +130,33 @@ export const replyMutation = (
   args: { parentId, comment: stamp(reviewer, text, now) },
 });
 
+/** An InDesign note of a story: a single annotation at a point of the text,
+ *  with no thread, no replies and no resolved state (engine ADR 172). It is
+ *  edited and removed with the note operations, not the comment ones. */
+export function isStoryNote(
+  c: Pick<CommentSummary, "threadKind" | "threadId" | "storyId">,
+): boolean {
+  return c.threadKind === "note" && !c.threadId && !!c.storyId;
+}
+
+/** The edit of a comment, or of a story note. */
+export const editFor = (
+  c: Pick<CommentSummary, "id" | "threadKind" | "threadId" | "storyId">,
+  text: string,
+  now: () => string,
+) =>
+  isStoryNote(c)
+    ? { op: "editNote", args: { noteId: c.id, text, date: now() } }
+    : editMutation(c.id, text, now);
+
+/** The removal of a comment, or of a story note. */
+export const deleteFor = (
+  c: Pick<CommentSummary, "id" | "threadKind" | "threadId" | "storyId">,
+) =>
+  isStoryNote(c)
+    ? { op: "deleteNote", args: { noteId: c.id } }
+    : deleteMutation(c.id);
+
 export const resolveMutation = (commentId: string, resolved: boolean) => ({
   op: "resolveComment",
   args: { commentId, resolved },

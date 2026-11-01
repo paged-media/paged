@@ -32,6 +32,7 @@
 //
 // PURE: content in, mutations out.
 
+import { fnv1a32Hex } from "@paged-media/helpers";
 import type { Mutation, PropertyPath, Value } from "@paged-media/plugin-api";
 
 import type {
@@ -76,16 +77,6 @@ export interface CellParagraphStyle {
 /** The gap (pt) between a repeat-fill's right tab stop and the cell's right
  *  edge, so the tab never wraps the line (a native cell has no inset). */
 export const FILL_TAB_GAP_PT = 1;
-
-/** FNV-1a, 32-bit, hex — a short stable content address. */
-function fnv(s: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
-}
 
 /** The paragraph style a cell needs, or null (left/general, no fill, no
  *  indent: the default paragraph). Alignment alone keeps the fixed ids of
@@ -152,7 +143,7 @@ export function cellParagraphStyle(
   }
   const key = JSON.stringify(doc ? { doc, props } : props);
   return {
-    id: `ParagraphStyle/paged.sheet ${fnv(key)}`,
+    id: `ParagraphStyle/paged.sheet ${fnv1a32Hex(key)}`,
     name: `Sheet · ${parts.join(" · ")}`,
     props,
     ...(doc ? { basedOn: doc } : {}),
