@@ -245,7 +245,7 @@ Read from the code on 2026-10-30.
   edits direction, start, duration, delay, repeat, rewind and trigger; Preview plays the slide
   over the canvas; the Animation Painter copies a shape's effects. A picked motion path is
   shown on the slide and edited with Bézier handles (an anchor with its handles, a handle
-  alone), one undo step, written back as `p:animMotion path`; Auto-reverse and Lock the path
+  alone; a double-click adds or deletes a point), one undo step, written back as `p:animMotion path`; Auto-reverse and Lock the path
   are effect options (ADR 714, amendment 2026-10-30). Typed commands add, remove,
   retime, move, list and preview animations.
 - **Video and audio** (ADR 718, engine ADR 1027, extensions ADR 345, amendment 1). A picture with

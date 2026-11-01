@@ -23,7 +23,8 @@
 // paged.draw's Direct Selection edits a path: a square anchor moves with
 // its two handles, a round handle bends its curve, a line segment shows
 // none. Release writes the path into the slide's timing, one undo step,
-// and export writes it back as `p:animMotion path`.
+// and export writes it back as `p:animMotion path`. A double-click on the
+// path adds a point there; on an anchor it deletes the point.
 //
 // The path is the timing's, not a page item, so it is drawn on the overlay
 // channel (`contribute.overlay`, the adjust handles' door) rather than
@@ -117,6 +118,113 @@ export function handlePoint(segs: readonly PathSeg[], h: PathHandle): Pt {
   if (!s || s.kind === "close") return [0, 0];
   if (h.which === "to" || s.kind !== "curve") return s.to;
   return s[h.which];
+}
+
+const lerp = (a: Pt, b: Pt, t: number): Pt => [
+  a[0] + (b[0] - a[0]) * t,
+  a[1] + (b[1] - a[1]) * t,
+];
+
+/** Where segment `i` starts (its predecessor's end point). */
+function startOf(segs: readonly PathSeg[], i: number): Pt | null {
+  const prev = segs[i - 1];
+  return prev && prev.kind !== "close" ? prev.to : null;
+}
+
+/** The point of segment `i` at `t` (0 to 1). */
+function pointAt(segs: readonly PathSeg[], i: number, t: number): Pt | null {
+  const s = segs[i];
+  const a = startOf(segs, i);
+  if (!s || s.kind === "close" || s.kind === "move" || !a) return null;
+  if (s.kind === "line") return lerp(a, s.to, t);
+  const ab = lerp(a, s.c1, t);
+  const bc = lerp(s.c1, s.c2, t);
+  const cd = lerp(s.c2, s.to, t);
+  return lerp(lerp(ab, bc, t), lerp(bc, cd, t), t);
+}
+
+/** The place on the path nearest `p` (slide fractions, measured in
+ *  `scale` units so a distance means the same both ways). */
+export function nearestOnPath(
+  segs: readonly PathSeg[],
+  p: Pt,
+  scale: Pt = [1, 1],
+): { seg: number; t: number; dist: number } | null {
+  let best: { seg: number; t: number; dist: number } | null = null;
+  const steps = 48;
+  segs.forEach((_, seg) => {
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps;
+      const q = pointAt(segs, seg, t);
+      if (!q) return;
+      const dist = Math.hypot(
+        (q[0] - p[0]) * scale[0],
+        (q[1] - p[1]) * scale[1],
+      );
+      if (!best || dist < best.dist) best = { seg, t, dist };
+    }
+  });
+  return best;
+}
+
+/** Add a point on segment `seg` at `t`: a line splits in two, a curve at
+ *  de Casteljau's point, so the path keeps its shape. */
+export function insertPoint(
+  segs: readonly PathSeg[],
+  seg: number,
+  t: number,
+): PathSeg[] {
+  const s = segs[seg];
+  const a = startOf(segs, seg);
+  if (!s || !a || (s.kind !== "line" && s.kind !== "curve")) return [...segs];
+  const out = [...segs];
+  if (s.kind === "line") {
+    out.splice(seg, 1, { kind: "line", to: lerp(a, s.to, t) }, s);
+    return out;
+  }
+  const ab = lerp(a, s.c1, t);
+  const bc = lerp(s.c1, s.c2, t);
+  const cd = lerp(s.c2, s.to, t);
+  const abc = lerp(ab, bc, t);
+  const bcd = lerp(bc, cd, t);
+  const mid = lerp(abc, bcd, t);
+  out.splice(
+    seg,
+    1,
+    { kind: "curve", c1: ab, c2: abc, to: mid },
+    { kind: "curve", c1: bcd, c2: cd, to: s.to },
+  );
+  return out;
+}
+
+/** Delete the anchor that segment `seg` ends at; a path keeps at least
+ *  two points. The neighbouring segments join into one. */
+export function deletePoint(segs: readonly PathSeg[], seg: number): PathSeg[] {
+  const ends = segs.filter((x) => x.kind !== "close").length;
+  const s = segs[seg];
+  if (!s || s.kind === "close" || ends <= 2) return [...segs];
+  const out = [...segs];
+  const next = out[seg + 1];
+  if (seg === 0) {
+    // The start point goes: the next end point becomes the start.
+    if (next && next.kind !== "close") {
+      out.splice(0, 2, { kind: "move", to: next.to });
+    }
+    return out;
+  }
+  if (!next || next.kind === "close") {
+    out.splice(seg, 1);
+    return out;
+  }
+  const a = startOf(segs, seg)!;
+  if (s.kind !== "curve" && next.kind !== "curve") {
+    out.splice(seg, 2, { kind: "line", to: next.to });
+  } else {
+    const c1 = s.kind === "curve" ? s.c1 : a;
+    const c2 = next.kind === "curve" ? next.c2 : next.to;
+    out.splice(seg, 2, { kind: "curve", c1, c2, to: next.to });
+  }
+  return out;
 }
 
 /** The page point of a path point. */
@@ -236,6 +344,22 @@ export class MotionPathModel implements Disposable {
     return out.ok;
   }
 
+  /** Add a point where the path passes nearest page point `p` (within a
+   *  few pt), one undo step. */
+  async addPointAt(p: Pt): Promise<boolean> {
+    const st = this.state;
+    const hit = nearestOnPath(st.segs, fromPage(st, p), st.slide);
+    if (!hit || hit.dist > 8) return false;
+    return this.commit(insertPoint(st.segs, hit.seg, hit.t));
+  }
+
+  /** Delete the anchor that segment `seg` ends at, one undo step. */
+  async deleteAnchor(seg: number): Promise<boolean> {
+    const next = deletePoint(this.state.segs, seg);
+    if (next.length === this.state.segs.length && seg !== 0) return false;
+    return this.commit(next);
+  }
+
   cancel(original: readonly PathSeg[]) {
     this.dragging = false;
     this.set({ ...this.state, segs: original });
@@ -319,6 +443,25 @@ export function motionPathOverlay(model: MotionPathModel): OverlayContribution {
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
         />
+        <path
+          data-slide-motion-path-hit=""
+          d={svgPath(s, s.segs)}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={10}
+          vectorEffect="non-scaling-stroke"
+          style={{ pointerEvents: "stroke" }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            const box =
+              e.currentTarget.ownerSVGElement?.getBoundingClientRect();
+            void model.addPointAt([
+              (e.clientX - (box?.left ?? 0) - camera.tx) / camera.scale -
+                rect.x,
+              (e.clientY - (box?.top ?? 0) - camera.ty) / camera.scale - rect.y,
+            ]);
+          }}
+        />
         {first ? marker(first.to, "#2e9d4a", "start") : null}
         {lastSeg ? marker(lastSeg.to, "#d0312d", "end") : null}
         {s.segs.map((seg, i) => {
@@ -374,6 +517,14 @@ export function motionPathOverlay(model: MotionPathModel): OverlayContribution {
               vectorEffect="non-scaling-stroke"
               style={{ cursor: "default", pointerEvents: "all" }}
               onPointerDown={onDown(h)}
+              onDoubleClick={
+                anchor
+                  ? (e) => {
+                      e.stopPropagation();
+                      void model.deleteAnchor(h.seg);
+                    }
+                  : undefined
+              }
             />
           );
         })}
