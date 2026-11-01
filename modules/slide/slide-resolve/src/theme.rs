@@ -507,11 +507,7 @@ pub fn gallery() -> Vec<GalleryTheme> {
 /// everything else (the format scheme, the other scripts' fonts, the
 /// extensions) as it was. `None` when the part has no colour or font scheme.
 pub fn rewrite_theme_xml(xml: &str, theme: &ThemeIr) -> Option<String> {
-    let esc = |s: &str| {
-        s.replace('&', "&amp;")
-            .replace('"', "&quot;")
-            .replace('<', "&lt;")
-    };
+    let esc = paged_ooxml::xml::escape_attr;
     let name = match &theme.variant {
         Some(v) if v != "Original" => format!("{} {v}", theme.name),
         _ => theme.name.clone(),
