@@ -175,7 +175,6 @@
       "patterns": ["0?\\.55228"],
       "extensions": [".rs", ".ts", ".tsx"],
       "baseline": [
-        "engine/core/crates/paged-renderer/src/pipeline/shapes.rs",
         "modules/draw/packages/draw-bundle/test/oracle/perspective-grid.spec.ts",
         "modules/draw/packages/draw-bundle/test/roundtrip/author.ts",
         "modules/draw/packages/draw-geometry/test/bench-data.ts",
