@@ -40,6 +40,7 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Sheet/New sheet from dataset", "sheetFromDataset", "dataset"],
   ["Sheet/Export sheet as CSV…", "exportCsv", "files"],
   ["Sheet/R1C1 reference style", "toggleR1C1", "view"],
+  ["Sheet/New comment…", "newComment", "review"],
 ];
 
 /** The right-click rows of the sheet's frame surface (`Context/…`, shown
@@ -64,6 +65,7 @@ const CONTEXT_ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Context/Group", "groupSelection", "outline"],
   ["Context/Ungroup", "ungroupSelection", "outline"],
   ["Context/Goal Seek…", "goalSeek", "data"],
+  ["Context/New comment…", "newComment", "review"],
 ];
 
 /** Register every entry; one Disposable drops them all. */

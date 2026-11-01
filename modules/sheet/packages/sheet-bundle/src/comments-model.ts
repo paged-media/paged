@@ -37,15 +37,28 @@
 //                       in the panel is written to the workbook through the
 //                       session's thread doors, so saving writes it.
 //
-// A thread the panel starts on a cell is not supported (the panel starts
-// item, page and text threads); a plain note (no thread) is not projected.
+// A thread started on a cell through the comments door (the "New comment"
+// command) has no workbook twin yet: the next reconcile writes it into the
+// workbook (`addThread`, its replies after it) and swaps the document's thread
+// for one carrying the workbook's ids, so both sides name it alike. The host
+// panel itself starts item, page and text threads, not cell ones. A plain note
+// (no thread) is not projected.
 // When both sides changed the same text since the last reconcile, the
 // workbook wins. A cell whose frame is deleted becomes orphaned by the
 // engine's own rule; the workbook keeps the thread.
 
-import type { BundleHost, ElementId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  CommentAuthor,
+  ElementId,
+} from "@paged-media/plugin-api";
 
-import { cellOfA1, parseBinding } from "../../sheet-host-model/src";
+import {
+  cellOfA1,
+  HEADING_INDEX,
+  parseBinding,
+  type LoweredContent,
+} from "../../sheet-host-model/src";
 import type { CellThreadInfo, SheetEngine, ThreadAuthor } from "./engine";
 
 /** The format name a projected comment's source carries. */
@@ -110,6 +123,16 @@ export interface Plan {
   workbook: WbAction[];
   /** Replies written in the panel that the workbook does not have yet. */
   replies: Array<{ row: EngineRow; root: WbComment }>;
+  /** Cell threads started in the document that the workbook does not have. */
+  starts: Array<{
+    row: EngineRow;
+    sheet: number;
+    sheetName: string;
+    r: number;
+    c: number;
+    item: string;
+    replies: EngineRow[];
+  }>;
 }
 
 // -- addresses ---------------------------------------------------------------
@@ -196,6 +219,86 @@ export function frameFor(
   return (showing ?? of[0])?.id ?? null;
 }
 
+// -- where an address points ----------------------------------------------------
+
+/** What the comment-anchor door answers: `[x, y, w, h]` in points from the
+ *  frame's top-left, and the address as the user knows it. */
+export interface AnchorGeometry {
+  rect: [number, number, number, number];
+  label: string;
+}
+
+/** A sheet frame as the resolver reads it: the sheet it shows, the table the
+ *  page holds (tracks in order: printed headings, frozen rows, the window)
+ *  and the room the frame's content box gives it. */
+export interface ResolvableFrame {
+  sheetName: string;
+  content: LoweredContent;
+  /** The content box (pt); a cell below or right of it is not shown. */
+  box?: { widthPt: number; heightPt: number };
+  /** False for a frame that continues a chain: its rows start elsewhere. */
+  head?: boolean;
+}
+
+/**
+ * The rectangle of `address` in a frame's table, in points from its top-left.
+ * The table's own tracks are the truth: hidden rows and columns are not in
+ * it (they take no room), a frozen row sits where the table puts it, the
+ * printed headings take their strip, and a cell outside the window the
+ * table shows is simply absent. A range answers the rectangle of its cells
+ * that are shown. Null when the address is not `Sheet!A1[:B2]`, names
+ * another sheet than the frame's, or no cell of it is shown.
+ */
+export function anchorGeometry(
+  address: string,
+  frame: ResolvableFrame,
+): AnchorGeometry | null {
+  const bang = address.lastIndexOf("!");
+  if (bang <= 0 || frame.head === false) return null;
+  const first = address.slice(bang + 1).split(":")[0] ?? "";
+  const parsed = parseAddress(`${address.slice(0, bang)}!${first}`);
+  const range = parseRange(address);
+  if (!parsed || !range || parsed.sheet !== frame.sheetName) return null;
+
+  let x = 0;
+  let x0: number | null = null;
+  let x1 = 0;
+  for (const col of frame.content.cols) {
+    if (
+      col.index !== HEADING_INDEX &&
+      col.index >= range.c0 &&
+      col.index <= range.c1
+    ) {
+      x0 ??= x;
+      x1 = x + col.widthPt;
+    }
+    x += col.widthPt;
+  }
+  let y = 0;
+  let y0: number | null = null;
+  let y1 = 0;
+  for (const row of frame.content.rows) {
+    if (
+      row.index !== HEADING_INDEX &&
+      row.index >= range.r0 &&
+      row.index <= range.r1
+    ) {
+      y0 ??= y;
+      y1 = y + row.heightPt;
+    }
+    y += row.heightPt;
+  }
+  if (x0 === null || y0 === null) return null;
+  // Beyond the content box the cell is not on the page (the engine flows
+  // the rest to the next frame of a chain, or the window ends there).
+  if (frame.box && (x0 >= frame.box.widthPt || y0 >= frame.box.heightPt))
+    return null;
+  return {
+    rect: [x0, y0, x1 - x0, y1 - y0],
+    label: address,
+  };
+}
+
 // -- times and people ---------------------------------------------------------
 
 const DT = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?$/;
@@ -266,6 +369,14 @@ const isCellRoot = (r: EngineRow) =>
   r.anchor?.kind === "cell" &&
   r.source?.format === SOURCE_FORMAT;
 
+/** A cell thread's root that the workbook has not taken yet: no source. */
+const isStartedRoot = (r: EngineRow) =>
+  !r.parentId &&
+  !r.orphaned &&
+  r.anchor?.kind === "cell" &&
+  !r.source &&
+  typeof (r.anchor as { address?: unknown }).address === "string";
+
 // -- the plan --------------------------------------------------------------------
 
 const specOf = (c: WbComment) => ({
@@ -294,8 +405,9 @@ export function plan(
   rows: readonly EngineRow[],
   snap: Snapshot,
   frames: () => readonly FrameRange[],
+  sheets: ReadonlyArray<{ id: number; name: string }> = [],
 ): Plan {
-  const out: Plan = { engine: [], workbook: [], replies: [] };
+  const out: Plan = { engine: [], workbook: [], replies: [], starts: [] };
   const w = new Map(wb.map((c) => [c.id, c]));
   const eRoots = new Map(rows.filter(isCellRoot).map((r) => [r.id, r]));
   const eReplies = new Map(
@@ -388,6 +500,31 @@ export function plan(
         inEngine.delete(id);
       }
     }
+  }
+
+  // Cell threads started in the document (no workbook source): the workbook
+  // takes them, unless it already has a thread on that cell or no sheet of
+  // the workbook carries the address's name.
+  const taken = new Set(
+    [...w.values()].map((c) => `${c.sheet}:${c.row}:${c.col}`),
+  );
+  for (const row of rows) {
+    if (!isStartedRoot(row) || gone.has(row.id)) continue;
+    const a = parseAddress((row.anchor as { address: string }).address);
+    const sheet = a && sheets.find((x) => x.name === a.sheet);
+    if (!a || !sheet) continue;
+    const key = `${sheet.id}:${a.row}:${a.col}`;
+    if (taken.has(key)) continue;
+    taken.add(key);
+    out.starts.push({
+      row,
+      sheet: sheet.id,
+      sheetName: sheet.name,
+      r: a.row,
+      c: a.col,
+      item: (row.anchor as { item: string }).item,
+      replies: rows.filter((x) => x.parentId === row.id),
+    });
   }
 
   const replyIds = new Set<string>([
@@ -499,6 +636,18 @@ export interface SheetCommentsDeps {
 export interface SheetComments {
   /** Reconcile now (coalesced with one in flight). */
   sync(): Promise<void>;
+  /** Start a thread on a workbook cell through the comments door and have
+   *  the workbook take it. `prefer` is the frame to pin it to (the entered
+   *  one) when it shows the sheet. A cell that has a thread takes the text
+   *  as a reply. */
+  startThread(at: {
+    sheet: number;
+    row: number;
+    col: number;
+    text: string;
+    prefer?: string | null;
+    author?: CommentAuthor;
+  }): Promise<{ ok: true; threadId: string } | { ok: false; reason: string }>;
   /** A workbook was restored with the document: forget the last reconcile.
    *  (An import keeps it, so the threads of the workbook it replaces are
    *  deleted from the document.) */
@@ -516,6 +665,9 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
   // appear on either side until a workbook loads, so document changes cost
   // nothing here (the engine is not asked, the comments are not read).
   let idle = false;
+  // The next reconcile reads the document even when both sides were idle: a
+  // thread was started in the document.
+  let probe = false;
 
   const rows = async (): Promise<EngineRow[]> => {
     const all: unknown = await host.document.collection("comments" as never);
@@ -639,6 +791,78 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
         host.log.warn("sheet comments: the workbook refused a reply", err);
       }
     }
+    for (const st of p.starts) {
+      try {
+        const a = author(st.row);
+        const when = toDt(st.row.date, deps.now);
+        const rootId = engine.addThread!(
+          st.sheet,
+          st.r,
+          st.c,
+          a,
+          when,
+          st.row.text,
+          deps.seed?.() ?? Math.floor(Math.random() * 0xffffffff),
+        );
+        changed = true;
+        const source = {
+          format: SOURCE_FORMAT,
+          data: JSON.stringify({
+            userId: a.userId,
+            providerId: "None",
+            timestamp: when,
+          }),
+        };
+        const comment = (id: string, r: EngineRow) => ({
+          id,
+          author: r.author ?? null,
+          initials: r.initials ?? null,
+          date: r.date ?? null,
+          text: r.text,
+          person: r.person ?? null,
+          source,
+        });
+        // The document's thread is replaced by one with the workbook's ids.
+        swaps.push(
+          { op: "deleteComment", args: { commentId: st.row.id } },
+          {
+            op: "insertCommentThread",
+            args: {
+              anchor: {
+                kind: "cell",
+                item: st.item,
+                address: cellAddress(st.sheetName, st.r, st.c),
+              },
+              comment: comment(rootId, st.row),
+            },
+          },
+        );
+        for (const reply of st.replies) {
+          const rid = engine.replyThread!(
+            st.sheet,
+            st.r,
+            st.c,
+            author(reply),
+            toDt(reply.date, deps.now),
+            reply.text,
+            deps.seed?.() ?? Math.floor(Math.random() * 0xffffffff),
+          );
+          swaps.push({
+            op: "replyComment",
+            args: { parentId: rootId, comment: comment(rid, reply) },
+          });
+        }
+        if (st.row.resolved) {
+          engine.setThreadDone!(st.sheet, st.r, st.c, true);
+          swaps.push({
+            op: "resolveComment",
+            args: { commentId: rootId, resolved: true },
+          });
+        }
+      } catch (err) {
+        host.log.warn("sheet comments: the workbook refused a new thread", err);
+      }
+    }
     return { changed, swaps };
   }
 
@@ -646,7 +870,9 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
     const engine = deps.engine();
     if (!engine?.listThreads || !engine.listSheets) return;
     const wb = readWorkbook(engine);
-    if (wb.length === 0 && snap.size === 0) {
+    const probing = probe;
+    probe = false;
+    if (wb.length === 0 && snap.size === 0 && !probing) {
       idle = true;
       return;
     }
@@ -657,7 +883,7 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
     const frameList = wb.some((c) => c.id === c.rootId && !placed.has(c.id))
       ? await frames()
       : [];
-    const p = plan(wb, current, snap, () => frameList);
+    const p = plan(wb, current, snap, () => frameList, engine.listSheets());
     const w = writeWorkbook(engine, p);
     if (w.changed) deps.edited();
     const ok = await apply([...p.engine, ...w.swaps]);
@@ -699,8 +925,65 @@ export function createSheetComments(deps: SheetCommentsDeps): SheetComments {
     if (!idle) void sync();
   });
 
+  async function startThread(at: {
+    sheet: number;
+    row: number;
+    col: number;
+    text: string;
+    prefer?: string | null;
+    author?: CommentAuthor;
+  }): Promise<{ ok: true; threadId: string } | { ok: false; reason: string }> {
+    const engine = deps.engine();
+    const sheet = engine?.listSheets().find((x) => x.id === at.sheet);
+    if (!engine || !sheet) return { ok: false, reason: "no workbook" };
+    if (!host.supports("comments@1")) {
+      return { ok: false, reason: "the host has no comments door" };
+    }
+    const text = at.text.trim();
+    if (!text) return { ok: false, reason: "no text" };
+    const existing = readWorkbook(engine).find(
+      (c) =>
+        c.id === c.rootId &&
+        c.sheet === at.sheet &&
+        c.row === at.row &&
+        c.col === at.col,
+    );
+    let r: Awaited<ReturnType<BundleHost["comments"]["startThread"]>>;
+    let threadId: string;
+    if (existing) {
+      // One thread per cell, as in Excel: the text joins it.
+      const rep = await host.comments.reply(existing.id, text, at.author);
+      if (!rep.ok) return rep;
+      threadId = existing.id;
+    } else {
+      const list = await frames();
+      const item =
+        at.prefer &&
+        list.some((f) => f.id === at.prefer && f.sheet === sheet.name)
+          ? at.prefer
+          : frameFor(list, sheet.name, at.row, at.col);
+      if (!item) return { ok: false, reason: "no frame shows this sheet" };
+      r = await host.comments.startThread(
+        {
+          kind: "cell",
+          item,
+          address: cellAddress(sheet.name, at.row, at.col),
+        },
+        text,
+        at.author,
+      );
+      if (!r.ok) return r;
+      threadId = r.threadId;
+    }
+    probe = true;
+    idle = false;
+    await sync();
+    return { ok: true, threadId };
+  }
+
   return {
     sync,
+    startThread,
     reset() {
       snap = new Map();
       idle = false;

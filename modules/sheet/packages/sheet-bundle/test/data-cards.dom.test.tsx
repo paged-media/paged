@@ -3,7 +3,13 @@
 // card's rule, the active cell's input message and list dropdown.
 
 import { afterEach, describe, expect, it } from "bun:test";
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/react";
 import { createElement } from "react";
 
 import type { FrameSurfaceProps } from "@paged-media/plugin-api";
@@ -40,7 +46,10 @@ const scene: GridScene = {
 };
 
 /** A fake session: `data` overrides the data tools; `changed()` re-renders. */
-function fakeSession(data: Partial<DataToolsApi> = {}) {
+function fakeSession(
+  data: Partial<DataToolsApi> = {},
+  startCellComment?: FrameSurfaceSession["startCellComment"],
+) {
   const calls: Array<[string, ...unknown[]]> = [];
   const listeners = new Set<() => void>();
   const changed = () => {
@@ -50,6 +59,9 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
   const session: FrameSurfaceSession = {
     ...dataToolsStub(data),
     undoCellEdit: () => (calls.push(["undo"]), true),
+    startCellComment:
+      startCellComment ??
+      (async () => ({ ok: false as const, reason: "stub" })),
     pasteSpecialOpen: () => false,
     closePasteSpecial: () => {},
     pasteAtSelection: async () => ({ ok: true as const, rows: 1, cols: 1 }),
@@ -585,5 +597,58 @@ describe("Goal Seek card [sheet.whatif.goalseek]", () => {
     });
     expect(fake.calls).toContainEqual(["undo"]);
     expect(r.queryByTestId("sheet-goal-seek-status")).toBeNull();
+  });
+});
+
+describe("New comment card [sheet.comments.threads]", () => {
+  it("starts the thread with the typed text and closes", async () => {
+    let open = true;
+    const started: string[] = [];
+    const fake = fakeSession(
+      {
+        dataCard: () => (open ? { kind: "comment" } : null),
+        closeDataCard: () => {
+          open = false;
+          fake.changed();
+        },
+      },
+      async (text) => {
+        started.push(text);
+        return { ok: true as const, threadId: "t1" };
+      },
+    );
+    const r = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    // empty text: asks for it, starts nothing
+    fireEvent.click(r.getByTestId("sheet-comment-ok"));
+    expect(r.getByRole("alert").textContent).toContain("text");
+    expect(started).toEqual([]);
+    fireEvent.change(r.getByTestId("sheet-comment-text"), {
+      target: { value: "check this" },
+    });
+    fireEvent.click(r.getByTestId("sheet-comment-ok"));
+    await waitFor(() =>
+      expect(r.queryByTestId("sheet-comment-card")).toBeNull(),
+    );
+    expect(started).toEqual(["check this"]);
+  });
+
+  it("keeps the card open and says why when the thread is refused", async () => {
+    const fake = fakeSession(
+      { dataCard: () => ({ kind: "comment" }) },
+      async () => ({ ok: false as const, reason: "no frame shows this sheet" }),
+    );
+    const r = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    fireEvent.change(r.getByTestId("sheet-comment-text"), {
+      target: { value: "x" },
+    });
+    fireEvent.click(r.getByTestId("sheet-comment-ok"));
+    await waitFor(() =>
+      expect(r.getByRole("alert").textContent).toContain("no frame shows"),
+    );
+    expect(r.queryByTestId("sheet-comment-card")).not.toBeNull();
   });
 });

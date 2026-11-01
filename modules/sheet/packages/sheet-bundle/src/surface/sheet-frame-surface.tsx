@@ -116,6 +116,7 @@ export type FrameSurfaceSession = Pick<
   | "sheets"
   | "state"
   | "undoCellEdit"
+  | "startCellComment"
   | keyof DataToolsApi
 >;
 

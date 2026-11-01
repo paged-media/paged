@@ -74,7 +74,8 @@ export type DataCard =
   | { kind: "validation" }
   | { kind: "sort" }
   | { kind: "filter"; col: number }
-  | { kind: "goalSeek" };
+  | { kind: "goalSeek" }
+  | { kind: "comment" };
 
 /** Where the AutoFilter's dropdown buttons sit: its header row, its
  *  columns (sheet indices), and the columns that filter. */

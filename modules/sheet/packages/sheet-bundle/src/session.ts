@@ -145,7 +145,11 @@ import type {
   NamedStyleUsage,
 } from "./engine-docstyles";
 import { readKnownSwatchIds } from "./swatch-mints";
-import { createSheetComments } from "./comments-model";
+import {
+  anchorGeometry,
+  createSheetComments,
+  type AnchorGeometry,
+} from "./comments-model";
 import {
   csvBytes,
   type CsvExportOptions,
@@ -489,6 +493,19 @@ export interface WorkbookSession extends DataToolsApi {
    *  threads now (sheet ADR 528; it also runs after a load and on every
    *  document change). Resolves when the reconcile has finished. */
   syncComments(): Promise<void>;
+  /** Sheet ADR 528 — where a comment thread's cell address points in the
+   *  sheet frame `item`, for `host.contribute.commentAnchor`: the rect in
+   *  points from the frame's top-left and the address as a label. Null when
+   *  the address is not of this workbook, the frame does not show that
+   *  sheet, or the cell is not in the window the frame shows (hidden,
+   *  scrolled out, or past the content box). */
+  commentAnchor(address: string, item: string): AnchorGeometry | null;
+  /** Start a comment thread on the active cell through the comments door
+   *  ("New comment"); the workbook takes it at once. A cell that has a
+   *  thread takes the text as a reply. */
+  startCellComment(
+    text: string,
+  ): Promise<{ ok: true; threadId: string } | { ok: false; reason: string }>;
   /** Set which sheet is active (and default its range to the used
    *  extent). */
   setActiveSheet(id: number): void;
@@ -7645,6 +7662,32 @@ export function createWorkbookSession(
 
     syncComments() {
       return sheetComments.sync();
+    },
+
+    commentAnchor(address, item) {
+      const info = loweredTables.get(item);
+      const engine = state.engine;
+      if (!info?.content || !engine) return null;
+      const sheet = engine.listSheets().find((x) => x.id === info.sheet);
+      if (!sheet) return null;
+      return anchorGeometry(address, {
+        sheetName: sheet.name,
+        content: info.content,
+        box: info.chain ? info.chain.boxes[0] : info.boxPt,
+      });
+    },
+
+    async startCellComment(text) {
+      const at = activeOf();
+      if (!at || state.activeSheet === null || !state.engine)
+        return { ok: false, reason: "no active cell" };
+      return sheetComments.startThread({
+        sheet: state.activeSheet,
+        row: at.row,
+        col: at.col,
+        text,
+        prefer: lastLoweredTable?.frameId,
+      });
     },
 
     requestFind() {

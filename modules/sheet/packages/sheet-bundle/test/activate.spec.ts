@@ -27,6 +27,7 @@ import { describe, expect, it } from "bun:test";
 import type {
   BundleHost,
   CommandContribution,
+  CommentAnchorContribution,
   Disposable,
   EditContextContribution,
   ExporterContribution,
@@ -48,6 +49,7 @@ function fakeHost() {
   const exporters: ExporterContribution[] = [];
   const objectTypes: ObjectTypeContribution[] = [];
   const editContexts: EditContextContribution[] = [];
+  const anchors: CommentAnchorContribution[] = [];
   let disposed = 0;
   const track = (): Disposable => ({
     dispose() {
@@ -70,6 +72,7 @@ function fakeHost() {
       f === "contribute.exporter@1" ||
       f === "contribute.objectType@1" ||
       f === "contribute.editContext@1" ||
+      f === "contribute.commentAnchor@1" ||
       f === "contribute.schemaPanel@1",
     contribute: {
       objectModel: () => ({ changed() {}, dispose() {} }),
@@ -86,6 +89,10 @@ function fakeHost() {
       },
       command(c: CommandContribution): Disposable {
         commands.push(c);
+        return track();
+      },
+      commentAnchor(c: CommentAnchorContribution): Disposable {
+        anchors.push(c);
         return track();
       },
       importer(c: ImporterContribution): Disposable {
@@ -132,6 +139,7 @@ function fakeHost() {
     exporters,
     objectTypes,
     editContexts,
+    anchors,
     openedPanels,
     disposedCount: () => disposed,
   };
@@ -196,7 +204,22 @@ describe("sheet_plugin_bundle_activate", () => {
       "media.paged.sheet.command.groupSelection",
       "media.paged.sheet.command.ungroupSelection",
       "media.paged.sheet.command.goalSeek",
+      "media.paged.sheet.command.newComment",
     ]);
+  });
+
+  it("registers the cell comment anchor, which answers null off any sheet frame, and disposes it", () => {
+    const fake = fakeHost();
+    const active = sheetBundle.activate(fake.host);
+    expect(fake.anchors.map((a) => [a.id, a.kind])).toEqual([
+      ["media.paged.sheet.commentAnchor.cell", "cell"],
+    ]);
+    // no workbook, no frame: the pin stays at the frame's top-left
+    expect(fake.anchors[0]!.resolve("Sheet1!B3", "frame-1")).toBeNull();
+    expect(fake.anchors[0]!.resolve("shape:12", "frame-1")).toBeNull();
+    const before = fake.disposedCount();
+    active.dispose();
+    expect(fake.disposedCount()).toBeGreaterThan(before);
   });
 
   it("titles the placing verbs 'Place … on page' (the ids keep their names)", () => {

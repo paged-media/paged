@@ -151,5 +151,74 @@ describe.skipIf(!ENGINE_BUILT)(
       expect(all.every((r) => r.orphaned)).toBe(true);
       expect(engine.listThreads!(sheet)).toHaveLength(1);
     });
+
+    it("starts a thread on a cell through the comments door; the workbook takes it", async () => {
+      const session = createWorkbookSession(host);
+      s = session;
+      await session.import(
+        await authorWorkbook(3, 2, (r, c) => String(r * 2 + c + 1)),
+        "c.xlsx",
+      );
+      const engine = session.state().engine!;
+      const sheet = session.state().activeSheet!;
+      session.setRange("A1:B3");
+      const frame = await session.lowerSelection();
+      expect(frame).not.toBeNull();
+      await settle();
+      expect(engine.listThreads!(sheet)).toHaveLength(0);
+
+      session.selectCell(1, 1); // B2
+      const r = await session.startCellComment("look at this");
+      expect(r.ok).toBe(true);
+      await settle();
+
+      // The workbook holds it: one thread at B2, the text as typed.
+      const threads = engine.listThreads!(sheet);
+      expect(threads).toHaveLength(1);
+      expect([threads[0]!.row, threads[0]!.col]).toEqual([1, 1]);
+      expect(threads[0]!.comments.map((c) => c.text)).toEqual(["look at this"]);
+      // The document's thread is the workbook's: same id, cell anchor on the frame.
+      const name = engine.listSheets().find((x) => x.id === sheet)!.name;
+      const all = await rows();
+      expect(all.map((x) => x.id)).toEqual([threads[0]!.comments[0]!.id]);
+      expect(all[0]!.anchor).toEqual({
+        kind: "cell",
+        item: frame!,
+        address: `${name}!B2`,
+      });
+      // A second reconcile changes nothing; the saved workbook carries it.
+      await session.syncComments();
+      expect(await rows()).toHaveLength(1);
+      expect(engine.listThreads!(sheet)).toHaveLength(1);
+    });
+
+    it("resolves a cell address to its rectangle in the placed frame", async () => {
+      const session = createWorkbookSession(host);
+      s = session;
+      await session.import(
+        await authorWorkbook(3, 2, (r, c) => String(r * 2 + c + 1)),
+        "c.xlsx",
+      );
+      const engine = session.state().engine!;
+      const sheet = session.state().activeSheet!;
+      const name = engine.listSheets().find((x) => x.id === sheet)!.name;
+      session.setRange("A1:B3");
+      const frame = await session.lowerSelection();
+      await settle();
+
+      const a1 = session.commentAnchor(`${name}!A1`, frame!);
+      const b2 = session.commentAnchor(`${name}!B2`, frame!);
+      expect(a1).not.toBeNull();
+      expect(a1!.rect.slice(0, 2)).toEqual([0, 0]);
+      expect(a1!.label).toBe(`${name}!A1`);
+      // B2 sits right of A and below row 1 by exactly their sizes.
+      expect(b2!.rect[0]).toBeCloseTo(a1!.rect[2], 5);
+      expect(b2!.rect[1]).toBeCloseTo(a1!.rect[3], 5);
+      expect(b2!.rect[2]).toBeGreaterThan(0);
+      // Not shown / not ours: the pin stays at the frame's top-left.
+      expect(session.commentAnchor(`${name}!A9`, frame!)).toBeNull();
+      expect(session.commentAnchor("Other!A1", frame!)).toBeNull();
+      expect(session.commentAnchor(`${name}!A1`, "no-such-frame")).toBeNull();
+    });
   },
 );

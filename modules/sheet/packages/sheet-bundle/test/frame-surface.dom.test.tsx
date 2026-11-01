@@ -78,6 +78,7 @@ function fakeSession(shown: GridScene = scene) {
   const session: FrameSurfaceSession = {
     ...dataToolsStub(),
     undoCellEdit: () => false,
+    startCellComment: async () => ({ ok: false as const, reason: "stub" }),
     pasteSpecialOpen: () => pasteCard,
     closePasteSpecial: () => {
       pasteCard = false;

@@ -47,7 +47,7 @@ import { a1Of } from "./formula-refs";
 export type DataCardSession = DataToolsApi &
   Pick<
     WorkbookSession,
-    "activeCell" | "onDidChange" | "undoCellEdit" | "state"
+    "activeCell" | "onDidChange" | "undoCellEdit" | "state" | "startCellComment"
   >;
 
 interface CardChrome {
@@ -1703,6 +1703,75 @@ export function GoalSeekCard({
   );
 }
 
+// ── New comment ───────────────────────────────────────────────────────
+
+/** "New comment": the text of a thread on the active cell. OK starts it
+ *  through the comments door; the workbook takes it at once (sheet ADR 528). */
+export function CommentCard({
+  session,
+  chrome,
+}: {
+  session: DataCardSession;
+  chrome: CardChrome;
+}) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const cancel = () => {
+    session.closeDataCard();
+    chrome.done();
+  };
+  const submit = () => {
+    if (busy) return;
+    if (!text.trim()) return setError("Enter the comment's text.");
+    setBusy(true);
+    void session.startCellComment(text).then((r) => {
+      setBusy(false);
+      if (!r.ok) return setError(r.reason);
+      session.closeDataCard();
+      chrome.done();
+    });
+  };
+  return (
+    <Card
+      label="New comment"
+      testId="sheet-comment-card"
+      chrome={chrome}
+      onCancel={cancel}
+      onSubmit={submit}
+    >
+      <input
+        data-testid="sheet-comment-text"
+        autoFocus
+        value={text}
+        placeholder="Comment"
+        aria-label="Comment"
+        style={{ ...field, flex: 1 }}
+        onChange={(e) => setText(e.currentTarget.value)}
+      />
+      {error ? (
+        <span role="alert" style={{ color: "#b42318" }}>
+          {error}
+        </span>
+      ) : null}
+      <Buttons>
+        <button type="button" style={chrome.button} onClick={cancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          data-testid="sheet-comment-ok"
+          style={chrome.button}
+          disabled={busy}
+          onClick={submit}
+        >
+          OK
+        </button>
+      </Buttons>
+    </Card>
+  );
+}
+
 /** The card the session has open (the alert first), under the bar. */
 export function DataCards({
   session,
@@ -1743,5 +1812,7 @@ export function DataCards({
       return <SortCard session={session} chrome={chrome} />;
     case "goalSeek":
       return <GoalSeekCard session={session} chrome={chrome} />;
+    case "comment":
+      return <CommentCard session={session} chrome={chrome} />;
   }
 }

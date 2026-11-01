@@ -79,7 +79,8 @@
       "media.paged.sheet.command.unhideSelection",
       "media.paged.sheet.command.groupSelection",
       "media.paged.sheet.command.ungroupSelection",
-      "media.paged.sheet.command.goalSeek"
+      "media.paged.sheet.command.goalSeek",
+      "media.paged.sheet.command.newComment"
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
@@ -499,6 +500,14 @@
         {
           "id": "media.paged.sheet.command.goalSeek",
           "title": "Goal Seek",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.newComment",
+          "title": "New comment",
           "args": {
             "kind": "struct",
             "fields": {}

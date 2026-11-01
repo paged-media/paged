@@ -29,6 +29,7 @@ import { describe, expect, it } from "bun:test";
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import {
+  anchorGeometry,
   cellAddress,
   createSheetComments,
   frameFor,
@@ -39,8 +40,10 @@ import {
   type EngineRow,
   type FrameRange,
   type Mutation,
+  type ResolvableFrame,
   type WbComment,
 } from "../src/comments-model";
+import { HEADING_INDEX, type LoweredContent } from "../../sheet-host-model/src";
 import type { CellThreadInfo, SheetEngine, ThreadAuthor } from "../src/engine";
 
 describe("addresses", () => {
@@ -152,7 +155,12 @@ describe("plan", () => {
   it("is quiet when both sides agree", () => {
     const snap = new Map([["{R}", { text: "hello", done: false }]]);
     const p = plan([wbc({ id: "{R}" })], [eroot("{R}")], snap, frames);
-    expect(p).toEqual({ engine: [], workbook: [], replies: [] });
+    expect(p).toEqual({
+      engine: [],
+      workbook: [],
+      replies: [],
+      starts: [],
+    });
   });
 
   it("sends a panel edit and a panel resolve to the workbook", () => {
@@ -265,6 +273,35 @@ function world(initial: CellThreadInfo[], real?: SheetEngine) {
       listSheets: () => [{ id: 0, name: "Sheet1", rows: 10, cols: 10 }],
       listThreads: () =>
         threads.map((t) => ({ ...t, comments: [...t.comments] })),
+      addThread: (
+        _s: number,
+        row: number,
+        col: number,
+        a: ThreadAuthor,
+        timestamp: string,
+        text: string,
+      ) => {
+        const id = `{NEW${++n}}`;
+        threads.push({
+          sheet: 0,
+          row,
+          col,
+          resolved: false,
+          comments: [
+            {
+              id,
+              personId: `{P-${a.userId}}`,
+              displayName: a.displayName,
+              userId: a.userId,
+              providerId: a.providerId,
+              timestamp,
+              text,
+              done: false,
+            },
+          ],
+        });
+        return id;
+      },
       replyThread: (
         _s: number,
         row: number,
@@ -360,6 +397,36 @@ function world(initial: CellThreadInfo[], real?: SheetEngine) {
   };
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    supports: (id: string) => id === "comments@1",
+    // The comments door, as far as the controller uses it.
+    comments: {
+      startThread: async (
+        anchor: unknown,
+        text: string,
+        author?: { name: string },
+      ) => {
+        const id = `panel-${++mintId}`;
+        const res = await host.document.mutate({
+          op: "insertCommentThread",
+          args: {
+            anchor,
+            comment: { id, text, author: author?.name ?? "Me" },
+          },
+        } as never);
+        return res.applied
+          ? { ok: true, threadId: id, commentId: id }
+          : { ok: false, reason: "refused" };
+      },
+      reply: async (id: string, text: string) => {
+        const res = await host.document.mutate({
+          op: "replyComment",
+          args: { parentId: id, comment: { text, author: "Me" } },
+        } as never);
+        return res.applied
+          ? { ok: true, commentId: "x" }
+          : { ok: false, reason: "refused" };
+      },
+    },
     document: {
       onDidChange: (l: () => void) => {
         listeners.push(l);
@@ -551,6 +618,166 @@ describe("SheetComments", () => {
     const w = world([]);
     await w.comments.sync();
     expect(w.store).toEqual([]);
+  });
+
+  it("writes a thread started on a cell through the comments door into the workbook", async () => {
+    const w = world([]);
+    await w.comments.sync(); // idle: nothing on either side
+    const r = await w.comments.startThread({
+      sheet: 0,
+      row: 2,
+      col: 1,
+      text: "  look at this  ",
+    });
+    expect(r.ok).toBe(true);
+    // the workbook has it, at B3, with the text trimmed
+    expect(w.threads).toHaveLength(1);
+    expect([w.threads[0]!.row, w.threads[0]!.col]).toEqual([2, 1]);
+    expect(w.threads[0]!.comments.map((c) => c.text)).toEqual(["look at this"]);
+    expect(w.edited()).toBeGreaterThan(0);
+    // the document's thread carries the workbook's id, the xlsx source and the address
+    const wbId = w.threads[0]!.comments[0]!.id;
+    expect(w.store.map((c) => c.id)).toEqual([wbId]);
+    expect(w.store[0]!.anchor).toEqual({
+      kind: "cell",
+      item: "f1",
+      address: "Sheet1!B3",
+    });
+    expect((w.store[0]!.source as { format: string }).format).toBe("xlsx");
+    // later reconciles leave both alone
+    await w.comments.sync();
+    expect(w.threads).toHaveLength(1);
+    expect(w.store).toHaveLength(1);
+  });
+
+  it("takes the text as a reply when the cell already has a thread", async () => {
+    const w = world([thread()]);
+    await w.comments.sync();
+    const r = await w.comments.startThread({
+      sheet: 0,
+      row: 0,
+      col: 0,
+      text: "second",
+    });
+    expect(r.ok).toBe(true);
+    expect(w.threads).toHaveLength(1);
+    expect(w.threads[0]!.comments.map((c) => c.text)).toEqual([
+      "check this",
+      "done",
+      "second",
+    ]);
+  });
+
+  it("refuses an empty text and a missing comments door", async () => {
+    const w = world([]);
+    expect(
+      await w.comments.startThread({ sheet: 0, row: 0, col: 0, text: " " }),
+    ).toEqual({ ok: false, reason: "no text" });
+    expect(w.threads).toEqual([]);
+  });
+});
+
+describe("plan: threads started in the document", () => {
+  const sheets = [{ id: 0, name: "Sheet1" }];
+  const started = (
+    id: string,
+    address: string,
+    over: Partial<EngineRow> = {},
+  ) =>
+    row({
+      id,
+      text: "hello",
+      resolved: false,
+      anchor: { kind: "cell", item: "f1", address },
+      source: null,
+      ...over,
+    });
+
+  it("hands a sourceless cell thread of a known sheet to the workbook", () => {
+    const p = plan([], [started("p1", "Sheet1!C4")], new Map(), frames, sheets);
+    expect(p.starts.map((s) => [s.row.id, s.sheet, s.r, s.c, s.item])).toEqual([
+      ["p1", 0, 3, 2, "f1"],
+    ]);
+  });
+
+  it("leaves alone a thread of another sheet, a taken cell and an orphan", () => {
+    const wb = [wbc({ id: "{R}", rootId: "{R}", row: 3, col: 2 })];
+    const p = plan(
+      wb,
+      [
+        started("a", "Other!A1"),
+        started("b", "Sheet1!C4"),
+        started("c", "Sheet1!A1", { orphaned: true }),
+        started("d", "nonsense"),
+      ],
+      new Map(),
+      frames,
+      sheets,
+    );
+    expect(p.starts).toEqual([]);
+  });
+});
+
+describe("anchorGeometry", () => {
+  // Heading strip (20 x 12), columns B (50) and D (70), rows 1 (frozen, 15),
+  // 2 (hidden: absent) and 10 (30) of a scrolled window.
+  const content = {
+    cols: [
+      { index: HEADING_INDEX, widthPt: 20 },
+      { index: 1, widthPt: 50 },
+      { index: 3, widthPt: 70 },
+    ],
+    rows: [
+      { index: HEADING_INDEX, heightPt: 12, cells: [] },
+      { index: 0, heightPt: 15, cells: [] },
+      { index: 9, heightPt: 30, cells: [] },
+    ],
+    rules: { h: [], v: [] },
+    merges: [],
+  } as unknown as LoweredContent;
+  const frame = (over: Partial<ResolvableFrame> = {}): ResolvableFrame => ({
+    sheetName: "Sheet1",
+    content,
+    ...over,
+  });
+
+  it("measures from the frame's top-left across the heading strip and skipped tracks", () => {
+    expect(anchorGeometry("Sheet1!B1", frame())).toEqual({
+      rect: [20, 12, 50, 15],
+      label: "Sheet1!B1",
+    });
+    // D10: column C is hidden (no track), rows 2..9 are scrolled out
+    expect(anchorGeometry("Sheet1!D10", frame())!.rect).toEqual([
+      70, 27, 70, 30,
+    ]);
+  });
+
+  it("answers null off the window, on another sheet or for a foreign address", () => {
+    expect(anchorGeometry("Sheet1!C1", frame())).toBeNull(); // hidden column
+    expect(anchorGeometry("Sheet1!B5", frame())).toBeNull(); // scrolled out
+    expect(anchorGeometry("Other!B1", frame())).toBeNull();
+    expect(anchorGeometry("shape:12", frame())).toBeNull();
+    expect(anchorGeometry("B1", frame())).toBeNull();
+    expect(anchorGeometry("Sheet1!B1", frame({ head: false }))).toBeNull();
+  });
+
+  it("reads quoted names and ranges as the rect of their shown cells", () => {
+    const q = frame({ sheetName: "it's mine" });
+    expect(anchorGeometry("'it''s mine'!D10", q)!.rect).toEqual([
+      70, 27, 70, 30,
+    ]);
+    // B1:D12 shows B, D and rows 1, 10
+    expect(anchorGeometry("Sheet1!B1:D12", frame())!.rect).toEqual([
+      20, 12, 120, 45,
+    ]);
+  });
+
+  it("drops a cell beyond the content box", () => {
+    const wide = { widthPt: 60, heightPt: 100 }; // D starts at x 70
+    const short = { widthPt: 200, heightPt: 20 }; // row 10 starts at y 27
+    expect(anchorGeometry("Sheet1!D10", frame({ box: wide }))).toBeNull();
+    expect(anchorGeometry("Sheet1!D10", frame({ box: short }))).toBeNull();
+    expect(anchorGeometry("Sheet1!B1", frame({ box: short }))).not.toBeNull();
   });
 });
 

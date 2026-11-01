@@ -597,6 +597,24 @@ export function activate(host: BundleHost): BundleHandle {
     when: workbookIsOpen,
     handler: () => void session.openDataCard({ kind: "goalSeek" }),
   });
+  // Sheet ADR 528 — a thread on the active cell: the card asks for the text,
+  // the comments door starts it, the workbook takes it.
+  host.contribute.command({
+    id: "media.paged.sheet.command.newComment",
+    title: t(COMMANDS.newComment),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.openDataCard({ kind: "comment" }),
+  });
+  // Where a comment thread's cell address points on the page (the host pins
+  // the thread there instead of at the frame's top-left).
+  const commentAnchorSub = host.supports("contribute.commentAnchor@1")
+    ? host.contribute.commentAnchor({
+        id: "media.paged.sheet.commentAnchor.cell",
+        kind: "cell",
+        resolve: (address, item) => session.commentAnchor(address, item),
+      })
+    : null;
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context
@@ -884,6 +902,7 @@ export function activate(host: BundleHost): BundleHandle {
       swatchesProviderHandle = null;
       textProviderHandle?.dispose();
       menuSub.dispose();
+      commentAnchorSub?.dispose();
       textProviderHandle = null;
       documentOpenedSub.dispose();
       propertyBindings?.dispose();

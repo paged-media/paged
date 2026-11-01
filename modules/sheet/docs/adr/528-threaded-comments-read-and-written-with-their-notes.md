@@ -101,6 +101,26 @@ text. It runs after a workbook is loaded and on every document change. A reply m
 workbook's GUID in place of the panel's id. Deleting the sheet frame orphans its threads (the engine's
 rule); the workbook keeps them.
 
-Not done: a thread started from the panel on a cell (the panel starts item, page and text threads), plain
-notes as threads, thread edits in the sheet's own undo journal (the document's undo covers the panel's
+## Amendment 2026-11-01 (2) — where a pin sits, and New comment
+
+Where: the bundle contributes `commentAnchor` (`media.paged.sheet.commentAnchor.cell`), so the canvas pins
+a cell thread at its cell. `resolve(address, item)` reads the table the frame holds (`LoweredContent` of
+the placed table): the rectangle of the cell in points from the frame's top-left, counting the printed
+heading strip, the frozen rows and only the tracks that are shown (hidden rows and columns have no
+track). It answers null, and the pin stays at the frame's top-left, when the address is not
+`Sheet!A1[:B2]`, names another sheet than the frame shows, the frame is a continuation of a chain,
+no table is known for it, or the cell is hidden, scrolled out of the window or past the content box. A
+range answers the rectangle of its shown cells. The label is the address.
+
+New comment: the command `media.paged.sheet.command.newComment` (Sheet menu, the grid's right-click) opens a
+card under the sheet bar like the other cell cards (a text field, OK, Cancel; the sheet bar exists while
+a frame is entered). OK calls `host.comments.startThread({ kind: "cell", item, address }, text)` for the
+active cell, `item` being the entered frame when it shows the sheet. The next reconcile writes the thread
+into the workbook (`addThread`, its replies after it) and swaps the document's thread for one with the
+workbook's ids and the xlsx source. A cell that already has a thread takes the text as a reply (one thread
+per cell, as in Excel). A cell thread started by another tool through the comments door is taken the same
+way.
+
+Not done: a thread started from the host's own Comments panel on a cell (the panel starts item, page and
+text threads), plain notes as threads, thread edits in the sheet's own undo journal (the document's undo covers the panel's
 side and the reconcile mirrors it), a sheet no frame shows (its threads wait for one).

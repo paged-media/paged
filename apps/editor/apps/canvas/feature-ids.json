@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 905,
+    "command": 906,
     "keybinding": 167,
-    "menu": 645,
+    "menu": 647,
     "panel": 151,
     "tool": 130
   },
@@ -3236,6 +3236,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.newComment",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.newWorkbook",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -5472,6 +5477,11 @@
     },
     {
       "id": "menu:Context/Insert rows",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/New comment…",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
@@ -8147,6 +8157,11 @@
     },
     {
       "id": "menu:Sheet/New blank workbook",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Sheet/New comment…",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },

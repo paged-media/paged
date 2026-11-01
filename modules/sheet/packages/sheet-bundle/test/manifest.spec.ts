@@ -92,6 +92,7 @@ describe("sheet_plugin_manifest_valid", () => {
       "media.paged.sheet.command.groupSelection",
       "media.paged.sheet.command.ungroupSelection",
       "media.paged.sheet.command.goalSeek",
+      "media.paged.sheet.command.newComment",
     ]);
   });
 

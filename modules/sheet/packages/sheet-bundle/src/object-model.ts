@@ -2180,6 +2180,15 @@ export function contributeObjectModel(
       },
     },
     {
+      // Sheet ADR 528 — a comment thread on the active cell.
+      id: C("newComment"),
+      title: "New comment",
+      args: struct({}),
+      async handler() {
+        session.openDataCard({ kind: "comment" });
+      },
+    },
+    {
       id: C("clearCells"),
       title: "Clear cells",
       args: struct({ range: text }),

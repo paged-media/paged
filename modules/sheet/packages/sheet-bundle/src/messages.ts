@@ -70,6 +70,7 @@ export const COMMANDS = defineMessages("sheet.command", {
   groupSelection: "Group",
   ungroupSelection: "Ungroup",
   goalSeek: "Goal Seek…",
+  newComment: "New comment…",
   findInSheet: "Find in sheet…",
   findNext: "Find next in sheet",
   exportCsv: "Export sheet as CSV…",
@@ -103,6 +104,7 @@ defineMessages("menu", {
   "New sheet from dataset": "New sheet from dataset",
   "Export sheet as CSV…": "Export sheet as CSV…",
   "R1C1 reference style": "R1C1 reference style",
+  "New comment…": "New comment…",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled
