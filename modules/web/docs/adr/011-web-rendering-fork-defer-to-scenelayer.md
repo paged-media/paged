@@ -1,7 +1,7 @@
 # ADR 011 — paged.web rendering: freeze the source lane for v1, lower via SceneLayer when rendering lands
 
 **2026-06-12 · decision record · status: RATIFIED 2026-06-12 (the
-web-rendering fork).
+web-rendering fork); amended 2026-11-01 (the isolation argument is retired, PM-0017).
 Direction confirmed: source lane frozen for v1; the Blitz lane lands
 post-freeze through the plugin `sceneLayer`, never a
 core paint hook.**
@@ -241,3 +241,12 @@ this step "not implemented" and is stale.
 **Also:** `BREAKAGE_LOG.md`, cited in Sources and Consequences, was removed from
 this repository in commit `1151df7` (2026-06-12). The references to it are
 historical.
+
+## Amendment (2026-11-01): the isolation argument is retired
+
+Reason 4 ("the isolation contract wants Blitz in the plugin") and the consequence "never core
+modifications" described the rule of the separate repositories. [PM-0017](../../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md) retires the isolation contract
+for the built-ins: paged.web may depend on the engine, and a capability goes where the lowest layer
+every consumer reaches is (PM-0014). The decision itself is not reopened: Blitz stays in the
+module's wasm and lowers into the in-frame `sceneLayer`, now justified by its alpha state, its
+version and its size, not by a boundary. Extensions keep only the public contract.

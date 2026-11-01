@@ -12,7 +12,7 @@ the code as it stood, for decisions made earlier; their status says so.
 
 | ADR | Title | Status |
 |---|---|---|
-| [011](011-web-rendering-fork-defer-to-scenelayer.md) | paged.web rendering: freeze the source lane for v1, lower via SceneLayer when rendering lands | Accepted (amended 2026-10-02) |
+| [011](011-web-rendering-fork-defer-to-scenelayer.md) | paged.web rendering: freeze the source lane for v1, lower via SceneLayer when rendering lands | Accepted (amended 2026-10-02 and 2026-11-01: the isolation argument is retired, PM-0017) |
 | [020](020-paged-web-native-engine-defer-frame-threading.md) | paged-web native engine: defer the fork; extend the SceneLayer lane for frame threading | Accepted (amended 2026-10-02) |
 | [400](400-pure-lowering-and-capture-layer.md) | The renderer splits a pure lowering from an opt-in capture layer | Accepted, recorded retroactively 2026-10-02 |
 | [401](401-layout-engine-pinned.md) | The layout engine is pinned exactly and used for style, layout and paint capture only | Accepted, recorded retroactively 2026-10-02 |
