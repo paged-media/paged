@@ -234,33 +234,5 @@ describe("draw conformance — Appearance model (Phase 9 Tier B)", () => {
       });
       await h.host.document.setMetadata(RECT, null);
     });
-
-    it("the recorded Add fill command stacks a layer on the selected element", async () => {
-      await h.host.selection.set([RECT]);
-      const rec = h.contributions.find(
-        (c) =>
-          c.kind === "command" &&
-          c.id === "media.paged.draw.command.appearanceAddFill",
-      );
-      expect(rec).toBeDefined();
-      await (rec!.value as { handler: (p?: unknown) => unknown }).handler(
-        undefined,
-      );
-
-      const env = await h.host.document.getMetadata(RECT);
-      expect(appearanceOf(env).fills.length).toBe(1);
-
-      // Clear via the Clear command, then wipe metadata for the next test.
-      const clear = h.contributions.find(
-        (c) =>
-          c.kind === "command" &&
-          c.id === "media.paged.draw.command.appearanceClear",
-      );
-      await (clear!.value as { handler: (p?: unknown) => unknown }).handler(
-        undefined,
-      );
-      await h.host.document.setMetadata(RECT, null);
-      expect(await h.host.document.getMetadata(RECT)).toBeNull();
-    });
   });
 });

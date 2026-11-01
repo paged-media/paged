@@ -101,3 +101,16 @@ are the `appearance` probe's (engine ADR 1043).
   with Mesh are not built.
 - Not moved onto the native appearance yet: Recolor Artwork and the appearance object kind of the
   object model (ADR 323) still read the metadata stack, which a migrated document no longer holds.
+
+## Amendment 2026-11-01 — the stack commands are the host's
+
+Status: Accepted, amended. The appearance commands this record describes (Add fill, Add stroke,
+Clear, Remove layer, Reorder layer, in both the native and the metadata lane) are gone from draw
+(PM-0017: one implementation per capability). The host declares them as `paged.appearance.*`
+(`apps/editor/apps/canvas/src/appearance-commands.ts`), over the Appearance panel's own list
+functions, with the same payload addressing (`{ layer }`, or `{ kind, index }` over the extra
+layers of one kind, and `{ delta }` or `{ direction }`). What stays in draw is what this record
+says about the migration: the stack model, `appearance-native.ts`'s conversion and
+`appearance-migrate.ts`, which move a document's old metadata stacks onto the native appearance
+when it opens, the group bake and its release, and the graphic styles that read and write the
+native list.

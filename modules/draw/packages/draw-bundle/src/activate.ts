@@ -100,10 +100,6 @@ import {
   SHAPER_STROKE_COMMAND_ID,
 } from "./commands/shaper";
 import {
-  contributeAppearanceCommands,
-  APPEARANCE_COMMAND_IDS,
-} from "./commands/appearance";
-import {
   contributeAppearanceBakeCommands,
   APPEARANCE_BAKE_COMMAND_IDS,
 } from "./commands/appearance-bake";
@@ -155,10 +151,6 @@ import {
   contributeRepeatCommands,
   REPEAT_COMMAND_IDS,
 } from "./commands/repeat";
-import {
-  contributeLiveCornerCommands,
-  LIVE_CORNER_COMMAND_IDS,
-} from "./commands/live-corners";
 import {
   contributeSelectSameCommands,
   SELECT_SAME_COMMAND_IDS,
@@ -528,14 +520,10 @@ export function activate(host: BundleHost): BundleHandle {
   // scene tree. commands/repeat.ts states every measured count and
   // consequence.
   const repeatCommandsSub = contributeRepeatCommands(host);
-  // Phase 9 (Tier B) — Live Corners (the frameCornerOption*/Radius* wire
-  // consumers, Rectangle-only — gap B-23; each preset is an eight-write
-  // batch + a metadata "live" marker).
-  const liveCornerCommandsSub = contributeLiveCornerCommands(host);
-  // Phase 9 (Tier B) — Appearance (multiple fills/strokes): a metadata
-  // stack baked to the frame's top layer (one-fill/one-stroke engine —
-  // gap B-24).
-  const appearanceCommandsSub = contributeAppearanceCommands(host);
+  // The corner presets (Rounded / Inverse rounded / Bevel / Fancy / None)
+  // are the host's: `paged.corners.*`.
+  // The appearance stack operations (Add fill / Add stroke / Clear / Remove
+  // layer / Move layer) are the host's: `paged.appearance.*`.
   // B-24 CLOSED — the GROUP BAKE: `bakeAppearance` lowers the metadata
   // stack onto real stacked page items (one derived path per paint,
   // sharing the source geometry, wrapped in a group with the source
@@ -747,8 +735,6 @@ export function activate(host: BundleHost): BundleHandle {
         COMPOUND_PATH_COMMAND_IDS.length +
         PATTERN_COMMAND_IDS.length +
         REPEAT_COMMAND_IDS.length +
-        LIVE_CORNER_COMMAND_IDS.length +
-        APPEARANCE_COMMAND_IDS.length +
         APPEARANCE_BAKE_COMMAND_IDS.length +
         GRAPHIC_STYLES_COMMAND_IDS.length +
         GRAPHIC_STYLE_LIBRARY_COMMAND_IDS.length +
@@ -828,8 +814,6 @@ export function activate(host: BundleHost): BundleHandle {
       graphicStyleCommandsSub.dispose();
       graphicStyleLibraryCommandsSub.dispose();
       appearanceBakeCommandsSub.dispose();
-      appearanceCommandsSub.dispose();
-      liveCornerCommandsSub.dispose();
       repeatCommandsSub.dispose();
       patternCommandsSub.dispose();
       compoundPathCommandsSub.dispose();

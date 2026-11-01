@@ -145,7 +145,7 @@ test.describe("journey · paged.draw appearance stack", () => {
     //    and bakes the top fill back to frameFillColor (still a colour
     //    ref — the stack round-trips, the frame stays painted). ──
     const beforeFill = await designer.renderBytes();
-    await invokeCommand(page, "media.paged.draw.command.appearanceAddFill");
+    await invokeCommand(page, "paged.appearance.addFill");
     await expect
       .poll(
         async () => (await propOf(page, ref, "frameFillColor"))?.type ?? "",
@@ -158,7 +158,7 @@ test.describe("journey · paged.draw appearance stack", () => {
     // ── 3. ADD STROKE — stacks a stroke layer of the engine's native
     //    appearance (draw ADR 367): the frame keeps its own (no) stroke,
     //    and the layer's edge must PAINT. ──
-    await invokeCommand(page, "media.paged.draw.command.appearanceAddStroke");
+    await invokeCommand(page, "paged.appearance.addStroke");
     await expect
       .poll(() => layerKinds(page, ref), { timeout: 6_000 })
       .toContain("stroke");
@@ -171,7 +171,7 @@ test.describe("journey · paged.draw appearance stack", () => {
     //    top-layer-only contract, so the baked frame paint persists (the
     //    IDML stays valid); the stack metadata is what Clear empties.
     //    Assert it does not throw and the frame is still addressable. ──
-    await invokeCommand(page, "media.paged.draw.command.appearanceClear");
+    await invokeCommand(page, "paged.appearance.clear");
     await expect
       .poll(() => layerKinds(page, ref), { timeout: 6_000 })
       .toEqual([]);

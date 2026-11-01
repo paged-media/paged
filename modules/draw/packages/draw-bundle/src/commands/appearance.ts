@@ -46,14 +46,13 @@
 // owns the group lowering, its inverse, and the honest list of what does
 // and does not survive it.
 //
-// The layer EDITORS (add/remove/reorder) are COMMANDS (a layer list is a
-// vector above the scalar schema binding ceiling — the dash/gradient
-// precedent); the panel SECTION reads the stack count via a published
-// binding and points the author at the commands.
+// The layer EDITORS (add fill / add stroke / clear / remove / reorder) are
+// the HOST's: `paged.appearance.*` over the engine's native appearance
+// (PM-0017). What stays here is the stack MODEL, which the group bake, the
+// graphic styles and the migration of a document's old metadata stacks read.
 
 import type {
   BundleHost,
-  Disposable,
   ElementId,
   Mutation,
   MutationOutcome,
@@ -63,54 +62,9 @@ import type {
 import {
   appearanceBakeOf,
   rebakeAppearance,
-  resolveAppearanceCarrier,
   stampDrawMetadata,
 } from "./appearance-bake";
-
-import { registerCommand } from "../command-registry";
-import {
-  addNativeLayer,
-  appearanceMutation,
-  explicitLayers,
-  extraLayerIndex,
-  moveNativeLayer,
-  nativeAppearanceOn,
-  readNativeAppearance,
-  removeNativeLayer,
-  type NativePaintLayer,
-} from "./appearance-native";
 import { oneBatchFor } from "./batch-handles";
-import { defineMessages } from "@paged-media/strings";
-
-/** Command titles, message keys `registerCommand` reads in the editor's locale. */
-const M = defineMessages("draw.appearance", {
-  addFill: "Appearance: Add fill",
-  addStroke: "Appearance: Add stroke",
-  clear: "Appearance: Clear extra layers",
-  removeLayer: "Appearance: Remove layer",
-  reorderLayer: "Appearance: Reorder layer",
-});
-export const APPEARANCE_COMMAND_CATEGORY = "Appearance";
-
-export const APPEARANCE_ADD_FILL_COMMAND_ID =
-  "media.paged.draw.command.appearanceAddFill";
-export const APPEARANCE_ADD_STROKE_COMMAND_ID =
-  "media.paged.draw.command.appearanceAddStroke";
-export const APPEARANCE_CLEAR_COMMAND_ID =
-  "media.paged.draw.command.appearanceClear";
-export const APPEARANCE_REMOVE_LAYER_COMMAND_ID =
-  "media.paged.draw.command.appearanceRemoveLayer";
-export const APPEARANCE_MOVE_LAYER_COMMAND_ID =
-  "media.paged.draw.command.appearanceMoveLayer";
-
-/** The contributed command ids, in registration order. */
-export const APPEARANCE_COMMAND_IDS = [
-  APPEARANCE_ADD_FILL_COMMAND_ID,
-  APPEARANCE_ADD_STROKE_COMMAND_ID,
-  APPEARANCE_CLEAR_COMMAND_ID,
-  APPEARANCE_REMOVE_LAYER_COMMAND_ID,
-  APPEARANCE_MOVE_LAYER_COMMAND_ID,
-];
 
 /** Which half of the stack an edit addresses. */
 export type AppearanceLayerKind = "fill" | "stroke";
@@ -156,8 +110,6 @@ export interface AppearanceStack {
   strokes: StrokeLayer[];
 }
 
-const EMPTY: AppearanceStack = { fills: [], strokes: [] };
-
 /** Read the appearance stack out of an envelope's `data.appearance`, or
  *  an empty stack. Tolerant of partial/foreign shapes (returns empty
  *  rather than throwing). */
@@ -198,45 +150,6 @@ export function withAppearance(
 // ------------------------------------------------ pure stack transforms
 // (the panel's edit vocabulary — index arithmetic with no host in sight,
 // so the round-trip is unit-testable and the panel stays a view)
-
-const cloneStack = (stack: AppearanceStack): AppearanceStack => ({
-  fills: stack.fills.slice(),
-  strokes: stack.strokes.slice(),
-});
-
-/** Drop one layer. An out-of-range index leaves the stack untouched
- *  (the honest no-op — a stale panel row never corrupts the model). */
-export function removeAppearanceLayer(
-  stack: AppearanceStack,
-  kind: AppearanceLayerKind,
-  index: number,
-): AppearanceStack {
-  const next = cloneStack(stack);
-  const list: unknown[] = kind === "fill" ? next.fills : next.strokes;
-  if (index < 0 || index >= list.length) return next;
-  list.splice(index, 1);
-  return next;
-}
-
-/** Reorder one layer by `delta` WITHIN its half of the stack. The stack
- *  is BOTTOM-to-TOP, so `+1` moves a layer toward the FRONT (toward the
- *  one layer that bakes) and `-1` toward the back. A move off either end
- *  is a no-op. */
-export function moveAppearanceLayer(
-  stack: AppearanceStack,
-  kind: AppearanceLayerKind,
-  index: number,
-  delta: number,
-): AppearanceStack {
-  const next = cloneStack(stack);
-  const list: unknown[] = kind === "fill" ? next.fills : next.strokes;
-  const target = index + delta;
-  if (index < 0 || index >= list.length) return next;
-  if (target < 0 || target >= list.length) return next;
-  const [moved] = list.splice(index, 1);
-  list.splice(target, 0, moved);
-  return next;
-}
 
 /** The BAKE: the `setElementProperty` writes that lower the FRONT-MOST
  *  (last) fill + stroke layer onto the frame's real attributes. Returns
@@ -345,291 +258,4 @@ async function commitAppearancePlans(
     );
   }
   return outcome;
-}
-
-/** Commit one stack per selected carrier: every unbaked carrier in ONE
- *  batch; a baked one re-bakes on its own (`rebakeAppearance`). */
-async function commitAppearances(
-  host: BundleHost,
-  edits: Array<{
-    id: ElementId;
-    stack: AppearanceStack;
-    prev: PluginMetadataEnvelope | null;
-  }>,
-): Promise<void> {
-  const plans: Mutation[][] = [];
-  for (const { id, stack, prev } of edits) {
-    if (appearanceBakeOf(prev)) await rebakeAppearance(host, id, stack, prev);
-    else plans.push(planAppearance(id, stack, prev));
-  }
-  if (plans.length > 0) await commitAppearancePlans(host, plans);
-}
-
-/** Read the element's current frame fill/stroke (the seed for a new
- *  appearance layer — "stack a copy of what's there"). Best-effort. */
-async function frameFillStroke(
-  host: BundleHost,
-  id: ElementId,
-): Promise<{ fill: string | null; stroke: string | null; weight: number }> {
-  const out = {
-    fill: null as string | null,
-    stroke: null as string | null,
-    weight: 1,
-  };
-  try {
-    const props = await host.document.elementProperties(id);
-    for (const e of props?.entries ?? []) {
-      const v = e.value;
-      if (!v) continue;
-      if (e.path === "frameFillColor" && v.type === "colorRef")
-        out.fill = v.value;
-      else if (e.path === "frameStrokeColor" && v.type === "colorRef")
-        out.stroke = v.value;
-      else if (
-        e.path === "frameStrokeWeight" &&
-        v.type === "length" &&
-        v.value != null
-      ) {
-        out.weight = v.value;
-      }
-    }
-  } catch {
-    /* defaults stand */
-  }
-  return out;
-}
-
-/** The three seeded/whole-stack operations (the panel's buttons drive
- *  the SAME appliers the commands do). */
-export type AppearanceKind = "fill" | "stroke" | "clear";
-
-export async function applyAppearanceCommand(
-  host: BundleHost,
-  commandId: string,
-  kind: AppearanceKind,
-): Promise<void> {
-  const selection = host.selection.get();
-  if (selection.length === 0) {
-    host.log.debug(`${commandId}: no selection — no-op`);
-    return;
-  }
-  if (nativeAppearanceOn(host)) {
-    await applyNative(host, commandId, async (id, layers) => {
-      if (kind === "clear") return [];
-      const seed = await frameFillStroke(host, id);
-      const all = explicitLayers(layers);
-      const top = (want: (l: NativePaintLayer) => boolean) =>
-        [...all].reverse().find(want);
-      if (kind === "fill") {
-        const t = top((l) => l.kind === "fill" || l.kind === "frameFill");
-        const color =
-          (t?.kind === "fill" ? t.color : seed.fill) ?? "Color/Black";
-        return addNativeLayer(layers, { kind: "fill", color, tint: 100 });
-      }
-      const t = top((l) => l.kind === "stroke" || l.kind === "frameStroke");
-      const own = t?.kind === "stroke";
-      return addNativeLayer(layers, {
-        kind: "stroke",
-        color: (own ? t.color : seed.stroke) ?? "Color/Black",
-        // A frame without a stroke of its own seeds a visible 1 pt line.
-        weight: (own ? t.weight : seed.stroke ? seed.weight : null) || 1,
-      });
-    });
-    return;
-  }
-  const edits: Parameters<typeof commitAppearances>[1] = [];
-  for (const selected of selection) {
-    // A baked stack can be selected as its GROUP or as one of its
-    // derived layers — both resolve to the carrier that owns the stack.
-    const id = await resolveAppearanceCarrier(host, selected);
-    const prev = await host.document.getMetadata(id).catch(() => null);
-    if (kind === "clear") {
-      // Through the commit so a BAKED object releases its derived
-      // layers instead of stranding them under an empty stack.
-      edits.push({ id, stack: EMPTY, prev });
-      continue;
-    }
-    const current = appearanceOf(prev);
-    const seed = await frameFillStroke(host, id);
-    if (kind === "fill") {
-      // Stack a new fill layer seeded from the STACK's front-most fill,
-      // falling back to the frame's own fill (or black). The stack comes
-      // first because a BAKED carrier paints nothing — its own fill is
-      // null by construction, so seeding from the frame would silently
-      // hand every added layer the fallback black.
-      current.fills.push({
-        color: current.fills.at(-1)?.color ?? seed.fill ?? "Color/Black",
-        tint: 100,
-      });
-    } else {
-      const top = current.strokes.at(-1);
-      current.strokes.push({
-        color: top?.color ?? seed.stroke ?? "Color/Black",
-        weight: top?.weight ?? seed.weight,
-      });
-    }
-    edits.push({ id, stack: current, prev });
-  }
-  await commitAppearances(host, edits);
-}
-
-/** Apply a pure stack transform to every selected element: read the
- *  envelope, transform, re-commit (metadata + the top-layer bake). The
- *  Appearance panel drives THIS — same door as the commands, so the
- *  panel adds no second write path to drift from. */
-export async function applyAppearanceEdit(
-  host: BundleHost,
-  commandId: string,
-  edit: (stack: AppearanceStack) => AppearanceStack,
-  native?: (layers: NativePaintLayer[]) => NativePaintLayer[],
-): Promise<void> {
-  const selection = host.selection.get();
-  if (selection.length === 0) {
-    host.log.debug(`${commandId}: no selection — no-op`);
-    return;
-  }
-  if (native && nativeAppearanceOn(host)) {
-    await applyNative(host, commandId, async (_id, layers) => native(layers));
-    return;
-  }
-  const edits: Parameters<typeof commitAppearances>[1] = [];
-  for (const selected of selection) {
-    const id = await resolveAppearanceCarrier(host, selected);
-    const prev = await host.document.getMetadata(id).catch(() => null);
-    edits.push({ id, stack: edit(appearanceOf(prev)), prev });
-  }
-  await commitAppearances(host, edits);
-}
-
-/** THE NATIVE LANE (draw ADR 367): when the engine draws native
- *  appearance, every selected item's `frameAppearance` is edited and
- *  written whole — all of them in ONE batch, one undo step. An item that
- *  carries no appearance (a group, a line) is skipped. */
-async function applyNative(
-  host: BundleHost,
-  commandId: string,
-  edit: (
-    id: ElementId,
-    layers: NativePaintLayer[],
-  ) => Promise<NativePaintLayer[]>,
-): Promise<void> {
-  const ops: Mutation[] = [];
-  for (const id of host.selection.get()) {
-    const layers = await readNativeAppearance(host, id);
-    if (!layers) continue;
-    const next = await edit(id, layers);
-    if (JSON.stringify(next) === JSON.stringify(layers)) continue;
-    ops.push(appearanceMutation(id, next));
-  }
-  if (ops.length === 0) {
-    host.log.debug(`${commandId}: nothing to change`);
-    return;
-  }
-  const out = await host.document.mutate(oneBatchFor(ops));
-  if (!out.applied)
-    host.log.warn(
-      `appearance edit rejected by engine: ${JSON.stringify(out.error)}`,
-    );
-}
-
-/** The native list index a remove / move payload addresses: `layer` (the
- *  list index, bottom to top) when given, else the `index`-th extra layer
- *  of `kind` — the metadata lane's addressing. */
-function nativeIndexOf(
-  layers: readonly NativePaintLayer[],
-  p: Record<string, unknown> | undefined,
-): number {
-  const all = explicitLayers(layers);
-  const at = p?.layer;
-  if (typeof at === "number" && Number.isInteger(at)) return at;
-  return extraLayerIndex(all, layerKind(p?.kind), layerIndex(p?.index));
-}
-
-const layerKind = (v: unknown): AppearanceLayerKind =>
-  v === "stroke" ? "stroke" : "fill";
-
-const layerIndex = (v: unknown): number =>
-  typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : -1;
-
-/** `{ direction: "up" }` (toward the front-most / baked layer) or
- *  `"down"`; an explicit numeric `delta` wins. */
-function layerDelta(payload: Record<string, unknown> | undefined): number {
-  const delta = payload?.delta;
-  if (typeof delta === "number" && Number.isInteger(delta)) return delta;
-  return payload?.direction === "down" ? -1 : 1;
-}
-
-/** Register the appearance commands: add fill / add stroke / clear, plus
- *  the panel's edit surface (remove layer / reorder layer). Payload:
- *  `{ kind: "fill" | "stroke", index: number, direction?: "up" | "down",
- *  delta?: number }` — `index` addresses the BOTTOM-to-TOP stack. */
-export function contributeAppearanceCommands(host: BundleHost): Disposable {
-  const disposers = [
-    registerCommand(host, {
-      id: APPEARANCE_ADD_FILL_COMMAND_ID,
-      title: M.addFill,
-      category: APPEARANCE_COMMAND_CATEGORY,
-      handler: () =>
-        applyAppearanceCommand(host, APPEARANCE_ADD_FILL_COMMAND_ID, "fill"),
-    }),
-    registerCommand(host, {
-      id: APPEARANCE_ADD_STROKE_COMMAND_ID,
-      title: M.addStroke,
-      category: APPEARANCE_COMMAND_CATEGORY,
-      handler: () =>
-        applyAppearanceCommand(
-          host,
-          APPEARANCE_ADD_STROKE_COMMAND_ID,
-          "stroke",
-        ),
-    }),
-    registerCommand(host, {
-      id: APPEARANCE_CLEAR_COMMAND_ID,
-      title: M.clear,
-      category: APPEARANCE_COMMAND_CATEGORY,
-      handler: () =>
-        applyAppearanceCommand(host, APPEARANCE_CLEAR_COMMAND_ID, "clear"),
-    }),
-    registerCommand(host, {
-      id: APPEARANCE_REMOVE_LAYER_COMMAND_ID,
-      title: M.removeLayer,
-      category: APPEARANCE_COMMAND_CATEGORY,
-      handler: (_paged, payload) => {
-        const p = payload as Record<string, unknown> | undefined;
-        return applyAppearanceEdit(
-          host,
-          APPEARANCE_REMOVE_LAYER_COMMAND_ID,
-          (s) =>
-            removeAppearanceLayer(s, layerKind(p?.kind), layerIndex(p?.index)),
-          (layers) => removeNativeLayer(layers, nativeIndexOf(layers, p)),
-        );
-      },
-    }),
-    registerCommand(host, {
-      id: APPEARANCE_MOVE_LAYER_COMMAND_ID,
-      title: M.reorderLayer,
-      category: APPEARANCE_COMMAND_CATEGORY,
-      handler: (_paged, payload) => {
-        const p = payload as Record<string, unknown> | undefined;
-        return applyAppearanceEdit(
-          host,
-          APPEARANCE_MOVE_LAYER_COMMAND_ID,
-          (s) =>
-            moveAppearanceLayer(
-              s,
-              layerKind(p?.kind),
-              layerIndex(p?.index),
-              layerDelta(p),
-            ),
-          (layers) =>
-            moveNativeLayer(layers, nativeIndexOf(layers, p), layerDelta(p)),
-        );
-      },
-    }),
-  ];
-  return {
-    dispose() {
-      for (const d of disposers) d.dispose();
-    },
-  };
 }

@@ -154,19 +154,23 @@ Status (draw items, one line each; updated as they land):
   the canvas; draw's annotator shows the axis with a marker per stop and drags a stop along it
   (`GradientStopMachine`). The host's `gradient-editor.tsx` is a panel, not the canvas lane.
   Delete draw's when the host tool shows the axis and stops.
-- Appearance stack: KEEP. The host panel (`panel:paged.appearance`) replaced draw's panel (done
-  earlier) and covers add fill/stroke, clear, remove, reorder as panel gestures, but it has no
-  commands: draw's five `appearance*` commands are the only palette and scripting entry. The
-  metadata lane (`appearance-native.ts`, `appearance-migrate.ts`, `appearance-bake.ts`) is the
-  read path for documents written before the native appearance and the fallback of a host
-  without `document.appearance@1`; graphic styles build on it, and specs exercise it. Not a
-  duplicate to remove.
+- Appearance stack: MERGED 2026-11-01. The host declares `paged.appearance.*` (Add fill, Add
+  stroke, Clear, Remove layer, Move layer; `appearance-commands.ts`) over the panel's own list
+  functions, with Object > Appearance entries for the first three and draw's payload addressing.
+  Draw's five commands, their menu entries, typed twins, strings and the native list functions
+  that duplicated the panel's are gone (draw ADR 367 amended). Kept in draw: the stack model, the
+  conversion and migration of old metadata stacks, the group bake and release, the graphic styles.
 - Reflect / Transform again: KEEP. The host has rotate, scale and shear tools and Transform
   each, but no Reflect and no repeat-last-transform; nothing to delete.
-- Live corners and star: KEEP. The host covers editing (corner type and radius per corner in
-  the shape section, on-canvas widgets, the polygon tool's star inset); draw's five corner
-  presets and `Insert star…` are command and menu entries the host lacks, and the Flare tool has
-  no host equivalent. Same gap as the pathfinder was: merge by declaring host commands first.
+- Live corners: MERGED 2026-11-01. The host declares `paged.corners.*` (Rounded, Inverse rounded,
+  Bevel, Fancy, None; `corner-commands.ts`) with Object > Corners entries; the eight writes are
+  one shared builder in `platform/shared/helpers` (`cornerPresetOps`) that draw's Corner Radius
+  tool also uses. Draw's five commands and Draw > Corners menu are gone (ids left through the
+  deprecation window). The `liveCorners` metadata marker the commands stamped was never read;
+  a stale one is inert (the InDesign round-trip recordings still echo it, see the case).
+- Star and Flare: KEEP. The host's polygon tool draws a live star by drag, but there is no host
+  command or dialog for a parametrised star (radius 1, radius 2, points, rotation) and nothing
+  like Flare; draw's `Insert star…` / `Insert flare` and their Path Options sections stay.
 - Fill / stroke / dash panels: the schema panels are already gone from draw (the bundle log
   says their rows moved to the host panels). What remains are the dash preset commands and the
   Path Options dash section, which the host stroke panel does not duplicate: KEEP.

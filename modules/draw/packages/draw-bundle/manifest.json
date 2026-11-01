@@ -141,16 +141,6 @@
       "media.paged.draw.command.selectRepeatInstances",
       "media.paged.draw.command.expandRepeat",
       "media.paged.draw.command.releaseRepeat",
-      "media.paged.draw.command.cornersRounded",
-      "media.paged.draw.command.cornersInverseRounded",
-      "media.paged.draw.command.cornersBevel",
-      "media.paged.draw.command.cornersFancy",
-      "media.paged.draw.command.cornersNone",
-      "media.paged.draw.command.appearanceAddFill",
-      "media.paged.draw.command.appearanceAddStroke",
-      "media.paged.draw.command.appearanceClear",
-      "media.paged.draw.command.appearanceRemoveLayer",
-      "media.paged.draw.command.appearanceMoveLayer",
       "media.paged.draw.command.bakeAppearance",
       "media.paged.draw.command.releaseAppearance",
       "media.paged.draw.command.saveGraphicStyle",
@@ -1682,86 +1672,6 @@
           }
         },
         {
-          "id": "media.paged.draw.command.cornersRounded",
-          "title": "Corners rounded",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersInverseRounded",
-          "title": "Corners inverse rounded",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersBevel",
-          "title": "Corners bevel",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersFancy",
-          "title": "Corners fancy",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.cornersNone",
-          "title": "Corners none",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
           "id": "media.paged.draw.command.outlineStroke",
           "title": "Outline stroke",
           "args": {
@@ -2021,54 +1931,6 @@
           }
         },
         {
-          "id": "media.paged.draw.command.appearanceAddFill",
-          "title": "Appearance add fill",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.appearanceAddStroke",
-          "title": "Appearance add stroke",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.appearanceClear",
-          "title": "Appearance clear",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
           "id": "media.paged.draw.command.bakeAppearance",
           "title": "Bake appearance",
           "args": {
@@ -2096,58 +1958,6 @@
                   "kind": "ref",
                   "to": "frame"
                 }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.appearanceRemoveLayer",
-          "title": "Appearance remove layer",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              },
-              "kind": {
-                "kind": "enum",
-                "members": ["fill", "stroke"]
-              },
-              "index": {
-                "kind": "number",
-                "integer": true
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.appearanceMoveLayer",
-          "title": "Appearance move layer",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              },
-              "kind": {
-                "kind": "enum",
-                "members": ["fill", "stroke"]
-              },
-              "index": {
-                "kind": "number",
-                "integer": true
-              },
-              "delta": {
-                "kind": "number",
-                "integer": true
               }
             }
           }

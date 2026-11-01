@@ -149,7 +149,7 @@ test.describe("journey · paged.draw render output", () => {
     //    the engine's native appearance (draw ADR 367); its edge must
     //    RENDER around the now-filled rectangle. ──
     const beforeStroke = await designer.renderBytes();
-    await invokeCommand(page, "media.paged.draw.command.appearanceAddStroke");
+    await invokeCommand(page, "paged.appearance.addStroke");
     await expect
       .poll(
         async () => {

@@ -130,6 +130,14 @@ import {
   type ObjectCommandDeps,
 } from "../../src/object-commands";
 import {
+  APPEARANCE_DIAGNOSTIC_SOURCE,
+  buildAppearanceCommands,
+} from "../../src/appearance-commands";
+import {
+  buildCornerCommands,
+  CORNER_DIAGNOSTIC_SOURCE,
+} from "../../src/corner-commands";
+import {
   buildPathfinderCommands,
   PATHFINDER_DIAGNOSTIC_SOURCE,
 } from "../../src/pathfinder-commands";
@@ -981,6 +989,22 @@ export async function createHeadlessEditor(
       ]),
     () => problemsSink.clear(PATHFINDER_DIAGNOSTIC_SOURCE),
   );
+  const cornerCommands = buildCornerCommands(
+    { client: objectDeps.client, getSelection: objectDeps.getSelection },
+    (message) =>
+      problemsSink.publish(CORNER_DIAGNOSTIC_SOURCE, "corners", [
+        { severity: "error", message, source: "corners" },
+      ]),
+    () => problemsSink.clear(CORNER_DIAGNOSTIC_SOURCE),
+  );
+  const appearanceCommands = buildAppearanceCommands(
+    { client: objectDeps.client, getSelection: objectDeps.getSelection },
+    (message) =>
+      problemsSink.publish(APPEARANCE_DIAGNOSTIC_SOURCE, "appearance", [
+        { severity: "error", message, source: "appearance" },
+      ]),
+    () => problemsSink.clear(APPEARANCE_DIAGNOSTIC_SOURCE),
+  );
   const insertReport: InsertReport = (severity, message) =>
     problemsSink.publish(INSERT_DIAGNOSTIC_SOURCE, "insert", [
       { severity, message, source: "insert" },
@@ -1055,6 +1079,8 @@ export async function createHeadlessEditor(
       ...clipboardCommands,
       ...objectCommands,
       ...pathfinderCommands,
+      ...cornerCommands,
+      ...appearanceCommands,
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,

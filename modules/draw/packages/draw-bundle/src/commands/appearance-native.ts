@@ -142,68 +142,6 @@ export function appearanceMutation(
   } as Mutation;
 }
 
-const isFillKind = (l: NativePaintLayer) =>
-  l.kind === "fill" || l.kind === "frameFill";
-const isStrokeKind = (l: NativePaintLayer) =>
-  l.kind === "stroke" || l.kind === "frameStroke";
-
-/** Add a fill or stroke the way Illustrator's Add New Fill / Stroke does:
- *  directly above the topmost layer of its kind. */
-export function addNativeLayer(
-  layers: readonly NativePaintLayer[],
-  layer: NativePaintLayer,
-): NativePaintLayer[] {
-  const out = explicitLayers(layers);
-  const same = layer.kind === "stroke" ? isStrokeKind : isFillKind;
-  let at = -1;
-  out.forEach((l, i) => {
-    if (same(l)) at = i;
-  });
-  out.splice(at + 1, 0, layer);
-  return out;
-}
-
-/** The list index of the `n`-th extra layer of `kind` (bottom to top),
- *  -1 when there is none. */
-export function extraLayerIndex(
-  layers: readonly NativePaintLayer[],
-  kind: "fill" | "stroke",
-  n: number,
-): number {
-  let seen = -1;
-  for (let i = 0; i < layers.length; i++)
-    if (layers[i]!.kind === kind && ++seen === n) return i;
-  return -1;
-}
-
-/** Drop the layer at `index` (a placeholder is the frame's own paint and
- *  stays: an out-of-range or placeholder index changes nothing). */
-export function removeNativeLayer(
-  layers: readonly NativePaintLayer[],
-  index: number,
-): NativePaintLayer[] {
-  const out = explicitLayers(layers);
-  const l = out[index];
-  if (!l || l.kind === "frameFill" || l.kind === "frameStroke") return out;
-  out.splice(index, 1);
-  return out;
-}
-
-/** Move the layer at `index` by `delta` places (clamped; placeholders
- *  move too — the order IS what draws on top). */
-export function moveNativeLayer(
-  layers: readonly NativePaintLayer[],
-  index: number,
-  delta: number,
-): NativePaintLayer[] {
-  const out = explicitLayers(layers);
-  const to = Math.max(0, Math.min(out.length - 1, index + delta));
-  if (!out[index] || to === index) return out;
-  const [l] = out.splice(index, 1);
-  out.splice(to, 0, l!);
-  return out;
-}
-
 function fillLayer(f: FillLayer): NativePaintLayer {
   return {
     kind: "fill",

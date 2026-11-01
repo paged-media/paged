@@ -83,7 +83,7 @@ const cardId = await make({
 });
 await fill(cardId, "Color/Violet");
 await editor.select([cardId], "replace");
-await editor.runCommand("media.paged.draw.command.cornersRounded");
+await editor.runCommand("paged.corners.rounded");
 await demo.showInfo(
   "Live corners",
   "Draw ▸ Corners ▸ Rounded: the corners stay live, and save as IDML corner options.",
