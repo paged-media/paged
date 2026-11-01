@@ -380,10 +380,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // Illustrator Phase 2 (the Transparency row) — Opacity masks
-        // (Make / Release) over the C-28 v58 pair. EXPORT-ONLY.
-        "command",
-        "command",
         // C-29 (engine v58) — Type on a path (Attach / Detach).
         "command",
         "command",

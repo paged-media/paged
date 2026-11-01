@@ -1407,33 +1407,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     expect(out.after, "the selection holds no text").toBe(out.before);
   });
 
-  test("Draw/Opacity mask/Make — masks the back rectangle with the front one, and one Undo takes it back", async () => {
-    covers("menu:Draw/Opacity mask/Make");
-    await expectGreyedAndInert(bare, "Draw/Opacity mask/Make");
-    const out = await clickEntry(
-      live,
-      "Draw/Opacity mask/Make",
-      "media.paged.draw.command.makeOpacityMask",
-    );
-    expect(out.shell).toEqual([]);
-    expect(out.after, "Draw/Opacity mask/Make changes the document").not.toBe(
-      out.before,
-    );
-    await expectOneUndoRestores(live, "Draw/Opacity mask/Make", out.before);
-  });
-
-  test("Draw/Opacity mask/Release — runs releaseOpacityMask; the selection holds no opacity mask, so it changes nothing", async () => {
-    covers("menu:Draw/Opacity mask/Release");
-    await expectGreyedAndInert(bare, "Draw/Opacity mask/Release");
-    const out = await clickEntry(
-      live,
-      "Draw/Opacity mask/Release",
-      "media.paged.draw.command.releaseOpacityMask",
-    );
-    expect(out.shell).toEqual([]);
-    expect(out.after, "the selection holds no opacity mask").toBe(out.before);
-  });
-
   test("Draw/Update linked recipes — runs updateLinkedRecipes; the selection feeds no recipe, so it changes nothing", async () => {
     covers("menu:Draw/Update linked recipes");
     await expectGreyedAndInert(bare, "Draw/Update linked recipes");

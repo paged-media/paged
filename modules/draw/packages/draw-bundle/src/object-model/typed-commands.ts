@@ -411,13 +411,7 @@ export const TWINS: readonly TwinSpec[] = [
     faces: { kind: "list", of: TEXT },
   }),
   recipeVerb("releaseLivePaint", "group", "livePaint", "groupId"),
-  // Opacity masks and type on a path (protocol 58).
-  twin("makeOpacityMask", {
-    ...T,
-    maskType: enumOf(["luminosity", "alpha"]),
-    invert: BOOL,
-  }),
-  sel("releaseOpacityMask"),
+  // Type on a path (protocol 58).
   twin(
     "attachTextToPath",
     {

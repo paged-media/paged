@@ -233,11 +233,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.selectLivePaintFaces",
       "media.paged.draw.command.deleteLivePaintFace",
       "media.paged.draw.command.releaseLivePaint",
-      // Illustrator Phase 2 (the Transparency row) — opacity masks
-      // (C-28, engine v58). EXPORT-ONLY: the canvas backend does not
-      // honour the mask, and the command title says so.
-      "media.paged.draw.command.makeOpacityMask",
-      "media.paged.draw.command.releaseOpacityMask",
       // C-29 (engine v58) — type on a path: flow an EXISTING story
       // along an EXISTING path, and its exact inverse.
       "media.paged.draw.command.attachTextToPath",

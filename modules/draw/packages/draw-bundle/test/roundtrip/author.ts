@@ -71,6 +71,7 @@ import {
   setTextOnPathStory,
   writeGraphicStyleLibrary,
 } from "../../src";
+import { stampDrawMetadata } from "../../src/commands/appearance-bake";
 import { packageWithSpread } from "../fixtures/build-idml";
 import { openHost } from "../headless/host";
 import { exportIdml } from "./package";
@@ -949,8 +950,38 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       await ctx.fill(target, await ctx.swatch("rt-red", [220, 40, 40]));
       const mask = await ctx.pen(circle(250, 200, 90), true);
       await ctx.fill(mask, "Color/Black");
-      await ctx.select([target, mask]);
-      await ctx.command(D + "makeOpacityMask", {});
+      // The editor's Transparency panel sends this op; draw has no
+      // command of its own for it (PM-0017). The label below is the
+      // record draw's command used to stamp: the InDesign recording of
+      // this case echoes it, so it stays until the case is re-recorded
+      // (then drop the stamp and the recording's label with it).
+      await ctx.mutate(
+        {
+          op: "batch",
+          args: {
+            ops: [
+              {
+                op: "applyOpacityMask",
+                args: { targetId: target, maskId: mask },
+              },
+              stampDrawMetadata(target, {
+                v: 1,
+                data: {
+                  opacityMask: {
+                    mask: {
+                      kind: mask.kind,
+                      id: String((mask as { id: unknown }).id),
+                    },
+                    maskType: "luminosity",
+                    invert: false,
+                  },
+                },
+              }),
+            ],
+          },
+        },
+        "make opacity mask",
+      );
     },
   },
 ];

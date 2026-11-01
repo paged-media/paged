@@ -126,10 +126,6 @@ import {
   LIVE_PAINT_COMMAND_IDS,
 } from "./commands/live-paint";
 import {
-  contributeOpacityMaskCommands,
-  OPACITY_MASK_COMMAND_IDS,
-} from "./commands/opacity-mask";
-import {
   contributeTextOnPathCommands,
   TEXT_ON_PATH_COMMAND_IDS,
 } from "./commands/text-on-path";
@@ -599,16 +595,6 @@ export function activate(host: BundleHost): BundleHandle {
   // see commands/live-paint.ts for why that is the honest shape, and
   // RFI C-30 for the persistent object it is standing in for.
   const livePaintCommandsSub = contributeLivePaintCommands(host);
-  // Illustrator Phase 2 (the Transparency panel row) — OPACITY MASKS
-  // over the C-28 protocol-58 pair. The mask is honoured by the CPU
-  // rasterizer and by PDF EXPORT but NOT by the Vello/WebGPU backend the
-  // canvas draws through, so there is deliberately no panel, no overlay
-  // and no preview here — the command TITLE carries the gap the way
-  // pattern.ts's title carries "copies, not a live fill". Core's seven
-  // refusals (text frame, self, cross-spread, already-masked,
-  // already-a-mask, pasted-in, grouped) are surfaced with the engine's
-  // own sentence rather than re-implemented — see commands/opacity-mask.ts.
-  const opacityMaskCommandsSub = contributeOpacityMaskCommands(host);
   // Illustrator/InDesign Phase 2 — TYPE ON A PATH over the C-29
   // protocol-58 pair (plus the tool above). The renderer has always
   // CONSUMED `<TextPath>`; v58 is the first way to create one, so every
@@ -785,7 +771,6 @@ export function activate(host: BundleHost): BundleHandle {
         GRAPHIC_STYLE_LIBRARY_COMMAND_IDS.length +
         SYMBOLS_COMMAND_IDS.length +
         LIVE_PAINT_COMMAND_IDS.length +
-        OPACITY_MASK_COMMAND_IDS.length +
         TEXT_ON_PATH_COMMAND_IDS.length +
         SELECT_SAME_COMMAND_IDS.length +
         GLOBAL_EDIT_COMMAND_IDS.length +
@@ -853,7 +838,6 @@ export function activate(host: BundleHost): BundleHandle {
       widthProfileCommandsSub.dispose();
       recipeUpdateCommandsSub.dispose();
       recipeAutoUpdateSub.dispose();
-      opacityMaskCommandsSub.dispose();
       livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();
       symbolMigrationSub.dispose();

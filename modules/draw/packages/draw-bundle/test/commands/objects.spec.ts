@@ -17,7 +17,7 @@
  */
 
 // THE OBJECT COMMANDS with no engine (`unit-kit.ts`) — Pathfinder,
-// compound paths, inserted shapes, Select Same, opacity masks, type on a
+// compound paths, inserted shapes, Select Same, type on a
 // path, Create Outlines and the Path Options "…" commands: what each one
 // sends (or selects, or raises) for the selection, as how many writes,
 // and that it sends nothing where it does not apply. The engine's answer
@@ -427,37 +427,6 @@ describe("paged.draw commands, no engine — Global Edit [plugin-draw.select-sam
     const r = unitRig(shapes(), { selection: [] });
     await r.run(`${C}.globalEdit`);
     expect(r.fake.selection()).toEqual([]);
-  });
-});
-
-describe("paged.draw commands, no engine — opacity masks", () => {
-  it("Make opacity mask masks the lower path with the upper one and stamps the record, in one batch; one path sends nothing", async () => {
-    covers("command:media.paged.draw.command.makeOpacityMask");
-    const r = rig([A, B]);
-    await r.run(`${C}.makeOpacityMask`);
-    expect(r.steps()).toBe(1);
-    const [mask, stamp] = r.leaves();
-    expect(mask!.op).toBe("applyOpacityMask");
-    expect(ids([args(mask!).targetId as ElementId])).toEqual(["ua"]);
-    expect(ids([args(mask!).maskId as ElementId])).toEqual(["ub"]);
-    expect(stamp!.op).toBe("setPluginMetadata");
-    const one = rig([A]);
-    await one.run(`${C}.makeOpacityMask`);
-    expect(one.sent()).toEqual([]);
-  });
-
-  it("Release opacity mask asks the engine to release the selected target, in one batch; nothing selected sends nothing", async () => {
-    covers("command:media.paged.draw.command.releaseOpacityMask");
-    const r = rig([A]);
-    await r.run(`${C}.releaseOpacityMask`);
-    expect(r.steps()).toBe(1);
-    expect(r.leaves()[0]).toEqual({
-      op: "releaseOpacityMask",
-      args: { targetId: A },
-    });
-    const none = rig([]);
-    await none.run(`${C}.releaseOpacityMask`);
-    expect(none.sent()).toEqual([]);
   });
 });
 

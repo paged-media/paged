@@ -447,7 +447,8 @@ export async function insertOnPlane(
   const ops: MutationInput[] = [
     insertPathMutationFor(pageId, page.anchors, false),
   ];
-  if (paint) ops.push(...graphicPaintOps("insertPath", paint));
+  if (paint)
+    ops.push(...(graphicPaintOps("insertPath", paint) as MutationInput[]));
   ops.push(
     bindCreatedMutationFor(handle),
     stampDrawMetadata(id, withPerspectiveLink(null, link)),

@@ -48,6 +48,17 @@ export {
   labelKey,
   type LabelEnvelope,
 } from "./label.ts";
+export {
+  INDESIGN_GRAPHIC_PAINT,
+  NORMAL_GRAPHICS_FRAME_STYLE,
+  graphicPaintFromStyle,
+  graphicPaintOps,
+  resolveGraphicPaint,
+  withGraphicPaint,
+  type GraphicDocumentDefaults,
+  type GraphicPaint,
+  type GraphicStyleEntries,
+} from "./graphic-default.ts";
 export { escapeXmlAttr, escapeXmlText } from "./escape.ts";
 export { zip, type ZipOptions } from "./zip.ts";
 export {

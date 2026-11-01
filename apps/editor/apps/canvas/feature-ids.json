@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 906,
+    "command": 904,
     "keybinding": 167,
-    "menu": 647,
+    "menu": 645,
     "panel": 151,
     "tool": 130
   },
@@ -1046,11 +1046,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "command:media.paged.draw.command.makeOpacityMask",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "command:media.paged.draw.command.makePatternFromSelection",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1282,11 +1277,6 @@
     },
     {
       "id": "command:media.paged.draw.command.releaseObjectsOnPath",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.releaseOpacityMask",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -5731,16 +5721,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "menu:Draw/Opacity mask/Make",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Draw/Opacity mask/Release",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "menu:Draw/Path/Average endpoints",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -10040,6 +10020,30 @@
     {
       "id": "panel:media.paged.draw.panel.appearance",
       "replacement": "panel:paged.appearance",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.makeOpacityMask",
+      "replacement": "command:paged.core.applyOpacityMask",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.releaseOpacityMask",
+      "replacement": "command:paged.core.releaseOpacityMask",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Opacity mask/Make",
+      "replacement": "menu:Object/Opacity mask/Make…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Opacity mask/Release",
+      "replacement": "menu:Object/Opacity mask/Release",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

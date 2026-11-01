@@ -121,6 +121,33 @@ fill/stroke panels, measure, copy appearance, graphic default paint, colour guid
 doc's text-format verbs; sheet's format fallback; image's history list and `type="color"` inputs;
 slide's adjust handles on `contribute.overlay`; doc's word count.
 
+Status (draw items, one line each; updated as they land):
+
+- Opacity mask: DONE 2026-11-01. The Transparency panel (`transparency-panel.tsx`) and the
+  core commands `applyOpacityMask` / `releaseOpacityMask` (Object > Opacity mask) cover make,
+  release, mode, clip, invert and edit-mask, and read the relation from the object model
+  (`opacityMask`), so draw's metadata stamp (`data.opacityMask`, only ever read by draw) is
+  gone with its writer; a stale stamp in an old document is inert. Draw's command ids and
+  its Draw > Opacity mask menu left through the deprecation window (`deprecated-ids.json`).
+- Graphic default paint: MERGED 2026-11-01. The decision (document defaults win, else the
+  document's `[Normal Graphics Frame]`, else InDesign's 1 pt black stroke) and the batch
+  builders (`resolveGraphicPaint`, `graphicPaintFromStyle`, `withGraphicPaint`) are one
+  implementation in `platform/shared/helpers`. The editor's tools and draw's tools each keep
+  only their two reads (client / `BundleHost`), which cannot be shared.
+- Pathfinder: KEEP for now, MERGE first. The host panel (`pathfinder-panel.tsx`) has all ten
+  verbs, orders by real z and shows the engine's refusal, but it is the only host entry point:
+  no commands, no menu entries, no palette or scripting ids. Draw's ten commands and their
+  Draw > Pathfinder menu are those. Delete draw's once the host declares
+  `paged.pathfinder.*` commands (the `paged.object.*` layer is the model) and the panel calls them.
+- Colour guide: KEEP. The host colour wheel (`color-wheel-panel.tsx`) authors a harmony from the
+  wheel's own colour and adds swatches; draw's panel reads the selection's fill, offers the
+  shade/tint, warm/cool and vivid/muted variation grids and paints the selection from a chip.
+  Merging means adding those three things to the host wheel.
+- Measure: KEEP. The host has no Measure tool (`built-in-tools.ts` records its retirement in
+  favour of draw's); nothing to delete until the host builds one.
+- Copy appearance: KEEP. The host eyedropper samples one composited pixel into a swatch and
+  fills with it; draw's copies a whole appearance (fills, strokes, effects). Different feature.
+
 ### Reach (gaps between modules)
 
 - **doc:** shapes (`dml-geom`), picture crop (`srcRect`), recolour, charts, SmartArt, drop caps,
