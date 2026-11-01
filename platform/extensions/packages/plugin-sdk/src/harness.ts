@@ -140,6 +140,10 @@ import {
   type DataBackend,
 } from "./doors-data-actions.js";
 import { createMlRegistry, type MlBackend } from "./doors-ml.js";
+import {
+  createCommentAnchorRegistry,
+  type CommentAnchorBackend,
+} from "./doors-comments.js";
 import { satisfiesApiVersion, API_VERSION } from "./version.js";
 import { mapBacking } from "./testing.js";
 import { createCoreObjects } from "./core-objects.js";
@@ -215,6 +219,7 @@ export interface HarnessOptions
       | "data"
       | "actions"
       | "ml"
+      | "commentAnchors"
       | "objects"
       | "willSave"
       | "toolSettings"
@@ -539,6 +544,10 @@ export interface HeadlessHost {
    *  provider (`fakeMlProvider`, `mlHostProvider`) and every bundle host
    *  here reaches it. */
   readonly ml: MlBackend;
+  /** The SHARED comment anchor registry (`contribute.commentAnchor@1`,
+   *  extensions ADR 1101): a bundle's resolvers land here; `resolve(item,
+   *  address)` is what the host panel asks. */
+  readonly commentAnchors: CommentAnchorBackend;
   /** The will-save registry this host injected: `fire()` runs every
    *  bundle's `document.onWillSave` listener and awaits them, as a save
    *  would. */
@@ -1209,6 +1218,8 @@ export async function createHeadlessHost(
   const actions = options.actions ?? createActionRegistry();
   // Extensions ADR 1100 — the ML backend, shared the same way.
   const ml = options.ml ?? createMlRegistry();
+  const commentAnchors =
+    options.commentAnchors ?? createCommentAnchorRegistry();
   const objects =
     options.objects ??
     createObjectRegistry({
@@ -1243,6 +1254,7 @@ export async function createHeadlessHost(
       data,
       actions,
       ml,
+      commentAnchors,
       objects,
       willSave: options.willSave ?? willSave,
       toolSettings: options.toolSettings ?? toolSettings,
@@ -1477,6 +1489,7 @@ export async function createHeadlessHost(
     data,
     actions,
     ml,
+    commentAnchors,
     willSave,
     toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {

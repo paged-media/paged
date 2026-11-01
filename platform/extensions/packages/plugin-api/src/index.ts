@@ -394,6 +394,7 @@ export type {
 // One element a mutation minted (`MutationOutcome.minted`): the element,
 // the `bindCreated` handle that named it, and the story minted with it.
 export type { MintedElement } from "./wire.js";
+export type { CommentSummary } from "./wire.js";
 
 export type {
   MlCapability,
@@ -422,6 +423,19 @@ export type {
   MlResults,
   MlSurface,
 } from "./ml.js";
+
+export type {
+  CommentAnchor,
+  CommentTextAnchor,
+  CommentRow,
+  CommentThread,
+  CommentFilter,
+  CommentAuthor,
+  CommentWriteResult,
+  CommentsSurface,
+  CommentAnchorGeometry,
+  CommentAnchorContribution,
+} from "./comments.js";
 
 export type {
   ClipboardSurface,

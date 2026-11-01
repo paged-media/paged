@@ -3341,3 +3341,17 @@ before the caller hears of it.
 
 **Additivity.** New capabilities are new doors (`ml.<name>@1`), a changed request shape is `@2`.
 The capability vocabulary is gated like the others (`capability-vocabulary.spec.ts`).
+
+## 32. The comments door (ADR 1101 — `comments@1`, `contribute.commentAnchor@1`)
+
+**One typed way to the document's threads.** `host.comments` lists threads (`list`, `get`),
+starts them on an `item`, `page`, `region` or `cell` anchor, replies, edits, resolves and
+deletes, and says when the comments changed. It is built over the document door, so there is no
+new engine operation and no new capability: reads need `document.read`, writes
+`document.write` and answer `{ ok: false, reason }` when refused. The flag `comments@1` is static.
+
+**The module says where its address points.** A `cell` anchor is opaque to the host.
+`contribute.commentAnchor` lets sheet answer a rectangle inside its frame and a label for
+`B7`, slide the shape for `shape:12`. The shared registry is the dynamic
+`contribute.commentAnchor@1`; the host that reads it pins the thread there. The editor has not
+wired the registry yet.

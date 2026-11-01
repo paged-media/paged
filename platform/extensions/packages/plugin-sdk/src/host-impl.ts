@@ -184,6 +184,10 @@ import {
 } from "./text-selection.js";
 import { formatAddress } from "./object-address.js";
 import {
+  createCommentsSurface,
+  type CommentAnchorBackend,
+} from "./doors-comments.js";
+import {
   createActionsSurface,
   createDataSurface,
   type ActionBackend,
@@ -396,6 +400,10 @@ export const HOST_FEATURES: readonly string[] = [
   // protocol, which applies them.
   "document.symbols@1",
   "document.collection@1",
+  // Extensions ADR 1101 — the comments door is built over the document door,
+  // so it exists wherever that does (STATIC). The resolver contribution is
+  // the dynamic `contribute.commentAnchor@1`.
+  "comments@1",
   "document.frameChain@1",
   "document.meta@1",
   "document.pathAnchors@1",
@@ -1650,6 +1658,12 @@ export interface CreateBundleHostOptions {
    *  Tier-B providers into it and injects it into every host. Absent:
    *  every `host.ml` call rejects and every `ml.*@1` feature is false. */
   ml?: MlBackend;
+  /** The shared comment anchor registry (`contribute.commentAnchor@1`,
+   *  extensions ADR 1101): the editor builds ONE
+   *  (`createCommentAnchorRegistry`), injects it into every host and asks it
+   *  where a `cell` anchor points. Absent: `contribute.commentAnchor` is a
+   *  no-op and the flag is false. */
+  commentAnchors?: CommentAnchorBackend;
   /** Host-provided SHARED BINDING-PROVIDER registry (ADR-023 phase A): the
    *  editor creates ONE (`createBindingProviderRegistry`) and injects the SAME
    *  instance into every plugin host, so its own panels can ask "who resolves
@@ -2493,6 +2507,13 @@ export function createBundleHost(
           },
         }),
       );
+    },
+    commentAnchor(c) {
+      assertNamespaced(c.id, "commentAnchor");
+      const anchors = options?.commentAnchors;
+      return anchors
+        ? store.add(anchors.register(manifest.id, c))
+        : toDisposable(() => {});
     },
     overlay(c) {
       assertNamespaced(c.id, "overlay");
@@ -4893,6 +4914,8 @@ export function createBundleHost(
     requireDeclared,
     (d) => store.add(d),
   );
+  // ------------------------------------------------ comments (ADR 1101)
+  const comments = createCommentsSurface(document, (d) => store.add(d));
   const dataProviders: DataProvidersSurface = {
     register(registration) {
       requireDeclared(
@@ -6478,6 +6501,9 @@ export function createBundleHost(
     // means a shared data backend is wired (extensions ADR 343).
     featureSet.add("data@1");
   }
+  if (options?.commentAnchors) {
+    featureSet.add("contribute.commentAnchor@1");
+  }
   if (options?.actions) {
     // The shared action registry is wired (extensions ADR 344).
     featureSet.add("actions@1");
@@ -6670,6 +6696,7 @@ export function createBundleHost(
     data,
     actions,
     ml,
+    comments,
     diagnostics,
     journal,
     bindings,

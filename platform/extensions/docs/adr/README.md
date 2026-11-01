@@ -72,6 +72,7 @@ and each one names the plugins that follow it and those that do not.
 | [348](348-editing-doors.md) | The editing doors: control-bar groups, scoped keys, status items, the text selection | Accepted 2026-10-24 |
 | [349](349-review-and-structure-doors.md) | The structure doors: headers, footers and notes edited in place (C6); amendment 1: the markup margin band (C5) and `text.contentRange` | Accepted 2026-10-28, amended 2026-10-29 |
 | [1100](1100-the-ml-doors.md) | The ML doors: seven typed capabilities, two tiers, nothing off the machine | Accepted 2026-10-24 |
+| [1101](1101-the-comments-door.md) | The comments door: `host.comments` over the document door, and `contribute.commentAnchor` | Accepted 2026-11-01 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).
