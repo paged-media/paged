@@ -110,6 +110,7 @@ import { ProblemsPanel } from "./problems-panel";
 import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
 import { HistoryPanel } from "./history-panel";
+import { GenerateImagePanel } from "./generate-image-panel";
 import { ModelsPanel } from "./models-panel";
 import { LibraryPanel } from "./library-panel";
 import { TreePanel } from "./tree-panel";
@@ -219,6 +220,7 @@ const M = defineMessages("app.builtInPanels", {
   actions: "Actions",
   keyboardShortcuts: "Keyboard shortcuts",
   models: "Models",
+  generateImage: "Generate image",
   problems: "Problems",
   journal: "Journal",
   data: "Data",
@@ -1212,6 +1214,16 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     component: KeyboardShortcutsPanel,
     defaultDock: "right",
     defaultGroup: "workspace",
+  },
+  {
+    // Editor ADR 313 — Generate Image: a prompt into any image frame.
+    id: "paged.generate-image",
+    get title() {
+      return t(M.generateImage);
+    },
+    component: GenerateImagePanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
   },
   {
     // Editor ADR 290 — Settings ▸ Models: the ML service's models (install

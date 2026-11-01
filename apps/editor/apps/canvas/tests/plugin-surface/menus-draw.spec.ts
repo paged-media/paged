@@ -1804,6 +1804,44 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
+  test("Draw/Text to vector… — raises the Generative panel, where the prompt is typed", async () => {
+    covers(
+      "menu:Draw/Text to vector…",
+      "command:media.paged.draw.command.textToVectorOptions",
+    );
+    await expectGreyedAndInert(bare, "Draw/Text to vector…");
+    const out = await clickEntry(
+      live,
+      "Draw/Text to vector…",
+      "media.paged.draw.command.textToVectorOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.generative" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Edit/Edit colors/Generative recolor… — raises the Generative panel", async () => {
+    covers(
+      "menu:Edit/Edit colors/Generative recolor…",
+      "command:media.paged.draw.command.generativeRecolorOptions",
+    );
+    await expectGreyedAndInert(bare, "Edit/Edit colors/Generative recolor…");
+    const out = await clickEntry(
+      live,
+      "Edit/Edit colors/Generative recolor…",
+      "media.paged.draw.command.generativeRecolorOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.generative" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
   // ── WP6.7 — Puppet warp, Object ▸ Perspective, View ▸ Perspective grid ──
 
   test("Object/Puppet warp — switches to the Puppet Warp tool and leaves the document alone", async () => {

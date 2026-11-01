@@ -120,8 +120,9 @@ import { BUILT_IN_TOOLS } from "@paged-media/tools";
 import { loadBundle, mlObjectModel } from "@paged-media/plugin-sdk";
 
 import { createEditorMlService } from "../ml/create-editor-ml";
+import { generateImageHandler } from "../ml/generate-image";
 import { browserPngCodec } from "../ml/png-codec";
-import { setMlService } from "../ml/scope";
+import { mlServiceOf, setMlService } from "../ml/scope";
 import type { SchemaPanelRenderer as SchemaPanelRendererType } from "@paged-media/plugin-api";
 import { errorIdent, identOf } from "@paged-media/client";
 import {
@@ -1508,6 +1509,19 @@ function CanvasAppIntegration() {
           },
           dropped,
         );
+      },
+      // Editor ADR 313 — Generate Image into any image frame; the service
+      // is read when the command runs (it is set in another effect).
+      generateImage: (p, payload) => {
+        problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE);
+        return generateImageHandler({
+          generate: (request, options) => {
+            const service = mlServiceOf(instance.scope);
+            if (!service) throw new Error("the ML service does not run here");
+            return service.generateImage(request, options);
+          },
+          report: insertReport,
+        })(p, payload);
       },
       newPage: freshInsert((p) => addPage(p, insertReport)),
     });

@@ -241,4 +241,52 @@ test.describe("ML service — Settings ▸ Models and the ML doors", () => {
       { kind: "generate", prompt: "a green card", width: 64, height: 64 },
     ]);
   });
+  test("Object ▸ Generate image…: a prompt fills a new image frame through the local host @feat:editor-shell.generate-image @level:happy", async ({
+    page,
+  }) => {
+    covers(
+      "menu:Object/Generate image…",
+      "panel:paged.generate-image",
+      "command:paged.insert.generateImage",
+    );
+    const host = await fakeHost(page);
+    await openShell(page);
+    await openModels(page);
+    await panel(page).locator('[data-action="ml-check-host"]').click();
+    await expect(panel(page).locator("[data-ml-host]")).toHaveAttribute(
+      "data-ml-host",
+      "ready",
+    );
+    await clickMenuRow(page, "Object/Generate image…");
+    const gen = page.locator('[data-generate-panel="ready"]');
+    await expect(gen).toBeVisible();
+    await gen.locator("[data-generate-prompt]").fill("a green card");
+    await gen.locator('[data-action="generate-image"]').click();
+    await expect(gen.locator("[data-generate-status]")).toHaveAttribute(
+      "data-generate-status",
+      "done",
+    );
+    expect(host.jobs).toEqual([
+      { kind: "generate", prompt: "a green card", width: 1024, height: 1024 },
+    ]);
+    // The same action as a command: a script generates without the panel.
+    const outcome = await page.evaluate(
+      () =>
+        (
+          globalThis as unknown as {
+            __canvas: {
+              registries: {
+                commands: {
+                  invoke(id: string, payload: unknown): Promise<unknown>;
+                };
+              };
+            };
+          }
+        ).__canvas.registries.commands.invoke("paged.insert.generateImage", {
+          prompt: "scripted",
+        }) as Promise<{ applied: boolean; provider?: string }>,
+    );
+    expect(outcome).toMatchObject({ applied: true, provider: "paged.ml-host" });
+    expect(host.jobs).toHaveLength(2);
+  });
 });
