@@ -207,6 +207,8 @@ discipline — the same posture as `plugin-image`, with one rule added.
 
 _Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the plugin spawns no workers; and data from another plugin arrives only through the host's data-provider door ([design/data-provider-consumer.md](design/data-provider-consumer.md))._
 
+_Retired 2026-11-01 by [PM-0017](../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md): the built-in modules are part of the core. Items 1 and 2 below no longer bind this module (it may depend on the engine, on `platform/shared/*` and on other built-ins, acyclic, declared in `moon.yml`); they bind third-party extensions. The TypeScript import lint stays._
+
 1. **Zero core contact.** No imports from `core/` or `editor/` internals,
    no patched Paged builds, no core feature flags for this plugin. CI
    builds against _published_ SDK canaries only.

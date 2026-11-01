@@ -1,6 +1,8 @@
 # ADR 526 — Hyperlinks, notes and pictures: authored by splice, drawn on both surfaces
 
 - **Status:** Accepted, 2026-10-24. Extends 510 (the frame's two surfaces) and 517 (protection).
+  Decision 3 (threaded comments preserved, never editable) is amended by 528, over engine ADR 1055's
+  `cell` anchors.
 - **Scope:** `sheet-xlsx/src/{links,comment_edit}.rs`, `sheet-xlsx/src/parts/pictures.rs`,
   `sheet-js/src/core/annotations.rs`, `sheet-grid` (`GridLink`, `GridPicture`), the host model's
   `table-pictures.ts` and `grid.ts` (`linkAt`, `pictureBox`), the grid painter and the frame
