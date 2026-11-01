@@ -187,7 +187,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       { kind: "polygon", id: target },
       { kind: "polygon", id: mask },
     ]);
-    await draw(ctx, "makeOpacityMask", { maskType: "luminosity" });
+    // The host's op (the Transparency panel sends the same one); the
+    // topmost of the pair is the mask.
+    await doc.mutate("applyOpacityMask", {
+      targetId: { kind: "polygon", id: target },
+      maskId: { kind: "polygon", id: mask },
+      maskType: "luminosity",
+    });
     // The mask artwork leaves the page z-order while it masks — the
     // documented residual, and the honest completion signal.
     const masked = await settle(
@@ -197,7 +203,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
     if (masked) {
       maskWorked = true;
-      await draw(ctx, "releaseOpacityMask", {
+      await doc.mutate("releaseOpacityMask", {
         targetId: { kind: "polygon", id: target },
       });
       await settle(
@@ -257,7 +263,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await specLabel(ctx, page, [
       "Specimen No. 124",
       "imageTrace (wasm, in-editor)",
-      "makeOpacityMask/release (transient)",
+      "applyOpacityMask/release (transient)",
       "listPagedParts inventory",
     ]),
   );
@@ -269,7 +275,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ),
   );
   if (!maskWorked) {
-    notes.push("plugin-draw.opacity-mask-commands not claimed on this run");
+    notes.push("effects-transparency.opacity-mask not claimed on this run");
   }
   notes.push(
     "plugin-draw.image-trace is registry-partial — demonstrated as this plate, deliberately not claimed",
@@ -277,10 +283,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   const covers = ["images-graphics.placed-images"];
   if (maskWorked) {
-    covers.push(
-      "plugin-draw.opacity-mask-commands",
-      "effects-transparency.opacity-mask",
-    );
+    covers.push("effects-transparency.opacity-mask");
   }
 
   return {

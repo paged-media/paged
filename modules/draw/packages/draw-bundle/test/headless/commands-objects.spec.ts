@@ -17,7 +17,7 @@
  */
 
 // THE OBJECT COMMANDS against the real engine — Pathfinder, compound
-// paths, inserted shapes, Select Same, opacity masks, type on a path,
+// paths, inserted shapes, Select Same, type on a path,
 // Create Outlines and the Path Options "…" commands — held to the kit's
 // contract (`command-kit.ts`): one undo step that undoes and redoes
 // exactly, and no change where the command does not apply.
@@ -299,24 +299,6 @@ describe("paged.draw commands — objects (real engine)", () => {
       await expectSelects(rig, `${C}.selectSameStrokeWeight`, (s) =>
         expect(s).toEqual([]),
       );
-    });
-  });
-
-  describe("opacity masks", () => {
-    it("Make opacity mask masks the lower quad with the upper one; one quad is refused", async () => {
-      covers("command:media.paged.draw.command.makeOpacityMask");
-      await rig.open(F4(), [A, B]);
-      await expectApplies(rig, `${C}.makeOpacityMask`);
-      await expectRefuses(rig, F4(), [A], `${C}.makeOpacityMask`);
-    });
-
-    it("Release opacity mask gives the mask back as an element; an unmasked quad is refused", async () => {
-      covers("command:media.paged.draw.command.releaseOpacityMask");
-      await rig.open(F4(), [A, B]);
-      await rig.run(`${C}.makeOpacityMask`);
-      await rig.h.host.selection.set([A]);
-      await expectApplies(rig, `${C}.releaseOpacityMask`);
-      await expectRefuses(rig, F4(), [B], `${C}.releaseOpacityMask`);
     });
   });
 

@@ -6,6 +6,30 @@
       "replacement": "panel:paged.appearance",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.makeOpacityMask",
+      "replacement": "command:paged.core.applyOpacityMask",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.releaseOpacityMask",
+      "replacement": "command:paged.core.releaseOpacityMask",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Opacity mask/Make",
+      "replacement": "menu:Object/Opacity mask/Make…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Opacity mask/Release",
+      "replacement": "menu:Object/Opacity mask/Release",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

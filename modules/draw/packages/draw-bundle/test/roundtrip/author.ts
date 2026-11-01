@@ -949,8 +949,12 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       await ctx.fill(target, await ctx.swatch("rt-red", [220, 40, 40]));
       const mask = await ctx.pen(circle(250, 200, 90), true);
       await ctx.fill(mask, "Color/Black");
-      await ctx.select([target, mask]);
-      await ctx.command(D + "makeOpacityMask", {});
+      // The editor's Transparency panel sends this op; draw has no
+      // command of its own for it (PM-0017).
+      await ctx.mutate(
+        { op: "applyOpacityMask", args: { targetId: target, maskId: mask } },
+        "make opacity mask",
+      );
     },
   },
 ];

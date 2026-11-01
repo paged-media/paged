@@ -121,7 +121,6 @@ defineMessages("menu", {
   Detach: "Detach",
   Type: "Type",
   "Create outlines": "Create outlines",
-  "Opacity mask": "Opacity mask",
   "Insert arc…": "Insert arc…",
   "Insert spiral…": "Insert spiral…",
   "Insert rectangular grid…": "Insert rectangular grid…",
@@ -315,10 +314,6 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // ── Type ▸ Create outlines — the frame's glyphs become compound paths
   //    (one per colour), the frame goes; protocol 66 (RFI C-69). ──
   ["Draw/Type/Create outlines", "createOutlines", "type-outlines"],
-
-  // ── Masks ──
-  ["Draw/Opacity mask/Make", "makeOpacityMask", "mask"],
-  ["Draw/Opacity mask/Release", "releaseOpacityMask", "mask"],
 
   // ── Every recipe the selection is a source of (pattern, repeat, blend,
   //    objects on a path, live paint), rebuilt in one go. ──

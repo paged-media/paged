@@ -151,8 +151,9 @@ REFUSED (nothing copies a story because nothing is copied), and RELEASE
 is an exact restore rather than an inverse. Nothing is grouped, nothing
 is scaled to fit, and the count mode's count IS the object count —
 there is deliberately no way to ask for more slots than objects, because
-that is what a Repeat is), OPACITY MASKS and TYPE ON
-A PATH (the two protocol-58 rows — see the v58 seam note below),
+that is what a Repeat is), TYPE ON
+A PATH (the protocol-58 row — see the v58 seam note below; opacity masks are the
+host's Transparency panel, PM-0017),
 INTERCHANGE (ADR 364 — and read it before adding a reader: SVG in and out
 is the ENGINE's `document.importSvg` / `exportSvg` and nothing else, the
 module's own TS reader/writer is deleted; DXF goes in and out THROUGH
@@ -228,8 +229,7 @@ contract at the revision it is tested with, so it calls every door
 directly and builds every op as a plain `Mutation` (since B3b; the list of
 what was deleted and why is `docs/migration/seams.md` at the repository
 root). The op builders live with their commands: the C-15 batch handles
-and the B-18 nesting pair in `commands/batch-handles.ts`, the C-28 opacity
-mask in `commands/opacity-mask.ts`, the C-29 type on a path in
+and the B-18 nesting pair in `commands/batch-handles.ts`, the C-29 type on a path in
 `commands/text-on-path.ts`, the engine's refusal sentence for both in
 `commands/refusal.ts`, and the Layers provider's two in
 `binding-provider/layers-provider.ts`. `handlers/planar-regions.ts` reads
@@ -244,17 +244,8 @@ never actually have registered once the cast came off. The mirror was not
 a cosmetically-drifted copy; it was a type this bundle could not have
 used. That is the argument against writing the next one.
 
-Two honesty facts these rows carry, and neither may be softened:
+One honesty fact this row carries, and it may not be softened:
 
-- **An opacity mask renders on canvas and in PDF alike.** This bullet
-  used to say the opposite: that the Vello/WebGPU backend could not
-  honour a mask because `push_layer` takes a shape. The premise was
-  false: core's Vello path draws a luminosity mask through
-  `Scene::push_luminance_mask_layer` and an alpha mask by `DestIn`
-  (`engine/core/crates/paged-gpu/src/vello_rs.rs`), matching the CPU
-  rasterizer. `OPACITY_MASK_CANVAS_NOTE` says so, and its wording is
-  pinned by `test/headless/opacity-mask.spec.ts` (it must name canvas,
-  PDF and byte-for-byte, and must not say UNMASKED or EXPORT ONLY).
 - **Type on a Path FLOWS AN EXISTING STORY.** No wire op mints a bare
   story (`insertTextFrame` mints one BOUND to its frame, and a flowed
   story is refused), so the attach resolves a FREE story — empty frame

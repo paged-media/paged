@@ -226,8 +226,6 @@ const COMMANDS = [
   "media.paged.draw.command.selectLivePaintFaces",
   "media.paged.draw.command.deleteLivePaintFace",
   "media.paged.draw.command.releaseLivePaint",
-  "media.paged.draw.command.makeOpacityMask",
-  "media.paged.draw.command.releaseOpacityMask",
   "media.paged.draw.command.attachTextToPath",
   "media.paged.draw.command.detachTextFromPath",
   "media.paged.draw.command.selectSameFill",
@@ -1848,7 +1846,7 @@ test.describe("plugin surface · paged.draw", () => {
 
   // ── 10. the remaining single-shot commands ────────────────────────
 
-  test("close path, radial gradient, opacity mask and text-on-path all commit @feat:plugin-draw.path-weld @feat:plugin-draw.opacity-mask-commands @feat:frames-paths.text-on-path @level:happy", async ({
+  test("close path, radial gradient and text-on-path all commit @feat:plugin-draw.path-weld @feat:frames-paths.text-on-path @level:happy", async ({
     page,
   }) => {
     const designer = new Designer(page);
@@ -1911,32 +1909,6 @@ test.describe("plugin surface · paged.draw", () => {
         { timeout: 10_000 },
       )
       .toEqual(expect.stringContaining("Gradient/"));
-
-    // ── OPACITY MASK — the TOPMOST of exactly two selected items
-    //    becomes the mask; the one below is masked. Real ink change. ──
-    const masked = await designer.drawRectangle({
-      x0: 150,
-      y0: 600,
-      x1: 420,
-      y1: 720,
-    });
-    await designer.applyFill("rectangle", masked);
-    const mask = await designer.drawRectangle({
-      x0: 220,
-      y0: 630,
-      x1: 350,
-      y1: 700,
-    });
-    await designer.applyFill("rectangle", mask, "Color/Paper");
-    await designer.selectElements([
-      { kind: "rectangle", id: masked },
-      { kind: "rectangle", id: mask },
-    ]);
-    const beforeMask = await designer.renderBytes();
-    await designer.runCommand("media.paged.draw.command.makeOpacityMask");
-    await designer.expectRenderChangesFrom(beforeMask);
-    await designer.runCommand("media.paged.draw.command.releaseOpacityMask");
-    await page.waitForTimeout(600);
 
     // ── TEXT ON PATH — attach an EXISTING story to a path, then
     //    detach it (the story survives, unflowed). ──

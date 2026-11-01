@@ -119,6 +119,15 @@ fill/stroke panels, measure, copy appearance, graphic default paint, colour guid
 doc's text-format verbs; sheet's format fallback; image's history list and `type="color"` inputs;
 slide's adjust handles on `contribute.overlay`; doc's word count.
 
+Status (draw items, one line each; updated as they land):
+
+- Opacity mask: DONE 2026-11-01. The Transparency panel (`transparency-panel.tsx`) and the
+  core commands `applyOpacityMask` / `releaseOpacityMask` (Object > Opacity mask) cover make,
+  release, mode, clip, invert and edit-mask, and read the relation from the object model
+  (`opacityMask`), so draw's metadata stamp (`data.opacityMask`, only ever read by draw) is
+  gone with its writer; a stale stamp in an old document is inert. Draw's command ids and
+  its Draw > Opacity mask menu left through the deprecation window (`deprecated-ids.json`).
+
 ### Reach (gaps between modules)
 
 - **doc:** shapes (`dml-geom`), picture crop (`srcRect`), recolour, charts, SmartArt, drop caps,

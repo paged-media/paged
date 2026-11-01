@@ -686,13 +686,8 @@ export {
   LIVE_PAINT_PANEL_ID,
   LIVE_PAINT_NOTE,
 } from "./panels/live-paint-panel";
-// The C-28 opacity-mask and C-29 type-on-a-path ops: their builders
-// (exported for the conformance specs) and the engine's refusal reader.
-export {
-  applyOpacityMaskMutationFor,
-  releaseOpacityMaskMutationFor,
-  type OpacityMaskMode,
-} from "./commands/opacity-mask";
+// The C-29 type-on-a-path ops: their builders (exported for the
+// conformance specs) and the engine's refusal reader.
 export {
   PATH_TYPE_ALIGNMENTS,
   FLIP_PATH_EFFECTS,
@@ -703,31 +698,6 @@ export {
   type TextPathSpec,
 } from "./commands/text-on-path";
 export { maskOrPathRefusalReason } from "./commands/refusal";
-// Illustrator Phase 2 (the Transparency panel row) — OPACITY MASKS
-// (C-28). Honoured by the CPU rasterizer, the Vello/WebGPU canvas and
-// PDF export alike.
-// `OPACITY_MASK_CANVAS_NOTE` is the pinned wording; the command title
-// carries it too.
-export {
-  OPACITY_MASK_COMMAND_IDS,
-  OPACITY_MASK_COMMAND_CATEGORY,
-  MAKE_OPACITY_MASK_COMMAND_ID,
-  RELEASE_OPACITY_MASK_COMMAND_ID,
-  BIND_OPACITY_MASK_STATUS,
-  OPACITY_MASK_CANVAS_NOTE,
-  OPACITY_MASK_KINDS,
-  DEFAULT_OPACITY_MASK_MODE,
-  opacityMaskOf,
-  withOpacityMaskKey,
-  opacityMaskApplyBatchFor,
-  opacityMaskReleaseBatchFor,
-  resolveMaskTarget,
-  opacityMaskLinks,
-  applyMakeOpacityMask,
-  applyReleaseOpacityMask,
-  contributeOpacityMaskCommands,
-  type OpacityMaskRef,
-} from "./commands/opacity-mask";
 // Illustrator/InDesign Phase 2 — TYPE ON A PATH (C-29): flow an
 // EXISTING story along an EXISTING path. Every knob offered is one the
 // renderer honours; `PathEffect` is deliberately absent.
