@@ -48,6 +48,7 @@ import {
   type VectorWasm,
 } from "./vector-engine";
 import { type SmartEngine, type SmartWasm, wrapSmart } from "./smart-engine";
+import { type MlEngine, type MlWasm, wrapMl } from "./ml-engine";
 import type { HistorySource } from "./brush-dynamics";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
@@ -1376,6 +1377,7 @@ export interface ImageEngine
     MaskingEngine,
     ModeEngine,
     RetouchEngine<DecodedInfo>,
+    MlEngine<DecodedInfo>,
     FilterEngine,
     VectorEngine<DecodedInfo>,
     WorkspaceEngine,
@@ -2484,6 +2486,7 @@ export interface ImageWasmModule
     MaskingWasm,
     ModeWasm,
     RetouchWasm,
+    MlWasm,
     FilterWasm,
     VectorWasm,
     WorkspaceWasm,
@@ -3324,6 +3327,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     ...maskingEngine(wasm),
     ...modeEngine(wasm),
     ...wrapRetouch(wasm, decodedInfoOf),
+    ...wrapMl(wasm, decodedInfoOf),
     ...filterEngineOf(wasm, decodedInfoOf),
     ...wrapVectors(wasm, decodedInfoOf),
     ...workspaceEngine(wasm),
