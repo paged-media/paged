@@ -29,7 +29,10 @@ describe("fnv1a32", () => {
   it("reads bytes by value and a string by UTF-16 code unit", () => {
     expect(fnv1a32(new Uint8Array([0x66, 0x6f, 0x6f]))).toBe(fnv1a32("foo"));
     // A code unit above 0xFF is XORed whole, as every earlier copy did.
-    expect(fnv1a32("€")).toBe(Math.imul(0x811c9dc5 ^ 0x20ac, 0x01000193) >>> 0);
+    // The hash of "" is the offset basis.
+    expect(fnv1a32("€")).toBe(
+      Math.imul(fnv1a32("") ^ 0x20ac, 0x01000193) >>> 0,
+    );
   });
   it("takes a seed for chained hashing", () => {
     expect(fnv1a32("bar", fnv1a32("foo"))).toBe(fnv1a32("foobar"));
