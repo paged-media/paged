@@ -106,11 +106,39 @@ export function hostVersion(pkg, bytes) {
     : `${pkg.version}+${sha("sha256", bytes).slice(0, 12)}`;
 }
 
-/** Every wasm inside the installed @paged-media packages, by sha256 →
- *  `{ name, version, path }` (version = host version). */
+/** Third-party packages whose wasm the build emits (the ML worker's
+ *  onnxruntime-web, editor ADR 290). Reviewed dependencies, installed from
+ *  npm, so immutable per version: hosted like a published module under their
+ *  own name. Keep in step with THIRD_PARTY_WASM in scripts/wasm-budget.mjs. */
+export const THIRD_PARTY_WASM = ["onnxruntime-web"];
+
+/** The installed third-party wasm packages, as `pagedPackages` entries. */
+export function thirdPartyPackages(app = APP) {
+  const out = [];
+  for (const name of THIRD_PARTY_WASM) {
+    for (const base of [
+      join(app, "node_modules"),
+      join(app, "..", "..", "node_modules"),
+    ]) {
+      const link = join(base, ...name.split("/"));
+      if (!existsSync(join(link, "package.json"))) continue;
+      const root = realpathSync(link);
+      const { version } = JSON.parse(
+        readFileSync(join(root, "package.json"), "utf8"),
+      );
+      out.push({ name, version, root, published: true });
+      break;
+    }
+  }
+  return out;
+}
+
+/** Every wasm inside the installed @paged-media packages (and the
+ *  third-party ones above), by sha256 → `{ name, version, path }`
+ *  (version = host version). */
 export function packageIndex(app = APP) {
   const index = new Map();
-  for (const pkg of pagedPackages(app)) {
+  for (const pkg of [...pagedPackages(app), ...thirdPartyPackages(app)]) {
     for (const file of walkWasm(pkg.root)) {
       const bytes = readFileSync(file);
       const hash = sha("sha256", bytes);
