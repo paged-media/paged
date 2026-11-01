@@ -67,3 +67,38 @@ fn threads_are_written_by_invoke_and_listed_by_read() {
         assert!(listed.contains(expected), "{expected} in:\n{listed}");
     }
 }
+
+#[test]
+fn an_idml_export_names_the_threads_it_cannot_carry() {
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let source = repo.join("corpus/generated/text.idml");
+    let dir = std::env::temp_dir().join(format!("paged-comments-idml-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let with_thread = dir.join("thread.paged");
+    paged(&[
+        "invoke",
+        source.to_str().unwrap(),
+        "insertCommentThread",
+        r#"{"anchor":{"kind":"cell","item":"sheet1","address":"Sheet1!B3"},"comment":{"id":"t1","author":"Ann Author","text":"Check this cell"}}"#,
+        "-o",
+        with_thread.to_str().unwrap(),
+    ]);
+    let out = dir.join("out.idml");
+    let run = Command::new(env!("CARGO_BIN_EXE_paged"))
+        .args(["export", with_thread.to_str().unwrap()])
+        .args(["--format", "idml", "-o", out.to_str().unwrap()])
+        .output()
+        .expect("run paged export");
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        stderr.contains("lost in translation to IDML: comment thread `t1`")
+            && stderr.contains("on cell `Sheet1!B3` of `sheet1`"),
+        "{stderr}"
+    );
+    assert!(out.exists());
+}

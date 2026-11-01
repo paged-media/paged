@@ -52,6 +52,7 @@ pub mod batch_handles;
 pub mod blank;
 pub mod camera;
 pub mod channel;
+mod comment_export;
 pub mod element_selection;
 pub mod export;
 mod export_losses;

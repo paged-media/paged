@@ -190,8 +190,22 @@ Rides protocol v78 (added before its first consumer sync; governance rule 4).
   what paged.slide and the host panel use. The door becomes worth its contract and harness cost when
   a module needs to *contribute* to comments (sheet resolving `Sheet1!B3` to the cell's rectangle),
   not before.
-- Not yet: the format readers and writers for Word (people, mentions), Excel (threaded comments,
-  editable) and IDML notes; reading annotations back from a PDF (`pdf-import`).
+- **IDML notes** (measured on InDesign 2025, 20.0.1): a `<Note>` has no `Self`, no thread and no
+  reply API (the DOM note has `creationDate`, `modificationDate`, `userName`, `collapsed`,
+  `storyOffset`, `label` only), and one inside a table cell stands in the cell's range like any
+  other. The `comments` collection lists every story note after its range comments as a row of
+  `threadKind: "note"`: `author` is `UserName`, `date`/`modified` the two dates, `start` = `end` the
+  note's story offset (none in a table cell), `text` its paragraphs joined by `\n`. Editing stays
+  with ADR 172's ops, which keep the preserved `<Note>` subtree. On export a comment on a text range
+  is written as a note at the start of its range (`comment_export.rs`, in a copy of the scene):
+  root text first, then each reply as a paragraph `Author: text`; InDesign reads it as one note of
+  those paragraphs, with the root's author and dates. The loss list (`paged export --format idml`
+  prints it as `lost in translation to IDML: ...`) names every thread IDML cannot carry, with its id,
+  anchor kind and reason: a document thread (item, page, region, cell) is dropped, a folded reply
+  and a resolved state are reported, and a range comment whose text is gone is dropped.
+- Not yet: the format readers and writers for Word (people, mentions) and Excel (threaded comments,
+  editable); reading annotations back from a PDF (`pdf-import`); a document thread as an IDML note
+  on its item's story (they are reported, not carried).
 
 ## Verification
 
