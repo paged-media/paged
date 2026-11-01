@@ -512,51 +512,30 @@ pub fn sha512(data: &[u8]) -> [u8; 64] {
 
 // ── base64 (RFC 4648, padded) ────────────────────────────────────────────
 
-const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+use base64::alphabet::STANDARD as ALPHABET;
+use base64::engine::general_purpose::{GeneralPurpose, GeneralPurposeConfig};
+use base64::engine::DecodePaddingMode;
+use base64::Engine as _;
+
+/// Standard alphabet, padded on write; reading takes any padding and any
+/// trailing bits, as Excel's files carry them.
+const B64: GeneralPurpose = GeneralPurpose::new(
+    &ALPHABET,
+    GeneralPurposeConfig::new()
+        .with_encode_padding(true)
+        .with_decode_padding_mode(DecodePaddingMode::Indifferent)
+        .with_decode_allow_trailing_bits(true),
+);
 
 pub fn base64_encode(data: &[u8]) -> String {
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    for chunk in data.chunks(3) {
-        let b = [
-            chunk[0],
-            chunk.get(1).copied().unwrap_or(0),
-            chunk.get(2).copied().unwrap_or(0),
-        ];
-        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        out.push(B64[(n >> 18) as usize & 63] as char);
-        out.push(B64[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 {
-            B64[(n >> 6) as usize & 63] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            B64[n as usize & 63] as char
-        } else {
-            '='
-        });
-    }
-    out
+    B64.encode(data)
 }
 
+/// The bytes of `s`; whitespace is skipped, `None` on a character outside
+/// the alphabet.
 pub fn base64_decode(s: &str) -> Option<Vec<u8>> {
-    let mut out = Vec::new();
-    let mut acc: u32 = 0;
-    let mut bits = 0;
-    for c in s.bytes() {
-        if c == b'=' || c.is_ascii_whitespace() {
-            continue;
-        }
-        let v = B64.iter().position(|&x| x == c)? as u32;
-        acc = (acc << 6) | v;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((acc >> bits) as u8);
-            acc &= (1 << bits) - 1;
-        }
-    }
-    Some(out)
+    let clean: Vec<u8> = s.bytes().filter(|c| !c.is_ascii_whitespace()).collect();
+    B64.decode(clean).ok()
 }
 
 #[cfg(test)]

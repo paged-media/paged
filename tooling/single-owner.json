@@ -167,10 +167,7 @@
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\\+/"
       ],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": [
-        "modules/sheet/sheet-js/src/core/annotations.rs",
-        "modules/sheet/sheet-xlsx/src/parts/protection.rs"
-      ]
+      "baseline": ["modules/sheet/sheet-js/src/core/annotations.rs"]
     },
     {
       "name": "bezier-kappa",

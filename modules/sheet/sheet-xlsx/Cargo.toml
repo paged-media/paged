@@ -49,6 +49,7 @@ sheet-parser = { path = "../sheet-parser" }
 # splicing, the XML helpers and DrawingML colour, shared with doc and slide.
 # Without `dom` (no ooxmlsdk); `deflate-flate2` is the zip backend this
 # workspace always had (flate2's rust_backend, root Cargo.toml).
+base64 = "0.23"
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
 # The DrawingML chart reader and model, shared with slide (slide ADR 709):
 # `parts::chart` folds it into `sheet_chart::ChartModel`, the Excel profile.
