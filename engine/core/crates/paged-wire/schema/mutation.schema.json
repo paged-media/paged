@@ -7793,6 +7793,11 @@
           "const": "paragraphStyleNextStyle"
         },
         {
+          "description": "Engine ADR 1054 — a paragraph style's PDF export tag\n(`StyleExportTagMap ExportType=\"PDF\"`): the standard structure type\na tagged PDF role-maps the style to (`H`, `H1`-`H6`, anything else\nis `P`). `Value::Text`; the empty string clears it.\nSTYLE-DEFINITION path only (`SetStyleProperty` against\n`StyleCollection::Paragraph`). Additive, no bump on its own.",
+          "type": "string",
+          "const": "paragraphStylePdfExportTag"
+        },
+        {
           "description": "W1.22 (engine gap 22) — a paragraph's `AppliedNumberingList`\nreference. Wire value is `Value::Text(String)` carrying the\n`NumberingList/<id>` self id (empty string clears it).\nAddressed against a `NodeId::StoryRange`; the apply arm rounds\nthe range to whole paragraphs (atomic) and rewrites each\nparagraph's `applied_numbering_list`. The renderer resolves it\nto find the list's cross-story continuity flag. Additive.",
           "type": "string",
           "const": "paragraphAppliedNumberingList"

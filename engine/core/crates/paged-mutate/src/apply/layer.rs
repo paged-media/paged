@@ -2570,6 +2570,14 @@ pub(super) fn set_paragraph_style_field(
         // `NextStyle` chain. Value is the next style's self id; the
         // empty string clears it (`None`). Prior is captured as the
         // current ref (or empty) so the inverse round-trips.
+        PropertyPath::ParagraphStylePdfExportTag => {
+            let Value::Text(s) = value else {
+                return Err(type_err());
+            };
+            let prior = Value::Text(def.pdf_export_tag.clone().unwrap_or_default());
+            def.pdf_export_tag = if s.is_empty() { None } else { Some(s.clone()) };
+            Ok(prior)
+        }
         PropertyPath::ParagraphStyleNextStyle => {
             let Value::Text(s) = value else {
                 return Err(type_err());

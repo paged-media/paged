@@ -268,3 +268,22 @@ fn the_masters_and_notes_print_where_word_prints_them__feat__doc_word_headers_fo
     // its own after the last, numbered 1 (doc ADR 611 residual).
     assert!(pages[2]["body"].as_str().unwrap().contains("An endnote. i"));
 }
+
+/// Doc ADR 621: a style named `heading N` — and one based on it — carries
+/// the `H<n>` PDF export tag; a body style carries none.
+#[test]
+fn heading_styles_carry_the_pdf_export_tag__feat__doc_word_tagged_pdf() {
+    let ir = lowered();
+    let tag = |id: &str| -> Option<String> {
+        let style = ir.styles.iter().find(|s| s.id.ends_with(id))?;
+        style.props.iter().find_map(|p| {
+            (p.path == "paragraphStylePdfExportTag").then(|| match &p.value {
+                docx_lower::ir::PropValue::Text(t) => t.clone(),
+                other => panic!("{other:?}"),
+            })
+        })
+    };
+    assert_eq!(tag("Heading1").as_deref(), Some("H1"));
+    assert_eq!(tag("Heading2").as_deref(), Some("H2"));
+    assert_eq!(tag("Normal"), None);
+}

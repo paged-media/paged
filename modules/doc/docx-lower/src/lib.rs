@@ -67,6 +67,10 @@ const PARA_PREFIX: &str = "ParagraphStyle/docx-";
 /// the break, with a warning). Its value is InDesign's `StartParagraph` string.
 const START_PARAGRAPH: &str = "paragraphStartParagraph";
 
+/// A paragraph style's PDF export tag (engine ADR 1054): the structure type
+/// a tagged PDF maps its paragraphs to.
+const PDF_EXPORT_TAG: &str = "paragraphStylePdfExportTag";
+
 /// The paragraph composer's property path (settable from core protocol 65)
 /// and the engine's Word first-fit composer (engine ADR 1016, doc ADR 617):
 /// Word's own line breaking, not InDesign's Single-line Composer, which
@@ -1534,6 +1538,11 @@ impl Lowering {
                     }
                     let size = self.resolve_face(None, Some(&s.style_id)).1;
                     props.extend(self.run_props(&s.run, size));
+                    // Doc ADR 621 — a heading style is tagged `H<n>` in a
+                    // tagged PDF, whose outline is built from them.
+                    if let Some(level) = self.heading_level(&s.style_id) {
+                        props.push(text(PDF_EXPORT_TAG, &format!("H{level}")));
+                    }
                     self.record_style(LoweredStyle {
                         id,
                         name: s.name.clone().unwrap_or_else(|| s.style_id.clone()),
@@ -2713,6 +2722,18 @@ impl Lowering {
 
     /// A paragraph style and its `basedOn` ancestors, nearest first
     /// (depth-bounded against malformed cycles).
+    /// The heading level (1-6) of paragraph style `id`: the one a style
+    /// named `heading N` (Word's built-in, in any case) has, or the nearest
+    /// such style it is based on.
+    fn heading_level(&self, id: &str) -> Option<u8> {
+        self.style_chain(Some(id)).iter().find_map(|s| {
+            let name = s.name.as_deref().unwrap_or(&s.style_id);
+            let n = name.trim().to_ascii_lowercase();
+            let level: u8 = n.strip_prefix("heading")?.trim().parse().ok()?;
+            (1..=6).contains(&level).then_some(level)
+        })
+    }
+
     fn style_chain(&self, id: Option<&str>) -> Vec<&Style> {
         let mut out = Vec::new();
         let mut next = id;

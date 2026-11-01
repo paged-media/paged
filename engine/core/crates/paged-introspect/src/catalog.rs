@@ -841,6 +841,7 @@ property_paths! {
         AppliedConditions => "appliedConditions" : reference(RefKind::Condition).idml(idml![attr(CharacterStyleRange, AppliedConditions)]),
         FrameInsetSpacing => "frameInsetSpacing" : bounds().idml(idml![child(TextFramePreference, InsetSpacing), attr(TextFramePreference, InsetSpacing)]),
         ParagraphJustification => "paragraphJustification" : enum_(JUSTIFICATION).default_text("LeftAlign").idml(idml![attr(ParagraphStyleRange | ParagraphStyle, Justification)]),
+        ParagraphStylePdfExportTag => "paragraphStylePdfExportTag" : text(),
         ParagraphStyleNextStyle => "paragraphStyleNextStyle" : reference(RefKind::ParagraphStyle).idml(idml![attr(ParagraphStyle, NextStyle)]),
         ParagraphAppliedNumberingList => "paragraphAppliedNumberingList" : reference(RefKind::NumberingList).idml(idml![attr(ParagraphStyleRange | ParagraphStyle, AppliedNumberingList), child(ParagraphStyleRange | ParagraphStyle, AppliedNumberingList)]),
         FrameStrokeEndCap => "frameStrokeEndCap" : enum_(END_CAPS).default_text("ButtEndCap").idml(idml![attr(Rectangle | Oval | GraphicLine | Polygon, EndCap)]),
@@ -1631,7 +1632,9 @@ mod tests {
         // script paths; ADR 1052 — a range's content control.
         //
         // 286 -> 287: ADR 1027 — a frame's medium (movie and sound items).
-        assert_eq!(cat.settable_paths.len(), 287, "settable path count drifted");
+        //
+        // 287 -> 288: ADR 1054 — a paragraph style's PDF export tag.
+        assert_eq!(cat.settable_paths.len(), 288, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

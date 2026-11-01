@@ -80,7 +80,8 @@ save-back (ADR 602) only splices into the file that was opened.
 - An RTF or OpenDocument file saves as a `.docx` written by paged. Save-back after that splices
   into that package as usual, because the session's source is the written package (stored as
   the label's part).
-- The tagged-PDF check found two gaps, both in the engine, and neither was changed here:
+- The tagged-PDF check found two gaps, both in the engine, and neither was changed here (closed
+  by [ADR 621](621-word-headings-tag-a-pdf.md) and engine ADR 1054):
   - Headings are not tagged as headings. The PDF export writes each paragraph under its style
     name, but maps it to `H1`–`H6` only from the style's `pdf_export_tag`, which no wire
     property sets, so headings from a Word document are tagged `P`.
