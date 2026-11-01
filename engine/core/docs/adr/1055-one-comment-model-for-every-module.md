@@ -167,8 +167,23 @@ Rides protocol v78 (added before its first consumer sync; governance rule 4).
   original `SlideComment` is the source, export rebuilds the per-page lists from the rows, the
   plugin's panel and markers are gone, and an older deck's container part is read into the
   document once. A text comment has no slide to go on and is not written to the `.pptx`.
-- Not yet: orphaning when an anchor's target is deleted, the format readers and writers, the
-  host panel and pins, `comments@1`, the CLI verbs, PDF annotations.
+- A thread **orphans** when what it is anchored to is deleted: it is kept with its anchor, and the
+  `comments` rows report `orphaned` (derived on read, so undoing the deletion needs no bookkeeping).
+  `SetCommentAnchor` re-anchors it.
+- **PDF / Acrobat:** `ExportPdfWireOptions.comments` (off by default; `paged export --comments`; the
+  export dialog's "Comments as annotations") writes each thread as a Text annotation at its point
+  (a page point as given; an item or text range at the top-left of its first frame), each reply as
+  an annotation in reply to it (`/IRT`, `/RT /R`), and a resolved thread's `Completed` review
+  state (`/StateModel /Review`, a hidden annotation), with author (`/T`), date (`/M`) and id (`/NM`).
+  Reading annotations back (`pdf-import`) is not built.
+- **Command line:** `paged read collection <doc> comments` lists every thread; `paged invoke <doc>
+  <op> '<json>'` writes them, with `<op>` one of `insertCommentThread`, `replyComment`,
+  `resolveComment`, `editComment`, `deleteComment`, `setCommentAnchor`, `setPerson` and the JSON its
+  arguments (for example `paged invoke doc.paged insertCommentThread '{"anchor":{"kind":"page",
+  "page":"u1","at":[40,50]},"comment":{"author":"Ann","text":"Check"}}'`); `paged export
+  --comments` puts them in a PDF. A separate `paged comments` verb would add nothing these do not.
+- Not yet: the format readers and writers for Word (people, mentions), Excel (threaded comments,
+  editable), IDML notes and PDF import; canvas pins for non-text anchors; the `comments@1` door.
 
 ## Verification
 

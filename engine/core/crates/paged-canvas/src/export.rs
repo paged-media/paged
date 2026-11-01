@@ -96,6 +96,9 @@ impl CanvasExportSession {
         } else if wire.bookmarks {
             options.bookmarks = pdf_bookmarks(model.scene(), &built);
         }
+        if wire.comments {
+            options.comments = pdf_comments(model, &built);
+        }
         if wire.tagged {
             options.tagged = true;
             options.lang = document_lang(model.scene());
@@ -297,6 +300,97 @@ impl CanvasExportSession {
             findings,
         })
     }
+}
+
+/// Engine ADR 1055 — the document's comment threads as PDF comments, each
+/// with its replies: a thread on a page at its point; a thread on text at
+/// the first line of the commented range. A thread whose place is gone (an
+/// orphan, or text that was deleted) is left out.
+pub(crate) fn pdf_comments(
+    model: &CanvasModel,
+    built: &paged_renderer::BuiltDocument,
+) -> Vec<paged_export_pdf::PdfComment> {
+    let page_index: HashMap<&str, usize> = built
+        .pages
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.id.as_str(), i))
+        .collect();
+    let rows = model.comments();
+    let mut out = Vec::new();
+    for root in rows.iter().filter(|r| r.parent_id.is_none()) {
+        let place = if root.story_id.is_empty() {
+            // A document thread: the page and point the engine resolved.
+            match (&root.page, root.at) {
+                (Some(page), Some(at)) => page_index.get(page.as_str()).map(|i| (*i, at)),
+                _ => None,
+            }
+        } else {
+            // A thread on text: the first line of its range.
+            let (Some(start), Some(end)) = (root.start, root.end) else {
+                continue;
+            };
+            let sel = crate::selection::ContentSelection {
+                story_id: root.story_id.clone(),
+                start,
+                end,
+                affinity: false,
+                cell: None,
+            };
+            crate::geometry::selection_geometry(built, &sel)
+                .first()
+                .and_then(|r| {
+                    page_index
+                        .get(r.page_id.as_str())
+                        .map(|i| (*i, [r.left_pt as f64, r.top_pt as f64]))
+                })
+                // The export build keeps no line layouts: the note goes at
+                // the top-left of the story's first text frame.
+                .or_else(|| {
+                    let frame = model
+                        .scene()
+                        .frame_for_story
+                        .get(root.story_id.as_str())
+                        .and_then(|f| f.self_id.clone())?;
+                    let g = model
+                        .element_geometry(&[crate::element_selection::ElementId::TextFrame(frame)])
+                        .into_iter()
+                        .next()?;
+                    let page = g.page_id?;
+                    page_index
+                        .get(page.0.as_str())
+                        .map(|i| (*i, [g.bounds[1] as f64, g.bounds[0] as f64]))
+                })
+        };
+        let Some((page_index, at)) = place else {
+            continue;
+        };
+        let when = |r: &crate::channel::CommentSummary| r.modified.clone().or(r.date.clone());
+        let who = |r: &crate::channel::CommentSummary| {
+            r.author.clone().unwrap_or_else(|| "Unknown".to_string())
+        };
+        out.push(paged_export_pdf::PdfComment {
+            id: root.id.clone(),
+            page_index,
+            at: [at[0] as f32, at[1] as f32],
+            author: who(root),
+            date: when(root),
+            text: root.text.clone(),
+            resolved: root.resolved,
+            review_state: None,
+            replies: rows
+                .iter()
+                .filter(|r| r.parent_id.as_deref() == Some(root.id.as_str()))
+                .map(|r| paged_export_pdf::PdfReply {
+                    id: r.id.clone(),
+                    author: who(r),
+                    date: when(r),
+                    text: r.text.clone(),
+                })
+                .collect(),
+        });
+    }
+    out
 }
 
 /// ADR 171 — the document's bookmarks as PDF outline items, in document
@@ -504,6 +598,7 @@ fn wire_to_options(wire: &ExportPdfWireOptions) -> Result<ExportOptions, String>
     };
     Ok(ExportOptions {
         bookmarks: Vec::new(),
+        comments: Vec::new(),
         tagged: false,
         lang: None,
         standard,

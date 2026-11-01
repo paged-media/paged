@@ -161,6 +161,7 @@
   "shell.exportPdf.cancel": "Abbrechen",
   "shell.exportPdf.color": "Farbe",
   "shell.exportPdf.colorBars": "Farbkontrollstreifen",
+  "shell.exportPdf.comments": "Kommentare als Anmerkungen",
   "shell.exportPdf.conformance": "Standard",
   "shell.exportPdf.convertToDestination": "In Zielprofil konvertieren",
   "shell.exportPdf.cropMarks": "Schnittmarken",

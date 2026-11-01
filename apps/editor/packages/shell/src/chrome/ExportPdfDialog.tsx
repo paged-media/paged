@@ -96,6 +96,8 @@ interface FormState {
   bookmarks: boolean;
   headingOutline: boolean;
   tagged: boolean;
+  /** Write the comments as PDF annotations (engine ADR 1055). */
+  comments: boolean;
 }
 
 const DEFAULTS: FormState = {
@@ -114,6 +116,7 @@ const DEFAULTS: FormState = {
   bookmarks: false,
   headingOutline: false,
   tagged: false,
+  comments: false,
 };
 
 /** The stored form, field by field: a value the dialog does not offer
@@ -309,6 +312,7 @@ export function ExportPdfDialog() {
       bookmarks: form.bookmarks,
       headingOutline: form.headingOutline,
       tagged: form.tagged,
+      comments: form.comments,
     };
     const fileName = `${docName}.pdf`;
     const pages = form.allPages
@@ -591,6 +595,16 @@ export function ExportPdfDialog() {
                   onChange={(e) => set("tagged", e.target.checked)}
                 />
                 {strings.t(EXPORT_PDF.tagged)}
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  data-export-comments
+                  checked={form.comments}
+                  disabled={exporting}
+                  onChange={(e) => set("comments", e.target.checked)}
+                />
+                {strings.t(EXPORT_PDF.comments)}
               </label>
             </div>
 

@@ -415,3 +415,117 @@ fn a_thread_reports_the_page_and_point_it_stands_at__feat__core_comments() {
     assert!(origin[0] >= 12.0 && origin[1] >= 34.0);
     assert_eq!(at("x"), (None, None));
 }
+
+fn export_pdf(m: &CanvasModel, comments: bool) -> String {
+    use paged_canvas::channel::ExportPdfWireOptions;
+    use paged_canvas::export::CanvasExportSession;
+    let wire = ExportPdfWireOptions {
+        comments,
+        ..ExportPdfWireOptions::default()
+    };
+    let (mut session, pages) = CanvasExportSession::begin(m, &wire).expect("begin");
+    for _ in 0..pages {
+        session.export_next_page().expect("page");
+    }
+    let pdf = session.finish().expect("finish").pdf_bytes;
+    String::from_utf8_lossy(&pdf).into_owned()
+}
+
+#[test]
+fn comments_export_as_pdf_annotations_only_when_asked__feat__core_comments() {
+    let mut m = model();
+    let page = m.scene().spreads[0].spread.pages[0]
+        .self_id
+        .clone()
+        .expect("a page id");
+    // A story that is laid out on a page: the first text frame's.
+    let story = m.scene().spreads[0].spread.text_frames[0]
+        .parent_story
+        .clone()
+        .expect("a frame with a story");
+    insert(
+        &mut m,
+        CommentAnchorSpec::Page {
+            page,
+            at: [40.0, 50.0],
+        },
+        Some("t1"),
+        "Page note",
+    );
+    m.apply_mutation(&Mutation::ReplyComment {
+        parent_id: "t1".into(),
+        comment: spec(Some("t1.1"), "Bob", "Page reply"),
+    })
+    .unwrap();
+    m.apply_mutation(&Mutation::InsertComment {
+        story_id: story,
+        start: 0,
+        end: 4,
+        cell: None,
+        comment: spec(Some("9"), "Author A", "Text note"),
+    })
+    .unwrap();
+
+    let without = export_pdf(&m, false);
+    assert!(
+        !without.contains("/Subtype /Text"),
+        "no annotations by default"
+    );
+
+    let with = export_pdf(&m, true);
+    for expected in ["(Page note)", "(Page reply)", "(Text note)"] {
+        assert!(
+            with.contains(&format!("/Contents {expected}")),
+            "{expected}"
+        );
+    }
+    assert!(with.contains("/T (Bob)"));
+    assert!(with.contains("/IRT"), "the reply is in reply to its note");
+    assert_eq!(with.matches("/Subtype /Text").count(), 3);
+}
+
+#[test]
+fn deleting_the_item_a_thread_is_on_orphans_it_and_undo_brings_it_back__feat__core_comments() {
+    let mut m = model();
+    let frame = m.scene().spreads[0].spread.text_frames[0]
+        .self_id
+        .clone()
+        .expect("a text frame id");
+    insert(&mut m, item(&frame), Some("t1"), "Check this frame");
+    let before = m.scene().canonical_hash();
+    let row = |m: &CanvasModel| m.comments().into_iter().find(|c| c.id == "t1").unwrap();
+    assert!(!row(&m).orphaned);
+    assert!(row(&m).page.is_some());
+
+    m.apply_mutation(&Mutation::DeleteFrame {
+        frame_id: frame.clone(),
+    })
+    .unwrap();
+    // The thread is kept, with its anchor, and reads as orphaned.
+    let gone = row(&m);
+    assert!(gone.orphaned);
+    assert!(gone.page.is_none());
+    assert!(matches!(&gone.anchor, Some(CommentAnchorSpec::Item { item, .. }) if item == &frame));
+
+    // Re-anchoring it to a page brings it back.
+    let page = m.scene().spreads[0].spread.pages[0]
+        .self_id
+        .clone()
+        .expect("a page id");
+    m.apply_mutation(&Mutation::SetCommentAnchor {
+        thread_id: "t1".into(),
+        anchor: CommentAnchorSpec::Page {
+            page,
+            at: [10.0, 10.0],
+        },
+    })
+    .unwrap();
+    assert!(!row(&m).orphaned);
+    m.undo().unwrap();
+    assert!(row(&m).orphaned);
+
+    // Undoing the deletion restores the item, and the thread is anchored again.
+    m.undo().unwrap();
+    assert!(!row(&m).orphaned);
+    assert_eq!(m.scene().canonical_hash(), before);
+}

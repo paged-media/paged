@@ -227,7 +227,6 @@ pub(super) fn apply_insert_thread(
         kind,
         comments: vec![comment_from(spec, id.clone())],
         source: source_of(spec, &id),
-        ..Default::default()
     });
     let mut echoed = spec.clone();
     echoed.id = Some(id);
@@ -308,7 +307,6 @@ pub(super) fn apply_set_anchor(
     let inverse = capture(doc);
     let thread = &mut doc.comment_threads[ti];
     thread.anchor = Some(anchor_of(anchor));
-    thread.orphaned = None;
     Ok(applied(
         Operation::SetCommentAnchor {
             thread_id: thread_id.to_string(),

@@ -486,7 +486,7 @@ pub(crate) fn thread_rows(doc: &paged_scene::Document) -> Vec<CommentSummary> {
                 ),
                 person: c.person.clone(),
                 modified: c.modified.clone(),
-                orphaned: t.anchor.is_none() || t.orphaned.is_some(),
+                orphaned: t.anchor.is_none(),
                 source: t.source.iter().find(|(id, _)| id == &c.id).map(|(_, s)| {
                     paged_mutate::SourceBlobSpec {
                         format: s.format.clone(),

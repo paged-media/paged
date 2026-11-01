@@ -407,6 +407,20 @@
         },
         {
           "defaults": [],
+          "help": "Write the document's comments as PDF annotations (engine ADR 1055): a note per thread, its replies, and a resolved thread's review state, as Acrobat's Comment tool writes them",
+          "long": "comments",
+          "name": "comments",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "COMMENTS"
+          ]
+        },
+        {
+          "defaults": [],
           "help": "Font file or directory to make available, repeatable",
           "long": "fonts",
           "name": "fonts",
@@ -735,6 +749,20 @@
           "takesValues": false,
           "valueNames": [
             "TAGGED"
+          ]
+        },
+        {
+          "defaults": [],
+          "help": "Write the document's comments as PDF annotations (engine ADR 1055): a note per thread, its replies, and a resolved thread's review state, as Acrobat's Comment tool writes them",
+          "long": "comments",
+          "name": "comments",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "COMMENTS"
           ]
         },
         {
@@ -4094,6 +4122,20 @@
         },
         {
           "defaults": [],
+          "help": "Write the document's comments as PDF annotations (engine ADR 1055): a note per thread, its replies, and a resolved thread's review state, as Acrobat's Comment tool writes them",
+          "long": "comments",
+          "name": "comments",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "COMMENTS"
+          ]
+        },
+        {
+          "defaults": [],
           "help": "Font file or directory to make available, repeatable",
           "long": "fonts",
           "name": "fonts",
@@ -4338,6 +4380,20 @@
           "takesValues": false,
           "valueNames": [
             "TAGGED"
+          ]
+        },
+        {
+          "defaults": [],
+          "help": "Write the document's comments as PDF annotations (engine ADR 1055): a note per thread, its replies, and a resolved thread's review state, as Acrobat's Comment tool writes them",
+          "long": "comments",
+          "name": "comments",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "COMMENTS"
           ]
         },
         {
@@ -4889,6 +4945,20 @@
         },
         {
           "defaults": [],
+          "help": "Write the document's comments as PDF annotations (engine ADR 1055): a note per thread, its replies, and a resolved thread's review state, as Acrobat's Comment tool writes them",
+          "long": "comments",
+          "name": "comments",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "COMMENTS"
+          ]
+        },
+        {
+          "defaults": [],
           "help": "Font file or directory to make available, repeatable",
           "long": "fonts",
           "name": "fonts",
@@ -5283,6 +5353,20 @@
               "takesValues": false,
               "valueNames": [
                 "TAGGED"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Write the document's comments as PDF annotations (engine ADR 1055): a note per thread, its replies, and a resolved thread's review state, as Acrobat's Comment tool writes them",
+              "long": "comments",
+              "name": "comments",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "COMMENTS"
               ]
             },
             {
@@ -6622,6 +6706,20 @@
               "takesValues": false,
               "valueNames": [
                 "TAGGED"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Write the document's comments as PDF annotations (engine ADR 1055): a note per thread, its replies, and a resolved thread's review state, as Acrobat's Comment tool writes them",
+              "long": "comments",
+              "name": "comments",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "COMMENTS"
               ]
             },
             {

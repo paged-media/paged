@@ -8,6 +8,7 @@ mod appearance;
 mod blend_modes_27;
 mod bookmarks;
 mod clip_groups;
+mod comments;
 mod effect_stack;
 mod effects_export;
 mod export_x4;

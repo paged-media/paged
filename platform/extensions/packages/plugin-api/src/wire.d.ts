@@ -5400,6 +5400,14 @@ export interface ExportPdfWireOptions {
      */
     headingOutline?: boolean;
     /**
+     * Engine ADR 1055 — write the document\'s comments as PDF annotations:
+     * a Text annotation per thread at its place, a reply annotation per
+     * reply, a review-state annotation for a resolved thread, as Acrobat\'s
+     * Comment tool writes them. Off by default, so a file sent for print
+     * carries no review remarks.
+     */
+    comments?: boolean;
+    /**
      * ADR 182 — Create Tagged PDF: the document\'s logical structure
      * (stories and their paragraphs) with `/MarkInfo` and `/Lang`. Off
      * by default, as in InDesign\'s print presets.

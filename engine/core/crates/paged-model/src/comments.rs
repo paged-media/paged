@@ -165,16 +165,12 @@ pub struct Reaction {
 #[serde(rename_all = "camelCase")]
 pub struct CommentThread {
     pub id: String,
-    /// `None` only while a thread is orphaned (its anchor's target is gone, see
-    /// [`CommentThread::orphaned`]); a thread read from a file always has one.
+    /// What the thread is attached to. A thread whose target is later deleted
+    /// keeps its anchor and reads as orphaned (the canvas derives that when it
+    /// lists the comments, so undoing the deletion needs no bookkeeping here).
     pub anchor: Option<CommentAnchor>,
     #[serde(default)]
     pub kind: ThreadKind,
-    /// Where the thread was last shown when its anchor target was deleted: the
-    /// page id and the point on it. The thread is kept, never deleted with its
-    /// target; a panel lists it and offers to re-anchor or delete it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub orphaned: Option<(String, [f64; 2])>,
     /// Root first, then the replies in order.
     #[serde(default)]
     pub comments: Vec<Comment>,
@@ -242,7 +238,6 @@ mod tests {
                     data: "<threadedComment/>".into(),
                 },
             )],
-            ..Default::default()
         };
         let json = serde_json::to_string(&thread).unwrap();
         assert!(json.contains(r#""kind":"cell""#) && json.contains(r#""address":"Sheet1!B3""#));

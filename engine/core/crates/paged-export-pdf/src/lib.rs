@@ -155,6 +155,43 @@ pub struct ExportOptions {
     /// The document's language for `/Lang` (a BCP 47 tag such as
     /// `en-US`), when known.
     pub lang: Option<String>,
+    /// The review comments to write as annotations (engine ADR 1055): one
+    /// Text annotation per thread with a reply annotation per reply and a
+    /// review-state annotation for a resolved thread, as Acrobat writes
+    /// them. Empty writes none.
+    pub comments: Vec<PdfComment>,
+}
+
+/// One comment thread for the PDF (engine ADR 1055): a sticky note on a page
+/// with its replies, as Acrobat's Comment tool makes one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PdfComment {
+    /// The comment's id, written as the annotation's `/NM`.
+    pub id: String,
+    /// The 0-based index of the document page it is on.
+    pub page_index: usize,
+    /// Where on that page, in points from the page's top-left.
+    pub at: [f32; 2],
+    pub author: String,
+    /// ISO 8601; written as the annotation's `/M`.
+    pub date: Option<String>,
+    pub text: String,
+    /// The thread is resolved: written as `/State /Completed` of the
+    /// `Review` state model, which Acrobat shows as a checked comment.
+    pub resolved: bool,
+    /// A PDF review state (`Accepted`, `Rejected`, `Cancelled`, `Completed`),
+    /// written instead of `Completed` when given.
+    pub review_state: Option<String>,
+    pub replies: Vec<PdfReply>,
+}
+
+/// A reply in a [`PdfComment`] thread.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PdfReply {
+    pub id: String,
+    pub author: String,
+    pub date: Option<String>,
+    pub text: String,
 }
 
 /// One PDF bookmark: an outline item going to a page, as InDesign 20.0.1
@@ -190,6 +227,7 @@ impl Default for ExportOptions {
             bookmarks: Vec::new(),
             tagged: false,
             lang: None,
+            comments: Vec::new(),
         }
     }
 }

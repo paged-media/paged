@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! `paged export --tagged` / `--bookmarks` reach the PDF writer: the
+//! `paged export --tagged` / `--bookmarks` / `--comments` reach the PDF writer: the
 //! flags were wire options with no CLI spelling.
 
 use std::path::PathBuf;
@@ -59,4 +59,11 @@ fn tagged_flag_writes_a_structure_tree() {
 #[test]
 fn bookmarks_flag_writes_the_outline() {
     assert!(has(&export("navigation", &["--bookmarks"]), "/Outlines"));
+}
+
+#[test]
+fn comments_flag_is_accepted_and_a_document_without_comments_gets_no_notes() {
+    let pdf = export("text", &["--comments"]);
+    assert!(has(&pdf, "%PDF-"));
+    assert!(!has(&pdf, "/Subtype /Text"));
 }

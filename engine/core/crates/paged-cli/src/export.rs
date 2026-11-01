@@ -63,6 +63,11 @@ pub struct PdfOptions {
     /// as InDesign's "Create Tagged PDF" writes it.
     #[arg(long)]
     pub tagged: bool,
+    /// Write the document's comments as PDF annotations (engine ADR 1055):
+    /// a note per thread, its replies, and a resolved thread's review
+    /// state, as Acrobat's Comment tool writes them.
+    #[arg(long)]
+    pub comments: bool,
 }
 
 pub fn run(
@@ -148,6 +153,7 @@ fn export_pdf(session: &mut Session, pdf: &PdfOptions) -> Result<Vec<u8>> {
         color_bars: pdf.marks,
         page_info: pdf.marks,
         bookmarks: pdf.bookmarks,
+        comments: pdf.comments,
         tagged: pdf.tagged,
         ..Default::default()
     };

@@ -12232,13 +12232,36 @@ impl CanvasModel {
             .flat_map(|s| crate::review::comment_rows(&s.self_id, &s.story))
             .chain(crate::review::thread_rows(&self.scene))
             .map(|mut row| {
-                if let Some((page, at)) = row.anchor.as_ref().and_then(|a| self.anchor_page(a)) {
-                    row.page = Some(page);
-                    row.at = Some(at);
+                if let Some(anchor) = row.anchor.as_ref() {
+                    if let Some((page, at)) = self.anchor_page(anchor) {
+                        row.page = Some(page);
+                        row.at = Some(at);
+                    } else if !self.anchor_target_exists(anchor) {
+                        // Its item or page was deleted: the thread stays, to be
+                        // re-anchored or deleted.
+                        row.orphaned = true;
+                    }
                 }
                 row
             })
             .collect()
+    }
+
+    /// Engine ADR 1055 — whether what a comment anchor names is still in the
+    /// document: the item, or the page.
+    fn anchor_target_exists(&self, anchor: &paged_mutate::operation::CommentAnchorSpec) -> bool {
+        use paged_mutate::operation::CommentAnchorSpec as A;
+        let target = match anchor {
+            A::Page { page, .. } => page.as_str(),
+            A::Item { item, .. } | A::Region { item, .. } | A::Cell { item, .. } => item.as_str(),
+        };
+        element_of_id(&self.scene, target).is_some()
+            || self
+                .scene
+                .spreads
+                .iter()
+                .flat_map(|p| p.spread.pages.iter())
+                .any(|pg| pg.self_id.as_deref() == Some(target))
     }
 
     /// Engine ADR 1055 — the page and the point on it a comment anchor

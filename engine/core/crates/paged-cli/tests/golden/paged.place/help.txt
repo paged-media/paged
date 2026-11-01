@@ -50,6 +50,9 @@ Options:
       --tagged
           Create Tagged PDF: a structure tree of stories and paragraphs, as InDesign's "Create Tagged PDF" writes it
 
+      --comments
+          Write the document's comments as PDF annotations (engine ADR 1055): a note per thread, its replies, and a resolved thread's review state, as Acrobat's Comment tool writes them
+
       --fonts <DIR|FILE>
           Font file or directory to make available, repeatable.
           

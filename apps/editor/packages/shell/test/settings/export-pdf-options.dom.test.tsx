@@ -63,6 +63,7 @@ const DEFAULTS = {
   bookmarks: false,
   headingOutline: false,
   tagged: false,
+  comments: false,
 };
 
 const HANDLE = {
@@ -186,6 +187,7 @@ describe("setting paged.exportPdf.options.v1", () => {
         downsample: "150",
         tagged: true,
         headingOutline: true,
+        comments: true,
         useDocumentBleed: false,
         bleedPt: "9",
       }),
@@ -206,6 +208,7 @@ describe("setting paged.exportPdf.options.v1", () => {
       downsamplePpi: 150,
       tagged: true,
       headingOutline: true,
+      comments: true,
       bleedOverridePt: [9, 9, 9, 9],
       pageFrom: null,
       pageTo: null,
