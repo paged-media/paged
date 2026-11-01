@@ -325,6 +325,10 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.recolorArtwork",
       "media.paged.draw.command.recolorArtworkOptions",
       "media.paged.draw.command.applyGuideColor",
+      "media.paged.draw.command.textToVector",
+      "media.paged.draw.command.generativeRecolor",
+      "media.paged.draw.command.textToVectorOptions",
+      "media.paged.draw.command.generativeRecolorOptions",
     ]);
     expect(fake.ids("keybindings").length).toBe(0);
   });
@@ -371,6 +375,7 @@ describe("drawBundle.activate", () => {
       // WP6.6 / WP6.5 — Image Trace options, Recolor Artwork, Color Guide.
       "media.paged.draw.panel.imageTrace",
       "media.paged.draw.panel.recolorArtwork",
+      "media.paged.draw.panel.generative",
       "media.paged.draw.panel.colorGuide",
       // ADR 323 — the Draw properties schema panel (property rows).
       "media.paged.draw.panel.properties",

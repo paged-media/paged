@@ -1540,6 +1540,29 @@ export {
   makeImageTracePanel,
   IMAGE_TRACE_PANEL_NOTE,
 } from "./panels/image-trace-panel";
+// WP8.3 — TEXT TO VECTOR and GENERATIVE RECOLOR (the agent and ml doors).
+export {
+  TEXT_TO_VECTOR_COMMAND_ID,
+  GENERATIVE_RECOLOR_COMMAND_ID,
+  TEXT_TO_VECTOR_OPTIONS_COMMAND_ID,
+  GENERATIVE_RECOLOR_OPTIONS_COMMAND_ID,
+  GENERATIVE_COMMAND_IDS,
+  GENERATIVE_PANEL_ID,
+  AGENT_COMPLETE_COMMAND,
+  applyTextToVector,
+  applyGenerativeRecolor,
+  textToVectorByAgent,
+  textToVectorByImage,
+  svgPromptFor,
+  extractSvg,
+  svgRefusal,
+  recolorPromptFor,
+  parseColorMap,
+  type GenerativeOutcome,
+  type GenerativeRecolorOutcome,
+  type GenerativeRoute,
+} from "./commands/generative";
+export { makeGenerativePanel } from "./panels/generative-panel";
 // WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE.
 export {
   RECOLOR_ARTWORK_COMMAND_ID,

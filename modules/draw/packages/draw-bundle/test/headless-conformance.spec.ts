@@ -235,7 +235,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Offset / Simplify / Outline stroke / the four Insert shapes).
         "panel",
         // WP6.6 — the IMAGE TRACE panel (presets, options, Trace /
-        // Re-trace); WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE.
+        // Re-trace); WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE; WP8.3 —
+        // the GENERATIVE panel (Text to vector, Generative recolor).
+        "panel",
         "panel",
         "panel",
         "panel",
@@ -249,7 +251,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Symbol Options (draw ADR 365); WP6.3 — the seven Envelope
         // distort / Expand appearance commands and the graphic-style
         // library's import / export / merge (draw ADR 367).
-        ...Array<string>(37).fill("command"),
+        ...Array<string>(41).fill("command"),
         "command",
         "command",
         "command",

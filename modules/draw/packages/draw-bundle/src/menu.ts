@@ -136,6 +136,8 @@ defineMessages("menu", {
   "Re-trace image": "Re-trace image",
   "Edit colors": "Edit colors",
   "Recolor artwork…": "Recolor artwork…",
+  "Generative recolor…": "Generative recolor…",
+  "Text to vector…": "Text to vector…",
   "Rasterize…": "Rasterize…",
   "Puppet warp": "Puppet warp",
   Perspective: "Perspective",
@@ -435,10 +437,18 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    Trace / Re-trace); Re-trace runs with the record's options.
   ["Draw/Image trace…", "imageTraceOptions", "trace"],
   ["Draw/Re-trace image", "retraceImage", "trace"],
+  // WP8.3 — Text to vector: the agent writes an SVG, or a generated picture
+  // is traced. The "…" raises the panel where the prompt is typed.
+  ["Draw/Text to vector…", "textToVectorOptions", "trace"],
 
   // ── Colour — Recolor Artwork merges into Edit ▸ Edit colors, where
   //    Illustrator keeps it; the "…" raises its panel. ──
   ["Edit/Edit colors/Recolor artwork…", "recolorArtworkOptions", "edit-colors"],
+  [
+    "Edit/Edit colors/Generative recolor…",
+    "generativeRecolorOptions",
+    "edit-colors",
+  ],
 ];
 
 /**

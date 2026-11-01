@@ -193,6 +193,11 @@ import {
   RECOLOR_PANEL_ID,
 } from "./commands/recolor";
 import {
+  contributeGenerativeCommands,
+  GENERATIVE_COMMAND_IDS,
+  GENERATIVE_PANEL_ID,
+} from "./commands/generative";
+import {
   contributeFillGradientCommands,
   FILL_GRADIENT_COMMAND_IDS,
 } from "./commands/fill-gradient";
@@ -251,6 +256,7 @@ import {
 import { makePathOptionsPanel } from "./panels/path-options-panel";
 import { makeImageTracePanel } from "./panels/image-trace-panel";
 import { makeRecolorPanel } from "./panels/recolor-panel";
+import { makeGenerativePanel } from "./panels/generative-panel";
 import { makeColorGuidePanel } from "./panels/color-guide-panel";
 import { contributeSvgIo } from "./io/svg";
 import { contributeDxfIo } from "./io/dxf";
@@ -423,6 +429,12 @@ export function activate(host: BundleHost): BundleHandle {
     id: RECOLOR_PANEL_ID,
     icon: "ui-swatch-fill",
     ...makeRecolorPanel(host),
+  });
+  // WP8.3 — TEXT TO VECTOR and GENERATIVE RECOLOR (the agent / ml doors).
+  host.contribute.panel({
+    id: GENERATIVE_PANEL_ID,
+    icon: "ui-sparkle",
+    ...makeGenerativePanel(host),
   });
   host.contribute.panel({
     id: COLOR_GUIDE_PANEL_ID,
@@ -673,6 +685,7 @@ export function activate(host: BundleHost): BundleHandle {
   const liveRetraceSub = contributeLiveRetrace(host);
   // WP6.5 — Recolor Artwork and the Color Guide's apply.
   const recolorCommandsSub = contributeRecolorCommands(host);
+  const generativeCommandsSub = contributeGenerativeCommands(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
@@ -766,6 +779,7 @@ export function activate(host: BundleHost): BundleHandle {
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
         RECOLOR_COMMAND_IDS.length +
+        GENERATIVE_COMMAND_IDS.length +
         BLEND_COMMAND_IDS.length +
         OBJECTS_ON_PATH_COMMAND_IDS.length +
         CUT_COMMAND_IDS.length +
@@ -805,6 +819,7 @@ export function activate(host: BundleHost): BundleHandle {
       imageTraceCommandSub.dispose();
       liveRetraceSub.dispose();
       recolorCommandsSub.dispose();
+      generativeCommandsSub.dispose();
       objectsOnPathCommandsSub.dispose();
       blendCommandsSub.dispose();
       insertShapeCommandsSub.dispose();

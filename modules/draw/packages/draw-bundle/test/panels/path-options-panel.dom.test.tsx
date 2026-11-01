@@ -939,6 +939,8 @@ describe("Path options panel — rendered against the engine", () => {
       const ownPanel = new Set([
         "imageTraceOptions",
         "recolorArtworkOptions",
+        "textToVectorOptions",
+        "generativeRecolorOptions",
         "symbolOptions",
       ]);
       const ellipsis = MENU_ENTRIES.filter(([path]) => path.endsWith("…"));
@@ -959,7 +961,9 @@ describe("Path options panel — rendered against the engine", () => {
         "Object/Rasterize…",
         "Edit/Select same/Stroke weight within…",
         "Draw/Image trace…",
+        "Draw/Text to vector…",
         "Edit/Edit colors/Recolor artwork…",
+        "Edit/Edit colors/Generative recolor…",
       ]);
       expect(
         ellipsis
