@@ -140,12 +140,29 @@ pub fn synthesize_xlsx(chart_xml: &[u8]) -> Result<Vec<u8>, String> {
     }
     sheet.push_str("</sheetData>");
     let last = format!("{}{}", col_name(series.len() as u32), n + 1);
+    let mut ct = paged_ooxml::content_types::ContentTypes::new();
+    ct.add_default(
+        "rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
+    );
+    ct.add_default("xml", "application/xml");
+    ct.add_override(
+        "/xl/workbook.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    );
+    ct.add_override(
+        "/xl/worksheets/sheet1.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+    );
+    ct.add_override(
+        "/xl/styles.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
+    );
+    let content_types = ct.render_with_decl_newline();
     let parts: Vec<(&str, String)> = vec![
         (
             "[Content_Types].xml",
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>"#
-                .into(),
+            content_types,
         ),
         (
             "_rels/.rels",

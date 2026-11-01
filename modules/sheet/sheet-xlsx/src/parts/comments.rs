@@ -32,10 +32,9 @@
 //! comment and its VML shape together and re-parses this model.
 //!
 //! Threaded comments (the modern `xl/threadedComments/*` parts + persons) are
-//! ALSO preserved opaquely; v0 reads the legacy `<comments>` list (the
-//! universally-present form Excel still writes for compatibility). A workbook
-//! with only threaded comments still round-trips (the parts are opaque); its
-//! display read is a follow-on.
+//! read and written by [`crate::threaded`] (sheet ADR 528); this module reads
+//! the legacy `<comments>` list, where Excel keeps a placeholder note for each
+//! thread (author `tc={root id}`).
 
 use crate::error::XlsxError;
 use crate::opc::attr;

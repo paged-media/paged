@@ -651,15 +651,19 @@ fn create_notes_part(pkg: &mut OpcPackage, main_part: &str, endnote: bool) -> St
     }
     // Its content type.
     if let Some(types) = pkg.part("[Content_Types].xml") {
-        let mut t = String::from_utf8_lossy(types).into_owned();
-        let over = format!(
-            "<Override PartName=\"/{name}\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.{root}+xml\"/>"
+        let t = String::from_utf8_lossy(types).into_owned();
+        let part = format!("/{name}");
+        let content_type =
+            format!("application/vnd.openxmlformats-officedocument.wordprocessingml.{root}+xml");
+        let patched = paged_ooxml::content_types::patch(
+            &t,
+            &paged_ooxml::content_types::Patch {
+                add_overrides: vec![(part.as_str(), content_type.as_str())],
+                ..Default::default()
+            },
         );
-        if !t.contains(&format!("PartName=\"/{name}\"")) {
-            if let Some(i) = t.rfind("</Types>") {
-                t.insert_str(i, &over);
-                pkg.set_part("[Content_Types].xml", t.into_bytes());
-            }
+        if patched != t {
+            pkg.set_part("[Content_Types].xml", patched.into_bytes());
         }
     }
     name

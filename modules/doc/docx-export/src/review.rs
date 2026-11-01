@@ -1627,15 +1627,17 @@ fn ensure_part(
         pkg.set_part(&rels_name, r.into_bytes());
     }
     if let Some(types) = pkg.part("[Content_Types].xml") {
-        let mut t = String::from_utf8_lossy(types).into_owned();
-        if !t.contains(&format!("PartName=\"/{name}\"")) {
-            if let Some(i) = t.rfind("</Types>") {
-                t.insert_str(
-                    i,
-                    &format!("<Override PartName=\"/{name}\" ContentType=\"{content_type}\"/>"),
-                );
-                pkg.set_part("[Content_Types].xml", t.into_bytes());
-            }
+        let t = String::from_utf8_lossy(types).into_owned();
+        let part = format!("/{name}");
+        let patched = paged_ooxml::content_types::patch(
+            &t,
+            &paged_ooxml::content_types::Patch {
+                add_overrides: vec![(part.as_str(), content_type)],
+                ..Default::default()
+            },
+        );
+        if patched != t {
+            pkg.set_part("[Content_Types].xml", patched.into_bytes());
         }
     }
     name

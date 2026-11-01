@@ -1738,14 +1738,28 @@ pub fn ods_to_xlsx(bytes: &[u8]) -> Result<Vec<u8>, XlsxError> {
 
     let (styles_xml, xf_of) = styles_xml(&r.looks);
     let mut files: Vec<(String, String)> = Vec::new();
-    let mut overrides = String::new();
+    let mut content_types = paged_ooxml::content_types::ContentTypes::new();
+    content_types.add_default(
+        "rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
+    );
+    content_types.add_default("xml", "application/xml");
+    content_types.add_override(
+        "/xl/workbook.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    );
+    content_types.add_override(
+        "/xl/styles.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
+    );
     let mut rels = String::new();
     let mut sheets_xml = String::new();
     for (i, s) in r.sheets.iter().enumerate() {
         let n = i + 1;
-        overrides.push_str(&format!(
-            r#"<Override PartName="/xl/worksheets/sheet{n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>"#
-        ));
+        content_types.add_override(
+            &format!("/xl/worksheets/sheet{n}.xml"),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+        );
         rels.push_str(&format!(
             r#"<Relationship Id="rId{n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{n}.xml"/>"#
         ));
@@ -1797,10 +1811,7 @@ pub fn ods_to_xlsx(bytes: &[u8]) -> Result<Vec<u8>, XlsxError> {
     files.push(("xl/styles.xml".into(), styles_xml));
     files.push((
         "[Content_Types].xml".into(),
-        format!(
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>{overrides}</Types>"#
-        ),
+        content_types.render_with_decl_newline(),
     ));
     files.push((
         "_rels/.rels".into(),

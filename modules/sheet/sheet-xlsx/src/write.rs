@@ -222,29 +222,9 @@ pub fn save(
 /// Rebuild `[Content_Types].xml` from the model, omitting the calcChain
 /// override. Deterministic byte output (defaults then overrides, in order).
 fn rebuild_content_types(ct: &ContentTypes) -> Vec<u8> {
-    let mut s = String::new();
-    s.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
-    s.push('\n');
-    s.push_str(r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#);
-    for (ext, ty) in &ct.defaults {
-        s.push_str(&format!(
-            r#"<Default Extension="{}" ContentType="{}"/>"#,
-            escape_attr(ext),
-            escape_attr(ty)
-        ));
-    }
-    for (pn, ty) in &ct.overrides {
-        if pn == "/xl/calcChain.xml" {
-            continue;
-        }
-        s.push_str(&format!(
-            r#"<Override PartName="{}" ContentType="{}"/>"#,
-            escape_attr(pn),
-            escape_attr(ty)
-        ));
-    }
-    s.push_str("</Types>");
-    s.into_bytes()
+    let mut out = ct.clone();
+    out.remove_override("/xl/calcChain.xml");
+    out.render_with_decl_newline().into_bytes()
 }
 
 /// Remove the `<Relationship ... /calcChain ... />` line from the workbook

@@ -28,7 +28,8 @@ neither the grid nor the page showed them.
    takes both out, and the parts when nothing is left in them. Other comments keep their content
    (rich text included) and other VML shapes keep their bytes. Shape numbers continue the
    drawing's own; a new drawing takes the next free `idmap` block of the workbook.
-3. **Threaded comments** stay preserved and are never rewritten. Excel keeps a legacy note for
+3. **Threaded comments** stayed preserved and were never rewritten (amended by 528: they are
+   now read and written with their note). Excel keeps a legacy note for
    each thread, so the note of a cell that carries a thread is refused (editing it alone would
    desynchronise the two); `list_comments` says which notes belong to a thread.
 4. **Pictures** are read on demand, nothing stored: the `xdr:pic` anchors of the sheet's

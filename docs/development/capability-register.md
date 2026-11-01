@@ -25,7 +25,7 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
 | Capability                     | Owner                                                    | Copies outside it (baseline)                                          |
 | ------------------------------ | -------------------------------------------------------- | --------------------------------------------------------------------- |
 | XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`         | 19 (open)                                                             |
-| `[Content_Types].xml`          | `paged-ooxml` `content_types`                            | 26 (open); the exporters' main parts moved, tests and sheet-js remain |
+| `[Content_Types].xml`          | `paged-ooxml` `content_types`                            | 18 (open); every writer moved, what remains is test fixtures and the in-test tables of three src files |
 | Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                          | 0 (done)                                                              |
 | sRGB transfer                  | `paged-color::math`, `paged-ooxml::colour`               | 11 (open)                                                             |
 | Blend modes                    | `paged-blend`                                            | 6 (open)                                                              |

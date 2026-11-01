@@ -42,26 +42,19 @@
         "modules/doc/docx-conformance/src/structure.rs",
         "modules/doc/docx-conformance/tests/it/line_spacing.rs",
         "modules/doc/docx-conformance/tests/it/template_fields.rs",
-        "modules/doc/docx-export/src/review.rs",
-        "modules/doc/docx-export/src/structure.rs",
         "modules/sheet/sheet-conformance/tests/it/chart_delete.rs",
         "modules/sheet/sheet-conformance/tests/it/chart_write.rs",
         "modules/sheet/sheet-conformance/tests/it/locale.rs",
         "modules/sheet/sheet-conformance/tests/it/oracle_fixes.rs",
         "modules/sheet/sheet-conformance/tests/it/spill_roundtrip.rs",
-        "modules/sheet/sheet-js/src/core.rs",
-        "modules/sheet/sheet-js/src/core/csv.rs",
         "modules/sheet/sheet-js/tests/it/w2_annotations.rs",
         "modules/sheet/sheet-js/tests/it/w5_files.rs",
         "modules/sheet/sheet-js/tests/it/wave4_features.rs",
         "modules/sheet/sheet-js/tests/it/wave6_format.rs",
         "modules/sheet/sheet-js/tests/it/wave9_colors.rs",
         "modules/sheet/sheet-xlsx/src/lib.rs",
-        "modules/sheet/sheet-xlsx/src/ods.rs",
-        "modules/sheet/sheet-xlsx/src/write.rs",
         "modules/slide/pptx-export/src/presentation.rs",
-        "modules/slide/pptx-export/tests/comments.rs",
-        "modules/slide/slide-sheet/src/synth.rs"
+        "modules/slide/pptx-export/tests/comments.rs"
       ]
     },
     {

@@ -26,6 +26,10 @@
 //! - Notes: set (add or replace) and delete, written into the comments part
 //!   and the VML drawing together (`sheet_xlsx::comment_edit`); the note of
 //!   a cell with a threaded comment is refused.
+//! - Threaded comments: listed per cell with their persons, and added,
+//!   replied to, edited, deleted and resolved (`sheet_xlsx::threaded`, sheet
+//!   ADR 528). Ids come from a seed the caller supplies and times from the
+//!   caller (the engine reads no clock); the paired legacy note follows.
 //! - Pictures: drawing pictures and images in cells, read on demand
 //!   (`sheet_xlsx::parts::pictures`), placed in sheet points; the bytes come
 //!   by media part name. The grid gets the pictures that show in the
@@ -50,6 +54,33 @@ pub struct HyperlinkInfo {
     pub location: Option<String>,
     pub display: Option<String>,
     pub tooltip: Option<String>,
+}
+
+/// One comment of a thread (`list_threads`).
+#[derive(serde::Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadCommentInfo {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub person_id: String,
+    pub display_name: Option<String>,
+    pub user_id: Option<String>,
+    pub provider_id: Option<String>,
+    /// `dT` as the file has it.
+    pub timestamp: String,
+    pub text: String,
+    pub done: bool,
+}
+
+/// The thread on one cell: the root first, then the replies.
+#[derive(serde::Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadInfo {
+    pub sheet: u16,
+    pub row: u32,
+    pub col: u32,
+    pub resolved: bool,
+    pub comments: Vec<ThreadCommentInfo>,
 }
 
 /// What a hyperlink points to (`set_hyperlink`).
@@ -325,6 +356,137 @@ impl SheetSession {
             self.extra_dirty.insert(sheet);
         }
         Ok(gone)
+    }
+
+    /// The threaded comments of a sheet, one entry per cell.
+    pub fn list_threads(&self, sheet: u16) -> Result<Vec<ThreadInfo>, SessionError> {
+        self.validate_sheet(sheet)?;
+        Ok(self
+            .doc
+            .threads_of(sheet)
+            .into_iter()
+            .map(|t| ThreadInfo {
+                sheet,
+                row: t.row,
+                col: t.col,
+                resolved: t.resolved(),
+                comments: t
+                    .comments
+                    .into_iter()
+                    .map(|c| ThreadCommentInfo {
+                        id: c.id,
+                        parent_id: c.parent_id,
+                        person_id: c.person_id,
+                        display_name: c.person.as_ref().map(|p| p.display_name.clone()),
+                        user_id: c.person.as_ref().map(|p| p.user_id.clone()),
+                        provider_id: c.person.map(|p| p.provider_id),
+                        timestamp: c.timestamp,
+                        text: c.text,
+                        done: c.done,
+                    })
+                    .collect(),
+            })
+            .collect())
+    }
+
+    /// Start a thread on a cell; returns the root comment's id. `seed` feeds
+    /// the ids, `timestamp` is the `dT` text, both from the caller.
+    pub fn add_thread(
+        &mut self,
+        sheet: u16,
+        row: u32,
+        col: u32,
+        author: &sheet_xlsx::threaded::Author<'_>,
+        timestamp: &str,
+        text: &str,
+        seed: u32,
+    ) -> Result<String, SessionError> {
+        self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, Allow::EditObjects)?;
+        let mut gen = sheet_xlsx::threaded::GuidGen::new(u64::from(seed));
+        let id = self
+            .doc
+            .add_thread(sheet, row, col, author, timestamp, text, &mut gen)
+            .map_err(|e| SessionError(e.to_string()))?;
+        self.extra_dirty.insert(sheet);
+        Ok(id)
+    }
+
+    /// Reply to the thread on a cell; returns the reply's id.
+    pub fn reply_thread(
+        &mut self,
+        sheet: u16,
+        row: u32,
+        col: u32,
+        author: &sheet_xlsx::threaded::Author<'_>,
+        timestamp: &str,
+        text: &str,
+        seed: u32,
+    ) -> Result<String, SessionError> {
+        self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, Allow::EditObjects)?;
+        let mut gen = sheet_xlsx::threaded::GuidGen::new(u64::from(seed));
+        let id = self
+            .doc
+            .reply_thread(sheet, row, col, author, timestamp, text, &mut gen)
+            .map_err(|e| SessionError(e.to_string()))?;
+        self.extra_dirty.insert(sheet);
+        Ok(id)
+    }
+
+    /// Replace the text of a comment; `false` when `id` is unknown.
+    pub fn edit_thread_comment(
+        &mut self,
+        sheet: u16,
+        id: &str,
+        text: &str,
+    ) -> Result<bool, SessionError> {
+        self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, Allow::EditObjects)?;
+        let done = self
+            .doc
+            .edit_thread_comment(sheet, id, text)
+            .map_err(|e| SessionError(e.to_string()))?;
+        if done {
+            self.extra_dirty.insert(sheet);
+        }
+        Ok(done)
+    }
+
+    /// Delete a comment (a root takes its thread with it); `false` when `id`
+    /// is unknown.
+    pub fn delete_thread_comment(&mut self, sheet: u16, id: &str) -> Result<bool, SessionError> {
+        self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, Allow::EditObjects)?;
+        let done = self
+            .doc
+            .delete_thread_comment(sheet, id)
+            .map_err(|e| SessionError(e.to_string()))?;
+        if done {
+            self.extra_dirty.insert(sheet);
+        }
+        Ok(done)
+    }
+
+    /// Resolve (`done`) or reopen the thread on a cell; `false` when the cell
+    /// has none.
+    pub fn set_thread_done(
+        &mut self,
+        sheet: u16,
+        row: u32,
+        col: u32,
+        done: bool,
+    ) -> Result<bool, SessionError> {
+        self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, Allow::EditObjects)?;
+        let changed = self
+            .doc
+            .set_thread_done(sheet, row, col, done)
+            .map_err(|e| SessionError(e.to_string()))?;
+        if changed {
+            self.extra_dirty.insert(sheet);
+        }
+        Ok(changed)
     }
 
     /// The pictures of a sheet, placed in sheet points.

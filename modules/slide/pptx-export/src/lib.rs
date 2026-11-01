@@ -389,7 +389,7 @@ fn patch_content_types(xml: &str, removed: &BTreeSet<String>, added: &[(String, 
         &paged_ooxml::content_types::Patch {
             remove_overrides: removed.iter().map(String::as_str).collect(),
             add_overrides: added.iter().map(|(p, ct)| (p.as_str(), *ct)).collect(),
-            add_defaults: Vec::new(),
+            ..Default::default()
         },
     )
 }

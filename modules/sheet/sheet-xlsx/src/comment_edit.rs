@@ -31,9 +31,10 @@
 //! re-serialized), other VML shapes such as form controls (the VML part is
 //! spliced, so they keep their bytes).
 //!
-//! Threaded comments (`xl/threadedComments/*`) stay preserved, never
-//! rewritten: Excel keeps a legacy note for each thread, so the note of a
-//! cell that carries a thread is refused here rather than desynchronised.
+//! Threaded comments (`xl/threadedComments/*`) are authored by
+//! [`crate::threaded`]: Excel keeps a legacy note for each thread, so the note
+//! of a cell that carries a thread is refused here (the thread API writes
+//! thread and note together) rather than desynchronised.
 
 use crate::error::XlsxError;
 use crate::links::NS_REL;
@@ -207,7 +208,7 @@ impl XlsxDocument {
     fn refuse_threaded(&self, sheet: SheetId, row: u32, col: u32) -> Result<(), XlsxError> {
         if self.threaded_comment_cells(sheet).contains(&(row, col)) {
             return Err(XlsxError::Structure(format!(
-                "{} carries a threaded comment; its note is kept as it is",
+                "{} carries a threaded comment; edit it through the thread API (its note follows)",
                 a1(row, col)
             )));
         }
@@ -224,6 +225,19 @@ impl XlsxDocument {
         text: &str,
     ) -> Result<(), XlsxError> {
         self.refuse_threaded(sheet, row, col)?;
+        self.put_note(sheet, row, col, author, text)
+    }
+
+    /// [`Self::set_note`] without the thread check: the thread API writes the
+    /// note that pairs with a thread through this.
+    pub(crate) fn put_note(
+        &mut self,
+        sheet: SheetId,
+        row: u32,
+        col: u32,
+        author: &str,
+        text: &str,
+    ) -> Result<(), XlsxError> {
         let ws = self.ws_part_of(sheet)?;
         // The comments part.
         let part = match self.comments_part_of(sheet) {
@@ -394,6 +408,16 @@ impl XlsxDocument {
     /// Take the note of a cell out; `false` when it has none.
     pub fn delete_note(&mut self, sheet: SheetId, row: u32, col: u32) -> Result<bool, XlsxError> {
         self.refuse_threaded(sheet, row, col)?;
+        self.remove_note(sheet, row, col)
+    }
+
+    /// [`Self::delete_note`] without the thread check.
+    pub(crate) fn remove_note(
+        &mut self,
+        sheet: SheetId,
+        row: u32,
+        col: u32,
+    ) -> Result<bool, XlsxError> {
         let Some(part) = self.comments_part_of(sheet) else {
             return Ok(false);
         };
