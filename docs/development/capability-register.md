@@ -43,8 +43,9 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
   `modules/doc/docx-conformance/fixtures/review.word.json`. Excel threaded comments are read and written in
   `sheet-xlsx` (sheet ADR 528) and projected into the engine threads as cell anchors; Excel opens and keeps what
   the panel's reply, edit and resolve produce. Open: starting a thread from the panel on a cell, plain notes as
-  threads, Word people, mentions and `commentsExtensible`, IDML notes, PDF annotation import, the `comments@1`
-  door.
+  threads, Word mentions (Word's own scripting makes none, so no marker is proven), IDML notes, PDF annotation
+  import, the `comments@1` door. Word's `people.xml` and `commentsExtensible.xml` (exact UTC dates) are read and
+  written (doc ADR 622); Word opens what paged saves with no repair prompt.
 - **OOXML foundation:** one DrawingML theme reader (`paged-ooxml::drawingml::theme`) for sheet
   and doc; content-type and relationship writers (`render`, `patch`) in doc, slide and sheet
   exporters; HSL through `paged_ooxml::colour`; `paged_store::package::read_document` for
