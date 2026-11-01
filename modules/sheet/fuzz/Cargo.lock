@@ -590,6 +590,7 @@ version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
  "paged-fmt",
+ "paged-ooxml",
  "serde",
  "serde-wasm-bindgen",
  "sheet-calc",
@@ -627,6 +628,7 @@ dependencies = [
 name = "sheet-xlsx"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "compact_str",
  "dml-chart",
  "flate2",

@@ -233,10 +233,7 @@ export function createWidthHandler(host: BundleHost): GestureHandler {
     e: CanvasPointerEvent,
   ): Promise<WidthGesture | LiveWidthGesture | null> => {
     if (!e.pageId || !e.pagePoint) return null;
-    if (
-      options.select("mode") === "live" &&
-      host.supports("document.strokeStyles@1")
-    ) {
+    if (options.select("mode") === "live") {
       const target = host.selection.get().find(takesStrokeStyle) ?? null;
       if (target) {
         const g = await beginLive(e, target);

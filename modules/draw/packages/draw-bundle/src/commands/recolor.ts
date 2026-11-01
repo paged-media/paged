@@ -221,15 +221,13 @@ async function displayOf(
 ): Promise<Map<string, { rgb: Rgb; model: string }>> {
   const out = new Map<string, { rgb: Rgb; model: string }>();
   if (refs.length === 0) return out;
-  if (host.supports("document.swatchDisplay@1")) {
-    try {
-      for (const d of await host.document.swatchDisplay(refs)) {
-        const rgb = hexRgb(d.rgbHex);
-        if (rgb) out.set(d.id, { rgb, model: String(d.model).toLowerCase() });
-      }
-    } catch {
-      /* fall through to the names */
+  try {
+    for (const d of await host.document.swatchDisplay(refs)) {
+      const rgb = hexRgb(d.rgbHex);
+      if (rgb) out.set(d.id, { rgb, model: String(d.model).toLowerCase() });
     }
+  } catch {
+    /* fall through to the names */
   }
   for (const ref of refs) {
     if (out.has(ref)) continue;

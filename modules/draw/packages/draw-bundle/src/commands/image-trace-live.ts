@@ -51,11 +51,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { applyRetraceImage, imageTraceOf } from "./image-trace";
-import {
-  RECIPE_AUTO_UPDATE_FEATURE,
-  recipeAutoUpdateEnabled,
-  runInStep,
-} from "./recipe-auto-update";
+import { recipeAutoUpdateEnabled, runInStep } from "./recipe-auto-update";
 import { leafIdsOf, linkIndex } from "../link-index";
 
 /** The `links` row fields the watch compares (the contract's
@@ -121,13 +117,6 @@ export function liveRetraceOf(host: BundleHost): LiveRetrace | undefined {
 
 export function contributeLiveRetrace(host: BundleHost): LiveRetrace {
   let retraced: readonly string[] = [];
-  if (!host.supports(RECIPE_AUTO_UPDATE_FEATURE)) {
-    return {
-      dispose() {},
-      idle: () => Promise.resolve(),
-      lastRetraced: () => retraced,
-    };
-  }
   let prints: Map<string, string> | null = null;
   const own = new Set<number>();
   let running: Promise<void> = Promise.resolve();

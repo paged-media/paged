@@ -696,8 +696,7 @@ export function createPaintbrushHandler(host: BundleHost): GestureHandler {
       // closeTolerance stays 0 — see the ENGINE NOTE in the header.
     }),
     commit: (page, c) =>
-      options.select("result") === "live" &&
-      host.supports("document.strokeStyles@1")
+      options.select("result") === "live"
         ? commitLiveStroke(host, "paintbrush", page, c)
         : commitPaintbrush(host, page, c),
   }));
@@ -711,8 +710,7 @@ export function createBlobBrushHandler(host: BundleHost): GestureHandler {
       nib: nibFromOptions(options),
     }),
     commit: (page, c) =>
-      options.select("result") === "live" &&
-      host.supports("document.strokeStyles@1")
+      options.select("result") === "live"
         ? commitLiveStroke(host, "blobBrush", page, c)
         : commitBlobBrush(host, page, c),
   }));

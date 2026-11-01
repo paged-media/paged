@@ -59,8 +59,6 @@
 // write is retried on the script's reply. A run that names no step (it
 // called `paged.undo()`, or an edit split it) is only fingerprinted.
 //
-// The update needs `supports("document.mutate.amend@1")`; without it
-// nothing is automatic and `updateLinkedRecipes` stays the way to rebuild.
 // It is on by default; the bundle's storage key `recipes.autoUpdate` set
 // to `false` turns it off (`setRecipeAutoUpdate`).
 
@@ -254,18 +252,12 @@ function amendingHost(
       await host.document.mutate(mutation, { ...options, amend: seq }),
     );
   };
-  const bytesAmend = host.supports(RECIPE_SCRIPT_FEATURE);
   document.mutateWithBytes = async (
     mutation: MutationInput,
     bytes: Uint8Array,
     options?: MutateWithBytesOptions,
   ): Promise<MutationOutcome> => {
     if (refusal !== null) return { applied: false, error: refusal };
-    if (!bytesAmend)
-      return {
-        applied: false,
-        error: "this host cannot join image bytes to an undo step",
-      };
     return follow(
       await host.document.mutateWithBytes(mutation, bytes, {
         ...options,
@@ -344,13 +336,6 @@ export async function runInStep<T>(
 
 export function contributeRecipeAutoUpdate(host: BundleHost): RecipeAutoUpdate {
   let rebuilt: readonly string[] = [];
-  if (!host.supports(RECIPE_AUTO_UPDATE_FEATURE)) {
-    return {
-      dispose() {},
-      idle: () => Promise.resolve(),
-      lastRebuilt: () => rebuilt,
-    };
-  }
   const handle = contributeRunning(host, {
     setRebuilt: (r) => {
       rebuilt = r;
@@ -579,8 +564,7 @@ function contributeRunning(
     }),
   );
   try {
-    if (host.supports("document.onDidOpen@1"))
-      subs.push(host.document.onDidOpen(() => schedule("open")));
+    subs.push(host.document.onDidOpen(() => schedule("open")));
   } catch {
     /* no open event: the first change takes the baseline */
   }

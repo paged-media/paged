@@ -754,17 +754,15 @@ export function activate(host: BundleHost): BundleHandle {
   // ADR 323 — draw's object properties as host-rendered PropertyFields (a
   // schema panel of property rows; needs the object model + bindings).
   const propertiesPanel = drawPropertiesPanel();
-  const propertyListsSub = objectModelHandle
-    ? (contributeSchemaPanel(host, {
-        id: DRAW_PROPERTIES_PANEL_ID,
-        title: propertiesPanel.title,
-        icon: propertiesPanel.icon,
-        defaultDock: "right",
-        defaultGroup: "draw",
-        schema: propertiesPanel,
-      }),
-      publishDrawPropertyLists(host))
-    : null;
+  contributeSchemaPanel(host, {
+    id: DRAW_PROPERTIES_PANEL_ID,
+    title: propertiesPanel.title,
+    icon: propertiesPanel.icon,
+    defaultDock: "right",
+    defaultGroup: "draw",
+    schema: propertiesPanel,
+  });
+  const propertyListsSub = publishDrawPropertyLists(host);
   host.log.info(
     `activated — ${tools.length} tools + 3 schema panels + 13 React panels + ` +
       `${
@@ -826,8 +824,8 @@ export function activate(host: BundleHost): BundleHandle {
       // That separation is what makes phase D a migration with a
       // rollback point rather than a deletion.
       layersProviderHandle?.dispose();
-      propertyListsSub?.dispose();
-      objectModelHandle?.dispose();
+      propertyListsSub.dispose();
+      objectModelHandle.dispose();
       svgIoSub.dispose();
       dxfIoSub.dispose();
       vectorFilesSub.dispose();

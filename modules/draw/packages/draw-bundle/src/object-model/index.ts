@@ -203,16 +203,7 @@ export function drawObjectModel(host: BundleHost): ObjectModelContribution {
   };
 }
 
-/** Contribute it. `null` where the host does not announce the door
- *  (`contribute.objectModel@1`). */
-export function contributeDrawObjectModel(
-  host: BundleHost,
-): ObjectModelHandle | null {
-  if (!host.supports("contribute.objectModel@1")) {
-    host.log.info(
-      "object model: this host does not announce contribute.objectModel@1 — skipped",
-    );
-    return null;
-  }
+/** Contribute it. */
+export function contributeDrawObjectModel(host: BundleHost): ObjectModelHandle {
   return host.contribute.objectModel(drawObjectModel(host));
 }

@@ -54,7 +54,6 @@ import { EASE_KINDS } from "@paged-media/draw-geometry";
 import {
   rebuildInStep,
   recipeAutoUpdateEnabled,
-  RECIPE_AUTO_UPDATE_FEATURE,
 } from "../commands/recipe-auto-update";
 import type { RecipeKind } from "../commands/recipe-update";
 
@@ -409,9 +408,7 @@ function makeRecipeKind<L>(
     // step (extensions ADR 337 amendment), where the host can amend and
     // the automatic update is on. A name changes nothing drawn.
     const followUps =
-      rebuild.size > 0 &&
-      host.supports(RECIPE_AUTO_UPDATE_FEATURE) &&
-      recipeAutoUpdateEnabled(host)
+      rebuild.size > 0 && recipeAutoUpdateEnabled(host)
         ? [
             async ({ appliedSeq }: { appliedSeq: number }) => {
               const r = await rebuildInStep(

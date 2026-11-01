@@ -30,7 +30,6 @@ import * as React from "react";
 
 import {
   onRecipeAutoUpdateChange,
-  RECIPE_AUTO_UPDATE_FEATURE,
   recipeAutoUpdateSnapshot,
   setRecipeAutoUpdate,
 } from "../commands/recipe-auto-update";
@@ -56,18 +55,13 @@ export function RecipeAutoUpdateToggle(props: {
   host: BundleHost;
   /** Distinguishes the panels' ids (`draw-<panel>-auto-update`). */
   panel: string;
-}): React.ReactElement | null {
+}): React.ReactElement {
   const { host, panel } = props;
   const s = useStrings();
   const on = React.useSyncExternalStore(
     (notify) => onRecipeAutoUpdateChange(notify).dispose,
     () => recipeAutoUpdateSnapshot(host),
   );
-  // Asked once: the host's feature set does not change while it lives.
-  const [able] = React.useState(() =>
-    host.supports(RECIPE_AUTO_UPDATE_FEATURE),
-  );
-  if (!able) return null;
   const id = `draw-${panel}-auto-update`;
   return (
     <div style={rowStyle} title={s.t(M.hint)}>

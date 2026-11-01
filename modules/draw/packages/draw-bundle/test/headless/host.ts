@@ -118,27 +118,6 @@ export const openHost = async (): Promise<HeadlessHost> => {
   return h;
 };
 
-/** `host`, answering no to the engine's SVG doors (engine ADR 1031): an
- *  engine before protocol 77. Since draw ADR 364 the bundle has no SVG
- *  reader of its own, so on such a host its SVG, DXF and EPS importers
- *  are not registered; the specs that pin that refusal run through it. */
-export function withoutSvgDoors<
-  H extends { supports(feature: string): boolean },
->(host: H): H {
-  return new Proxy(host, {
-    get(target, key, receiver) {
-      if (key === "supports") {
-        return (feature: string) =>
-          feature !== "document.importSvg@1" &&
-          feature !== "document.exportSvg@1" &&
-          target.supports(feature);
-      }
-      const v = Reflect.get(target, key, receiver);
-      return typeof v === "function" ? v.bind(target) : v;
-    },
-  });
-}
-
 /** Engine ADR 1039 — a host whose engine is taken to carry no symbols, so
  *  the draw bundle runs its re-emitted-artwork lane (draw ADR 356), the
  *  fallback the interim specs pin. Call it AFTER `loadBundle`: it patches
