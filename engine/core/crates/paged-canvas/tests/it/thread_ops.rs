@@ -28,6 +28,15 @@ use paged_canvas::{CanvasModel, CanvasOptions, Mutation};
 use paged_mutate::operation::{CommentAnchorSpec, PersonSpec};
 use paged_mutate::{CommentSpec, MentionSpec, SourceBlobSpec};
 
+/// The document threads: the comments without the notes the sample's story holds
+/// (InDesign notes list as rows of kind `note` beside them, engine ADR 1055).
+fn threads(m: &CanvasModel) -> Vec<paged_canvas::channel::CommentSummary> {
+    m.comments()
+        .into_iter()
+        .filter(|r| r.story_id.is_empty() || r.thread_kind.as_deref() != Some("note"))
+        .collect()
+}
+
 fn model() -> CanvasModel {
     let idml = paged_gen::write_idml(&paged_gen::samples::notes::build()).expect("idml");
     CanvasModel::load("doc", &idml, CanvasOptions::default()).expect("load")
@@ -70,7 +79,7 @@ fn a_thread_is_inserted_replied_to_resolved_edited_and_deleted__feat__core_comme
         comment: spec(None, "Author B", "Fixed"),
     })
     .unwrap();
-    let rows = m.comments();
+    let rows = threads(&m);
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].thread_id.as_deref(), Some("t1"));
     assert_eq!(rows[0].story_id, "");
@@ -88,7 +97,7 @@ fn a_thread_is_inserted_replied_to_resolved_edited_and_deleted__feat__core_comme
         resolved: true,
     })
     .unwrap();
-    assert!(m.comments().iter().all(|c| c.resolved));
+    assert!(threads(&m).iter().all(|c| c.resolved));
 
     // Editing stamps the modification time, not the creation time.
     m.apply_mutation(&Mutation::EditComment {
@@ -97,7 +106,7 @@ fn a_thread_is_inserted_replied_to_resolved_edited_and_deleted__feat__core_comme
         date: Some("2026-11-01T10:30:00.250Z".into()),
     })
     .unwrap();
-    let root = m.comments().into_iter().find(|c| c.id == "t1").unwrap();
+    let root = threads(&m).into_iter().find(|c| c.id == "t1").unwrap();
     assert_eq!(root.text, "Check the margins");
     assert_eq!(root.date.as_deref(), Some("2026-11-01T09:00:00Z"));
     assert_eq!(root.modified.as_deref(), Some("2026-11-01T10:30:00.250Z"));
@@ -108,26 +117,26 @@ fn a_thread_is_inserted_replied_to_resolved_edited_and_deleted__feat__core_comme
         comment: spec(None, "Author A", "Reopened"),
     })
     .unwrap();
-    assert!(m.comments().iter().all(|c| !c.resolved));
+    assert!(threads(&m).iter().all(|c| !c.resolved));
 
     // Deleting a reply keeps the thread; deleting the root takes it all.
     m.apply_mutation(&Mutation::DeleteComment {
         comment_id: "t1.1".into(),
     })
     .unwrap();
-    assert_eq!(m.comments().len(), 2);
+    assert_eq!(threads(&m).len(), 2);
     m.apply_mutation(&Mutation::DeleteComment {
         comment_id: "t1".into(),
     })
     .unwrap();
-    assert!(m.comments().is_empty());
+    assert!(threads(&m).is_empty());
 
     // Seven steps (insert, reply, resolve, edit, reply, delete reply, delete root).
     for _ in 0..7 {
         m.undo().expect("undo");
     }
     assert_eq!(m.scene().canonical_hash(), before);
-    assert!(m.comments().is_empty());
+    assert!(threads(&m).is_empty());
 }
 
 #[test]
@@ -160,7 +169,7 @@ fn every_anchor_kind_reads_back_and_a_thread_can_move__feat__core_comments() {
         Some("c"),
         "cell",
     );
-    let rows = m.comments();
+    let rows = threads(&m);
     assert!(matches!(&rows[0].anchor, Some(CommentAnchorSpec::Page { page, .. }) if page == "p1"));
     assert!(
         matches!(&rows[1].anchor, Some(CommentAnchorSpec::Region { rect, .. }) if rect[2] == 50.0)
@@ -177,18 +186,18 @@ fn every_anchor_kind_reads_back_and_a_thread_can_move__feat__core_comments() {
         },
     })
     .unwrap();
-    let moved = m.comments().into_iter().find(|c| c.id == "c").unwrap();
+    let moved = threads(&m).into_iter().find(|c| c.id == "c").unwrap();
     assert!(
         matches!(&moved.anchor, Some(CommentAnchorSpec::Cell { address, .. }) if address == "Sheet1!C9")
     );
     m.undo().unwrap();
-    let back = m.comments().into_iter().find(|c| c.id == "c").unwrap();
+    let back = threads(&m).into_iter().find(|c| c.id == "c").unwrap();
     assert!(
         matches!(&back.anchor, Some(CommentAnchorSpec::Cell { address, .. }) if address == "Sheet1!B3")
     );
 
     // An empty anchor is refused, and the failed step leaves nothing behind.
-    let n = m.comments().len();
+    let n = threads(&m).len();
     assert!(m
         .apply_mutation(&Mutation::SetCommentAnchor {
             thread_id: "a".into(),
@@ -198,7 +207,7 @@ fn every_anchor_kind_reads_back_and_a_thread_can_move__feat__core_comments() {
             },
         })
         .is_err());
-    assert_eq!(m.comments().len(), n);
+    assert_eq!(threads(&m).len(), n);
 }
 
 #[test]
@@ -210,7 +219,7 @@ fn a_note_takes_no_replies_and_ids_are_unique_across_both_stores__feat__core_com
         comment: spec(Some("n1"), "Author A", "a sticky note"),
     })
     .unwrap();
-    assert_eq!(m.comments()[0].thread_kind.as_deref(), Some("note"));
+    assert_eq!(threads(&m)[0].thread_kind.as_deref(), Some("note"));
     assert!(m
         .apply_mutation(&Mutation::ReplyComment {
             parent_id: "n1".into(),
@@ -230,7 +239,7 @@ fn a_note_takes_no_replies_and_ids_are_unique_across_both_stores__feat__core_com
     })
     .unwrap();
     insert(&mut m, item("u2"), None, "minted");
-    let ids: Vec<String> = m.comments().into_iter().map(|c| c.id).collect();
+    let ids: Vec<String> = threads(&m).into_iter().map(|c| c.id).collect();
     assert!(ids.contains(&"8".to_string()), "{ids:?}");
     assert!(m
         .apply_mutation(&Mutation::InsertCommentThread {
@@ -324,7 +333,7 @@ fn a_comment_keeps_what_its_format_wrote_for_it__feat__core_comments() {
         },
     })
     .unwrap();
-    let rows = m.comments();
+    let rows = threads(&m);
     let src = |id: &str| {
         rows.iter()
             .find(|r| r.id == id)
@@ -401,7 +410,7 @@ fn a_thread_reports_the_page_and_point_it_stands_at__feat__core_comments() {
         "its target is not here",
     );
 
-    let rows = m.comments();
+    let rows = threads(&m);
     let at = |id: &str| {
         let r = rows.iter().find(|r| r.id == id).unwrap();
         (r.page.clone(), r.at)
@@ -481,7 +490,8 @@ fn comments_export_as_pdf_annotations_only_when_asked__feat__core_comments() {
     }
     assert!(with.contains("/T (Bob)"));
     assert!(with.contains("/IRT"), "the reply is in reply to its note");
-    assert_eq!(with.matches("/Subtype /Text").count(), 3);
+    // The three comments, and the sample story's notes beside them.
+    assert_eq!(with.matches("/Subtype /Text").count(), 3 + m.notes().len());
 }
 
 #[test]
@@ -493,7 +503,7 @@ fn deleting_the_item_a_thread_is_on_orphans_it_and_undo_brings_it_back__feat__co
         .expect("a text frame id");
     insert(&mut m, item(&frame), Some("t1"), "Check this frame");
     let before = m.scene().canonical_hash();
-    let row = |m: &CanvasModel| m.comments().into_iter().find(|c| c.id == "t1").unwrap();
+    let row = |m: &CanvasModel| threads(m).into_iter().find(|c| c.id == "t1").unwrap();
     assert!(!row(&m).orphaned);
     assert!(row(&m).page.is_some());
 

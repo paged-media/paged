@@ -32,6 +32,7 @@
 // no-op, and a document with no part falls back to the blob, so existing
 // documents keep working unchanged.
 
+import { fnv1a32 } from "@paged-media/helpers";
 import type { BundleHost } from "@paged-media/plugin-api";
 
 type PartsHost = Pick<BundleHost, "parts" | "supports">;
@@ -110,12 +111,7 @@ async function readChartSlots(
 
 /** A short key of a byte string (its length and FNV-1a 32). */
 function bytesKey(bytes: Uint8Array): string {
-  let h = 0x811c9dc5;
-  for (const b of bytes) {
-    h ^= b;
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return `${bytes.length}:${h.toString(16)}`;
+  return `${bytes.length}:${fnv1a32(bytes).toString(16)}`;
 }
 
 /** The named filter views (sheet ADR 517) — criteria saved beside the

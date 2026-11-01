@@ -107,6 +107,8 @@ _Status note (2026-10-02): this section predates the implementation; see [ADR 46
 
 _Amended 2026-10-24 by [ADR 466](adr/466-core-raster-crates-are-shared.md) ([PM-0014](../../../docs/adr/PM-0014-capability-layering.md)): item 1 holds for the TypeScript glue (plugin SDK only); the Rust crates may path-depend on `engine/core` crates for raster codecs, PSD, pixel types, colour and kernels._
 
+_Retired 2026-11-01 by [PM-0017](../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md): the built-in modules are part of the core. Items 1 and 2 below no longer bind this module (it may depend on the engine, on `platform/shared/*` and on other built-ins, acyclic, declared in `moon.yml`); they bind third-party extensions. The TypeScript import lint stays._
+
 1. **Zero core contact.** No imports from `core/` or `editor/` internals, no
    patched Paged builds, no feature flags inside Paged existing for this
    plugin. CI builds against _published_ SDK canaries only; a build that

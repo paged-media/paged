@@ -1,6 +1,7 @@
 # ADR PM-0015 — Data and actions are platform layers
 
-- **Status:** Accepted 2026-10-24.
+- **Status:** Accepted 2026-10-24. Amended 2026-10-25 (headless image actions) and 2026-11-01 by
+  [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) (no isolation between built-ins).
 - **Amends:** [PM-0002](PM-0002-built-ins-and-extensions.md) (built-ins and extensions reach data
   and actions through two doors) and applies [PM-0014](PM-0014-capability-layering.md) to data
   binding and to computed steps over assets and tables.
@@ -179,3 +180,13 @@ image module's `resize`, `fit` and straightened `crop` run on it in every realm,
 result does not depend on whether the realm has a device; the two backends agree within one
 8-bit level on opaque pixels. The adjustment chain already ran without a device on its CPU
 twins (image ADR 465). Neither needs a GPU-capable host.
+
+## Amendment (2026-11-01): paged.data is no longer behind an isolation contract
+
+The context's "behind an isolation contract" and the rule that others reach data "sideways" no
+longer describe the repository: under [PM-0017](PM-0017-built-ins-are-part-of-the-core.md)
+paged.data is a built-in that is part of the core, and another built-in may depend on its
+crates directly (acyclic, declared in `moon.yml`). The layering decided here holds: bindings and
+the action runner live in the engine, `data@1` and `actions@1` stay the public doors, and
+extensions reach data only through them with `supports("data@1")`. A built-in calls the door
+without probing a flag that is always true.

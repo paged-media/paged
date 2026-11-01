@@ -8342,8 +8342,14 @@ fn split_tail(
     } else {
         head.text.as_str()
     };
+    // An editorial note's place (core ADR 172) is a character of the model's
+    // text a note gained since the part was written may add: the pieces are
+    // compared without it (the notes are written at their places by the
+    // pieces themselves), so a note added to a split range does not read as
+    // an edit of its pieces, which would drop all but the first.
     let alike = |t: &str| -> String {
         t.chars()
+            .filter(|c| *c != paged_model::NOTE_MARKER)
             .map(|c| match crate::emit::page_number_type(c) {
                 Some(_) => paged_model::AUTO_PAGE_NUMBER_MARKER,
                 None => c,

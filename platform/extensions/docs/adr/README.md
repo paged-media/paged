@@ -36,7 +36,7 @@ and each one names the plugins that follow it and those that do not.
 | [312](312-panels-as-data.md) | Panels cross the boundary as data: a schema plus bindings, no expression language | Accepted, recorded retroactively 2026-10-02 |
 | [313](313-no-react-at-load.md) | plugin-sdk loads without React; the build target is the gate | Accepted, recorded retroactively 2026-10-02 |
 | [314](314-plugin-shape.md) | The plugin shape: semantics in Rust behind one wasm module, a logic-free shim, one published package | Accepted, recorded retroactively 2026-10-02 |
-| [315](315-isolation-contract.md) | The isolation contract: a plugin depends only on the published contract; a gap becomes a host door | Accepted, recorded retroactively 2026-10-02 |
+| [315](315-isolation-contract.md) | The isolation contract: a plugin depends only on the published contract; a gap becomes a host door | Accepted, recorded retroactively 2026-10-02; retired for built-ins 2026-11-01 (PM-0017), still binds extensions |
 | [316](316-native-content-and-baking.md) | Plugin content is stored as valid native document content; baking is the fallback | Accepted, recorded retroactively 2026-10-02 |
 | [317](317-registry-driven-dispatch.md) | Function and kernel dispatch is generated from a registry, with a coverage gate | Accepted, recorded retroactively 2026-10-02 |
 | [318](318-host-spawned-workers.md) | Workers are spawned by the host on a declared capability | Accepted, recorded retroactively 2026-10-02 |

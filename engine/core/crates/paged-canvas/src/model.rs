@@ -7790,6 +7790,8 @@ impl CanvasModel {
         crate::mesh_fill_export::lower_for_idml(&mut scene);
         // Engine ADR 1041 — a pattern paint rides in its frame's label.
         crate::pattern_export::lower_for_idml(&mut scene);
+        // Engine ADR 1055 — a comment on a text range is written as a note.
+        crate::comment_export::lower_for_idml(&mut scene);
         let out = idml_export::write_idml_with(
             &scene,
             &self.source_idml,
@@ -7925,6 +7927,7 @@ impl CanvasModel {
         out.extend(crate::export_losses::image_adjustment_losses(&self.scene));
         out.extend(crate::export_losses::media_losses(&self.scene));
         out.extend(crate::export_losses::blend_mode_losses(&self.scene));
+        out.extend(crate::comment_export::comment_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -7954,7 +7957,12 @@ impl CanvasModel {
                                 .map(|l| (l.source_uri.clone(), l.file_name.clone()))
                                 .collect(),
                         };
-                        out.extend(crate::export_losses::diff(&self.scene, &twin, &ctx));
+                        // The twin holds the notes the export wrote for the
+                        // story comments (their markers are text), so it is
+                        // measured against the scene as the writer saw it.
+                        let mut written = self.scene.clone();
+                        crate::comment_export::lower_for_idml(&mut written);
+                        out.extend(crate::export_losses::diff(&written, &twin, &ctx));
                         out.extend(crate::paint_v2_export::paint_v2_losses(
                             &self.scene,
                             Some(&twin),
@@ -12224,12 +12232,18 @@ impl CanvasModel {
         out
     }
 
-    /// Engine ADR 1020 — the document's comments, threads in story order.
+    /// Engine ADR 1020 — the document's comments, threads in story order,
+    /// each story's editorial notes (ADR 172) after its range comments as
+    /// rows of kind `note` (ADR 1055).
     pub fn comments(&self) -> Vec<crate::channel::CommentSummary> {
         self.scene
             .stories
             .iter()
-            .flat_map(|s| crate::review::comment_rows(&s.self_id, &s.story))
+            .flat_map(|s| {
+                let mut rows = crate::review::comment_rows(&s.self_id, &s.story);
+                rows.extend(crate::review::note_rows(&s.self_id, &s.story));
+                rows
+            })
             .chain(crate::review::thread_rows(&self.scene))
             .map(|mut row| {
                 if let Some(anchor) = row.anchor.as_ref() {

@@ -3,7 +3,8 @@
 - **Status:** Accepted 2026-10-18. Amended 2026-10-24 by [PM-0014](PM-0014-capability-layering.md)
   (the image codecs merge with the engine's decoders). Amended 2026-10-24 by
   [PM-0015](PM-0015-data-and-actions-are-platform-layers.md) (data and actions are reached
-  through two doors).
+  through two doors). Amended 2026-11-01 by [PM-0017](PM-0017-built-ins-are-part-of-the-core.md)
+  (isolation between built-ins ends).
 - **Scope:** `modules/*`, `platform/shared/*`, `platform/extensions` (`plugin-api`, `plugin-sdk`),
   `apps/editor`.
 
@@ -72,3 +73,14 @@ as stated above. Extensions still see only the public contract.
 steps (actions) like every other capability: the engine holds bindings and the action runner,
 and built-ins and extensions alike reach records, bindings and actions through the `data@1`
 and `actions@1` doors of plugin-sdk, never through paged.data's or another module's internals.
+
+## Amendment (2026-11-01): isolation between built-ins ends
+
+[PM-0017](PM-0017-built-ins-are-part-of-the-core.md) makes the built-ins part of the core. The
+first bullet of the decision no longer holds as a limit on built-ins: a built-in's Rust may also
+path-depend on `engine/core` crates and on another built-in (acyclic, declared in `moon.yml`),
+and it uses a door only where the host provides the service, with no `supports()` probe of a
+door that is always present. What holds: **extensions** and `platform/extensions/*` see only the
+public contract (`bun lint` enforces it), and shared code is still placed by who needs it, now
+by genericity alone (PM-0014, PM-0017). The capability register
+(`docs/development/capability-register.md`) names the owner of each shared capability.

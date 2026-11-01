@@ -1,6 +1,7 @@
 # PM-0005 — Separate Cargo workspaces, one JS workspace, the IDML crates in the engine
 
-- **Status:** Accepted 2026-10-18.
+- **Status:** Accepted 2026-10-18. The separate Cargo workspaces are amended by
+  [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) (2026-11-01): one workspace, gated on a spike.
 - **Supersedes:** modules/publish ADR 650 (the IDML adapter and the engine pin each other by git
   revision).
 - **Scope:** every `Cargo.toml` workspace root, the root `package.json` workspace, and
@@ -50,3 +51,12 @@ packages reached each other through published npm canaries.
 - A module's `-D warnings` now lints the engine crates it builds.
 - Editor development needs Rust, because the engine's wasm is built, not downloaded. A
   prebuilt-artifact fetch is a possible follow-up.
+
+## Amendment (2026-11-01): one Cargo workspace, conditional on a spike
+
+[PM-0017](PM-0017-built-ins-are-part-of-the-core.md) makes the built-ins part of the core and
+moves toward one Cargo workspace. "Cargo workspaces stay separate" holds until its spike
+conditions are met: its first measurement left the engine wasm within 0.01 % of today's size,
+and four dependency pins and the per-target profiles remain to settle. Until the move lands, the
+separate workspaces, their lockfiles and the `flo_curves` guard stay as decided here. The one JS
+workspace and the IDML crates in the engine are unchanged.

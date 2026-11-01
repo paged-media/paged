@@ -1,6 +1,7 @@
 # ADR 557 — Variables and data sets are a projection over bindings
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `6b96ce5`.
+  Amended 2026-11-01 by [PM-0017](../../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md): the isolation reason is retired.
 - **Scope:** `data-dataset`, `Binding::Visibility` in `data-core`, the variable methods of
   `DataSession`, `packages/data-host-model/src/variables.ts`, the Dataset panel
 
@@ -96,3 +97,13 @@ On branch `om/universal-binding`, a data set also captures and applies every
 `Binding::Property` (variable trait `property`, value `DataSetValue::Property`), which makes a
 data set range over any property `host.objects` exposes. The Illustrator library does not
 carry property variables (its deviation 3). Effective when ADR 558 is accepted.
+
+## Amendment (2026-11-01): the isolation reason is retired
+
+The reasons given above that cite the isolation rule (the context's "would have forced a drawing
+plugin to grow a second data model" and the declined alternative of resolving graph data through
+the chart-owning plugin) no longer hold: [PM-0017](../../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md) retires the isolation contract for the built-ins, and a
+built-in may depend on another. The decision stands: a variable is a projection over a binding and
+lives with the binding engine, and graph data is carried and not resolved. Resolving it through
+the chart surface is now a choice of ownership (PM-0014, `docs/development/capability-register.md`),
+not a prohibition; it is not built.

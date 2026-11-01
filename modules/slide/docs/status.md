@@ -143,10 +143,12 @@ Read from the code on 2026-10-30.
   editor's keybinding test holds the chords free of its own.
 - **Comments** (ADR 711, amendment 2026-10-25). PowerPoint's threaded comments (text, author,
   date, status, replies, a position or a shape anchor) and its legacy comments are imported per
-  slide and kept in the container part `comments/comments.json`, by page id. The Comments panel
-  lists the active slide's threads: reply, resolve and reopen, delete, add a comment, show the
-  resolved ones. Open threads are marked on the slide with their author's initials (the host's
-  overlay layers). Typed commands add, reply to, resolve and delete comments. Export writes a
+  slide into the document's comment model (engine ADR 1055): a thread anchored to its page or,
+  for a shape comment, to `shape:<cNvPr id>`, keeping PowerPoint's own comment as its source. The
+  host's Comments panel lists them (reply, resolve and reopen, delete) and the canvas marks open
+  threads with a pin; comments undo and save with the document, and an older deck's container
+  part `comments/comments.json` is read once and emptied. The engine's comment operations add,
+  reply to, resolve and delete comments. Export writes a
   slide's comments back as one modern comment part when they changed (legacy ones converted),
   extends `ppt/authors.xml`, and keeps the bytes of every slide whose comments did not change.
 - **The slide profile and Normal-view keys** (editor ADR 307). `?solo=paged.slide` opens the

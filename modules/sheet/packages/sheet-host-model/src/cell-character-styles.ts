@@ -32,6 +32,7 @@
 //
 // PURE: content in, mutations out.
 
+import { fnv1a32Hex } from "@paged-media/helpers";
 import type { Mutation } from "@paged-media/plugin-api";
 
 import type { LoweredContent, LoweredStyle } from "./lowered";
@@ -42,19 +43,9 @@ import { textOffsetLength } from "./table-refresh";
 /** InDesign's "no character style" — what an unformatted cell resets to. */
 export const NO_CHARACTER_STYLE = "CharacterStyle/$ID/[No character style]";
 
-/** FNV-1a, 32-bit, hex — a short stable content address. */
-function fnv(s: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
-}
-
 /** The deterministic character-style id for a set of facets. */
 export function cellCharacterStyleId(props: readonly StyleProp[]): string {
-  return `CharacterStyle/paged.sheet ${fnv(JSON.stringify(props))}`;
+  return `CharacterStyle/paged.sheet ${fnv1a32Hex(JSON.stringify(props))}`;
 }
 
 /** A readable name for the style (what the Character Styles panel lists). */

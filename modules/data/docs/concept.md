@@ -136,6 +136,8 @@ with the inter-plugin rule that defines the suite.
 
 _Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the glue is the TypeScript package `packages/data-bundle`; the one worker is the DuckDB worker the bundle spawns ([ADR 015](adr/015-duckdb-wasm-vendored.md)); and the Boa sandbox exists only in the native `data-script` crate ([ADR 555](adr/555-batch-reuses-the-engine.md))._
 
+_Retired 2026-11-01 by [PM-0017](../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md): the built-in modules are part of the core. Items 1 and 2 below no longer bind this module (it may depend on the engine, on `platform/shared/*` and on other built-ins, acyclic, declared in `moon.yml`); they bind third-party extensions. The TypeScript import lint stays._
+
 1. **Zero core contact** beyond the published SDK; CI builds against SDK
    canaries only.
 2. **Zero inter-plugin contact** — no dependency, import, runtime

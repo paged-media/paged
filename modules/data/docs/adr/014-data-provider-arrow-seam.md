@@ -1,7 +1,7 @@
 # ADR 014 — The data-provider seam: `RecordSet` = Arrow IPC, no `arrow-rs` (D-09)
 
 **2026-06-12 (records a 2026-06-09/10 decision) · decision record · status:
-ACCEPTED (records the ratified D-09 cross-plugin interchange contract; consumer
+ACCEPTED; amended 2026-11-01 (not an isolation matter any more, PM-0017) (records the ratified D-09 cross-plugin interchange contract; consumer
 landed `editor 5df546b`).**
 
 **Sources:** the data-provider RFC, `plugin-sdk: docs/design/data-provider.md`
@@ -126,3 +126,11 @@ This supersedes, in Consequences, "D-09 is `planned`/`data.provider.register` on
 Three comments still describe the registry door as not yet available and are stale:
 `data-js/src/core.rs:157-160`, `data-js/src/lib.rs:290-293` and
 `packages/data-bundle/src/session.ts:498-501`.
+
+## Amendment (2026-11-01): the seam stays a door, no longer because of isolation
+
+"Violates the isolation rule" and "inter-plugin contact" above describe the rule of the separate
+repositories. [PM-0017](../../../../docs/adr/PM-0017-built-ins-are-part-of-the-core.md) retires it between built-ins, which may depend on one another. The seam is
+unchanged: `host.dataProviders` is the neutral, host-owned contract that extensions and built-ins
+use to exchange record sets without learning of each other, and an extension still has no other
+route. A built-in that owns a capability another built-in needs is read directly, not copied.

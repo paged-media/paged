@@ -102,7 +102,7 @@ is not written yet.
 | [169](169-update-cross-references.md) | Cross-references: a live page number, and Update Cross-References | Accepted 2026-10-16 |
 | [170](170-endnotes-as-indesign-writes-them.md) | Endnotes, read and numbered as InDesign writes them | Accepted 2026-10-16 |
 | [171](171-pdf-bookmarks.md) | PDF bookmarks, as InDesign exports them | Accepted 2026-10-16 |
-| [172](172-editorial-notes.md) | Editorial notes, kept and edited as InDesign keeps them | Accepted 2026-10-16 |
+| [172](172-editorial-notes.md) | Editorial notes, kept and edited as InDesign keeps them | Accepted 2026-10-16 (a note is a `note` thread, 1055) |
 | [173](173-bookmarks-edited.md) | Bookmarks created, renamed, moved and deleted as InDesign does it | Accepted 2026-10-16 |
 | [174](174-endnotes-inserted-and-deleted.md) | Endnotes inserted, deleted and converted from footnotes, as InDesign does it | Accepted 2026-10-17 |
 | [175](175-table-row-start.md) | A table row starts where its Start Row option asks, as InDesign sets it | Accepted 2026-10-17 |
@@ -156,7 +156,7 @@ is not written yet.
 | [1017](1017-styled-field-values-and-alternates.md) | A text field takes the styles and breaks its author allows; alternates choose a frame | Accepted 2026-10-24 |
 | [1018](1018-word-paragraph-character-and-list-model.md) | Word's paragraph, character and list model: highlight, hidden text, underline kinds, double strike, direct shading and borders, list levels, based-on, Next Style | Accepted 2026-10-24 |
 | [1019](1019-geometry-kernels-walk-the-arrangement.md) | The planar arrangement is a face walk; offsets and variable width work on whole paths | Accepted 2026-10-25 |
-| [1020](1020-range-comments-with-threads.md) | Range comments with threads: a comment's range is the runs that name it (extends 172) | Accepted 2026-10-29 |
+| [1020](1020-range-comments-with-threads.md) | Range comments with threads: a comment's range is the runs that name it (extends 172) | Accepted 2026-10-29 (a text range is one anchor of several, 1055) |
 | [1021](1021-find-and-replace.md) | Find and replace: the caret space, Word's specials and wildcards on `regress`, Replace All as one undo step | Accepted 2026-10-24 |
 | [1022](1022-word-document-structure.md) | Word document structure: section first / odd / even masters and odd/even starts (amends 026), Word fields and F9, creating tables of contents, cross-references, bookmarks and index markers | Accepted 2026-10-25 |
 | [1025](1025-word-tables-split-rows-and-autofit.md) | Word tables: rows split across frames (`cantSplit` holds), autofit columns, indent, exact rows — behind a policy switch on the table | Accepted 2026-10-30 |
@@ -186,6 +186,7 @@ is not written yet.
 | [1052](1052-content-controls.md) | Content controls: a range of runs that is a checkbox, drop-down, date or text field; one value set is one undo step | Accepted 2026-10-30 |
 | [1053](1053-a-stroke-style-draws-the-stroke-along-the-path.md) | A stroke style draws the stroke along the path: width profiles and Art, Scatter, Pattern and Bristle brushes, the fill kept by a split, IDML baked | Accepted 2026-10-31 |
 | [1054](1054-headings-tag-and-outline-a-pdf.md) | A paragraph style's PDF tag is settable and a PDF's outline can come from its headings | Accepted 2026-11-01 |
+| [1055](1055-one-comment-model-for-every-module.md) | One comment model for every module: document-level threads with item, page, region and cell anchors, people, orphaning; compatible with Word, Excel, PowerPoint, InDesign and Acrobat (extends 172, 1020) | Accepted 2026-11-01 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

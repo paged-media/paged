@@ -1,6 +1,7 @@
 # ADR PM-0014 — A capability lives at the lowest layer every consumer can reach
 
-- **Status:** Accepted 2026-10-24.
+- **Status:** Accepted 2026-10-24. Amended 2026-10-25 (DrawingML geometry) and 2026-11-01 by
+  [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) (placement by genericity alone).
 - **Amends:** [PM-0002](PM-0002-built-ins-and-extensions.md) (its consequence that merging the
   image codecs with the engine's decoders "is left for later" is decided here).
 - **Scope:** `engine/core` (model, renderer and `crates/paged-*`), `modules/*` (their Rust
@@ -117,3 +118,14 @@ not L2. It is its own Cargo workspace, a path dependency of the modules, and it 
 name in the slide workspace through a `package = "dml-geom"` alias, as this record asks of a
 moved crate. Adjust handles use `contribute.overlay` until the overlay-handles door (extensions
 340) lands.
+
+## Amendment (2026-11-01): the built-ins are part of the core
+
+[PM-0017](PM-0017-built-ins-are-part-of-the-core.md) retires the isolation contract for all
+built-ins. The image module's "zero core contact", which this record kept for TypeScript, is
+gone: a module's TypeScript uses the contract, `platform/shared/*` and the host's doors, and its
+Rust may path-depend on the engine, on `platform/shared/*` and on another
+built-in. The placement rule above stands and is now the only one: a capability sits at the
+lowest layer every consumer reaches, whether or not a module is loaded, and a copy kept to avoid
+depending on a sibling is a defect. `docs/development/capability-register.md` names each
+capability's owner, and `bun tooling/js/single-owner.mjs` fails on a new copy.

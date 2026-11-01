@@ -15,7 +15,7 @@ Range 700–749.
 | [708](708-a-deck-is-built-as-a-native-document.md) | A deck is built as a native document with the engine's model crates | Accepted 2026-10-19 |
 | [709](709-one-drawingml-chart-reader.md) | One DrawingML chart reader and model for paged.slide and paged.sheet; the layouts stay per module | Accepted 2026-10-19 |
 | [710](710-chart-labels-are-formatted-by-sheet-format.md) | Chart labels are formatted by sheet-format | Accepted 2026-10-19 |
-| [711](711-powerpoint-parity-program.md) | The PowerPoint parity program; export keeps untouched slides byte for byte | Accepted 2026-10-24; amended 2026-10-25 (ADR 717), 2026-10-29 (ADR 713) |
+| [711](711-powerpoint-parity-program.md) | The PowerPoint parity program; export keeps untouched slides byte for byte | Accepted 2026-10-24; amended 2026-10-25 (ADR 717), 2026-10-29 (ADR 713); comment model superseded in part 2026-11-01 (engine ADR 1055) |
 | [712](712-two-level-masters-and-placeholders-as-overrides.md) | Two-level masters, every layout, placeholders as overrides; the Slide Master view; masters and layouts written back | Accepted 2026-10-29 |
 | [713](713-live-theme.md) | Live theme: theme colours as swatches by key, theme fonts on the root styles, one mutation per theme | Accepted 2026-10-29 |
 | [714](714-timeline-model-and-full-effect-set.md) | Timeline model and full effect set: the timing as a tree, a Rust player, layers composited on WebGPU, presets from PowerPoint | Accepted 2026-10-28; amended 2026-10-30 (motion paths on the canvas) |

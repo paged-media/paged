@@ -1,6 +1,7 @@
 # ADR 1020 — Range comments with threads
 
-- **Status:** Accepted 2026-10-29.
+- **Status:** Accepted 2026-10-29. Extended 2026-11-01 by [ADR 1055](1055-one-comment-model-for-every-module.md): a text range is one anchor of
+  several, and the threads live on the document.
 - **Scope:** rides protocol v78 as a rider. Extends [ADR 172](172-editorial-notes.md):
   InDesign's notes stay points in the text; a comment covers a range and holds a thread.
   Part of engine wave E3; tracked changes are [ADR 1040](1040-word-change-tracking.md).
@@ -51,3 +52,13 @@ of their own: no range, no replies, no resolved state.
   ranges only.
 - The margin band that shows the threads beside the page is the host's (editor ADR 300,
   extensions ADR 349).
+
+## Amendment (2026-11-01): a text range is one anchor among several
+
+[ADR 1055](1055-one-comment-model-for-every-module.md) makes comments one model for every module. What no longer holds: that a comment is
+anchored to text only, and that a comment lives only in a story. `Document.comments` holds every
+thread, and a thread's anchor is a text range, a text point, an item, a page point, a region or a
+module-owned cell address; a thread whose target is deleted is orphaned, not deleted. What holds:
+the per-run ids of this record stay the mechanism that makes a text anchor follow its text, the
+text-range operations are 1055's operations with a text-range anchor, and a range comment whose
+text is deleted still reads without a range.

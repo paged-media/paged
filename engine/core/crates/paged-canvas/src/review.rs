@@ -432,6 +432,72 @@ pub(crate) fn comment_rows(story_id: &str, story: &paged_model::Story) -> Vec<Co
     out
 }
 
+/// A story's editorial notes (engine ADRs 172 and 1055) as comment rows of
+/// kind `note`: an InDesign `<Note>` is a single, unthreaded annotation at a
+/// point of the story, so it lists beside the threads without a thread of its
+/// own. The row's `start`/`end` are the note's story offset (its marker); a
+/// note inside a table cell has none (the cell's text has no story offset
+/// here). `author` is `UserName`, `date` the creation date.
+pub(crate) fn note_rows(story_id: &str, story: &paged_model::Story) -> Vec<CommentSummary> {
+    fn row(story_id: &str, n: &paged_model::Note, at: Option<u32>) -> CommentSummary {
+        CommentSummary {
+            id: n.id.clone(),
+            story_id: story_id.to_string(),
+            parent_id: None,
+            start: at,
+            end: at,
+            anchor_text: String::new(),
+            text: n.text.replace('\r', "\n"),
+            author: n.user_name.clone(),
+            initials: None,
+            date: n.creation_date.clone(),
+            resolved: false,
+            thread_id: None,
+            anchor: None,
+            thread_kind: Some("note".to_string()),
+            person: None,
+            modified: n.modification_date.clone(),
+            orphaned: false,
+            source: None,
+            page: None,
+            at: None,
+        }
+    }
+    fn in_table(story_id: &str, para: &paged_model::Paragraph, out: &mut Vec<CommentSummary>) {
+        let Some(table) = &para.table else { return };
+        for cell in &table.cells {
+            for p in &cell.paragraphs {
+                out.extend(p.notes.iter().map(|n| row(story_id, n, None)));
+                in_table(story_id, p, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    let mut pos = 0u32;
+    for para in &story.paragraphs {
+        let markers: Vec<u32> = para
+            .runs
+            .iter()
+            .flat_map(|r| r.text.chars())
+            .enumerate()
+            .filter(|(_, c)| *c == paged_model::NOTE_MARKER)
+            .map(|(i, _)| i as u32)
+            .collect();
+        let one_each = markers.len() == para.notes.len();
+        for (k, n) in para.notes.iter().enumerate() {
+            let local = if one_each { markers[k] } else { n.anchor };
+            out.push(row(story_id, n, Some(pos + local)));
+        }
+        in_table(story_id, para, &mut out);
+        pos += para
+            .runs
+            .iter()
+            .map(|r| r.text.chars().count() as u32)
+            .sum::<u32>();
+    }
+    out
+}
+
 /// The anchor of a document thread as the wire names it.
 fn anchor_spec(a: &paged_model::CommentAnchor) -> paged_mutate::operation::CommentAnchorSpec {
     use paged_model::CommentAnchor as A;

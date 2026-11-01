@@ -86,6 +86,7 @@ mod minted_page_names;
 mod model_part;
 mod native_skeleton_growth;
 mod nested_group_transform;
+mod note_comments;
 mod note_ops;
 mod object_model_targets;
 mod on_master;
