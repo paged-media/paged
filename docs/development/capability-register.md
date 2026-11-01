@@ -121,8 +121,10 @@ slide's adjust handles on `contribute.overlay`; doc's word count.
 - **doc:** shapes (`dml-geom`), picture crop (`srcRect`), recolour, charts, SmartArt, drop caps,
   OpenType features, embedded fonts, equations.
 - **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.
-- **slide:** hyphenation (forced off), bullet font/colour/size, fields beyond `slidenum`,
-  autofit, date/time fields.
+- **slide:** autofit (stored `fontScale` is applied as fixed values). Done and checked against PowerPoint:
+  date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
+  font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
+  right: PowerPoint does not hyphenate.
 - **all:** path tools in every context (`CONTEXT_SHARED_TOOL_IDS` is Free Transform only);
   image filters as `actions@1` steps on any picture; barcode insert; ML service and door.
 
