@@ -103,10 +103,14 @@ function effectKinds(root) {
       "utf8",
     ),
   );
-  return (catalog.effectKinds ?? []).map((k) => ({
-    command: `paged.effect.add.${k.kind}`,
-    path: `Object/Effects/${EFFECT_SEGMENTS[k.category] ?? k.category}/${k.title}`,
-  }));
+  // Stroke styles (brush, width profile) are the Brushes panel's, not the
+  // Effect menu's rows (the menu filters `strokeStyle` kinds out).
+  return (catalog.effectKinds ?? [])
+    .filter((k) => !k.strokeStyle)
+    .map((k) => ({
+      command: `paged.effect.add.${k.kind}`,
+      path: `Object/Effects/${EFFECT_SEGMENTS[k.category] ?? k.category}/${k.title}`,
+    }));
 }
 
 /** Sites the evaluator cannot resolve, on purpose. Keyed by
