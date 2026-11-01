@@ -56,6 +56,7 @@ import {
   createActionRegistry,
   createDataProviderRegistry,
   createDataRegistry,
+  createCommentAnchorRegistry,
   createMlRegistry,
 } from "@paged-media/plugin-sdk";
 import type { CanvasClient } from "@paged-media/client";
@@ -288,6 +289,10 @@ export function createEditorHostOptions(
   // service registers its providers (Tier-A models, the local image host)
   // into it.
   const ml = createMlRegistry();
+  // Extensions ADR 1101: the ONE registry of comment anchor resolvers; the
+  // canvas's comment pins ask it where a module's address (a sheet's cell)
+  // points, and every bundle host contributes into it.
+  const commentAnchors = createCommentAnchorRegistry();
 
   const shared: Omit<CreateBundleHostOptions, "console"> = {
     shell,
@@ -313,6 +318,8 @@ export function createEditorHostOptions(
     actions,
     // Flips supports("ml.<capability>@1") while a provider is healthy.
     ml,
+    // Flips supports("contribute.commentAnchor@1").
+    commentAnchors,
     // ADR 023 phase A/C — the app's ONE binding-provider registry (host
     // panels read the same instance).
     bindingProviders: deps.bindingProviders,

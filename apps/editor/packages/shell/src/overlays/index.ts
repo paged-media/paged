@@ -57,6 +57,8 @@ export {
   COMMENTS_PANEL,
   initialsOf as pinInitialsOf,
   pinsOf,
+  setCommentAnchorLookup,
+  type CommentAnchorLookup,
   type CommentPin,
 } from "./comment-pins";
 export { tableCellOverlayContribution } from "./table-cell-overlay";
