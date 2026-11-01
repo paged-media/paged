@@ -28,6 +28,7 @@ use zip::write::SimpleFileOptions;
 
 mod first_fit;
 mod objects;
+mod reach;
 mod structure;
 pub use first_fit::{
     first_fit_cases, first_fit_cases_json, first_fit_docx, FirstFitCase, CHAR_PT,
@@ -37,6 +38,10 @@ pub use objects::{
     float_cases, objects_floats_docx, objects_languages_docx, objects_nested_tables_docx,
     objects_table_look_docx, objects_text_boxes_docx, FLOAT_PAGE_PARAGRAPHS, FLOAT_SIZE_PT,
     LANGUAGE_CASES, TABLE_LOOK_CASES, TEXT_BOX_LINES,
+};
+pub use reach::{
+    crop_png, drop_cap_docx, drop_cap_paragraphs, picture_crop_docx, CROP_CASES, CROP_PNG_H,
+    CROP_PNG_W, DROP_CAP_FILLER,
 };
 pub use structure::{structure_docx, STRUCTURE_NOTES};
 

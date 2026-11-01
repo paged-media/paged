@@ -68,6 +68,8 @@ fn main() {
         "objects-text-boxes" => docx_conformance::objects_text_boxes_docx(),
         "objects-nested-tables" => docx_conformance::objects_nested_tables_docx(),
         "objects-table-look" => docx_conformance::objects_table_look_docx(),
+        "drop-cap" => docx_conformance::drop_cap_docx(),
+        "picture-crop" => docx_conformance::picture_crop_docx(),
         "objects-languages" => docx_conformance::objects_languages_docx(),
         _ => docx_conformance::memo_docx(),
     };
