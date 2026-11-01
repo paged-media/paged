@@ -33,6 +33,13 @@
 //!   describes (what the renderer draws, what IDML export writes, what
 //!   `expandAppearance` keeps).
 //!
+//! The stroke styles (engine ADR 1053) are vector entries too: a width
+//! profile and the Art, Scatter, Pattern and Bristle brushes draw the
+//! item's STROKE as artwork along the path ([`stroke_style`]); the
+//! outline they return is filled with the stroke's paint, and a caller
+//! that keeps the item's fill draws the fill from the source outline
+//! (`bake::fill_part_*`).
+//!
 //! Everything is deterministic: the random effects draw from their own
 //! seed, never from the clock or the item.
 
@@ -44,6 +51,7 @@ pub mod path;
 pub mod rng;
 pub mod scribble;
 pub mod shape;
+pub mod stroke_style;
 pub mod warp;
 
 use std::sync::Arc;
@@ -117,6 +125,33 @@ pub fn apply_effect(shape: &Shape, effect: &Effect, ctx: &Context, paint: &mut P
             scribble::scribble(shape, p, 0)
         }
         Effect::ConvertToShape(p) => path::convert_to_shape(shape, p),
+        Effect::WidthProfile(p) => stroke_styled(shape, ctx, paint, |stroke| {
+            stroke_style::width_outline(shape, p, stroke)
+        }),
+        Effect::Brush(p) => stroke_styled(shape, ctx, paint, |stroke| {
+            stroke_style::brush(shape, p, stroke, None)
+        }),
+        _ => shape.clone(),
+    }
+}
+
+/// A stroke style's outline, which takes the stroke's place: the item's
+/// stroke once (an outline already filled with the stroke's paint has
+/// none, and an item that strokes nothing draws no stroke style).
+fn stroke_styled(
+    shape: &Shape,
+    ctx: &Context,
+    paint: &mut PaintRole,
+    draw: impl FnOnce(&StrokeStyle) -> Option<Shape>,
+) -> Shape {
+    match (ctx.stroke, *paint) {
+        (Some(stroke), PaintRole::Keep) => match draw(&stroke) {
+            Some(out) => {
+                *paint = PaintRole::StrokeAsFill;
+                out
+            }
+            None => shape.clone(),
+        },
         _ => shape.clone(),
     }
 }
@@ -133,10 +168,23 @@ pub fn apply_stack(source: &Shape, stack: &[EffectEntry], ctx: &Context) -> Opti
     }
     let key = cache::key(&[source], &entries, ctx);
     Some(cache::get_or_insert(key, || {
+        // A width profile and a brush combine: the brush is as wide as
+        // the profile says, and the profile draws nothing of its own.
+        let profile = entries.iter().find_map(|e| match &e.effect {
+            Effect::WidthProfile(p) => Some(p),
+            _ => None,
+        });
+        let brushed = entries.iter().any(|e| matches!(e.effect, Effect::Brush(_)));
         let mut paint = PaintRole::Keep;
         let mut shape = source.clone();
         for e in &entries {
-            shape = apply_effect(&shape, &e.effect, ctx, &mut paint);
+            shape = match &e.effect {
+                Effect::WidthProfile(_) if brushed => shape,
+                Effect::Brush(p) => stroke_styled(&shape, ctx, &mut paint, |stroke| {
+                    stroke_style::brush(&shape, p, stroke, profile)
+                }),
+                other => apply_effect(&shape, other, ctx, &mut paint),
+            };
         }
         Effected { shape, paint }
     }))

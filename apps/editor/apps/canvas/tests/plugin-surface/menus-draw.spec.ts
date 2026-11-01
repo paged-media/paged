@@ -19,7 +19,7 @@
 
 // PLUGIN MENUS — paged.draw (modules/draw/packages/draw-bundle/src/menu.ts).
 //
-// A hundred and five entries: most under the Draw menu (folded into Plugins ▸
+// A hundred and nine entries: most under the Draw menu (folded into Plugins ▸
 // Draw, and shown as a context menu while artwork is selected), the
 // insert verbs filed under Object (Arc…, Spiral…, Rectangular grid…, Polar
 // grid…, Star…, Flare…) beside Rasterize…, Puppet warp and Perspective, the
@@ -424,6 +424,61 @@ test.describe.serial("plugin menus — paged.draw", () => {
       { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
     ]);
     expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  // WP6.4 — brushes and width profiles as live stroke styles (draw ADR
+  // 366): the panel raisers, and the two verbs that need no panel row.
+  const raisesBrushes = async (row: string, command: string) => {
+    await expectGreyedAndInert(bare, row);
+    const out = await clickEntry(live, row, command);
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.brushes" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  };
+
+  test("Draw/Stroke/Brushes… — raises the Brushes panel", async () => {
+    covers("menu:Draw/Stroke/Brushes…");
+    await raisesBrushes(
+      "Draw/Stroke/Brushes…",
+      "media.paged.draw.command.brushes",
+    );
+  });
+
+  test("Draw/Stroke/Brush options… — raises the Brushes panel at its options", async () => {
+    covers("menu:Draw/Stroke/Brush options…");
+    await raisesBrushes(
+      "Draw/Stroke/Brush options…",
+      "media.paged.draw.command.brushOptions",
+    );
+  });
+
+  test("Draw/Stroke/Remove brush — runs removeBrush; the rectangles carry no brush, so it changes nothing", async () => {
+    covers("menu:Draw/Stroke/Remove brush");
+    await expectGreyedAndInert(bare, "Draw/Stroke/Remove brush");
+    const out = await clickEntry(
+      live,
+      "Draw/Stroke/Remove brush",
+      "media.paged.draw.command.removeBrush",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "nothing selected has a brush").toBe(out.before);
+  });
+
+  test("Draw/Stroke/New brush from selection — keeps the artwork as a document brush; the page is unchanged", async () => {
+    covers("menu:Draw/Stroke/New brush from selection");
+    await expectGreyedAndInert(bare, "Draw/Stroke/New brush from selection");
+    const out = await clickEntry(
+      live,
+      "Draw/Stroke/New brush from selection",
+      "media.paged.draw.command.newBrush",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "a brush library write is not a page edit").toBe(
       out.before,
     );
   });

@@ -387,6 +387,9 @@ pub trait AppearanceParts: AppearanceBearing + Clone {
     fn own_fill_layer(&self) -> PaintLayer;
     /// The item's own stroke, as a layer.
     fn own_stroke_layer(&self) -> PaintLayer;
+    /// The item's object effect stack (engine ADR 1053: a part of an item
+    /// with a stroke style takes the item's vector entries).
+    fn effect_stack_mut(&mut self) -> &mut Vec<crate::effect_stack::EffectEntry>;
 }
 
 const NONE_SWATCH: &str = "Swatch/None";
@@ -451,6 +454,10 @@ macro_rules! appearance_parts {
                     _ => {}
                 }
                 x
+            }
+
+            fn effect_stack_mut(&mut self) -> &mut Vec<crate::effect_stack::EffectEntry> {
+                &mut self.effect_stack
             }
 
             fn base_item(&self, fill: bool, stroke: bool, content: bool) -> Self {

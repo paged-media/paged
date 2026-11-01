@@ -144,6 +144,8 @@ const PANELS = [
   "media.paged.draw.panel.imageTrace",
   "media.paged.draw.panel.recolorArtwork",
   "media.paged.draw.panel.colorGuide",
+  // WP6.4 — brushes and width profiles as live stroke styles.
+  "media.paged.draw.panel.brushes",
   "media.paged.draw.panel.properties",
 ] as const;
 
@@ -297,6 +299,13 @@ const COMMANDS = [
   "media.paged.draw.command.recolorArtwork",
   "media.paged.draw.command.recolorArtworkOptions",
   "media.paged.draw.command.applyGuideColor",
+  // WP6.4 — brushes and width profiles as live stroke styles.
+  "media.paged.draw.command.applyBrush",
+  "media.paged.draw.command.removeBrush",
+  "media.paged.draw.command.brushOptions",
+  "media.paged.draw.command.brushes",
+  "media.paged.draw.command.newBrush",
+  "media.paged.draw.command.applyWidthProfile",
   // Object ▸ Rasterize (extensions ADR 338) and its "…" raiser.
   "media.paged.draw.command.rasterize",
   "media.paged.draw.command.rasterizeOptions",
@@ -414,6 +423,7 @@ const PANEL_MARKER: Record<string, string> = {
   "media.paged.draw.panel.imageTrace": "[data-draw-image-trace-panel]",
   "media.paged.draw.panel.recolorArtwork": "[data-draw-recolor-panel]",
   "media.paged.draw.panel.colorGuide": "[data-draw-color-guide-panel]",
+  "media.paged.draw.panel.brushes": "[data-draw-brushes-panel]",
   // ADR 323 — object properties as host PropertyFields (a schema panel).
   "media.paged.draw.panel.properties":
     '[data-schema-panel="media.paged.draw.panel.properties"]',
@@ -755,8 +765,8 @@ test.describe("plugin surface · paged.draw", () => {
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(46);
-    expect(PANELS).toHaveLength(12);
-    expect(COMMANDS).toHaveLength(162);
+    expect(PANELS).toHaveLength(13);
+    expect(COMMANDS).toHaveLength(168);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────

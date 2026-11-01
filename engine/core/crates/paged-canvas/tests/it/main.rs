@@ -130,6 +130,7 @@ mod snapshot_v2;
 mod spread_membership_reads;
 mod spread_transform_hit;
 mod story_grow_rule_read;
+mod stroke_styles;
 mod style_paths_word_lowering;
 mod style_properties;
 mod svg_io;

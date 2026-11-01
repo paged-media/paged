@@ -30241,6 +30241,239 @@
         }
       ],
       "vector": true
+    },
+    {
+      "kind": "widthProfile",
+      "title": "Width profile",
+      "category": "stroke",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "widthPoints",
+          "title": "Width points",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "list",
+              "of": {
+                "kind": "number"
+              }
+            }
+          }
+        }
+      ],
+      "vector": true,
+      "strokeStyle": true
+    },
+    {
+      "kind": "brush",
+      "title": "Brush",
+      "category": "stroke",
+      "indesign": false,
+      "targets": [
+        "object"
+      ],
+      "blend": false,
+      "params": [
+        {
+          "field": "brushType",
+          "title": "Brush type",
+          "type": {
+            "kind": "enum",
+            "members": [
+              "art",
+              "scatter",
+              "pattern",
+              "bristle"
+            ]
+          },
+          "default": "art"
+        },
+        {
+          "field": "artNodes",
+          "title": "Artwork",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "list",
+              "of": {
+                "kind": "number"
+              }
+            }
+          }
+        },
+        {
+          "field": "artStarts",
+          "title": "Artwork contours",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "number"
+            }
+          }
+        },
+        {
+          "field": "artClosed",
+          "title": "Closed contours",
+          "type": {
+            "kind": "list",
+            "of": {
+              "kind": "bool"
+            }
+          }
+        },
+        {
+          "field": "scalePct",
+          "title": "Size",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 1.0,
+            "max": 10000.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "spacingPct",
+          "title": "Spacing",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 1.0,
+            "max": 10000.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "scatterPct",
+          "title": "Scatter",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 10000.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "rotateDeg",
+          "title": "Rotation",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": -360.0,
+            "max": 360.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "rotateVariationDeg",
+          "title": "Rotation variation",
+          "type": {
+            "kind": "number",
+            "unit": "deg"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 180.0
+          },
+          "default": 0.0
+        },
+        {
+          "field": "sizeMinPct",
+          "title": "Smallest size",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.0,
+            "max": 100.0
+          },
+          "default": 100.0
+        },
+        {
+          "field": "flipAlong",
+          "title": "Flip along",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "flipAcross",
+          "title": "Flip across",
+          "type": {
+            "kind": "bool"
+          },
+          "default": false
+        },
+        {
+          "field": "tileAspect",
+          "title": "Tile proportion",
+          "type": {
+            "kind": "number"
+          },
+          "range": {
+            "min": 0.01,
+            "max": 100.0
+          },
+          "default": 1.0
+        },
+        {
+          "field": "bristles",
+          "title": "Bristles",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 200.0
+          },
+          "default": 24.0
+        },
+        {
+          "field": "bristleThicknessPct",
+          "title": "Bristle thickness",
+          "type": {
+            "kind": "number",
+            "unit": "percent"
+          },
+          "range": {
+            "min": 0.1,
+            "max": 100.0
+          },
+          "default": 12.0
+        },
+        {
+          "field": "seed",
+          "title": "Seed",
+          "type": {
+            "kind": "number",
+            "integer": true
+          },
+          "range": {
+            "min": 0.0,
+            "max": 4294967295.0
+          },
+          "default": 0.0
+        }
+      ],
+      "vector": true,
+      "strokeStyle": true
     }
   ],
   "effectCategories": [

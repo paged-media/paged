@@ -29,6 +29,7 @@ their status says so.
 | [363](363-distortion-tools.md) | The distortion tools rewrite paths; their maths is pure warp geometry; the grid is a view setting | Accepted 2026-10-24 |
 | [364](364-interchange-rides-the-engines-doors.md) | Interchange rides the engine's doors: one SVG reader and writer, DXF through SVG, AI and EPS through the host | Accepted 2026-10-28 (amends 357) |
 | [365](365-live-symbols-on-the-engine-node.md) | Live symbols run on the engine's instance node; the Symbolism tools change what an instance carries | Accepted 2026-10-29 |
+| [366](366-brushes-and-width-are-live-stroke-styles.md) | Brushes and width points are live stroke styles: the Width tool, the Paintbrush's live result and the Brushes panel write the engine's entries | Accepted 2026-10-31 |
 | [367](367-envelopes-and-graphic-styles-on-native-appearance.md) | Draw's appearance runs on the engine: the host panel, envelopes as stack entries, graphic styles on native appearance | Accepted 2026-10-31 (amends 354, 355) |
 | [368](368-pattern-options-save-an-engine-pattern-swatch.md) | Pattern Options save an engine pattern swatch; the tile field stays as pattern artwork | Accepted 2026-10-29 |
 

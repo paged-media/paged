@@ -217,26 +217,35 @@ const EFFECT_ROWS: readonly string[] = (
       ),
       "utf8",
     ),
-  ) as { effectKinds: Array<{ title: string; category: string }> }
-).effectKinds.map(
-  (k) =>
-    `Object/Effects/${
-      (
-        {
-          stylize: "Stylize",
-          blur: "Blur",
-          noise: "Noise",
-          color: "Color",
-          distortAndTransform: "Distort & Transform",
-          path: "Path",
-          pathfinder: "Pathfinder",
-          warp: "Warp",
-          convertToShape: "Convert to Shape",
-          rasterize: "Rasterize",
-        } as Record<string, string>
-      )[k.category] ?? k.category
-    }/${k.title}`,
-);
+  ) as {
+    effectKinds: Array<{
+      title: string;
+      category: string;
+      strokeStyle?: boolean;
+    }>;
+  }
+).effectKinds
+  // The stroke styles (engine ADR 1053) have no Effect menu row.
+  .filter((k) => !k.strokeStyle)
+  .map(
+    (k) =>
+      `Object/Effects/${
+        (
+          {
+            stylize: "Stylize",
+            blur: "Blur",
+            noise: "Noise",
+            color: "Color",
+            distortAndTransform: "Distort & Transform",
+            path: "Path",
+            pathfinder: "Pathfinder",
+            warp: "Warp",
+            convertToShape: "Convert to Shape",
+            rasterize: "Rasterize",
+          } as Record<string, string>
+        )[k.category] ?? k.category
+      }/${k.title}`,
+  );
 
 const HOST_TOPS = [
   "File",
