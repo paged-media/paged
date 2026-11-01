@@ -2,7 +2,8 @@
 
 - **Status:** Accepted 2026-10-24. Amends [ADR 704](704-pptx-export-regenerates-slides.md)
   (identity per slide, not only per deck) and [ADR 703](703-slide-data-storage.md) (item
-  metadata).
+  metadata). The comment model of its 2026-10-25 amendment is superseded in part (2026-11-01) by
+  engine ADR 1055.
 - **Scope:** `pptx-export`, `slide-native`, `slide-resolve`, `slide-js`,
   `packages/slide-bundle` (`deck-export.ts`, `activate.ts`, manifest)
 

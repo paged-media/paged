@@ -10,13 +10,18 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
 
 - **All PPTX semantics live in Rust** (`pptx-*`, `slide-*` crates, one wasm module). TypeScript
   packages are glue: bundle lifecycle, panels, file input, slideshow UI.
-- **The engine at runtime only through the host contract.** Two crates build on the engine's
-  model (`paged-model`, `paged-scene`, `paged-store`, path dependencies on `engine/core/crates`
-  at the same commit): `slide-native` writes the deck (ADR 708), `pptx-export` reads the
-  document back (ADR 711). No other engine crate, no git dependency; `deny.toml` denies git
-  sources. The one other module reached is paged.sheet, by path, in Rust only: its number
-  formats for chart labels (ADR 710) and its workbook engine for live charts (`slide-sheet`,
-  ADR 715).
+- **BUILT-IN, PART OF THE CORE (PM-0017).** The Rust crates may path-depend on the engine
+  (`engine/core/crates`), on `platform/shared/*` and on other built-ins, at the same commit and
+  without cycles (declared in `moon.yml`); there is no git dependency (`deny.toml` denies git
+  sources). Today `slide-native` writes the deck with the engine's model crates (`paged-model`,
+  `paged-scene`, `paged-store`; ADR 708), `pptx-export` reads the document back (ADR 711), and
+  paged.sheet is reached by path for its number formats (chart labels, ADR 710) and its workbook
+  engine (live charts, `slide-sheet`, ADR 715). At runtime the open document is reached through
+  the host (`host.document`, `host.nativeDocument`); the TypeScript packages import only
+  `plugin-api`, `plugin-sdk` and `platform/shared/*` (the lint rule in `/bunfig.toml`, PM-0003).
+  A capability another module or the engine also needs belongs in the engine or in
+  `platform/shared`, not here (PM-0014, PM-0017); the register is
+  `docs/development/capability-register.md`.
 - **The OOXML foundation is shared** (`platform/shared/ooxml`, doc ADR 607): the package
   read and its memory budget, rels, the XML helpers and DrawingML colour. Change it there;
   doc and sheet build and test against the same crate.
