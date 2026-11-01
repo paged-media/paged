@@ -276,6 +276,7 @@ pub fn skeleton_document_with(
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: None,
     }
 }
 

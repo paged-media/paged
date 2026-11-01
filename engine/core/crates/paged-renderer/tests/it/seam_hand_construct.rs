@@ -60,6 +60,7 @@ fn build_document_accepts_a_hand_constructed_empty_document() {
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: None,
     };
 
     let built = pipeline::build_document(&document, &PipelineOptions::default())
@@ -111,6 +112,7 @@ fn build_document_accepts_a_hand_constructed_single_page_document() {
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: None,
     };
 
     let built = pipeline::build_document(&document, &PipelineOptions::default())

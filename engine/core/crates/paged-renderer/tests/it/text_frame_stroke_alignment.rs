@@ -74,6 +74,7 @@ fn document(items: &str) -> paged_scene::Document {
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: None,
     }
 }
 

@@ -340,6 +340,7 @@ pub fn import_idml_archive(archive: &SourceArchive) -> Result<paged_scene::Docum
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: None,
     };
     restore_patterns(&mut document);
     document.rebuild_indexes();

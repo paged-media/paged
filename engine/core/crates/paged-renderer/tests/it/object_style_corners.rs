@@ -67,6 +67,7 @@ fn document(rect_attrs: &str, styles: StyleSheet) -> paged_scene::Document {
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
+        theme: None,
     }
 }
 
