@@ -237,7 +237,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 275: ADR 1048 added a frame's gradient mesh or freeform gradient.
         // 286: ADRs 1041 / 1051 / 1052 added the direction, script and content
         // control paths.
-        286,
+        // 287: ADR 1027 added a movie or sound frame's medium.
+        287,
         "the advertised roster changed; move the count with the decision"
     );
 }

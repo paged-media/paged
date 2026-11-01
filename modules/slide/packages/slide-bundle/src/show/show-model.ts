@@ -36,6 +36,7 @@
 // comes a black end screen ("End of slide show"), and the next advance
 // ends the show; with `loop` the show starts over instead, until Esc.
 
+import type { ShowMedia } from "../media.js";
 import type { EffectInfo, Timing } from "../anim/model.js";
 import type { ScenePlan } from "./scene.js";
 
@@ -64,6 +65,11 @@ export interface ShowSlide {
   /** Its animations: the timing, its effects as listed, and how its page
    *  splits into layers. */
   anim?: SlideAnim | null;
+  /** Its video and audio (slide ADR 718); absent: none. */
+  media?: ShowMedia[];
+  /** Frames not drawn into the slide image: media hidden while they do
+   *  not play. */
+  hide?: string[];
 }
 
 /** A slide's animations as the show plays them. */

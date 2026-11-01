@@ -43,14 +43,18 @@ import type { SlideEngine } from "./engine.js";
 import {
   copyFormat,
   pasteFormat,
+  PainterMode,
   type CopiedFormat,
 } from "./format-painter.js";
 import { CONTENT } from "./messages.js";
 import { insertPicture, PICTURE_ACCEPT } from "./pictures.js";
+import { AUDIO_ACCEPT, insertMedia, VIDEO_ACCEPT } from "./media.js";
 import { setPointText, smartArtAt } from "./smartart.js";
 
 import insertPictureArgs from "../schema/insert-picture.args.json" with { type: "json" };
 import insertPictureResult from "../schema/insert-picture.result.json" with { type: "json" };
+import insertMediaArgs from "../schema/insert-media.args.json" with { type: "json" };
+import insertMediaResult from "../schema/insert-media.result.json" with { type: "json" };
 import formatArgs from "../schema/format.args.json" with { type: "json" };
 import appliedResult from "../schema/applied.result.json" with { type: "json" };
 import presentedResult from "../schema/presented.result.json" with { type: "json" };
@@ -66,8 +70,12 @@ const C = `${P}.command`;
 export const CONTENT_CMD = {
   insertPicture: `${C}.insertPicture`,
   insertIcon: `${C}.insertIcon`,
+  insertVideo: `${C}.insertVideo`,
+  insertAudio: `${C}.insertAudio`,
   copyFormat: `${C}.copyFormat`,
   pasteFormat: `${C}.pasteFormat`,
+  formatPainter: `${C}.formatPainter`,
+  formatPainterOff: `${C}.formatPainterOff`,
   smartArtText: `${C}.smartArtText`,
 } as const;
 
@@ -82,6 +90,9 @@ export const CONTENT_TYPED = {
 export const CONTENT_MENU: [string, string, string, number][] = [
   ["Insert/Pictures…", CONTENT_CMD.insertPicture, "objects", 41],
   ["Insert/Icons…", CONTENT_CMD.insertIcon, "objects", 42],
+  ["Slide/Format Painter", CONTENT_CMD.formatPainter, "format", 5],
+  ["Insert/Video…", CONTENT_CMD.insertVideo, "objects", 43],
+  ["Insert/Audio…", CONTENT_CMD.insertAudio, "objects", 44],
   ["Slide/Copy formatting", CONTENT_CMD.copyFormat, "format", 10],
   ["Slide/Paste formatting", CONTENT_CMD.pasteFormat, "format", 20],
   ["Slide/SmartArt text pane", CONTENT_CMD.smartArtText, "format", 30],
@@ -105,6 +116,8 @@ export interface ContentDeps {
   activePage(): string | null;
   /** Raise the SmartArt text pane; false where there is no panel door. */
   openTextPane(): boolean;
+  /** Raise the Icons panel; false where there is none (the picker then). */
+  openIconsPanel?(): boolean;
 }
 
 /** The format painter's clipboard: what Copy formatting took. */
@@ -192,7 +205,7 @@ async function placePicture(
 }
 
 /** Pick a file and insert it (the palette's Insert ▸ Pictures / Icons). */
-async function pickAndPlace(
+export async function pickAndPlace(
   host: BundleHost,
   deps: ContentDeps,
   icon: boolean,
@@ -205,6 +218,57 @@ async function pickAndPlace(
   });
   if (!file) return null; // cancelled
   return placePicture(host, deps, file.bytes, {}, icon);
+}
+
+/** Insert the medium `bytes` (named `name`) on the slide `slide`
+ *  (default: the active one), slide ADR 718. */
+async function placeMedia(
+  host: BundleHost,
+  deps: ContentDeps,
+  bytes: Uint8Array,
+  name: string,
+  a: {
+    slide?: string;
+    x?: number;
+    y?: number;
+    w?: number;
+    h?: number;
+    play?: "onClick" | "auto";
+  },
+): Promise<string> {
+  const pageId = a.slide ? pageIdOf(a.slide) : deps.activePage();
+  if (!pageId) throw new Error("failed: no slide is active");
+  const size = await pageSize(host, pageId);
+  const center: [number, number] | undefined =
+    a.x !== undefined && a.y !== undefined ? [a.x, a.y] : undefined;
+  const id = await insertMedia(host, {
+    bytes,
+    name,
+    pageId,
+    pageSize: size,
+    center,
+    w: a.w,
+    h: a.h,
+    play: a.play,
+  });
+  if (!id) throw new Error("failed: the medium could not be inserted");
+  return fromElementId(id);
+}
+
+/** Pick a video or audio file and insert it (Insert ▸ Video / Audio). */
+async function pickAndPlaceMedia(
+  host: BundleHost,
+  deps: ContentDeps,
+  kind: "video" | "audio",
+): Promise<string | null> {
+  if (!host.supports("shell.pickFile@1"))
+    throw new Error("unavailable: this host has no file picker");
+  const [file] = await host.shell.pickFile({
+    accept: [...(kind === "video" ? VIDEO_ACCEPT : AUDIO_ACCEPT)],
+    multiple: false,
+  });
+  if (!file) return null; // cancelled
+  return placeMedia(host, deps, file.bytes, file.name, {});
 }
 
 /** The typed commands of slide W4's content verbs. */
@@ -228,6 +292,20 @@ export function contentTypedCommands(
     if (!address) throw new Error("cancelled: no file was chosen");
     return { picture: address };
   };
+  type MediaArgs = PictureArgs & { name?: string; play?: "onClick" | "auto" };
+  const medium = (kind: "video" | "audio") => async (a: MediaArgs) => {
+    const address = a.data
+      ? await placeMedia(
+          host,
+          deps,
+          base64ToBytes(a.data),
+          a.name ?? (kind === "video" ? "video.mp4" : "audio.m4a"),
+          a,
+        )
+      : await pickAndPlaceMedia(host, deps, kind);
+    if (!address) throw new Error("cancelled: no file was chosen");
+    return { media: address };
+  };
   const diagram = async (ref: string) => {
     const id = elementOf(ref);
     const art = id ? await smartArtAt(host, id) : null;
@@ -248,6 +326,20 @@ export function contentTypedCommands(
       insertPictureArgs,
       insertPictureResult,
       picture(true),
+    ),
+    typed(
+      CONTENT_CMD.insertVideo,
+      t(CONTENT.insertVideo),
+      insertMediaArgs,
+      insertMediaResult,
+      medium("video"),
+    ),
+    typed(
+      CONTENT_CMD.insertAudio,
+      t(CONTENT.insertAudio),
+      insertMediaArgs,
+      insertMediaResult,
+      medium("audio"),
     ),
     typed(
       CONTENT_CMD.copyFormat,
@@ -364,8 +456,17 @@ export function contributeContentCommands(
   add(CONTENT_CMD.insertPicture, t(CONTENT.insertPicture), slideActive, () =>
     pickAndPlace(host, deps, false),
   );
+  // Insert ▸ Icons… opens the Icons panel (the bundled icons and a file),
+  // or, without one, the file picker (ADR 723).
   add(CONTENT_CMD.insertIcon, t(CONTENT.insertIcon), slideActive, () =>
-    pickAndPlace(host, deps, true),
+    deps.openIconsPanel?.() ? null : pickAndPlace(host, deps, true),
+  );
+  const mediaActive = () => slideActive() && host.supports("document.media@1");
+  add(CONTENT_CMD.insertVideo, t(CONTENT.insertVideo), mediaActive, () =>
+    pickAndPlaceMedia(host, deps, "video"),
+  );
+  add(CONTENT_CMD.insertAudio, t(CONTENT.insertAudio), mediaActive, () =>
+    pickAndPlaceMedia(host, deps, "audio"),
   );
   add(
     CONTENT_CMD.copyFormat,
@@ -385,6 +486,76 @@ export function contributeContentCommands(
       if (clipboard.copied) await pasteFormat(host, clipboard.copied);
     },
   );
+  // The Format Painter (ADR 723): armed by the command, the next shape
+  // clicked takes the formatting; the command twice in quick succession
+  // (PowerPoint's double-click on the brush) keeps it on until Esc.
+  const painter = new PainterMode();
+  // The copy is read asynchronously; a click that comes before it is done
+  // waits for it.
+  let arming: Promise<void> = Promise.resolve();
+  let pending: Promise<void> | null = null;
+  add(
+    CONTENT_CMD.formatPainter,
+    t(CONTENT.formatPainter),
+    () => gates.deckOpen() && (painter.armed || hasSelection()),
+    async () => {
+      const now = Date.now();
+      // A second invoke while the first copy is still being read is the
+      // double-click: it waits for the painter to be armed, then locks it.
+      if (pending) {
+        await pending;
+        if (painter.armed) painter.invoke(null, null, now);
+        return;
+      }
+      if (painter.armed) {
+        painter.invoke(null, null, now);
+        return;
+      }
+      const source = host.selection.get()[0];
+      const arm = (async () => {
+        const copied = await copyFormat(host, source);
+        const mode = painter.invoke(
+          copied,
+          source ? String(source.id) : null,
+          now,
+        );
+        if (mode === "off")
+          host.log.info("paged.slide formatPainter: nothing is selected");
+        else host.log.info(t(CONTENT.formatPainterArmed));
+      })();
+      pending = arm;
+      arming = arm;
+      try {
+        await arm;
+      } finally {
+        pending = null;
+      }
+    },
+  );
+  add(
+    CONTENT_CMD.formatPainterOff,
+    t(CONTENT.formatPainterOff),
+    () => painter.armed,
+    () => painter.off(),
+  );
+  if (typeof host.selection?.onDidChange === "function")
+    handles.push(
+      host.selection.onDidChange((sel) => {
+        void arming
+          .then(() => {
+            const go = painter.take(sel.map((e) => String(e.id)));
+            if (!go) return;
+            const targets = sel.filter((e) =>
+              go.targets.includes(String(e.id)),
+            );
+            return pasteFormat(host, go.copied, targets);
+          })
+          .catch((err: unknown) =>
+            host.log.warn(`paged.slide formatPainter: ${String(err)}`),
+          );
+      }),
+    );
+  handles.push({ dispose: () => painter.off() });
   add(CONTENT_CMD.smartArtText, t(CONTENT.smartArtText), gates.deckOpen, () => {
     if (!deps.openTextPane())
       host.log.info("paged.slide smartArtText: this host cannot raise a panel");
@@ -394,6 +565,15 @@ export function contributeContentCommands(
       handles.push(host.contribute.menu({ path, command, group, order }));
   }
   if (gates.scopedKeys && host.supports("contribute.keybinding.scope@1")) {
+    // Esc puts a locked (or armed) painter down.
+    handles.push(
+      host.contribute.keybinding({
+        key: "escape",
+        command: CONTENT_CMD.formatPainterOff,
+        scope: { editContext: gates.deckContext },
+        when: () => painter.armed,
+      }),
+    );
     for (const [key, command] of FORMAT_KEYS) {
       const when = whens.get(command);
       if (!when) continue;

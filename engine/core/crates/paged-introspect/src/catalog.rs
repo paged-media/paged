@@ -882,6 +882,9 @@ property_paths! {
         // Engine ADR 1037 — the placed picture's filter stack; IDML has none
         // (the export keeps it in a label and reports it).
         FrameImageAdjustments => "frameImageAdjustments" : list_of("RasterOp", Wire::ImageAdjustments),
+        // Engine ADR 1027 — the medium a frame is a movie or sound of; IDML has
+        // none here (the export keeps it in a label and reports it).
+        FrameMedia => "frameMedia" : structure("MediaItem", Wire::Media),
         // Engine ADR 1007 — how a gradient stroke maps onto the stroke; IDML has no attribute.
         FrameGradientStrokeMode => "frameGradientStrokeMode" : enum_(STROKE_GRADIENT_MODES).default_text("Within"),
         // Engine ADRs 1007 and 1031 — the gradient fill's start, `[x, y]` in inner coordinates ([] = default).
@@ -1626,7 +1629,9 @@ mod tests {
         //
         // 275 -> 286: ADR 1041 — a frame's own pattern transform; ADR 1051 — the paragraph direction and the eight
         // script paths; ADR 1052 — a range's content control.
-        assert_eq!(cat.settable_paths.len(), 286, "settable path count drifted");
+        //
+        // 286 -> 287: ADR 1027 — a frame's medium (movie and sound items).
+        assert_eq!(cat.settable_paths.len(), 287, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

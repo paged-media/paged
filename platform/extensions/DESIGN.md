@@ -810,6 +810,17 @@ unknown paths. paged.draw's Star tool asks it before it inserts a live
 star (the plain polygon, then its points and inset in the same batch)
 instead of a plain path.
 
+`"document.media@1"` (extensions ADR 345, amendment 1, engine ADR 1027) is the media
+door. A movie or sound frame is a rectangle whose picture is its poster and
+whose `frameMedia` (a `MediaItem`: kind, a part or link source, trim, fades,
+play on click or automatically, loop, volume, hide while not playing) names
+its medium. `host.media.read(id)` answers `{ media, bytes, url }` (the part's
+bytes, or the link); `host.media.store(bytes, { mime })` keeps new media in
+the engine's shared, write-once folder `paged/core/media/` and answers the
+`{ type: "part", path }` source a `frameMedia` write names. The engine never
+plays a medium: a presentation surface (ADR 345) plays it in its own media
+element over the frame. Additive at protocol 78.
+
 `"document.importSvg@1"` and `"document.exportSvg@1"` (engine ADR 1031,
 protocol 77) are SVG in and out through the engine's `paged-svg`.
 `importSvg(bytes, { pageId?, origin?, scale?, text?, group? })` asks the

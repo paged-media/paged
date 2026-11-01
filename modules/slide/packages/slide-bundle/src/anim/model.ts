@@ -72,7 +72,24 @@ export interface EffectInfo {
   endMs: number;
   /** The pane can change it (its structure is one the engine writes). */
   editable: boolean;
+  /** Its motion path (slide fractions from where the shape stands). */
+  path?: string;
+  /** Path lock (`pathEditMode="fixed"`). */
+  pathLocked?: boolean;
 }
+
+/** One segment of a motion path (slide-anim `path::Seg`): absolute slide
+ *  fractions from where the shape stands. */
+export type PathSeg =
+  | { kind: "move"; to: [number, number] }
+  | { kind: "line"; to: [number, number] }
+  | {
+      kind: "curve";
+      c1: [number, number];
+      c2: [number, number];
+      to: [number, number];
+    }
+  | { kind: "close" };
 
 export interface EffectList {
   effects: EffectInfo[];
@@ -130,7 +147,8 @@ export type TimingEdit =
       presetId: number;
       presetSubtype?: number;
     }
-  | { kind: "paint"; from: TargetRef; to: TargetRef };
+  | { kind: "paint"; from: TargetRef; to: TargetRef }
+  | { kind: "path"; index: number; path?: string; locked?: boolean };
 
 /** A layer's state at one moment (slide-anim `LayerState`): about the
  *  layer's own centre, then moved by (dx, dy) pt. */

@@ -161,6 +161,7 @@ is not written yet.
 | [1022](1022-word-document-structure.md) | Word document structure: section first / odd / even masters and odd/even starts (amends 026), Word fields and F9, creating tables of contents, cross-references, bookmarks and index markers | Accepted 2026-10-25 |
 | [1025](1025-word-tables-split-rows-and-autofit.md) | Word tables: rows split across frames (`cantSplit` holds), autofit columns, indent, exact rows — behind a policy switch on the table | Accepted 2026-10-30 |
 | [1026](1026-masters-based-on-masters.md) | Masters based on masters (four deep, cycles drawn once), override lists and Override on the wire, page items as hyperlink sources | Accepted 2026-10-29 |
+| [1027](1027-movie-and-sound-items.md) | Movie and sound items: a frame whose poster the engine draws and whose medium a presentation plays | Accepted 2026-10-30 |
 | [1030](1030-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
 | [1031](1031-svg-in-and-out-through-paged-svg.md) | SVG in and out through `paged-svg` | Accepted 2026-10-24 |
 | [1032](1032-one-cms-with-intents-and-bpc.md) | One colour API with explicit intents and black-point compensation on every backend | Accepted 2026-10-24 |

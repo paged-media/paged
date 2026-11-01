@@ -128,6 +128,25 @@ pub fn wrap_document(
     fallback_width_pt: f32,
     fallback_height_pt: f32,
 ) -> Result<Vec<u8>, serde_json::Error> {
+    wrap_document_with_parts(
+        doc,
+        name,
+        fallback_width_pt,
+        fallback_height_pt,
+        &crate::BlobParts::new(),
+    )
+}
+
+/// [`wrap_document`] with more container parts: `parts` by full path, each
+/// under `paged/` (engine ADR 1027 — the media a movie or sound frame
+/// names, under `paged/core/media/`). A path outside `paged/` is left out.
+pub fn wrap_document_with_parts(
+    doc: &Document,
+    name: &str,
+    fallback_width_pt: f32,
+    fallback_height_pt: f32,
+    parts: &crate::BlobParts,
+) -> Result<Vec<u8>, serde_json::Error> {
     let (pgm, blobs) = crate::to_parts(doc)?;
     // InDesign's GeometricBounds order is "y0 x0 y1 x1".
     let bounds = format!("0 0 {fallback_height_pt} {fallback_width_pt}");
@@ -169,6 +188,15 @@ pub fn wrap_document(
     // compressed, and deflating it again costs time for nothing.
     for (path, bytes) in &blobs {
         put(path, bytes, true);
+    }
+    // More parts: STORED for the same reason (media is compressed).
+    for (path, bytes) in parts {
+        if path.starts_with("paged/")
+            && !blobs.contains_key(path)
+            && path != crate::DOCUMENT_PGM_PATH
+        {
+            put(path, bytes, true);
+        }
     }
 
     Ok(zip.finish().expect("zip finish").into_inner())

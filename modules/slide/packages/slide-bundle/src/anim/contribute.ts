@@ -39,6 +39,7 @@ import { AnimationAuthoring } from "./authoring.js";
 import type { EffectStart } from "./model.js";
 import { ANIMATIONS_PANEL_ID, makeAnimationsPanel } from "./pane.js";
 import { PreviewModel, previewOverlay } from "./preview.js";
+import { MotionPathModel, motionPathOverlay } from "./motion-path.js";
 import { idOf } from "./shapes.js";
 
 const PREFIX = "media.paged.slide";
@@ -430,6 +431,17 @@ export function contributeAnimations(
     preview.start(pageId);
   };
 
+  // The picked effect's motion path on the canvas (slide ADR 714,
+  // amendment 2026-10-30).
+  const motion = opts.overlay
+    ? new MotionPathModel(
+        host,
+        engine,
+        authoring,
+        (pageId) =>
+          store.list().find((s) => s.pageId === pageId)?.sizePt ?? null,
+      )
+    : null;
   if (opts.panel) {
     handles.push(
       host.contribute.panel({
@@ -439,6 +451,7 @@ export function contributeAnimations(
           authoring,
           preview: startPreview,
           painter: arm,
+          motionPath: (pageId, effect) => void motion?.show(pageId, effect),
         }),
         defaultDock: "right",
         // A star with motion lines.
@@ -452,6 +465,10 @@ export function contributeAnimations(
     handles.push(
       host.contribute.overlay(previewOverlay(host, engine, store, preview)),
     );
+    if (motion) {
+      handles.push(host.contribute.overlay(motionPathOverlay(motion)));
+      handles.push(motion);
+    }
   }
 
   if (host.supports("contribute.command@1")) {

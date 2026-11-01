@@ -570,3 +570,65 @@ fn a_linear_axis_starts_where_office_centres_it__feat__sheet_chart_native_effect
     assert_eq!(axis_start(&p, 30.0, 40.0), Some([15.0, 20.0]));
     assert_eq!(axis_start(&Placement::default(), 30.0, 40.0), None);
 }
+
+#[test]
+fn a_flat_top_bevel_is_the_engines_inner_bevel_and_comes_back__feat__plugin_slide_native_effects() {
+    let el = sp_pr(
+        r#"<a:scene3d><a:camera prst="orthographicFront"/><a:lightRig rig="threePt" dir="t"/></a:scene3d><a:sp3d><a:bevelT w="152400" h="76200" prst="angle"/></a:sp3d>"#,
+    );
+    let fx = drawingml::shape_effects(&el, &|_| None).unwrap();
+    let fx = resolved::effects(&fx, &theme(), &mut |_| {});
+    let mut m = Mapper::new(&[]);
+    let t = m.transparency(1.0, &fx, None);
+    let b = t.effects.and_then(|e| e.bevel).expect("a bevel");
+    assert_eq!(b.size, Some(12.0));
+    assert_eq!(b.depth_pct, Some(50.0));
+    assert_eq!(b.technique.as_deref(), Some("ChiselHard"));
+    assert_eq!(b.style.as_deref(), Some("InnerBevel"));
+    assert_eq!(b.angle_deg, Some(135.0));
+    assert!(m.losses().is_empty(), "{:?}", m.losses());
+    // Back: a flat scene lit from the top, a hard bevel 12 × 6 pt.
+    let back = three_d_of(&b);
+    assert!(back.is_front());
+    assert_eq!(back.light_dir, "t");
+    let top = back.bevel_top.unwrap();
+    assert_eq!(
+        (top.width, top.height, top.preset.as_str()),
+        (12.0, 6.0, "angle")
+    );
+}
+
+#[test]
+fn a_turned_camera_and_a_contour_are_reported__feat__plugin_slide_native_effects() {
+    let el = sp_pr(
+        r#"<a:scene3d><a:camera prst="perspectiveRelaxed"/><a:lightRig rig="threePt" dir="t"/></a:scene3d><a:sp3d contourW="12700"><a:bevelT/></a:sp3d>"#,
+    );
+    let fx = drawingml::shape_effects(&el, &|_| None).unwrap();
+    let fx = resolved::effects(&fx, &theme(), &mut |_| {});
+    let mut m = Mapper::new(&[]);
+    let t = m.transparency(1.0, &fx, None);
+    assert!(t.effects.and_then(|e| e.bevel).is_some());
+    let l = m.losses().join("\n");
+    assert!(
+        l.contains("perspective camera") && l.contains("contour"),
+        "{l}"
+    );
+}
+
+#[test]
+fn a_pattern_becomes_a_tile_picture_on_the_slides_grid__feat__plugin_slide_native_effects() {
+    let Paint::Pattern(pp) = paint_of(
+        r#"<a:pattFill prst="ltVert"><a:fgClr><a:srgbClr val="FF0000"/></a:fgClr><a:bgClr><a:srgbClr val="FFFF00"/></a:bgClr></a:pattFill>"#,
+    ) else {
+        panic!("a pattern")
+    };
+    let mut m = Mapper::new(&[]);
+    let t = m.pattern_tile(&pp, [10.0, 10.0, 30.0, 20.0]).unwrap();
+    assert_eq!(t.origin, [8.0, 8.0]);
+    assert_eq!(t.palette, [[255, 255, 0, 255], [255, 0, 0, 255]]);
+    // ltVert: every fourth column, 0x88 a row: page x 8, 12, 16, …
+    let row: Vec<u8> = t.indices[..t.w as usize].to_vec();
+    assert_eq!(&row[..10], &[1, 1, 0, 0, 0, 0, 0, 0, 1, 1]);
+    assert_eq!(m.losses().len(), 1);
+    assert!(m.losses()[0].contains("tiles"));
+}

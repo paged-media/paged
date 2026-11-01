@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 896,
-    "keybinding": 166,
-    "menu": 639,
-    "panel": 148,
+    "command": 900,
+    "keybinding": 167,
+    "menu": 642,
+    "panel": 149,
     "tool": 130
   },
   "features": [
@@ -3396,7 +3396,22 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "command:media.paged.slide.command.formatPainter",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.formatPainterOff",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.importPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertAudio",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -3412,6 +3427,11 @@
     },
     {
       "id": "command:media.paged.slide.command.insertShapes",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.insertVideo",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -5214,6 +5234,11 @@
       "id": "keybinding:end→paged.view.lastPage",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:escape→media.paged.slide.command.formatPainterOff",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:f5→media.paged.slide.command.slideShowFromBeginning",
@@ -7591,6 +7616,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Insert/Audio…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Insert/Icons…",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -7602,6 +7632,11 @@
     },
     {
       "id": "menu:Insert/Shapes…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Insert/Video…",
       "kind": "menu",
       "owner": "media.paged.slide"
     },
@@ -8171,6 +8206,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/Format Painter",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Move slide down",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -8727,6 +8767,11 @@
     },
     {
       "id": "panel:media.paged.slide.panel.design",
+      "kind": "panel",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.icons",
       "kind": "panel",
       "owner": "media.paged.slide"
     },

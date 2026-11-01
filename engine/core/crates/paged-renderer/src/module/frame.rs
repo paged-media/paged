@@ -678,6 +678,7 @@ mod tests {
             subpath_open: Vec::new(),
             fill_rule: paged_model::FillRule::NonZero,
             image_adjustments: Vec::new(),
+            media: None,
             gradient_stroke_mode: paged_model::StrokeGradientMode::Within,
             fill_mesh: None,
             pattern_transform: None,

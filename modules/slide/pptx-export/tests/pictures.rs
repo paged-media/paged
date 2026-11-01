@@ -19,9 +19,12 @@
 //! Pictures in every format the engine reads (slide W4): a picture placed
 //! in the editor is written as PowerPoint holds it. PNG, JPEG, GIF, BMP and
 //! TIFF go as they are, with their content types; an SVG goes as an
-//! `asvg:svgBlip` beside a PNG fallback and reads back as the SVG; any
+//! `asvg:svgBlip` beside a PNG fallback and reads back as the SVG; a
+//! WebP, TGA, ICO and QOI go as a PNG the exporter decodes (ADR 723); any
 //! other format goes as the PNG of the frame the host renders. Pictures
 //! are header-only files: export and import read no pixel.
+
+#![allow(non_snake_case)]
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -258,40 +261,113 @@ fn an_svg_is_written_with_a_png_fallback_and_reads_back_as_the_svg() {
 #[test]
 fn another_format_is_written_as_the_png_the_host_renders() {
     let bytes = fixture("geometry");
-    let webp = b"RIFF\x1a\0\0\0WEBPVP8L\x0d\0\0\0\x2f\0\0\0\x10\x07\x10\x11\x11\x88\x88\xfe\x07\0"
-        .to_vec();
     let mut psd = b"8BPS\0\x01\0\0\0\0\0\0\0\x03".to_vec();
     psd.extend(20u32.to_be_bytes());
     psd.extend(40u32.to_be_bytes());
     psd.extend([0, 8, 0, 3]);
-    for (name, pic) in [("webp", webp), ("psd", psd)] {
+    let name = "psd";
+    let mut doc = imported(&bytes);
+    place(&mut doc, "newpic", psd);
+    let first = export(&bytes, &doc, &BTreeMap::new());
+    assert_eq!(first.rasters_needed.len(), 1, "{name}");
+    assert!(
+        first
+            .not_exported
+            .iter()
+            .any(|n| n.contains("no PNG of it was rendered")),
+        "{name}: {:?}",
+        first.not_exported
+    );
+    let rendered = png(120, 60);
+    let rasters = BTreeMap::from([("newpic".to_string(), rendered.clone())]);
+    let out = export(&bytes, &doc, &rasters);
+    keep(&out.bytes, &format!("picture-{name}"));
+    assert!(
+        out.not_exported.is_empty(),
+        "{name}: {:?}",
+        out.not_exported
+    );
+    let (pic, blip, svg) = last_picture(&out.bytes);
+    assert!(svg.is_none() && !pic.contains("a:srcRect"), "{name}: {pic}");
+    assert_eq!(part(&out.bytes, &blip).unwrap(), rendered);
+    // No part of the original format is written.
+    let pkg = paged_ooxml::opc::OpcPackage::read(&out.bytes).unwrap();
+    assert!(!pkg.file_names().any(|n| n.ends_with(&format!(".{name}"))));
+}
+
+/// A 2 × 1 TGA, a 1 × 1 WebP, a 2 × 1 QOI and an icon holding a 2 × 1
+/// bitmap: what PowerPoint cannot open and the exporter decodes itself.
+fn transcoded_pictures() -> Vec<(&'static str, Vec<u8>, (u32, u32))> {
+    let mut tga = vec![0u8; 18];
+    tga[2] = 2;
+    tga[12] = 2;
+    tga[14] = 1;
+    tga[16] = 24;
+    tga.extend([0xC4, 0x72, 0x44, 0x31, 0x7D, 0xED]);
+    let webp = b"RIFF\x1a\0\0\0WEBPVP8L\x0d\0\0\0\x2f\0\0\0\x10\x07\x10\x11\x11\x88\x88\xfe\x07\0"
+        .to_vec();
+    let mut qoi = b"qoif".to_vec();
+    qoi.extend(2u32.to_be_bytes());
+    qoi.extend(1u32.to_be_bytes());
+    qoi.extend([3, 0, 0xFE, 0x44, 0x72, 0xC4, 0xFE, 0xED, 0x7D, 0x31]);
+    qoi.extend([0, 0, 0, 0, 0, 0, 0, 1]);
+    let mut dib = vec![0u8; 40];
+    dib[0] = 40;
+    dib[4] = 2;
+    dib[8] = 2;
+    dib[12] = 1;
+    dib[14] = 24;
+    dib.extend([0xC4, 0x72, 0x44, 0x31, 0x7D, 0xED, 0, 0]);
+    dib.extend([0, 0, 0, 0]);
+    let mut ico = vec![0, 0, 1, 0, 1, 0, 2, 1, 0, 0, 1, 0, 24, 0];
+    ico.extend((dib.len() as u32).to_le_bytes());
+    ico.extend(22u32.to_le_bytes());
+    ico.extend(dib);
+    vec![
+        ("tga", tga, (2, 1)),
+        ("webp", webp, (1, 1)),
+        ("qoi", qoi, (2, 1)),
+        ("ico", ico, (2, 1)),
+    ]
+}
+
+#[test]
+fn a_webp_tga_ico_or_qoi_is_written_as_a_png_of_its_own_pixels__feat__plugin_slide_pptx_export() {
+    let bytes = fixture("geometry");
+    for (name, pic, (w, h)) in transcoded_pictures() {
         let mut doc = imported(&bytes);
         place(&mut doc, "newpic", pic);
-        let first = export(&bytes, &doc, &BTreeMap::new());
-        assert_eq!(first.rasters_needed.len(), 1, "{name}");
-        assert!(
-            first
-                .not_exported
-                .iter()
-                .any(|n| n.contains("no PNG of it was rendered")),
-            "{name}: {:?}",
-            first.not_exported
-        );
-        let rendered = png(120, 60);
-        let rasters = BTreeMap::from([("newpic".to_string(), rendered.clone())]);
-        let out = export(&bytes, &doc, &rasters);
+        // No PNG asked of the host: the exporter decodes it.
+        let out = export(&bytes, &doc, &BTreeMap::new());
         keep(&out.bytes, &format!("picture-{name}"));
+        assert!(out.rasters_needed.is_empty(), "{name}");
         assert!(
             out.not_exported.is_empty(),
             "{name}: {:?}",
             out.not_exported
         );
-        let (pic, blip, svg) = last_picture(&out.bytes);
-        assert!(svg.is_none() && !pic.contains("a:srcRect"), "{name}: {pic}");
-        assert_eq!(part(&out.bytes, &blip).unwrap(), rendered);
-        // No part of the original format is written.
+        let (_, blip, svg) = last_picture(&out.bytes);
+        assert!(svg.is_none() && blip.ends_with(".png"), "{name}: {blip}");
+        let png = part(&out.bytes, &blip).unwrap();
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n", "{name}");
+        let size = (
+            u32::from_be_bytes(png[16..20].try_into().unwrap()),
+            u32::from_be_bytes(png[20..24].try_into().unwrap()),
+        );
+        assert_eq!(size, (w, h), "{name}");
         let pkg = paged_ooxml::opc::OpcPackage::read(&out.bytes).unwrap();
         assert!(!pkg.file_names().any(|n| n.ends_with(&format!(".{name}"))));
+        let ct = String::from_utf8(part(&out.bytes, "[Content_Types].xml").unwrap()).unwrap();
+        assert!(
+            ct.contains(r#"Extension="png" ContentType="image/png""#),
+            "{name}: {ct}"
+        );
+        // It reads back as a picture.
+        let deck = slide_resolve::resolve(&pptx_import::import_pptx(&out.bytes).unwrap());
+        assert!(matches!(
+            deck.slides[0].items.last().unwrap().kind,
+            slide_resolve::model::ItemKind::Picture { .. }
+        ));
     }
 }
 
@@ -300,10 +376,10 @@ fn a_raster_is_rendered_at_its_own_pixel_density() {
     let bytes = fixture("geometry");
     let mut doc = imported(&bytes);
     // 480 px shown over 120 pt: 4 px a point, 288 dpi.
-    let mut q = b"qoif".to_vec();
-    q.extend(480u32.to_be_bytes());
+    let mut q = b"8BPS\0\x01\0\0\0\0\0\0\0\x03".to_vec();
     q.extend(240u32.to_be_bytes());
-    q.extend([4, 0]);
+    q.extend(480u32.to_be_bytes());
+    q.extend([0, 8, 0, 3]);
     place(&mut doc, "q", q);
     let out = export(&bytes, &doc, &BTreeMap::new());
     assert_eq!(out.rasters_needed.len(), 1);
