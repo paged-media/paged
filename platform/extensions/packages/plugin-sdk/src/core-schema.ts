@@ -274,6 +274,11 @@ export const CORE_PATHS: Record<
     wire: "text",
     type: { kind: "ref", to: "style:paragraph" },
   },
+  paragraphStylePdfExportTag: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
   paragraphAppliedNumberingList: {
     scope: "story",
     wire: "text",
