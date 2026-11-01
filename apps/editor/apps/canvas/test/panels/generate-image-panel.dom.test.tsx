@@ -133,7 +133,7 @@ function service(opts: { provider: boolean }) {
       encode: async (image) => encodePng(image),
     },
     settings: { get: () => null, set: () => undefined },
-    detectGpu: async () => ({ webgpu: false, reason: "test" }),
+    detectGpu: async () => ({ webgpu: false, adapter: null, reason: "test" }),
     pollMs: 0,
   });
   return { svc, provider };
