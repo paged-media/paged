@@ -27,6 +27,7 @@ mod offset_compound_oracle;
 mod oval_bounds;
 mod page_canvas_origin;
 mod pathfinder_oracle;
+mod pattern_swatch;
 mod place_image;
 mod placeholder_fields;
 mod planar_ops;

@@ -107,8 +107,8 @@ use paged_compose::{
 };
 use vello::kurbo;
 use vello::peniko::{
-    BlendMode as PenikoBlendMode, Blob, BrushRef, Color as PenikoColor, Compose, Fill,
-    ImageAlphaType, ImageBrush, ImageData, ImageFormat, Mix,
+    BlendMode as PenikoBlendMode, Blob, Color as PenikoColor, Compose, Fill, ImageAlphaType,
+    ImageBrush, ImageData, ImageFormat, Mix,
 };
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 use wgpu;
@@ -308,6 +308,41 @@ fn mesh_image_data(raster: &paged_compose::MeshRaster) -> ImageData {
             data: Blob::new(Arc::new(raster.rgba.as_ref().clone())),
             format: ImageFormat::Rgba8,
             alpha_type: ImageAlphaType::Alpha,
+            width: raster.width,
+            height: raster.height,
+        };
+        if c.len() >= 8 {
+            c.remove(0);
+        }
+        c.push((raster.key, data.clone()));
+        data
+    })
+}
+
+/// A pattern raster's cache key and its peniko image.
+type PatternImage = ((u64, i32), ImageData);
+
+thread_local! {
+    /// Engine ADR 1041 — the last pattern rasters as peniko images: the
+    /// same blob on every redraw at one scale, so the GPU uploads it once.
+    static PATTERN_IMAGES: RefCell<Vec<PatternImage>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A pattern raster as a peniko image (premultiplied, as the CPU lane's
+/// pixmap reads it).
+fn pattern_image_data(raster: &crate::pattern_raster::PatternRaster) -> ImageData {
+    PATTERN_IMAGES.with(|c| {
+        let mut c = c.borrow_mut();
+        if let Some(at) = c.iter().position(|(k, _)| *k == raster.key) {
+            let hit = c.remove(at);
+            let data = hit.1.clone();
+            c.push(hit);
+            return data;
+        }
+        let data = ImageData {
+            data: Blob::new(Arc::new(raster.rgba.as_ref().clone())),
+            format: ImageFormat::Rgba8,
+            alpha_type: ImageAlphaType::AlphaPremultiplied,
             width: raster.width,
             height: raster.height,
         };
@@ -1194,11 +1229,17 @@ fn build_scene_with_transform_filtered(
                 let Some(path) = fills.path(list, *path_id, transform, page_to_px, glyph) else {
                     continue;
                 };
-                let Some(brush) = resolve_paint(paint, list, transform) else {
+                let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
                     continue;
                 };
                 let rule = path_fill(list, *path_id);
-                scene.fill(rule, page_to_px, brush_ref(&brush), None, &path);
+                scene.fill(
+                    rule,
+                    page_to_px,
+                    &brush_of(&brush),
+                    brush.brush_transform(),
+                    &path,
+                );
             }
             DisplayCommand::FillPathBlend {
                 path_id,
@@ -1216,19 +1257,31 @@ fn build_scene_with_transform_filtered(
                 let Some(path) = fills.path(list, *path_id, transform, page_to_px, glyph) else {
                     continue;
                 };
-                let Some(brush) = resolve_paint(paint, list, transform) else {
+                let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
                     continue;
                 };
                 let pb = blend_to_peniko(*blend_mode);
                 let rule = path_fill(list, *path_id);
                 if pb.mix == Mix::Normal && pb.compose == Compose::SrcOver {
                     // Fast path: Normal blend, no layer needed.
-                    scene.fill(rule, page_to_px, brush_ref(&brush), None, &path);
+                    scene.fill(
+                        rule,
+                        page_to_px,
+                        &brush_of(&brush),
+                        brush.brush_transform(),
+                        &path,
+                    );
                 } else {
                     // The blend layer's clip shape is the path
                     // itself — anything outside is unaffected.
                     scene.push_layer(rule, pb, 1.0, page_to_px, &path);
-                    scene.fill(rule, page_to_px, brush_ref(&brush), None, &path);
+                    scene.fill(
+                        rule,
+                        page_to_px,
+                        &brush_of(&brush),
+                        brush.brush_transform(),
+                        &path,
+                    );
                     scene.pop_layer();
                 }
             }
@@ -1243,15 +1296,27 @@ fn build_scene_with_transform_filtered(
                     continue;
                 };
                 let path = path_to_bez(path_data, transform);
-                let Some(brush) = resolve_paint(paint, list, transform) else {
+                let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
                     continue;
                 };
                 match stroke_geometry(path, kurbo_stroke(stroke), page_to_px) {
                     StrokeGeometry::Outline(outline) => {
-                        scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &outline);
+                        scene.fill(
+                            Fill::NonZero,
+                            page_to_px,
+                            &brush_of(&brush),
+                            brush.brush_transform(),
+                            &outline,
+                        );
                     }
                     StrokeGeometry::Stroke(path, ks) => {
-                        scene.stroke(&ks, page_to_px, brush_ref(&brush), None, &path);
+                        scene.stroke(
+                            &ks,
+                            page_to_px,
+                            &brush_of(&brush),
+                            brush.brush_transform(),
+                            &path,
+                        );
                     }
                 }
             }
@@ -1273,11 +1338,17 @@ fn build_scene_with_transform_filtered(
                 let Some(path) = fills.path(list, *path_id, transform, page_to_px, false) else {
                     continue;
                 };
-                let Some(brush) = resolve_paint(paint, list, transform) else {
+                let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
                     continue;
                 };
                 let rule = path_fill(list, *path_id);
-                scene.fill(rule, page_to_px, brush_ref(&brush), None, &path);
+                scene.fill(
+                    rule,
+                    page_to_px,
+                    &brush_of(&brush),
+                    brush.brush_transform(),
+                    &path,
+                );
             }
             DisplayCommand::StrokePathOverprint {
                 path_id,
@@ -1293,15 +1364,27 @@ fn build_scene_with_transform_filtered(
                     continue;
                 };
                 let path = path_to_bez(path_data, transform);
-                let Some(brush) = resolve_paint(paint, list, transform) else {
+                let Some(brush) = resolve_paint(paint, list, transform, page_to_px) else {
                     continue;
                 };
                 match stroke_geometry(path, kurbo_stroke(stroke), page_to_px) {
                     StrokeGeometry::Outline(outline) => {
-                        scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &outline);
+                        scene.fill(
+                            Fill::NonZero,
+                            page_to_px,
+                            &brush_of(&brush),
+                            brush.brush_transform(),
+                            &outline,
+                        );
                     }
                     StrokeGeometry::Stroke(path, ks) => {
-                        scene.stroke(&ks, page_to_px, brush_ref(&brush), None, &path);
+                        scene.stroke(
+                            &ks,
+                            page_to_px,
+                            &brush_of(&brush),
+                            brush.brush_transform(),
+                            &path,
+                        );
                     }
                 }
             }
@@ -2900,7 +2983,7 @@ fn build_overprint_batch_scene(
         let Some(path_data) = list.paths.get(path.path_id) else {
             continue;
         };
-        let white = BrushRef::Solid(opaque_white);
+        let white = vello::peniko::BrushRef::Solid(opaque_white);
         match &path.stroke {
             Some(stroke) => match stroke_geometry(
                 path_to_bez(path_data, &path.transform),
@@ -2933,10 +3016,16 @@ fn build_overprint_batch_scene(
 }
 
 /// A resolved paint as the brush `Scene::fill` / `Scene::stroke` take.
-fn brush_ref(b: &PaintBrush) -> BrushRef<'_> {
+fn brush_of(b: &PaintBrush) -> vello::peniko::Brush {
     match b {
-        PaintBrush::Solid(c) => BrushRef::Solid(*c),
-        PaintBrush::Gradient(g) => BrushRef::Gradient(g),
+        PaintBrush::Solid(c) => vello::peniko::Brush::Solid(*c),
+        PaintBrush::Gradient(g) => vello::peniko::Brush::Gradient(g.clone()),
+        // Engine ADR 1041 — the pattern's period, repeated.
+        PaintBrush::Pattern { raster, .. } => vello::peniko::Brush::Image(
+            ImageBrush::new(pattern_image_data(raster))
+                .with_extend(vello::peniko::Extend::Repeat)
+                .with_quality(vello::peniko::ImageQuality::Medium),
+        ),
     }
 }
 
@@ -5549,6 +5638,107 @@ mod tests {
                         "shading {k} painted: {mid:?}"
                     );
                 }
+            }
+        }
+    }
+
+    /// Engine ADR 1041 — a pattern fill and a pattern stroke draw alike on
+    /// both lanes (ADR 146): both repeat the one period raster
+    /// `pattern_raster` makes at the display scale, upright and under a
+    /// turn, at two resolutions.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn patterns_paint_alike_on_both_lanes__feat__color_swatches_pattern_paint() {
+        use paged_compose::{
+            DisplayCommand, Paint, PathData, PathSegment, PatternPaint, PatternShape, PatternTile,
+            Stroke, Transform,
+        };
+        let c = |r: f32, g: f32, b: f32| ComposeColor::rgba(r, g, b, 1.0);
+        let dot = PathData::new(vec![
+            PathSegment::MoveTo { x: 1.0, y: 1.0 },
+            PathSegment::LineTo { x: 6.0, y: 1.0 },
+            PathSegment::LineTo { x: 6.0, y: 6.0 },
+            PathSegment::LineTo { x: 1.0, y: 6.0 },
+            PathSegment::Close,
+        ]);
+        let ring = PathData::new(vec![
+            PathSegment::MoveTo { x: 3.0, y: 8.0 },
+            PathSegment::LineTo { x: 9.0, y: 9.0 },
+        ]);
+        let tile = std::sync::Arc::new(PatternTile::new(
+            (10.0, 10.0),
+            vec![
+                PatternShape {
+                    path: dot,
+                    fill: Some(Paint::Solid(c(0.9, 0.1, 0.1))),
+                    stroke: None,
+                },
+                PatternShape {
+                    path: ring,
+                    fill: None,
+                    stroke: Some((Paint::Solid(c(0.1, 0.1, 0.8)), Stroke::new(1.5))),
+                },
+            ],
+            vec![(0.0, 0.0), (5.0, 5.0), (-5.0, 5.0)],
+        ));
+        for turned in [false, true] {
+            let mut list = DisplayList::new();
+            let rect = unit_rect_path(&mut list);
+            let transform = if turned {
+                Transform([0.0, 50.0, -50.0, 0.0, 90.0, 5.0])
+            } else {
+                Transform([50.0, 0.0, 0.0, 50.0, 35.0, 5.0])
+            };
+            let fill = list.push_pattern(PatternPaint {
+                tile: tile.clone(),
+                to_local: Transform([0.02, 0.0, 0.0, 0.02, 0.0, 0.0]),
+            });
+            let stroke = list.push_pattern(PatternPaint {
+                tile: tile.clone(),
+                to_local: Transform([0.04, 0.0, 0.0, 0.04, 0.0, 0.0]),
+            });
+            list.commands.push(DisplayCommand::FillPath {
+                path_id: rect,
+                paint: Paint::Pattern(fill),
+                transform,
+            });
+            list.commands.push(DisplayCommand::StrokePath {
+                path_id: rect,
+                paint: Paint::Pattern(stroke),
+                stroke: Stroke::new(6.0),
+                transform,
+            });
+            for dpi in [72.0, 144.0] {
+                let mut opts = RasterOptions::new(120.0, 60.0);
+                opts.dpi = dpi;
+                opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+                let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+                if !gpu_or_skip(&gpu) {
+                    return;
+                }
+                let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+                let w = (120.0 * dpi / 72.0) as usize;
+                let h = (60.0 * dpi / 72.0) as usize;
+                let mut far = 0usize;
+                let mut red = 0usize;
+                for y in 0..h {
+                    for x in 0..w {
+                        let (g, c) = (px_w(&gpu, w, x, y), px_w(&cpu, w, x, y));
+                        if (0..4).any(|i| g[i].abs_diff(c[i]) > 8) {
+                            far += 1;
+                        }
+                        // Linear 0.9 / 0.1 encodes to about 243 / 89.
+                        if c[0] > 200 && c[1] < 130 && c[2] < 130 {
+                            red += 1;
+                        }
+                    }
+                }
+                assert!(
+                    far <= w * h / 400,
+                    "turned {turned}, {dpi} dpi: lanes differ by > 8 on {far} px"
+                );
+                assert!(red > w * h / 40, "the pattern painted: {red} red px");
             }
         }
     }

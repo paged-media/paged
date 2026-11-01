@@ -5183,6 +5183,7 @@ impl CanvasModel {
                         alternate_value: Vec::new(),
                         tint: None,
                         alpha: None,
+                        pattern: None,
                     }
                 };
                 let mut groups: Vec<(String, Vec<String>)> = Vec::new();
@@ -7658,6 +7659,8 @@ impl CanvasModel {
         crate::paint_v2_export::lower_for_idml(&mut scene);
         // Engine ADR 1048 — a mesh fill rides in its frame's label.
         crate::mesh_fill_export::lower_for_idml(&mut scene);
+        // Engine ADR 1041 — a pattern paint rides in its frame's label.
+        crate::pattern_export::lower_for_idml(&mut scene);
         let out = idml_export::write_idml_with(
             &scene,
             &self.source_idml,
@@ -7827,6 +7830,10 @@ impl CanvasModel {
                             Some(&twin),
                         ));
                         out.extend(crate::mesh_fill_export::mesh_fill_losses(
+                            &self.scene,
+                            Some(&twin),
+                        ));
+                        out.extend(crate::pattern_export::pattern_losses(
                             &self.scene,
                             Some(&twin),
                         ));
@@ -8444,6 +8451,11 @@ impl CanvasModel {
                                         .map(paged_mutate::MeshFillSpec::from_model),
                                 )),
                             },
+                            // Engine ADR 1041 — the frame's placement of a pattern paint.
+                            PropertyEntry {
+                                path: PropertyPath::FramePatternTransform,
+                                value: Some(Value::Transform(f.pattern_transform)),
+                            },
                             // C-24 — a text frame's outline is stroked
                             // inside / centred / outside like any other
                             // closed shape, and the stroke's share insets
@@ -8835,6 +8847,11 @@ impl CanvasModel {
                                         .as_deref()
                                         .map(paged_mutate::MeshFillSpec::from_model),
                                 )),
+                            },
+                            // Engine ADR 1041 — the frame's placement of a pattern paint.
+                            PropertyEntry {
+                                path: PropertyPath::FramePatternTransform,
+                                value: Some(Value::Transform(f.pattern_transform)),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -9397,6 +9414,11 @@ impl CanvasModel {
                                         .map(paged_mutate::MeshFillSpec::from_model),
                                 )),
                             },
+                            // Engine ADR 1041 — the frame's placement of a pattern paint.
+                            PropertyEntry {
+                                path: PropertyPath::FramePatternTransform,
+                                value: Some(Value::Transform(p.pattern_transform)),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(p.opacity)),
@@ -9610,6 +9632,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameGradientStrokeMode,
                                 value: Some(Value::Text(l.gradient_stroke_mode.as_str().into())),
                             },
+                            // Engine ADR 1041 — the line's placement of a pattern stroke.
+                            PropertyEntry {
+                                path: PropertyPath::FramePatternTransform,
+                                value: Some(Value::Transform(l.pattern_transform)),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
                                 value: Some(Value::Text(
@@ -9816,6 +9843,11 @@ impl CanvasModel {
                                         .as_deref()
                                         .map(paged_mutate::MeshFillSpec::from_model),
                                 )),
+                            },
+                            // Engine ADR 1041 — the frame's placement of a pattern paint.
+                            PropertyEntry {
+                                path: PropertyPath::FramePatternTransform,
+                                value: Some(Value::Transform(o.pattern_transform)),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
@@ -10889,7 +10921,29 @@ impl CanvasModel {
                 total_area_coverage_pct: swatch_total_area_coverage(color),
             });
         }
+        // Engine ADR 1041 — pattern swatches list with the colours, kind
+        // `"pattern"`; a frame applies one by naming its id as a fill or
+        // stroke, as it names a colour.
+        for (self_id, p) in &self.scene.palette.patterns {
+            out.push(SwatchSummary {
+                self_id: self_id.clone(),
+                name: p.name.clone().unwrap_or_else(|| self_id.clone()),
+                kind: "pattern".to_string(),
+                total_area_coverage_pct: None,
+            });
+        }
         out
+    }
+
+    /// Engine ADR 1041 — the pattern swatch `swatch_id` as its wire spec
+    /// (what `createSwatch` / `editSwatch` carry), for an editor that
+    /// re-opens it.
+    pub fn pattern_detail(&self, swatch_id: &str) -> Option<paged_mutate::PatternSpec> {
+        self.scene
+            .palette
+            .patterns
+            .get(swatch_id)
+            .map(paged_mutate::PatternSpec::from_model)
     }
 
     /// SDK Phase 3 — list every paragraph style in the document.
@@ -16274,6 +16328,7 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameStrokeEffectStack
             | P::FrameContentEffectStack
             | P::FrameFillMesh
+            | P::FramePatternTransform
             | P::FrameAppearance
             | P::FrameAppearanceLayer
     )

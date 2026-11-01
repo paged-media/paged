@@ -86,6 +86,7 @@ fn a_master_item_is_edited_like_a_page_item() {
             alternate_value: Vec::new(),
             tint: None,
             alpha: None,
+            pattern: None,
         },
     })
     .expect("mint a swatch");
