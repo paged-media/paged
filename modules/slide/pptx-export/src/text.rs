@@ -381,6 +381,17 @@ pub fn paragraph(
             continue;
         }
         let rpr = run_props(r, d, defaults.font_scale, ctx, link, lost);
+        // A date or time field follows the clock in PowerPoint too: written
+        // back as its `a:fld`, with the text it shows now as the result.
+        if let Some(field_type) = r.field.as_ref().and_then(slide_native::datetime_type_of) {
+            out.push_str(&format!(
+                r#"<a:fld id="{{B6F15528-21DE-4FAA-801E-634DDDAF4B2B}}" type="{field_type}">{}<a:t>{}</a:t></a:fld>"#,
+                rpr("a:rPr"),
+                esc_text(&clean(&r.text))
+            ));
+            wrote = true;
+            continue;
+        }
         for (k, piece) in r.text.split('\u{2028}').enumerate() {
             if k > 0 {
                 out.push_str(&format!("<a:br>{}</a:br>", rpr("a:rPr")));

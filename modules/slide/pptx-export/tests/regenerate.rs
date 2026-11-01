@@ -333,6 +333,82 @@ fn a_resized_shape_reads_back_at_its_new_size() {
     );
 }
 
+/// The text deck with a date field and a time field after the title's words:
+/// PowerPoint's `a:fld type="datetime2"` and `"datetime13"`.
+fn dated_deck() -> Vec<u8> {
+    let bytes = fixture("text");
+    let mut pkg = paged_ooxml::opc::OpcPackage::read(&bytes).unwrap();
+    let part = "ppt/slides/slide1.xml";
+    let xml = String::from_utf8(pkg.part(part).unwrap().to_vec()).unwrap();
+    let old = r#"<a:t>List levels</a:t></a:r></a:p>"#;
+    assert!(xml.contains(old));
+    let fld = |id: &str, ty: &str, shown: &str| {
+        format!(
+            r#"<a:fld id="{{{id}}}" type="{ty}"><a:rPr lang="en-US"/><a:t>{shown}</a:t></a:fld>"#
+        )
+    };
+    let with = format!(
+        "<a:t>List levels</a:t></a:r>{}{}</a:p>",
+        fld(
+            "B6F15528-21DE-4FAA-801E-634DDDAF4B2B",
+            "datetime2",
+            "Sunday, November 1, 2026"
+        ),
+        fld(
+            "C6F15528-21DE-4FAA-801E-634DDDAF4B2C",
+            "datetime13",
+            "7:48:56 PM"
+        ),
+    );
+    pkg.set_part(part, xml.replacen(old, &with, 1).into_bytes());
+    pkg.write().unwrap()
+}
+
+#[test]
+fn date_and_time_fields_are_engine_fields_and_are_written_back_as_fields() {
+    let bytes = dated_deck();
+    let before = resolved(&bytes);
+    let part = before.slides[0].part.clone();
+    let mut doc = imported(&bytes);
+    // The title's runs: the words, then the two fields, each an engine
+    // date / time field that carries the text it showed.
+    let title = story_of(&doc, 0, &format!("{part}#4"));
+    {
+        let runs = &story_mut(&mut doc, &title).paragraphs[0].runs;
+        let fields: Vec<_> = runs.iter().filter_map(|r| r.field.as_ref()).collect();
+        assert_eq!(fields.len(), 2, "{runs:?}");
+        assert_eq!(fields[0].code, "DATE \\@ \"dddd, MMMM d, yyyy\"");
+        assert_eq!(fields[1].code, "TIME \\@ \"h:mm:ss AM/PM\"");
+        let shown: Vec<_> = runs.iter().map(|r| r.text.as_str()).collect();
+        assert_eq!(
+            shown,
+            vec!["List levels", "Sunday, November 1, 2026", "7:48:56 PM"]
+        );
+    }
+    // An edit of the words rewrites the slide; the fields come back as fields.
+    story_mut(&mut doc, &title).paragraphs[0].runs[0].text = "Dated levels".into();
+    let out = export_doc(&bytes, &doc);
+    keep(&out.bytes, "datetime-edit");
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    let xml = part_text(&out.bytes, &part);
+    assert!(xml.contains(r#"type="datetime2""#), "{xml}");
+    assert!(xml.contains(r#"type="datetime13""#), "{xml}");
+    assert!(xml.contains("<a:t>Sunday, November 1, 2026</a:t>"));
+    assert!(xml.contains("<a:t>Dated levels</a:t>"));
+    // And it reads back as the same two fields.
+    let after = resolved(&out.bytes);
+    let item = item(&after, 0, 4);
+    let ItemKind::Shape { text: Some(t), .. } = &item.kind else {
+        panic!()
+    };
+    let kinds: Vec<_> = t.paragraphs[0]
+        .runs
+        .iter()
+        .filter_map(|r| r.field.as_deref())
+        .collect();
+    assert_eq!(kinds, vec!["datetime2", "datetime13"]);
+}
+
 #[test]
 fn edited_text_reads_back_and_untouched_paragraphs_keep_their_xml() {
     let bytes = fixture("text");

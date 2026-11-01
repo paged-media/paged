@@ -22,16 +22,16 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
 
 ## Enforced by the ratchet
 
-| Capability                     | Owner                                                    | Copies outside it (baseline)                                          |
-| ------------------------------ | -------------------------------------------------------- | --------------------------------------------------------------------- |
-| XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`         | 19 (open)                                                             |
+| Capability                     | Owner                                                    | Copies outside it (baseline)                                                                           |
+| ------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`         | 19 (open)                                                                                              |
 | `[Content_Types].xml`          | `paged-ooxml` `content_types`                            | 18 (open); every writer moved, what remains is test fixtures and the in-test tables of three src files |
-| Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                          | 0 (done)                                                              |
-| sRGB transfer                  | `paged-color::math`, `paged-ooxml::colour`               | 11 (open)                                                             |
-| Blend modes                    | `paged-blend`                                            | 6 (open)                                                              |
-| FNV hash                       | none yet; `platform/shared/helpers` (TS) and a Rust util | 14 (open)                                                             |
-| CRC-32                         | `crc32fast` (Rust), `platform/shared/helpers` (TS)       | 12 (open)                                                             |
-| Base64                         | `base64` crate, `platform/shared/helpers`                | 2 (open)                                                              |
+| Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                          | 0 (done)                                                                                               |
+| sRGB transfer                  | `paged-color::math`, `paged-ooxml::colour`               | 11 (open)                                                                                              |
+| Blend modes                    | `paged-blend`                                            | 6 (open)                                                                                               |
+| FNV hash                       | none yet; `platform/shared/helpers` (TS) and a Rust util | 14 (open)                                                                                              |
+| CRC-32                         | `crc32fast` (Rust), `platform/shared/helpers` (TS)       | 12 (open)                                                                                              |
+| Base64                         | `base64` crate, `platform/shared/helpers`                | 2 (open)                                                                                               |
 
 ## Landed (do not redo)
 
