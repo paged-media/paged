@@ -124,6 +124,15 @@ is the engine's). Illustrator writes the meshes back as shading types 6
 and 7, as the engine does. A freeform gradient cannot be created by
 script, so it has no probe.
 
+`probes/pattern-render.jsx` is its sibling for engine ADR 1041: it opens the
+engine's PDF tiling patterns (`paged-export-pdf/tests/fixtures/pattern-oracle`,
+written by that crate's ignored `write_illustrator_pattern_inputs`), records
+whether Illustrator reads a pattern swatch on the path, and exports its
+rendering and PDF. Illustrator may be unable to read files on an external
+volume: copy the inputs into `$TMPDIR` and point `PAGED_PROBE_INPUTS` there.
+Recorded 2026-10-29: one pattern swatch per file, upright lattices identical
+to the engine's on every lattice pixel, turned edges within 5 %.
+
 Each fixture's `script_sha256` identifies the exact text (library + probe)
 that produced it. The library has grown since the first recording (stroke,
 paint and fill-rule fields), so older fixtures carry fewer fields; re-record

@@ -696,4 +696,70 @@ mod tests {
         // 240% lands in the [240, 250) bucket.
         assert!(report.histogram[24] > 0, "240% TAC bucket is populated");
     }
+
+    /// Engine ADR 1041 — a pattern's CMYK items keep their inks on the
+    /// planes (ADR 106): a tile whose cyan square covers a quarter of the
+    /// period separates a quarter of the rectangle as 100 % cyan; an RGB
+    /// item separates nothing.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_pattern_separates_its_cmyk_items__feat__color_swatches_pattern_paint() {
+        use paged_compose::{
+            PathData, PathSegment, PatternPaint, PatternShape, PatternTile, Transform,
+        };
+        use std::sync::Arc;
+        let square = PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 5.0, y: 0.0 },
+            PathSegment::LineTo { x: 5.0, y: 5.0 },
+            PathSegment::LineTo { x: 0.0, y: 5.0 },
+            PathSegment::Close,
+        ]);
+        for (item, separated) in [
+            (cmyk(1.0, 0.0, 0.0, 0.0), true),
+            (Paint::Solid(Color::rgba(1.0, 0.0, 0.0, 1.0)), false),
+        ] {
+            let mut list = DisplayList::new();
+            let tile = PatternTile::new(
+                (10.0, 10.0),
+                vec![PatternShape {
+                    path: square.clone(),
+                    fill: Some(item),
+                    stroke: None,
+                }],
+                vec![(0.0, 0.0)],
+            );
+            let id = list.push_pattern(PatternPaint {
+                tile: Arc::new(tile),
+                // The unit rect's paths: pattern units over a 40 pt square.
+                to_local: Transform::scale(1.0 / 40.0, 1.0 / 40.0),
+            });
+            emit_rect(
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 40.0,
+                    h: 40.0,
+                },
+                Paint::Pattern(id),
+                &mut list,
+            );
+            let report = separate(&list, 40.0, 40.0).ink_coverage(300.0);
+            if separated {
+                // A quarter of the area, plus the one-pixel bilinear fringe
+                // the repeated raster draws round each 5 px square
+                // (6 × 6 of 10 × 10 is 36 %).
+                let pct = report.separated_pct();
+                assert!((24.0..=37.0).contains(&pct), "a quarter separates: {pct}");
+                assert!(
+                    (report.max_tac_pct - 100.0).abs() < 1.5,
+                    "{}",
+                    report.max_tac_pct
+                );
+                assert_eq!(report.active_plates().count(), 1, "cyan only");
+            } else {
+                assert_eq!(report.separated_pixels, 0, "an RGB item has no inks");
+            }
+        }
+    }
 }

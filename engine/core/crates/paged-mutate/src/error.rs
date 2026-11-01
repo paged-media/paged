@@ -107,6 +107,10 @@ pub enum OperationError {
     /// control, an item not in its list, a date that does not read.
     #[error("content control {control_id}: {reason}")]
     InvalidControlValue { control_id: String, reason: String },
+    /// Engine ADR 1041 — a swatch spec that is not a swatch (a pattern
+    /// whose tile, colours or lattice do not make one).
+    #[error("invalid swatch {id:?}: {reason}")]
+    InvalidSwatch { id: String, reason: String },
 
     #[error("batch failed at index {failed_at}: {source}")]
     BatchFailed {

@@ -140,6 +140,7 @@
       "media.paged.draw.command.selectPatternTiles",
       "media.paged.draw.command.deletePatternTiles",
       "media.paged.draw.command.releasePatternField",
+      "media.paged.draw.command.savePatternSwatch",
       "media.paged.draw.command.makeRadialRepeat",
       "media.paged.draw.command.makeGridRepeat",
       "media.paged.draw.command.makeMirrorRepeat",
@@ -3244,6 +3245,27 @@
                 "kind": "text"
               }
             }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.savePatternSwatch",
+          "title": "Save pattern swatch",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "pattern": {
+                "kind": "text"
+              },
+              "name": {
+                "kind": "text"
+              },
+              "exit": {
+                "kind": "bool"
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
           }
         },
         {

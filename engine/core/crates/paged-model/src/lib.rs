@@ -38,6 +38,7 @@ pub mod image_adjust;
 pub mod image_bytes;
 pub mod live_shape;
 pub mod mesh;
+pub mod pattern;
 pub mod review;
 pub mod script;
 pub mod vector_effect;
@@ -57,6 +58,11 @@ pub use word_field::{WordField, WordFieldKind};
 pub use mesh::{
     FreeformGradient, FreeformPoint, GradientMesh, MeshColor, MeshFill, MeshGrid, MeshHandle,
     MeshNode, MeshPatch, PatchInput, MESH_FILL_LABEL_KEY,
+};
+pub use pattern::{
+    HorizontalOverlap, PatternCell, PatternColor, PatternEntry, PatternItem, PatternLayout,
+    PatternPlacement, PatternTileKind, VerticalOverlap, PATTERN_FILL_LABEL_KEY, PATTERN_ID_PREFIX,
+    PATTERN_STROKE_LABEL_KEY,
 };
 
 use std::collections::BTreeMap;
@@ -1780,6 +1786,12 @@ pub struct TextFrame {
     /// is reported as a loss and kept in a label the import restores).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_mesh: Option<Box<mesh::MeshFill>>,
+    /// Engine ADR 1041 — this frame's own move, turn and scale of a
+    /// pattern fill or stroke (Illustrator's "transform patterns"):
+    /// applied after the pattern's placement, in the frame's box space.
+    /// `None` is identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern_transform: Option<[f32; 6]>,
     /// `AppliedTOCStyle` attribute — `TOCStyle/<id>` reference. Frames
     /// authored as Table-of-Contents hosts carry this; the renderer
     /// detects it at story emission and swaps the story's paragraphs
@@ -1906,6 +1918,7 @@ impl TextFrame {
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
             gradient_stroke_mode: StrokeGradientMode::Within,
+            pattern_transform: None,
             fill_mesh: None,
             effects: None,
             effect_stack: Vec::new(),
@@ -2311,6 +2324,12 @@ pub struct Rectangle {
     /// is reported as a loss and kept in a label the import restores).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_mesh: Option<Box<mesh::MeshFill>>,
+    /// Engine ADR 1041 — this frame's own move, turn and scale of a
+    /// pattern fill or stroke (Illustrator's "transform patterns"):
+    /// applied after the pattern's placement, in the frame's box space.
+    /// `None` is identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern_transform: Option<[f32; 6]>,
     /// `<TextPath>` children attached to this rectangle. See
     /// [`Polygon::text_paths`].
     pub text_paths: Vec<TextPath>,
@@ -2442,6 +2461,7 @@ impl Rectangle {
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            pattern_transform: None,
             fill_mesh: None,
         }
     }
@@ -2782,6 +2802,12 @@ pub struct Oval {
     /// is reported as a loss and kept in a label the import restores).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_mesh: Option<Box<mesh::MeshFill>>,
+    /// Engine ADR 1041 — this frame's own move, turn and scale of a
+    /// pattern fill or stroke (Illustrator's "transform patterns"):
+    /// applied after the pattern's placement, in the frame's box space.
+    /// `None` is identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern_transform: Option<[f32; 6]>,
     /// See [`Rectangle::opacity`].
     pub opacity: Option<f32>,
     /// See [`Rectangle::blend_mode`].
@@ -2937,6 +2963,7 @@ impl Oval {
             pie: None,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            pattern_transform: None,
             fill_mesh: None,
         }
     }
@@ -2999,6 +3026,12 @@ pub struct GraphicLine {
     /// over the line's bounds.
     #[serde(default, skip_serializing_if = "StrokeGradientMode::is_within")]
     pub gradient_stroke_mode: StrokeGradientMode,
+    /// Engine ADR 1041 — this frame's own move, turn and scale of a
+    /// pattern fill or stroke (Illustrator's "transform patterns"):
+    /// applied after the pattern's placement, in the frame's box space.
+    /// `None` is identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern_transform: Option<[f32; 6]>,
     /// `<TextPath>` children attached to this line. See
     /// [`Polygon::text_paths`].
     pub text_paths: Vec<TextPath>,
@@ -3109,6 +3142,7 @@ impl GraphicLine {
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
             gradient_stroke_mode: StrokeGradientMode::Within,
+            pattern_transform: None,
             text_paths: Vec::new(),
             effects: None,
             opacity: None,
@@ -3573,6 +3607,12 @@ pub struct Polygon {
     /// is reported as a loss and kept in a label the import restores).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_mesh: Option<Box<mesh::MeshFill>>,
+    /// Engine ADR 1041 — this frame's own move, turn and scale of a
+    /// pattern fill or stroke (Illustrator's "transform patterns"):
+    /// applied after the pattern's placement, in the frame's box space.
+    /// `None` is identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern_transform: Option<[f32; 6]>,
     /// See [`Rectangle::opacity`].
     pub opacity: Option<f32>,
     /// See [`Rectangle::blend_mode`].
@@ -3710,6 +3750,7 @@ impl Polygon {
             fill_rule: FillRule::NonZero,
             image_adjustments: Vec::new(),
             gradient_stroke_mode: StrokeGradientMode::Within,
+            pattern_transform: None,
             fill_mesh: None,
             text_wrap: None,
             item_layer: None,
@@ -9591,6 +9632,11 @@ pub struct Graphic {
     /// Ink Manager's: the process inks, then the spot inks).
     #[serde(default)]
     pub inks: Vec<InkDef>,
+    /// Engine ADR 1041 — pattern swatches, keyed by `Self`
+    /// (`Pattern/<id>`). Native: IDML has no pattern swatch; skipped when
+    /// empty, so a document without one keeps its bytes and state hash.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub patterns: BTreeMap<String, PatternEntry>,
 }
 
 impl Graphic {

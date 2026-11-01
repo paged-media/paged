@@ -228,6 +228,7 @@ pub fn swatch_spec_from_entry(entry: &paged_model::ColorEntry) -> SwatchSpec {
         alternate_value: entry.alternate_value.clone(),
         tint: entry.tint,
         alpha: entry.alpha,
+        pattern: None,
     }
 }
 
@@ -235,6 +236,9 @@ pub(super) fn apply_create_swatch(
     doc: &mut Document,
     spec: &SwatchSpec,
 ) -> Result<AppliedOperation, OperationError> {
+    if spec.pattern.is_some() {
+        return apply_create_pattern_swatch(doc, spec);
+    }
     let colors = &mut doc.palette.colors;
     let self_id = match &spec.self_id {
         Some(s) => {
@@ -278,6 +282,9 @@ pub(super) fn apply_edit_swatch(
     swatch_id: &str,
     spec: &SwatchSpec,
 ) -> Result<AppliedOperation, OperationError> {
+    if doc.palette.patterns.contains_key(swatch_id) {
+        return apply_edit_pattern_swatch(doc, swatch_id, spec);
+    }
     let colors = &mut doc.palette.colors;
     let existing =
         colors
@@ -312,6 +319,20 @@ pub(super) fn apply_delete_swatch(
     doc: &mut Document,
     swatch_id: &str,
 ) -> Result<AppliedOperation, OperationError> {
+    if let Some(captured) = doc.palette.patterns.remove(swatch_id) {
+        return Ok(AppliedOperation {
+            op: Operation::DeleteSwatch {
+                swatch_id: swatch_id.to_string(),
+            },
+            inverse: Operation::CreateSwatch {
+                spec: pattern_swatch_spec(&captured),
+            },
+            invalidation: InvalidationHint {
+                structural: true,
+                ..Default::default()
+            },
+        });
+    }
     let colors = &mut doc.palette.colors;
     let captured =
         colors
@@ -329,6 +350,121 @@ pub(super) fn apply_delete_swatch(
             swatch_id: swatch_id.to_string(),
         },
         inverse,
+        invalidation: InvalidationHint {
+            structural: true,
+            ..Default::default()
+        },
+    })
+}
+
+// ── Engine ADR 1041 — pattern swatches ────────────────────────────
+
+/// A pattern swatch as the `SwatchSpec` that recreates it (for lossless
+/// inverses).
+pub fn pattern_swatch_spec(entry: &paged_model::PatternEntry) -> SwatchSpec {
+    SwatchSpec {
+        self_id: Some(entry.self_id.clone()),
+        name: entry.name.clone(),
+        space: String::new(),
+        value: Vec::new(),
+        model: None,
+        alternate_space: None,
+        alternate_value: Vec::new(),
+        tint: None,
+        alpha: None,
+        pattern: Some(crate::operation::PatternSpec::from_model(entry)),
+    }
+}
+
+fn pattern_of(
+    spec: &SwatchSpec,
+    self_id: String,
+) -> Result<paged_model::PatternEntry, OperationError> {
+    let Some(pattern) = &spec.pattern else {
+        return Err(OperationError::InvalidSwatch {
+            id: self_id,
+            reason: "a pattern swatch's edit carries a `pattern`".to_string(),
+        });
+    };
+    pattern
+        .to_model(self_id.clone(), spec.name.clone())
+        .map_err(|reason| OperationError::InvalidSwatch {
+            id: self_id,
+            reason,
+        })
+}
+
+fn apply_create_pattern_swatch(
+    doc: &mut Document,
+    spec: &SwatchSpec,
+) -> Result<AppliedOperation, OperationError> {
+    let patterns = &doc.palette.patterns;
+    let self_id = match &spec.self_id {
+        Some(s) => {
+            if !s.starts_with(paged_model::PATTERN_ID_PREFIX) {
+                return Err(OperationError::InvalidSwatch {
+                    id: s.clone(),
+                    reason: format!(
+                        "a pattern swatch's id starts with `{}`",
+                        paged_model::PATTERN_ID_PREFIX
+                    ),
+                });
+            }
+            if patterns.contains_key(s) {
+                return Err(OperationError::DuplicateNodeId { id: s.clone() });
+            }
+            s.clone()
+        }
+        None => {
+            let mut n = patterns.len();
+            let mut id = format!("Pattern/u{n}");
+            while patterns.contains_key(&id) {
+                n += 1;
+                id = format!("Pattern/u{n}");
+            }
+            id
+        }
+    };
+    let entry = pattern_of(spec, self_id.clone())?;
+    doc.palette.patterns.insert(self_id.clone(), entry);
+    let mut resolved_spec = spec.clone();
+    resolved_spec.self_id = Some(self_id.clone());
+    Ok(AppliedOperation {
+        op: Operation::CreateSwatch {
+            spec: resolved_spec,
+        },
+        inverse: Operation::DeleteSwatch { swatch_id: self_id },
+        invalidation: InvalidationHint {
+            structural: true,
+            ..Default::default()
+        },
+    })
+}
+
+fn apply_edit_pattern_swatch(
+    doc: &mut Document,
+    swatch_id: &str,
+    spec: &SwatchSpec,
+) -> Result<AppliedOperation, OperationError> {
+    let entry = pattern_of(spec, swatch_id.to_string())?;
+    let prior = doc
+        .palette
+        .patterns
+        .insert(swatch_id.to_string(), entry)
+        .map(|p| pattern_swatch_spec(&p))
+        .ok_or_else(|| OperationError::CollectionEntryNotFound {
+            collection: "swatch".to_string(),
+            id: swatch_id.to_string(),
+        })?;
+    Ok(AppliedOperation {
+        op: Operation::EditSwatch {
+            swatch_id: swatch_id.to_string(),
+            spec: spec.clone(),
+        },
+        inverse: Operation::EditSwatch {
+            swatch_id: swatch_id.to_string(),
+            spec: prior,
+        },
         invalidation: InvalidationHint {
             structural: true,
             ..Default::default()

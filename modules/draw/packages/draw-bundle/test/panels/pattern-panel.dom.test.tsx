@@ -177,7 +177,7 @@ describe("Pattern options panel — rendered against the engine", () => {
       expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
       expect(panel.work.count("log.warn")).toBe(0);
       expect(t(PATTERN_PANEL_NOTE)).toContain(
-        "Making, re-planning, releasing and deleting the copies are one undo step each",
+        "Making, re-planning, releasing and deleting the copies and saving the swatch are one undo step each",
       );
       expect(t(PATTERN_PANEL_NOTE)).not.toContain("two undo steps");
 

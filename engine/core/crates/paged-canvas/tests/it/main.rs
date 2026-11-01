@@ -103,6 +103,7 @@ mod paragraph_list_marker_paths;
 mod paragraph_span_columns_paths;
 mod paste_wire;
 mod path_edit_gesture;
+mod pattern_paint;
 mod place_image_wire;
 mod placed_pdf_page;
 mod placeholder_wire;

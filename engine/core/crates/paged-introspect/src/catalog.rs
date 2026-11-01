@@ -894,6 +894,9 @@ property_paths! {
         // Engine ADR 1048 — the native mesh fill (no IDML attribute: a
         // label carries it through an IDML round trip).
         FrameFillMesh => "frameFillMesh" : structure("MeshFillSpec", Wire::FillMesh),
+        // Engine ADR 1041 — the frame's own placement of a pattern paint
+        // (no IDML attribute: the pattern label carries it).
+        FramePatternTransform => "framePatternTransform" : transform(),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -1621,9 +1624,9 @@ mod tests {
         // 274 -> 275: ADR 1048 — a frame's gradient mesh or freeform
         // gradient.
         //
-        // 275 -> 285: ADR 1051 — the paragraph direction and the eight
+        // 275 -> 286: ADR 1041 — a frame's own pattern transform; ADR 1051 — the paragraph direction and the eight
         // script paths; ADR 1052 — a range's content control.
-        assert_eq!(cat.settable_paths.len(), 285, "settable path count drifted");
+        assert_eq!(cat.settable_paths.len(), 286, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings
