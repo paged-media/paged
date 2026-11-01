@@ -64,7 +64,7 @@ use image_core::{
     TileCoord, TileData, Transfer,
 };
 use image_gpu::GpuContext;
-use image_kernels::families::compose::{self, ComposeParams};
+use image_kernels::families::compose;
 use image_kernels::KernelDef;
 use image_psd::model::{LayerRecord, PsdFile, SectionKind};
 use std::sync::Arc;
@@ -203,8 +203,7 @@ fn layer_plates(file: &PsdFile) -> Vec<LayerPlate> {
         let premul: Vec<Px> = straight.into_iter().map(premultiply).collect();
         // Unknown blend keys fall back to Normal (the bytes are preserved
         // by the parser regardless).
-        let blend = Blend::from_psd_key(std::str::from_utf8(&layer.blend_key).unwrap_or("norm"))
-            .unwrap_or(Blend::Normal);
+        let blend = Blend::from_psd_key(&layer.blend_key).unwrap_or(Blend::Normal);
         plates.push(LayerPlate {
             premul,
             blend,
@@ -223,45 +222,29 @@ fn layer_plates(file: &PsdFile) -> Vec<LayerPlate> {
 pub fn flatten_reference(file: &PsdFile) -> Vec<Px> {
     let n = file.header.width as usize * file.header.height as usize;
     let mut canvas = vec![Px([0.0; 4]); n]; // transparent black backdrop
+    let w = (file.header.width as usize).max(1);
     for plate in layer_plates(file) {
-        for (bd, &src) in canvas.iter_mut().zip(plate.premul.iter()) {
-            *bd = compose_ref::composite(*bd, src, plate.opacity, plate.blend);
+        for (i, (bd, &src)) in canvas.iter_mut().zip(plate.premul.iter()).enumerate() {
+            *bd = if plate.blend == Blend::Dissolve {
+                let (x, y) = ((i % w) as u32, (i / w) as u32);
+                compose_ref::composite_dissolve(*bd, src, plate.opacity, x, y, 0)
+            } else {
+                compose_ref::composite(*bd, src, plate.opacity, plate.blend)
+            };
         }
     }
     canvas
 }
 
 /// The `compose.*` `KernelDef` for a [`Blend`] — joins the blend operator
-/// to its GPU kernel by id (the registry dispatch key).
+/// to its GPU kernel by the mode's canonical id (the registry dispatch
+/// key).
 fn compose_kernel(blend: Blend) -> &'static KernelDef {
-    match blend {
-        Blend::Normal => &compose::COMPOSE_NORMAL,
-        Blend::Multiply => &compose::COMPOSE_MULTIPLY,
-        Blend::Screen => &compose::COMPOSE_SCREEN,
-        Blend::Overlay => &compose::COMPOSE_OVERLAY,
-        Blend::Darken => &compose::COMPOSE_DARKEN,
-        Blend::Lighten => &compose::COMPOSE_LIGHTEN,
-        Blend::ColorDodge => &compose::COMPOSE_COLOR_DODGE,
-        Blend::ColorBurn => &compose::COMPOSE_COLOR_BURN,
-        Blend::HardLight => &compose::COMPOSE_HARD_LIGHT,
-        Blend::SoftLight => &compose::COMPOSE_SOFT_LIGHT,
-        Blend::Difference => &compose::COMPOSE_DIFFERENCE,
-        Blend::Exclusion => &compose::COMPOSE_EXCLUSION,
-        Blend::Hue => &compose::COMPOSE_HUE,
-        Blend::Saturation => &compose::COMPOSE_SATURATION,
-        Blend::Color => &compose::COMPOSE_COLOR,
-        Blend::Luminosity => &compose::COMPOSE_LUMINOSITY,
-        Blend::LinearBurn => &compose::COMPOSE_LINEAR_BURN,
-        Blend::LinearDodge => &compose::COMPOSE_LINEAR_DODGE,
-        Blend::DarkerColor => &compose::COMPOSE_DARKER_COLOR,
-        Blend::LighterColor => &compose::COMPOSE_LIGHTER_COLOR,
-        Blend::VividLight => &compose::COMPOSE_VIVID_LIGHT,
-        Blend::LinearLight => &compose::COMPOSE_LINEAR_LIGHT,
-        Blend::PinLight => &compose::COMPOSE_PIN_LIGHT,
-        Blend::HardMix => &compose::COMPOSE_HARD_MIX,
-        Blend::Subtract => &compose::COMPOSE_SUBTRACT,
-        Blend::Divide => &compose::COMPOSE_DIVIDE,
-    }
+    compose::FAMILY
+        .iter()
+        .copied()
+        .find(|k| k.id == compose_ref::kernel_id(blend))
+        .unwrap_or(&compose::COMPOSE_NORMAL)
 }
 
 /// A full-canvas plate as the interleaved f32 RGBA bytes a [`RawSource`]
@@ -326,7 +309,7 @@ pub fn flatten_gpu(file: &PsdFile, ctx: &GpuContext) -> Option<Vec<Px>> {
         .expect("layer raw source");
         let leaf = pipe.source(Box::new(src));
         let def = compose_kernel(plate.blend);
-        let params = Arc::<[u8]>::from(ComposeParams::new(plate.opacity).as_bytes());
+        let params = Arc::<[u8]>::from(compose::layer_params(def, plate.opacity, (0, 0)));
         acc = pipe.apply2(acc, leaf, def, params);
     }
 

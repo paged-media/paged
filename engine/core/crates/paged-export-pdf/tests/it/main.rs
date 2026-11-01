@@ -5,6 +5,7 @@
 
 mod anchored_effects;
 mod appearance;
+mod blend_modes_27;
 mod bookmarks;
 mod clip_groups;
 mod effect_stack;

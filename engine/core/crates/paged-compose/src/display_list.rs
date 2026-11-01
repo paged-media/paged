@@ -1004,32 +1004,14 @@ impl LayerEffect {
     }
 }
 
-/// IDML compositing blend mode. `Normal` (the default, source-over
-/// alpha composite) keeps the existing fast path; everything else
-/// requires the rasterizer to render the fill into an offscreen
-/// pixmap and composite onto the page with the named blend mode.
-/// Names match Adobe / W3C conventions; map straight to
-/// `peniko::Mix` in the rasterizer.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum BlendMode {
-    #[default]
-    Normal,
-    Multiply,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
-}
+/// The compositing blend mode of a group, a layer or a fill: the 27 of
+/// `paged-blend` (engine ADR 1034). `Normal` (the default, source-over)
+/// keeps the fast path. The sixteen [`BlendMode::is_native`] modes map
+/// straight to `peniko::Mix` in both rasterizers; Photoshop's eleven
+/// travel only on a `BeginBlendGroup` / `PushLayer` (the build wraps a
+/// `FillPathBlend` in one, [`crate::extent::lift_photoshop_fill_blends`]),
+/// which the CPU lane composites against its backdrop pixel by pixel.
+pub use paged_blend::BlendMode;
 
 /// One command in the display list.
 #[derive(Debug, Clone)]

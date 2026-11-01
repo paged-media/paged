@@ -558,24 +558,17 @@ impl PropertySchema {
 
 // ---- shared vocabularies --------------------------------------------
 
-pub const BLEND_MODES: &[&str] = &[
-    "Normal",
-    "Multiply",
-    "Screen",
-    "Overlay",
-    "SoftLight",
-    "HardLight",
-    "ColorDodge",
-    "ColorBurn",
-    "Darken",
-    "Lighten",
-    "Difference",
-    "Exclusion",
-    "Hue",
-    "Saturation",
-    "Color",
-    "Luminosity",
-];
+/// The 27 blend modes' model spellings, in Photoshop's menu order —
+/// derived from `paged-blend`, the one definition (engine ADR 1034).
+pub const BLEND_MODES: &[&str] = &{
+    let mut out = [""; 27];
+    let mut i = 0;
+    while i < out.len() {
+        out[i] = paged_blend::BlendMode::MENU[i].name();
+        i += 1;
+    }
+    out
+};
 pub const JUSTIFICATION: &[&str] = &[
     "LeftAlign",
     "CenterAlign",

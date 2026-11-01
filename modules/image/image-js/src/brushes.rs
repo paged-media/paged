@@ -618,14 +618,14 @@ pub const EXPORT_KEYS: &[&str] = &[
 
 /// The dual tip's combine modes, in the glue's `COMBINE_MODES` order.
 const COMBINE_MODES: [BlendMode; 10] = [
-    BlendMode::Multiply,
+    BlendMode::Layer(paged_blend::BlendMode::Multiply),
     BlendMode::SubtractionTexture,
-    BlendMode::Darken,
-    BlendMode::Overlay,
-    BlendMode::ColorDodge,
-    BlendMode::ColorBurn,
-    BlendMode::LinearBurn,
-    BlendMode::HardMix,
+    BlendMode::Layer(paged_blend::BlendMode::Darken),
+    BlendMode::Layer(paged_blend::BlendMode::Overlay),
+    BlendMode::Layer(paged_blend::BlendMode::ColorDodge),
+    BlendMode::Layer(paged_blend::BlendMode::ColorBurn),
+    BlendMode::Layer(paged_blend::BlendMode::LinearBurn),
+    BlendMode::Layer(paged_blend::BlendMode::HardMix),
     BlendMode::LinearHeight,
     BlendMode::Height,
 ];
@@ -741,7 +741,7 @@ pub fn export_brush(
     let mode = COMBINE_MODES
         .get(v("dual.mode").round().max(0.0) as usize)
         .copied()
-        .unwrap_or(BlendMode::Multiply);
+        .unwrap_or(BlendMode::Layer(paged_blend::BlendMode::Multiply));
     let dual_diameter = v("dual.diameter").max(1.0);
     let scatter_jitter = v("dual.scatter");
     let opacity = v("opacity").clamp(0.0, 1.0);
@@ -850,7 +850,7 @@ pub fn export_brush(
                 class_id: "PbTl".into(),
                 flow: (flow * 100.0).round(),
                 opacity: (opacity * 100.0).round(),
-                blend_mode: BlendMode::Normal,
+                blend_mode: BlendMode::NORMAL,
                 descriptor: d,
             }
         }),
