@@ -6,7 +6,7 @@
     "command": 877,
     "keybinding": 166,
     "menu": 621,
-    "panel": 145,
+    "panel": 146,
     "tool": 129
   },
   "features": [
@@ -8384,6 +8384,11 @@
       "id": "panel:media.paged.data.panel.templates",
       "kind": "panel",
       "owner": "media.paged.data"
+    },
+    {
+      "id": "panel:media.paged.doc.panel.contentControl",
+      "kind": "panel",
+      "owner": "media.paged.doc"
     },
     {
       "id": "panel:media.paged.doc.panel.outline",
