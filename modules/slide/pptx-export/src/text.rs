@@ -332,6 +332,55 @@ pub fn paragraph(
             }
         }
     }
+    // The marker's own colour, size and font (`buClr`, `buSzPct`, `buFont`),
+    // from the character style the paragraph names, where they differ from
+    // the inherited bullet's. The schema orders them before the bullet type.
+    let marker = match p.bullets_list_type.as_deref() {
+        Some("BulletList") => p.bullets_character_style.as_deref(),
+        Some("NumberedList") => p.bullets_and_numbering_digits_character_style.as_deref(),
+        _ => None,
+    }
+    .and_then(|id| ctx.colors.doc.styles.character_styles.get(id));
+    if let Some(def) = marker {
+        let (d_font, d_rgb, d_pct) = match &d.bullet {
+            Some(Bullet::Char {
+                font,
+                rgb,
+                size_percent,
+                ..
+            }) => (font.as_deref(), *rgb, *size_percent),
+            Some(Bullet::Number {
+                rgb, size_percent, ..
+            }) => (None, *rgb, *size_percent),
+            None => (None, None, 100.0),
+        };
+        if let Some(swatch) = def.fill_color.as_deref() {
+            if ctx.colors.rgb(swatch) != d_rgb {
+                if let Some(c) = ctx.colors.color(swatch, None) {
+                    kids.push_str(&format!("<a:buClr>{c}</a:buClr>"));
+                }
+            }
+        }
+        let text_size = p
+            .runs
+            .iter()
+            .find_map(|r| r.point_size)
+            .filter(|s| *s > 0.0);
+        if let (Some(ps), Some(ts)) = (def.point_size, text_size) {
+            let pct = ps as f64 / ts as f64 * 100.0;
+            if differs(pct, d_pct, 0.5) {
+                kids.push_str(&format!(
+                    r#"<a:buSzPct val="{}"/>"#,
+                    (pct * 1000.0).round() as i64
+                ));
+            }
+        }
+        if let Some(font) = def.font.as_deref() {
+            if d_font != Some(font) {
+                kids.push_str(&format!(r#"<a:buFont typeface="{}"/>"#, esc(font)));
+            }
+        }
+    }
     match p.bullets_list_type.as_deref() {
         Some("BulletList") => {
             let ch = p

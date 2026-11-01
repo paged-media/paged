@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use paged_model::FrameRef;
 use paged_scene::Document;
 use pptx_export::{export_with, native, ExportPlan, Exported, SlidePlan};
-use slide_resolve::model::{Deck, Item, ItemKind};
+use slide_resolve::model::{Bullet, Deck, Item, ItemKind};
 
 const FIXTURES: &[&str] = &[
     "text",
@@ -409,8 +409,8 @@ fn date_and_time_fields_are_engine_fields_and_are_written_back_as_fields() {
     assert_eq!(kinds, vec!["datetime2", "datetime13"]);
 }
 
-#[test]
-fn a_bullets_font_colour_and_size_become_the_markers_character_style() {
+/// The text deck whose title paragraph is a red 80 % Wingdings bullet.
+fn bulleted_deck() -> Vec<u8> {
     let bytes = fixture("text");
     let mut pkg = paged_ooxml::opc::OpcPackage::read(&bytes).unwrap();
     let part = "ppt/slides/slide1.xml";
@@ -419,7 +419,12 @@ fn a_bullets_font_colour_and_size_become_the_markers_character_style() {
     assert!(xml.contains(old));
     let with = r#"<a:p><a:pPr marL="285750" indent="-285750"><a:buClr><a:srgbClr val="FF0000"/></a:buClr><a:buSzPct val="80000"/><a:buFont typeface="Wingdings"/><a:buChar char="&#167;"/></a:pPr><a:r><a:rPr lang="de-DE" sz="2000"/><a:t>List levels</a:t>"#;
     pkg.set_part(part, xml.replacen(old, with, 1).into_bytes());
-    let bytes = pkg.write().unwrap();
+    pkg.write().unwrap()
+}
+
+#[test]
+fn a_bullets_font_colour_and_size_become_the_markers_character_style() {
+    let bytes = bulleted_deck();
     let doc = imported(&bytes);
     let before = resolved(&bytes);
     let title = story_of(&doc, 0, &format!("{}#4", before.slides[0].part));
@@ -442,6 +447,49 @@ fn a_bullets_font_colour_and_size_become_the_markers_character_style() {
             .count()
             >= 1
     );
+}
+
+#[test]
+fn an_edited_bullet_paragraph_writes_its_marker_font_colour_and_size_back() {
+    let bytes = bulleted_deck();
+    let before = resolved(&bytes);
+    let part = before.slides[0].part.clone();
+    let mut doc = imported(&bytes);
+    let title = story_of(&doc, 0, &format!("{part}#4"));
+    story_mut(&mut doc, &title).paragraphs[0].runs[0].text = "Edited levels".into();
+    let out = export_doc(&bytes, &doc);
+    keep(&out.bytes, "bullet-edit");
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    let xml = part_text(&out.bytes, &part);
+    let at = |needle: &str| {
+        xml.find(needle)
+            .unwrap_or_else(|| panic!("{needle} in {xml}"))
+    };
+    // The schema's order: colour, size, font, then the bullet itself.
+    let (clr, sz, font, ch) = (
+        at(r#"<a:buClr><a:srgbClr val="FF0000"/></a:buClr>"#),
+        at(r#"<a:buSzPct val="80000"/>"#),
+        at(r#"<a:buFont typeface="Wingdings"/>"#),
+        at("<a:buChar"),
+    );
+    assert!(clr < sz && sz < font && font < ch, "{xml}");
+    // And it reads back as the same bullet.
+    let after = resolved(&out.bytes);
+    let ItemKind::Shape { text: Some(t), .. } = &item(&after, 0, 4).kind else {
+        panic!()
+    };
+    let Some(Bullet::Char {
+        font,
+        rgb,
+        size_percent,
+        ..
+    }) = &t.paragraphs[0].bullet
+    else {
+        panic!("{:?}", t.paragraphs[0].bullet)
+    };
+    assert_eq!(font.as_deref(), Some("Wingdings"));
+    assert_eq!(*rgb, Some([255, 0, 0]));
+    assert!((size_percent - 80.0).abs() < 0.5, "{size_percent}");
 }
 
 #[test]
