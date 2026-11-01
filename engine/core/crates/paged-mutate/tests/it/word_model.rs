@@ -501,3 +501,96 @@ fn numbering_list_levels_travel_through_the_spec__feat__doc_word_list_levels() {
         "spec → def → spec is the identity"
     );
 }
+
+// ---- engine ADR 1051 — direction and script slots ----------------------
+
+#[test]
+fn direction_and_script_slots_set_and_undo__feat__doc_script_font_slots() {
+    let mut doc = open();
+    let cases = [
+        (PropertyPath::CharacterDirection, Value::Text("rtl".into())),
+        (
+            PropertyPath::CharacterEastAsianFont,
+            Value::Text("MS Mincho".into()),
+        ),
+        (
+            PropertyPath::CharacterComplexFont,
+            Value::Text("Arial".into()),
+        ),
+        (
+            PropertyPath::CharacterComplexFontSize,
+            Value::Length(Some(14.0)),
+        ),
+        (PropertyPath::CharacterComplexBold, Value::Bool(true)),
+        (PropertyPath::CharacterComplexItalic, Value::Bool(true)),
+        (PropertyPath::CharacterComplexScript, Value::Bool(true)),
+        (
+            PropertyPath::CharacterFontHint,
+            Value::Text("eastAsia".into()),
+        ),
+    ];
+    for (path, value) in cases {
+        round_trip(&mut doc, &set(range(0, 4), path, value.clone()));
+        apply(&mut doc, &set(range(0, 4), path, value)).unwrap();
+    }
+    let s = &run(&doc, 0).script;
+    assert_eq!(
+        s.direction,
+        Some(paged_model::CharacterDirection::RightToLeft)
+    );
+    assert_eq!(s.east_asian_font.as_deref(), Some("MS Mincho"));
+    assert_eq!(s.complex_point_size, Some(14.0));
+    assert_eq!(s.hint, Some(paged_model::FontHint::EastAsia));
+    // A bad value is refused before anything changes.
+    let before = doc.canonical_hash();
+    assert!(apply(
+        &mut doc,
+        &set(
+            range(0, 4),
+            PropertyPath::CharacterFontHint,
+            Value::Text("x".into())
+        )
+    )
+    .is_err());
+    assert_eq!(doc.canonical_hash(), before);
+}
+
+#[test]
+fn paragraph_direction_sets_and_undoes__feat__doc_bidi_paragraph() {
+    let mut doc = open();
+    let op = set(
+        range(0, 2),
+        PropertyPath::ParagraphDirection,
+        Value::Text("rtl".into()),
+    );
+    round_trip(&mut doc, &op);
+    apply(&mut doc, &op).unwrap();
+    assert_eq!(
+        doc.stories[0].story.paragraphs[0].direction,
+        Some(paged_model::ParagraphDirection::RightToLeft)
+    );
+    assert!(apply(
+        &mut doc,
+        &set(
+            range(0, 2),
+            PropertyPath::ParagraphDirection,
+            Value::Text("up".into())
+        )
+    )
+    .is_err());
+    // On a paragraph style too.
+    let style = Operation::SetStyleProperty {
+        collection: StyleCollection::Paragraph,
+        style_id: "ParagraphStyle/Body".into(),
+        path: PropertyPath::ParagraphDirection,
+        value: Value::Text("auto".into()),
+    };
+    round_trip(&mut doc, &style);
+    let slot = Operation::SetStyleProperty {
+        collection: StyleCollection::Character,
+        style_id: "CharacterStyle/Strong".into(),
+        path: PropertyPath::CharacterComplexFont,
+        value: Value::Text("Arial".into()),
+    };
+    round_trip(&mut doc, &slot);
+}

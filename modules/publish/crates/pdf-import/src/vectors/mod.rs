@@ -22,8 +22,9 @@
 //! carries) becomes the items it paints: paths with their fills and
 //! strokes (exact Béziers, the fill rule, dashes, caps and joins), clips
 //! as clip groups, transparency groups with their opacity, blend mode and
-//! soft mask, axial and radial shadings as native ramps (anything else
-//! sampled to an image and reported), images, and text runs with their
+//! soft mask, axial and radial shadings as native ramps, patch and
+//! triangle mesh shadings (types 4–7) as native gradient meshes (publish
+//! ADR 659; anything else sampled to an image and reported), images, and text runs with their
 //! glyph outlines. The bundle lowers them to native page items in one
 //! batch ([`ir`] is the contract).
 //!
@@ -51,6 +52,7 @@ use kurbo::Affine;
 
 pub use ai::sniff as sniff_format;
 use ir::{PageInfo, PdfInfo, VectorPage};
+pub use paint::MAX_MESH_PATCHES;
 
 /// Which box of the page a read is cropped to and measured from: the
 /// `<PDFAttribute PDFCrop>` vocabulary a placed PDF frame carries.

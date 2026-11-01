@@ -60,6 +60,12 @@ import type {
   ProofTarget,
 } from "./mode-engine";
 import {
+  initialMl,
+  makeMlFeatures,
+  type MlFeatures,
+  type MlUiState,
+} from "./ml-features";
+import {
   initialRetouch,
   makeRetouch,
   type RetouchApi,
@@ -590,6 +596,8 @@ export interface ImageSessionState {
    *  five sources and overlay, the healing and Content-Aware Move options
    *  (retouch.ts). */
   retouch: RetouchState;
+  /** The ML features' busy flag and the Generate panel's strip. */
+  ml: MlUiState;
   /** The dodge / burn / sponge options, frozen into each such stroke. */
   tone: ToneOptions;
   /** The per-channel readout for the ingested source (R/G/B/A + luma),
@@ -687,6 +695,9 @@ export interface ImageSession extends RetouchApi, HistoryOps, PresetOps {
    *  Select and Mask, Quick Mask, channels, paths, the display view
    *  (image ADR 470). */
   masking(): MaskingController;
+  /** The ML features over the host's ML doors: Select Subject, Select
+   *  Sky, Object Selection and the matting hook (image ADR 485). */
+  ml(): MlFeatures;
   /** Vectors inside the image: the paths the Pen and the shape tools
    *  draw, vector masks and shape layers (image ADR 476). */
   vectors(): VectorController;
@@ -2305,6 +2316,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     ptPerPx: null,
     cloneSource: null,
     retouch: initialRetouch(),
+    ml: initialMl(),
     tone: { ...DEFAULT_TONE },
     channels: null,
     brushLibrary: null,
@@ -4179,6 +4191,33 @@ export function createImageSession(host: BundleHost): ImageSession {
     wand: () => state.wand,
   });
   const masking = maskingRef;
+  // WP8.2 (image ADR 485): the ML features. The matting hook is given to
+  // Select and Mask once; it asks the host's door on every call.
+  const mlFeatures = makeMlFeatures({
+    host,
+    state: () => state,
+    engine: () => engine,
+    emit,
+    setStatus,
+    refreshSelection: () => api.refreshSelection(),
+    adopt: async (out) => {
+      const src = state.source;
+      if (!src || !engine) return false;
+      swapSource(src, out);
+      state.saveBack = null;
+      return recomposite();
+    },
+    adoptExtent: async (wh) => {
+      const src = state.source;
+      if (!src) return;
+      adoptCanvasExtent(src, wh);
+      if (src.elementId) await api.apply();
+    },
+    activeLayer: () => state.layers.active,
+    discardStroke: () => discardStroke(),
+    fillContentAware: () => api.fillSelection({ kind: "contentAware" }),
+  });
+  masking.setMattingProvider(mlFeatures.mattingProvider());
   // ── CURVES ▸ TARGETED ADJUSTMENT (I-55) ─────────────────────────────
   const curvesTarget: {
     armed: boolean;
@@ -4399,6 +4438,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     ...presetOps,
     ...retouch,
     masking: () => masking,
+    ml: () => mlFeatures,
     vectors: () => vectors,
     workspace: () => workspace,
     smart: () => smart,

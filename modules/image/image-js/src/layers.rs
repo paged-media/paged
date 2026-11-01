@@ -176,6 +176,8 @@ pub use history::{set_default_history_budget, SnapshotInfo};
 #[cfg(test)]
 mod type_tests;
 mod workspace_ops;
+// Generated pixels as layers, masks and an expanded canvas (ADR 485).
+mod generated;
 pub use mask::{BoundedMask, LayerMask};
 pub use vector_ops::VectorMaskStart;
 

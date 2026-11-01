@@ -31,6 +31,10 @@ import { frameOutline, placedPdfPlacement } from "../src/vectors/place";
 const MAPPER_CODES = [
   "shading.function_sampled",
   "shading.mesh_sampled",
+  "shading.mesh_too_large",
+  "shading.mesh_function",
+  "shading.mesh_background",
+  "shading.mesh_patches",
   "shading.focal_sampled",
   "shading.skewed_sampled",
   "shading.degenerate",

@@ -181,6 +181,8 @@ is not written yet.
 | [1047](1047-live-shapes.md) | A polygon, a star and a pie stay live shapes: parameters on the item, the outline in IDML, the parameters in a label | Accepted 2026-10-30 |
 | [1048](1048-gradient-mesh-and-freeform-gradient.md) | Gradient meshes and freeform gradients are native fills, drawn as a cached raster | Accepted 2026-10-29 |
 | [1050](1050-anchored-floats-text-frames-and-objects-in-cells.md) | Anchored floats wrap, sit behind the text and keep clear of each other; anchored text frames; tables and objects in table cells | Accepted 2026-10-30 |
+| [1051](1051-paragraph-direction-and-script-font-slots.md) | A paragraph's base direction (logical alignment, indents and tabs, UAX #9 at its level, mirrored right to left) and a run's direction and East Asian / complex-script font slots | Accepted 2026-10-30 |
+| [1052](1052-content-controls.md) | Content controls: a range of runs that is a checkbox, drop-down, date or text field; one value set is one undo step | Accepted 2026-10-30 |
 | [1053](1053-a-stroke-style-draws-the-stroke-along-the-path.md) | A stroke style draws the stroke along the path: width profiles and Art, Scatter, Pattern and Bristle brushes, the fill kept by a split, IDML baked | Accepted 2026-10-31 |
 
 Decisions made in other repositories that this engine's code rests on are listed in

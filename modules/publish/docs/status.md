@@ -27,7 +27,8 @@ What this repository ships and what it does not, read from the code at commit `6
 - **Place a PDF or Illustrator page as vectors** ([ADR 658](adr/658-a-pdf-page-places-as-native-vectors.md)).
   File ▸ Import ▸ PDF or AI as Vectors… (the editor's dialog, page picker) places one page into
   the open document as native items — exact paths with their fill rule, strokes with caps, joins
-  and dashes, clip groups, linear and radial gradients, images, opacity, blend modes and opacity
+  and dashes, clip groups, linear and radial gradients, gradient meshes (PDF shading types 4–7,
+  [ADR 659](adr/659-pdf-mesh-shadings-import-as-native-meshes.md)), images, opacity, blend modes and opacity
   masks, text frames (outlines where the document lacks the font) — as one paste, one undo step,
   with a loss report. Object ▸ Convert Placed PDF to Vectors does it for a placed PDF frame, in
   place and clipped to the frame. An `.ai` file reads through its PDF; Illustrator's private

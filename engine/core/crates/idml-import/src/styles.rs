@@ -156,6 +156,20 @@ pub(crate) fn parse_character_decorations(
     }
 }
 
+/// Engine ADR 1051 — the part of a run's script properties IDML spells:
+/// `CharacterDirection` (`DefaultDirection` reads as unset). The East
+/// Asian and complex-script slots have no IDML attribute (InDesign sets
+/// them through composite fonts).
+pub(crate) fn parse_character_script(
+    e: &quick_xml::events::BytesStart,
+) -> paged_model::ScriptProperties {
+    paged_model::ScriptProperties {
+        direction: attr(e, b"CharacterDirection")
+            .and_then(|s| paged_model::CharacterDirection::from_idml(&s)),
+        ..Default::default()
+    }
+}
+
 /// Parse a [`ParagraphShading`] from the `ParagraphShading*` attrs off a
 /// `<ParagraphStyle>` (or `<ParagraphStyleRange>`) element. Returns a
 /// fully-default instance when no attrs are present; callers can check `on`
@@ -1113,6 +1127,7 @@ fn parse_character_style(e: &quick_xml::events::BytesStart) -> Option<CharacterS
         underline: attr(e, b"Underline").and_then(|s| s.parse().ok()),
         strikethru: attr(e, b"StrikeThru").and_then(|s| s.parse().ok()),
         decorations: parse_character_decorations(e),
+        script: parse_character_script(e),
         no_break: attr(e, b"NoBreak").and_then(|s| s.parse().ok()),
         overprint_fill: attr(e, b"OverprintFill").and_then(|s| s.parse().ok()),
         overprint_stroke: attr(e, b"OverprintStroke").and_then(|s| s.parse().ok()),
@@ -1703,6 +1718,7 @@ fn parse_paragraph_style(e: &quick_xml::events::BytesStart) -> Option<ParagraphS
         underline: attr(e, b"Underline").and_then(|s| s.parse().ok()),
         strikethru: attr(e, b"StrikeThru").and_then(|s| s.parse().ok()),
         decorations: parse_character_decorations(e),
+        script: parse_character_script(e),
         tab_list: Vec::new(),
         bullets_list_type: attr(e, b"BulletsAndNumberingListType"),
         bullet_character: None,
@@ -1789,6 +1805,8 @@ fn parse_paragraph_style(e: &quick_xml::events::BytesStart) -> Option<ParagraphS
         rule_above: parse_paragraph_rule(e, "RuleAbove"),
         rule_below: parse_paragraph_rule(e, "RuleBelow"),
         border: parse_paragraph_border(e),
+        direction: attr(e, b"ParagraphDirection")
+            .and_then(|s| paged_model::ParagraphDirection::from_idml(&s)),
         // `Ligatures`, `KerningMethod` and the `OTF*` toggles: InDesign
         // writes run formatting on paragraph styles as on character
         // styles (asked 2026-10-12: `Ligatures="false"

@@ -360,6 +360,14 @@ pub(crate) fn invert_para_props(props: &[StyleProp]) -> docx_core::ParaProps {
             ("paragraphSpaceAfter", PropValue::Length(v)) => p.space_after = Some(tw(*v)),
             ("paragraphKeepWithNext", PropValue::Length(v)) => p.keep_next = Some(*v > 0.0),
             ("paragraphKeepLinesTogether", PropValue::Bool(b)) => p.keep_lines = Some(*b),
+            // Doc ADR 620.
+            ("paragraphDirection", PropValue::Text(d)) => {
+                p.bidi = match d.as_str() {
+                    "rtl" => Some(true),
+                    "ltr" => Some(false),
+                    _ => None,
+                }
+            }
             // The lowering also gives a paragraph NextPage when a page break
             // ended the paragraph before it; re-emitted as pageBreakBefore
             // that lays out the same (it already opens the page).
@@ -890,9 +898,42 @@ fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], size_pt: f32, doc:
                     r.spacing_twips = Some(twips);
                 }
             }
-            _ => {}
+            (path, value) => {
+                apply_script_prop(r, path, value);
+            }
         }
     }
+}
+
+/// Doc ADR 620 — a script path's value onto `r` (the reverse of
+/// `docx_lower::script_props`). `false` when `path` is not one.
+pub(crate) fn apply_script_prop(r: &mut RunProps, path: &str, value: &PropValue) -> bool {
+    match (path, value) {
+        ("characterEastAsianFont", PropValue::Text(f)) => {
+            r.font_east_asia = (!f.is_empty()).then(|| f.clone())
+        }
+        ("characterComplexFont", PropValue::Text(f)) => {
+            r.font_cs = (!f.is_empty()).then(|| f.clone())
+        }
+        ("characterComplexFontSize", PropValue::Length(pt)) => {
+            r.size_cs_half_pts = Some((pt * 2.0).round() as u32)
+        }
+        ("characterComplexBold", PropValue::Bool(b)) => r.bold_cs = Some(*b),
+        ("characterComplexItalic", PropValue::Bool(b)) => r.italic_cs = Some(*b),
+        ("characterComplexScript", PropValue::Bool(b)) => r.complex_script = Some(*b),
+        ("characterDirection", PropValue::Text(d)) => {
+            r.rtl = match d.as_str() {
+                "rtl" => Some(true),
+                "ltr" => Some(false),
+                _ => None,
+            }
+        }
+        ("characterFontHint", PropValue::Text(h)) => {
+            r.font_hint = (!h.is_empty()).then(|| h.clone())
+        }
+        _ => return false,
+    }
+    true
 }
 
 /// What becomes of one baseline run ([`plan_runs`]).
@@ -1169,7 +1210,9 @@ pub(crate) fn invert_props(props: &[StyleProp], size_pt: f32, doc: &LoweredDoc) 
             ("characterTracking", PropValue::Length(t)) => {
                 r.spacing_twips = Some(twips_of_tracking(*t, size_pt));
             }
-            _ => {}
+            (path, value) => {
+                apply_script_prop(&mut r, path, value);
+            }
         }
     }
     r

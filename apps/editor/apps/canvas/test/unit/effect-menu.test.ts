@@ -122,6 +122,40 @@ describe("Effect menu [editor-shell.panels.appearance-transparency]", () => {
     });
   });
 
+  test("Pathfinder goes to a group's own stack and never to a lone rectangle's", () => {
+    const plan = planAddEffect(
+      [
+        { address: "rectangle:a", entries: [] },
+        { address: "group:g", entries: [] },
+      ],
+      "pathfinder",
+    );
+    expect(plan).toEqual({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "set",
+            args: {
+              address: "group:g",
+              path: "groupEffectStack",
+              value: {
+                type: "effectStack",
+                value: { entries: [{ kind: "pathfinder", enabled: true }] },
+              },
+            },
+          },
+        ],
+      },
+    });
+    expect(
+      planAddEffect([{ address: "rectangle:a", entries: [] }], "pathfinder"),
+    ).toBeNull();
+    expect(
+      planAddEffect([{ address: "group:g", entries: [] }], "gaussianBlur"),
+    ).toBeNull();
+  });
+
   test("an InDesign effect a stack already holds is not added twice", () => {
     expect(
       planAddEffect(

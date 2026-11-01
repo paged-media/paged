@@ -199,6 +199,17 @@ pub(crate) fn apply_fonts(f: &wml::RunFonts, theme: Option<&Theme>, props: &mut 
     if cs.is_some() {
         props.font_cs = cs;
     }
+    // Doc ADR 620 — the hint (`ascii` reads as the default slot).
+    if let Some(h) = f.hint {
+        props.font_hint = Some(
+            match h {
+                wml::FontTypeHintValues::EastAsia => "eastAsia",
+                wml::FontTypeHintValues::ComplexScript => "cs",
+                _ => "default",
+            }
+            .to_string(),
+        );
+    }
 }
 
 /// The Latin family a paragraph mark's or a list level's `w:rFonts` names.

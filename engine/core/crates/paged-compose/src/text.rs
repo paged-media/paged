@@ -452,6 +452,7 @@ mod tests {
             object_advances: Vec::new(),
             ruby_aki: Vec::new(),
             vertical: false,
+            bidi: None,
         };
         layout_paragraph(text, &shaper, &opts)
     }

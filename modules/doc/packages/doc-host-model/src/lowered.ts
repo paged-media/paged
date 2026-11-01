@@ -88,6 +88,18 @@ export interface LoweredRun {
   formatChange?: LoweredFormatChange | null;
   /** Doc ADR 613 — the comments (`docx-c<w:id>`) whose range covers it. */
   comments?: string[];
+  /** Doc ADR 614 — the inline content control the run is content of, in the
+   *  engine's JSON shape (`paged_model::ContentControl`, engine ADR 1052):
+   *  the pour sets it on the run's range (`characterContentControl`). */
+  control?: LoweredContentControl | null;
+}
+
+/** Doc ADR 614 — an inline content control (its `id` and `kind` are what the
+ *  bundle reads; the rest rides to the engine as it stands). */
+export interface LoweredContentControl {
+  id: string;
+  kind: { type: string; [key: string]: unknown };
+  [key: string]: unknown;
 }
 
 /** Doc ADR 613 — one tracked change, as `recordChange` records it. */

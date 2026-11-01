@@ -120,4 +120,5 @@ mod variables;
 mod vector_effects;
 mod vertical_text;
 mod word_decorations;
+mod word_direction;
 mod word_fields;

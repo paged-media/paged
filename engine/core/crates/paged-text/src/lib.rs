@@ -51,8 +51,9 @@ pub use hyphenate::{
     soft_hyphen_opportunities, HyphenationLimits, Hyphenator, Hyphenators, Language, SOFT_HYPHEN,
 };
 pub use layout::{
-    apply_bidi_reorder, layout_paragraph, layout_runs, position_line, Alignment, BidiDirection,
-    LaidOutLine, LaidOutParagraph, LayoutOptions, PositionedGlyph, StyledRun,
+    apply_bidi_reorder, layout_paragraph, layout_runs, position_line, set_stated_bidi, Alignment,
+    BidiDirection, BidiLayout, LaidOutLine, LaidOutParagraph, LayoutOptions, PositionedGlyph,
+    StyledRun,
 };
 pub use shape::{
     apply_optical_margin, apply_tracking, optical_margin_offset, shape_run,
