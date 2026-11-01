@@ -83,6 +83,13 @@ async function workbookWith(marker: string): Promise<Uint8Array> {
 /** An editor that opens documents one after another. Each document has its
  *  own container parts; the per-browser blob is shared by all of them. When
  *  `broadcasts`, every open is announced through `document.onDidOpen`. */
+/** A door that exists and does nothing (ADR 305): every member is a no-op
+ *  returning a disposable, except the ones given. */
+function inertSurface(own: Record<string, unknown> = {}) {
+  const noop = () => ({ dispose() {} });
+  return new Proxy(own, { get: (t, k) => (k in t ? t[k as string] : noop) });
+}
+
 function fakeEditor(opts: { broadcasts?: boolean } = {}) {
   const opened = new Set<(e: unknown) => void>();
   const docs = new Map<string, Map<string, Uint8Array>>();
@@ -151,6 +158,7 @@ function fakeEditor(opts: { broadcasts?: boolean } = {}) {
       },
       objectType: () => ({ dispose() {} }),
       objectModel: () => ({ changed() {}, dispose() {} }),
+      schemaPanel: () => ({ dispose() {} }),
       editContext(c: EditContextContribution) {
         editContexts.push(c);
         return { dispose() {} };
@@ -163,6 +171,9 @@ function fakeEditor(opts: { broadcasts?: boolean } = {}) {
         dispose() {},
       }),
     },
+    bindings: inertSurface(),
+    selection: inertSurface({ get: () => [] }),
+    objects: inertSurface({ query: async () => [] }),
     shell: { openPanel() {}, closePanel() {} },
   } as unknown as BundleHost;
 
