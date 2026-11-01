@@ -24,7 +24,7 @@
 //! the part re-emits verbatim.
 
 use crate::error::{FromXmlError, XmlError};
-use crate::xml::attr_as;
+use crate::xml::{attr_as, escape_attr};
 
 /// The reserved OPC part name of the content-type table.
 pub const CONTENT_TYPES_PART: &str = "[Content_Types].xml";
@@ -106,6 +106,215 @@ impl ContentTypes {
             .iter()
             .any(|(pn, _)| pn == absolute_part_name)
     }
+
+    /// A table with no entries (write one with the `add_*` methods and [`to_xml`](Self::to_xml)).
+    pub fn new() -> ContentTypes {
+        ContentTypes::default()
+    }
+
+    /// Add an extension default unless the extension (any case) has one.
+    pub fn add_default(&mut self, extension: &str, content_type: &str) {
+        let ext = extension.trim_start_matches('.');
+        if !self
+            .defaults
+            .iter()
+            .any(|(e, _)| e.eq_ignore_ascii_case(ext))
+        {
+            self.defaults
+                .push((ext.to_string(), content_type.to_string()));
+        }
+    }
+
+    /// Add a per-part override (absolute name, `/word/document.xml`) unless
+    /// the part has one. The first content type given for a part stays.
+    pub fn add_override(&mut self, absolute_part_name: &str, content_type: &str) {
+        if !self.has_override(absolute_part_name) {
+            self.overrides
+                .push((absolute_part_name.to_string(), content_type.to_string()));
+        }
+    }
+
+    /// Drop the override of a part.
+    pub fn remove_override(&mut self, absolute_part_name: &str) {
+        self.overrides.retain(|(p, _)| p != absolute_part_name);
+    }
+
+    /// The whole `[Content_Types].xml`: defaults, then overrides, in order.
+    pub fn to_xml(&self) -> String {
+        let mut out = String::from(XML_DECL);
+        out.push_str(&format!(r#"<Types xmlns="{NS}">"#));
+        for (ext, ct) in &self.defaults {
+            out.push_str(&format!(
+                r#"<Default Extension="{}" ContentType="{}"/>"#,
+                escape_attr(ext),
+                escape_attr(ct)
+            ));
+        }
+        for (part, ct) in &self.overrides {
+            out.push_str(&format!(
+                r#"<Override PartName="{}" ContentType="{}"/>"#,
+                escape_attr(part),
+                escape_attr(ct)
+            ));
+        }
+        out.push_str("</Types>");
+        out
+    }
+}
+
+/// The XML declaration every part this crate writes starts with.
+const XML_DECL: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#;
+/// The content-types namespace.
+const NS: &str = "http://schemas.openxmlformats.org/package/2006/content-types";
+
+/// One edit to an existing `[Content_Types].xml`, applied by [`patch`].
+#[derive(Debug, Clone, Default)]
+pub struct Patch<'a> {
+    /// Parts (absolute names) whose `<Override>` goes.
+    pub remove_overrides: Vec<&'a str>,
+    /// `(absolute part name, content type)` overrides to add (skipped when the part has one).
+    pub add_overrides: Vec<(&'a str, &'a str)>,
+    /// `(extension, content type)` defaults to add (skipped when the extension has one).
+    pub add_defaults: Vec<(&'a str, &'a str)>,
+}
+
+/// Edit an existing `[Content_Types].xml` as text: every byte the edit does not
+/// touch stays, so a table nobody changed is unchanged and a changed one differs
+/// by exactly the tags added or removed. New overrides go before `</Types>`; a
+/// new default goes before the first `<Default`, else right after `<Types …>`.
+/// Part names compare ignoring case, as OPC part names do.
+pub fn patch(xml: &str, edit: &Patch<'_>) -> String {
+    let mut out = xml.to_string();
+    for part in &edit.remove_overrides {
+        while let Some((start, end)) = find_tag(&out, "Override", |t| {
+            tag_attr(t, "PartName").is_some_and(|v| v.eq_ignore_ascii_case(part))
+        }) {
+            out.replace_range(start..end, "");
+        }
+    }
+    for (ext, ct) in &edit.add_defaults {
+        let ext = ext.trim_start_matches('.');
+        if find_tag(&out, "Default", |t| {
+            tag_attr(t, "Extension").is_some_and(|v| v.eq_ignore_ascii_case(ext))
+        })
+        .is_some()
+        {
+            continue;
+        }
+        let tag = format!(
+            r#"<Default Extension="{}" ContentType="{}"/>"#,
+            escape_attr(ext),
+            escape_attr(ct)
+        );
+        insert_child(&mut out, &tag, Where::BeforeFirst("Default"));
+    }
+    let mut adds = String::new();
+    for (part, ct) in &edit.add_overrides {
+        let has = find_tag(&out, "Override", |t| {
+            tag_attr(t, "PartName").is_some_and(|v| v.eq_ignore_ascii_case(part))
+        })
+        .is_some();
+        if !has && !adds.contains(&format!(r#"PartName="{}""#, escape_attr(part))) {
+            adds.push_str(&format!(
+                r#"<Override PartName="{}" ContentType="{}"/>"#,
+                escape_attr(part),
+                escape_attr(ct)
+            ));
+        }
+    }
+    if !adds.is_empty() {
+        insert_child(&mut out, &adds, Where::AtEnd);
+    }
+    out
+}
+
+enum Where {
+    BeforeFirst(&'static str),
+    AtEnd,
+}
+
+/// Insert `tags` among the children of the root `<Types>`.
+fn insert_child(xml: &mut String, tags: &str, at: Where) {
+    if let Where::BeforeFirst(name) = at {
+        if let Some((start, _)) = find_tag(xml, name, |_| true) {
+            xml.insert_str(start, tags);
+            return;
+        }
+    }
+    if let Some(close) = xml.rfind("</Types>") {
+        // `AtEnd`, or a table with no default yet: a default still belongs first.
+        match at {
+            Where::AtEnd => xml.insert_str(close, tags),
+            Where::BeforeFirst(_) => {
+                if let Some(open_end) = xml
+                    .find("<Types")
+                    .and_then(|i| xml[i..].find('>').map(|j| i + j + 1))
+                {
+                    xml.insert_str(open_end, tags);
+                } else {
+                    xml.insert_str(close, tags);
+                }
+            }
+        }
+    } else if let Some(i) = xml.rfind("/>") {
+        // `<Types …/>`: no children yet; open it.
+        let open = xml[..i].trim_end().to_string();
+        *xml = format!("{open}>{tags}</Types>");
+    }
+}
+
+/// The `[start, end)` span of the first `<name …>` tag (self-closed, or with its
+/// closing `</name>`) that `keep` accepts; `keep` sees the opening tag's text.
+pub(crate) fn find_tag(
+    xml: &str,
+    name: &str,
+    keep: impl Fn(&str) -> bool,
+) -> Option<(usize, usize)> {
+    let open = format!("<{name}");
+    let mut from = 0;
+    while let Some(i) = xml[from..].find(&open).map(|i| i + from) {
+        let after = i + open.len();
+        // `<Default` must not match `<DefaultFoo`.
+        if !xml[after..].starts_with(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>') {
+            from = after;
+            continue;
+        }
+        let gt = xml[after..].find('>').map(|j| j + after)?;
+        let tag = &xml[i..=gt];
+        if keep(tag) {
+            if tag.ends_with("/>") {
+                return Some((i, gt + 1));
+            }
+            let close = format!("</{name}>");
+            let end = xml[gt..]
+                .find(&close)
+                .map(|j| gt + j + close.len())
+                .unwrap_or(gt + 1);
+            return Some((i, end));
+        }
+        from = gt + 1;
+    }
+    None
+}
+
+/// An attribute of an opening tag's text, either quote style, unescaped.
+pub(crate) fn tag_attr(tag: &str, name: &str) -> Option<String> {
+    let bytes = tag.as_bytes();
+    let mut from = 0;
+    while let Some(i) = tag[from..].find(name).map(|i| i + from) {
+        let after = i + name.len();
+        let before_ok = i > 0 && bytes[i - 1].is_ascii_whitespace();
+        let rest = tag[after..].trim_start();
+        if before_ok && rest.starts_with('=') {
+            let v = rest[1..].trim_start();
+            let quote = v.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+            let body = &v[1..];
+            let end = body.find(quote)?;
+            return Some(crate::xml::unescape(&body[..end]));
+        }
+        from = after;
+    }
+    None
 }
 
 #[cfg(test)]
@@ -156,6 +365,83 @@ mod tests {
         assert!(
             ContentTypes::parse(b"not xml at all <<<").is_ok()
                 || ContentTypes::parse(b"<<<").is_err()
+        );
+    }
+
+    const TABLE: &str = r#"<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="r"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/a.xml" ContentType="A"/><Override ContentType='B' PartName='/B.xml'></Override></Types>"#;
+
+    #[test]
+    fn a_model_writes_and_reads_back() {
+        let mut t = ContentTypes::new();
+        t.add_default(".png", "image/png");
+        t.add_default("PNG", "image/other"); // the extension has one, any case
+        t.add_override("/word/document.xml", "main");
+        t.add_override("/word/document.xml", "other"); // first stays
+        let back = ContentTypes::parse(t.to_xml().as_bytes()).unwrap();
+        assert_eq!(back.defaults, vec![("png".into(), "image/png".into())]);
+        assert_eq!(
+            back.overrides,
+            vec![("/word/document.xml".into(), "main".into())]
+        );
+        t.remove_override("/word/document.xml");
+        assert!(!t.has_override("/word/document.xml"));
+    }
+
+    #[test]
+    fn a_patch_changes_only_the_tags_it_names() {
+        let out = patch(
+            TABLE,
+            &Patch {
+                remove_overrides: vec!["/b.xml"], // case-insensitive, single quotes, paired close
+                add_overrides: vec![("/a.xml", "dup"), ("/c.xml", "C&D")],
+                add_defaults: vec![("png", "image/png"), ("XML", "dup")],
+            },
+        );
+        let t = ContentTypes::parse(out.as_bytes()).unwrap();
+        assert!(!t.has_override("/B.xml"));
+        assert_eq!(t.content_type_of("/a.xml"), Some("A")); // not duplicated
+        assert_eq!(t.content_type_of("/c.xml"), Some("C&D")); // escaped and read back
+        assert_eq!(t.defaults.iter().filter(|(e, _)| e == "png").count(), 1);
+        assert_eq!(
+            t.defaults
+                .iter()
+                .filter(|(e, _)| e.eq_ignore_ascii_case("xml"))
+                .count(),
+            1
+        );
+        // New default before the first `<Default`; everything else in place.
+        assert!(out.contains(
+            r#"<Default Extension="png" ContentType="image/png"/><Default Extension="rels""#
+        ));
+        assert!(out.starts_with(r#"<?xml version="1.0"?><Types"#));
+        assert!(out.ends_with(r#"<Override PartName="/c.xml" ContentType="C&amp;D"/></Types>"#));
+    }
+
+    #[test]
+    fn an_empty_patch_is_the_identity_and_a_bare_root_opens() {
+        assert_eq!(patch(TABLE, &Patch::default()), TABLE);
+        let bare = r#"<Types xmlns="x"/>"#;
+        let out = patch(
+            bare,
+            &Patch {
+                add_overrides: vec![("/p.xml", "P")],
+                ..Patch::default()
+            },
+        );
+        assert_eq!(
+            out,
+            r#"<Types xmlns="x"><Override PartName="/p.xml" ContentType="P"/></Types>"#
+        );
+        let out = patch(
+            r#"<Types xmlns="x"></Types>"#,
+            &Patch {
+                add_defaults: vec![("png", "i")],
+                ..Patch::default()
+            },
+        );
+        assert_eq!(
+            out,
+            r#"<Types xmlns="x"><Default Extension="png" ContentType="i"/></Types>"#
         );
     }
 }

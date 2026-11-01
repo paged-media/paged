@@ -35,7 +35,7 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 
 use crate::error::{FromXmlError, XmlError};
-use crate::xml::attr_as;
+use crate::xml::{attr_as, escape_attr};
 
 /// One `<Relationship>` from a `.rels` part.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,6 +110,141 @@ impl Relationships {
     pub fn all_of_type<'a>(&'a self, suffix: &'a str) -> impl Iterator<Item = &'a Relationship> {
         self.items.iter().filter(move |r| r.is_type(suffix))
     }
+}
+
+impl Relationships {
+    /// An empty graph (fill it with [`add`](Self::add) and write it with [`to_xml`](Self::to_xml)).
+    pub fn new() -> Relationships {
+        Relationships::default()
+    }
+
+    /// The first `rIdN` no relationship uses.
+    pub fn next_id(&self) -> String {
+        next_id(self.items.iter().map(|r| r.id.as_str()))
+    }
+
+    /// Add a relationship under `id` (replacing one with that id).
+    pub fn add(&mut self, id: &str, rel_type: &str, target: &str, external: bool) {
+        self.items.retain(|r| r.id != id);
+        self.items.push(Relationship {
+            id: id.to_string(),
+            rel_type: rel_type.to_string(),
+            target: target.to_string(),
+            target_mode: external.then(|| "External".to_string()),
+        });
+    }
+
+    /// Add a relationship under the next free id and return the id.
+    pub fn add_next(&mut self, rel_type: &str, target: &str, external: bool) -> String {
+        let id = self.next_id();
+        self.add(&id, rel_type, target, external);
+        id
+    }
+
+    /// Drop the relationship with `id`.
+    pub fn remove(&mut self, id: &str) {
+        self.items.retain(|r| r.id != id);
+    }
+
+    /// The whole `.rels` part, in order.
+    pub fn to_xml(&self) -> String {
+        let mut out = String::from(XML_DECL);
+        out.push_str(&format!(r#"<Relationships xmlns="{NS}">"#));
+        for r in &self.items {
+            out.push_str(&relationship_tag(
+                &r.id,
+                &r.rel_type,
+                &r.target,
+                r.target_mode.as_deref(),
+            ));
+        }
+        out.push_str("</Relationships>");
+        out
+    }
+}
+
+/// The first `rIdN` that is not among `ids` (N from 1; ids that are not `rId<number>` are ignored).
+pub fn next_id<'a>(ids: impl Iterator<Item = &'a str>) -> String {
+    let max = ids
+        .filter_map(|id| id.strip_prefix("rId")?.parse::<u64>().ok())
+        .max()
+        .unwrap_or(0);
+    format!("rId{}", max + 1)
+}
+
+const XML_DECL: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#;
+const NS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
+
+fn relationship_tag(id: &str, rel_type: &str, target: &str, mode: Option<&str>) -> String {
+    let mode = mode
+        .map(|m| format!(r#" TargetMode="{}""#, escape_attr(m)))
+        .unwrap_or_default();
+    format!(
+        r#"<Relationship Id="{}" Type="{}" Target="{}"{mode}/>"#,
+        escape_attr(id),
+        escape_attr(rel_type),
+        escape_attr(target),
+    )
+}
+
+/// One relationship to add with [`patch`].
+#[derive(Debug, Clone)]
+pub struct NewRelationship<'a> {
+    /// The id; `None` takes the next free `rIdN`.
+    pub id: Option<&'a str>,
+    pub rel_type: &'a str,
+    pub target: &'a str,
+    pub external: bool,
+}
+
+/// Edit an existing `.rels` part as text: the tags named by `remove` (by id) go,
+/// the `add`ed ones are appended before `</Relationships>`, and every other byte
+/// stays. Returns the new text and the ids of the added relationships, in order.
+pub fn patch(xml: &str, remove: &[&str], add: &[NewRelationship<'_>]) -> (String, Vec<String>) {
+    let mut out = xml.to_string();
+    for id in remove {
+        while let Some((start, end)) = crate::content_types::find_tag(&out, "Relationship", |t| {
+            crate::content_types::tag_attr(t, "Id").as_deref() == Some(*id)
+        }) {
+            out.replace_range(start..end, "");
+        }
+    }
+    let mut taken: Vec<String> = Vec::new();
+    let mut from = 0;
+    while let Some((start, end)) =
+        crate::content_types::find_tag(&out[from..], "Relationship", |_| true)
+            .map(|(a, b)| (a + from, b + from))
+    {
+        if let Some(id) = crate::content_types::tag_attr(&out[start..end], "Id") {
+            taken.push(id);
+        }
+        from = end;
+    }
+    let mut ids = Vec::new();
+    let mut tags = String::new();
+    for r in add {
+        let id =
+            r.id.map(str::to_string)
+                .unwrap_or_else(|| next_id(taken.iter().map(String::as_str)));
+        taken.push(id.clone());
+        tags.push_str(&relationship_tag(
+            &id,
+            r.rel_type,
+            r.target,
+            r.external.then_some("External"),
+        ));
+        ids.push(id);
+    }
+    if !tags.is_empty() {
+        if let Some(close) = out.rfind("</Relationships>") {
+            out.insert_str(close, &tags);
+        } else if let Some(i) = out.rfind("/>") {
+            // `<Relationships …/>`: no children yet; open it.
+            let open = out[..i].trim_end().to_string();
+            out = format!("{open}>{tags}</Relationships>");
+        }
+    }
+    (out, ids)
 }
 
 /// The one scanner behind both parses. `STRICT` turns every XML and
@@ -301,5 +436,72 @@ mod tests {
         );
         assert_eq!(rels_part_name("x.xml"), "_rels/x.xml.rels");
         assert_eq!(rels_part_name(""), "_rels/.rels");
+    }
+
+    const RELS: &str = r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="t/a" Target="a.xml"/><Relationship Id="rId7" Type="t/b" Target="b.xml"></Relationship></Relationships>"#;
+
+    #[test]
+    fn a_graph_writes_and_reads_back() {
+        let mut r = Relationships::new();
+        assert_eq!(r.add_next("t/styles", "styles.xml", false), "rId1");
+        assert_eq!(r.add_next("t/hyperlink", "http://x/?a=1&b=2", true), "rId2");
+        r.add("rIdStyles", "t/s", "s.xml", false);
+        let back = Relationships::try_parse(r.to_xml().as_bytes()).unwrap();
+        assert_eq!(back.items, r.items);
+        assert_eq!(back.items[1].target_mode.as_deref(), Some("External"));
+        assert_eq!(back.target_of("rId2"), Some("http://x/?a=1&b=2"));
+        r.remove("rId1");
+        assert_eq!(r.next_id(), "rId3"); // rId2 stays the highest numbered id
+    }
+
+    #[test]
+    fn a_patch_removes_by_id_and_appends_under_free_ids() {
+        let (out, ids) = patch(
+            RELS,
+            &["rId1"],
+            &[
+                NewRelationship {
+                    id: None,
+                    rel_type: "t/c",
+                    target: "c.xml",
+                    external: false,
+                },
+                NewRelationship {
+                    id: Some("rIdX"),
+                    rel_type: "t/d",
+                    target: "u?a&b",
+                    external: true,
+                },
+                NewRelationship {
+                    id: None,
+                    rel_type: "t/e",
+                    target: "e.xml",
+                    external: false,
+                },
+            ],
+        );
+        assert_eq!(ids, vec!["rId8", "rIdX", "rId9"]);
+        let r = Relationships::try_parse(out.as_bytes()).unwrap();
+        assert!(r.by_id("rId1").is_none());
+        assert_eq!(r.by_id("rId7").unwrap().target, "b.xml"); // untouched
+        assert_eq!(r.target_of("rIdX"), Some("u?a&b"));
+        assert!(out.contains(r#"<Relationship Id="rId7" Type="t/b" Target="b.xml"></Relationship><Relationship Id="rId8""#));
+        assert_eq!(patch(RELS, &[], &[]).0, RELS);
+        let bare = r#"<Relationships xmlns="x"/>"#;
+        let (out, ids) = patch(
+            bare,
+            &[],
+            &[NewRelationship {
+                id: None,
+                rel_type: "t",
+                target: "z",
+                external: false,
+            }],
+        );
+        assert_eq!(ids, vec!["rId1"]);
+        assert_eq!(
+            out,
+            r#"<Relationships xmlns="x"><Relationship Id="rId1" Type="t" Target="z"/></Relationships>"#
+        );
     }
 }

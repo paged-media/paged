@@ -94,49 +94,36 @@ pub fn write_docx(doc: &DocxDocument) -> Result<(Vec<u8>, WriteReport), String> 
 
     // Relationships of the main part: styles, settings, numbering, then the
     // pictures and hyperlinks in the order the body named them.
-    let mut rels = String::new();
-    rels.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
-    let _ = write!(
-        rels,
-        r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
-    );
-    let _ = write!(
-        rels,
-        r#"<Relationship Id="rIdStyles" Type="{REL}/styles" Target="styles.xml"/>"#
-    );
-    let _ = write!(
-        rels,
-        r#"<Relationship Id="rIdSettings" Type="{REL}/settings" Target="settings.xml"/>"#
+    let mut rels = paged_ooxml::Relationships::new();
+    rels.add("rIdStyles", &format!("{REL}/styles"), "styles.xml", false);
+    rels.add(
+        "rIdSettings",
+        &format!("{REL}/settings"),
+        "settings.xml",
+        false,
     );
     if numbering.is_some() {
-        let _ = write!(
-            rels,
-            r#"<Relationship Id="rIdNumbering" Type="{REL}/numbering" Target="numbering.xml"/>"#
+        rels.add(
+            "rIdNumbering",
+            &format!("{REL}/numbering"),
+            "numbering.xml",
+            false,
         );
     }
     for (id, target) in &w.media_rels {
-        let _ = write!(
-            rels,
-            r#"<Relationship Id="{id}" Type="{REL}/image" Target="{}"/>"#,
-            escape(target.as_str())
-        );
+        rels.add(id, &format!("{REL}/image"), target, false);
     }
     for (id, url) in &w.link_rels {
-        let _ = write!(
-            rels,
-            r#"<Relationship Id="{id}" Type="{REL}/hyperlink" Target="{}" TargetMode="External"/>"#,
-            escape(url.as_str())
-        );
+        rels.add(id, &format!("{REL}/hyperlink"), url, true);
     }
-    rels.push_str("</Relationships>");
+    let rels = rels.to_xml();
 
-    let mut types = String::new();
-    types.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
-    types.push_str(
-        r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#,
+    let mut types = paged_ooxml::ContentTypes::new();
+    types.add_default(
+        "rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
     );
-    types.push_str(r#"<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#);
-    types.push_str(r#"<Default Extension="xml" ContentType="application/xml"/>"#);
+    types.add_default("xml", "application/xml");
     let mut exts: Vec<(&str, &str)> = w
         .media
         .iter()
@@ -145,22 +132,24 @@ pub fn write_docx(doc: &DocxDocument) -> Result<(Vec<u8>, WriteReport), String> 
     exts.sort();
     exts.dedup_by(|a, b| a.0 == b.0);
     for (ext, mime) in exts {
-        let _ = write!(
-            types,
-            r#"<Default Extension="{ext}" ContentType="{}"/>"#,
-            escape(mime)
+        types.add_default(ext, mime);
+    }
+    types.add_override("/word/document.xml", DOCUMENT_MAIN);
+    types.add_override(
+        "/word/styles.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
+    );
+    types.add_override(
+        "/word/settings.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml",
+    );
+    if numbering.is_some() {
+        types.add_override(
+            "/word/numbering.xml",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml",
         );
     }
-    let _ = write!(
-        types,
-        r#"<Override PartName="/word/document.xml" ContentType="{DOCUMENT_MAIN}"/>"#
-    );
-    types.push_str(r#"<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>"#);
-    types.push_str(r#"<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>"#);
-    if numbering.is_some() {
-        types.push_str(r#"<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>"#);
-    }
-    types.push_str("</Types>");
+    let types = types.to_xml();
 
     let root_rels = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="{REL}/officeDocument" Target="word/document.xml"/></Relationships>"#

@@ -279,24 +279,7 @@ pub(crate) fn write_rels_bytes(r: &Relationships) -> Vec<u8> {
 }
 
 fn write_rels(r: &Relationships) -> Vec<u8> {
-    let mut out = String::from(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
-    );
-    for i in &r.items {
-        out.push_str(&format!(
-            r#"<Relationship Id="{}" Type="{}" Target="{}"{}/>"#,
-            escape(&i.id),
-            escape(&i.rel_type),
-            escape(&i.target),
-            i.target_mode
-                .as_ref()
-                .map(|m| format!(r#" TargetMode="{}""#, escape(m)))
-                .unwrap_or_default()
-        ));
-    }
-    out.push_str("</Relationships>");
-    out.into_bytes()
+    r.to_xml().into_bytes()
 }
 
 /// Set or clear the slide root's `show="0"`.
@@ -399,27 +382,22 @@ fn part_number(part: &str, stem: &str) -> Option<u32> {
 /// Rewrite `[Content_Types].xml`: drop the overrides of `removed`, add
 /// `added` (part, content type).
 fn patch_content_types(xml: &str, removed: &BTreeSet<String>, added: &[(String, &str)]) -> String {
-    let mut out = xml.to_string();
-    for part in removed {
-        let tag_start = format!(r#"<Override PartName="/{part}""#);
-        if let Some(i) = out.find(&tag_start) {
-            if let Some(j) = out[i..].find("/>") {
-                out.replace_range(i..i + j + 2, "");
-            }
-        }
-    }
-    let adds: String = added
-        .iter()
-        .filter(|(p, _)| !out.contains(&format!(r#"PartName="/{p}""#)))
-        .map(|(p, ct)| format!(r#"<Override PartName="/{p}" ContentType="{ct}"/>"#))
-        .collect();
-    out.replace("</Types>", &format!("{adds}</Types>"))
+    let removed: Vec<String> = removed.iter().map(|p| format!("/{p}")).collect();
+    let added: Vec<(String, &str)> = added.iter().map(|(p, ct)| (format!("/{p}"), *ct)).collect();
+    paged_ooxml::content_types::patch(
+        xml,
+        &paged_ooxml::content_types::Patch {
+            remove_overrides: removed.iter().map(String::as_str).collect(),
+            add_overrides: added.iter().map(|(p, ct)| (p.as_str(), *ct)).collect(),
+            add_defaults: Vec::new(),
+        },
+    )
 }
 
 /// Add `Default` content types for the extensions of `parts` the types do
 /// not cover.
 fn add_defaults(xml: &str, parts: &[String]) -> String {
-    let mut out = xml.to_string();
+    let mut defaults: Vec<(&str, &str)> = Vec::new();
     for p in parts {
         let Some(ext) = p.rsplit('.').next() else {
             continue;
@@ -443,18 +421,15 @@ fn add_defaults(xml: &str, parts: &[String]) -> String {
                 None => continue,
             },
         };
-        let has = out
-            .to_ascii_lowercase()
-            .contains(&format!(r#"extension="{ext}""#));
-        if !has {
-            out = out.replacen(
-                "<Default ",
-                &format!(r#"<Default Extension="{ext}" ContentType="{ct}"/><Default "#),
-                1,
-            );
-        }
+        defaults.push((ext, ct));
     }
-    out
+    paged_ooxml::content_types::patch(
+        xml,
+        &paged_ooxml::content_types::Patch {
+            add_defaults: defaults,
+            ..Default::default()
+        },
+    )
 }
 
 /// A slide part for a slide made in the editor: its layout's placeholders

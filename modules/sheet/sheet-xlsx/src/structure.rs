@@ -449,22 +449,10 @@ impl XlsxDocument {
             .content_types
             .overrides
             .push((pn.clone(), content_type.to_string()));
-        if let Some(raw) = self.part_bytes(CONTENT_TYPES_PART) {
-            let (_, close) = root_children(&raw)?;
-            let tag = render_tag(
-                "Override",
-                &[
-                    ("PartName".into(), pn),
-                    ("ContentType".into(), content_type.into()),
-                ],
-                true,
-            );
-            self.set_part_bytes(
-                CONTENT_TYPES_PART,
-                splice(&raw, close, close, tag.as_bytes()),
-            );
-        }
-        Ok(())
+        self.patch_content_types(&paged_ooxml::content_types::Patch {
+            add_overrides: vec![(pn.as_str(), content_type)],
+            ..Default::default()
+        })
     }
 
     /// Remove a `[Content_Types]` override (model + bytes).
@@ -474,16 +462,25 @@ impl XlsxDocument {
             .content_types
             .overrides
             .retain(|(p, _)| p != &pn);
-        if let Some(raw) = self.part_bytes(CONTENT_TYPES_PART) {
-            let (kids, _) = root_children(&raw)?;
-            for k in kids.iter().rev() {
-                if k.local == "Override"
-                    && attr_local(&attrs_of(&raw, k)?, "PartName").as_deref() == Some(pn.as_str())
-                {
-                    self.set_part_bytes(CONTENT_TYPES_PART, splice(&raw, k.start, k.end, b""));
-                    break;
-                }
-            }
+        self.patch_content_types(&paged_ooxml::content_types::Patch {
+            remove_overrides: vec![pn.as_str()],
+            ..Default::default()
+        })
+    }
+
+    /// Edit the bytes of `[Content_Types].xml` (when the package has one).
+    fn patch_content_types(
+        &mut self,
+        edit: &paged_ooxml::content_types::Patch<'_>,
+    ) -> Result<(), XlsxError> {
+        let Some(raw) = self.part_bytes(CONTENT_TYPES_PART) else {
+            return Ok(());
+        };
+        let text = std::str::from_utf8(&raw)
+            .map_err(|_| XlsxError::Structure("[Content_Types].xml is not UTF-8".into()))?;
+        let patched = paged_ooxml::content_types::patch(text, edit);
+        if patched != text {
+            self.set_part_bytes(CONTENT_TYPES_PART, patched.into_bytes());
         }
         Ok(())
     }
