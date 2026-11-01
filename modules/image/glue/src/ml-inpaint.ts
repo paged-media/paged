@@ -27,7 +27,7 @@
 //
 // `hostInpaintProvider` adapts the host's ML service once the contract
 // carries it (`host.ml.inpaint`, gated by `supports("ml.inpaint@1")`,
-// extensions ADR 345 / WP8.1). It reads the door structurally so this
+// extensions ADR 1100 / WP8.1). It reads the door structurally so this
 // bundle builds against a contract that does not have it yet.
 
 import type { BundleHost } from "@paged-media/plugin-api";
