@@ -55,19 +55,17 @@ Rules for every code change in this repo:
   comments into any artifact. Implementation derives from the spec, the
   behavior specs in an internal notes repository, public documentation and academic
   literature, and the oracle tests.
-- **ISOLATION CONTRACT (§2.1).** Zero core contact. No imports from
-  `core/` or `editor/` internals; the only `@paged-media/*` dependencies
-  are `plugin-api`, `plugin-sdk`, and published package contracts
-  (TS: the contract-import lint rule in `/bunfig.toml`, PM-0003; Rust: `deny.toml` sources +
-  the cargo-tree CI guards). SDK gaps become RFI §6 entries /
-  plugin-platform RFCs — NEVER core modifications from this project.
-  AMENDED (ADR 466, PM-0014): the TypeScript rule stands (plugin SDK
-  only); the Rust crates MAY path-depend on `engine/core/crates` for
-  raster codecs, PSD, pixel types, colour and kernels. `image-core` and
-  `image-psd` live there since WP1.2 as `paged-pixel`/`paged-psd`
-  (`engine/core/crates/`); this workspace keeps their old names through
-  `package` aliases in `Cargo.toml`, so `use image_core::…` and
-  `use image_psd::…` are unchanged. Their tests run in the engine's CI.
+- **BUILT-IN, PART OF THE CORE (PM-0017; supersedes the isolation contract of §2.1).**
+  The Rust crates may path-depend on `engine/core/crates` (raster codecs, PSD, pixel
+  types, colour, kernels; ADR 466, PM-0014) and on `platform/shared/*`, at the same
+  commit and without cycles. `image-core` and `image-psd` live there as
+  `paged-pixel`/`paged-psd`; this workspace keeps their old names through `package`
+  aliases in `Cargo.toml`, so `use image_core::…` and `use image_psd::…` are
+  unchanged, and their tests run in the engine's CI. The TypeScript packages import
+  only `plugin-api`, `plugin-sdk` and `platform/shared/*` (the contract-import lint
+  rule in `/bunfig.toml`, PM-0003); what they need from another module comes through
+  the host's doors. A capability the engine or another module also needs belongs in
+  the engine or in `platform/shared`, not here (PM-0014, PM-0017).
 - **GPU-ONLY EXECUTION (§6/§9).** One production backend: WGSL compute
   via wgpu. No CPU kernel path ships. The scalar Rust reference twins are
   TEST-ONLY (`image-kernels` feature `reference`, enabled solely by
