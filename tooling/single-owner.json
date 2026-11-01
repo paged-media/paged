@@ -21,7 +21,6 @@
         "modules/sheet/sheet-chart/tests/kinds.rs",
         "modules/sheet/sheet-conformance/tests/it/locale.rs",
         "modules/sheet/sheet-conformance/tests/it/oracle_fixes.rs",
-        "modules/sheet/sheet-js/src/core/csv.rs",
         "modules/web/packages/web-bundle/src/template-fields.ts",
         "modules/web/packages/web-bundle/test/conformance/source-roundtrip.spec.ts",
         "modules/web/packages/web-model/src/source-text.ts",

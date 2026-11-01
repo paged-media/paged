@@ -22,6 +22,7 @@ sheet-calc = { path = "../sheet-calc" }
 sheet-fn = { path = "../sheet-fn" }
 sheet-format = { path = "../sheet-format" }
 sheet-xlsx = { path = "../sheet-xlsx", default-features = false }
+paged-ooxml = { path = "../../../platform/shared/ooxml" }
 sheet-lower = { path = "../sheet-lower" }
 sheet-grid = { path = "../sheet-grid" }
 # The M2 charts track (spec §8.4): sheet-js resolves a parsed chart's series

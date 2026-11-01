@@ -33,6 +33,7 @@
 //! everything else text. A leading `=` stays TEXT (a CSV is data, not
 //! formulas — no formula injection through an import).
 
+use paged_ooxml::xml::escape_attr as esc;
 use sheet_core::{CellError, CellValue, DateSystem, Locale};
 use sheet_format::entry::{parse_entry, EntryCtx, FormatHint};
 use sheet_format::locale::locale_data;
@@ -199,13 +200,6 @@ pub fn type_field_at(s: &str, locale: Locale, sys: DateSystem, now_serial: f64) 
         }
         (CellValue::Number(n), Some(h)) => Typed::Formatted(n, h.code(locale)),
     }
-}
-
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 /// Column letters for a 0-based index.
