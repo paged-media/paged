@@ -893,16 +893,14 @@ export function contributeReview(
       }).dispose,
     );
   }
-  if (host.supports("contribute.keybinding.scope@1")) {
-    for (const k of REVIEW_KEYS) {
-      disposers.push(
-        host.contribute.keybinding({
-          key: k.key,
-          command: k.command,
-          scope: { editContext: deps.editContext },
-        }).dispose,
-      );
-    }
+  for (const k of REVIEW_KEYS) {
+    disposers.push(
+      host.contribute.keybinding({
+        key: k.key,
+        command: k.command,
+        scope: { editContext: deps.editContext },
+      }).dispose,
+    );
   }
   disposers.push(
     host.contribute.panel({
@@ -913,37 +911,33 @@ export function contributeReview(
       icon: "panel-outline",
     }).dispose,
   );
-  if (host.supports("contribute.statusItem@1")) {
-    disposers.push(
-      host.contribute.statusItem({
-        id: "media.paged.doc.status.trackChanges",
-        scope: { editContext: deps.editContext },
-        align: "start",
-        order: 35,
-        render: makeTrackStatus(store, commands),
-      }).dispose,
-    );
-  }
-  if (host.supports("contribute.marginBand@1")) {
-    const listeners = new Set<() => void>();
-    const off = store.subscribe(() => {
-      for (const l of [...listeners]) l();
-    });
-    disposers.push(off);
-    disposers.push(
-      host.contribute.marginBand({
-        id: REVIEW_BAND,
-        title: t(REVIEW.markup),
-        scope: { editContext: deps.editContext },
-        items: () => bandItems(store),
-        onDidChange(listener) {
-          listeners.add(listener);
-          return { dispose: () => void listeners.delete(listener) };
-        },
-        render: makeBalloon(store, commands),
-      }).dispose,
-    );
-  }
+  disposers.push(
+    host.contribute.statusItem({
+      id: "media.paged.doc.status.trackChanges",
+      scope: { editContext: deps.editContext },
+      align: "start",
+      order: 35,
+      render: makeTrackStatus(store, commands),
+    }).dispose,
+  );
+  const listeners = new Set<() => void>();
+  const off = store.subscribe(() => {
+    for (const l of [...listeners]) l();
+  });
+  disposers.push(off);
+  disposers.push(
+    host.contribute.marginBand({
+      id: REVIEW_BAND,
+      title: t(REVIEW.markup),
+      scope: { editContext: deps.editContext },
+      items: () => bandItems(store),
+      onDidChange(listener) {
+        listeners.add(listener);
+        return { dispose: () => void listeners.delete(listener) };
+      },
+      render: makeBalloon(store, commands),
+    }).dispose,
+  );
   // The collections move with every edit; the store re-reads once a burst
   // of edits settles.
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -954,9 +948,7 @@ export function contributeReview(
       void store.refresh();
     }, 150);
   };
-  if (host.supports("document.onDidChange@1")) {
-    disposers.push(host.document.onDidChange(refreshSoon).dispose);
-  }
+  disposers.push(host.document.onDidChange(refreshSoon).dispose);
   if (host.supports("document.onDidOpen@1")) {
     disposers.push(host.document.onDidOpen(refreshSoon).dispose);
   }

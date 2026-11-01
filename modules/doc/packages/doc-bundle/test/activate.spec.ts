@@ -48,6 +48,12 @@ const PANEL_ID = "media.paged.doc.panel.outline";
  * dependency to read a contribution back would be the wrong trade.
  * Same shape paged.sheet's activation spec uses.
  */
+/** An object whose every other member is a door that does nothing. */
+function inert(own: Record<string, unknown>) {
+  const noop = (): Disposable => ({ dispose() {} });
+  return new Proxy(own, { get: (t, k) => (k in t ? t[k as string] : noop) });
+}
+
 function fakeHost() {
   const editContexts: EditContextContribution[] = [];
   const openedPanels: string[] = [];
@@ -60,7 +66,10 @@ function fakeHost() {
       f === "contribute.objectType@1" ||
       f === "contribute.importer@1" ||
       f === "contribute.exporter@1",
-    contribute: {
+    // Every contribution door exists (ADR 305); the ones this spec does not
+    // inspect are inert.
+    document: { onDidChange: noop, onDidOpen: noop, onWillSave: noop },
+    contribute: inert({
       panel: noop,
       command: noop,
       importer: noop,
@@ -71,7 +80,7 @@ function fakeHost() {
         editContexts.push(c);
         return noop();
       },
-    },
+    }),
     shell: {
       openPanel(id: string) {
         openedPanels.push(id);

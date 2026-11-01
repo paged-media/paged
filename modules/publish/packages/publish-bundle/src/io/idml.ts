@@ -119,40 +119,28 @@ async function exportIdml(host: BundleHost): Promise<ExportResult | null> {
 const M = defineMessages("publish.io", { idmlPackage: "IDML package" });
 
 /** Register both the IDML importer and exporter through the K-2 doors,
- *  capability-gated (degrades honestly when a host predates the door).
+ *  through the door every host has.
  *  Returns a Disposable dropping both. */
 export function contributeIdmlIo(host: BundleHost): Disposable {
   const disposers: Disposable[] = [];
-  if (host.supports("contribute.importer@1")) {
-    disposers.push(
-      host.contribute.importer({
-        id: IDML_IMPORTER_ID,
-        title: t(M.idmlPackage),
-        extensions: [".idml"],
-        mimeTypes: [IDML_MIME],
-        import: (file) => importIdml(host, file),
-      }),
-    );
-  } else {
-    host.log.warn(
-      `${IDML_IMPORTER_ID}: host predates contribute.importer@1 — not registered`,
-    );
-  }
-  if (host.supports("contribute.exporter@1")) {
-    disposers.push(
-      host.contribute.exporter({
-        id: IDML_EXPORTER_ID,
-        title: t(M.idmlPackage),
-        extension: ".idml",
-        mimeType: IDML_MIME,
-        export: () => exportIdml(host),
-      }),
-    );
-  } else {
-    host.log.warn(
-      `${IDML_EXPORTER_ID}: host predates contribute.exporter@1 — not registered`,
-    );
-  }
+  disposers.push(
+    host.contribute.importer({
+      id: IDML_IMPORTER_ID,
+      title: t(M.idmlPackage),
+      extensions: [".idml"],
+      mimeTypes: [IDML_MIME],
+      import: (file) => importIdml(host, file),
+    }),
+  );
+  disposers.push(
+    host.contribute.exporter({
+      id: IDML_EXPORTER_ID,
+      title: t(M.idmlPackage),
+      extension: ".idml",
+      mimeType: IDML_MIME,
+      export: () => exportIdml(host),
+    }),
+  );
   return {
     dispose() {
       for (const d of disposers) d.dispose();

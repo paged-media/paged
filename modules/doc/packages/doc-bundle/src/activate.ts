@@ -555,106 +555,98 @@ function activateDoc(
   );
 
   // Importer: File/Open + drag-drop of a .docx routes its bytes here.
-  if (host.supports("contribute.importer@1")) {
+  disposers.push(
+    host.contribute.importer({
+      id: "media.paged.doc.importer.docx",
+      title: t(DOC.importer),
+      extensions: [...WORD_EXTENSIONS],
+      mimeTypes: [...WORD_MIME_TYPES],
+      import: async ({ name, bytes }) => {
+        await ingest(name, bytes, "open");
+      },
+    }).dispose,
+  );
+  if (options.odt) {
     disposers.push(
       host.contribute.importer({
-        id: "media.paged.doc.importer.docx",
-        title: t(DOC.importer),
-        extensions: [...WORD_EXTENSIONS],
-        mimeTypes: [...WORD_MIME_TYPES],
+        id: "media.paged.doc.importer.odt",
+        title: t(FILES.odtImporter),
+        extensions: [...ODT_EXTENSIONS],
+        mimeTypes: [...ODT_MIME_TYPES],
         import: async ({ name, bytes }) => {
           await ingest(name, bytes, "open");
         },
       }).dispose,
     );
-    if (options.odt) {
-      disposers.push(
-        host.contribute.importer({
-          id: "media.paged.doc.importer.odt",
-          title: t(FILES.odtImporter),
-          extensions: [...ODT_EXTENSIONS],
-          mimeTypes: [...ODT_MIME_TYPES],
-          import: async ({ name, bytes }) => {
-            await ingest(name, bytes, "open");
-          },
-        }).dispose,
-      );
-    }
   }
 
   // Exporter: zero-edit save-back (verbatim carry-through of the retained OPC).
-  if (host.supports("contribute.exporter@1")) {
-    disposers.push(
-      host.contribute.exporter({
-        id: "media.paged.doc.exporter.docx",
-        title: t(DOC.importer),
-        extension: ".docx",
-        mimeType: DOCX_MIME,
-        export: () => exportDocx(),
-      }).dispose,
-    );
-  }
+  disposers.push(
+    host.contribute.exporter({
+      id: "media.paged.doc.exporter.docx",
+      title: t(DOC.importer),
+      extension: ".docx",
+      mimeType: DOCX_MIME,
+      export: () => exportDocx(),
+    }).dispose,
+  );
 
   // objectType: a frame carrying our binding envelope is a wordDocument.
-  if (host.supports("contribute.objectType@1")) {
-    disposers.push(
-      host.contribute.objectType({
-        type: "wordDocument",
-        bakedFallback: "group",
-        editContextType: "wordDocument",
-        matches: (candidate) =>
-          candidate.metadata != null &&
-          typeof candidate.metadata.data?.part === "string",
-      }).dispose,
-    );
-  }
+  disposers.push(
+    host.contribute.objectType({
+      type: "wordDocument",
+      bakedFallback: "group",
+      editContextType: "wordDocument",
+      matches: (candidate) =>
+        candidate.metadata != null &&
+        typeof candidate.metadata.data?.part === "string",
+    }).dispose,
+  );
 
   // editContext: double-click enters native text editing scoped to the frame;
   // the editor owns the caret (native text tools — this sidesteps C-9), so the
   // context mainly opens the doc panel and bounds the edit scope.
-  if (host.supports("contribute.editContext@1")) {
-    disposers.push(
-      host.contribute.editContext({
-        type: "wordDocument",
-        entry: "doubleClick",
-        // ADR 024 — and paged.doc is the case that proves the rule is
-        // not "plugins get an empty rail".
-        //
-        // A DOCX is lowered to NATIVE content: real host text frames,
-        // real stories, real styles. So the editor genuinely owns the
-        // caret here (the note above), and the HOST'S OWN text tools are
-        // the right tools — unlike a spreadsheet or a web frame, where
-        // no canvas tool has anything to act on and the honest
-        // declaration is empty.
-        //
-        // Naming host built-in ids from plugin code is explicitly
-        // sanctioned by the contract ("plus host built-ins it names").
-        // It sits in tension with the rule that keeps HOST PANEL ids out
-        // of plugin code, and that tension is recorded in the RFI rather
-        // than resolved here.
-        toolIds: ["paged.tool.type", "paged.tool.select"],
-        panelIds: [PANEL_ID],
-        // No `onEnter` openPanel: the declaration above already opens
-        // it, and it is the only path that can WITHHOLD a raise which
-        // would displace a shared panel this context's providers serve
-        // (ADR 023). The SDK door takes no options and always raises.
-      }).dispose,
-    );
-    word = contributeWord(host, {
-      async docStories() {
-        if (last && last.storyIds.length > 0) return last.storyIds;
-        const docs = await discoverDocs(host).catch(() => []);
-        return docs.flatMap((d) => d.data.sections ?? []);
-      },
-      async isWordDocument() {
-        const docs = await discoverDocs(host).catch(() => []);
-        return docs.some(
-          (d) => (d.frame as { id: string }).id === STANDALONE_FRAME,
-        );
-      },
-      structure: () => last?.structure ?? null,
-    });
-  }
+  disposers.push(
+    host.contribute.editContext({
+      type: "wordDocument",
+      entry: "doubleClick",
+      // ADR 024 — and paged.doc is the case that proves the rule is
+      // not "plugins get an empty rail".
+      //
+      // A DOCX is lowered to NATIVE content: real host text frames,
+      // real stories, real styles. So the editor genuinely owns the
+      // caret here (the note above), and the HOST'S OWN text tools are
+      // the right tools — unlike a spreadsheet or a web frame, where
+      // no canvas tool has anything to act on and the honest
+      // declaration is empty.
+      //
+      // Naming host built-in ids from plugin code is explicitly
+      // sanctioned by the contract ("plus host built-ins it names").
+      // It sits in tension with the rule that keeps HOST PANEL ids out
+      // of plugin code, and that tension is recorded in the RFI rather
+      // than resolved here.
+      toolIds: ["paged.tool.type", "paged.tool.select"],
+      panelIds: [PANEL_ID],
+      // No `onEnter` openPanel: the declaration above already opens
+      // it, and it is the only path that can WITHHOLD a raise which
+      // would displace a shared panel this context's providers serve
+      // (ADR 023). The SDK door takes no options and always raises.
+    }).dispose,
+  );
+  word = contributeWord(host, {
+    async docStories() {
+      if (last && last.storyIds.length > 0) return last.storyIds;
+      const docs = await discoverDocs(host).catch(() => []);
+      return docs.flatMap((d) => d.data.sections ?? []);
+    },
+    async isWordDocument() {
+      const docs = await discoverDocs(host).catch(() => []);
+      return docs.some(
+        (d) => (d.frame as { id: string }).id === STANDALONE_FRAME,
+      );
+    },
+    structure: () => last?.structure ?? null,
+  });
 
   // ADR 323 — the object model: the placed document, its blocks, runs and
   // mail-merge fields through `host.objects`, plus the typed commands.

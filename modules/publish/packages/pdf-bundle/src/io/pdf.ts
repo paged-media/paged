@@ -217,21 +217,15 @@ async function tryEditableImport(
  *  dropping it. */
 export function contributePdfIo(host: BundleHost): Disposable {
   const disposers: Disposable[] = [];
-  if (host.supports("contribute.importer@1")) {
-    disposers.push(
-      host.contribute.importer({
-        id: PDF_IMPORTER_ID,
-        title: t(M.pdf),
-        extensions: [".pdf"],
-        mimeTypes: [PDF_MIME],
-        import: (file) => importPdf(host, file),
-      }),
-    );
-  } else {
-    host.log.warn(
-      `${PDF_IMPORTER_ID}: host predates contribute.importer@1 — not registered`,
-    );
-  }
+  disposers.push(
+    host.contribute.importer({
+      id: PDF_IMPORTER_ID,
+      title: t(M.pdf),
+      extensions: [".pdf"],
+      mimeTypes: [PDF_MIME],
+      import: (file) => importPdf(host, file),
+    }),
+  );
   return {
     dispose() {
       for (const d of disposers) d.dispose();

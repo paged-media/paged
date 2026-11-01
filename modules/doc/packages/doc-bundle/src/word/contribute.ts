@@ -206,116 +206,108 @@ export function contributeWord(
     );
   }
 
-  if (host.supports("contribute.keybinding.scope@1")) {
-    for (const k of WORD_KEYS) {
-      disposers.push(
-        host.contribute.keybinding({
-          key: k.key,
-          command: k.command,
-          scope: { editContext: WORD_CONTEXT },
-          // A shortcut acts on text: with no text selected the key stays
-          // the host's. Tab and Shift+Tab are a list level only in a list
-          // paragraph, at its start or over a range (Word); elsewhere they
-          // stay a tab and focus.
-          when: k.list
-            ? () => hasText() && isList(store) && store.get().tabIsListLevel
-            : () => hasText(),
-        }).dispose,
-      );
-    }
-    // Find, Replace and Go To are the host's (editor ADR 303); inside a
-    // Word document Word's keys reach them.
-    for (const k of WORD_HOST_KEYS) {
-      disposers.push(
-        host.contribute.keybinding({
-          key: k.key,
-          command: k.command,
-          scope: { editContext: WORD_CONTEXT },
-        }).dispose,
-      );
-    }
-  }
-
-  if (host.supports("contribute.controlBarGroup@1")) {
-    const write = (
-      path:
-        | "characterFontFamily"
-        | "characterFontSize"
-        | "characterFillColor"
-        | "characterHighlightColor",
-      value:
-        | { type: "text"; value: string }
-        | { type: "length"; value: number }
-        | { type: "colorRef"; value: string },
-    ) =>
-      void host.text
-        .format([{ path, value }])
-        .then(() => store.refreshFormat());
+  for (const k of WORD_KEYS) {
     disposers.push(
-      host.contribute.controlBarGroup({
-        id: "media.paged.doc.controlBar.home",
-        title: t(WORD.home),
+      host.contribute.keybinding({
+        key: k.key,
+        command: k.command,
         scope: { editContext: WORD_CONTEXT },
-        render: makeHomeGroup(store, {
-          run: (name) => void run(name).then(() => store.refreshFormat()),
-          applyParagraphStyle: (id) =>
-            void host.text
-              .applyStyle("paragraph", id)
-              .then(() => store.refreshFormat()),
-          setFontFamily: (family) =>
-            write("characterFontFamily", { type: "text", value: family }),
-          setFontSize: (size) =>
-            write("characterFontSize", { type: "length", value: size }),
-          setTextColor: (swatch) =>
-            write("characterFillColor", { type: "colorRef", value: swatch }),
-          setHighlight: (swatch) => {
-            if (swatch !== "Swatch/None") state.highlight = swatch;
-            write("characterHighlightColor", {
-              type: "colorRef",
-              value: swatch,
-            });
-          },
-          setShading: (swatch) => {
-            state.shading = swatch;
-            void host.text
-              .format([
-                {
-                  path: "paragraphShadingOn",
-                  value: { type: "bool", value: true },
-                },
-                {
-                  path: "paragraphShadingColor",
-                  value: { type: "colorRef", value: swatch },
-                },
-                {
-                  path: "paragraphShadingTint",
-                  value: { type: "length", value: 100 },
-                },
-              ])
-              .then(() => store.refreshFormat());
-          },
-        }),
+        // A shortcut acts on text: with no text selected the key stays
+        // the host's. Tab and Shift+Tab are a list level only in a list
+        // paragraph, at its start or over a range (Word); elsewhere they
+        // stay a tab and focus.
+        when: k.list
+          ? () => hasText() && isList(store) && store.get().tabIsListLevel
+          : () => hasText(),
+      }).dispose,
+    );
+  }
+  // Find, Replace and Go To are the host's (editor ADR 303); inside a
+  // Word document Word's keys reach them.
+  for (const k of WORD_HOST_KEYS) {
+    disposers.push(
+      host.contribute.keybinding({
+        key: k.key,
+        command: k.command,
+        scope: { editContext: WORD_CONTEXT },
       }).dispose,
     );
   }
 
-  if (host.supports("contribute.statusItem@1")) {
-    const items = [
-      { id: "page", align: "start" as const, render: makePageStatus(store) },
-      { id: "words", align: "start" as const, render: makeWordsStatus(store) },
-      { id: "zoom", align: "end" as const, render: makeZoomStatus(host) },
-    ];
-    for (const [order, item] of items.entries()) {
-      disposers.push(
-        host.contribute.statusItem({
-          id: `media.paged.doc.status.${item.id}`,
-          scope: { editContext: WORD_CONTEXT },
-          align: item.align,
-          order: (order + 1) * 10,
-          render: item.render,
-        }).dispose,
-      );
-    }
+  const write = (
+    path:
+      | "characterFontFamily"
+      | "characterFontSize"
+      | "characterFillColor"
+      | "characterHighlightColor",
+    value:
+      | { type: "text"; value: string }
+      | { type: "length"; value: number }
+      | { type: "colorRef"; value: string },
+  ) =>
+    void host.text.format([{ path, value }]).then(() => store.refreshFormat());
+  disposers.push(
+    host.contribute.controlBarGroup({
+      id: "media.paged.doc.controlBar.home",
+      title: t(WORD.home),
+      scope: { editContext: WORD_CONTEXT },
+      render: makeHomeGroup(store, {
+        run: (name) => void run(name).then(() => store.refreshFormat()),
+        applyParagraphStyle: (id) =>
+          void host.text
+            .applyStyle("paragraph", id)
+            .then(() => store.refreshFormat()),
+        setFontFamily: (family) =>
+          write("characterFontFamily", { type: "text", value: family }),
+        setFontSize: (size) =>
+          write("characterFontSize", { type: "length", value: size }),
+        setTextColor: (swatch) =>
+          write("characterFillColor", { type: "colorRef", value: swatch }),
+        setHighlight: (swatch) => {
+          if (swatch !== "Swatch/None") state.highlight = swatch;
+          write("characterHighlightColor", {
+            type: "colorRef",
+            value: swatch,
+          });
+        },
+        setShading: (swatch) => {
+          state.shading = swatch;
+          void host.text
+            .format([
+              {
+                path: "paragraphShadingOn",
+                value: { type: "bool", value: true },
+              },
+              {
+                path: "paragraphShadingColor",
+                value: { type: "colorRef", value: swatch },
+              },
+              {
+                path: "paragraphShadingTint",
+                value: { type: "length", value: 100 },
+              },
+            ])
+            .then(() => store.refreshFormat());
+        },
+      }),
+    }).dispose,
+  );
+
+  const items = [
+    { id: "page", align: "start" as const, render: makePageStatus(store) },
+    { id: "words", align: "start" as const, render: makeWordsStatus(store) },
+    { id: "zoom", align: "end" as const, render: makeZoomStatus(host) },
+  ];
+  for (const [order, item] of items.entries()) {
+    disposers.push(
+      host.contribute.statusItem({
+        id: `media.paged.doc.status.${item.id}`,
+        scope: { editContext: WORD_CONTEXT },
+        align: item.align,
+        order: (order + 1) * 10,
+        render: item.render,
+      }).dispose,
+    );
   }
 
   // Doc ADR 614 — the content control at the caret, edited from a panel
@@ -355,20 +347,18 @@ export function contributeWord(
 
   // Editor ADR 301 / contract C6 — a double-click in a page's header or
   // footer band edits its master's story in place.
-  if (host.supports("contribute.subContextProvider@1")) {
-    disposers.push(
-      host.contribute.subContextProvider({
-        editContext: WORD_CONTEXT,
-        resolve: (hit) =>
-          resolveHeaderFooter(
-            host,
-            deps.structure?.() ?? null,
-            hit,
-            HEADER_BAR_COMMANDS.map((n) => WORD_COMMAND[n]),
-          ),
-      }).dispose,
-    );
-  }
+  disposers.push(
+    host.contribute.subContextProvider({
+      editContext: WORD_CONTEXT,
+      resolve: (hit) =>
+        resolveHeaderFooter(
+          host,
+          deps.structure?.() ?? null,
+          hit,
+          HEADER_BAR_COMMANDS.map((n) => WORD_COMMAND[n]),
+        ),
+    }).dispose,
+  );
 
   // Doc ADR 613 — Word's Review: Track Changes, the markup views, the
   // changes and the comment threads (margin band, panel, status item).
@@ -397,17 +387,15 @@ export function contributeWord(
       }).dispose,
     );
   }
-  if (host.supports("document.onDidChange@1")) {
-    disposers.push(
-      host.document.onDidChange(() => {
-        void store.refreshFormat();
-        void store.refreshDocument();
-        void store.refreshPage();
-        void store.refreshShowHidden();
-        refreshWordsSoon();
-      }).dispose,
-    );
-  }
+  disposers.push(
+    host.document.onDidChange(() => {
+      void store.refreshFormat();
+      void store.refreshDocument();
+      void store.refreshPage();
+      void store.refreshShowHidden();
+      refreshWordsSoon();
+    }).dispose,
+  );
   if (host.supports("viewport.pages@1")) {
     disposers.push(
       host.viewport.onDidChangeActivePage(() => void store.refreshPage())

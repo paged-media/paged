@@ -181,24 +181,22 @@ export function activate(host: BundleHost): BundleHandle {
   // an .html file inserts a web frame with that file as its source —
   // <style> blocks land in the css lane, sanitize runs ON INGEST (§6.1:
   // page JavaScript never executes; removals are logged, never silent).
-  if (host.supports("contribute.importer@1")) {
-    host.contribute.importer({
-      id: "media.paged.web.importer.html",
-      title: t(M.htmlFile),
-      extensions: [".html", ".htm"],
-      mimeTypes: ["text/html"],
-      import: async ({ name, bytes }) => {
-        const text = new TextDecoder().decode(bytes);
-        const { source, removed } = sourceFromHtmlFile(text);
-        if (removed.length > 0) {
-          host.log.warn(
-            `import ${name}: sanitized on ingest (removed: ${removed.join(", ")})`,
-          );
-        }
-        await insertWebFrame(host, PANEL_ID, source);
-      },
-    });
-  }
+  host.contribute.importer({
+    id: "media.paged.web.importer.html",
+    title: t(M.htmlFile),
+    extensions: [".html", ".htm"],
+    mimeTypes: ["text/html"],
+    import: async ({ name, bytes }) => {
+      const text = new TextDecoder().decode(bytes);
+      const { source, removed } = sourceFromHtmlFile(text);
+      if (removed.length > 0) {
+        host.log.warn(
+          `import ${name}: sanitized on ingest (removed: ${removed.join(", ")})`,
+        );
+      }
+      await insertWebFrame(host, PANEL_ID, source);
+    },
+  });
   // ADR 323 — the object model: web frames, bound template values and CSS
   // variables addressable from scripts, the CLI, bindings and schema-driven
   // fields through `host.objects`, plus the seven commands typed. Headless.
