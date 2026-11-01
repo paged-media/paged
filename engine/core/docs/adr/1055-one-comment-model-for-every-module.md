@@ -1,7 +1,9 @@
 # ADR 1055 — One comment model for every module, compatible with Adobe and Microsoft review
 
-- **Status:** Accepted 2026-11-01; the engine part is built (below, "Built so far"), the format readers and
-  writers, the host panel and the door follow. Extends [ADR 1020](1020-range-comments-with-threads.md) (range
+- **Status:** Accepted 2026-11-01; built: the engine model, the host Comments panel and canvas pins, the slide, Excel and
+  Word readers and writers (slide ADR 711, sheet ADR 528, doc ADR 622), PDF comment annotations, IDML notes as `note` rows,
+  and the `comments@1` door (extensions ADR 1101). Open: PDF annotation import, a sheet thread started from the panel
+  on a cell, Word mentions, and document threads in IDML (reported as lost). Extends [ADR 1020](1020-range-comments-with-threads.md) (range
   comments with threads) and [ADR 172](172-editorial-notes.md) (InDesign notes). Part of the
   capability layering of PM-0014 and PM-0017.
 - **Scope:** `paged-model` (`review.rs`), `paged-mutate`, `paged-wire`, `paged-canvas` (the
