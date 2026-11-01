@@ -795,13 +795,12 @@ function defineSessionBinding(
   }
 }
 
-/** Register the object model; a no-op on a host without the door. */
+/** Register the object model. */
 export function contributeObjectModel(
   host: BundleHost,
   session: DataSourceSession,
   panels: { bindings: string },
-): Disposable | null {
-  if (!host.supports("contribute.objectModel@1")) return null;
+): Disposable {
   return host.contribute.objectModel({
     kinds: kinds(host, session),
     commands: [

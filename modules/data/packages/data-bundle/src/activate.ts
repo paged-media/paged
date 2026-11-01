@@ -175,27 +175,25 @@ export function activate(host: BundleHost): BundleHandle {
 
   // File ▸ Import / drop: a JSON or Parquet file becomes a data source (the
   // contested spreadsheet types stay with paged.sheet — IMPORTER_EXTENSIONS).
-  if (host.supports("contribute.importer@1")) {
-    host.contribute.importer({
-      id: IMPORTER_ID,
-      title: t(M.importerTitle),
-      extensions: IMPORTER_EXTENSIONS,
-      mimeTypes: [
-        "application/json",
-        "application/x-ndjson",
-        "application/vnd.apache.parquet",
-      ],
-      async import(file) {
-        await session.whenRestored();
-        await session.importFile(file.name, file.bytes);
-        try {
-          host.shell.openPanel(SOURCES_PANEL_ID);
-        } catch {
-          // a headless host has no panels; the import itself is done
-        }
-      },
-    });
-  }
+  host.contribute.importer({
+    id: IMPORTER_ID,
+    title: t(M.importerTitle),
+    extensions: IMPORTER_EXTENSIONS,
+    mimeTypes: [
+      "application/json",
+      "application/x-ndjson",
+      "application/vnd.apache.parquet",
+    ],
+    async import(file) {
+      await session.whenRestored();
+      await session.importFile(file.name, file.bytes);
+      try {
+        host.shell.openPanel(SOURCES_PANEL_ID);
+      } catch {
+        // a headless host has no panels; the import itself is done
+      }
+    },
+  });
 
   host.contribute.command({
     id: "media.paged.data.command.importData",
@@ -313,23 +311,21 @@ export function activate(host: BundleHost): BundleHandle {
   // data source, not geometry — a brush or a pen has nothing to act on.
   // Empty is a statement here, distinct from omitting the field, which
   // reads as "unrestricted" and would leave the whole rail lit.
-  if (host.supports("contribute.editContext@1")) {
-    host.contribute.editContext({
-      type: "dataBinding",
-      entry: "doubleClick",
-      // Claimed by OUR OWN metadata envelope — the host pre-resolves
-      // this plugin's namespace and never a foreign one, so this cannot
-      // claim another plugin's frame. Matching by KIND would claim every
-      // rectangle in the document.
-      // Since ADR 559 a page item also carries our label when a PROPERTY
-      // binding targets it (`oid` / `bind`); that frame is the designer's
-      // own content, not ours — only lowered content (`binding`) enters the
-      // data context.
-      matches: (c) => isLoweredContent(c.metadata),
-      toolIds: [],
-      panelIds: [BINDINGS_PANEL_ID],
-    });
-  }
+  host.contribute.editContext({
+    type: "dataBinding",
+    entry: "doubleClick",
+    // Claimed by OUR OWN metadata envelope — the host pre-resolves
+    // this plugin's namespace and never a foreign one, so this cannot
+    // claim another plugin's frame. Matching by KIND would claim every
+    // rectangle in the document.
+    // Since ADR 559 a page item also carries our label when a PROPERTY
+    // binding targets it (`oid` / `bind`); that frame is the designer's
+    // own content, not ours — only lowered content (`binding`) enters the
+    // data context.
+    matches: (c) => isLoweredContent(c.metadata),
+    toolIds: [],
+    panelIds: [BINDINGS_PANEL_ID],
+  });
 
   // ADR 323 — paged.data's own objects (sources, queries, bindings, data
   // sets, variables) and typed commands, for scripts, the CLI and the
@@ -341,17 +337,14 @@ export function activate(host: BundleHost): BundleHandle {
   // panel of property rows ("Data objects"; needs the object model and the
   // schema-panel door). The React panels above keep their features.
   const objectsPanel = dataObjectsPanel();
-  const objectLists =
-    objectModel && host.supports("contribute.schemaPanel@1")
-      ? (contributeSchemaPanel(host, {
-          id: OBJECTS_PANEL_ID,
-          title: objectsPanel.title,
-          icon: objectsPanel.icon,
-          defaultDock: "right",
-          schema: objectsPanel,
-        }),
-        publishObjectLists(host, session))
-      : null;
+  contributeSchemaPanel(host, {
+    id: OBJECTS_PANEL_ID,
+    title: objectsPanel.title,
+    icon: objectsPanel.icon,
+    defaultDock: "right",
+    schema: objectsPanel,
+  });
+  const objectLists = publishObjectLists(host, session);
   // "Bind to data…" also as a plain command (the editor's command registry
   // and the Actions recorder call commands by id; the typed twin is the
   // object model's).
@@ -395,8 +388,8 @@ export function activate(host: BundleHost): BundleHandle {
       sessions.delete(host);
       session.dispose();
       menuSub.dispose();
-      objectLists?.dispose();
-      objectModel?.dispose();
+      objectLists.dispose();
+      objectModel.dispose();
     },
   };
 }

@@ -60,12 +60,15 @@ function fakeHost() {
     // door had nowhere to land. Answering honestly (this host DOES wire
     // the edit-context registry) is the fix; a blanket `() => true`
     // would make the degradation path untestable.
-    supports: (f: string) => f === "contribute.editContext@1",
+    supports: () => false,
     contribute: {
       editContext(c: Record<string, unknown>) {
         editContexts.push(c);
         return track();
       },
+      importer: (): Disposable => track(),
+      objectModel: (): Disposable => track(),
+      schemaPanel: (): Disposable => track(),
       panel(c: PanelContribution): Disposable {
         panels.push(c);
         return track();
