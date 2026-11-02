@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "ab_glyph_rasterizer"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "366ffbaa4442f4684d91e2cd7c5ea7c4ed8add41959a31447066e279e432b618"
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2148,6 +2154,7 @@ version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
 dependencies = [
+ "bytemuck",
  "cfg-if",
  "crunchy",
  "num-traits 0.2.19",
@@ -2590,6 +2597,142 @@ dependencies = [
 ]
 
 [[package]]
+name = "image-cms"
+version = "0.0.0"
+dependencies = [
+ "lcms2",
+ "lcms2-sys",
+ "paged-color",
+ "paged-pixel",
+ "thiserror",
+]
+
+[[package]]
+name = "image-codecs"
+version = "0.0.0"
+dependencies = [
+ "paged-pixel",
+ "paged-raster",
+ "thiserror",
+]
+
+[[package]]
+name = "image-conformance"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "criterion",
+ "half",
+ "image-cms",
+ "image-codecs",
+ "image-gpu",
+ "image-graph",
+ "image-js",
+ "image-kernels",
+ "image-pipeline",
+ "paged-blend",
+ "paged-color",
+ "paged-pixel",
+ "paged-psd",
+ "paged-resample",
+ "paged-test-resources",
+ "paged-warp",
+ "png",
+ "pollster",
+ "proptest",
+ "serde_json",
+ "zune-core",
+ "zune-png",
+]
+
+[[package]]
+name = "image-gpu"
+version = "0.0.0"
+dependencies = [
+ "half",
+ "image-kernels",
+ "paged-pixel",
+ "paged-test-resources",
+ "pollster",
+ "thiserror",
+ "wgpu",
+]
+
+[[package]]
+name = "image-graph"
+version = "0.0.0"
+dependencies = [
+ "half",
+ "image-gpu",
+ "image-kernels",
+ "image-pipeline",
+ "paged-pixel",
+ "thiserror",
+]
+
+[[package]]
+name = "image-js"
+version = "0.0.0"
+dependencies = [
+ "ab_glyph_rasterizer",
+ "console_error_panic_hook",
+ "criterion",
+ "getrandom 0.4.3",
+ "half",
+ "harfrust 0.14.0",
+ "image-cms",
+ "image-codecs",
+ "image-gpu",
+ "image-graph",
+ "image-kernels",
+ "image-pipeline",
+ "jpeg-encoder",
+ "js-sys",
+ "paged-blend",
+ "paged-color",
+ "paged-pixel",
+ "paged-psd",
+ "paged-raster",
+ "paged-resample",
+ "paged-test-resources",
+ "paged-warp",
+ "pollster",
+ "serde",
+ "serde_json",
+ "skrifa 0.48.0",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "zune-core",
+ "zune-png",
+]
+
+[[package]]
+name = "image-kernels"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "half",
+ "naga",
+ "paged-blend",
+ "paged-kernels",
+ "paged-pixel",
+ "paged-warp",
+]
+
+[[package]]
+name = "image-pipeline"
+version = "0.0.0"
+dependencies = [
+ "half",
+ "image-codecs",
+ "image-gpu",
+ "image-kernels",
+ "paged-pixel",
+ "thiserror",
+]
+
+[[package]]
 name = "image-webp"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2760,6 +2903,12 @@ checksum = "00810f1d8b74be64b13dbf3db89ac67740615d6c891f0e7b6179326533011a07"
 dependencies = [
  "rayon",
 ]
+
+[[package]]
+name = "jpeg-encoder"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0370574b86f7eca156b9f298392b5e69a23f8c86f3f865add60bbc2e79467a6"
 
 [[package]]
 name = "js-sys"
@@ -5949,6 +6098,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "skrifa"
+version = "0.48.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5213b4825bac3587046330052d61bfac7bd3bd0d203c758d7c2ef726fcea034"
+dependencies = [
+ "bytemuck",
+ "read-fonts 0.45.1",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7822,4 +7981,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cba11ecd07cc23351500e840ae03841b7e4997923ec8e4832ee3ae199ea0b6b4"
 dependencies = [
  "zune-core",
+]
+
+[[package]]
+name = "zune-png"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a321146329f7617ba0a5b26982cba45b7ce78163135aba78be25850aefcea80"
+dependencies = [
+ "zune-core",
+ "zune-inflate",
 ]

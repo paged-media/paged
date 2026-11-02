@@ -17,7 +17,7 @@
  */
 
 //! The doc-reach documents: drop caps (`w:framePr w:dropCap`) and cropped
-//! pictures (`a:srcRect`). `dump-fixture <out> drop-cap|picture-crop` writes
+//! pictures (`a:srcRect`). `dump-fixture <out> drop-cap|picture-crop|picture-crop-cell` writes
 //! them; `scripts/word-pagination-probe.sh` has Word render them to PDF.
 
 use std::io::Write;
@@ -206,5 +206,38 @@ pub fn picture_crop_docx() -> Vec<u8> {
             pic(id, *crop, (*cx, *cy))
         ));
     }
+    package(&body, true)
+}
+
+/// The pictures of [`picture_crop_cell_docx`]: an `a:srcRect` and the extent
+/// in EMU, one inline and one anchored, each in a cell of its own.
+pub const CELL_CROP_CASES: &[CropCase] = &[
+    ((25_000, 0, 25_000, 0), (914_400, 914_400)),
+    ((0, 10_000, 0, 40_000), (1_828_800, 457_200)),
+];
+
+/// Cropped pictures in table cells (doc ADR 623): a table of one row and
+/// two cells, the first holding an inline cropped picture, the second the
+/// same kind of picture anchored (against the cell), each after a line of
+/// text, and a paragraph before and after the table.
+pub fn picture_crop_cell_docx() -> Vec<u8> {
+    let (inline_crop, (icx, icy)) = CELL_CROP_CASES[0];
+    let (float_crop, (fcx, fcy)) = CELL_CROP_CASES[1];
+    let inline = format!(
+        r#"<w:p><w:r><w:t>Inline in a cell</w:t></w:r></w:p><w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="{icx}" cy="{icy}"/><wp:docPr id="21" name="Picture 21"/><wp:cNvGraphicFramePr/>{}</wp:inline></w:drawing></w:r></w:p>"#,
+        pic(21, inline_crop, (icx, icy))
+    );
+    let anchored = format!(
+        r#"<w:p><w:r><w:t>Anchored in a cell</w:t></w:r><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>182880</wp:posOffset></wp:positionV><wp:extent cx="{fcx}" cy="{fcy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="22" name="Picture 22"/><wp:cNvGraphicFramePr/>{}</wp:anchor></w:drawing></w:r></w:p>"#,
+        pic(22, float_crop, (fcx, fcy))
+    );
+    let cell = |w: u32, content: &str| {
+        format!(r#"<w:tc><w:tcPr><w:tcW w:w="{w}" w:type="dxa"/></w:tcPr>{content}</w:tc>"#)
+    };
+    let body = format!(
+        r#"<w:p><w:r><w:t>Before the table</w:t></w:r></w:p><w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid><w:tr>{}{}</w:tr></w:tbl><w:p><w:r><w:t>After the table</w:t></w:r></w:p>"#,
+        cell(4500, &inline),
+        cell(4500, &anchored)
+    );
     package(&body, true)
 }

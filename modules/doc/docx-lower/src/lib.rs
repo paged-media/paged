@@ -161,6 +161,7 @@ fn lower_image(img: &docx_core::Image) -> LoweredImage {
         losses: Vec::new(),
         layout: None,
         crop: img.crop.and_then(|c| lower_crop(c, img)),
+        drawing: img.drawing,
     }
 }
 
@@ -3578,6 +3579,7 @@ mod tests {
                 band_offset_emu: Some(12700 * offset_pt),
                 look: None,
                 crop: None,
+                drawing: None,
             }],
             ..Default::default()
         };
@@ -4092,6 +4094,7 @@ mod tests {
                 band_offset_emu: None,
                 look: None,
                 crop: None,
+                drawing: None,
             }],
             ..run("", RunProps::default())
         }

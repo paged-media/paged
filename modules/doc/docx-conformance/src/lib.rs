@@ -40,8 +40,8 @@ pub use objects::{
     LANGUAGE_CASES, TABLE_LOOK_CASES, TEXT_BOX_LINES,
 };
 pub use reach::{
-    crop_png, drop_cap_docx, drop_cap_paragraphs, picture_crop_docx, CROP_CASES, CROP_PNG_H,
-    CROP_PNG_W, DROP_CAP_FILLER,
+    crop_png, drop_cap_docx, drop_cap_paragraphs, picture_crop_cell_docx, picture_crop_docx,
+    CELL_CROP_CASES, CROP_CASES, CROP_PNG_H, CROP_PNG_W, DROP_CAP_FILLER,
 };
 pub use structure::{structure_docx, STRUCTURE_NOTES};
 

@@ -31,7 +31,7 @@ fileGroups:
   rust-sources:
     - "**/*.rs"
     - "**/Cargo.toml"
-    - "Cargo.lock"
+    - "/engine/core/Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
     - "/engine/core/Cargo.toml"
@@ -51,7 +51,25 @@ fileGroups:
     - "/engine/core/crates/paged-psd/**/*"
     - "/engine/core/crates/paged-resample/**/*"
 
+# The image crates are members of the engine's Cargo workspace (one Cargo
+# workspace, docs/development/one-workspace.md): this directory has no
+# Cargo.toml, so the Rust tasks run cargo in engine/core and select the module's
+# crates with -p.
 tasks:
+  rust-fmt:
+    script: "cd ../../engine/core && cargo fmt -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance --check"
+  rust-check:
+    script: "cd ../../engine/core && cargo check -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance --all-targets"
+  rust-lint:
+    script: "cd ../../engine/core && cargo clippy -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance --all-targets -- -D warnings"
+  rust-test:
+    script: >-
+      cd ../../engine/core
+      && cargo nextest run -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance
+      && cargo test --doc -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance
+  rust-build:
+    script: "cd ../../engine/core && cargo build -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance"
+
   js-check:
     inputs:
       - project: "extensions"
