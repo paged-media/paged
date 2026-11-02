@@ -129,12 +129,16 @@ describe("the live star (engine ADR 1047)", () => {
   it("starMutationFor falls back to the plain 2 x points path", () => {
     const turned = starMutationFor("page-1", star({ rotationDeg: 15 }))!;
     expect(turned.op).toBe("insertPath");
-    expect((turned.args as { anchors: unknown[] }).anchors).toHaveLength(12);
+    expect(
+      (turned.args as unknown as { anchors: unknown[] }).anchors,
+    ).toHaveLength(12);
     const larger = starMutationFor(
       "page-1",
       star({ radius1: 10, radius2: 40 }),
     )!;
-    expect((larger.args as { anchors: unknown[] }).anchors).toHaveLength(12);
+    expect(
+      (larger.args as unknown as { anchors: unknown[] }).anchors,
+    ).toHaveLength(12);
     expect(starMutationFor("p", star())!.op).toBe("batch");
     expect(starMutationFor("p", star({ radius1: 0, radius2: 0 }))).toBeNull();
   });

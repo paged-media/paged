@@ -263,13 +263,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // PATH OPTIONS — the nine "…" commands (Offset / Simplify /
-        // Outline stroke / Arc / Spiral / Rect grid / Polar grid / Star /
-        // Flare / Select same stroke weight within): each raises the panel
-        // at its section and mutates nothing. (The Width profile section is
-        // raised by its own command, run bare.)
-        "command",
-        "command",
+        // PATH OPTIONS — the "…" commands (Offset / Simplify / Outline
+        // stroke / Arc / Spiral / Rect grid / Polar grid / Flare / Select
+        // same stroke weight within): each raises the panel at its section
+        // and mutates nothing. (The Width profile section is raised by its
+        // own command, run bare.)
         "command",
         "command",
         "command",
@@ -697,7 +695,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(43);
+    expect(harness.toolsContributed()).toHaveLength(41);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

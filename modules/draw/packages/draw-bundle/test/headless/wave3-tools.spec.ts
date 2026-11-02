@@ -134,10 +134,8 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
     const group = (id: string) => tools.find((t) => t.id === id);
     expect(WAVE3_TOOL_IDS.map((id) => group(id)?.group)).toEqual([
       "transform",
-      "transform",
       "pencil",
       "pencil",
-      "shape",
       "shape",
       "pencil",
     ]);
