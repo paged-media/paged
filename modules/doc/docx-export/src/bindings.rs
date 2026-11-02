@@ -125,6 +125,9 @@ pub enum RunLock {
     TrackedChange,
     /// Inside a content control (`w:sdt`).
     ContentControl,
+    /// In a drop cap (doc ADR 624): the framed cap paragraph and the
+    /// paragraph after it are shown as one.
+    DropCap,
 }
 
 impl RunLock {
@@ -135,6 +138,9 @@ impl RunLock {
                 "inside a tracked change (accept or reject it in Word to edit it here)"
             }
             RunLock::ContentControl => "inside a content control",
+            RunLock::DropCap => {
+                "in a drop cap (Word keeps the cap in a paragraph of its own; edit it in Word)"
+            }
         }
     }
 }
@@ -330,6 +336,10 @@ fn held_refusal(held: &ParagraphHeld, op: ParaUse) -> Option<&'static str> {
     if held.in_content_control {
         return Some("sits inside a content control");
     }
+    // Doc ADR 624 — two `w:p` stand behind the one block.
+    if held.drop_cap {
+        return Some("is a drop cap, which Word keeps in two paragraphs (edit it in Word)");
+    }
     match op {
         ParaUse::Delete if held.unshown_runs > 0 => Some(
             "holds tracked deletions or hidden text the canvas does not show, \
@@ -354,6 +364,8 @@ fn run_bindings(p: &docx_core::Paragraph) -> Vec<RunBinding> {
             // A paragraph inside a content control: no run of it is on the
             // patcher's path.
             _ if p.held.in_content_control => RunBinding::Locked(RunLock::ContentControl),
+            // Doc ADR 624 — the cap's runs belong to another `w:p`.
+            _ if p.held.drop_cap => RunBinding::Locked(RunLock::DropCap),
             Some(RunSource::Tracked) => RunBinding::Locked(RunLock::TrackedChange),
             Some(RunSource::ContentControl) => RunBinding::Locked(RunLock::ContentControl),
             // ADR 028/029 — a page/column break INSIDE the run's text: the

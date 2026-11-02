@@ -33,6 +33,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [620](620-right-to-left-and-east-asian-text.md) | Right-to-left and East Asian text: `w:bidi`, `w:rtl`, the East Asian and complex-script fonts and their size and weight on the engine's direction and script slots, written back where edited | Accepted 2026-10-30 |
 | [621](621-word-headings-tag-a-pdf.md) | Word headings tag the PDF and give it an outline: `heading N` styles carry the PDF export tag (engine ADR 1054) | Accepted 2026-11-01 |
 | [622](622-word-comment-identity-and-exact-dates.md) | Word comments carry an author identity (`people.xml`) and an exact UTC time (`commentsExtensible.xml`), read and written | Accepted 2026-11-01 |
+| [624](624-word-drop-caps.md) | Word drop caps (the framed paragraph) fold into the following paragraph and lower to the engine's paragraph drop cap; the folded block is held on save-back | Accepted 2026-11-02 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

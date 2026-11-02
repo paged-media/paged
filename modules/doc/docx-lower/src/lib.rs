@@ -939,6 +939,24 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             2,
         ));
     }
+    // Drop caps (doc ADR 624): the engine's paragraph drop cap.
+    if ctx.drop_caps > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} drop cap(s) shown as the engine's paragraph drop cap{}",
+                ctx.drop_caps,
+                if ctx.margin_drop_caps > 0 {
+                    format!(
+                        " ({} of them hang in the margin in Word; here they are set in the text)",
+                        ctx.margin_drop_caps
+                    )
+                } else {
+                    String::new()
+                }
+            ),
+            3,
+        ));
+    }
     // Pictures' DrawingML looks (doc ADR 618): lowered through the shared
     // mapper, carried in the IR and painted on the pictures' anchored frames
     // (engine ADR 1045, doc ADR 619). What the engine cannot hold is listed
@@ -1321,6 +1339,10 @@ struct Lowering {
     /// many of them float.
     cell_pictures: usize,
     cell_floats: usize,
+    /// Doc ADR 624 — drop caps lowered, and how many of them hang in the
+    /// margin in Word (the engine sets them in the text).
+    drop_caps: usize,
+    margin_drop_caps: usize,
     /// Drawings that are not pictures, per body block.
     other_drawings: BTreeMap<usize, u32>,
     /// Field result runs lowered as live engine fields (doc ADR 612).
@@ -1642,6 +1664,16 @@ impl Lowering {
             direct.tabs = self.effective_tabs(&p.props.tabs, self.style_of(p));
         }
         let mut props = self.para_props(&direct);
+        // Doc ADR 624 — Word's drop cap: the engine's paragraph drop cap
+        // (the first characters over a number of lines).
+        let drop_cap = p.drop_cap.filter(|dc| dc.chars > 0).map(|dc| {
+            self.drop_caps += 1;
+            self.margin_drop_caps += usize::from(dc.in_margin);
+            ir::LoweredDropCap {
+                lines: dc.lines,
+                characters: dc.chars,
+            }
+        });
         let (space_before, no_space_after) = std::mem::take(&mut self.spacing_override);
         if let Some(pt) = space_before {
             props.retain(|sp| sp.path != "paragraphSpaceBefore");
@@ -2081,6 +2113,7 @@ impl Lowering {
                     }
                 }),
                 text_boxes,
+                drop_cap,
             },
             tail,
         )
@@ -3362,6 +3395,7 @@ mod tests {
                 bookmarks: Vec::new(),
                 toc_field: None,
                 review: Default::default(),
+                drop_cap: None,
             }));
         }
         let lowered = lower(&doc);
@@ -3421,6 +3455,7 @@ mod tests {
                 bookmarks: Vec::new(),
                 toc_field: None,
                 review: Default::default(),
+                drop_cap: None,
             })
         };
         // Body, a 24 pt heading, body, body.
@@ -3492,6 +3527,7 @@ mod tests {
                 bookmarks: Vec::new(),
                 toc_field: None,
                 review: Default::default(),
+                drop_cap: None,
             }));
         }
         let lowered = lower(&doc);
@@ -3535,6 +3571,7 @@ mod tests {
                     bookmarks: Vec::new(),
                     toc_field: None,
                     review: Default::default(),
+                    drop_cap: None,
                 }],
                 grid_span: 1,
                 v_merge: VMerge::None,
@@ -3584,6 +3621,7 @@ mod tests {
                 bookmarks: Vec::new(),
                 toc_field: None,
                 review: Default::default(),
+                drop_cap: None,
             }));
         }
         let lowered = lower(&doc);
@@ -3670,6 +3708,7 @@ mod tests {
             bookmarks: Vec::new(),
             toc_field: None,
             review: Default::default(),
+            drop_cap: None,
         }));
 
         let lowered = lower(&doc);

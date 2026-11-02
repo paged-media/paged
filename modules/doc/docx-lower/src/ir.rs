@@ -529,6 +529,21 @@ pub struct LoweredParagraph {
     /// amendment 1).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub text_boxes: Vec<LoweredTextBox>,
+    /// Doc ADR 624 — the paragraph's Word drop cap, set on its first native
+    /// paragraph as the engine's paragraph drop cap. A paragraph property of
+    /// its own, not a style's: the engine refuses the drop cap paths on a
+    /// style.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drop_cap: Option<LoweredDropCap>,
+}
+
+/// A paragraph's drop cap: its first `characters` characters stand over
+/// `lines` lines of the paragraph (the engine's `DropCapCharacters` and
+/// `DropCapLines`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoweredDropCap {
+    pub lines: u32,
+    pub characters: u32,
 }
 
 /// A list paragraph's list identity: the `w:numId` its items share and its

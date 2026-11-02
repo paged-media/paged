@@ -199,6 +199,16 @@ export interface LoweredParagraph {
   /** Engine ADR 1050 — text boxes anchored in the paragraph that are not
    *  page items: anchored text frames with stories of their own. */
   textBoxes?: LoweredTextBox[];
+  /** Doc ADR 624 — Word's drop cap: the paragraph's first `characters`
+   *  characters stand over `lines` lines (the engine's paragraph drop cap,
+   *  set on the paragraph itself: the engine refuses it on a style). */
+  dropCap?: LoweredDropCap;
+}
+
+/** A paragraph's drop cap (doc ADR 624). */
+export interface LoweredDropCap {
+  lines: number;
+  characters: number;
 }
 
 /** Engine ADR 1050 — a float's layout among its story's text. */
