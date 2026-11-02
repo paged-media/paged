@@ -141,7 +141,7 @@ jobs:
           toolchain: "1.99.1" # mirrors rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/image -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-image
       - name: install cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -152,14 +152,15 @@ jobs:
         # writes target/nextest/ci/junit.xml from [profile.ci.junit].
         run: |
           echo "PAGED_SKIP_LOG=$RUNNER_TEMP/paged-skips.tsv" >> "$GITHUB_ENV"
+          cd ../../engine/core
           PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv" \
-            cargo nextest run --workspace --profile ci --no-tests=fail || true
+            cargo nextest run -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance --profile ci --no-tests=fail || true
 
       # Unavailable tests become <skipped> rows in the JUnit, and a run that
       # executed nothing fails here (the red result above still uploads).
       - name: lane report
         if: ${{ !cancelled() }}
-        run: python3 ../../tooling/rust/skip-report.py --lane "image nextest evidence (no GPU)" --junit target/nextest/ci/junit.xml
+        run: python3 ../../tooling/rust/skip-report.py --lane "image nextest evidence (no GPU)" --junit ../../engine/core/target/nextest/ci/junit.xml
 
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the
@@ -176,6 +177,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: modules/image/target/nextest/ci/junit.xml
+          path: engine/core/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
