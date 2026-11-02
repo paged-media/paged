@@ -189,10 +189,17 @@ fn a_deleted_chart_takes_only_the_parts_it_alone_reached__feat__sheet_objects() 
         b"<cs:colorStyle xmlns:cs=\"x\"/>".to_vec(),
     ));
     let types = {
-        let mut ct = paged_ooxml::content_types::ContentTypes::parse(text(&parts, TYPES).as_bytes())
-            .expect("content types");
-        ct.add_override("/xl/charts/style3.xml", "application/vnd.ms-office.chartstyle+xml");
-        ct.add_override("/xl/charts/colors1.xml", "application/vnd.ms-office.chartcolorstyle+xml");
+        let mut ct =
+            paged_ooxml::content_types::ContentTypes::parse(text(&parts, TYPES).as_bytes())
+                .expect("content types");
+        ct.add_override(
+            "/xl/charts/style3.xml",
+            "application/vnd.ms-office.chartstyle+xml",
+        );
+        ct.add_override(
+            "/xl/charts/colors1.xml",
+            "application/vnd.ms-office.chartcolorstyle+xml",
+        );
         ct.render()
     };
     for p in parts.iter_mut() {

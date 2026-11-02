@@ -62,10 +62,9 @@ fn add_rel(pkg: &mut paged_ooxml::opc::OpcPackage, rels: &str, id: &str, ty: &st
 }
 
 fn add_type(pkg: &mut paged_ooxml::opc::OpcPackage, part: &str, ct: &str) {
-    let mut types = paged_ooxml::content_types::ContentTypes::parse(
-        get(pkg, "[Content_Types].xml").as_bytes(),
-    )
-    .expect("content types");
+    let mut types =
+        paged_ooxml::content_types::ContentTypes::parse(get(pkg, "[Content_Types].xml").as_bytes())
+            .expect("content types");
     types.add_override(&format!("/{part}"), ct);
     pkg.set_part("[Content_Types].xml", types.render().into_bytes());
 }
