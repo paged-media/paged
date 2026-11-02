@@ -380,6 +380,7 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
 }
 
 fn build_paragraph(
+    doc: &LoweredDoc,
     styles: &HashMap<&str, &LoweredStyle>,
     p: &LoweredParagraph,
 ) -> Result<Paragraph, String> {
@@ -392,9 +393,11 @@ fn build_paragraph(
         ..Paragraph::default()
     };
     // Character properties that sit in a paragraph style (the line pitch, a
-    // size) reach each run as the run's own; they sit below a character
-    // style in the cascade and above it as run properties, so a run with a
-    // character style of its own is left to the old path.
+    // size) reach each run as the run's own. In the cascade they sit below a
+    // character style; as a run's own they would sit above it. A run's own
+    // synthesized properties are laid over them, as the old cascade does, so
+    // only a Word character style that sets one of the same paths changes
+    // the result: that paragraph is left to the old path.
     let mut para_chars = Vec::new();
     for prop in direct.props {
         if is_char_path(&prop.path) {
@@ -403,8 +406,14 @@ fn build_paragraph(
             return Err(format!("no model field for {}", prop.path));
         }
     }
-    if !para_chars.is_empty() && p.runs.iter().any(|r| r.char_style_id.is_some()) {
-        return Err("paragraph character properties under a character style".into());
+    for r in &p.runs {
+        let Some(base) = split_style(styles, r.char_style_id.as_deref())?.base else {
+            continue;
+        };
+        let theirs = resolve_style(doc, base);
+        if para_chars.iter().any(|c| theirs.contains_key(&c.path)) {
+            return Err("paragraph character properties under a character style".into());
+        }
     }
     if !para_chars.is_empty() && p.runs.iter().all(|r| r.text.is_empty()) {
         return Err("paragraph character properties on an empty paragraph".into());
@@ -442,7 +451,7 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
             LoweredBlock::Table(_) => NativeBlock::Deferred {
                 reason: "table".into(),
             },
-            LoweredBlock::Paragraph(p) => match build_paragraph(&styles, p) {
+            LoweredBlock::Paragraph(p) => match build_paragraph(doc, &styles, p) {
                 Ok(para) => NativeBlock::Paragraph(Box::new(para)),
                 Err(reason) => NativeBlock::Deferred { reason },
             },

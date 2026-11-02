@@ -259,3 +259,20 @@ fn a_body_with_a_table_is_not_prefilled() {
             .is_none()
     );
 }
+
+#[test]
+fn the_bundles_direct_format_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/direct-format.docx");
+    let ir = lowered(bytes);
+    let reasons: Vec<String> = native_body(&ir)
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| match b {
+            NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
+            NativeBlock::Paragraph(_) => None,
+        })
+        .collect();
+    assert!(reasons.is_empty(), "deferred: {reasons:?}");
+    assert!(docx_skeleton::body::native_stories(&ir).is_some());
+}
