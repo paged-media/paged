@@ -41,7 +41,7 @@ paged-ooxml = { path = "../../platform/shared/ooxml", features = ["dom", "deflat
 # above 9, which nothing here asks for) and pick flate2's zlib-rs backend.
 # flate2 below names the backend, so every crate that depends on `zip` lists
 # `flate2` beside it.
-zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 # ooxmlsdk 0.12's `parts` feature (which `mce` needs) also brings zip 8 with
 # `deflate-flate2-zlib-rs`, and flate2 prefers zlib-rs to miniz_oxide when
