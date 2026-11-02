@@ -4070,6 +4070,44 @@ fn style_cases(c: &mut Vec<Case>) {
             }
         },
     ));
+    c.push(inert(
+        "CreateThemeFromSwatches",
+        "styles-cascade",
+        "the swatch that follows a slot already has the slot's colour, so making the theme repaints nothing (engine ADR 1057)",
+        |m| {
+            let id = fresh_color(m);
+            Mutation::CreateThemeFromSwatches {
+                name: "Sweep".into(),
+                slots: vec![paged_mutate::operation::ThemeSlotSwatchSpec {
+                    slot: "accent1".into(),
+                    swatch: id,
+                }],
+                relink: true,
+            }
+        },
+    ));
+    c.push(inert(
+        "SetStyleThemeFont",
+        "styles-cascade",
+        "the theme has no font face to give, so the style keeps its own (engine ADR 1057)",
+        |m| {
+            m.apply_mutation(&Mutation::SetTheme {
+                theme: Default::default(),
+            })
+            .expect("seed a theme");
+            m.apply_mutation(&Mutation::CreateParagraphStyle {
+                self_id: Some("ParagraphStyle/sweepTheme".into()),
+                name: Some("Sweep Theme".into()),
+                based_on: None,
+            })
+            .expect("seed a style");
+            Mutation::SetStyleThemeFont {
+                collection: StyleCollection::Paragraph,
+                style_id: "ParagraphStyle/sweepTheme".into(),
+                which: Some("major".into()),
+            }
+        },
+    ));
     c.push(paints("UpdateFields", "styles-cascade", |m| {
         let story_id = m.scene().stories[0].self_id.clone();
         m.apply_mutation(&Mutation::InsertField {

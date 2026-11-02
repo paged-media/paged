@@ -383,6 +383,16 @@ mod tests {
         back.designmap.labels = written.designmap.labels.clone();
         back.palette = written.palette.clone();
         back.styles = written.styles.clone();
+        back.palette
+            .colors
+            .get_mut("Color/Brand")
+            .unwrap()
+            .theme_ref = None;
+        back.styles
+            .character_styles
+            .get_mut("CharacterStyle/Head")
+            .unwrap()
+            .font_ref = None;
         back.palette.colors.get_mut("Color/Brand").unwrap().value = vec![1.0, 2.0, 3.0];
         back.styles
             .character_styles
