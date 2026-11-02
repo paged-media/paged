@@ -51,6 +51,7 @@ fn is_para_path(k: &str) -> bool {
             | "paragraphFirstLineIndent"
             | "paragraphSpaceBefore"
             | "paragraphSpaceAfter"
+            | "paragraphAutoLeading"
             | "paragraphKeepWithNext"
             | "paragraphKeepFirstLines"
             | "paragraphKeepLastLines"

@@ -207,6 +207,11 @@ pub fn set_paragraph_prop(p: &mut Paragraph, prop: &StyleProp) -> bool {
         }
         "paragraphSpaceBefore" => return len_of(v).map(|f| p.space_before = Some(f)).is_some(),
         "paragraphSpaceAfter" => return len_of(v).map(|f| p.space_after = Some(f)).is_some(),
+        "paragraphAutoLeading" => {
+            return len_of(v)
+                .map(|f| p.line_setting.auto_leading = Some(f))
+                .is_some();
+        }
         "paragraphKeepWithNext" => {
             return len_of(v)
                 .map(|f| p.keep_with_next = Some(count(f)))
@@ -319,6 +324,7 @@ pub fn read_paragraph_props(p: &Paragraph) -> BTreeMap<String, PropValue> {
         ("paragraphFirstLineIndent", p.first_line_indent),
         ("paragraphSpaceBefore", p.space_before),
         ("paragraphSpaceAfter", p.space_after),
+        ("paragraphAutoLeading", p.line_setting.auto_leading),
         ("paragraphKeepWithNext", p.keep_with_next.map(|n| n as f32)),
         (
             "paragraphKeepFirstLines",
