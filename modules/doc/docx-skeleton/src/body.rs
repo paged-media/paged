@@ -1,0 +1,452 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+//! The body of a Word document as native paragraphs, built in Rust (doc
+//! ADR 625, slice 1): the engine's own `paged_model::Paragraph` and
+//! `CharacterRun`, with Word's direct formatting set as the paragraph's and
+//! the run's own properties instead of a synthesized named style.
+//!
+//! The lowering ([`docx_lower`]) still produces the plugin-local IR, and
+//! the IR still names a `docx-auto-pN` / `docx-auto-cN` style for every
+//! distinct set of direct formatting, because the host's mutation door
+//! styles a range only by applying a named style (ADR 600). This module is
+//! the seam that undoes that for the blocks it can build: it reads the IR,
+//! resolves each synthesized style to the Word style it is based on plus the
+//! properties it carries, and sets those properties on the model. A block it
+//! cannot build whole (a field, a picture, a list, a tracked change, a
+//! property it has no model field for) is returned as [`NativeBlock::Deferred`]
+//! with the reason, and the old path pours it. Blocks keep their index in
+//! [`docx_lower::ir::LoweredStory::blocks`], so save-back's ordinal map
+//! (`docx-export` `bindings.rs`) is unchanged.
+//!
+//! Nothing here invents an id: a paragraph's style is the Word style's
+//! token, or `None`.
+
+use std::collections::{BTreeMap, HashMap};
+
+use docx_lower::ir::{
+    LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, PropValue, StyleProp,
+};
+use paged_model::{CharacterRun, Justification, Paragraph};
+
+/// The id prefix of the styles the lowering synthesizes for direct
+/// formatting (`docx-lower` `synthesize`).
+const AUTO_PARA: &str = "ParagraphStyle/docx-auto-p";
+const AUTO_CHAR: &str = "CharacterStyle/docx-auto-c";
+
+/// One block of the story as slice 1 sees it.
+#[derive(Debug, Clone)]
+pub enum NativeBlock {
+    /// Built as a model paragraph.
+    Paragraph(Paragraph),
+    /// Left to the old path, with the reason (an honest, countable
+    /// degradation: nothing is dropped).
+    Deferred { reason: String },
+}
+
+/// The story's blocks, one per [`LoweredBlock`] and at its index.
+#[derive(Debug, Clone, Default)]
+pub struct NativeBody {
+    pub blocks: Vec<NativeBlock>,
+}
+
+impl NativeBody {
+    /// How many blocks were built natively.
+    pub fn built(&self) -> usize {
+        self.blocks
+            .iter()
+            .filter(|b| matches!(b, NativeBlock::Paragraph(_)))
+            .count()
+    }
+}
+
+/// Whether `id` names a style the lowering synthesized for direct
+/// formatting.
+pub fn is_synthesized(id: &str) -> bool {
+    id.starts_with(AUTO_PARA) || id.starts_with(AUTO_CHAR)
+}
+
+fn is_char_path(path: &str) -> bool {
+    path.starts_with("character")
+}
+
+/// The style catalogue by id.
+fn catalogue(doc: &LoweredDoc) -> HashMap<&str, &LoweredStyle> {
+    doc.styles.iter().map(|s| (s.id.as_str(), s)).collect()
+}
+
+/// The properties `id` resolves to: its `basedOn` chain from the root down,
+/// a child's value replacing its parent's. An unknown id resolves to none.
+pub fn resolve_style(doc: &LoweredDoc, id: &str) -> BTreeMap<String, PropValue> {
+    let styles = catalogue(doc);
+    let mut chain = Vec::new();
+    let mut at = Some(id);
+    while let Some(i) = at {
+        let Some(s) = styles.get(i) else { break };
+        if chain.len() > 64 {
+            break;
+        }
+        chain.push(*s);
+        at = s.based_on.as_deref();
+    }
+    let mut out = BTreeMap::new();
+    for s in chain.iter().rev() {
+        for p in &s.props {
+            out.insert(p.path.clone(), p.value.clone());
+        }
+    }
+    out
+}
+
+/// A synthesized style split into the Word style it stands on and its own
+/// properties.
+struct Direct<'a> {
+    base: Option<&'a str>,
+    props: &'a [StyleProp],
+}
+
+fn split_style<'a>(
+    styles: &'a HashMap<&str, &LoweredStyle>,
+    id: Option<&'a str>,
+) -> Result<Direct<'a>, String> {
+    let Some(id) = id else {
+        return Ok(Direct {
+            base: None,
+            props: &[],
+        });
+    };
+    if !is_synthesized(id) {
+        return Ok(Direct {
+            base: Some(id),
+            props: &[],
+        });
+    }
+    let Some(s) = styles.get(id) else {
+        return Err(format!("synthesized style {id} is not in the catalogue"));
+    };
+    // A synthesized style is based on a Word style, never on another
+    // synthesized one.
+    if s.based_on.as_deref().is_some_and(is_synthesized) {
+        return Err(format!("{id} is based on a synthesized style"));
+    }
+    Ok(Direct {
+        base: s.based_on.as_deref(),
+        props: &s.props,
+    })
+}
+
+fn len_of(v: &PropValue) -> Option<f32> {
+    match v {
+        PropValue::Length(f) => Some(*f),
+        _ => None,
+    }
+}
+
+fn bool_of(v: &PropValue) -> Option<bool> {
+    match v {
+        PropValue::Bool(b) => Some(*b),
+        _ => None,
+    }
+}
+
+fn text_of(v: &PropValue) -> Option<&str> {
+    match v {
+        PropValue::Text(t) => Some(t),
+        _ => None,
+    }
+}
+
+fn count(f: f32) -> u32 {
+    f.max(0.0).round() as u32
+}
+
+/// Set one paragraph property on the model, as the engine's
+/// `setElementProperty` does. `false`: the path (or its value shape) is not
+/// one slice 1 builds.
+pub fn set_paragraph_prop(p: &mut Paragraph, prop: &StyleProp) -> bool {
+    let v = &prop.value;
+    match prop.path.as_str() {
+        "paragraphJustification" => match text_of(v).and_then(Justification::from_idml) {
+            Some(j) => p.justification = Some(j),
+            None => return false,
+        },
+        "paragraphLeftIndent" => return len_of(v).map(|f| p.left_indent = Some(f)).is_some(),
+        "paragraphRightIndent" => return len_of(v).map(|f| p.right_indent = Some(f)).is_some(),
+        "paragraphFirstLineIndent" => {
+            return len_of(v).map(|f| p.first_line_indent = Some(f)).is_some();
+        }
+        "paragraphSpaceBefore" => return len_of(v).map(|f| p.space_before = Some(f)).is_some(),
+        "paragraphSpaceAfter" => return len_of(v).map(|f| p.space_after = Some(f)).is_some(),
+        "paragraphKeepWithNext" => {
+            return len_of(v)
+                .map(|f| p.keep_with_next = Some(count(f)))
+                .is_some();
+        }
+        "paragraphKeepFirstLines" => {
+            return len_of(v)
+                .map(|f| p.keep_first_lines = Some(count(f)))
+                .is_some();
+        }
+        "paragraphKeepLastLines" => {
+            return len_of(v)
+                .map(|f| p.keep_last_lines = Some(count(f)))
+                .is_some();
+        }
+        "paragraphKeepLinesTogether" => {
+            return bool_of(v)
+                .map(|b| p.keep_lines_together = Some(b))
+                .is_some();
+        }
+        "paragraphKeepAllLinesTogether" => {
+            return bool_of(v)
+                .map(|b| p.keep_all_lines_together = Some(b))
+                .is_some();
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn opt_text(v: &PropValue) -> Option<Option<String>> {
+    text_of(v).map(|t| (!t.is_empty()).then(|| t.to_owned()))
+}
+
+/// Set one character property on a model run (see [`set_paragraph_prop`]).
+pub fn set_run_prop(r: &mut CharacterRun, prop: &StyleProp) -> bool {
+    let v = &prop.value;
+    match prop.path.as_str() {
+        "characterFontFamily" => return opt_text(v).map(|t| r.font = t).is_some(),
+        "characterFontStyle" => return opt_text(v).map(|t| r.font_style = t).is_some(),
+        "characterCase" => return opt_text(v).map(|t| r.capitalization = t).is_some(),
+        "characterPosition" => return opt_text(v).map(|t| r.position = t).is_some(),
+        "characterFontSize" => return len_of(v).map(|f| r.point_size = Some(f)).is_some(),
+        "characterLeading" => return len_of(v).map(|f| r.leading = Some(f)).is_some(),
+        "characterTracking" => return len_of(v).map(|f| r.tracking = Some(f)).is_some(),
+        "characterBaselineShift" => {
+            return len_of(v).map(|f| r.baseline_shift = Some(f)).is_some();
+        }
+        "characterUnderline" => return bool_of(v).map(|b| r.underline = Some(b)).is_some(),
+        "characterStrikethru" => return bool_of(v).map(|b| r.strikethru = Some(b)).is_some(),
+        "characterFillColor" => match v {
+            PropValue::ColorRef(c) => r.fill_color = Some(c.clone()),
+            _ => return false,
+        },
+        _ => return false,
+    }
+    true
+}
+
+/// The paragraph properties slice 1 builds, read back off the model in the
+/// IR's vocabulary (what the comparison test resolves against).
+pub fn read_paragraph_props(p: &Paragraph) -> BTreeMap<String, PropValue> {
+    let mut m = BTreeMap::new();
+    let mut put = |k: &str, v: PropValue| {
+        m.insert(k.to_owned(), v);
+    };
+    if let Some(j) = p.justification {
+        put(
+            "paragraphJustification",
+            PropValue::Text(j.as_idml().into()),
+        );
+    }
+    let lens = [
+        ("paragraphLeftIndent", p.left_indent),
+        ("paragraphRightIndent", p.right_indent),
+        ("paragraphFirstLineIndent", p.first_line_indent),
+        ("paragraphSpaceBefore", p.space_before),
+        ("paragraphSpaceAfter", p.space_after),
+        ("paragraphKeepWithNext", p.keep_with_next.map(|n| n as f32)),
+        (
+            "paragraphKeepFirstLines",
+            p.keep_first_lines.map(|n| n as f32),
+        ),
+        (
+            "paragraphKeepLastLines",
+            p.keep_last_lines.map(|n| n as f32),
+        ),
+    ];
+    for (k, v) in lens {
+        if let Some(f) = v {
+            put(k, PropValue::Length(f));
+        }
+    }
+    let bools = [
+        ("paragraphKeepLinesTogether", p.keep_lines_together),
+        ("paragraphKeepAllLinesTogether", p.keep_all_lines_together),
+    ];
+    for (k, v) in bools {
+        if let Some(b) = v {
+            put(k, PropValue::Bool(b));
+        }
+    }
+    m
+}
+
+/// The character properties slice 1 builds, read back off a model run.
+pub fn read_run_props(r: &CharacterRun) -> BTreeMap<String, PropValue> {
+    let mut m = BTreeMap::new();
+    let mut put = |k: &str, v: PropValue| {
+        m.insert(k.to_owned(), v);
+    };
+    let texts = [
+        ("characterFontFamily", &r.font),
+        ("characterFontStyle", &r.font_style),
+        ("characterCase", &r.capitalization),
+        ("characterPosition", &r.position),
+    ];
+    for (k, v) in texts {
+        if let Some(t) = v {
+            put(k, PropValue::Text(t.clone()));
+        }
+    }
+    let lens = [
+        ("characterFontSize", r.point_size),
+        ("characterLeading", r.leading),
+        ("characterTracking", r.tracking),
+        ("characterBaselineShift", r.baseline_shift),
+    ];
+    for (k, v) in lens {
+        if let Some(f) = v {
+            put(k, PropValue::Length(f));
+        }
+    }
+    if let Some(b) = r.underline {
+        put("characterUnderline", PropValue::Bool(b));
+    }
+    if let Some(b) = r.strikethru {
+        put("characterStrikethru", PropValue::Bool(b));
+    }
+    if let Some(c) = &r.fill_color {
+        put("characterFillColor", PropValue::ColorRef(c.clone()));
+    }
+    m
+}
+
+/// Why a run is not slice 1's, if it is not: everything beyond text and
+/// formatting waits for its own slice.
+fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
+    if r.hyperlink_url.is_some() {
+        Some("hyperlink")
+    } else if r.merge_field.is_some() {
+        Some("merge field")
+    } else if r.field.is_some() {
+        Some("field")
+    } else if r.note.is_some() {
+        Some("note reference")
+    } else if r.change.is_some() || r.format_change.is_some() {
+        Some("tracked change")
+    } else if !r.comments.is_empty() {
+        Some("comment")
+    } else if r.control.is_some() {
+        Some("content control")
+    } else {
+        None
+    }
+}
+
+fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
+    if !p.images.is_empty() {
+        Some("picture")
+    } else if !p.segments.is_empty() {
+        Some("page or column break inside the paragraph")
+    } else if !p.bookmarks.is_empty() {
+        Some("bookmark")
+    } else if p.list.is_some() {
+        Some("list item")
+    } else if p.mark_change.is_some() || p.props_change.is_some() {
+        Some("tracked change")
+    } else if !p.text_boxes.is_empty() {
+        Some("text box")
+    } else if p.drop_cap.is_some() {
+        Some("drop cap")
+    } else {
+        p.runs.iter().find_map(run_deferral)
+    }
+}
+
+fn build_paragraph(
+    styles: &HashMap<&str, &LoweredStyle>,
+    p: &LoweredParagraph,
+) -> Result<Paragraph, String> {
+    if let Some(why) = paragraph_deferral(p) {
+        return Err(why.into());
+    }
+    let direct = split_style(styles, p.para_style_id.as_deref())?;
+    let mut para = Paragraph {
+        paragraph_style: direct.base.map(str::to_owned),
+        ..Paragraph::default()
+    };
+    // Character properties that sit in a paragraph style (the line pitch, a
+    // size) reach each run as the run's own; they sit below a character
+    // style in the cascade and above it as run properties, so a run with a
+    // character style of its own is left to the old path.
+    let mut para_chars = Vec::new();
+    for prop in direct.props {
+        if is_char_path(&prop.path) {
+            para_chars.push(prop);
+        } else if !set_paragraph_prop(&mut para, prop) {
+            return Err(format!("no model field for {}", prop.path));
+        }
+    }
+    if !para_chars.is_empty() && p.runs.iter().any(|r| r.char_style_id.is_some()) {
+        return Err("paragraph character properties under a character style".into());
+    }
+    if !para_chars.is_empty() && p.runs.iter().all(|r| r.text.is_empty()) {
+        return Err("paragraph character properties on an empty paragraph".into());
+    }
+    for r in p.runs.iter().filter(|r| !r.text.is_empty()) {
+        let run_direct = split_style(styles, r.char_style_id.as_deref())?;
+        let mut run = CharacterRun {
+            character_style: run_direct.base.map(str::to_owned),
+            text: r.text.clone(),
+            ..CharacterRun::default()
+        };
+        for prop in &para_chars {
+            if !set_run_prop(&mut run, prop) {
+                return Err(format!("no model field for {}", prop.path));
+            }
+        }
+        for prop in run_direct.props {
+            if !set_run_prop(&mut run, prop) {
+                return Err(format!("no model field for {}", prop.path));
+            }
+        }
+        para.runs.push(run);
+    }
+    Ok(para)
+}
+
+/// Build the story's blocks that slice 1 can, directly on the model.
+pub fn native_body(doc: &LoweredDoc) -> NativeBody {
+    let styles = catalogue(doc);
+    let blocks = doc
+        .story
+        .blocks
+        .iter()
+        .map(|b| match b {
+            LoweredBlock::Table(_) => NativeBlock::Deferred {
+                reason: "table".into(),
+            },
+            LoweredBlock::Paragraph(p) => match build_paragraph(&styles, p) {
+                Ok(para) => NativeBlock::Paragraph(para),
+                Err(reason) => NativeBlock::Deferred { reason },
+            },
+        })
+        .collect();
+    NativeBody { blocks }
+}
