@@ -190,10 +190,7 @@
       "owner": [],
       "patterns": ["0x428a2f98"],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": [
-        "modules/image/image-conformance/src/abr_corpus/sha256.rs",
-        "modules/sheet/sheet-xlsx/src/parts/protection.rs"
-      ]
+      "baseline": ["modules/image/image-conformance/src/abr_corpus/sha256.rs"]
     }
   ]
 }

@@ -1,6 +1,6 @@
 # ADR PM-0013 — A fourth public package: `@paged-media/editor`
 
-- **Status:** Accepted 2026-10-23; amended 2026-11-02 (amendment 4: the `dist/` budget is 72.25 MiB).
+- **Status:** Accepted 2026-10-23; amended 2026-11-02 (amendments 4 and 5: the `dist/` budget is 73 MiB).
 - **Amends:** [PM-0008](PM-0008-npm-packages-and-release.md) (three public packages since its
   amendment 3; four from here).
 - **Scope:** `apps/editor/packages/editor`, `tooling/release/*`, `.github/workflows/release.yml`
@@ -90,7 +90,7 @@ worker, and it is useless without it.
 release version, React a peer, and the package's own `scripts/check-dist.mjs` over the packed
 `dist/` (no private `@paged-media/*` import, every named file present, workers in the bundler
 form, no engine wasm, no paged.data engine, no source map, no path of the build machine, and the
-size budget: 72.25 MiB for `dist/` (amendment 4), 16 KiB for the `.` entry and for `./iframe` with what it
+size budget: 73 MiB for `dist/` (amendment 5), 16 KiB for the `.` entry and for `./iframe` with what it
 imports). `consumer-test.sh` installs it with React in clean projects under npm and Bun,
 imports `.` and `./iframe`, finds the engine's wasm where the package points, type-checks an
 embedder under `nodenext` and `bundler` with TypeScript 7 and 5.9, and builds a host page with
@@ -198,3 +198,10 @@ follow a slot) and the colour-arithmetic crate it resolves them with, in every m
 the engine; `dist/` measured 75,509,437 bytes, 11,965 over. The margin is the next slice's headroom (font
 references on styles, doc and sheet lowering). The precedent is the app-wide wasm budget, which moved to
 140 MB for the ML worker's runtime. The entry budgets stay at 16 KiB.
+
+## Amendment 5 (2026-11-02): a 73 MiB budget for `dist/`
+
+The budget for `dist/` goes from 72.25 to 73 MiB (76,546,048 bytes, from 75,759,616), on the owner's
+decision to give the following slices room instead of amending it each time: font references on styles,
+doc and sheet lowering onto the theme model, and the PDF annotation reader. Amendment 4's reasons stand;
+the entry budgets stay at 16 KiB.

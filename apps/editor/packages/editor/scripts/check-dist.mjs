@@ -44,7 +44,7 @@ const DIST = resolve(process.argv[2] ?? join(PKG, "dist"));
  *  bundles ship (doc, web, pdfium, image, sheet, slide, …); a rise past it
  *  is a decision, not a drift. */
 export const BUDGET = {
-  dist: 72 * 1024 * 1024 + 256 * 1024, // 72.25 MiB, PM-0013 amendment 4
+  dist: 73 * 1024 * 1024, // 73 MiB, PM-0013 amendment 5
   /** The `.` entry: createEditor before the editor loads. */
   entry: 16 * 1024,
   /** `./iframe`: the bridge, without the editor. */

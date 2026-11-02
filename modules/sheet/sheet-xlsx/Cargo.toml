@@ -50,6 +50,8 @@ sheet-parser = { path = "../sheet-parser" }
 # Without `dom` (no ooxmlsdk); `deflate-flate2` is the zip backend this
 # workspace always had (flate2's rust_backend, root Cargo.toml).
 base64 = "0.23"
+# SHA-512 of the sheet-protection hash (ECMA-376 agile); the same crate and version as the engine and the data module.
+sha2 = { version = "0.11", default-features = false }
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
 # The DrawingML chart reader and model, shared with slide (slide ADR 709):
 # `parts::chart` folds it into `sheet_chart::ChartModel`, the Excel profile.
