@@ -134,6 +134,24 @@ model's, not the model's.
 
 A Word drop cap (ADR 624) is the paragraph's `drop_cap_characters` and `drop_cap_lines`.
 
+### Slice 2 amendment: the catalogue, by the engine's own operations
+
+The theme, swatches, colour groups and styles of a prefilled skeleton are made by
+`paged_mutate::apply` (`docx-skeleton` `catalog`), the operations `buildStyleMutations` sends, in
+its order, so a style property is read exactly as the host reads it and nothing is re-implemented
+(about fifty paths, each with its own undo default, would have been a second copy). A refused
+operation sends the document to the old path whole. The styles the lowering invented for direct
+formatting (`docx-auto-*`) are left out when nothing the old path still pours (headers, footers,
+notes, page items) names them: the document then holds only the styles Word defined.
+
+This reverses the size argument above: the doc wasm now links `paged-mutate` (with `paged-geom`
+and `paged-vector-fx`). Measured by the wasm build in CI: `docx_js_bg.wasm` 8,170,515 bytes
+(7.79 MiB) before, 12,939,388 bytes (12.34 MiB) with it, +4.77 MiB. The manifest's `maxBytes` is
+raised from 8 MiB to 14 MiB (14,680,064); the 100 MB app limit of `build-wasm.sh` is unchanged. The
+price buys every remaining slice as the engine's own operations (floats, comments, changes, notes)
+rather than ports of them, and the removal of the TS pour and the IR at the end, which is where
+size is given back (bundle code) if not in the wasm.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

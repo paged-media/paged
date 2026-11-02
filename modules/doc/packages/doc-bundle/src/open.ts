@@ -46,7 +46,11 @@ import { t } from "@paged-media/strings";
 import type { DocEngine } from "./engine.js";
 import { DOC } from "./messages.js";
 import { pourPageItems } from "./page-items.js";
-import { applyStyleOpsReporting, pourSteps } from "./pour.js";
+import {
+  applyStyleOpsReporting,
+  pourSteps,
+  type StyleRefusals,
+} from "./pour.js";
 
 /** What a standalone open produced: the section stories (save-back reads
  *  them back in this order), the frame carrying the binding, the lowering
@@ -223,10 +227,13 @@ export async function finishStandalone(
 ): Promise<Opened> {
   let storyIds = engine.skeletonStories();
   let midPageColumns = engine.usesMidPageColumns();
-  const refusals = await applyStyleOpsReporting(
-    host,
-    buildStyleMutations(ir, { theme: true }),
-  );
+  // Doc ADR 625 — a prefilled skeleton holds the theme, swatches and styles.
+  const refusals: StyleRefusals = bodyPrefilled
+    ? { messages: [], paths: new Set() }
+    : await applyStyleOpsReporting(
+        host,
+        buildStyleMutations(ir, { theme: true }),
+      );
   if (midPageColumns && SPAN_COLUMN_PATHS.some((p) => refusals.paths.has(p))) {
     engine.setMidPageColumns(false);
     midPageColumns = false;
