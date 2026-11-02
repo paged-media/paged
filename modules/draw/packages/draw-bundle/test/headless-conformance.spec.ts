@@ -90,7 +90,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.convertAnchor",
         "media.paged.draw.tool.curvature",
         "media.paged.draw.tool.gradientAnnotator",
-        "media.paged.draw.tool.measure",
         "media.paged.draw.tool.shapeBuilder",
         "media.paged.draw.tool.cornerRadius",
         "media.paged.draw.tool.paintbrush",
@@ -710,7 +709,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(46);
+    expect(harness.toolsContributed()).toHaveLength(44);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

@@ -490,6 +490,10 @@
       "unspecified": "not specified yet: covered by its handler tests (packages/tools/test/mesh-tool.test.ts) and tests/e2e/mesh-tool.spec.ts"
     },
     {
+      "tool": "paged.tool.measure",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
       "tool": "paged.tool.eyedropper",
       "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
     },
@@ -519,10 +523,6 @@
     },
     {
       "tool": "media.paged.draw.tool.gradientAnnotator",
-      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
-    },
-    {
-      "tool": "media.paged.draw.tool.measure",
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
     },
     {

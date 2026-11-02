@@ -60,6 +60,7 @@ describe("the built-in tools, mounted from the registry", () => {
         "paged.tool.scissors",
         "paged.tool.shear",
         "paged.tool.smooth",
+        "paged.tool.measure",
         "paged.tool.type",
       ].sort(),
     );

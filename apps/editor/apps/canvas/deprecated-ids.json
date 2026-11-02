@@ -306,6 +306,12 @@
       "replacement": "tool:paged.tool.eyedropper",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.measure",
+      "replacement": "tool:paged.tool.measure",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

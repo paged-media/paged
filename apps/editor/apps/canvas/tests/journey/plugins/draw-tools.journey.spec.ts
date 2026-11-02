@@ -279,10 +279,7 @@ test.describe("journey · paged.draw pro tools", () => {
     //    activating + dragging does not throw and authors nothing new. ──
     try {
       const polysB = await designer.count("polygon");
-      await invokeCommand(
-        page,
-        "paged.tool.activate.media.paged.draw.tool.measure",
-      );
+      await invokeCommand(page, "paged.tool.activate.paged.tool.measure");
       const mFrom = await screenPoint(page, 200, 200);
       const mTo = await screenPoint(page, 420, 280);
       await dragMouse(page, mFrom, mTo, { steps: 6, settleMs: 120 });

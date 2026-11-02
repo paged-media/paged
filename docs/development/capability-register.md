@@ -191,8 +191,13 @@ Status (draw items, one line each; updated as they land):
   wheel's own colour and adds swatches; draw's panel reads the selection's fill, offers the
   shade/tint, warm/cool and vivid/muted variation grids and paints the selection from a chip.
   Merging means adding those three things to the host wheel.
-- Measure: KEEP. The host has no Measure tool (`built-in-tools.ts` records its retirement in
-  favour of draw's); nothing to delete until the host builds one.
+- Measure: DONE 2026-11-02. The host has a Measure tool again (`paged.tool.measure`,
+  `handlers/measure-tool.ts`, `shift+m`): drag to read a distance and an angle, the segment and its
+  label as one preview that stays after the release, Esc clears, Shift snaps to 45 degrees, and the
+  origin snaps to the nearest point on the path under the press (the hit-test's transform is reused,
+  so no anchor table is read). It drives `MeasureMachine` from `@paged-media/draw/machines`. Draw's
+  tool, handler, the raw nearest-point read, its readout binding (nothing read it) and specs are
+  gone; the tool id leaves through the deprecation window.
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
   and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
   opacity land on the selection in one batch, each target written only what its own snapshot

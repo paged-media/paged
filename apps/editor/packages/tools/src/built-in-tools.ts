@@ -59,6 +59,7 @@ import {
   GRADIENT_SWATCH_TOOL_ID,
 } from "./handlers/gradient-tool";
 import { createLineHandler } from "./handlers/line-tool";
+import { createMeasureHandler } from "./handlers/measure-tool";
 import { createMeshHandler, MESH_TOOL_ID } from "./handlers/mesh-tool";
 import { createPolygonHandler } from "./handlers/polygon-tool";
 import { createArtboardHandler } from "./handlers/artboard-tool";
@@ -618,16 +619,22 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
       fields: EYEDROPPER_OPTION_FIELDS,
     },
   },
-  // RETIRED — Measure was an inert built-in holding `k` while
-  // paged.draw shipped a working version
-  // (the eyedropper, now this one's object mode, and
-  // `media.paged.draw.tool.measure` on `shift+m`
-  // in its own slot). The dead built-in Eyedropper was even the slot's
-  // group DEFAULT, so the rail face was the broken one. Removing both
-  // FREES `i` and `k` for paged.draw to claim (its repo, not ours), and
-  // hands the `eyedropper` slot to the plugin — which also means the
-  // slot now takes its rail position from bundle-load order; paged.draw
-  // can pin it back with `slotOrder`.
+  // Measure (PM-0017): drag to read a distance and an angle in pt. It was an
+  // inert built-in, then paged.draw's; it is the host's again, and draw's is
+  // gone.
+  {
+    id: "paged.tool.measure",
+    title: "Measure",
+    description:
+      "Drag to measure a distance and an angle in pt; Shift snaps to 45 degrees.",
+    icon: "tool-measure",
+    shortcut: "shift+m",
+    group: "measure",
+    section: "modNav",
+    cluster: "view",
+    order: 1,
+    gesture: createMeasureHandler,
+  },
   {
     id: "paged.tool.hand",
     title: "Hand",
@@ -664,6 +671,7 @@ const TOOL_CURSORS: Record<string, CursorSpec> = {
   "paged.tool.pen": CROSS,
   "paged.tool.pencil": CROSS,
   "paged.tool.smooth": CROSS,
+  "paged.tool.measure": CROSS,
   "paged.tool.rectangleFrame": CROSS,
   "paged.tool.ellipseFrame": CROSS,
   "paged.tool.polygonFrame": CROSS,

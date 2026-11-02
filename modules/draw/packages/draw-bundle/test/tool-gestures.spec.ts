@@ -404,21 +404,6 @@ describe("paged.draw tools through the gesture DSL — paint and shape", () => {
 });
 
 describe("paged.draw tools through the gesture DSL — reading and selecting", () => {
-  it("Measure: a drag publishes the distance and angle and commits nothing", async () => {
-    covers("tool:media.paged.draw.tool.measure");
-    const { r, g } = rig([]);
-    await arm(r, g, `${T}.measure`);
-    await g.drag({ from: [100, 100], to: [400, 500] }).settle();
-    const shown = r.fake.previews().filter(Array.isArray).at(-1) as Array<
-      Record<string, unknown>
-    >;
-    expect(shown.at(-1)).toMatchObject({
-      kind: "text",
-      text: "500.00 pt · 53.1°",
-    });
-    expect(r.sent()).toEqual([]);
-  });
-
   it("Lasso Select: a lasso around the first quad selects what it encloses and commits nothing", async () => {
     covers("tool:media.paged.draw.tool.lassoSelect");
     const { r, g } = rig([]);

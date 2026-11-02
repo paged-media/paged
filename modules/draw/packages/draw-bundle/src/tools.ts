@@ -53,7 +53,6 @@ import {
   createLivePaintBucketHandler,
   createLivePaintSelectHandler,
 } from "./handlers/live-paint";
-import { createMeasureHandler } from "./handlers/measure";
 import { createRepeatHandler } from "./handlers/repeat";
 import { createScissorsHandler } from "./handlers/scissors";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
@@ -98,7 +97,6 @@ const M = defineMessages("draw.tools", {
   convertAnchor: "Convert Direction Point",
   curvature: "Curvature",
   gradientAnnotator: "Gradient Annotator",
-  measure: "Measure",
   shapeBuilder: "Shape Builder",
   cornerRadius: "Corner Radius",
   paintbrush: "Paintbrush",
@@ -157,7 +155,6 @@ export const DRAW_TOOL_IDS = [
 export const PRO_TOOL_IDS = [
   "media.paged.draw.tool.curvature",
   "media.paged.draw.tool.gradientAnnotator",
-  "media.paged.draw.tool.measure",
   "media.paged.draw.tool.shapeBuilder",
   "media.paged.draw.tool.cornerRadius",
 ] as const;
@@ -323,20 +320,6 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       cursor: CROSS,
       gesture: () => createGradientAnnotatorHandler(host),
     },
-    {
-      id: "media.paged.draw.tool.measure",
-      title: t(M.measure),
-      icon: "tool-measure",
-      shortcut: "shift+m",
-      group: "measure",
-      section: "modNav",
-      order: 1,
-      cursor: CROSS,
-      gesture: () => createMeasureHandler(host),
-    },
-    // Phase 9 (Tier B) — Shape Builder: a drag across overlapping shapes
-    // unites them; Alt-drag subtracts. Composes over pathfinderBoolean;
-    // the gesture decides the operand set + mode (handlers/shape-builder.ts).
     {
       id: "media.paged.draw.tool.shapeBuilder",
       title: t(M.shapeBuilder),

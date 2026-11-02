@@ -9446,11 +9446,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.measure",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.paintbrush",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -9921,6 +9916,11 @@
       "owner": "editor"
     },
     {
+      "id": "tool:paged.tool.measure",
+      "kind": "tool",
+      "owner": "editor"
+    },
+    {
       "id": "tool:paged.tool.mesh",
       "kind": "tool",
       "owner": "editor"
@@ -10310,6 +10310,12 @@
     {
       "id": "tool:media.paged.draw.tool.eyedropper",
       "replacement": "tool:paged.tool.eyedropper",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.measure",
+      "replacement": "tool:paged.tool.measure",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

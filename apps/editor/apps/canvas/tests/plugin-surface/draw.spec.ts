@@ -69,7 +69,6 @@ const TOOLS = [
   "media.paged.draw.tool.convertAnchor",
   "media.paged.draw.tool.curvature",
   "media.paged.draw.tool.gradientAnnotator",
-  "media.paged.draw.tool.measure",
   "media.paged.draw.tool.shapeBuilder",
   "media.paged.draw.tool.cornerRadius",
   "media.paged.draw.tool.paintbrush",
@@ -347,7 +346,6 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.blobBrush": "pen",
   "media.paged.draw.tool.eraserBrush": "pen",
   "media.paged.draw.tool.gradientAnnotator": "gradientAnnotator",
-  "media.paged.draw.tool.measure": "measure",
   "media.paged.draw.tool.shapeBuilder": "shapeBuilder",
   "media.paged.draw.tool.cornerRadius": "cornerRadius",
   "media.paged.draw.tool.width": "width",
@@ -684,7 +682,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 45 registered.
+    // TOOLS — all 44 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -743,14 +741,14 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(45);
+    expect(TOOLS).toHaveLength(44);
     expect(PANELS).toHaveLength(14);
     expect(COMMANDS).toHaveLength(145);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 45 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 44 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);

@@ -48,7 +48,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.convertAnchor",
       "media.paged.draw.tool.curvature",
       "media.paged.draw.tool.gradientAnnotator",
-      "media.paged.draw.tool.measure",
       "media.paged.draw.tool.shapeBuilder",
       "media.paged.draw.tool.cornerRadius",
       "media.paged.draw.tool.paintbrush",

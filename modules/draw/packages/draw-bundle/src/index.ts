@@ -112,16 +112,6 @@ export {
 } from "./tool-options";
 export { createCurvatureHandler } from "./handlers/curvature";
 export {
-  createMeasureHandler,
-  nearestPathPointOnPage,
-  measureReadoutLabel,
-  measureTextPreview,
-  BIND_MEASURE_READOUT,
-  OVERLAY_TEXT_FEATURE,
-  OVERLAY_MULTI_FEATURE,
-  type ToolPreviewTextMirror,
-} from "./handlers/measure";
-export {
   createGradientAnnotatorHandler,
   gradientAxisMutationFor,
   gradientSpecWithStop,
@@ -134,10 +124,8 @@ export {
 export {
   hasRawWire,
   rawRead,
-  rawNearestPathPoint,
   rawGradientDetail,
   type RawRequest,
-  type NearestPathPointWire,
   type GradientDetailWire,
   type GradientStopWire,
 } from "./raw-wire";
