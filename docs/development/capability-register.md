@@ -181,10 +181,8 @@ Status (draw items, one line each; updated as they land):
   ("6, 3"). The model (pairs of an array and back, the preset runs, the one write) is shared in
   `platform/shared/helpers`. The four preset commands are `paged.stroke.dash*` (palette) and
   Object > Stroke > Dashes… raises the panel. Draw's `Dashes…` command, its Path Options "Stroke
-  dashes" section and all its helpers are gone (ids left through the deprecation window). Still in
-  draw: the unregistered stroke schema (`panels/stroke-panel.ts`) whose dormant dash section only
-  carries a pointer text, and the binding driver its specs exercise; delete both with the rest of
-  that dormant module.
+  dashes" section and all its helpers are gone (ids left through the deprecation window). The dormant draw Stroke and Fill schema panels (never registered), their binding
+  drivers and specs are deleted too.
 - SVG import registration: KEEP. The host has File > Import / Export SVG commands
   (`svg-commands.ts`); draw's `importer.svg/dxf/ai/eps` and `exporter.svg/dxf` are registry
   doors (Place, drop, scripts, data bindings), a different entry. Whether the host's drop path

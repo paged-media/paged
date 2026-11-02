@@ -78,3 +78,13 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# The shipped wasm (scripts/build-wasm.sh --profile wasm-draw), named so it
+# survives the move into the one Cargo workspace (docs/development/one-workspace.md).
+[profile.wasm-draw]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

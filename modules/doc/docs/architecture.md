@@ -253,7 +253,7 @@ code uses `readNative` or the declared part type `docLowered`.
 ## Build and test
 
 - `bash scripts/build-wasm.sh` builds `docx-js` for `wasm32-unknown-unknown` with the
-  `wasm-release` profile (release, with ooxmlsdk compiled for size), checks that the
+  `wasm-doc` profile (release, with ooxmlsdk compiled for size), checks that the
   `wasm-bindgen` CLI equals the version in `Cargo.lock`, runs `wasm-bindgen --target web`
   into `packages/doc-bundle/bin/` (gitignored) and, if present, `wasm-opt -Oz`. It fails
   above 100 000 000 bytes and above the manifest's `maxBytes`.

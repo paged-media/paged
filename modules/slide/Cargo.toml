@@ -47,7 +47,7 @@ dml-chart = { path = "../../platform/shared/dml-chart", features = ["serde"] }
 # above 9, which nothing here asks for) and pick flate2's zlib-rs backend.
 # flate2 below names the backend, so every crate that depends on `zip` lists
 # `flate2` beside it.
-zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 # With ooxmlsdk gone from this graph (C1), nothing turns zlib-rs on, so the
 # packages are deflated by miniz_oxide: the parts are the same bytes, the
@@ -110,4 +110,26 @@ opt-level = "z"
 opt-level = "z"
 
 [profile.release.package.slide-native]
+opt-level = "z"
+
+# The shipped wasm (scripts/build-wasm.sh --profile wasm-slide). Named, not
+# `release`, so the settings stay with this artifact when the module joins the
+# one Cargo workspace (docs/development/one-workspace.md): profiles live only
+# in the root manifest there, and `release` is the engine's.
+[profile.wasm-slide]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+[profile.wasm-slide.package.paged-model]
+opt-level = "z"
+
+[profile.wasm-slide.package.paged-scene]
+opt-level = "z"
+
+[profile.wasm-slide.package.paged-store]
+opt-level = "z"
+
+[profile.wasm-slide.package.slide-native]
 opt-level = "z"

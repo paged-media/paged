@@ -51,7 +51,7 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import { editValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 
-import { drawBundle, installStrokePanelBindings } from "../src";
+import { drawBundle } from "../src";
 import { minimalIdml } from "./fixtures/minimal-idml";
 // The shared engine boot (it probes the editor-checkout layouts for the
 // wasm — see headless/host.ts).
@@ -483,39 +483,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         drawBundle.manifest.contributes?.exporters,
       );
     } finally {
-      handle.dispose();
-    }
-  });
-
-  it("the stroke bindings react to real selection (B-01 derived value)", async () => {
-    // The Vector stroke panel is no longer contributed; its exported
-    // binding driver still works when a host installs it.
-    const handle = harness.loadBundle(drawBundle);
-    const sub = installStrokePanelBindings(harness.host);
-    try {
-      // On activation the binding driver primes from the (empty)
-      // selection: nothing selected → hasSelection false.
-      // Selecting the rectangle flips hasSelection true; the rectangle
-      // is bounds-based (no anchor table — B-13 finding b), so
-      // dashControlsVisible stays false (it gates on path anchors).
-      await harness.host.selection.set([RECT as never]);
-      // Give the async recompute a tick to land.
-      await new Promise((r) => setTimeout(r, 0));
-      expect(harness.host.bindings.get("media.paged.draw.hasSelection")).toBe(
-        true,
-      );
-      expect(
-        harness.host.bindings.get("media.paged.draw.dashControlsVisible"),
-      ).toBe(false);
-
-      // Clearing the selection flips hasSelection back to false.
-      await harness.host.selection.set([]);
-      await new Promise((r) => setTimeout(r, 0));
-      expect(harness.host.bindings.get("media.paged.draw.hasSelection")).toBe(
-        false,
-      );
-    } finally {
-      sub.dispose();
       handle.dispose();
     }
   });
