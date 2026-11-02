@@ -37,14 +37,19 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import {
-  drawBundle,
-  ARROWHEAD_OPTIONS,
-  BIND_ARROWHEAD_CONTROLS_VISIBLE,
-  installStrokePanelBindings,
-} from "../../src";
+import { drawBundle } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
+
+/** The arrowhead tokens the engine accepts ("" clears); the host's Stroke
+ *  panel offers the same vocabulary. */
+const ARROWHEAD_OPTIONS = [
+  { value: "" },
+  { value: "SimpleArrowHead" },
+  { value: "TriangleArrowHead" },
+  { value: "CircleSolidArrowHead" },
+  { value: "BarArrowHead" },
+] as const;
 
 const LINE = {
   kind: "graphicLine",
@@ -87,10 +92,6 @@ describe("draw conformance — GraphicLine arrowheads (v43, Phase 4c)", () => {
     h = await openHost();
     await h.load(F1_MULTI_SHAPE.bytes());
     h.loadBundle(drawBundle);
-    // The panel these bindings gated is no longer contributed (its rows
-    // live in the host's own panels); the exported driver is installed
-    // directly to keep it proven.
-    installStrokePanelBindings(h.host);
   });
   afterAll(() => h?.dispose());
 
@@ -157,19 +158,5 @@ describe("draw conformance — GraphicLine arrowheads (v43, Phase 4c)", () => {
       setArrowhead(RECT, "frameStrokeStartArrowhead", "SimpleArrowHead"),
     );
     expect(outcome.applied).toBe(false);
-  });
-
-  it("the published arrowheadControlsVisible binding flips with the selection's kind", async () => {
-    await h.host.selection.set([LINE]);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(h.host.bindings.get(BIND_ARROWHEAD_CONTROLS_VISIBLE)).toBe(true);
-
-    await h.host.selection.set([RECT]);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(h.host.bindings.get(BIND_ARROWHEAD_CONTROLS_VISIBLE)).toBe(false);
-
-    await h.host.selection.set([]);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(h.host.bindings.get(BIND_ARROWHEAD_CONTROLS_VISIBLE)).toBe(false);
   });
 });

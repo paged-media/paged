@@ -34,15 +34,6 @@ export { activate };
 // harness (so it replays the EXACT mutation the live tool emits — no
 // second copy to drift from).
 export { mutationFor, type AnchorEditMode } from "./handlers/anchors";
-// W3.1 — the v1 declarative stroke panel (closes B-01) + its binding
-// driver, exported for the conformance spec.
-export {
-  strokePanel,
-  installStrokePanelBindings,
-  STROKE_PANEL_ID,
-  BIND_HAS_SELECTION,
-  BIND_DASH_CONTROLS_VISIBLE,
-} from "./panels/stroke-panel";
 // W3.2 — the vectorGraphic edit context (closes B-02), exported for the
 // conformance spec.
 export {
@@ -58,14 +49,6 @@ export {
   groupMutationFor,
   ungroupMutationFor,
 } from "./commands/group";
-// Phase 2d — the v1 declarative FILL panel (B-03 consumer) + its
-// binding driver, exported for the conformance spec.
-export {
-  fillPanel,
-  installFillPanelBindings,
-  FILL_PANEL_ID,
-  BIND_GRADIENT_CONTROLS_VISIBLE,
-} from "./panels/fill-panel";
 // Phase 2d — the gradient-fill preset commands + their mutation
 // builder, exported for the conformance spec (so it asserts the EXACT
 // mutations a command emits — no second copy to drift from).
@@ -1010,12 +993,6 @@ export {
   globalEditOptionsOf,
   type GlobalEditOptions,
 } from "./commands/global-edit";
-// Phase 4c — the Line ends (arrowheads) panel section's binding +
-// curated vocabulary, exported for the conformance spec.
-export {
-  BIND_ARROWHEAD_CONTROLS_VISIBLE,
-  ARROWHEAD_OPTIONS,
-} from "./panels/stroke-panel";
 // Interchange (draw ADR 364): SVG, DXF, Illustrator and EPS through the
 // engine's SVG doors and paged.pdf's placement — registration and the
 // import/export functions, exported for the conformance specs.
