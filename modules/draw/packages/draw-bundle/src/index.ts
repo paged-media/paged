@@ -49,17 +49,6 @@ export {
   vectorGraphicEditContext,
   VECTOR_GRAPHIC_CONTEXT,
 } from "./edit-context";
-// B-12 — the stroke DASH editor's builders (the preset commands are the
-// host's), exported for
-// the conformance spec (so it asserts the EXACT mutation a command
-// emits — no second copy to drift from).
-export {
-  dashMutationFor,
-  applyDashArray,
-  dashArrayFrom,
-  dashBatchFor,
-  MAX_DASH_PAIRS,
-} from "./commands/dash";
 // The B-04 GROUP wire shapes, composed by Pattern / Symbols / Image
 // Trace and exported for the conformance spec. The user-facing Group /
 // Ungroup COMMANDS are the host's now (`paged.object.*`) — see
@@ -1169,9 +1158,6 @@ export {
   offsetPayloadOf,
   simplifyPayloadOf,
   outlineStrokePayloadOf,
-  dashLengthsOf,
-  dashOptionsFromLengths,
-  dashTargetsOf,
   pathOptionsFocusOf,
   showPathOptions,
   openPathOptions,
@@ -1183,15 +1169,11 @@ export {
   type SimplifyOptions,
   type OutlineStrokeOptions,
   type SelectSameWeightOptions,
-  type DashOptions,
   type ReflectOptions,
 } from "./commands/path-options";
 export {
   makePathOptionsPanel,
   ownStrokeLabel,
-  dashPatternLabel,
-  hiddenPairsNote,
-  DASH_SECTION_NOTE,
   REFLECT_SECTION_NOTE,
   SIMPLIFY_PREVIEW_ENGINE_NOTE,
   REFLECT_COPY_UNAVAILABLE_NOTE,

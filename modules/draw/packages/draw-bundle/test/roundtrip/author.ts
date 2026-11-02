@@ -63,7 +63,6 @@ import {
   applyAttachTextToPath,
   commitAppearance,
   cornerStyleMutationFor,
-  dashMutationFor,
   drawBundle,
   gradientAxisMutationFor,
   groupMutationFor,
@@ -72,6 +71,7 @@ import {
   setTextOnPathStory,
   writeGraphicStyleLibrary,
 } from "../../src";
+import { dashArrayOp } from "@paged-media/helpers";
 import { stampDrawMetadata } from "../../src/commands/appearance-bake";
 import { packageWithSpread } from "../fixtures/build-idml";
 import { openHost } from "../headless/host";
@@ -656,7 +656,10 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
         const id = await ctx.pen([{ at: [100, y] }, { at: [500, y] }], false);
         await ctx.strokeWeight(id, 4);
         await ctx.select([id]);
-        await ctx.mutate(dashMutationFor(id, lengths), "dash preset");
+        await ctx.mutate(
+          dashArrayOp(id, lengths) as MutationInput,
+          "dash preset",
+        );
       }
     },
   },

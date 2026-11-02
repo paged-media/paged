@@ -31,10 +31,14 @@
 //  2. EVERY SELECTED PAGE ITEM is written, as draw's commands did; the
 //     engine refuses what has no dash array, and the refusal is reported in
 //     words.
-//  3. PALETTE ONLY: draw had no menu entries for the presets (its
-//     `Dashes…` raiser opens the editor), and neither do these.
+//  3. PALETTE ONLY for the presets (draw had no menu rows for them); the
+//     editor's `Dashes…` row is Object > Stroke > Dashes…, which raises the
+//     Stroke panel.
 
-import type { CommandContribution } from "@paged-media/shell";
+import type {
+  CommandContribution,
+  MenuItemContribution,
+} from "@paged-media/shell";
 import type { CanvasClient, ElementId, Mutation } from "@paged-media/client";
 import { refusalText } from "@paged-media/panel-kit";
 import { DASH_PRESET_LENGTHS, dashArrayOp } from "@paged-media/helpers";
@@ -47,6 +51,12 @@ const M = defineMessages("app.strokeDashCommands", {
   dashed: "Stroke: Dashed",
   dotted: "Stroke: Dotted",
   dashDot: "Stroke: Dash-dot",
+});
+
+// The menu leaves (`menu.<label>`).
+defineMessages("menu", {
+  Stroke: "Stroke",
+  "Dashes…": "Dashes…",
 });
 
 export const PAGED_STROKE_DASH_SOLID = "paged.stroke.dashSolid";
@@ -120,3 +130,14 @@ export function buildStrokeDashCommands(
     },
   }));
 }
+
+/** Object > Stroke > Dashes… raises the Stroke panel, whose dash editor is
+ *  the entry draw's `Dashes…` row opened its own panel for. */
+export const STROKE_DASH_MENU_ITEMS: MenuItemContribution[] = [
+  {
+    path: "Object/Stroke/Dashes…",
+    command: "paged.panel.show.paged.stroke",
+    order: 66.5,
+    group: "stroke",
+  },
+];

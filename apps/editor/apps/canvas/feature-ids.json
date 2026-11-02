@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 904,
+    "command": 903,
     "keybinding": 167,
     "menu": 645,
     "panel": 151,
@@ -1352,11 +1352,6 @@
     },
     {
       "id": "command:media.paged.draw.command.simplifyPathOptions",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.strokeDashOptions",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -5786,11 +5781,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "menu:Draw/Stroke/Dashes…",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "menu:Draw/Stroke/New brush from selection",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -8061,6 +8051,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Stroke/Dashes…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Transform/Transform each…",
       "kind": "menu",
       "owner": "editor"
@@ -10296,6 +10291,24 @@
     {
       "id": "command:media.paged.draw.command.strokeDashDashDot",
       "replacement": "command:paged.stroke.dashDashDot",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.comments",
+      "replacement": "panel:paged.comments",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashOptions",
+      "replacement": "panel:paged.stroke",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Stroke/Dashes…",
+      "replacement": "menu:Object/Stroke/Dashes…",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

@@ -28,6 +28,7 @@ import {
 } from "@paged-media/shell";
 
 import { appCatalogRegistry } from "./catalog-registry";
+import { DashEditor } from "./dash-editor";
 import { strokeComposition } from "./stroke.composition";
 import { useStrings } from "@paged-media/strings";
 
@@ -37,6 +38,7 @@ export function StrokePanel() {
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3" data-stroke-panel="ready">
         <CompositionRenderer composition={strokeComposition(strings)} />
+        <DashEditor />
       </div>
     </CatalogRegistryProvider>
   );

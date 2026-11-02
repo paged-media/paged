@@ -174,14 +174,17 @@ Status (draw items, one line each; updated as they land):
 - Star and Flare: KEEP. The host's polygon tool draws a live star by drag, but there is no host
   command or dialog for a parametrised star (radius 1, radius 2, points, rotation) and nothing
   like Flare; draw's `Insert star…` / `Insert flare` and their Path Options sections stay.
-- Fill / stroke / dash: the schema panels were already gone from draw. The four dash PRESET
-  commands are MERGED 2026-11-01: the host declares `paged.stroke.dash*` (Solid, Dashed, Dotted,
-  Dash-dot; palette only, as draw's had no menu rows; `stroke-dash-commands.ts`), writing the
-  shared op in `platform/shared/helpers` (`dashArrayOp`, `DASH_PRESET_LENGTHS`) that draw's dash
-  editor also builds through. Draw's four commands are gone (ids left through the deprecation
-  window). KEPT: draw's dash EDITOR (`Draw > Stroke > Dashes…` and the Path Options section with up
-  to three dash/gap pairs). The host Stroke panel has a "Dashes & arrows" field on the same
-  property; whether it replaces the editor is not proven, so it stays.
+- Fill / stroke / dash: DONE 2026-11-02. The schema panels were already gone. The host Stroke panel
+  now has a dash editor (`panels/dash-editor.tsx`): the four presets, a "Dashed line" switch that
+  keeps the typed pairs, three dash/gap pairs, and a read-back that follows the selection with a
+  note when a dash has more than three pairs; beside it the generic list field takes any run
+  ("6, 3"). The model (pairs of an array and back, the preset runs, the one write) is shared in
+  `platform/shared/helpers`. The four preset commands are `paged.stroke.dash*` (palette) and
+  Object > Stroke > Dashes… raises the panel. Draw's `Dashes…` command, its Path Options "Stroke
+  dashes" section and all its helpers are gone (ids left through the deprecation window). Still in
+  draw: the unregistered stroke schema (`panels/stroke-panel.ts`) whose dormant dash section only
+  carries a pointer text, and the binding driver its specs exercise; delete both with the rest of
+  that dormant module.
 - SVG import registration: KEEP. The host has File > Import / Export SVG commands
   (`svg-commands.ts`); draw's `importer.svg/dxf/ai/eps` and `exporter.svg/dxf` are registry
   doors (Place, drop, scripts, data bindings), a different entry. Whether the host's drop path
