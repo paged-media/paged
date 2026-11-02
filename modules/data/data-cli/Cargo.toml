@@ -1,5 +1,6 @@
 [package]
 name = "data-cli"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -25,4 +26,4 @@ paged-data-automation = { path = "../../../engine/core/crates/paged-data-automat
 data-js = { path = "../data-js" }
 data-script = { path = "../data-script" }
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { version = "1", features = ["float_roundtrip"] }
