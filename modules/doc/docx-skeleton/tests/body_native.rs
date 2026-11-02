@@ -156,6 +156,32 @@ fn compare_paragraph(
         );
         assert_eq!(old_run, new_run, "{at}: character properties");
     }
+    // Inline pictures: anchored frames at their offsets, crop as placement.
+    assert_eq!(p.images.len(), np.anchored_frames.len(), "{at}: pictures");
+    for (k, (img, f)) in p.images.iter().zip(&np.anchored_frames).enumerate() {
+        let b = f.bounds.expect("a picture frame has bounds");
+        assert_eq!(
+            (b.right - b.left, b.bottom - b.top),
+            (img.width_pt, img.height_pt),
+            "{at}: picture {k} size"
+        );
+        assert_eq!(
+            f.image_link.as_deref(),
+            Some(img.uri.as_str()),
+            "{at}: picture {k} image"
+        );
+        assert_eq!(
+            f.image_item_transform,
+            img.crop.and_then(|c| c.placement),
+            "{at}: picture {k} crop"
+        );
+        let chars: u32 = np.runs.iter().map(|r| r.text.chars().count() as u32).sum();
+        assert_eq!(
+            np.anchored_frame_offsets[k],
+            img.at.min(chars),
+            "{at}: picture {k} offset"
+        );
+    }
     p.para_style_id.as_deref().is_some_and(is_synthesized)
 }
 
@@ -280,6 +306,8 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
         ("table", docx_conformance::table_docx()),
+        ("image", docx_conformance::image_docx()),
+        ("picture crop", docx_conformance::picture_crop_docx()),
         ("table look", docx_conformance::objects_table_look_docx()),
     ];
     let (mut built, mut direct) = (0, 0);
@@ -303,6 +331,10 @@ fn what_slice_1_does_not_build_is_deferred_not_dropped() {
             .iter()
             .any(|b| matches!(b, NativeBlock::Deferred { reason } if reason == why))
     };
+    assert!(deferred(
+        &docx_conformance::objects_floats_docx(),
+        "floating picture or picture look"
+    ));
     assert!(deferred(
         &docx_conformance::objects_nested_tables_docx(),
         "nested table"
@@ -432,4 +464,23 @@ fn the_bundles_table_fixture_is_built_whole() {
     assert!(reasons.is_empty(), "deferred: {reasons:?}");
     assert!(docx_skeleton::body::native_stories(&ir).is_some());
     compare("table-body", &ir);
+}
+
+#[test]
+fn the_bundles_picture_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/picture-body.docx");
+    let ir = lowered(bytes);
+    let reasons: Vec<String> = native_body(&ir)
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| match b {
+            NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
+            _ => None,
+        })
+        .collect();
+    assert!(reasons.is_empty(), "deferred: {reasons:?}");
+    let (built, _) = compare("picture-body", &ir);
+    assert!(built >= 3);
+    assert!(docx_skeleton::body::native_stories(&ir).is_some());
 }

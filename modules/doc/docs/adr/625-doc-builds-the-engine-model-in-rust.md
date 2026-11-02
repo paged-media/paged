@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slices 1 to 3 implemented (2 and 3 behind a flag, off); the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 to 4a implemented (2 to 4a behind a flag, off); the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
@@ -104,6 +104,14 @@ body paragraphs. The table stands in a paragraph of its own, which takes the Wor
 paragraph's style (it aligns the table). Still deferred, and so the document opens by the old
 pour: nested tables, pictures in cells, a table poured as text, rows
 held at an exact height. The table's id is `Table/docx_t<n>`, not the engine's minted `u<hex>`.
+
+### Slice 4a as built: inline pictures
+
+An inline picture is an anchored frame on its paragraph (`AnchoredFrame`, a rectangle holding the
+image, a character of its line at the picture's offset), its crop the frame's inner image
+placement. Floating pictures (anchored objects with wrap), pictures with a DrawingML look and text
+boxes stay deferred (4b), as do pictures whose frame ids the old path takes from the engine's
+mint: a native frame is `docx_img<n>`.
 
 ### Save-back
 

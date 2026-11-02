@@ -197,7 +197,11 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     for (const h of opened.splice(0)) h.dispose();
   });
 
-  for (const name of ["direct-format.docx", "table-body.docx"]) {
+  for (const name of [
+    "direct-format.docx",
+    "table-body.docx",
+    "picture-body.docx",
+  ]) {
     laysOutAsTheOldPour(name);
     exportsAsTheOldPour(name);
   }

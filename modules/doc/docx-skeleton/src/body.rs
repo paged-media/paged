@@ -45,8 +45,8 @@ use docx_lower::ir::{
 };
 use paged_model::script::{CharacterDirection, FontHint};
 use paged_model::{
-    CellWidth, CharacterRun, Justification, Paragraph, Table, TableCell, TableColumn, TableRow,
-    TableWidth, WordTableLayout,
+    AnchoredFrame, AnchoredFrameKind, Bounds, CellWidth, CharacterRun, Justification, Paragraph,
+    Table, TableCell, TableColumn, TableRow, TableWidth, WordTableLayout,
 };
 
 /// The id prefix of the styles the lowering synthesizes for direct
@@ -436,8 +436,11 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
 }
 
 fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
-    if !p.images.is_empty() {
-        Some("picture")
+    if p.images
+        .iter()
+        .any(|i| i.anchor.is_some() || i.fx.is_some() || i.layout.is_some())
+    {
+        Some("floating picture or picture look")
     } else if !p.segments.is_empty() {
         Some("page or column break inside the paragraph")
     } else if !p.bookmarks.is_empty() {
@@ -455,10 +458,19 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
     }
 }
 
+/// The ids the builder mints for what it makes: a table's and a picture
+/// frame's (the engine mints `u<hex>`; these cannot collide with those).
+#[derive(Default)]
+struct Minted {
+    tables: usize,
+    frames: usize,
+}
+
 fn build_paragraph(
     doc: &LoweredDoc,
     styles: &HashMap<&str, &LoweredStyle>,
     p: &LoweredParagraph,
+    minted: &mut Minted,
 ) -> Result<Paragraph, String> {
     if let Some(why) = paragraph_deferral(p) {
         return Err(why.into());
@@ -513,6 +525,32 @@ fn build_paragraph(
         }
         para.runs.push(run);
     }
+    // Inline pictures: anchored frames, characters of their line (engine
+    // ADR 1050), their crop the picture's placement (doc ADR 623).
+    let chars: u32 = para
+        .runs
+        .iter()
+        .map(|r| r.text.chars().count() as u32)
+        .sum();
+    for img in &p.images {
+        para.anchored_frame_offsets
+            .resize(para.anchored_frames.len(), 0);
+        para.anchored_frame_offsets.push(img.at.min(chars));
+        para.anchored_frames.push(AnchoredFrame {
+            frame_kind: AnchoredFrameKind::Rectangle,
+            self_id: Some(format!("docx_img{}", minted.frames)),
+            bounds: Some(Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: img.height_pt,
+                right: img.width_pt,
+            }),
+            image_link: Some(img.uri.clone()),
+            image_item_transform: img.crop.and_then(|c| c.placement),
+            ..AnchoredFrame::default()
+        });
+        minted.frames += 1;
+    }
     Ok(para)
 }
 
@@ -558,7 +596,7 @@ fn build_table(
     doc: &LoweredDoc,
     styles: &HashMap<&str, &LoweredStyle>,
     t: &LoweredTable,
-    made: &mut usize,
+    minted: &mut Minted,
 ) -> Result<Paragraph, String> {
     if !t.flow.is_empty() {
         return Err("table poured as text".into());
@@ -607,9 +645,6 @@ fn build_table(
         if !lc.nested.is_empty() {
             return Err("nested table".into());
         }
-        if lc.paragraphs.iter().any(|p| !p.images.is_empty()) {
-            return Err("picture in a table cell".into());
-        }
         if lc.row >= rows || lc.col >= cols {
             return Err("table cell outside the grid".into());
         }
@@ -649,7 +684,7 @@ fn build_table(
         let styled_empty = lc.paragraphs.iter().any(|p| p.para_style_id.is_some());
         if !(text_empty && !styled_empty) {
             for p in &lc.paragraphs {
-                let para = build_paragraph(doc, styles, p)?;
+                let para = build_paragraph(doc, styles, p, minted)?;
                 if para.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
                     return Err("line feed in a table cell".into());
                 }
@@ -672,7 +707,7 @@ fn build_table(
                 .filter_map(|(r, c)| c.then_some(r as u32))
                 .collect(),
         }),
-        self_id: Some(format!("Table/docx_t{}", *made)),
+        self_id: Some(format!("Table/docx_t{}", minted.tables)),
         header_row_count: header,
         footer_row_count: 0,
         body_row_count: rows - header,
@@ -694,7 +729,7 @@ fn build_table(
         cells,
         ..Table::default()
     };
-    *made += 1;
+    minted.tables += 1;
     host.table = Some(table);
     Ok(host)
 }
@@ -702,17 +737,17 @@ fn build_table(
 /// Build the story's blocks that slice 1 can, directly on the model.
 pub fn native_body(doc: &LoweredDoc) -> NativeBody {
     let styles = catalogue(doc);
-    let mut tables = 0usize;
+    let mut minted = Minted::default();
     let blocks = doc
         .story
         .blocks
         .iter()
         .map(|b| match b {
-            LoweredBlock::Table(t) => match build_table(doc, &styles, t, &mut tables) {
+            LoweredBlock::Table(t) => match build_table(doc, &styles, t, &mut minted) {
                 Ok(para) => NativeBlock::Table(Box::new(para)),
                 Err(reason) => NativeBlock::Deferred { reason },
             },
-            LoweredBlock::Paragraph(p) => match build_paragraph(doc, &styles, p) {
+            LoweredBlock::Paragraph(p) => match build_paragraph(doc, &styles, p, &mut minted) {
                 Ok(para) => NativeBlock::Paragraph(Box::new(para)),
                 Err(reason) => NativeBlock::Deferred { reason },
             },
