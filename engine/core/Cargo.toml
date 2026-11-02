@@ -70,6 +70,10 @@ members = [
     "crates/paged-data-session",
     # Actions (core ADR 1015): the registry, chains, the cache key, JS actions.
     "crates/paged-action",
+    # Modules that joined this workspace (docs/development/one-workspace.md).
+    # A member outside this directory names this root in its [package]
+    # (`workspace = "…/engine/core"`).
+    "../../modules/publish/crates/pdf-import",
     "spikes/vello-eval",
     "spikes/composer-calibration",
     "spikes/wasm-size",
@@ -155,6 +159,13 @@ tsify-next = { version = "0.5", default-features = false, features = ["js"] }
 # each crate's optional `schema` feature. Never on in a wasm build.
 schemars = "1.2.3"
 wasm-bindgen = "0.2"
+# paged.publish's PDF page reader (pdf-import): the engine's own PDF interpreter
+# (engine ADR 154) at the engine's version, hayro's geometry, and the PNGs the
+# page's images become. No embedded base-14 fonts or CMaps: the bundle's text
+# comes from PDFium.
+hayro-interpret = { version = "0.8", default-features = false }
+kurbo = "0.13"
+png = "0.18"
 # W1.24 (audit B17) — benchmark harness (dev-only). `html_reports` is
 # off: the bench lane is local + CI-smoke, not a report-publishing gate,
 # and the gnuplot/plotters report deps bloat the dev build for no value
@@ -169,6 +180,9 @@ serde_json = "1"
 # both resolve to the one package.
 paged-model = { path = "crates/paged-model" }
 paged-scene = { path = "crates/paged-scene" }
+paged-store = { path = "crates/paged-store" }
+paged-pdf-annots = { path = "crates/paged-pdf-annots" }
+idml-import = { path = "crates/idml-import" }
 
 # C-21 — flo_curves upstream fix, pinned until it is released.
 #

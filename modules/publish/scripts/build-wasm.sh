@@ -9,8 +9,10 @@
 # `engine-loader.ts` imports. The mapper is tiny (serde + zip + the paged
 # model, no PDF stack); the size it prints flags an accidental heavy dep.
 #
-# Built from the workspace root so the shared git-dep lock is reused; -p
-# selects just the mapper (idml-import/-export are not needed for the bundle).
+# pdf-import is a member of the engine's Cargo workspace (there is no Cargo.toml
+# in this module's directory), so the build is told which manifest to start from
+# and takes Cargo.lock and the target directory from that workspace; -p selects
+# just the mapper.
 # The steps, the pin check, wasm-opt and the size gate are the shared
 # tooling/rust/build-wasm.sh.
 #
@@ -21,6 +23,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 exec bash ../../tooling/rust/build-wasm.sh \
+  --manifest-path crates/pdf-import/Cargo.toml \
   --package pdf-import --artifact pdf_import \
   --out packages/pdf-bundle/bin \
   --ensure-target

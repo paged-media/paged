@@ -1,6 +1,6 @@
 # ADR 1045 — An anchored frame paints as a free frame does
 
-- **Status:** Accepted 2026-10-29.
+- **Status:** Accepted 2026-10-29; amended 2026-11-02 (the picture's placement, below).
 - **Scope:** protocol v78 (additive; no bump). `paged-model` (`AnchoredFrame`: the look fields,
   `has_transparency`, `EffectBearing`); `paged-renderer` (`pipeline/anchored.rs`:
   `synthetic_rectangle`, `paints_with_picture`, `AnchoredLook`, the picture pass);
@@ -97,3 +97,29 @@ row `anchored-inline-objects.anchored-effects`.
   through `getElementProperties` on an anchored frame (it lists the anchored-object rows; the
   host panels read free frames); a source story with footnotes keeps the patch lane, which does
   not rewrite an anchored object's changed look.
+
+## Amendment 2026-11-02 — an anchored picture takes a placement (a crop)
+
+The model already held the picture's inner transform on the frame
+(`AnchoredFrame::image_item_transform`, read and written by IDML as the `<Image>`'s
+`ItemTransform`), and the picture pass handed it to the picture emission. Two things kept an
+anchored picture from being placed or cropped, which Word's `a:srcRect` needs (doc ADR 621):
+
+- **No door.** `imageContentTransform` answered for the rectangle, oval and polygon on a spread
+  only; a lowering that places a picture with `insertAnchoredFrame` had no way to set it. The
+  path now reaches an anchored picture frame (`apply/anchored_look.rs`, `image_placement`),
+  with its exact inverse, in table cells as well (the finders now use ADR 1050's, which look
+  there). A frame with no picture refuses it. No `PropertyPath` is added: the wire, the schema
+  and the catalog do not change.
+- **The placement did not move with the frame.** The transform is in the frame's own box, as
+  the frame's `bounds` are (an inserted frame's box starts at (0, 0)); the picture pass puts the
+  box where the line placed it but left the transform where it was. `synthetic_rectangle` now
+  moves the transform with the box, as it does a gradient start. An IDML anchored picture with
+  an `ItemTransform` is placed by the same rule now.
+
+The crop is the mapping slide's pictures use: shown at `w / (1 - l - r)` by `h / (1 - t - b)`
+with its top left corner `l` and `t` of that outside the frame, over the picture's pixel size.
+Evidence: `crates/paged-canvas/tests/it/anchored_picture_crop.rs` (the part the frame shows,
+found by taking its clip back through the placement, is the middle half for `l = r = 25%`,
+and the same as a free frame's), `crates/paged-mutate/src/lib.rs`
+(`an_anchored_picture_takes_an_image_placement_and_undoes_it`).

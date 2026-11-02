@@ -1,7 +1,11 @@
 # Rust builds
 
-The repository has eleven Cargo workspaces (`engine/core`, `modules/*`,
-`apps/server/server`, …). They share one root `.cargo/config.toml`, which Cargo
+The repository is moving from eleven Cargo workspaces to one, module by module
+([one-workspace.md](one-workspace.md)); a module that has joined is a set of members of
+`engine/core`'s workspace, has no `Cargo.toml` of its own at its root and builds with
+`cargo … -p <crate>` from `engine/core` (or from anywhere with `--manifest-path`). The
+workspaces that remain (`modules/*` not yet moved, `apps/server/server`, …) and the
+one workspace all share one root `.cargo/config.toml`, which Cargo
 reads from the current directory upwards. This page covers what it sets, what to
 install, and the macOS settings Cargo can't make for you.
 

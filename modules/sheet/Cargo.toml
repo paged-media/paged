@@ -94,3 +94,13 @@ opt-level = "s"
 lto = true
 codegen-units = 1
 
+
+# The shipped wasm (scripts/build-wasm.sh --profile wasm-sheet). Named, not
+# `release`, so the settings stay with this artifact when the module joins the
+# one Cargo workspace (docs/development/one-workspace.md): profiles live only
+# in the root manifest there, and `release` is the engine's.
+[profile.wasm-sheet]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1

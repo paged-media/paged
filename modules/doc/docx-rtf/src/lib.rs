@@ -919,6 +919,7 @@ impl<'a> Reader<'a> {
             float: None,
             band_offset_emu: None,
             look: None,
+            crop: None,
         };
         let st = self.stack.last().cloned().unwrap_or_else(State::root);
         self.runs.push(Run {

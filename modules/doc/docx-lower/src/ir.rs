@@ -596,6 +596,36 @@ pub struct LoweredImage {
     /// z-order and overlap (engine ADR 1050).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layout: Option<LoweredFloatLayout>,
+    /// Doc ADR 623 — the picture's crop (`a:srcRect`) as fractions of the
+    /// image left out at each side. [`Self::width_pt`] x [`Self::height_pt`]
+    /// is the cropped picture's size on the page, so the image is shown at
+    /// `width / (1 - l - r)` by `height / (1 - t - b)`, its top left corner
+    /// `l` and `t` of that out of the frame (the mapping slide's pictures
+    /// use). Absent for a picture shown whole.
+    ///
+    /// The engine places the picture by [`LoweredCrop::placement`], set on
+    /// its anchored frame as `imageContentTransform` (engine ADR 1045,
+    /// amendment 2026-11-02).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<LoweredCrop>,
+}
+
+/// The parts of an image a crop leaves out, as fractions (0 to 1) of the
+/// image's width (`l`, `r`) and height (`t`, `b`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct LoweredCrop {
+    pub l: f32,
+    pub t: f32,
+    pub r: f32,
+    pub b: f32,
+    /// The picture's placement in its frame: the engine's inner image
+    /// transform `[a, b, c, d, e, f]` (natural pixels to points, in the
+    /// frame's own box, origin at its top left), made from the picture's
+    /// pixel size. `None` when the picture's size is not read from its
+    /// bytes (a metafile, a format the header reader does not know): the
+    /// picture then shows whole.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<[f32; 6]>,
 }
 
 /// A floating drawing's position and wrap, in points (thoughts ADR 035).

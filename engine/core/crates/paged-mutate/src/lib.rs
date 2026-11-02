@@ -3452,6 +3452,59 @@ mod tests {
         assert_eq!(back, looked);
     }
 
+    /// Engine ADR 1045 (amendment 2026-11-02) — an anchored picture takes
+    /// the inner image transform (a crop), with its exact inverse; a frame
+    /// with no picture refuses it.
+    #[test]
+    fn an_anchored_picture_takes_an_image_placement_and_undoes_it() {
+        let mut project = Project::new(document_with_one_story("Story/u1"));
+        for (id, uri) in [("pic", Some("data:image/png;base64,AAAA")), ("box", None)] {
+            project
+                .apply(Operation::InsertAnchoredFrame {
+                    paragraph: None,
+                    story_id: "Story/u1".to_string(),
+                    offset: 3,
+                    width: 100.0,
+                    height: 80.0,
+                    image_uri: uri.map(str::to_string),
+                    self_id: id.to_string(),
+                    restore: None,
+                    frame_kind: Default::default(),
+                    frame_story: None,
+                    layout: None,
+                    cell: None,
+                })
+                .unwrap();
+        }
+        let before =
+            serde_json::to_string(&project.document().stories[0].story.paragraphs[0]).unwrap();
+        let t = [2.0, 0.0, 0.0, 2.0, -30.0, 0.0];
+        let set = |id: &str| Operation::SetProperty {
+            node: NodeId::Rectangle(id.to_string()),
+            path: PropertyPath::ImageContentTransform,
+            value: Value::Transform(Some(t)),
+        };
+        let applied = project.apply(set("pic")).unwrap();
+        let placed = |p: &Project| {
+            p.document().stories[0].story.paragraphs[0]
+                .anchored_frames
+                .iter()
+                .find(|f| f.self_id.as_deref() == Some("pic"))
+                .unwrap()
+                .image_item_transform
+        };
+        assert_eq!(placed(&project), Some(t));
+        crate::apply(project.document_mut(), &applied.inverse).unwrap();
+        assert_eq!(placed(&project), None);
+        let after =
+            serde_json::to_string(&project.document().stories[0].story.paragraphs[0]).unwrap();
+        assert_eq!(after, before, "the inverse restores the frame exactly");
+        assert!(
+            project.apply(set("box")).is_err(),
+            "a frame with no picture has nothing to place"
+        );
+    }
+
     /// Engine ADR 1045 — an anchored frame without a look serialises as
     /// it always did: no key of the look appears.
     #[test]

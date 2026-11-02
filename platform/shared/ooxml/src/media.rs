@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Picture formats (slide W4): what a picture's bytes are, how many pixels
+//! Picture formats (slide W4, shared with doc for a picture's crop): what a picture's bytes are, how many pixels
 //! they hold, and how PowerPoint carries them.
 //!
 //! The engine decodes every format `paged-raster` reads (and draws an SVG

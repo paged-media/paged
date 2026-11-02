@@ -1,7 +1,6 @@
 {
   "rust-analyzer.linkedProjects": [
     "engine/core/Cargo.toml",
-    "modules/publish/Cargo.toml",
     "modules/image/Cargo.toml",
     "modules/draw/Cargo.toml",
     "modules/sheet/Cargo.toml",

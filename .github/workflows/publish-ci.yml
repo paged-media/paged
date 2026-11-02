@@ -100,6 +100,12 @@ jobs:
   check:
     name: fmt + clippy + build
     runs-on: ubuntu-latest
+    # pdf-import is a member of the engine's Cargo workspace (one Cargo
+    # workspace, docs/development/one-workspace.md): cargo runs there and
+    # selects the crate with -p.
+    defaults:
+      run:
+        working-directory: engine/core
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -112,19 +118,19 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/publish -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-publish
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: fmt
-        run: cargo fmt --all --check
+        run: cargo fmt -p pdf-import --check
 
       - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy -p pdf-import --all-targets -- -D warnings
 
       - name: build (native)
-        run: cargo build --workspace --all-targets
+        run: cargo build -p pdf-import --all-targets
 
       # The pdf-import mapper SHIPS as wasm in the pdf bundle. (The IDML
       # adapter's own wasm32 lint is core-ci.yml's `clippy (wasm32)` now that
@@ -132,21 +138,21 @@ jobs:
       - name: build (wasm32)
         run: cargo build -p pdf-import --target wasm32-unknown-unknown
 
-      # The engine patches flo_curves (engine/core/Cargo.toml, C-21), and a
-      # [patch] applies only in the workspace that declares it. Depending on
-      # an engine crate that reaches flo_curves (paged-mutate and everything
-      # above it) would build the UNPATCHED crates.io release here, whose
-      # boolean ops can panic. So flo_curves must not be in this graph.
+      # pdf-import now builds in the engine's workspace, so the engine's
+      # flo_curves [patch] (engine/core/Cargo.toml, C-21) applies to it. The
+      # guard stays as a statement of what the mapper links: it needs no
+      # boolean-path engine, and a dependency that reaches flo_curves (paged-mutate
+      # and everything above it) would put one in the bundle's wasm.
       - name: guard (no flo_curves in the graph)
         run: |
           set -euo pipefail
           # Any resolution error fails here, so the check below can only
           # fail for the one reason it is about.
-          cargo tree --locked --target all > /dev/null
+          cargo tree -p pdf-import --locked --target all > /dev/null
           # `cargo tree -i` exits non-zero when the package is not in the
           # graph at all, which is the passing case.
-          if out=$(cargo tree --locked --target all -i flo_curves 2>/dev/null) && [ -n "$out" ]; then
-            echo "::error title=flo_curves in the publish graph::the engine's flo_curves [patch] does not apply here; drop the dependency path below"
+          if out=$(cargo tree -p pdf-import --locked --target all -i flo_curves 2>/dev/null) && [ -n "$out" ]; then
+            echo "::error title=flo_curves in the publish graph::pdf-import must not link a boolean-path engine; drop the dependency path below"
             echo "$out"
             exit 1
           fi
@@ -216,7 +222,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/publish -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-publish
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -228,7 +234,8 @@ jobs:
       - name: nextest → JUnit
         run: |
           set -uo pipefail
-          cargo nextest run --profile ci --no-tests=fail || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
+          cd ../../engine/core
+          cargo nextest run -p pdf-import --profile ci --no-tests=fail || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
           test -s target/nextest/ci/junit.xml
 
       - name: upload nextest results artifact
@@ -236,7 +243,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: modules/publish/target/nextest/ci/junit.xml
+          path: engine/core/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
 
@@ -317,7 +324,7 @@ jobs:
       - name: mold linked the test binaries
         if: runner.os == 'Linux'
         run: |
-          bin=$(find "${CARGO_TARGET_DIR:-target}/debug/deps" -maxdepth 1 -type f -perm -u+x ! -name '*.so' | head -1)
-          test -n "$bin" || { echo "::error::no test binary in target/debug/deps"; exit 1; }
+          bin=$(find "${CARGO_TARGET_DIR:-../../engine/core/target}/debug/deps" -maxdepth 1 -type f -perm -u+x ! -name '*.so' | head -1)
+          test -n "$bin" || { echo "::error::no test binary in engine/core/target/debug/deps"; exit 1; }
           readelf -p .comment "$bin" | grep -q mold || { echo "::error::$bin was not linked by mold"; exit 1; }
           echo "mold linked $bin"

@@ -870,6 +870,7 @@ impl Odt<'_> {
             float: None,
             band_offset_emu: None,
             look: None,
+            crop: None,
         })
     }
 

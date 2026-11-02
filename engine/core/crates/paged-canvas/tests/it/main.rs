@@ -7,6 +7,7 @@ mod address_grammar;
 mod amend_mutation;
 mod anchored_effects;
 mod anchored_floats;
+mod anchored_picture_crop;
 mod appearance;
 mod apply_style_caret;
 mod artboards;
