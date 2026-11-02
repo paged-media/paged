@@ -88,7 +88,6 @@
       "media.paged.draw.panel.imageTrace",
       "media.paged.draw.panel.recolorArtwork",
       "media.paged.draw.panel.generative",
-      "media.paged.draw.panel.colorGuide",
       "media.paged.draw.panel.brushes",
       "media.paged.draw.panel.properties"
     ],
@@ -227,7 +226,6 @@
       "media.paged.draw.command.imageTraceOptions",
       "media.paged.draw.command.recolorArtwork",
       "media.paged.draw.command.recolorArtworkOptions",
-      "media.paged.draw.command.applyGuideColor",
       "media.paged.draw.command.textToVector",
       "media.paged.draw.command.generativeRecolor",
       "media.paged.draw.command.textToVectorOptions",
@@ -3802,28 +3800,6 @@
           "args": {
             "kind": "struct",
             "fields": {}
-          }
-        },
-        {
-          "id": "media.paged.draw.command.applyGuideColor",
-          "title": "Apply guide color",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              },
-              "hex": {
-                "kind": "text"
-              },
-              "stroke": {
-                "kind": "bool"
-              }
-            }
           }
         },
         {

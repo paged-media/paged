@@ -291,7 +291,6 @@ describe("drawBundle.activate", () => {
       // apply.
       "media.paged.draw.command.recolorArtwork",
       "media.paged.draw.command.recolorArtworkOptions",
-      "media.paged.draw.command.applyGuideColor",
       "media.paged.draw.command.textToVector",
       "media.paged.draw.command.generativeRecolor",
       "media.paged.draw.command.textToVectorOptions",
@@ -350,7 +349,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.imageTrace",
       "media.paged.draw.panel.recolorArtwork",
       "media.paged.draw.panel.generative",
-      "media.paged.draw.panel.colorGuide",
       "media.paged.draw.panel.brushes",
       // ADR 323 — the Draw properties schema panel (property rows).
       "media.paged.draw.panel.properties",

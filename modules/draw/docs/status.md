@@ -149,9 +149,10 @@ canary added is under [Releases](#releases).
   nearest swatches of a colour group. Apply is one batch: new swatches (a spot colour's
   replacement is a spot), new gradients where stops change, the selection's refs
   re-pointed; an object's tint is kept, so a tint of a spot stays a tint. The Color Guide
-  panel shows the fill's harmony and its shades / tints, warm / cool and vivid / muted
-  variations; a click fills the selection (Alt-click strokes). The colour math is
-  draw-geometry's `color-harmony.ts`.
+  is the host's since 2026-11-02 (a section of its Color Wheel panel: the fill's harmony and
+  its shades / tints, warm / cool and vivid / muted variations; a click fills the selection,
+  Alt-click strokes). The colour math stays draw-geometry's `color-harmony.ts`, shared with
+  Recolor Artwork.
 - **Interchange** ([ADR 364](adr/364-interchange-rides-the-engines-doors.md)). SVG in
   (`.svg`) and out (the selection) through the engine's `paged-svg`; DXF in (`.dxf`) and
   out (the selection, else the page) through the same doors and the draw wasm's

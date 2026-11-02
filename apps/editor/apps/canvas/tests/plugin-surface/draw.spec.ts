@@ -141,7 +141,6 @@ const PANELS = [
   // WP6.6 / WP6.5 — Image Trace options, Recolor Artwork, Color Guide.
   "media.paged.draw.panel.imageTrace",
   "media.paged.draw.panel.recolorArtwork",
-  "media.paged.draw.panel.colorGuide",
   // WP6.4 — brushes and width profiles as live stroke styles.
   "media.paged.draw.panel.brushes",
   "media.paged.draw.panel.properties",
@@ -271,7 +270,6 @@ const COMMANDS = [
   "media.paged.draw.command.imageTraceOptions",
   "media.paged.draw.command.recolorArtwork",
   "media.paged.draw.command.recolorArtworkOptions",
-  "media.paged.draw.command.applyGuideColor",
   // WP8.3 — Text to vector and Generative recolor, with their panel raisers.
   "media.paged.draw.command.textToVector",
   "media.paged.draw.command.textToVectorOptions",
@@ -398,7 +396,6 @@ const PANEL_MARKER: Record<string, string> = {
   "media.paged.draw.panel.pathOptions": "[data-draw-pathopts-panel]",
   "media.paged.draw.panel.imageTrace": "[data-draw-image-trace-panel]",
   "media.paged.draw.panel.recolorArtwork": "[data-draw-recolor-panel]",
-  "media.paged.draw.panel.colorGuide": "[data-draw-color-guide-panel]",
   "media.paged.draw.panel.brushes": "[data-draw-brushes-panel]",
   // ADR 323 — object properties as host PropertyFields (a schema panel).
   "media.paged.draw.panel.properties":
@@ -742,8 +739,8 @@ test.describe("plugin surface · paged.draw", () => {
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(44);
-    expect(PANELS).toHaveLength(14);
-    expect(COMMANDS).toHaveLength(145);
+    expect(PANELS).toHaveLength(13);
+    expect(COMMANDS).toHaveLength(144);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────

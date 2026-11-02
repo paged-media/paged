@@ -97,7 +97,6 @@ const M = defineMessages("draw.recolor", {
   recolor:
     "Color: Recolor artwork (harmony, reduce to N colours, library or a colour map — one undo step)",
   recolorOptions: "Color: Recolor artwork…",
-  applyGuide: "Color: Apply a Color Guide colour to the selection's fill",
 });
 
 export const RECOLOR_COMMAND_CATEGORY = "Color";
@@ -105,17 +104,13 @@ export const RECOLOR_ARTWORK_COMMAND_ID =
   "media.paged.draw.command.recolorArtwork";
 export const RECOLOR_ARTWORK_OPTIONS_COMMAND_ID =
   "media.paged.draw.command.recolorArtworkOptions";
-export const APPLY_GUIDE_COLOR_COMMAND_ID =
-  "media.paged.draw.command.applyGuideColor";
 export const RECOLOR_COMMAND_IDS = [
   RECOLOR_ARTWORK_COMMAND_ID,
   RECOLOR_ARTWORK_OPTIONS_COMMAND_ID,
-  APPLY_GUIDE_COLOR_COMMAND_ID,
 ] as const;
 
 /** The panels (ids here so the commands raise them without React). */
 export const RECOLOR_PANEL_ID = "media.paged.draw.panel.recolorArtwork";
-export const COLOR_GUIDE_PANEL_ID = "media.paged.draw.panel.colorGuide";
 
 /** Refs that are not colours to change. */
 const NOT_A_COLOR = new Set([
@@ -749,74 +744,6 @@ export async function applyRecolorArtwork(
   };
 }
 
-/** **APPLY GUIDE COLOUR** — paint the selection's fill (or, with
- *  `stroke: true`, its stroke) with `hex`: a swatch is created (or one
- *  already named for the colour reused) and referenced. ONE batch. */
-export async function applyGuideColor(
-  host: BundleHost,
-  payload?: unknown,
-): Promise<boolean> {
-  const label = APPLY_GUIDE_COLOR_COMMAND_ID;
-  const p = (payload && typeof payload === "object" ? payload : {}) as {
-    hex?: unknown;
-    stroke?: unknown;
-  };
-  const rgb = typeof p.hex === "string" ? parseCssColor(p.hex) : null;
-  if (!rgb) {
-    host.log.warn(`${label}: needs a colour ({ hex: "#rrggbb" }) — no-op`);
-    return false;
-  }
-  const leaves = await selectionLeaves(host, host.selection.get());
-  if (leaves.length === 0) {
-    host.log.warn(`${label}: nothing selected — no-op`);
-    return false;
-  }
-  const hex = rgbToHex(rgb);
-  const swatches = await host.document
-    .collection<SwatchSummary>("swatches")
-    .catch(() => [] as SwatchSummary[]);
-  const reuse = swatches.find((s) => s.name === hex);
-  const ops: Mutation[] = [];
-  let ref = reuse?.selfId ?? null;
-  if (!ref) {
-    ref = defaultRecolorMint.swatch();
-    ops.push({
-      op: "createSwatch",
-      args: {
-        spec: {
-          selfId: ref,
-          name: hex,
-          space: "RGB",
-          value: [rgb[0], rgb[1], rgb[2]],
-        },
-      },
-    });
-  }
-  const path = p.stroke === true ? "frameStrokeColor" : "frameFillColor";
-  for (const leaf of leaves) ops.push(colorRef(leaf, path, ref));
-  const outcome = await host.document.mutate(batchMutationFor(ops));
-  if (!outcome.applied) {
-    host.log.warn(
-      `${label}: rejected by engine: ${JSON.stringify(outcome.error)}`,
-    );
-    return false;
-  }
-  return true;
-}
-
-/** The selection's current fill colour as the Color Guide's base, or
- *  null (nothing selected, or no readable fill). */
-export async function guideBaseOf(host: BundleHost): Promise<Rgb | null> {
-  const read = await readArtworkColors(host);
-  const fill = read.slots.find(
-    (s) => s.kind === "fill" && !isGradientRef(s.ref),
-  );
-  const color = fill
-    ? read.colors.find((c) => c.ref === fill.ref)
-    : read.colors[0];
-  return color?.rgb ?? null;
-}
-
 export function contributeRecolorCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
@@ -843,13 +770,6 @@ export function contributeRecolorCommands(host: BundleHost): Disposable {
         );
         await applyRecolorArtwork(host, {});
       },
-    }),
-    registerCommand(host, {
-      id: APPLY_GUIDE_COLOR_COMMAND_ID,
-      title: M.applyGuide,
-      category: RECOLOR_COMMAND_CATEGORY,
-      handler: (_paged, payload) =>
-        applyGuideColor(host, payload).then(() => undefined),
     }),
   ];
   return {

@@ -1424,14 +1424,12 @@ export {
   type GenerativeRoute,
 } from "./commands/generative";
 export { makeGenerativePanel } from "./panels/generative-panel";
-// WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE.
+// WP6.5 — RECOLOR ARTWORK (the Color Guide is the host's).
 export {
   RECOLOR_ARTWORK_COMMAND_ID,
   RECOLOR_ARTWORK_OPTIONS_COMMAND_ID,
-  APPLY_GUIDE_COLOR_COMMAND_ID,
   RECOLOR_COMMAND_IDS,
   RECOLOR_PANEL_ID,
-  COLOR_GUIDE_PANEL_ID,
   RECOLOR_DEFAULTS,
   RECOLOR_MODES,
   readArtworkColors,
@@ -1443,8 +1441,6 @@ export {
   requestHarmony,
   harmonyBaseOf,
   applyRecolorArtwork,
-  applyGuideColor,
-  guideBaseOf,
   contributeRecolorCommands,
   type ArtworkColor,
   type ArtworkRead,
@@ -1457,10 +1453,6 @@ export {
   type RecolorOutcome,
 } from "./commands/recolor";
 export { makeRecolorPanel, RECOLOR_PANEL_NOTE } from "./panels/recolor-panel";
-export {
-  makeColorGuidePanel,
-  COLOR_GUIDE_PANEL_NOTE,
-} from "./panels/color-guide-panel";
 // WP6.4 — brushes and width profiles as live stroke styles (engine ADR
 // 1053, draw ADR 366).
 export {

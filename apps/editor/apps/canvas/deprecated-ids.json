@@ -312,6 +312,18 @@
       "replacement": "tool:paged.tool.measure",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "panel:media.paged.draw.panel.colorGuide",
+      "replacement": "panel:paged.color-wheel",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.applyGuideColor",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

@@ -42,7 +42,6 @@ import { covers } from "@paged-media/test-kit";
 
 import {
   appearanceOf,
-  applyGuideColor,
   applyRecolorArtwork,
   drawBundle,
   rawGradientDetail,
@@ -320,34 +319,5 @@ describe("draw conformance — RECOLOR ARTWORK (WP6.5)", () => {
     expect(await refOf(h, A, "frameStrokeColor")).not.toBe("Color/ublue");
     await h.host.document.undo();
     expect(await refOf(h, A, "frameStrokeColor")).toBe("Color/ublue");
-  });
-});
-
-describe("draw conformance — the COLOR GUIDE's apply (WP6.5)", () => {
-  let h: HeadlessHost;
-  beforeAll(async () => {
-    h = await openHost();
-    await h.load(doc());
-    h.loadBundle(drawBundle);
-    await seed(h);
-  });
-  afterAll(() => h?.dispose());
-
-  it("paints the selection's fill (or stroke) in ONE undo step, reusing a swatch of that name", async () => {
-    covers("command:media.paged.draw.command.applyGuideColor");
-    await h.host.selection.set([A, B]);
-    expect(await applyGuideColor(h.host, { hex: "#ff0000" })).toBe(true);
-    // "#ff0000" names an existing swatch: reused.
-    expect(await refOf(h, B, "frameFillColor")).toBe("Color/ured");
-    expect(
-      await applyGuideColor(h.host, { hex: "#336699", stroke: true }),
-    ).toBe(true);
-    const ref = String(await refOf(h, A, "frameStrokeColor"));
-    expect(
-      (await h.host.document.swatchDisplay([ref]))[0]?.rgbHex.toLowerCase(),
-    ).toBe("#336699");
-    await h.host.document.undo();
-    expect(await refOf(h, A, "frameStrokeColor")).toBe("Color/ublue");
-    expect(await applyGuideColor(h.host, {})).toBe(false);
   });
 });

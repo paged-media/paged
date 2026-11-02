@@ -29,6 +29,8 @@ import { ColorWheel } from "@paged-media/ui";
 import type { Mutation, SwatchSpec } from "@paged-media/client";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
+import { ColorGuideSection } from "./color-guide-section";
+
 const M = defineMessages("app.colorWheelPanel", {
   newSwatch: "New swatch",
 });
@@ -58,6 +60,7 @@ export function ColorWheelPanel() {
   return (
     <div className="p-3 overflow-y-auto" data-color-wheel-panel="ready">
       <ColorWheel size={220} onAddSwatch={addSwatch} onPalette={addPalette} />
+      <ColorGuideSection />
     </div>
   );
 }

@@ -187,10 +187,14 @@ Status (draw items, one line each; updated as they land):
   (`svg-commands.ts`); draw's `importer.svg/dxf/ai/eps` and `exporter.svg/dxf` are registry
   doors (Place, drop, scripts, data bindings), a different entry. Whether the host's drop path
   could use the registry's SVG door instead is open; not proven, not touched.
-- Colour guide: KEEP. The host colour wheel (`color-wheel-panel.tsx`) authors a harmony from the
-  wheel's own colour and adds swatches; draw's panel reads the selection's fill, offers the
-  shade/tint, warm/cool and vivid/muted variation grids and paints the selection from a chip.
-  Merging means adding those three things to the host wheel.
+- Colour guide: DONE 2026-11-02. The host Color Wheel panel has a Color Guide section: the
+  selection's fill as the base (as the document shows it), a harmony rule menu, the harmony chips,
+  and a row of variations per harmony colour (shades and tints, warm and cool, vivid and muted);
+  a click paints the selection's fill through a swatch named for the hex (found or created, one
+  batch), Alt-click its stroke. The maths is `@paged-media/draw/geometry`'s, shared with Recolor
+  Artwork. Draw's panel and its `applyGuideColor` command are gone (ids left through the
+  deprecation window; draw ADR 362 amended). Not verified locally: the section's DOM behaviour
+  (no DOM test could run without wasm); the reads and the write are unit-tested.
 - Measure: DONE 2026-11-02. The host has a Measure tool again (`paged.tool.measure`,
   `handlers/measure-tool.ts`, `shift+m`): drag to read a distance and an angle, the segment and its
   label as one preview that stays after the release, Esc clears, Shift snaps to 45 degrees, and the
