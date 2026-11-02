@@ -1,7 +1,7 @@
 {
   "catalog": {
-    "hostFunctions": 223,
-    "operations": 189
+    "hostFunctions": 229,
+    "operations": 195
   },
   "environment": {
     "cli": true
@@ -8918,6 +8918,258 @@
       "op": "editComment"
     },
     {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "insertCommentThread"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "setCommentAnchor"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "setPerson"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "setTheme"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "setThemeColor"
+    },
+    {
+      "cases": [],
+      "cells": {
+        "automation": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "boa": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "cli": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "editor-ui": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "mcp": {
+          "door": "named",
+          "measured": {},
+          "status": "not-run"
+        },
+        "plugin-api": {
+          "door": "typed",
+          "measured": {},
+          "status": "not-run"
+        },
+        "viewer-sdk": {
+          "door": "none",
+          "measured": {},
+          "status": "gap"
+        }
+      },
+      "changes": null,
+      "op": "setThemeFonts"
+    },
+    {
       "cases": [
         "insertOval",
         "insertOval/command"
@@ -11244,17 +11496,17 @@
       "generic": 7,
       "named": 9,
       "none": 1,
-      "not-run": 46,
+      "not-run": 52,
       "parity": 140,
-      "typed": 172
+      "typed": 178
     },
     "boa": {
       "differs": 0,
       "gap": 1,
       "generic": 1,
-      "named": 186,
+      "named": 192,
       "none": 1,
-      "not-run": 46,
+      "not-run": 52,
       "parity": 142,
       "typed": 1
     },
@@ -11262,9 +11514,9 @@
       "differs": 0,
       "gap": 1,
       "generic": 0,
-      "named": 186,
+      "named": 192,
       "none": 1,
-      "not-run": 46,
+      "not-run": 52,
       "parity": 142,
       "typed": 2
     },
@@ -11274,17 +11526,17 @@
       "generic": 0,
       "named": 9,
       "none": 8,
-      "not-run": 46,
+      "not-run": 52,
       "parity": 133,
-      "typed": 172
+      "typed": 178
     },
     "mcp": {
       "differs": 0,
       "gap": 1,
       "generic": 2,
-      "named": 186,
+      "named": 192,
       "none": 1,
-      "not-run": 48,
+      "not-run": 54,
       "parity": 140,
       "typed": 0
     },
@@ -11294,16 +11546,16 @@
       "generic": 7,
       "named": 0,
       "none": 1,
-      "not-run": 46,
+      "not-run": 52,
       "parity": 142,
-      "typed": 181
+      "typed": 187
     },
     "viewer-sdk": {
       "differs": 0,
-      "gap": 189,
+      "gap": 195,
       "generic": 0,
       "named": 0,
-      "none": 189,
+      "none": 195,
       "not-run": 0,
       "parity": 0,
       "typed": 0
