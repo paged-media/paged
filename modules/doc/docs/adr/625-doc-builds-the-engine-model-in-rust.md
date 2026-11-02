@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slices 1 and 2 implemented (2 behind a flag, off); the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 to 3 implemented (2 and 3 behind a flag, off); the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
@@ -93,6 +93,17 @@ page count and the same selection rectangles per paragraph, no `docx-auto` style
 paragraph, and an unedited export equal to the source. The flag turns on when that spec and the
 conformance suites are green on the final commit and the remaining slices make the document
 mostly native, not before.
+
+### Slice 3 as built: tables
+
+`body::build_table` makes the table `insertTable` and the bundle's cell pour make: the whole
+grid of cells with InDesign's new-table edges, column-major, header rows, row heights and column
+widths from the lowering, Word's table layout (indent, autofit, width, cell widths, rows that may
+not split), each cell's spans, insets and vertical alignment, and the cell's paragraphs built as
+body paragraphs. The table stands in a paragraph of its own, which takes the Word table
+paragraph's style (it aligns the table). Still deferred, and so the document opens by the old
+pour: cell borders and shading, nested tables, pictures in cells, a table poured as text, rows
+held at an exact height. The table's id is `Table/docx_t<n>`, not the engine's minted `u<hex>`.
 
 ### Save-back
 

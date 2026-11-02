@@ -92,6 +92,150 @@ fn overlay(
     base
 }
 
+/// One built paragraph against its IR paragraph; true when the IR names a
+/// synthesized paragraph style.
+fn compare_paragraph(
+    doc: &LoweredDoc,
+    p: &docx_lower::ir::LoweredParagraph,
+    np: &paged_model::Paragraph,
+    at: &str,
+) -> bool {
+    assert!(
+        !np.paragraph_style.as_deref().is_some_and(is_synthesized),
+        "{at}: names a synthesized paragraph style"
+    );
+    let old_para = p
+        .para_style_id
+        .as_deref()
+        .map(|id| resolve_style(doc, id))
+        .unwrap_or_default();
+    let named_para = np
+        .paragraph_style
+        .as_deref()
+        .map(|id| resolve_style(doc, id))
+        .unwrap_or_default();
+    // Paragraph properties.
+    let old_p = only(old_para.clone(), is_para_path);
+    let new_p = only(
+        overlay(named_para.clone(), read_paragraph_props(np)),
+        is_para_path,
+    );
+    assert_eq!(old_p, new_p, "{at}: paragraph properties");
+    // Text and runs.
+    let old_runs: Vec<_> = p.runs.iter().filter(|r| !r.text.is_empty()).collect();
+    assert_eq!(old_runs.len(), np.runs.len(), "{at}: run count");
+    for (j, (or, nr)) in old_runs.iter().zip(&np.runs).enumerate() {
+        let at = format!("{at} run {j}");
+        assert_eq!(or.text, nr.text, "{at}: text");
+        assert!(
+            !nr.character_style.as_deref().is_some_and(is_synthesized),
+            "{at}: names a synthesized character style"
+        );
+        let old_run = overlay(
+            only(old_para.clone(), is_char_path),
+            only(
+                or.char_style_id
+                    .as_deref()
+                    .map(|id| resolve_style(doc, id))
+                    .unwrap_or_default(),
+                is_char_path,
+            ),
+        );
+        let new_run = overlay(
+            only(named_para.clone(), is_char_path),
+            overlay(
+                only(
+                    nr.character_style
+                        .as_deref()
+                        .map(|id| resolve_style(doc, id))
+                        .unwrap_or_default(),
+                    is_char_path,
+                ),
+                read_run_props(nr),
+            ),
+        );
+        assert_eq!(old_run, new_run, "{at}: character properties");
+    }
+    p.para_style_id.as_deref().is_some_and(is_synthesized)
+}
+
+/// One built table against its IR table: the grid, the spans, each cell's
+/// geometry and its paragraphs.
+fn compare_table(
+    doc: &LoweredDoc,
+    t: &docx_lower::ir::LoweredTable,
+    host: &paged_model::Paragraph,
+    at: &str,
+) -> usize {
+    let table = host.table.as_ref().expect("a table block holds its table");
+    assert!(
+        host.runs.is_empty(),
+        "{at}: the table's paragraph holds only the table"
+    );
+    assert_eq!(table.column_count, t.cols, "{at}: columns");
+    assert_eq!(table.rows.len() as u32, t.rows, "{at}: rows");
+    assert_eq!(
+        table.header_row_count,
+        t.header_rows.min(t.rows),
+        "{at}: header rows"
+    );
+    assert_eq!(
+        table.cells.len() as u32,
+        t.rows * t.cols,
+        "{at}: the whole grid"
+    );
+    let mut direct = 0;
+    for lc in &t.cells {
+        let cell = &table.cells[(lc.col * t.rows + lc.row) as usize];
+        let at = format!("{at} cell {}:{}", lc.col, lc.row);
+        assert_eq!(
+            cell.name.as_deref(),
+            Some(format!("{}:{}", lc.col, lc.row).as_str())
+        );
+        assert_eq!(
+            (cell.row_span, cell.column_span),
+            (lc.row_span.max(1), lc.col_span.max(1)),
+            "{at}: spans"
+        );
+        if let Some([top, left, bottom, right]) = lc.insets_pt {
+            assert_eq!(
+                [
+                    cell.text_top_inset,
+                    cell.text_left_inset,
+                    cell.text_bottom_inset,
+                    cell.text_right_inset
+                ],
+                [top, left, bottom, right],
+                "{at}: insets"
+            );
+        }
+        assert_eq!(
+            cell.vertical_justification, lc.v_align,
+            "{at}: vertical alignment"
+        );
+        if cell.paragraphs.is_empty() {
+            assert!(
+                lc.paragraphs
+                    .iter()
+                    .all(|p| p.runs.iter().all(|r| r.text.is_empty())),
+                "{at}: a cell with text has its paragraphs"
+            );
+            continue;
+        }
+        assert_eq!(
+            cell.paragraphs.len(),
+            lc.paragraphs.len(),
+            "{at}: paragraphs"
+        );
+        for (k, (p, np)) in lc.paragraphs.iter().zip(&cell.paragraphs).enumerate() {
+            if compare_paragraph(doc, p, np, &format!("{at} paragraph {k}")) {
+                direct += 1;
+            }
+        }
+    }
+    direct
+}
+
 /// Compare every built block of `doc`; returns (built, with direct formatting).
 fn compare(label: &str, doc: &LoweredDoc) -> (usize, usize) {
     let body = native_body(doc);
@@ -102,69 +246,19 @@ fn compare(label: &str, doc: &LoweredDoc) -> (usize, usize) {
     );
     let (mut built, mut direct) = (0, 0);
     for (i, (old, new)) in doc.story.blocks.iter().zip(&body.blocks).enumerate() {
-        let (LoweredBlock::Paragraph(p), NativeBlock::Paragraph(np)) = (old, new) else {
-            continue;
-        };
-        built += 1;
         let at = format!("{label} block {i}");
-        assert!(
-            !np.paragraph_style.as_deref().is_some_and(is_synthesized),
-            "{at}: names a synthesized paragraph style"
-        );
-        let old_para = p
-            .para_style_id
-            .as_deref()
-            .map(|id| resolve_style(doc, id))
-            .unwrap_or_default();
-        let named_para = np
-            .paragraph_style
-            .as_deref()
-            .map(|id| resolve_style(doc, id))
-            .unwrap_or_default();
-        if p.para_style_id.as_deref().is_some_and(is_synthesized) {
-            direct += 1;
-        }
-        // Paragraph properties.
-        let old_p = only(old_para.clone(), is_para_path);
-        let new_p = only(
-            overlay(named_para.clone(), read_paragraph_props(np)),
-            is_para_path,
-        );
-        assert_eq!(old_p, new_p, "{at}: paragraph properties");
-        // Text and runs.
-        let old_runs: Vec<_> = p.runs.iter().filter(|r| !r.text.is_empty()).collect();
-        assert_eq!(old_runs.len(), np.runs.len(), "{at}: run count");
-        for (j, (or, nr)) in old_runs.iter().zip(&np.runs).enumerate() {
-            let at = format!("{at} run {j}");
-            assert_eq!(or.text, nr.text, "{at}: text");
-            assert!(
-                !nr.character_style.as_deref().is_some_and(is_synthesized),
-                "{at}: names a synthesized character style"
-            );
-            let old_run = overlay(
-                only(old_para.clone(), is_char_path),
-                only(
-                    or.char_style_id
-                        .as_deref()
-                        .map(|id| resolve_style(doc, id))
-                        .unwrap_or_default(),
-                    is_char_path,
-                ),
-            );
-            let new_run = overlay(
-                only(named_para.clone(), is_char_path),
-                overlay(
-                    only(
-                        nr.character_style
-                            .as_deref()
-                            .map(|id| resolve_style(doc, id))
-                            .unwrap_or_default(),
-                        is_char_path,
-                    ),
-                    read_run_props(nr),
-                ),
-            );
-            assert_eq!(old_run, new_run, "{at}: character properties");
+        match (old, new) {
+            (LoweredBlock::Paragraph(p), NativeBlock::Paragraph(np)) => {
+                built += 1;
+                if compare_paragraph(doc, p, np, &at) {
+                    direct += 1;
+                }
+            }
+            (LoweredBlock::Table(t), NativeBlock::Table(host)) => {
+                built += 1;
+                direct += compare_table(doc, t, host, &at);
+            }
+            _ => {}
         }
     }
     (built, direct)
@@ -185,6 +279,7 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("tier 1", docx_conformance::tier1_docx()),
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
+        ("table", docx_conformance::table_docx()),
     ];
     let (mut built, mut direct) = (0, 0);
     for (label, bytes) in &fixtures {
@@ -201,11 +296,20 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
 
 #[test]
 fn what_slice_1_does_not_build_is_deferred_not_dropped() {
-    let body = native_body(&lowered(&docx_conformance::table_docx()));
-    assert!(body
-        .blocks
-        .iter()
-        .any(|b| matches!(b, NativeBlock::Deferred { reason } if reason == "table")));
+    let deferred = |bytes: &[u8], why: &str| {
+        native_body(&lowered(bytes))
+            .blocks
+            .iter()
+            .any(|b| matches!(b, NativeBlock::Deferred { reason } if reason == why))
+    };
+    assert!(deferred(
+        &docx_conformance::objects_nested_tables_docx(),
+        "nested table"
+    ));
+    assert!(deferred(
+        &docx_conformance::objects_table_look_docx(),
+        "table cell with borders or shading"
+    ));
     let body = native_body(&lowered(&docx_conformance::hyperlink_docx()));
     assert!(body
         .blocks
@@ -226,7 +330,7 @@ fn a_prefilled_skeleton_holds_the_body_as_model_paragraphs() {
         .iter()
         .filter_map(|b| match b {
             NativeBlock::Deferred { reason } => Some(reason.clone()),
-            NativeBlock::Paragraph(_) => None,
+            NativeBlock::Paragraph(_) | NativeBlock::Table(_) => None,
         })
         .collect();
     assert!(why.is_empty(), "deferred: {why:?}");
@@ -267,14 +371,26 @@ fn a_prefilled_skeleton_holds_the_body_as_model_paragraphs() {
 }
 
 #[test]
-fn a_body_with_a_table_is_not_prefilled() {
-    let model = docx_import::import_docx(&docx_conformance::table_docx()).expect("import");
+fn a_body_with_a_nested_table_is_not_prefilled() {
+    let model =
+        docx_import::import_docx(&docx_conformance::objects_nested_tables_docx()).expect("import");
     let ir = docx_lower::lower(&model);
     assert!(
         docx_skeleton::skeleton_prefilled(&model, &ir, "t.docx", Default::default())
             .expect("builds")
             .is_none()
     );
+}
+
+#[test]
+fn a_plain_table_is_prefilled_in_a_paragraph_of_its_own() {
+    let model = docx_import::import_docx(&docx_conformance::table_docx()).expect("import");
+    let ir = docx_lower::lower(&model);
+    let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
+    let tables = stories[0].iter().filter(|p| p.table.is_some()).count();
+    assert_eq!(tables, 1);
+    // The paragraphs before and after stand beside it.
+    assert_eq!(stories[0].len(), 3);
 }
 
 #[test]
@@ -287,7 +403,7 @@ fn the_bundles_direct_format_fixture_is_built_whole() {
         .enumerate()
         .filter_map(|(i, b)| match b {
             NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
-            NativeBlock::Paragraph(_) => None,
+            NativeBlock::Paragraph(_) | NativeBlock::Table(_) => None,
         })
         .collect();
     assert!(reasons.is_empty(), "deferred: {reasons:?}");

@@ -197,25 +197,32 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     for (const h of opened.splice(0)) h.dispose();
   });
 
-  it("direct-format.docx opens natively, as the old pour lays it out", async () => {
-    const old = await open("direct-format.docx", false);
-    const native = await open("direct-format.docx", true);
-    opened.push(old.h, native.h);
-    expect(old.prefilled).toBe(false);
-    expect(native.prefilled).toBe(true);
-    expect(native.pages).toBe(old.pages);
-    expect(native.paras.map((p) => p.text)).toEqual(
-      old.paras.map((p) => p.text),
-    );
-    expect(native.paras.map((p) => p.rects)).toEqual(
-      old.paras.map((p) => p.rects),
-    );
-    // No paragraph names a style the lowering invented for direct formatting.
-    expect(native.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
-      false,
-    );
-    expect(old.paras.some((p) => p.style?.includes("docx-auto"))).toBe(true);
-  }, 120_000);
+  for (const name of ["direct-format.docx", "table-body.docx"]) {
+    laysOutAsTheOldPour(name);
+    exportsAsTheOldPour(name);
+  }
+
+  function laysOutAsTheOldPour(name: string) {
+    it(`${name} opens natively, as the old pour lays it out`, async () => {
+      const old = await open(name, false);
+      const native = await open(name, true);
+      opened.push(old.h, native.h);
+      expect(old.prefilled).toBe(false);
+      expect(native.prefilled).toBe(true);
+      expect(native.pages).toBe(old.pages);
+      expect(native.paras.map((p) => p.text)).toEqual(
+        old.paras.map((p) => p.text),
+      );
+      expect(native.paras.map((p) => p.rects)).toEqual(
+        old.paras.map((p) => p.rects),
+      );
+      // No paragraph names a style the lowering invented for direct formatting.
+      expect(native.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
+        false,
+      );
+      expect(old.paras.some((p) => p.style?.includes("docx-auto"))).toBe(true);
+    }, 120_000);
+  }
 
   it("a document the builder cannot take whole opens by the old pour", async () => {
     const doc = await open("structure.docx", true);
@@ -224,23 +231,25 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     expect(doc.paras.length).toBeGreaterThan(0);
   }, 120_000);
 
-  it("a natively opened document exports unedited as the old pour does", async () => {
-    const exported = async (native: boolean): Promise<string> => {
-      const o = await open("direct-format.docx", native);
-      opened.push(o.h);
-      const exporter = o.h
-        .exportersContributed()
-        .find(
-          (c) => c.id === "media.paged.doc.exporter.docx",
-        ) as ExporterContribution;
-      const out = await exporter.export();
-      expect(out).not.toBeNull();
-      return new TextDecoder().decode(
-        inflatedPart(out!.bytes, "word/document.xml"),
-      );
-    };
-    const old = await exported(false);
-    const native = await exported(true);
-    expect(native).toEqual(old);
-  }, 120_000);
+  function exportsAsTheOldPour(name: string) {
+    it(`${name} opened natively exports unedited as the old pour does`, async () => {
+      const exported = async (native: boolean): Promise<string> => {
+        const o = await open(name, native);
+        opened.push(o.h);
+        const exporter = o.h
+          .exportersContributed()
+          .find(
+            (c) => c.id === "media.paged.doc.exporter.docx",
+          ) as ExporterContribution;
+        const out = await exporter.export();
+        expect(out).not.toBeNull();
+        return new TextDecoder().decode(
+          inflatedPart(out!.bytes, "word/document.xml"),
+        );
+      };
+      const old = await exported(false);
+      const native = await exported(true);
+      expect(native).toEqual(old);
+    }, 120_000);
+  }
 });
