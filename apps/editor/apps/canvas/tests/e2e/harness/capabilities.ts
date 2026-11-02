@@ -738,6 +738,16 @@ export const CAPABILITIES: Capability[] = [
     note: "proto 78, engine ADR 1056; {which, fonts}; refuses without a theme, so probed after a setTheme",
   },
   {
+    op: "createThemeFromSwatches",
+    status: "supported",
+    note: "proto 78, engine ADR 1057; {name?, slots: [{slot, swatch}], relink?}; refuses when the document has a theme; probed on a scratch RGB swatch",
+  },
+  {
+    op: "setStyleThemeFont",
+    status: "supported",
+    note: "proto 78, engine ADR 1057; {collection, styleId, which?}; refuses without a theme to follow, so probed after a setTheme on a scratch paragraph style",
+  },
+  {
     op: "recordChange",
     status: "supported",
     note: "proto 78, doc ADR 613; {storyId, start, end, cell?, paragraph?, change}; probed on the text fixture's first story",

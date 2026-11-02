@@ -278,6 +278,8 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::SetThemeColor { .. }
         | O::SetThemeFonts { .. }
         | O::RestoreTheme { .. }
+        | O::CreateThemeFromSwatches { .. }
+        | O::SetStyleThemeFont { .. }
         | O::EditSwatch { .. }
         | O::DeleteSwatch { .. }
         | O::CreateParagraphStyle { .. }

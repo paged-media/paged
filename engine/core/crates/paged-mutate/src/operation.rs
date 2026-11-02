@@ -6354,6 +6354,36 @@ pub enum Operation {
         /// as they were (JSON); `None` leaves the swatches alone.
         #[serde(default)]
         swatches_json: Option<String>,
+        /// Engine ADR 1057 — every swatch's `[id, themeRef, value]` as it was
+        /// (JSON); `None` leaves the swatches' references alone.
+        #[serde(default)]
+        refs_json: Option<String>,
+        /// Engine ADR 1057 — the styles' `[kind, id, font, fontRef]` as they
+        /// were (JSON); `None` leaves the styles alone.
+        #[serde(default)]
+        styles_json: Option<String>,
+    },
+    /// Engine ADR 1057 — make a theme from swatches: each `slots` entry sets
+    /// a slot to its (plain RGB) swatch's colour and the swatch follows it;
+    /// with `relink`, every other plain RGB swatch that is an exact Office
+    /// tint of a slot follows that slot with the tint. Refused when the
+    /// document has a theme. Inverse: `RestoreTheme`.
+    CreateThemeFromSwatches {
+        #[serde(default)]
+        name: String,
+        slots: Vec<ThemeSlotSwatchSpec>,
+        #[serde(default)]
+        relink: bool,
+    },
+    /// Engine ADR 1057 — make a paragraph or character style follow the
+    /// theme's `major` or `minor` font (its face becomes that set's Latin
+    /// face now and after every theme change), or with `which` absent stop
+    /// following (the face stays). Inverse: `RestoreTheme`.
+    SetStyleThemeFont {
+        collection: StyleCollection,
+        style_id: String,
+        #[serde(default)]
+        which: Option<String>,
     },
     /// Inverse-only (engine ADR 1055) — set the document's comment threads
     /// and people list to what they were. Its inverse carries what it replaced.
@@ -7374,6 +7404,17 @@ pub struct PersonSpec {
     pub user_id: Option<String>,
     #[serde(default)]
     pub provider_id: Option<String>,
+}
+
+/// Engine ADR 1057 — a theme slot and the swatch (self id or name) it takes
+/// its colour from.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSlotSwatchSpec {
+    pub slot: String,
+    pub swatch: String,
 }
 
 /// Engine ADR 1056 — one colour slot of a theme, on the wire.

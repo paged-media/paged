@@ -793,10 +793,28 @@ pub(crate) fn apply_inner(
         Operation::SetTheme { theme } => theme::apply_set_theme(doc, theme),
         Operation::SetThemeColor { slot, value } => theme::apply_set_color(doc, slot, value),
         Operation::SetThemeFonts { which, fonts } => theme::apply_set_fonts(doc, which, fonts),
+        Operation::CreateThemeFromSwatches {
+            name,
+            slots,
+            relink,
+        } => theme::apply_create_from_swatches(doc, name, slots, *relink),
+        Operation::SetStyleThemeFont {
+            collection,
+            style_id,
+            which,
+        } => theme::apply_set_style_font(doc, *collection, style_id, which.as_deref()),
         Operation::RestoreTheme {
             theme_json,
             swatches_json,
-        } => theme::apply_restore(doc, theme_json.as_deref(), swatches_json.as_deref()),
+            refs_json,
+            styles_json,
+        } => theme::apply_restore(
+            doc,
+            theme_json.as_deref(),
+            swatches_json.as_deref(),
+            refs_json.as_deref(),
+            styles_json.as_deref(),
+        ),
         Operation::RestoreCommentThreads {
             threads_json,
             people_json,
@@ -1509,6 +1527,7 @@ pub mod permit;
 pub mod review;
 mod script;
 pub mod theme;
+pub mod theme_interchange;
 pub mod threads;
 mod tracked_change;
 mod word;

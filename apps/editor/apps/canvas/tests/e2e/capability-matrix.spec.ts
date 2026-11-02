@@ -3501,6 +3501,42 @@ const REVIEW_PROBES: Probe[] = [
       ),
     setupUndo: 1,
   },
+  {
+    op: "createThemeFromSwatches",
+    // A document with no theme (the probe runs before any setTheme here), a
+    // plain RGB scratch swatch for the slot.
+    build: async ({ page }) => {
+      const id = await newSwatch(page);
+      return id
+        ? {
+            op: "createThemeFromSwatches",
+            args: {
+              name: "Probe",
+              slots: [{ slot: "accent1", swatch: id }],
+              relink: true,
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "setStyleThemeFont",
+    build: async ({ page }) => {
+      const id = await newStyle(page, "Paragraph");
+      return id
+        ? after(
+            page,
+            { op: "setTheme", args: { theme: { name: "Probe", colors: [] } } },
+            {
+              op: "setStyleThemeFont",
+              args: { collection: "paragraph", styleId: id, which: "minor" },
+            },
+          )
+        : null;
+    },
+    setupUndo: 2,
+  },
   { op: "recordChange", build: async ({ fx }) => scratchChange(fx) },
   {
     op: "acceptChange",
