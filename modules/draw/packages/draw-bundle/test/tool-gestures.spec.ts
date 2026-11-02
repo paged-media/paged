@@ -333,25 +333,6 @@ describe("paged.draw tools through the gesture DSL — drawing", () => {
 });
 
 describe("paged.draw tools through the gesture DSL — paint and shape", () => {
-  it("Gradient Annotator: a drag across the selection sets its gradient's angle and length, as one undo step; Escape commits nothing", async () => {
-    covers("tool:media.paged.draw.tool.gradientAnnotator");
-    const { r, g } = rig([A]);
-    await arm(r, g, `${T}.gradientAnnotator`);
-    const before = r.picture();
-    await g.drag({ from: [120, 200], to: [280, 200], steps: 6 }).settle();
-    expect(paths(r.leaves())).toEqual([
-      "frameGradientFillAngle",
-      "frameGradientFillLength",
-    ]);
-    await oneUndoStep(r, before);
-    await cancelCommitsNothing(
-      `${T}.gradientAnnotator`,
-      [A],
-      [120, 200],
-      [280, 200],
-    );
-  });
-
   it("Shape Builder: a drag across the overlapping pair unites them, as one undo step; Escape commits nothing", async () => {
     covers("tool:media.paged.draw.tool.shapeBuilder");
     const { r, g } = rig([A, B]);

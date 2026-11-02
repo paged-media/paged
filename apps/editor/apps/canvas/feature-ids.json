@@ -7,7 +7,7 @@
     "keybinding": 167,
     "menu": 645,
     "panel": 150,
-    "tool": 129
+    "tool": 128
   },
   "features": [
     {
@@ -9406,11 +9406,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.gradientAnnotator",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.join",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -10318,6 +10313,12 @@
     {
       "id": "command:media.paged.draw.command.applyGuideColor",
       "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.gradientAnnotator",
+      "replacement": "tool:paged.tool.gradientSwatch",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

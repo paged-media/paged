@@ -324,6 +324,12 @@
       "replacement": null,
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.gradientAnnotator",
+      "replacement": "tool:paged.tool.gradientSwatch",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

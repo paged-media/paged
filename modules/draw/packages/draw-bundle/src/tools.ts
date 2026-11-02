@@ -46,7 +46,6 @@ import {
 } from "./handlers/brush";
 import { createCornerRadiusHandler } from "./handlers/corner-radius";
 import { createCurvatureHandler } from "./handlers/curvature";
-import { createGradientAnnotatorHandler } from "./handlers/gradient-annotator";
 import { createKnifeHandler } from "./handlers/knife";
 import { createLassoSelectHandler } from "./handlers/lasso";
 import {
@@ -96,7 +95,6 @@ const M = defineMessages("draw.tools", {
   deleteAnchor: "Delete Anchor Point",
   convertAnchor: "Convert Direction Point",
   curvature: "Curvature",
-  gradientAnnotator: "Gradient Annotator",
   shapeBuilder: "Shape Builder",
   cornerRadius: "Corner Radius",
   paintbrush: "Paintbrush",
@@ -154,7 +152,6 @@ export const DRAW_TOOL_IDS = [
  *  B) appends the Shape Builder gesture tool. */
 export const PRO_TOOL_IDS = [
   "media.paged.draw.tool.curvature",
-  "media.paged.draw.tool.gradientAnnotator",
   "media.paged.draw.tool.shapeBuilder",
   "media.paged.draw.tool.cornerRadius",
 ] as const;
@@ -306,19 +303,6 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 4,
       cursor: CROSS,
       gesture: () => createCurvatureHandler(host),
-    },
-    {
-      id: "media.paged.draw.tool.gradientAnnotator",
-      title: t(M.gradientAnnotator),
-      icon: "tool-gradient",
-      // shift+a — yields shift+g to the built-in Gradient Feather tool
-      // (InDesign-canonical); INV-REG-1 keeps tool shortcuts unique.
-      shortcut: "shift+a",
-      group: "gradientAnnotator",
-      section: "transform",
-      order: 1,
-      cursor: CROSS,
-      gesture: () => createGradientAnnotatorHandler(host),
     },
     {
       id: "media.paged.draw.tool.shapeBuilder",

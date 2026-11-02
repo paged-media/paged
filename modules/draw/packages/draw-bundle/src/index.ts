@@ -111,14 +111,6 @@ export {
   type SelectOption,
 } from "./tool-options";
 export { createCurvatureHandler } from "./handlers/curvature";
-export {
-  createGradientAnnotatorHandler,
-  gradientAxisMutationFor,
-  gradientSpecWithStop,
-  gradientStopMutationFor,
-  stopMarker,
-  type GradientAnnotatorOptions,
-} from "./handlers/gradient-annotator";
 // THE RAW WIRE — the one guarded seam over the `host.editor.client.send`
 // hatch (the facade gaps it covers are named in the module).
 export {

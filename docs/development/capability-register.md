@@ -152,11 +152,16 @@ Status (draw items, one line each; updated as they land):
   other tools build on (`pathfinderMutationFor`, the paint-order readers, the faces builder).
   Neither side had keybindings. After a success the shape modes leave the kept object selected
   and the region verbs clear the selection (draw's behaviour, now the host's).
-- Gradient annotator and stop machine: KEEP. The host gradient tool commits an axis drag
-  (and the freeform modes) but draws no axis for an existing gradient and has no stop markers on
-  the canvas; draw's annotator shows the axis with a marker per stop and drags a stop along it
-  (`GradientStopMachine`). The host's `gradient-editor.tsx` is a panel, not the canvas lane.
-  Delete draw's when the host tool shows the axis and stops.
+- Gradient annotator and stop machine: DONE 2026-11-02. The host Gradient tool (linear mode) now
+  shows the selected object's gradient axis with a diamond marker at every stop
+  (`handlers/gradient-annotation.ts`); a press on a marker grabs that stop, it slides along the axis
+  between its neighbours, and the release writes one `editGradient` (one undo step, every other stop
+  field kept; the spec of a moved stop is shared in `platform/shared/helpers`). A press elsewhere is
+  the axis drag as before, Esc cancels. The line is drawn from the frame's centre and the gradient
+  is a swatch (every object using it changes), as draw's note said. Draw's tool, handler, specs and
+  the axis builder are gone (tool id left through the deprecation window). The stop machine stays
+  in `@paged-media/draw/machines`. The annotation's gesture tests run on the fake client; the
+  canvas behaviour is covered by the gradient e2e (now on the host tool).
 - Appearance stack: MERGED 2026-11-01. The host declares `paged.appearance.*` (Add fill, Add
   stroke, Clear, Remove layer, Move layer; `appearance-commands.ts`) over the panel's own list
   functions, with Object > Appearance entries for the first three and draw's payload addressing.

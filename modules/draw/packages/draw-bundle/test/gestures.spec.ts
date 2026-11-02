@@ -141,7 +141,6 @@ describe("paged.draw tools through the gesture DSL", () => {
     "deleteAnchor",
     "convertAnchor",
     "curvature",
-    "gradientAnnotator",
     "shapeBuilder",
     "cornerRadius",
     "paintbrush",

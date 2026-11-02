@@ -251,7 +251,7 @@ test.describe("journey · paged.draw pro tools", () => {
 
       await invokeCommand(
         page,
-        "paged.tool.activate.media.paged.draw.tool.gradientAnnotator",
+        "paged.tool.activate.paged.tool.gradientSwatch",
       );
       const gFrom = await screenPoint(page, 190, 590);
       const gTo = await screenPoint(page, 400, 640);
