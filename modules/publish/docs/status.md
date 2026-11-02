@@ -23,7 +23,11 @@ What this repository ships and what it does not, read from the code at commit `6
   IDML parts and an index of the container parts.
 - **Open a PDF as an editable document.** The `media.paged.pdf` importer reads the PDF with
   PDFium and opens a native document with one page per PDF page: text frames with size and
-  fill colour, vector shapes with fill, stroke and stroke width, and placed images.
+  fill colour, vector shapes with fill, stroke and stroke width, and placed images. The PDF's
+  review comments (sticky notes, free text, text markup, replies, review states) come in as
+  engine comment threads on their pages (engine ADR 1055; the `comments` option of the open,
+  on by default); other annotation types are logged as not imported. `paged comments` lists
+  them on the command line.
 - **Place a PDF or Illustrator page as vectors** ([ADR 658](adr/658-a-pdf-page-places-as-native-vectors.md)).
   File ▸ Import ▸ PDF or AI as Vectors… (the editor's dialog, page picker) places one page into
   the open document as native items — exact paths with their fill rule, strokes with caps, joins

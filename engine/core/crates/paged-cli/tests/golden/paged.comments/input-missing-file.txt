@@ -1,0 +1,9 @@
+$ paged comments missing.pdf
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: read missing.pdf
+
+Caused by:
+    No such file or directory (os error <N>)

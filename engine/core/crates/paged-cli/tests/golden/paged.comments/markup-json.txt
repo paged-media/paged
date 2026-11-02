@@ -1,0 +1,73 @@
+$ paged comments review.pdf --json
+--- exit: 0
+--- stdout
+{
+  "losses": [
+    {
+      "count": 1,
+      "kind": "Link",
+      "pages": [
+        0
+      ],
+      "reason": "a hyperlink or destination, not a review comment"
+    },
+    {
+      "count": 1,
+      "kind": "Stamp",
+      "pages": [
+        0
+      ],
+      "reason": "not an annotation type paged imports as a comment (Text, FreeText, Highlight, Underline, StrikeOut, Squiggly)"
+    }
+  ],
+  "threads": [
+    {
+      "anchor": {
+        "kind": "region",
+        "rect": [
+          20.0,
+          38.0,
+          100.0,
+          12.0
+        ]
+      },
+      "comments": [
+        {
+          "author": "Ann",
+          "date": "2026-11-01T10:30:00Z",
+          "id": "h1",
+          "text": "Too loose"
+        },
+        {
+          "author": "Bob",
+          "date": "2026-11-01T11:00:00Z",
+          "id": "h1.1",
+          "parent": "h1",
+          "text": "Agreed"
+        }
+      ],
+      "id": "h1",
+      "kind": "comment",
+      "pageIndex": 0,
+      "source": [
+        [
+          "h1",
+          {
+            "data": "<< /Contents <546F6F206C6F6F7365> /M <443A32303236313130313130333030305A> /NM <6831> /QuadPoints [ 20 262 120 262 20 250 120 250 ] /Rect [ 20 250 120 262 ] /Subtype /Highlight /T <416E6E> >>",
+            "format": "pdf-annot"
+          }
+        ],
+        [
+          "h1.1",
+          {
+            "data": "<< /Contents <416772656564> /M <443A32303236313130313131303030305A> /NM <68312E31> /RT /R /Rect [ 20 250 40 270 ] /Subtype /Text /T <426F62> >>",
+            "format": "pdf-annot"
+          }
+        ]
+      ],
+      "subtype": "Highlight"
+    }
+  ]
+}
+--- stderr
+(empty)

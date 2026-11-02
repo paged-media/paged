@@ -31,7 +31,6 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import type { ElementId } from "@paged-media/plugin-api";
 import { covers } from "@paged-media/test-kit";
 
-import { dashMutationFor } from "../../src";
 import { buildIdml } from "../fixtures/build-idml";
 import { F1_MULTI_SHAPE, F4_OVERLAP, F6_RING_PAIR } from "../fixtures/corpus";
 import {
@@ -316,14 +315,6 @@ describe("paged.draw commands — objects (real engine)", () => {
       await rig.open(F1(), [POLY]);
       await expectApplies(rig, `${C}.outlineStrokeOptions`);
       await expectRefuses(rig, F1(), [], `${C}.outlineStrokeOptions`);
-    });
-
-    it("Dashes… applies the last used dash (solid, unedited) to the selection", async () => {
-      covers("command:media.paged.draw.command.strokeDashOptions");
-      await rig.open(F1(), [RECT]);
-      await rig.h.host.document.mutate(dashMutationFor(RECT, [6, 3]));
-      await expectApplies(rig, `${C}.strokeDashOptions`);
-      await expectRefuses(rig, F1(), [], `${C}.strokeDashOptions`);
     });
 
     it("Reflect… reflects the selection about the last used axis", async () => {

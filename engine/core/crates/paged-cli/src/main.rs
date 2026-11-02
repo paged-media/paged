@@ -192,6 +192,7 @@ fn main() -> Result<()> {
             json,
             assets,
         } => paged_cli::query::run(&doc, &assets, &selector, json),
+        Command::Comments { pdf, json } => paged_cli::comments::run(&pdf, json),
         Command::Describe { compact } => paged_cli::inspect::describe(compact),
         Command::Digest {
             doc,

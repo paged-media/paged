@@ -56,7 +56,6 @@ defineMessages("menu", {
   "Reflect…": "Reflect…",
   "Transform again": "Transform again",
   Stroke: "Stroke",
-  "Dashes…": "Dashes…",
   "Width profile…": "Width profile…",
   "Brushes…": "Brushes…",
   "Brush options…": "Brush options…",
@@ -184,10 +183,7 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Transform/Reflect…", "reflectOptions", "transform"],
   ["Draw/Transform/Transform again", "transformAgain", "transform-again"],
 
-  // ── Stroke — the dash EDITOR (the Path Options panel's Stroke dashes
-  //    section: up to three dash/gap pairs, read back for the selection).
-  //    An ellipsis, so it RAISES the panel at that section. ──
-  ["Draw/Stroke/Dashes…", "strokeDashOptions", "stroke"],
+  // ── Stroke — (the dash editor is the host's: Object ▸ Stroke ▸ Dashes…). ──
   //    The width profile (the Width tool's bake, typed): run bare, the
   //    command raises the panel's Width profile section.
   ["Draw/Stroke/Width profile…", "widthProfile", "stroke"],

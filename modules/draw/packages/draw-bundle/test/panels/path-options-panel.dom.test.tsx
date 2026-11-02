@@ -952,7 +952,6 @@ describe("Path options panel — rendered against the engine", () => {
         "Draw/Path/Offset path…",
         "Draw/Path/Simplify…",
         "Draw/Transform/Reflect…",
-        "Draw/Stroke/Dashes…",
         "Draw/Stroke/Width profile…",
         "Draw/Stroke/Brushes…",
         "Draw/Stroke/Brush options…",

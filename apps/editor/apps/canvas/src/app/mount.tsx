@@ -302,6 +302,7 @@ import {
 import {
   buildStrokeDashCommands,
   STROKE_DASH_DIAGNOSTIC_SOURCE,
+  STROKE_DASH_MENU_ITEMS,
 } from "../stroke-dash-commands";
 import {
   APPEARANCE_DIAGNOSTIC_SOURCE,
@@ -1702,6 +1703,7 @@ function CanvasAppIntegration() {
       ...PATHFINDER_MENU_ITEMS,
       ...CORNER_MENU_ITEMS,
       ...APPEARANCE_MENU_ITEMS,
+      ...STROKE_DASH_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,

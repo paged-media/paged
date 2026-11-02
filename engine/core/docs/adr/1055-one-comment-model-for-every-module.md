@@ -1,9 +1,10 @@
 # ADR 1055 — One comment model for every module, compatible with Adobe and Microsoft review
 
 - **Status:** Accepted 2026-11-01; built: the engine model, the host Comments panel and canvas pins, the slide, Excel and
-  Word readers and writers (slide ADR 711, sheet ADR 528, doc ADR 622), PDF comment annotations, IDML notes as `note` rows,
-  and the `comments@1` door (extensions ADR 1101). Open: PDF annotation import, a sheet thread started from the panel
-  on a cell, Word mentions, and document threads in IDML (reported as lost). Extends [ADR 1020](1020-range-comments-with-threads.md) (range
+  Word readers and writers (slide ADR 711, sheet ADR 528, doc ADR 622), PDF comment annotations in and out (import
+  2026-11-02), IDML notes as `note` rows, and the `comments@1` door (extensions ADR 1101). Open: a sheet thread started
+  from the panel on a cell, Word mentions, document threads in IDML (reported as lost), and re-emitting a PDF thread's
+  kept annotation on export. Extends [ADR 1020](1020-range-comments-with-threads.md) (range
   comments with threads) and [ADR 172](172-editorial-notes.md) (InDesign notes). Part of the
   capability layering of PM-0014 and PM-0017.
 - **Scope:** `paged-model` (`review.rs`), `paged-mutate`, `paged-wire`, `paged-canvas` (the
@@ -22,7 +23,7 @@ Review comments exist five times, in different shapes:
 | Engine, ADR 1020 | a thread over a text range of a story (`Story.comments`, `CharacterRun.comments`) | anchored to text only |
 | slide, ADR 711 (amendment) | the plugin's own model, panel and markers, kept in a container part | not in the document, not undoable, invisible to export and the CLI |
 | sheet, ADR 526 | Excel notes edited by XML splice; threaded comments preserved, never editable | a cell address is the only anchor |
-| PDF | export writes `Link` annotations only; import reads none | no review round trip with Acrobat |
+| PDF | export wrote `Link` annotations only; import read none (both built 2026-11-02, below) | no review round trip with Acrobat |
 
 A comment on a shape, a slide, a cell, a page, a raster region or a vector object has no home in
 the engine. The host's Comments panel is a stub. Word, Excel, PowerPoint, InDesign and Acrobat
@@ -177,13 +178,35 @@ Rides protocol v78 (added before its first consumer sync; governance rule 4).
   (a page point as given; an item or text range at the top-left of its first frame), each reply as
   an annotation in reply to it (`/IRT`, `/RT /R`), and a resolved thread's `Completed` review
   state (`/StateModel /Review`, a hidden annotation), with author (`/T`), date (`/M`) and id (`/NM`).
-  Reading annotations back (`pdf-import`) is not built.
+  **Reading them back (2026-11-02):** `paged-pdf-annots` (`read_pdf_comments(bytes)`, over `hayro-syntax`'s
+  object model, the reader the renderer and `pdf-import` already use) returns the threads and a loss list.
+  `/Text` and `/FreeText` become a thread at the top-left of `/Rect`; `/Highlight`, `/Underline`, `/StrikeOut` and
+  `/Squiggly` a region over the bounding box of `/QuadPoints` (the markup kind stays in the source); `/Popup` is
+  skipped (its parent has the text); an annotation with `/IRT` (and `/RT /R` or none) is a reply, ordered by `/M`
+  when all have one, else by position; `/State` with `/StateModel /Review` sets the review state (`Completed` on
+  the root resolves the thread, the latest state of a model wins); `/T` is the author, `/CreationDate` (else `/M`)
+  the date, `/M` the modification time (PDF dates become ISO 8601 with their zone), `/Contents` (else `/RC` as
+  plain text) the text. Page space is the `/TrimBox` (else the crop box) with `/Rotate` applied and the box's
+  origin subtracted. Every other annotation type (`/Link`, `/Widget`, `/Stamp`, `/Ink`, …), a `/RT /Group`
+  member, a state model other than `Review` (`Marked` has no model field) and an annotation with no place are
+  one aggregated loss line per type, never dropped silently. Each annotation (and the state annotations that
+  name it) is kept as a self-contained dictionary in the comment's `source` (format `pdf-annot`: keys sorted,
+  strings as hex, indirect values inlined, `/P`, `/Parent`, `/Popup`, `/IRT`, `/AP` and streams left out).
+  Threads read are `comment` threads, also a lone sticky note. Wiring: `paged comments <file.pdf> [--json]`
+  lists them and the losses; the PDF bundle's wasm (`pdf_comments`) hands the report to the importer, which
+  writes `setPerson`, `insertCommentThread` and `replyComment` in one `batch` after the document is open
+  (a text-markup region has no item in a fresh import and is placed as a point at its top-left, said in the
+  log). No wire or catalog change was needed: `CommentSpec` already carries dates, review state and source.
+  The round trip with `paged-export-pdf` (threads, authors, dates to the second, replies, resolved and review
+  state, points within half a point) is a test of that crate; poppler draws the sticky note of an exported
+  thread at the point the reader reports.
 - **Command line:** `paged read collection <doc> comments` lists every thread; `paged invoke <doc>
   <op> '<json>'` writes them, with `<op>` one of `insertCommentThread`, `replyComment`,
   `resolveComment`, `editComment`, `deleteComment`, `setCommentAnchor`, `setPerson` and the JSON its
   arguments (for example `paged invoke doc.paged insertCommentThread '{"anchor":{"kind":"page",
   "page":"u1","at":[40,50]},"comment":{"author":"Ann","text":"Check"}}'`); `paged export
-  --comments` puts them in a PDF. A separate `paged comments` verb would add nothing these do not.
+  --comments` puts them in a PDF. A separate verb for document threads would add nothing these do not; `paged
+  comments <file.pdf>` exists because a PDF's annotations are not a document yet.
 - **Canvas pins** (editor): a pin with the author's initials at each non-text thread's place on its
   page, faint when resolved; a click focuses the thread and opens the Comments panel on it. Text
   comments keep the margin band.
@@ -208,8 +231,8 @@ Rides protocol v78 (added before its first consumer sync; governance rule 4).
   anchor kind and reason: a document thread (item, page, region, cell) is dropped, a folded reply
   and a resolved state are reported, and a range comment whose text is gone is dropped.
 - Not yet: the format readers and writers for Word (people, mentions) and Excel (threaded comments,
-  editable); reading annotations back from a PDF (`pdf-import`); a document thread as an IDML note
-  on its item's story (they are reported, not carried).
+  editable); writing a PDF thread's kept annotation back on export (it is read and kept, 2026-11-02); a
+  document thread as an IDML note on its item's story (they are reported, not carried).
 
 ## Verification
 

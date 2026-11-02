@@ -19,6 +19,7 @@ members = [
     "crates/paged-resample",
     "crates/paged-raster",
     "crates/paged-sniff",
+    "crates/paged-pdf-annots",
     "crates/paged-svg",
     "crates/paged-ps",
     "crates/paged-blend",

@@ -39,6 +39,7 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import { instantiateWasmBindgen, singleFlight } from "@paged-media/wasm-boot";
 
 import type { DocumentIr } from "./ir";
+import type { PdfCommentsReport } from "./io/comments";
 import type { PdfInfo, PlaceRequest, PlaceResult } from "./vectors/ir";
 
 /** The minimal surface of the wasm-bindgen `--target web` glue we use —
@@ -54,6 +55,9 @@ interface PdfMapperGlue {
   pdf_to_paged_wasm: (bytes: Uint8Array, irJson: string) => Uint8Array;
   /** `pdf_inspect_wasm(bytes) -> PdfInfo JSON`; throws `"<code>: <why>"`. */
   pdf_inspect_wasm: (bytes: Uint8Array) => string;
+  /** `pdf_comments_wasm(bytes) -> PdfCommentsReport JSON` (engine ADR 1055);
+   *  throws `"unreadable: <why>"`. Absent from a wasm built before it. */
+  pdf_comments_wasm?: (bytes: Uint8Array) => string;
   /** `pdf_place_wasm(bytes, request_json) -> PlaceResult JSON`; throws
    *  `"<code>: <why>"`. */
   pdf_place_wasm: (bytes: Uint8Array, requestJson: string) => string;
@@ -70,6 +74,9 @@ export interface PdfMapper {
   inspect(bytes: Uint8Array): PdfInfo;
   /** A page lowered into a snippet; throws `"<code>: <why>"`. */
   place(bytes: Uint8Array, request: PlaceRequest): PlaceResult;
+  /** The PDF's review comments (engine ADR 1055); `null` when the wasm
+   *  predates the reader or the file cannot be read. */
+  comments?(bytes: Uint8Array): PdfCommentsReport | null;
 }
 
 export interface LoadMapperOptions {
@@ -140,6 +147,19 @@ const mapperOnce = singleFlight(
         },
         inspect(bytes): PdfInfo {
           return JSON.parse(glue.pdf_inspect_wasm(bytes)) as PdfInfo;
+        },
+        comments(bytes): PdfCommentsReport | null {
+          if (!glue.pdf_comments_wasm) return null;
+          try {
+            return JSON.parse(
+              glue.pdf_comments_wasm(bytes),
+            ) as PdfCommentsReport;
+          } catch (err) {
+            host.log.warn(
+              `pdf mapper: pdf_comments_wasm threw — ${stringifyErr(err)}`,
+            );
+            return null;
+          }
         },
         place(bytes, request): PlaceResult {
           return JSON.parse(
