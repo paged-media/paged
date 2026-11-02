@@ -25,6 +25,7 @@ export {
   crc32,
   fnv1a32,
   fnv1a32Hex,
+  fnv1a32Utf16,
   hex,
   sha256Hex,
   sha256HexPrefix,

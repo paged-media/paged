@@ -37,6 +37,7 @@
 
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
+import { escapeXmlAttr } from "@paged-media/helpers";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import {
   DEFAULT_SOURCE,
@@ -65,12 +66,7 @@ async function insertCarrier(
   return out.createdId as never;
 }
 
-const xmlAttr = (s: string): string =>
-  s
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+const xmlAttr = escapeXmlAttr;
 
 describe("web conformance — source metadata round-trip", () => {
   let h: HeadlessHost;

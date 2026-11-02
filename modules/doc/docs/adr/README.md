@@ -35,6 +35,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [622](622-word-comment-identity-and-exact-dates.md) | Word comments carry an author identity (`people.xml`) and an exact UTC time (`commentsExtensible.xml`), read and written | Accepted 2026-11-01 |
 | [623](623-a-cropped-picture-is-placed-in-its-anchored-frame.md) | A cropped picture is placed in its anchored frame: `a:srcRect` lowered to the picture's placement and set as `imageContentTransform` | Accepted 2026-11-02 |
 | [624](624-word-drop-caps.md) | Word drop caps (the framed paragraph) fold into the following paragraph and lower to the engine's paragraph drop cap; the folded block is held on save-back | Accepted 2026-11-02 |
+| [625](625-doc-builds-the-engine-model-in-rust.md) | Doc builds the engine's model in Rust and retires the plugin-local IR slice by slice; slice 1 builds body paragraphs with direct formatting as the model's own fields, with no invented named styles | Accepted 2026-11-02; slice 1 implemented, not yet wired |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

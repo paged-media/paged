@@ -23,6 +23,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
+import { escapeXmlAttr } from "../../platform/shared/helpers/src/escape.ts";
 
 const args = process.argv.slice(2);
 let out;
@@ -61,12 +62,8 @@ const DISCOURAGED = new RegExp(
   "g",
 );
 const encode = (s) =>
-  String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
+  escapeXmlAttr(String(s))
     .replace(/'/g, "&apos;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
     .replace(INVALID, "")
     .replace(DISCOURAGED, "");
 const attrs = (tag) => {

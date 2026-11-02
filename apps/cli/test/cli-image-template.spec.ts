@@ -33,23 +33,13 @@ import { createHeadlessHost } from "@paged-media/plugin-sdk";
 
 import { minimalIdml } from "../../../platform/extensions/packages/plugin-sdk/test/fixtures/minimal-idml";
 import { cli, engineOptions, silent, tempDir } from "./helpers";
+import { crc32 } from "@paged-media/helpers";
 
 const IMAGE_ENTRY = fileURLToPath(
   new URL("../../../modules/image/glue/src/index.ts", import.meta.url),
 );
 const IMAGE = `--plugins=${IMAGE_ENTRY}`;
 const PICTURE = "media.paged.image.picture";
-
-const CRC = Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-const crc32 = (b: Uint8Array) => {
-  let c = 0xffffffff;
-  for (const x of b) c = CRC[(c ^ x) & 0xff]! ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-};
 
 /** A w×h PNG of one RGBA colour. */
 function png(w: number, h: number, rgba: number[]): Uint8Array {

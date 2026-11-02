@@ -89,27 +89,19 @@ pub(super) fn list_get_or_intern_glyph_outline<O: GlyphOutliner>(
 /// `Self` id (synthetic / minified IDMLs). FNV-1a of the
 /// concatenated anchor coordinates.
 pub(crate) fn path_signature(anchors: &[PathAnchor]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
+    let mut h: u64 = paged_pixel::FNV1A_64_OFFSET;
     for a in anchors {
         for v in [
             a.anchor.0, a.anchor.1, a.left.0, a.left.1, a.right.0, a.right.1,
         ] {
-            for b in v.to_le_bytes() {
-                h ^= b as u64;
-                h = h.wrapping_mul(0x100000001b3);
-            }
+            h = paged_pixel::fnv1a_64_update(h, &v.to_le_bytes());
         }
     }
     h
 }
 
 pub(crate) fn fnv_1a_u64(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
-    for &b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
-    }
-    h
+    paged_pixel::fnv1a_64(bytes)
 }
 
 /// Decode the UTF-8 character starting at byte offset `i` in `bytes`.

@@ -137,6 +137,7 @@
       "version": "0.64.0-canary.0",
       "dependencies": {
         "@paged-media/canvas-wasm": "workspace:*",
+        "@paged-media/helpers": "workspace:*",
       },
       "devDependencies": {
         "typescript": "catalog:",
@@ -860,6 +861,7 @@
       "name": "@paged-media/test-kit",
       "version": "0.0.0",
       "dependencies": {
+        "@paged-media/helpers": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
       },
