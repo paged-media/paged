@@ -21,7 +21,6 @@
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.offsetPathOptions",
       "media.paged.draw.command.outlineStrokeOptions",
-      "media.paged.draw.command.reflectOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
       "media.paged.draw.command.simplifyPathOptions"
     ],

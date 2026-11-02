@@ -177,17 +177,34 @@ Status (draw items, one line each; updated as they land):
   Draw's five commands, their menu entries, typed twins, strings and the native list functions
   that duplicated the panel's are gone (draw ADR 367 amended). Kept in draw: the stack model, the
   conversion and migration of old metadata stacks, the group bake and release, the graphic styles.
-- Reflect / Transform again: KEEP. The host has rotate, scale and shear tools and Transform
-  each, but no Reflect and no repeat-last-transform; nothing to delete.
+- Reflect / Transform again: MERGED 2026-11-02. The host declares `paged.transform.reflectHorizontal`,
+  `reflectVertical`, `reflectOptions` (a dialog: axis angle, optional page-space axis point, Copy)
+  and `again` (`reflect-commands.ts`, `panels/reflect-dialog.tsx`), with Object > Transform
+  entries. They write through Transform Each's door (`R ∘ M` for an item, `setGroupTransform` in
+  the parent frame for a group, one batch; Copy is `core.duplicateElements` first). The matrix
+  algebra and the session's last-transform record are one implementation in
+  `platform/shared/helpers` (`transform`); the host's Rotate, Scale and Shear tools record the
+  linear part of what a drag did, so Transform again repeats those as well (draw's repeated only
+  its own reflects). Draw's three commands, Reflect…, its Draw > Transform menu, typed twins,
+  Path Options Reflect section, Reflect tool and `ReflectMachine` are gone (ids left through the
+  deprecation window; draw ADR 359 amended). Not carried over: the tool's interactive axis (click
+  for the axis point, drag to turn it, Alt+click for the options). The dialog types the same
+  angle and point; a tool would need the host's tools to run a command.
 - Live corners: MERGED 2026-11-01. The host declares `paged.corners.*` (Rounded, Inverse rounded,
   Bevel, Fancy, None; `corner-commands.ts`) with Object > Corners entries; the eight writes are
   one shared builder in `platform/shared/helpers` (`cornerPresetOps`) that draw's Corner Radius
   tool also uses. Draw's five commands and Draw > Corners menu are gone (ids left through the
   deprecation window). The `liveCorners` metadata marker the commands stamped was never read;
   a stale one is inert (the InDesign round-trip recordings still echo it, see the case).
-- Star and Flare: KEEP. The host's polygon tool draws a live star by drag, but there is no host
-  command or dialog for a parametrised star (radius 1, radius 2, points, rotation) and nothing
-  like Flare; draw's `Insert star…` / `Insert flare` and their Path Options sections stay.
+- Star: MERGED 2026-11-02. The host declares `paged.insert.star` (`star-commands.ts`,
+  `panels/star-dialog.tsx`): bare it opens a dialog (radius 1, radius 2, points, rotation), with a
+  payload it inserts, centred on the page. The write is one implementation in
+  `platform/shared/helpers` (`star`): a live star (`frameShapeSides` + `frameShapeStarInset`) only
+  when upright and radius 2 < radius 1, else a plain path. The host Polygon tool has a Star option
+  (default inset 50 % when none is set). Draw's Insert star command, its Path Options section, the
+  Star tool, `StarMachine` and `starPath` are gone (ids left through the deprecation window; draw
+  ADR 359 amended). Not carried over: the old tool's rotate-by-drag and click-for-dialog.
+  Flare: KEEP (nothing like it in the host; draw's `Insert flare` and its section stay).
 - Fill / stroke / dash: DONE 2026-11-02. The schema panels were already gone. The host Stroke panel
   now has a dash editor (`panels/dash-editor.tsx`): the four presets, a "Dashed line" switch that
   keeps the typed pairs, three dash/gap pairs, and a read-back that follows the selection with a

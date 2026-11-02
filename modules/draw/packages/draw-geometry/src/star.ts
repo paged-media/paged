@@ -16,8 +16,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// STAR and FLARE — the two Illustrator shape tools whose geometry is
-// parametric. Pure; page-space pt, angles in DEGREES from +x toward +y
+// STAR and FLARE — the geometry that is parametric (the host's Insert star
+// writes its own, `@paged-media/helpers`' `star`; this one serves the image
+// module's vector shapes). Pure; page-space pt, angles in DEGREES from +x toward +y
 // (y down), what the tools and the typed commands speak.
 //
 // A STAR is Illustrator's: `points` tips on Radius 1, `points` valleys on

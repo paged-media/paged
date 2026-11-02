@@ -1,5 +1,6 @@
 [package]
 name = "slide-sheet"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,8 +12,8 @@ description = "paged.slide: live charts. A chart's workbook (the embedded xlsx, 
 workspace = true
 
 [dependencies]
-dml-chart.workspace = true
-paged-ooxml.workspace = true
+dml-chart = { path = "../../../platform/shared/dml-chart", features = ["serde"] }
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 pptx-core.workspace = true
 slide-chart.workspace = true
 serde.workspace = true

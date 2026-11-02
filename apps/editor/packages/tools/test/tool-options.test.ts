@@ -37,7 +37,11 @@ import {
   PENCIL_DEFAULTS,
   PENCIL_TOOL_ID,
 } from "../src/handlers/pencil-tool";
-import { createPolygonHandler } from "../src/handlers/polygon-tool";
+import {
+  createPolygonHandler,
+  effectiveStarInset,
+  STAR_OPTION_DEFAULT_INSET,
+} from "../src/handlers/polygon-tool";
 import { createSmoothHandler } from "../src/handlers/smooth-tool";
 import { harness, leaves, previews } from "./support";
 
@@ -115,6 +119,7 @@ describe("the host tool options", () => {
       "paged.tool.pencil.fidelity",
       "paged.tool.pencil.smoothing",
       "paged.tool.polygon.sides",
+      "paged.tool.polygon.star",
       "paged.tool.polygon.starInset",
       "paged.tool.smooth.tolerance",
     ]);
@@ -122,7 +127,9 @@ describe("the host tool options", () => {
       expect(d.field.kind).toBe(
         d.field.key === "smoothing" || d.field.key === "mode"
           ? "select"
-          : "number",
+          : d.field.key === "star"
+            ? "toggle"
+            : "number",
       );
   });
 });
@@ -200,6 +207,39 @@ describe("setting paged.tool.polygon.starInset", () => {
     expect(
       await polygonAnchors({ sides: 5, starInset: "40" as unknown as number }),
     ).toHaveLength(5);
+  });
+});
+
+describe("setting paged.tool.polygon.star", () => {
+  it("default: off, a plain polygon", async () => {
+    covers("setting:paged.tool.polygon.star");
+    expect(await polygonAnchors({ sides: 5 })).toHaveLength(5);
+  });
+
+  it("on, with no inset set, is Illustrator's star: Radius 2 half of Radius 1", async () => {
+    covers("setting:paged.tool.polygon.star");
+    const r = radii(await polygonAnchors({ sides: 5, star: true }));
+    expect(r).toHaveLength(10);
+    r.forEach((x, i) => expect(x).toBeCloseTo(i % 2 === 0 ? 100 : 50, 9));
+  });
+
+  it("an inset that is set wins over the default; only true switches it on", async () => {
+    covers("setting:paged.tool.polygon.star");
+    const r = radii(
+      await polygonAnchors({ sides: 5, star: true, starInset: 25 }),
+    );
+    r.forEach((x, i) => expect(x).toBeCloseTo(i % 2 === 0 ? 100 : 75, 9));
+    for (const star of ["true", 1, null, false])
+      expect(
+        await polygonAnchors({ sides: 5, star: star as unknown as boolean }),
+      ).toHaveLength(5);
+  });
+
+  it("the Polygon Frame tool shares the switch (one Polygon Settings)", () => {
+    covers("setting:paged.tool.polygon.star");
+    expect(effectiveStarInset(true, 0)).toBe(STAR_OPTION_DEFAULT_INSET);
+    expect(effectiveStarInset(true, 30)).toBe(30);
+    expect(effectiveStarInset(false, 0)).toBe(0);
   });
 });
 

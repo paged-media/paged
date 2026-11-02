@@ -149,34 +149,6 @@ export {
   type KnifeTarget,
 } from "./commands/knife";
 export { createKnifeHandler, type KnifeHandlerOptions } from "./handlers/knife";
-// REFLECT and TRANSFORM AGAIN — the one transform seam, its pure batch
-// and the copy probe (engine 0.65's duplicateElements).
-export {
-  applyReflect,
-  applySelectionTransform,
-  applyTransformAgain,
-  contributeTransformCommands,
-  forgetLastTransform,
-  groupFrameOf,
-  lastSelectionTransform,
-  selectionCentre,
-  supportsDuplicate,
-  transformBatchFor,
-  transformMatrixOf,
-  transformTargetsOf,
-  writtenTransformOf,
-  COPY_UNAVAILABLE_NOTE,
-  DUPLICATE_ENGINE,
-  DUPLICATE_OP,
-  REFLECT_HORIZONTAL_COMMAND_ID,
-  REFLECT_VERTICAL_COMMAND_ID,
-  TRANSFORM_AGAIN_COMMAND_ID,
-  TRANSFORM_COMMAND_CATEGORY,
-  TRANSFORM_COMMAND_IDS,
-  type TransformRecord,
-  type TransformResult,
-  type TransformTarget,
-} from "./commands/transform";
 // SCISSORS AT ANY POINT — split the clicked segment, open the path there.
 export {
   applyScissorsAt,
@@ -1114,14 +1086,11 @@ export {
   type SimplifyOptions,
   type OutlineStrokeOptions,
   type SelectSameWeightOptions,
-  type ReflectOptions,
 } from "./commands/path-options";
 export {
   makePathOptionsPanel,
   ownStrokeLabel,
-  REFLECT_SECTION_NOTE,
   SIMPLIFY_PREVIEW_ENGINE_NOTE,
-  REFLECT_COPY_UNAVAILABLE_NOTE,
   PATH_OPTIONS_PANEL_NOTE,
   SELECT_SAME_TOLERANCE_NOTE,
   WIDTH_PROFILE_SECTION_NOTE,
@@ -1551,8 +1520,6 @@ export {
   clampCornerAngle,
   DEFAULT_SIMPLIFY_CORNER_ANGLE_DEG,
 } from "./commands/path-ops";
-export { spreadPivotOf } from "./commands/transform";
-export { reflectPivotOf } from "./commands/path-options";
 export {
   rewritePathOps,
   insertOpenPieceOps,
@@ -1576,22 +1543,16 @@ export {
   type EraseResult,
 } from "./commands/path-tools";
 export {
-  applyInsertStar,
   applyInsertFlare,
   flareBatchFor,
   flareHandle,
-  starParamsFrom,
   flareParamsFrom,
-  starTableFor,
-  STAR_PARAM_DEFAULTS,
   FLARE_PARAM_DEFAULTS,
   FLARE_PAPER,
   FLARE_RAY_OPACITY,
   FLARE_RING_OPACITY,
-  INSERT_STAR_COMMAND_ID,
   INSERT_FLARE_COMMAND_ID,
   STAR_FLARE_COMMAND_IDS,
-  type StarParams,
   type FlareParams,
 } from "./commands/star-flare";
 export {
@@ -1600,12 +1561,6 @@ export {
   SHAPER_STROKE_COMMAND_ID,
   type ShaperResult,
 } from "./commands/shaper";
-export {
-  createReflectHandler,
-  reflectPreview,
-  selectionPageBox,
-  type ReflectHandlerOptions,
-} from "./handlers/reflect";
 export { createReshapeHandler, tablePreview } from "./handlers/reshape";
 export {
   createJoinHandler,
@@ -1615,11 +1570,10 @@ export {
   PATH_ERASER_WIDTH_PX,
 } from "./handlers/scrub-tools";
 export {
-  createStarHandler,
   createFlareHandler,
   flareParamsOfGesture,
 } from "./handlers/star-flare";
-export { RESHAPE_OPTIONS, STAR_OPTIONS } from "./tool-options";
+export { RESHAPE_OPTIONS } from "./tool-options";
 
 // WP6.7 — the distortion tools: the Liquify family, Puppet Warp, the
 // Perspective Grid and Perspective Selection; their commands, the grid

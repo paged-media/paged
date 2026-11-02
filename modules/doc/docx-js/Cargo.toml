@@ -1,5 +1,6 @@
 [package]
 name = "docx-js"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,7 +23,7 @@ docx-skeleton.workspace = true
 # Other formats onto docx-core (doc ADR 616).
 docx-rtf.workspace = true
 docx-odt = { workspace = true, optional = true }
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
 serde.workspace = true
 serde_json.workspace = true
 

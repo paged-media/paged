@@ -574,10 +574,6 @@
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
     },
     {
-      "tool": "media.paged.draw.tool.reflect",
-      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
-    },
-    {
       "tool": "media.paged.draw.tool.reshape",
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
     },
@@ -591,10 +587,6 @@
     },
     {
       "tool": "media.paged.draw.tool.join",
-      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
-    },
-    {
-      "tool": "media.paged.draw.tool.star",
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
     },
     {

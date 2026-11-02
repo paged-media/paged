@@ -16,15 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// THE STAR and FLARE tools' gesture machines.
-//
-// STAR — press at the CENTRE and drag: the distance to the pointer is
-// Radius 1 (the tips) and the direction turns the star; Radius 2 keeps the
-// RATIO to Radius 1 the drag started with (the tool option), so the star
-// grows without changing its shape. Shift keeps it upright. Arrow Up /
-// Arrow Down during the drag add / remove a point (3…1000). A CLICK
-// (no drag) asks for the options at that centre — Illustrator's dialog —
-// and the host decides what that is.
+// THE FLARE tool's gesture machine. (Star is the host's: Object ▸ Insert
+// star… and the Polygon tool's Star option.)
 //
 // FLARE — Illustrator's two-step gesture: press at the CENTRE and drag to
 // size the centre disc and the halo (the rays scale with it); release;
@@ -33,136 +26,7 @@
 // first size (Illustrator keeps what has been set). A click on the first
 // step asks for the options at that point.
 
-import {
-  dist,
-  STAR_MAX_POINTS,
-  STAR_MIN_POINTS,
-  type Vec2,
-  type Vec2Mut,
-} from "@paged-media/draw-geometry";
-
-export interface ShapeModifiers {
-  shift: boolean;
-}
-
-export type StarEvent =
-  | { type: "down"; point: Vec2; modifiers?: ShapeModifiers }
-  | { type: "move"; point: Vec2; modifiers?: ShapeModifiers }
-  | { type: "up"; point: Vec2; modifiers?: ShapeModifiers }
-  | { type: "key"; key: "Escape" | "ArrowUp" | "ArrowDown" };
-
-export interface StarMachineOptions {
-  /** Tips at the start of the drag. */
-  points: number;
-  /** Radius 2 ÷ Radius 1 (> 0; > 1 puts the valleys outside). */
-  ratio: number;
-  /** pt — a press that travels less than this is a click. */
-  clickTolerance: number;
-}
-
-export interface StarShape {
-  cx: number;
-  cy: number;
-  radius1: number;
-  radius2: number;
-  points: number;
-  rotationDeg: number;
-}
-
-export interface StarSnapshot {
-  /** The star being dragged (the preview); null before a drag. */
-  star: StarShape | null;
-  commit: StarShape | null;
-  /** Non-null once, on a click: open the options for a star here. */
-  openOptions: Vec2Mut | null;
-  active: boolean;
-}
-
-/** The rotation that puts the first tip at `point` (Shift: upright). */
-function rotationOf(centre: Vec2, point: Vec2, upright: boolean): number {
-  if (upright) return 0;
-  return (
-    (Math.atan2(point[1] - centre[1], point[0] - centre[0]) * 180) / Math.PI +
-    90
-  );
-}
-
-export class StarMachine {
-  private centre: Vec2Mut | null = null;
-  private points: number;
-  private star: StarShape | null = null;
-  private dragging = false;
-  private done = false;
-
-  constructor(private readonly options: StarMachineOptions) {
-    this.points = clampPoints(options.points);
-  }
-
-  handle(event: StarEvent): StarSnapshot {
-    if (this.done) return this.snapshot(null, null);
-    switch (event.type) {
-      case "down":
-        this.centre = [event.point[0], event.point[1]];
-        return this.snapshot(null, null);
-      case "move":
-        if (!this.centre) return this.snapshot(null, null);
-        if (
-          !this.dragging &&
-          dist(this.centre, event.point) >= this.options.clickTolerance
-        )
-          this.dragging = true;
-        if (this.dragging)
-          this.track(event.point, event.modifiers?.shift ?? false);
-        return this.snapshot(null, null);
-      case "up": {
-        if (!this.centre) return this.snapshot(null, null);
-        this.done = true;
-        if (
-          !this.dragging &&
-          dist(this.centre, event.point) < this.options.clickTolerance
-        )
-          return this.snapshot(null, [...this.centre]);
-        this.track(event.point, event.modifiers?.shift ?? false);
-        return this.snapshot(this.star, null);
-      }
-      case "key":
-        if (event.key === "Escape") {
-          this.done = true;
-          this.star = null;
-          return this.snapshot(null, null);
-        }
-        this.points = clampPoints(
-          this.points + (event.key === "ArrowUp" ? 1 : -1),
-        );
-        if (this.star) this.star = { ...this.star, points: this.points };
-        return this.snapshot(null, null);
-    }
-  }
-
-  private track(point: Vec2, upright: boolean): void {
-    const c = this.centre!;
-    const r1 = dist(c, point);
-    this.star = {
-      cx: c[0],
-      cy: c[1],
-      radius1: r1,
-      radius2: r1 * this.options.ratio,
-      points: this.points,
-      rotationDeg: rotationOf(c, point, upright),
-    };
-  }
-
-  private snapshot(
-    commit: StarShape | null,
-    open: Vec2Mut | null,
-  ): StarSnapshot {
-    return { star: this.star, commit, openOptions: open, active: !this.done };
-  }
-}
-
-function clampPoints(n: number): number {
-  return Math.round(Math.min(STAR_MAX_POINTS, Math.max(STAR_MIN_POINTS, n)));
-}
+import { dist, type Vec2, type Vec2Mut } from "@paged-media/draw-geometry";
 
 // ---------------------------------------------------------------- flare
 

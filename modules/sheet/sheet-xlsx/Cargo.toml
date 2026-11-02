@@ -1,5 +1,6 @@
 [package]
 name = "sheet-xlsx"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -64,7 +65,7 @@ zip.workspace = true
 # save writes the same compressed bytes in every build (see the root
 # Cargo.toml).
 flate2.workspace = true
-quick-xml.workspace = true
+quick-xml = { version = "0.41", default-features = false }
 thiserror.workspace = true
 compact_str.workspace = true
 

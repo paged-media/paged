@@ -48,7 +48,9 @@ import type {
   CanvasPointerEvent,
   GestureHandler,
   PagedEditor,
+  ToolOptionField,
 } from "@paged-media/shell";
+import { t } from "@paged-media/strings";
 
 import type { Mutation, PathAnchorSpec } from "@paged-media/client";
 
@@ -70,6 +72,8 @@ import {
   type PageDrag,
 } from "./shared";
 
+import { POLYGON_TOOL } from "../messages";
+
 const TOOL_ID = "paged.tool.polygon";
 /** InDesign's default polygon is a hexagon; star inset defaults off. */
 const DEFAULT_SIDES = 6;
@@ -77,6 +81,50 @@ const DEFAULT_STAR_INSET = 0;
 const MIN_SIDES = 3;
 const MAX_SIDES = 100;
 const MIN_SIZE_PT = 1;
+/** The star inset the Star option gives when none is set: Illustrator's
+ *  Star defaults to Radius 2 = half of Radius 1. */
+export const STAR_OPTION_DEFAULT_INSET = 50;
+
+/** The Polygon (and Polygon Frame) tool's options: the sides, a Star switch
+ *  and the star inset. They are read from the `paged.tool.polygon` settings
+ *  key by both tools. */
+export const POLYGON_OPTION_FIELDS: ToolOptionField[] = [
+  {
+    kind: "number",
+    key: "sides",
+    get label() {
+      return t(POLYGON_TOOL.sides);
+    },
+    min: 3,
+    max: 100,
+    step: 1,
+  },
+  {
+    kind: "toggle",
+    key: "star",
+    get label() {
+      return t(POLYGON_TOOL.star);
+    },
+  },
+  {
+    kind: "number",
+    key: "starInset",
+    get label() {
+      return t(POLYGON_TOOL.starInset);
+    },
+    min: 0,
+    // Engine ADR 1047: a live star's inset stops at 99 %.
+    max: 99,
+    step: 1,
+    unit: "%",
+  },
+];
+
+/** The inset a drag commits: the star inset as set, except that the Star
+ *  switch with no inset set gives Illustrator's default star. */
+export function effectiveStarInset(star: boolean, starInset: number): number {
+  return star && starInset <= 0 ? STAR_OPTION_DEFAULT_INSET : starInset;
+}
 
 /** Clamp a tool-setting number, falling back to `fallback` when the
  *  store has no (or a non-numeric) value yet. */
@@ -176,12 +224,9 @@ export function createPolygonHandler(
     sides: Math.round(
       settingNumber(paged!, "sides", DEFAULT_SIDES, MIN_SIDES, MAX_SIDES),
     ),
-    starInset: settingNumber(
-      paged!,
-      "starInset",
-      DEFAULT_STAR_INSET,
-      0,
-      MAX_STAR_INSET,
+    starInset: effectiveStarInset(
+      paged!.toolSettings.getValue(TOOL_ID, "star") === true,
+      settingNumber(paged!, "starInset", DEFAULT_STAR_INSET, 0, MAX_STAR_INSET),
     ),
   });
 

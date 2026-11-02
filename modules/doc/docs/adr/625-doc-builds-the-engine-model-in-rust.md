@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slices 1 and 2 implemented (2 behind a flag, off); the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented (2 to 5 behind a flag, off); the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
@@ -93,6 +93,35 @@ page count and the same selection rectangles per paragraph, no `docx-auto` style
 paragraph, and an unedited export equal to the source. The flag turns on when that spec and the
 conformance suites are green on the final commit and the remaining slices make the document
 mostly native, not before.
+
+### Slice 3 as built: tables
+
+`body::build_table` makes the table `insertTable` and the bundle's cell pour make: the whole
+grid of cells with InDesign's new-table edges, column-major, header rows, row heights and column
+widths from the lowering, each cell's borders and shading, Word's table layout (indent, autofit, width, cell widths, rows that may
+not split), each cell's spans, insets and vertical alignment, and the cell's paragraphs built as
+body paragraphs. The table stands in a paragraph of its own, which takes the Word table
+paragraph's style (it aligns the table). Still deferred, and so the document opens by the old
+pour: nested tables, pictures in cells, a table poured as text, rows
+held at an exact height. The table's id is `Table/docx_t<n>`, not the engine's minted `u<hex>`.
+
+### Slice 4a as built: inline pictures
+
+An inline picture is an anchored frame on its paragraph (`AnchoredFrame`, a rectangle holding the
+image, a character of its line at the picture's offset), its crop the frame's inner image
+placement. Floating pictures (anchored objects with wrap), pictures with a DrawingML look and text
+boxes stay deferred (4b), as do pictures whose frame ids the old path takes from the engine's
+mint: a native frame is `docx_img<n>`. A paragraph that holds a picture and no text, under a
+paragraph style with character properties (the picture line's pitch), is deferred too: the model
+has no paragraph-level character properties and an empty run is not known to carry them.
+
+### Slice 5 as built: fields
+
+A Word field the engine keeps live is one native run carrying `WordField::parse(code)`, its result
+the joined text of the field's runs, in the first run's look (what the bundle's `insertField`
+makes). A merge field needs nothing native (its text pours as text; the object model reads the
+IR). Hyperlinks and bookmarks (which need document-level objects: hyperlink sources, destinations
+and text anchors) and a table of contents stay deferred.
 
 ### Save-back
 

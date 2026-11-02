@@ -167,43 +167,15 @@ describe("paged.draw commands — path, stroke and fill (real engine)", () => {
       await expectApplies(rig, `${C}.closePath`);
     });
 
-    it("Reflect, Reverse path and Average endpoints ARE one step for two elements", async () => {
+    it("Reverse path and Average endpoints ARE one step for two elements", async () => {
       covers(
-        "command:media.paged.draw.command.reflectHorizontal",
         "command:media.paged.draw.command.reversePathDirection",
         "command:media.paged.draw.command.averageEndpoints",
       );
       await rig.open(F1(), TWO);
-      await expectApplies(rig, `${C}.reflectHorizontal`);
-      await rig.open(F1(), TWO);
       await expectApplies(rig, `${C}.reversePathDirection`);
       await rig.open(F1(), [POLY, LINE]);
       await expectApplies(rig, `${C}.averageEndpoints`);
-    });
-  });
-
-  describe("transforms", () => {
-    it("Reflect horizontally mirrors the selection about its centre; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.reflectHorizontal");
-      await rig.open(F1(), [POLY]);
-      await expectApplies(rig, `${C}.reflectHorizontal`);
-      await expectRefuses(rig, F1(), [], `${C}.reflectHorizontal`);
-    });
-
-    it("Reflect vertically mirrors the selection about its centre; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.reflectVertical");
-      await rig.open(F1(), [POLY]);
-      await expectApplies(rig, `${C}.reflectVertical`);
-      await expectRefuses(rig, F1(), [], `${C}.reflectVertical`);
-    });
-
-    it("Transform again repeats the last reflection on the new selection; nothing selected is a no-op", async () => {
-      covers("command:media.paged.draw.command.transformAgain");
-      await rig.open(F1(), [POLY]);
-      await rig.run(`${C}.reflectVertical`);
-      await rig.h.host.selection.set([RECT]);
-      await expectApplies(rig, `${C}.transformAgain`);
-      await expectRefuses(rig, F1(), [], `${C}.transformAgain`);
     });
   });
 });

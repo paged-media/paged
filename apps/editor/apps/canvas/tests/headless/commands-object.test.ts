@@ -32,6 +32,8 @@ import {
   gestureFixture,
   GESTURE_TARGETS as T,
 } from "@paged-media/test-kit";
+import type { ElementId } from "@paged-media/client";
+import { transformBounds } from "@paged-media/helpers";
 import {
   dumpDiff,
   elementKey,
@@ -712,5 +714,156 @@ describe("Stroke dashes", () => {
     const solid = await run(e, "paged.stroke.dashSolid");
     expect(dash(solid.after, FRAME) ?? []).toEqual([]);
     await expectOneUndoStep(e, solid.before);
+  });
+});
+
+describe("Reflect and Transform again", () => {
+  const matrixOf = (dump: ModelDump, key: string): number[] =>
+    (bounds(dump, key) as number[] | undefined) ?? [1, 0, 0, 1, 0, 0];
+
+  /** An element's page box through its item transform. */
+  async function boxOf(e: HeadlessEditor, id: ElementId) {
+    const [g] = (await e.client.elementGeometry([id])) as Array<{
+      bounds: [number, number, number, number];
+      itemTransform?: [number, number, number, number, number, number] | null;
+    }>;
+    return transformBounds(g!.bounds, g!.itemTransform ?? null);
+  }
+  const near = (got: readonly number[], want: readonly number[]) =>
+    got.forEach((v, i) => expect(v).toBeCloseTo(want[i]!, 3));
+
+  test("Reflect horizontally mirrors a frame about its own centre: the linear part flips x, the box stays, one undo step", async () => {
+    covers(
+      "command:paged.transform.reflectHorizontal",
+      "command:paged.transform.reflectVertical",
+    );
+    const e = await open();
+    await e.select([T.frame.id]);
+    const box = await boxOf(e, T.frame.id);
+    const h = await run(e, "paged.transform.reflectHorizontal");
+    expect(e.problems()).toEqual([]);
+    const [a0, b0, c0, d0] = matrixOf(h.before, FRAME);
+    const [a1, b1, c1, d1] = matrixOf(h.after, FRAME);
+    near([a1!, b1!, c1!, d1!], [-a0!, b0!, -c0!, d0!]);
+    near(await boxOf(e, T.frame.id), box);
+    await expectOneUndoStep(e, h.before);
+    const v = await run(e, "paged.transform.reflectVertical");
+    const [a2, b2, c2, d2] = matrixOf(v.after, FRAME);
+    near([a2!, b2!, c2!, d2!], [a0!, -b0!, c0!, -d0!]);
+    near(await boxOf(e, T.frame.id), box);
+    await expectOneUndoStep(e, v.before);
+  });
+
+  test("a rotated frame keeps its rotation under the reflection (R ∘ M, not R)", async () => {
+    covers("command:paged.transform.reflectHorizontal");
+    const e = await open();
+    await e.select([T.rotated.id]);
+    const key = elementKey(T.rotated.id);
+    const { before, after } = await run(e, "paged.transform.reflectHorizontal");
+    const [a0, b0, c0, d0] = matrixOf(before, key);
+    const [a1, b1, c1, d1] = matrixOf(after, key);
+    expect(Math.abs(b0!)).toBeGreaterThan(0.01);
+    near([a1!, b1!, c1!, d1!], [-a0!, b0!, -c0!, d0!]);
+  });
+
+  test("a group is reflected through setGroupTransform: members move, one undo step", async () => {
+    covers("command:paged.transform.reflectHorizontal");
+    const e = await open();
+    await e.select([T.group.id]);
+    const { before, after } = await run(e, "paged.transform.reflectHorizontal");
+    expect(e.problems()).toEqual([]);
+    expect(dumpDiff(before, after)).not.toEqual([]);
+    await expectOneUndoStep(e, before);
+  });
+
+  test("Copy leaves the original and reflects a copy, in one undo step", async () => {
+    covers("command:paged.transform.reflectHorizontal");
+    const e = await open();
+    await e.select([T.frame.id]);
+    const before = await e.dump();
+    await e.invoke("paged.transform.reflectHorizontal", { copy: true });
+    await e.idle();
+    expect(e.problems()).toEqual([]);
+    const after = await e.dump();
+    expect(pageOne(after)).toHaveLength(pageOne(before).length + 1);
+    await expectOneUndoStep(e, before);
+  });
+
+  test("Transform again repeats the last reflection about the NEW selection; with nothing remembered it is a no-op", async () => {
+    covers("command:paged.transform.again");
+    const e = await open();
+    await e.select([T.frame.id]);
+    const idle = await run(e, "paged.transform.again");
+    expect(dumpDiff(idle.before, idle.after)).toEqual([]);
+    await e.invoke("paged.transform.reflectHorizontal");
+    await e.idle();
+    await e.select([T.path.id]);
+    const box = await boxOf(e, T.path.id);
+    const { before, after } = await run(e, "paged.transform.again");
+    expect(e.problems()).toEqual([]);
+    const [a0, , c0] = matrixOf(before, PATH);
+    const [a1, , c1] = matrixOf(after, PATH);
+    near([a1!, c1!], [-a0!, -c0!]);
+    near(await boxOf(e, T.path.id), box);
+    await expectOneUndoStep(e, before);
+  });
+
+  test("Reflect… raises the dialog and writes nothing; with nothing selected it does nothing", async () => {
+    covers("command:paged.transform.reflectOptions");
+    const e = await open();
+    await e.select([T.frame.id]);
+    const { before, after } = await run(e, "paged.transform.reflectOptions");
+    expect(dumpDiff(before, after)).toEqual([]);
+    await e.select([]);
+    await e.invoke("paged.transform.reflectOptions");
+    await e.idle();
+    expect(e.problems()).toEqual([]);
+  });
+});
+
+describe("Insert star", () => {
+  test("a payload inserts a live star (sides and inset) in one undo step; a turned star is a plain path", async () => {
+    covers("command:paged.insert.star");
+    const e = await open();
+    const before = await e.dump();
+    await e.invoke("paged.insert.star", {
+      radius1: 40,
+      radius2: 10,
+      points: 6,
+    });
+    await e.idle();
+    expect(e.problems()).toEqual([]);
+    const after = await e.dump();
+    expect(pageOne(after)).toHaveLength(pageOne(before).length + 1);
+    const created = pageOne(after).find((k) => !pageOne(before).includes(k))!;
+    const entries = (
+      after.elements[created] as {
+        entries: Array<{ path: string; value: { value: unknown } }>;
+      }
+    ).entries;
+    expect(entries.find((x) => x.path === "frameShapeSides")?.value.value).toBe(
+      6,
+    );
+    expect(
+      entries.find((x) => x.path === "frameShapeStarInset")?.value.value,
+    ).toBe(75);
+    await expectOneUndoStep(e, before);
+    await e.invoke("paged.insert.star", {
+      radius1: 40,
+      radius2: 10,
+      points: 6,
+      rotationDeg: 15,
+    });
+    await e.idle();
+    const turned = await e.dump();
+    expect(pageOne(turned)).toHaveLength(pageOne(before).length + 1);
+    await expectOneUndoStep(e, before);
+  });
+
+  test("run bare it opens the dialog and writes nothing", async () => {
+    covers("command:paged.insert.star");
+    const e = await open();
+    const { before, after } = await run(e, "paged.insert.star");
+    expect(dumpDiff(before, after)).toEqual([]);
   });
 });

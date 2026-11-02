@@ -318,84 +318,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     expect(out.shell).toEqual([]);
   });
 
-  test("Draw/Transform/Reflect horizontally — reflects the selection, and one Undo takes it back", async () => {
-    covers("menu:Draw/Transform/Reflect horizontally");
-    await expectGreyedAndInert(bare, "Draw/Transform/Reflect horizontally");
-    const out = await clickEntry(
-      live,
-      "Draw/Transform/Reflect horizontally",
-      "media.paged.draw.command.reflectHorizontal",
-    );
-    expect(out.shell).toEqual([]);
-    expect(
-      out.after,
-      "Draw/Transform/Reflect horizontally changes the document",
-    ).not.toBe(out.before);
-    await expectOneUndoRestores(
-      live,
-      "Draw/Transform/Reflect horizontally",
-      out.before,
-    );
-  });
-
-  test("Draw/Transform/Reflect vertically — reflects the selection, and one Undo takes it back", async () => {
-    covers("menu:Draw/Transform/Reflect vertically");
-    await expectGreyedAndInert(bare, "Draw/Transform/Reflect vertically");
-    const out = await clickEntry(
-      live,
-      "Draw/Transform/Reflect vertically",
-      "media.paged.draw.command.reflectVertical",
-    );
-    expect(out.shell).toEqual([]);
-    expect(
-      out.after,
-      "Draw/Transform/Reflect vertically changes the document",
-    ).not.toBe(out.before);
-    await expectOneUndoRestores(
-      live,
-      "Draw/Transform/Reflect vertically",
-      out.before,
-    );
-  });
-
-  test("Draw/Transform/Reflect… — raises Path Options, where the axis is set", async () => {
-    covers("menu:Draw/Transform/Reflect…");
-    await expectGreyedAndInert(bare, "Draw/Transform/Reflect…");
-    const out = await clickEntry(
-      live,
-      "Draw/Transform/Reflect…",
-      "media.paged.draw.command.reflectOptions",
-    );
-    expect(out.shell).toEqual([
-      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
-    ]);
-    expect(out.after, "opening a panel leaves the document alone").toBe(
-      out.before,
-    );
-  });
-
-  test("Draw/Transform/Transform again — repeats the last transform on the selection, and one Undo takes the repeat back", async () => {
-    covers("menu:Draw/Transform/Transform again");
-    await expectGreyedAndInert(bare, "Draw/Transform/Transform again");
-    // A transform to repeat: Transform again repeats the LAST one.
-    await runCommand(live, "media.paged.draw.command.reflectHorizontal");
-    const out = await clickEntry(
-      live,
-      "Draw/Transform/Transform again",
-      "media.paged.draw.command.transformAgain",
-    );
-    expect(out.shell).toEqual([]);
-    expect(
-      out.after,
-      "Draw/Transform/Transform again changes the document",
-    ).not.toBe(out.before);
-    await expectOneUndoRestores(
-      live,
-      "Draw/Transform/Transform again",
-      out.before,
-    );
-  });
-
   test("Draw/Stroke/Width profile… — raises Path Options, where the profile is set", async () => {
     covers("menu:Draw/Stroke/Width profile…");
     await expectGreyedAndInert(bare, "Draw/Stroke/Width profile…");
@@ -1162,22 +1084,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
-  test("Object/Insert star… — raises Path Options, where the star is set up", async () => {
-    covers("menu:Object/Insert star…");
-    await expectGreyedAndInert(bare, "Object/Insert star…");
-    const out = await clickEntry(
-      live,
-      "Object/Insert star…",
-      "media.paged.draw.command.insertStarOptions",
-    );
-    expect(out.shell).toEqual([
-      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
-    ]);
-    expect(out.after, "opening a panel leaves the document alone").toBe(
-      out.before,
-    );
-  });
-
   test("Object/Insert flare… — raises Path Options, where the flare is set up", async () => {
     covers("menu:Object/Insert flare…");
     await expectGreyedAndInert(bare, "Object/Insert flare…");
@@ -1780,8 +1686,8 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
-  test("Draw/Transform/Reflect horizontally — the Draw CONTEXT menu sits on the bar while artwork is selected, and runs the same command", async () => {
-    covers("menu:Draw/Transform/Reflect horizontally");
+  test("Draw/Compound path/Make — the Draw CONTEXT menu sits on the bar while artwork is selected, and runs the same command", async () => {
+    covers("menu:Draw/Compound path/Make");
     const bar = live.locator('nav[aria-label="Main menu"]');
     await expect(bar.locator('[data-menu-trigger="Draw"]')).toHaveAttribute(
       "data-menu-context",
@@ -1789,16 +1695,12 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
     const out = await clickEntry(
       live,
-      "Draw/Transform/Reflect horizontally",
-      "media.paged.draw.command.reflectHorizontal",
-      { route: contextRouteOf("Draw/Transform/Reflect horizontally") },
+      "Draw/Compound path/Make",
+      "media.paged.draw.command.makeCompoundPath",
+      { route: contextRouteOf("Draw/Compound path/Make") },
     );
     expect(out.after).not.toBe(out.before);
-    await expectOneUndoRestores(
-      live,
-      "Draw/Transform/Reflect horizontally",
-      out.before,
-    );
+    await expectOneUndoRestores(live, "Draw/Compound path/Make", out.before);
     // Nothing selected, the context menu leaves the bar (Plugins ▸ Draw stays).
     await new Designer(live).selectElements([]);
     await expect(bar.locator('[data-menu-trigger="Draw"]')).toHaveCount(0);

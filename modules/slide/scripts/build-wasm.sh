@@ -11,5 +11,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 exec bash ../../tooling/rust/build-wasm.sh \
+  --manifest-path slide-js/Cargo.toml \
   --package slide-js --artifact slide_js --profile wasm-slide \
   --out packages/slide-bundle/bin

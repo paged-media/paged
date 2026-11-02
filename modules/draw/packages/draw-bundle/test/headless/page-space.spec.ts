@@ -40,17 +40,9 @@ import {
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import {
-  affineReflect,
-  ovalToPath,
-  type Affine,
-} from "@paged-media/draw-geometry";
+import { ovalToPath, type Affine } from "@paged-media/draw-geometry";
 
 import { drawBundle } from "../../src";
-import {
-  applyReflect,
-  forgetLastTransform,
-} from "../../src/commands/transform";
 import {
   applyMakeObjectsOnPath,
   applyReleaseObjectsOnPath,
@@ -229,7 +221,6 @@ describe("draw conformance — page space on a page that does not start at its s
   afterAll(() => h?.dispose());
   beforeEach(async () => {
     await h.load(DOC());
-    forgetLastTransform();
     await h.host.selection.set([]);
     const [g] = await h.host.document.elementGeometry([poly("tri")]);
     pageSpaceEngine =
@@ -250,30 +241,6 @@ describe("draw conformance — page space on a page that does not start at its s
         if (pageSpaceEngine) expect(pageOriginOf(read)).toEqual(ORIGIN);
       }
     }
-  });
-
-  it("Reflect mirrors an item in place", async () => {
-    await h.host.selection.set([poly("tri")]);
-    expect((await applyReflect(h.host, 90)).applied).toBe(true);
-    // Page (100, 100)–(200, 160), mirrored about its own centre, in spread space.
-    near(await spreadOutline(poly("tri")), [
-      [
-        [-412, -296],
-        [-512, -296],
-        [-412, -236],
-      ],
-    ]);
-  });
-
-  it("Reflect keeps a rotated item's rotation and mirrors it about its box's centre", async () => {
-    const before = await spreadOutline(poly("rot"));
-    await h.host.selection.set([poly("rot")]);
-    await applyReflect(h.host, 0);
-    const r = affineReflect(0, centre(before));
-    near(
-      await spreadOutline(poly("rot")),
-      before.map((c) => c.map((p) => apply(r, p))),
-    );
   });
 
   it("Objects on a path: MAKE slots the objects on the path, RELEASE puts them back exactly", async () => {

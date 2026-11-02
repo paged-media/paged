@@ -45,6 +45,7 @@ export {
   type ScopedKey,
   type ValueStore,
 } from "./state/editor-scope";
+export { TRANSFORM_MEMORY } from "./state/transform-memory";
 export {
   editorStorage,
   memoryStorage,

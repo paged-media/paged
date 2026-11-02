@@ -317,13 +317,6 @@ describe("paged.draw commands — objects (real engine)", () => {
       await expectRefuses(rig, F1(), [], `${C}.outlineStrokeOptions`);
     });
 
-    it("Reflect… reflects the selection about the last used axis", async () => {
-      covers("command:media.paged.draw.command.reflectOptions");
-      await rig.open(F1(), [POLY]);
-      await expectApplies(rig, `${C}.reflectOptions`);
-      await expectRefuses(rig, F1(), [], `${C}.reflectOptions`);
-    });
-
     it("Arc… inserts an arc with the last used parameters", async () => {
       covers("command:media.paged.draw.command.insertArcOptions");
       await rig.open(F1(), []);
@@ -352,12 +345,6 @@ describe("paged.draw commands — objects (real engine)", () => {
       covers("command:media.paged.draw.command.rasterizeOptions");
       await rig.open(F1(), [RECT]);
       await expectApplies(rig, `${C}.rasterizeOptions`);
-    });
-
-    it("Star… inserts a star with the last used parameters [plugin-draw.tool-wave-3]", async () => {
-      covers("command:media.paged.draw.command.insertStarOptions");
-      await rig.open(F1(), []);
-      await expectApplies(rig, `${C}.insertStarOptions`);
     });
 
     it("Flare… inserts a flare with the last used parameters [plugin-draw.tool-wave-3]", async () => {

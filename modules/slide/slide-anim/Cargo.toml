@@ -1,5 +1,6 @@
 [package]
 name = "slide-anim"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,7 +16,7 @@ pptx-core.workspace = true
 # Preset templates are kept as PowerPoint's XML and read through the
 # importer's timing reader (slide-js links it anyway).
 pptx-import.workspace = true
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 serde.workspace = true
 serde_json.workspace = true
 

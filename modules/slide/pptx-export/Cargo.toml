@@ -1,5 +1,6 @@
 [package]
 name = "pptx-export"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +12,7 @@ description = "paged.slide: write a .pptx back from the original package and the
 workspace = true
 
 [dependencies]
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 pptx-core.workspace = true
 pptx-import.workspace = true
 slide-resolve.workspace = true
@@ -24,7 +25,7 @@ dml-native.workspace = true
 paged-model.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true
-quick-xml.workspace = true
+quick-xml = "0.41"
 serde.workspace = true
 serde_json.workspace = true
 base64.workspace = true

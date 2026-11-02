@@ -224,7 +224,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           set -o pipefail
-          cargo test --workspace --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+          cargo test --workspace --exclude sheet-conformance --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
 
       # What the macOS leg executed: a leg that ran nothing fails, and the
       # tests that reported a resource unavailable are listed, not counted.
@@ -232,6 +232,11 @@ jobs:
         if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' && runner.os == 'macOS' }}
         run: python3 ../../tooling/rust/skip-report.py --lane "core cargo test (macOS)" --cargo-log "$RUNNER_TEMP/cargo-test.log"
 
+      # sheet-conformance pins the bytes of the XLSX container (a deflate stream
+      # per part). A workspace-wide build unifies the zip / flate2 features of all
+      # members, which turns on a different deflate backend than sheet's own build
+      # has, so its tests run in sheet-rust (-p, sheet's feature set) and are left
+      # out of the workspace-wide runs here (docs/development/one-workspace.md).
       - name: nextest (workspace) → JUnit
         id: nextest
         if: runner.os == 'Linux'
@@ -240,7 +245,7 @@ jobs:
         # still publish its ✗ (cockpit reads the `nextest-junit` artifact),
         # and it does: the upload below runs `if: !cancelled()`. So the job
         # FAILS on a failing test instead of `|| true` reporting green.
-        run: cargo nextest run --workspace --profile ci --no-fail-fast
+        run: cargo nextest run --workspace --exclude sheet-conformance --profile ci --no-fail-fast
 
       # Before the upload: tests that reported a resource unavailable become
       # <skipped> rows in the JUnit cockpit reads, and a run that executed
@@ -274,7 +279,7 @@ jobs:
       # After a red nextest too, so a run reports both; not after a red lint.
       - name: doctests
         if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
-        run: cargo test --workspace --doc --no-fail-fast
+        run: cargo test --workspace --exclude sheet-conformance --doc --no-fail-fast
 
       # The hand-off to the evidence ingest: core is public, so the private
       # side pulls this artifact through the API instead of this workflow

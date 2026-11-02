@@ -40,10 +40,14 @@
 use std::collections::{BTreeMap, HashMap};
 
 use docx_lower::ir::{
-    LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, PropValue, StyleProp,
+    LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, LoweredTable, PropValue,
+    StyleProp,
 };
 use paged_model::script::{CharacterDirection, FontHint};
-use paged_model::{CharacterRun, Justification, Paragraph};
+use paged_model::{
+    AnchoredFrame, AnchoredFrameKind, Bounds, CellWidth, CharacterRun, Justification, Paragraph,
+    Table, TableCell, TableColumn, TableRow, TableWidth, WordField, WordTableLayout,
+};
 
 /// The id prefix of the styles the lowering synthesizes for direct
 /// formatting (`docx-lower` `synthesize`).
@@ -55,6 +59,8 @@ const AUTO_CHAR: &str = "CharacterStyle/docx-auto-c";
 pub enum NativeBlock {
     /// Built as a model paragraph.
     Paragraph(Box<Paragraph>),
+    /// A native table, in a paragraph of its own (doc ADR 625, slice 3).
+    Table(Box<Paragraph>),
     /// Left to the old path, with the reason (an honest, countable
     /// degradation: nothing is dropped).
     Deferred { reason: String },
@@ -71,7 +77,7 @@ impl NativeBody {
     pub fn built(&self) -> usize {
         self.blocks
             .iter()
-            .filter(|b| matches!(b, NativeBlock::Paragraph(_)))
+            .filter(|b| !matches!(b, NativeBlock::Deferred { .. }))
             .count()
     }
 }
@@ -201,6 +207,11 @@ pub fn set_paragraph_prop(p: &mut Paragraph, prop: &StyleProp) -> bool {
         }
         "paragraphSpaceBefore" => return len_of(v).map(|f| p.space_before = Some(f)).is_some(),
         "paragraphSpaceAfter" => return len_of(v).map(|f| p.space_after = Some(f)).is_some(),
+        "paragraphAutoLeading" => {
+            return len_of(v)
+                .map(|f| p.line_setting.auto_leading = Some(f))
+                .is_some();
+        }
         "paragraphKeepWithNext" => {
             return len_of(v)
                 .map(|f| p.keep_with_next = Some(count(f)))
@@ -313,6 +324,7 @@ pub fn read_paragraph_props(p: &Paragraph) -> BTreeMap<String, PropValue> {
         ("paragraphFirstLineIndent", p.first_line_indent),
         ("paragraphSpaceBefore", p.space_before),
         ("paragraphSpaceAfter", p.space_after),
+        ("paragraphAutoLeading", p.line_setting.auto_leading),
         ("paragraphKeepWithNext", p.keep_with_next.map(|n| n as f32)),
         (
             "paragraphKeepFirstLines",
@@ -412,10 +424,8 @@ pub fn read_run_props(r: &CharacterRun) -> BTreeMap<String, PropValue> {
 fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
     if r.hyperlink_url.is_some() {
         Some("hyperlink")
-    } else if r.merge_field.is_some() {
-        Some("merge field")
-    } else if r.field.is_some() {
-        Some("field")
+    } else if r.field.is_some() && r.text.is_empty() {
+        Some("field without a result")
     } else if r.note.is_some() {
         Some("note reference")
     } else if r.change.is_some() || r.format_change.is_some() {
@@ -430,8 +440,11 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
 }
 
 fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
-    if !p.images.is_empty() {
-        Some("picture")
+    if p.images
+        .iter()
+        .any(|i| i.anchor.is_some() || i.fx.is_some() || i.layout.is_some())
+    {
+        Some("floating picture or picture look")
     } else if !p.segments.is_empty() {
         Some("page or column break inside the paragraph")
     } else if !p.bookmarks.is_empty() {
@@ -449,10 +462,19 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
     }
 }
 
+/// The ids the builder mints for what it makes: a table's and a picture
+/// frame's (the engine mints `u<hex>`; these cannot collide with those).
+#[derive(Default)]
+struct Minted {
+    tables: usize,
+    frames: usize,
+}
+
 fn build_paragraph(
     doc: &LoweredDoc,
     styles: &HashMap<&str, &LoweredStyle>,
     p: &LoweredParagraph,
+    minted: &mut Minted,
 ) -> Result<Paragraph, String> {
     if let Some(why) = paragraph_deferral(p) {
         return Err(why.into());
@@ -488,11 +510,26 @@ fn build_paragraph(
     if !para_chars.is_empty() && p.runs.iter().all(|r| r.text.is_empty()) {
         return Err("paragraph character properties on an empty paragraph".into());
     }
+    // The field the previous run belongs to (its runs are one engine field,
+    // with their joined text as its result, in its first run's look).
+    let mut open_field: Option<u32> = None;
     for r in p.runs.iter().filter(|r| !r.text.is_empty()) {
+        if let Some(f) = &r.field {
+            if open_field == Some(f.seq) {
+                if let Some(last) = para.runs.last_mut() {
+                    last.text.push_str(&r.text);
+                }
+                continue;
+            }
+            open_field = Some(f.seq);
+        } else {
+            open_field = None;
+        }
         let run_direct = split_style(styles, r.char_style_id.as_deref())?;
         let mut run = CharacterRun {
             character_style: run_direct.base.map(str::to_owned),
             text: r.text.clone(),
+            field: r.field.as_ref().map(|f| WordField::parse(&f.code)),
             ..CharacterRun::default()
         };
         for prop in &para_chars {
@@ -507,21 +544,229 @@ fn build_paragraph(
         }
         para.runs.push(run);
     }
+    // Inline pictures: anchored frames, characters of their line (engine
+    // ADR 1050), their crop the picture's placement (doc ADR 623).
+    let chars: u32 = para
+        .runs
+        .iter()
+        .map(|r| r.text.chars().count() as u32)
+        .sum();
+    for img in &p.images {
+        para.anchored_frame_offsets
+            .resize(para.anchored_frames.len(), 0);
+        para.anchored_frame_offsets.push(img.at.min(chars));
+        para.anchored_frames.push(AnchoredFrame {
+            frame_kind: AnchoredFrameKind::Rectangle,
+            self_id: Some(format!("docx_img{}", minted.frames)),
+            bounds: Some(Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: img.height_pt,
+                right: img.width_pt,
+            }),
+            image_link: Some(img.uri.clone()),
+            image_item_transform: img.crop.and_then(|c| c.placement),
+            ..AnchoredFrame::default()
+        });
+        minted.frames += 1;
+    }
     Ok(para)
+}
+
+/// InDesign's new-table edges, which `insertTable` stamps on every cell
+/// (`paged-mutate` `new_table_cell`).
+const NEW_CELL_EDGE_COLOR: &str = "Color/Black";
+const NEW_CELL_EDGE_WEIGHT_PT: f32 = 1.0;
+
+fn new_table_cell(col: u32, row: u32) -> TableCell {
+    let mut cell = TableCell {
+        name: Some(format!("{col}:{row}")),
+        row_span: 1,
+        column_span: 1,
+        ..TableCell::default()
+    };
+    for (color, weight) in [
+        (
+            &mut cell.top_edge_stroke_color,
+            &mut cell.top_edge_stroke_weight,
+        ),
+        (
+            &mut cell.bottom_edge_stroke_color,
+            &mut cell.bottom_edge_stroke_weight,
+        ),
+        (
+            &mut cell.left_edge_stroke_color,
+            &mut cell.left_edge_stroke_weight,
+        ),
+        (
+            &mut cell.right_edge_stroke_color,
+            &mut cell.right_edge_stroke_weight,
+        ),
+    ] {
+        *color = Some(NEW_CELL_EDGE_COLOR.to_string());
+        *weight = Some(NEW_CELL_EDGE_WEIGHT_PT);
+    }
+    cell
+}
+
+/// A Word table as the model's table in a paragraph of its own (doc ADR 625,
+/// slice 3), as `insertTable` and the cell pour of the bundle make it.
+fn build_table(
+    doc: &LoweredDoc,
+    styles: &HashMap<&str, &LoweredStyle>,
+    t: &LoweredTable,
+    minted: &mut Minted,
+) -> Result<Paragraph, String> {
+    if !t.flow.is_empty() {
+        return Err("table poured as text".into());
+    }
+    if let Some(l) = &t.layout {
+        if l.exact_rows.iter().any(|e| *e) {
+            return Err("table with rows held at an exact height".into());
+        }
+    }
+    // The table's own paragraph: its style aligns the table.
+    let direct = split_style(styles, t.para_style_id.as_deref())?;
+    let mut host = Paragraph {
+        paragraph_style: direct.base.map(str::to_owned),
+        ..Paragraph::default()
+    };
+    for prop in &direct.props {
+        if is_char_path(&prop.path) || !set_paragraph_prop(&mut host, prop) {
+            return Err(format!("no model field for {} on a table", prop.path));
+        }
+    }
+    let (rows, cols) = (t.rows, t.cols);
+    let header = t.header_rows.min(rows);
+    let layout = t.layout.clone().unwrap_or_default();
+    let width = match (layout.width_pt, layout.width_pct) {
+        (Some(w), _) => Some(TableWidth::Points(w)),
+        (None, Some(p)) => Some(TableWidth::Percent(p)),
+        _ => None,
+    };
+    let mut cell_widths = Vec::new();
+    for (i, w) in layout.cell_widths_pt.iter().enumerate() {
+        if let (Some(w), Some(c)) = (w, t.cells.get(i)) {
+            cell_widths.push(CellWidth {
+                row: c.row,
+                col: c.col,
+                width: TableWidth::Points(*w),
+            });
+        }
+    }
+    let mut cells: Vec<TableCell> = Vec::with_capacity((rows * cols) as usize);
+    for c in 0..cols {
+        for r in 0..rows {
+            cells.push(new_table_cell(c, r));
+        }
+    }
+    for lc in &t.cells {
+        if !lc.nested.is_empty() {
+            return Err("nested table".into());
+        }
+        if lc.row >= rows || lc.col >= cols {
+            return Err("table cell outside the grid".into());
+        }
+        // The engine keeps a span inside the grid.
+        if lc.col + lc.col_span.max(1) > cols || lc.row + lc.row_span.max(1) > rows {
+            return Err("table cell span outside the grid".into());
+        }
+        let cell = &mut cells[(lc.col * rows + lc.row) as usize];
+        if let Some([top, left, bottom, right]) = lc.insets_pt {
+            cell.text_top_inset = top;
+            cell.text_left_inset = left;
+            cell.text_bottom_inset = bottom;
+            cell.text_right_inset = right;
+        }
+        if let Some(v) = &lc.v_align {
+            cell.vertical_justification = Some(v.clone());
+        }
+        // Word's borders and shading (doc ADR 614).
+        if let Some(look) = &lc.look {
+            cell.top_edge_stroke_weight = Some(look.top.weight_pt);
+            cell.top_edge_stroke_color = Some(look.top.color.clone());
+            cell.left_edge_stroke_weight = Some(look.left.weight_pt);
+            cell.left_edge_stroke_color = Some(look.left.color.clone());
+            cell.bottom_edge_stroke_weight = Some(look.bottom.weight_pt);
+            cell.bottom_edge_stroke_color = Some(look.bottom.color.clone());
+            cell.right_edge_stroke_weight = Some(look.right.weight_pt);
+            cell.right_edge_stroke_color = Some(look.right.color.clone());
+            if let Some(f) = &look.fill {
+                cell.fill_color = Some(f.clone());
+            }
+        }
+        let text_empty = lc
+            .paragraphs
+            .iter()
+            .all(|p| p.runs.iter().all(|r| r.text.is_empty()))
+            && lc.paragraphs.len() <= 1;
+        let styled_empty = lc.paragraphs.iter().any(|p| p.para_style_id.is_some());
+        if !(text_empty && !styled_empty) {
+            for p in &lc.paragraphs {
+                let para = build_paragraph(doc, styles, p, minted)?;
+                if para.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
+                    return Err("line feed in a table cell".into());
+                }
+                cell.paragraphs.push(para);
+            }
+        }
+        cell.row_span = lc.row_span.max(1);
+        cell.column_span = lc.col_span.max(1);
+    }
+    let table = Table {
+        word: Some(WordTableLayout {
+            indent: layout.indent_pt.unwrap_or(0.0),
+            autofit: !layout.fixed,
+            width,
+            cell_widths,
+            cant_split_rows: layout
+                .cant_split
+                .iter()
+                .enumerate()
+                .filter_map(|(r, c)| c.then_some(r as u32))
+                .collect(),
+        }),
+        self_id: Some(format!("Table/docx_t{}", minted.tables)),
+        header_row_count: header,
+        footer_row_count: 0,
+        body_row_count: rows - header,
+        column_count: cols,
+        rows: (0..rows)
+            .map(|r| TableRow {
+                name: Some(r.to_string()),
+                single_row_height: t.row_heights_pt.get(r as usize).copied(),
+                ..TableRow::default()
+            })
+            .collect(),
+        columns: (0..cols)
+            .map(|c| TableColumn {
+                name: Some(c.to_string()),
+                single_column_width: t.column_widths_pt.get(c as usize).copied(),
+                ..TableColumn::default()
+            })
+            .collect(),
+        cells,
+        ..Table::default()
+    };
+    minted.tables += 1;
+    host.table = Some(table);
+    Ok(host)
 }
 
 /// Build the story's blocks that slice 1 can, directly on the model.
 pub fn native_body(doc: &LoweredDoc) -> NativeBody {
     let styles = catalogue(doc);
+    let mut minted = Minted::default();
     let blocks = doc
         .story
         .blocks
         .iter()
         .map(|b| match b {
-            LoweredBlock::Table(_) => NativeBlock::Deferred {
-                reason: "table".into(),
+            LoweredBlock::Table(t) => match build_table(doc, &styles, t, &mut minted) {
+                Ok(para) => NativeBlock::Table(Box::new(para)),
+                Err(reason) => NativeBlock::Deferred { reason },
             },
-            LoweredBlock::Paragraph(p) => match build_paragraph(doc, &styles, p) {
+            LoweredBlock::Paragraph(p) => match build_paragraph(doc, &styles, p, &mut minted) {
                 Ok(para) => NativeBlock::Paragraph(Box::new(para)),
                 Err(reason) => NativeBlock::Deferred { reason },
             },
@@ -546,7 +791,7 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<Vec<Vec<Paragraph>>> {
     let mut paras = Vec::with_capacity(body.blocks.len());
     for b in body.blocks {
         match b {
-            NativeBlock::Paragraph(p) => {
+            NativeBlock::Paragraph(p) | NativeBlock::Table(p) => {
                 // The old pour reads a line feed as a paragraph break.
                 if p.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
                     return None;

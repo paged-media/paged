@@ -36,8 +36,6 @@ import { fileURLToPath } from "node:url";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-const CARGO_WORKSPACE = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"];
-
 /** What each module's engine wasm is built from. */
 export const MODULES = {
   data: {
@@ -82,7 +80,12 @@ export const MODULES = {
     crateFiles: ["build.rs", "Cargo.toml"],
     // sheet-core + sheet-fn build.rs read them.
     extra: [{ dir: "registry/functions", ext: ".yaml" }],
-    rootFiles: CARGO_WORKSPACE,
+    // sheet-* are members of engine/core's Cargo workspace.
+    rootFiles: [
+      "../../engine/core/Cargo.toml",
+      "../../engine/core/Cargo.lock",
+      "rust-toolchain.toml",
+    ],
   },
   web: {
     root: "modules/web",

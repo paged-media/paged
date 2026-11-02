@@ -293,6 +293,17 @@ export function engineOpVocabulary(
   return probe;
 }
 
+/** The engine op the Offset section's join note is gated on: it arrived in
+ *  the release whose offset honours the join. */
+const DUPLICATE_OP = "duplicateElements";
+
+/** Does this engine carry `duplicateElements`? An unreadable vocabulary
+ *  answers FALSE: the note is only withheld on proof. */
+export async function supportsDuplicate(host: BundleHost): Promise<boolean> {
+  const vocab = await engineOpVocabulary(host);
+  return vocab?.has(DUPLICATE_OP) ?? false;
+}
+
 /** Does this engine carry the true-join topology ops (protocol ≥ v56)?
  *  An unreadable vocabulary answers TRUE — optimistic, because the
  *  attempt below detects an unknown op honestly and falls back then. */

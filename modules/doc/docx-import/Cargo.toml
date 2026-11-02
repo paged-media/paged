@@ -1,5 +1,6 @@
 [package]
 name = "docx-import"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,5 +12,5 @@ description = "paged.doc Tier-0 importer: an OPC package (via paged-ooxml) + the
 workspace = true
 
 [dependencies]
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
 docx-core.workspace = true

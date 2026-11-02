@@ -84,12 +84,10 @@ const TOOLS = [
   "media.paged.draw.tool.knife",
   "media.paged.draw.tool.scissorsAnyPoint",
   // WP6.1 — keyless, in the host's transform / pencil / shape flyouts.
-  "media.paged.draw.tool.reflect",
   "media.paged.draw.tool.reshape",
   "media.paged.draw.tool.shaper",
   "media.paged.draw.tool.pathEraser",
   "media.paged.draw.tool.join",
-  "media.paged.draw.tool.star",
   "media.paged.draw.tool.flare",
   // WP6.7 — keyless: the Liquify flyout, Puppet Warp in the host's Free
   // Transform flyout, the Perspective pair in a flyout of their own.
@@ -240,14 +238,10 @@ const COMMANDS = [
   "media.paged.draw.command.insertPolarGridOptions",
   "media.paged.draw.command.selectSameStrokeWeightOptions",
   "media.paged.draw.command.reversePathDirection",
-  // canary.14 — Dashes… / Reflect… raise their Path Options sections;
-  // Reflect / Transform again (journey/plugins/draw-transform), Create
-  // outlines (journey/plugins/draw-outlines), Dashes… (draw-dash).
-  "media.paged.draw.command.reflectOptions",
+  // canary.14 — Create outlines (journey/plugins/draw-outlines), Dashes…
+  // (draw-dash). Reflect / Transform again are the host's (journey/plugins/
+  // draw-transform).
   "media.paged.draw.command.createOutlines",
-  "media.paged.draw.command.reflectHorizontal",
-  "media.paged.draw.command.reflectVertical",
-  "media.paged.draw.command.transformAgain",
   // G4 — the tool-only cuts as commands, the width profile as data, and
   // the update of the recipes a changed source feeds.
   "media.paged.draw.command.knife",
@@ -257,13 +251,11 @@ const COMMANDS = [
   "media.paged.draw.command.updateLinkedRecipes",
   // WP6.1 (tools' commands, Select same, Global Edit), WP6.6 (Re-trace,
   // Image Trace options) and WP6.5 (Recolor Artwork, the Color Guide).
-  "media.paged.draw.command.insertStarOptions",
   "media.paged.draw.command.insertFlareOptions",
   "media.paged.draw.command.joinScrub",
   "media.paged.draw.command.pathErase",
   "media.paged.draw.command.reshapeAt",
   "media.paged.draw.command.shaperStroke",
-  "media.paged.draw.command.insertStar",
   "media.paged.draw.command.insertFlare",
   "media.paged.draw.command.retraceImage",
   "media.paged.draw.command.imageTraceOptions",
@@ -352,12 +344,10 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.repeat": "repeat",
   "media.paged.draw.tool.knife": "scissors",
   "media.paged.draw.tool.scissorsAnyPoint": "scissors",
-  "media.paged.draw.tool.reflect": "transform",
   "media.paged.draw.tool.reshape": "transform",
   "media.paged.draw.tool.shaper": "pencil",
   "media.paged.draw.tool.pathEraser": "pencil",
   "media.paged.draw.tool.join": "pencil",
-  "media.paged.draw.tool.star": "shape",
   "media.paged.draw.tool.flare": "shape",
   "media.paged.draw.tool.warp": "liquify",
   "media.paged.draw.tool.twirl": "liquify",
@@ -677,7 +667,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 43 registered.
+    // TOOLS — all 41 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -736,14 +726,14 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(43);
+    expect(TOOLS).toHaveLength(41);
     expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(144);
+    expect(COMMANDS).toHaveLength(138);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 43 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 41 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);

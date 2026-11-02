@@ -105,15 +105,10 @@ import {
 } from "./select-same";
 import {
   FLARE_PARAM_DEFAULTS,
-  STAR_PARAM_DEFAULTS,
   applyInsertFlare,
-  applyInsertStar,
   flareParamsFrom,
-  starParamsFrom,
   type FlareParams,
-  type StarParams,
 } from "./star-flare";
-import { applyReflect } from "./transform";
 import {
   RASTERIZE_DEFAULTS,
   applyRasterize,
@@ -131,12 +126,10 @@ const M = defineMessages("draw.pathOptions", {
   offset: "Offset path",
   simplify: "Simplify",
   outlineStroke: "Outline stroke",
-  reflect: "Reflect",
   arc: "Insert arc",
   spiral: "Insert spiral",
   rectGrid: "Insert rectangular grid",
   polarGrid: "Insert polar grid",
-  star: "Insert star",
   flare: "Insert flare",
   selectSameWeight: "Select same stroke weight",
   widthProfile: "Width profile",
@@ -153,12 +146,10 @@ export const PATH_OPTION_SECTIONS = [
   "offset",
   "simplify",
   "outlineStroke",
-  "reflect",
   "arc",
   "spiral",
   "rectGrid",
   "polarGrid",
-  "star",
   "flare",
   "selectSameWeight",
   "widthProfile",
@@ -172,12 +163,10 @@ export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
   offset: M.offset,
   simplify: M.simplify,
   outlineStroke: M.outlineStroke,
-  reflect: M.reflect,
   arc: M.arc,
   spiral: M.spiral,
   rectGrid: M.rectGrid,
   polarGrid: M.polarGrid,
-  star: M.star,
   flare: M.flare,
   selectSameWeight: M.selectSameWeight,
   widthProfile: M.widthProfile,
@@ -190,7 +179,6 @@ export const SELECTION_SECTIONS: ReadonlySet<PathOptionSection> = new Set([
   "offset",
   "simplify",
   "outlineStroke",
-  "reflect",
   "selectSameWeight",
   "widthProfile",
   "rasterize",
@@ -239,8 +227,7 @@ export interface OffsetOptions {
  *  outward corner (core `offset_closed_path` took `_join` / `_miter_limit`).
  *  0.65.0 honours both — `test/oracle/offset-path.spec.ts` against
  *  Illustrator — and the same release added `duplicateElements`, which is
- *  how the panel tells the two apart (one vocabulary probe, shared with
- *  Reflect ▸ Copy). */
+ *  how the panel tells the two apart (one vocabulary probe). */
 export const OFFSET_JOIN_NOTE = M.offsetJoinNote;
 
 export interface SimplifyOptions {
@@ -266,27 +253,6 @@ export interface OutlineStrokeOptions {
   miterLimit: number;
 }
 
-/** REFLECT — the mirror axis' angle (degrees from +x, y down: 90 flips
- *  left ↔ right, 0 top ↔ bottom) and whether a COPY is reflected
- *  (`commands/transform.ts` — needs the engine's `duplicateElements`). */
-export interface ReflectOptions {
-  angleDeg: number;
-  copy: boolean;
-  /** Reflect about the point (`x`, `y`, page pt) instead of the
-   *  selection's centre — what the Reflect tool's Alt+click fills in. */
-  aboutPoint: boolean;
-  x: number;
-  y: number;
-}
-
-/** The page-space pivot a Reflect section names, or undefined for the
- *  selection's centre. */
-export function reflectPivotOf(
-  o: ReflectOptions,
-): [number, number] | undefined {
-  return o.aboutPoint ? [o.x, o.y] : undefined;
-}
-
 /** WIDTH PROFILE — a three-stop variable width (start, middle, end; full
  *  stroke widths in pt, spread evenly along the path by arc length) that
  *  replaces each selected open path with its outline: the Width tool's
@@ -302,12 +268,10 @@ export interface PathOptions {
   offset: OffsetOptions;
   simplify: SimplifyOptions;
   outlineStroke: OutlineStrokeOptions;
-  reflect: ReflectOptions;
   arc: ArcParams;
   spiral: SpiralParams;
   rectGrid: RectGridParams;
   polarGrid: PolarGridParams;
-  star: StarParams;
   flare: FlareParams;
   selectSameWeight: SelectSameWeightOptions;
   widthProfile: WidthProfileOptions;
@@ -336,12 +300,10 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
     overrideMiterLimit: false,
     miterLimit: DEFAULT_MITER_LIMIT,
   },
-  reflect: { angleDeg: 90, copy: false, aboutPoint: false, x: 0, y: 0 },
   arc: ARC_PARAM_DEFAULTS,
   spiral: SPIRAL_PARAM_DEFAULTS,
   rectGrid: RECT_GRID_PARAM_DEFAULTS,
   polarGrid: POLAR_GRID_PARAM_DEFAULTS,
-  star: STAR_PARAM_DEFAULTS,
   flare: FLARE_PARAM_DEFAULTS,
   selectSameWeight: { tolerance: 0.5 },
   // A stroke that swells to 6 pt in the middle and tapers at both ends.
@@ -413,18 +375,10 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
       ),
       miterLimit: num(outline?.miterLimit, d.outlineStroke.miterLimit),
     },
-    reflect: {
-      angleDeg: num(loose(r?.reflect)?.angleDeg, d.reflect.angleDeg),
-      copy: bool(loose(r?.reflect)?.copy, d.reflect.copy),
-      aboutPoint: bool(loose(r?.reflect)?.aboutPoint, d.reflect.aboutPoint),
-      x: num(loose(r?.reflect)?.x, d.reflect.x),
-      y: num(loose(r?.reflect)?.y, d.reflect.y),
-    },
     arc: arcParamsFrom(loose(r?.arc)),
     spiral: spiralParamsFrom(loose(r?.spiral)),
     rectGrid: rectGridParamsFrom(loose(r?.rectGrid)),
     polarGrid: polarGridParamsFrom(loose(r?.polarGrid)),
-    star: starParamsFrom(loose(r?.star)),
     flare: flareParamsFrom(loose(r?.flare)),
     selectSameWeight: {
       tolerance: Math.min(
@@ -547,11 +501,7 @@ export function lastUsedPayload(
   host: BundleHost,
   section: Exclude<
     PathOptionSection,
-    | "outlineStroke"
-    | "selectSameWeight"
-    | "reflect"
-    | "widthProfile"
-    | "rasterize"
+    "outlineStroke" | "selectSameWeight" | "widthProfile" | "rasterize"
   >,
 ): Record<string, unknown> | undefined {
   if (!hasLastUsed(host, section)) return undefined;
@@ -569,8 +519,6 @@ export function lastUsedPayload(
       return { ...all.rectGrid };
     case "polarGrid":
       return { ...all.polarGrid };
-    case "star":
-      return { ...all.star };
     case "flare":
       return { ...all.flare };
   }
@@ -599,14 +547,6 @@ export async function applyPathOptions<S extends PathOptionSection>(
     case "outlineStroke":
       await applyOutlineStroke(host, outlineStrokePayloadOf(all.outlineStroke));
       return;
-    case "reflect":
-      await applyReflect(
-        host,
-        all.reflect.angleDeg,
-        all.reflect.copy,
-        reflectPivotOf(all.reflect),
-      );
-      return;
     case "arc":
       await applyInsertArc(host, { ...all.arc });
       return;
@@ -618,9 +558,6 @@ export async function applyPathOptions<S extends PathOptionSection>(
       return;
     case "polarGrid":
       await applyInsertPolarGrid(host, { ...all.polarGrid });
-      return;
-    case "star":
-      await applyInsertStar(host, { ...all.star });
       return;
     case "flare":
       await applyInsertFlare(host, { ...all.flare });
@@ -654,11 +591,6 @@ async function applyLastUsed(
       // Bare Outline Stroke = the element's own stroke (path-ops.ts).
       await applyOutlineStroke(host);
       return;
-    case "reflect": {
-      const r = lastUsedPathOptions(host).reflect;
-      await applyReflect(host, r.angleDeg, r.copy, reflectPivotOf(r));
-      return;
-    }
     case "arc":
       await applyInsertArc(host, lastUsedPayload(host, "arc"));
       return;
@@ -670,9 +602,6 @@ async function applyLastUsed(
       return;
     case "polarGrid":
       await applyInsertPolarGrid(host, lastUsedPayload(host, "polarGrid"));
-      return;
-    case "star":
-      await applyInsertStar(host, lastUsedPayload(host, "star"));
       return;
     case "flare":
       await applyInsertFlare(host, lastUsedPayload(host, "flare"));
@@ -760,12 +689,10 @@ export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   offset: `${C}.offsetPathOptions`,
   simplify: `${C}.simplifyPathOptions`,
   outlineStroke: `${C}.outlineStrokeOptions`,
-  reflect: `${C}.reflectOptions`,
   arc: `${C}.insertArcOptions`,
   spiral: `${C}.insertSpiralOptions`,
   rectGrid: `${C}.insertRectGridOptions`,
   polarGrid: `${C}.insertPolarGridOptions`,
-  star: `${C}.insertStarOptions`,
   flare: `${C}.insertFlareOptions`,
   selectSameWeight: `${C}.selectSameStrokeWeightOptions`,
   widthProfile: WIDTH_PROFILE_COMMAND_ID,

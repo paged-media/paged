@@ -493,6 +493,15 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+dependencies = [
+ "bit-vec 0.8.0",
+]
+
+[[package]]
+name = "bit-set"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
@@ -514,6 +523,12 @@ name = "bit-vec"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
 name = "bit-vec"
@@ -1533,6 +1548,115 @@ dependencies = [
 ]
 
 [[package]]
+name = "docx-conformance"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
+ "docx-export",
+ "docx-import",
+ "docx-js",
+ "docx-lower",
+ "docx-skeleton",
+ "flate2",
+ "paged-ooxml",
+ "paged-test-resources",
+ "serde_json",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "docx-core"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
+name = "docx-export"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
+ "docx-lower",
+ "flate2",
+ "paged-ooxml",
+ "quick-xml 0.41.0",
+ "serde",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "docx-import"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
+ "paged-ooxml",
+]
+
+[[package]]
+name = "docx-js"
+version = "0.0.0"
+dependencies = [
+ "console_error_panic_hook",
+ "docx-core",
+ "docx-export",
+ "docx-import",
+ "docx-lower",
+ "docx-odt",
+ "docx-rtf",
+ "docx-skeleton",
+ "paged-ooxml",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "docx-lower"
+version = "0.0.0"
+dependencies = [
+ "base64",
+ "dml-native",
+ "docx-core",
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
+name = "docx-odt"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
+ "flate2",
+ "paged-ooxml",
+ "quick-xml 0.41.0",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "docx-rtf"
+version = "0.0.0"
+dependencies = [
+ "docx-core",
+]
+
+[[package]]
+name = "docx-skeleton"
+version = "0.0.0"
+dependencies = [
+ "docx-conformance",
+ "docx-core",
+ "docx-import",
+ "docx-lower",
+ "flate2",
+ "paged-model",
+ "paged-scene",
+ "paged-store",
+ "zip 9.0.5",
+]
+
+[[package]]
 name = "draw-dxf"
 version = "0.0.0"
 dependencies = [
@@ -1730,6 +1854,17 @@ name = "fallible_collections"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dab93c7205280c4785c44517fe84d99751b81f6deb8450cb196da6be88e332bb"
+
+[[package]]
+name = "fancy-regex"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72cf461f865c862bb7dc573f643dd6a2b6842f7c30b07882b56bd148cc2761b8"
+dependencies = [
+ "bit-set 0.8.0",
+ "regex-automata",
+ "regex-syntax",
+]
 
 [[package]]
 name = "fast-float2"
@@ -5089,6 +5224,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
+name = "plotters"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aeb6f403d7a4911efb1e33402027fc44f29b5bf6def3effcc22d7bb75f2b747"
+dependencies = [
+ "num-traits 0.2.19",
+ "plotters-backend",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "plotters-backend"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df42e13c12958a16b3f7f4386b9ab1f3e7933914ecea48da7139435263a4172a"
+
+[[package]]
 name = "png"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5173,6 +5326,69 @@ name = "powerfmt"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a6394b9e965e73d0a289ee54f589087e2c676aedf60885baf52c76b771e4958"
+
+[[package]]
+name = "pptx-core"
+version = "0.0.0"
+dependencies = [
+ "dml-chart",
+ "dml-geom",
+ "flate2",
+ "image-webp",
+ "paged-ooxml",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "pptx-export"
+version = "0.0.0"
+dependencies = [
+ "base64",
+ "dml-geom",
+ "dml-native",
+ "paged-model",
+ "paged-ooxml",
+ "paged-scene",
+ "paged-store",
+ "paged-test-resources",
+ "pptx-core",
+ "pptx-import",
+ "quick-xml 0.41.0",
+ "serde",
+ "serde_json",
+ "slide-native",
+ "slide-output",
+ "slide-resolve",
+ "slide-sheet",
+]
+
+[[package]]
+name = "pptx-fonts"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "skrifa 0.48.0",
+ "thiserror",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "pptx-import"
+version = "0.0.0"
+dependencies = [
+ "dml-chart",
+ "dml-geom",
+ "flate2",
+ "paged-ooxml",
+ "paged-test-resources",
+ "pptx-core",
+ "pptx-fonts",
+ "quick-xml 0.41.0",
+ "serde_json",
+ "thiserror",
+ "zip 9.0.5",
+]
 
 [[package]]
 name = "ppv-lite86"
@@ -5760,6 +5976,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust_decimal"
+version = "1.43.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7653272e75dcac41dc199fbea6f5797633994fafd339943c06c9af16bf29cd3a"
+dependencies = [
+ "arrayvec",
+ "borsh",
+ "bytes",
+ "num-traits 0.2.19",
+ "rand 0.8.8",
+ "rand 0.9.5",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6097,6 +6330,184 @@ dependencies = [
 ]
 
 [[package]]
+name = "sheet-calc"
+version = "0.0.0"
+dependencies = [
+ "criterion",
+ "proptest",
+ "rustc-hash 2.1.3",
+ "sheet-calc",
+ "sheet-core",
+ "sheet-fn",
+ "sheet-format",
+ "sheet-parser",
+ "smallvec",
+]
+
+[[package]]
+name = "sheet-chart"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "dml-native",
+ "paged-ooxml",
+ "plotters",
+ "plotters-backend",
+ "serde",
+ "serde_json",
+ "sheet-core",
+ "sheet-fn",
+ "sheet-format",
+]
+
+[[package]]
+name = "sheet-conformance"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "paged-test-resources",
+ "proptest",
+ "serde",
+ "serde_json",
+ "serde_norway",
+ "sheet-calc",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-fn",
+ "sheet-format",
+ "sheet-grid",
+ "sheet-js",
+ "sheet-lower",
+ "sheet-parser",
+ "sheet-xlsx",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "sheet-core"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "serde",
+ "serde_norway",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "sheet-fn"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "fancy-regex",
+ "paged-fmt",
+ "regex-automata",
+ "regex-syntax",
+ "rust_decimal",
+ "serde",
+ "serde_norway",
+ "sheet-core",
+ "sheet-format",
+]
+
+[[package]]
+name = "sheet-format"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "dml-native",
+ "paged-fmt",
+ "paged-ooxml",
+ "proptest",
+ "rustc-hash 2.1.3",
+ "ryu",
+ "sheet-core",
+ "thiserror",
+]
+
+[[package]]
+name = "sheet-grid"
+version = "0.0.0"
+dependencies = [
+ "criterion",
+ "proptest",
+ "serde",
+ "serde_json",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-format",
+ "sheet-lower",
+]
+
+[[package]]
+name = "sheet-js"
+version = "0.0.0"
+dependencies = [
+ "console_error_panic_hook",
+ "criterion",
+ "dml-native",
+ "paged-fmt",
+ "paged-ooxml",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "sheet-calc",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-fn",
+ "sheet-format",
+ "sheet-grid",
+ "sheet-lower",
+ "sheet-parser",
+ "sheet-xlsx",
+ "wasm-bindgen",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "sheet-lower"
+version = "0.0.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "sheet-core",
+ "sheet-format",
+]
+
+[[package]]
+name = "sheet-parser"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "proptest",
+ "sheet-core",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "sheet-xlsx"
+version = "0.0.0"
+dependencies = [
+ "base64",
+ "compact_str",
+ "dml-chart",
+ "dml-native",
+ "flate2",
+ "paged-ooxml",
+ "quick-xml 0.41.0",
+ "sha2",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-format",
+ "sheet-lower",
+ "sheet-parser",
+ "thiserror",
+ "zip 9.0.5",
+]
+
+[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6203,6 +6614,119 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "slide-anim"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "slide-chart"
+version = "0.0.0"
+dependencies = [
+ "pptx-core",
+ "serde",
+ "sheet-core",
+ "sheet-format",
+]
+
+[[package]]
+name = "slide-js"
+version = "0.0.0"
+dependencies = [
+ "base64",
+ "paged-ooxml",
+ "pptx-core",
+ "pptx-export",
+ "pptx-import",
+ "serde",
+ "serde_json",
+ "slide-anim",
+ "slide-chart",
+ "slide-native",
+ "slide-output",
+ "slide-resolve",
+ "slide-sheet",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "slide-native"
+version = "0.0.0"
+dependencies = [
+ "dml-geom",
+ "dml-native",
+ "flate2",
+ "paged-model",
+ "paged-ooxml",
+ "paged-scene",
+ "paged-store",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+ "slide-resolve",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "slide-output"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "serde",
+]
+
+[[package]]
+name = "slide-resolve"
+version = "0.0.0"
+dependencies = [
+ "dml-geom",
+ "paged-ooxml",
+ "paged-test-resources",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+ "slide-chart",
+]
+
+[[package]]
+name = "slide-shaders"
+version = "0.0.0"
+dependencies = [
+ "naga",
+ "paged-ooxml",
+ "pptx-core",
+ "serde_json",
+]
+
+[[package]]
+name = "slide-sheet"
+version = "0.0.0"
+dependencies = [
+ "dml-chart",
+ "paged-ooxml",
+ "paged-test-resources",
+ "pptx-core",
+ "pptx-import",
+ "serde",
+ "serde_json",
+ "sheet-calc",
+ "sheet-chart",
+ "sheet-core",
+ "sheet-format",
+ "sheet-parser",
+ "sheet-xlsx",
+ "slide-chart",
+ "slide-resolve",
+]
 
 [[package]]
 name = "slotmap"
