@@ -168,9 +168,11 @@ export async function setGrowRules(
 }
 
 /** Doc ADR 625 — open a document whose body the engine's model builds
- *  natively (slice 2). Off by default: the old pour stays the path until the
- *  slices are proven on the real engine. */
-export const NATIVE_BODY = { enabled: false };
+ *  natively (the prefilled skeleton) when the whole document allows it; the
+ *  old pour opens the rest. On since the real-engine specs, the whole
+ *  headless suite and the conformance fixtures held equal on both paths
+ *  (set `enabled = false` to open every document by the old pour). */
+export const NATIVE_BODY = { enabled: true };
 
 /** True when this host can open a native document (the standalone path). */
 export function canOpenStandalone(host: BundleHost): boolean {

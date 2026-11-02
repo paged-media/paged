@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented, with 4 in part (2 to 5 behind a flag, off); 4b, 6 and 7 and the styles remain; the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented, with 4 in part; the prefilled open is ON (2026-11-02); 4b, 6 and 7 and the removal of the IR remain; the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
@@ -151,6 +151,18 @@ raised from 8 MiB to 14 MiB (14,680,064); the 100 MB app limit of `build-wasm.sh
 price buys every remaining slice as the engine's own operations (floats, comments, changes, notes)
 rather than ports of them, and the removal of the TS pour and the IR at the end, which is where
 size is given back (bundle code) if not in the wasm.
+
+### The flag is on
+
+`NATIVE_BODY.enabled` is true. What held both paths equal before turning it on, on the final
+commit: the Rust comparison over the conformance fixtures (resolved properties, text, tables,
+pictures, fields, links, drop caps), the real-engine spec `native-body.spec.ts` (text, page
+count, per-paragraph geometry, no invented style, unedited export equal to the old pour's, on
+seven fixtures), and the whole headless suite run on natively opened bodies where the body allows it
+(editing, review, save-back, structure, object model: green). A document with anything the builder
+defers (floating pictures, picture looks, text boxes, comments, tracked changes, notes, bookmarks,
+tables of contents, nested tables, breaks inside a paragraph, exact-height rows, headers and
+footers are poured but do not block) opens by the old pour, whole.
 
 ### Save-back
 

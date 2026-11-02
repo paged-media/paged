@@ -62,9 +62,9 @@ export function requireDocx(suite: string): void {
   }
 }
 
-// Doc ADR 625 — run the whole suite on natively opened bodies:
-// PAGED_DOC_NATIVE=1 turns the prefilled skeleton on where the body allows it.
-NATIVE_BODY.enabled = process.env.PAGED_DOC_NATIVE === "1";
+// Doc ADR 625 — the suite runs on natively opened bodies where the body
+// allows it; PAGED_DOC_NATIVE=0 runs it on the old pour whole.
+NATIVE_BODY.enabled = process.env.PAGED_DOC_NATIVE !== "0";
 
 export const fixture = (name: string): Uint8Array =>
   new Uint8Array(readFileSync(new URL(`../fixtures/${name}`, import.meta.url)));
