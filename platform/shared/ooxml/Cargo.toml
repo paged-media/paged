@@ -11,8 +11,6 @@ description = "The shared ECMA-376 (OOXML) foundation of paged.doc, paged.slide 
 # is not inside any module's Cargo workspace. doc, slide and sheet take it as
 # a path dependency (docs/adr/PM-0005); Cargo reads their workspace's
 # profiles and lockfile, never this table.
-[workspace]
-
 [features]
 default = []
 # The ooxmlsdk typed part DOM (`dom`). paged.doc reads WordprocessingML

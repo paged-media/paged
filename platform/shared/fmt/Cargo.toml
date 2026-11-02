@@ -15,4 +15,3 @@ description = "Shared formatting facts of the built-ins: the proleptic-Gregorian
 # A workspace of its own: this directory is not inside any other Cargo
 # workspace, and the consumers ignore this table (cargo reads only the
 # root workspace's).
-[workspace]

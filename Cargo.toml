@@ -1,0 +1,234 @@
+[workspace]
+resolver = "2"
+members = [
+    "engine/core/crates/paged-model",
+    "engine/core/crates/paged-flow",
+    "engine/core/crates/paged-composition",
+    "engine/core/crates/paged-composition-render",
+    "engine/core/crates/paged-scene",
+    "engine/core/crates/paged-text",
+    "engine/core/crates/paged-color",
+    "engine/core/crates/paged-pixel",
+    "engine/core/crates/paged-warp",
+    "engine/core/crates/paged-geom",
+    "engine/core/crates/paged-vector-fx",
+    "engine/core/crates/paged-kernels",
+    "engine/core/crates/paged-psd",
+    "engine/core/crates/paged-psd-fx",
+    "engine/core/crates/paged-resample",
+    "engine/core/crates/paged-raster",
+    "engine/core/crates/paged-sniff",
+    "engine/core/crates/paged-svg",
+    "engine/core/crates/paged-ps",
+    "engine/core/crates/paged-blend",
+    "engine/core/crates/paged-compose",
+    "engine/core/crates/paged-gpu",
+    "engine/core/crates/paged-renderer",
+    "engine/core/crates/paged-fidelity",
+    "engine/core/crates/paged-sdk",
+    "engine/core/crates/paged-mutate",
+    "engine/core/crates/paged-template",
+    "engine/core/crates/paged-introspect",
+    "engine/core/crates/paged-introspect-wasm",
+    "engine/core/crates/paged-gen",
+    "engine/core/crates/paged-store",
+    "engine/core/crates/paged-repo",
+    "engine/core/crates/paged-repo-wasm",
+    "engine/core/crates/paged-mcp",
+    "engine/core/crates/paged-wire",
+    "engine/core/crates/paged-canvas",
+    "engine/core/crates/paged-canvas-wasm",
+    "engine/core/crates/paged-export-pdf",
+    "engine/core/crates/paged-script",
+    "engine/core/crates/paged-run",
+    "engine/core/crates/paged-cli",
+    "engine/core/crates/paged-perf",
+    "engine/core/crates/idml-import",
+    "engine/core/crates/idml-export",
+    "engine/core/crates/idml-coverage",
+    "engine/core/crates/paged-data-core",
+    "engine/core/crates/paged-data-expr",
+    "engine/core/crates/paged-data-query",
+    "engine/core/crates/paged-data-bind",
+    "engine/core/crates/paged-data-lower",
+    "engine/core/crates/paged-data-barcode",
+    "engine/core/crates/paged-data-dataset",
+    "engine/core/crates/paged-data-sources",
+    "engine/core/crates/paged-data-store",
+    "engine/core/crates/paged-data-xlsx",
+    "engine/core/crates/paged-data-automation",
+    "engine/core/crates/paged-data-session",
+    "engine/core/crates/paged-action",
+    "modules/data/data-js",
+    "modules/data/data-cli",
+    "modules/data/data-script",
+    "modules/data/data-conformance",
+    "modules/doc/docx-core",
+    "modules/doc/docx-import",
+    "modules/doc/docx-lower",
+    "modules/doc/docx-export",
+    "modules/doc/docx-rtf",
+    "modules/doc/docx-odt",
+    "modules/doc/docx-js",
+    "modules/doc/docx-skeleton",
+    "modules/doc/docx-conformance",
+    "modules/draw/crates/draw-trace",
+    "modules/draw/crates/draw-dxf",
+    "modules/draw/crates/trace-js",
+    "modules/image/image-kernels",
+    "modules/image/image-gpu",
+    "modules/image/image-pipeline",
+    "modules/image/image-graph",
+    "modules/image/image-cms",
+    "modules/image/image-codecs",
+    "modules/image/image-js",
+    "modules/image/image-conformance",
+    "modules/publish/crates/pdf-import",
+    "modules/sheet/sheet-core",
+    "modules/sheet/sheet-parser",
+    "modules/sheet/sheet-calc",
+    "modules/sheet/sheet-fn",
+    "modules/sheet/sheet-format",
+    "modules/sheet/sheet-xlsx",
+    "modules/sheet/sheet-lower",
+    "modules/sheet/sheet-grid",
+    "modules/sheet/sheet-chart",
+    "modules/sheet/sheet-js",
+    "modules/sheet/sheet-conformance",
+    "modules/slide/pptx-core",
+    "modules/slide/pptx-import",
+    "modules/slide/pptx-fonts",
+    "modules/slide/slide-chart",
+    "modules/slide/slide-sheet",
+    "modules/slide/slide-resolve",
+    "modules/slide/slide-native",
+    "modules/slide/pptx-export",
+    "modules/slide/slide-js",
+    "modules/slide/slide-shaders",
+    "modules/slide/slide-anim",
+    "modules/slide/slide-output",
+    "platform/shared/dml-chart",
+    "platform/shared/dml-geom",
+    "platform/shared/dml-native",
+    "platform/shared/fmt",
+    "platform/shared/ooxml",
+    "platform/shared/test-resources",
+]
+exclude = ["spikes", "vendor", "modules/web", "apps"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.99"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+needless_pass_by_value = "allow"
+too_many_arguments = "allow"
+
+[workspace.dependencies]
+anyhow = "1"
+avif-parse = "2.1"
+base64 = "0.23"
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
+bytes = "1"
+compact_str = { version = "0.10", features = ["serde"] }
+console_error_panic_hook = "0.1"
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+dml-chart = { path = "platform/shared/dml-chart", features = ["serde"] }
+dml-native = { path = "platform/shared/dml-native" }
+docx-core = { path = "modules/doc/docx-core" }
+docx-export = { path = "modules/doc/docx-export" }
+docx-import = { path = "modules/doc/docx-import" }
+docx-js = { path = "modules/doc/docx-js" }
+docx-lower = { path = "modules/doc/docx-lower" }
+docx-odt = { path = "modules/doc/docx-odt" }
+docx-rtf = { path = "modules/doc/docx-rtf" }
+docx-skeleton = { path = "modules/doc/docx-skeleton" }
+dxf = "0.6.2"
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+half = { version = "2", features = ["bytemuck"] }
+hayro-interpret = { version = "0.8", default-features = false }
+idml-import = { path = "engine/core/crates/idml-import" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "gif", "bmp"] }
+image-core = { path = "engine/core/crates/paged-pixel", package = "paged-pixel" }
+image-psd = { path = "engine/core/crates/paged-psd", package = "paged-psd" }
+image-webp = "0.2"
+js-sys = "0.3"
+jxl-oxide = { version = "0.12", default-features = false }
+kurbo = "0.13"
+moxcms = "0.8"
+naga = { version = "30", features = ["wgsl-in"] }
+paged-blend = { path = "engine/core/crates/paged-blend" }
+paged-color = { path = "engine/core/crates/paged-color" }
+paged-kernels = { path = "engine/core/crates/paged-kernels" }
+paged-model = { path = "engine/core/crates/paged-model" }
+paged-ooxml = { path = "platform/shared/ooxml", features = ["deflate-flate2", "dom", "serde"] }
+paged-raster = { path = "engine/core/crates/paged-raster" }
+paged-resample = { path = "engine/core/crates/paged-resample" }
+paged-scene = { path = "engine/core/crates/paged-scene" }
+paged-store = { path = "engine/core/crates/paged-store" }
+paged-svg = { path = "engine/core/crates/paged-svg", default-features = false }
+paged-test-resources = { path = "platform/shared/test-resources" }
+paged-warp = { path = "engine/core/crates/paged-warp" }
+plotters = { version = "0.3", default-features = false, features = ["histogram", "line_series", "area_series", "point_series"] }
+plotters-backend = { version = "0.3", default-features = false }
+png = "0.18"
+pollster = "1"
+pptx-core = { path = "modules/slide/pptx-core" }
+pptx-export = { path = "modules/slide/pptx-export" }
+pptx-fonts = { path = "modules/slide/pptx-fonts" }
+pptx-import = { path = "modules/slide/pptx-import" }
+proptest = "1"
+quick-xml = { version = "0.41", features = ["serialize"] }
+rav1d = { package = "sqzer-rav1d", version = "0.1", default-features = false, features = ["bitdepth_8", "bitdepth_16"] }
+ravif = { version = "0.13", default-features = false }
+rustc-hash = "2"
+ryu = "1"
+schemars = "1.2.3"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+serde_json = { version = "1", features = ["float_roundtrip"] }
+serde_norway = "0.9"
+serde_yaml = "0.9"
+slide-anim = { path = "modules/slide/slide-anim" }
+slide-chart = { path = "modules/slide/slide-chart" }
+slide-geom = { path = "platform/shared/dml-geom", package = "dml-geom" }
+slide-js = { path = "modules/slide/slide-js" }
+slide-native = { path = "modules/slide/slide-native" }
+slide-output = { path = "modules/slide/slide-output" }
+slide-resolve = { path = "modules/slide/slide-resolve" }
+slide-sheet = { path = "modules/slide/slide-sheet" }
+smallvec = { version = "1", features = ["serde"] }
+thiserror = "2"
+tiff = { version = "0.11", default-features = false, features = ["deflate", "fax", "jpeg", "lzw"] }
+tracing = "0.1"
+tsify-next = { version = "0.5", default-features = false, features = ["js"] }
+visioncortex = "0.9.1"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3"
+wgpu = "30.0.1"
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
+zune-core = "0.5"
+zune-jpeg = "0.5"
+zune-jpegxl = { version = "0.5", default-features = false, features = ["std"] }
+zune-png = "0.5"
+
+[patch.crates-io]
+flo_curves = { git = "https://github.com/drietsch/flo_curves", rev = "b351df8" }
+vello_shaders = { path = "engine/core/vendor/vello_shaders" }
+
+[profile.bench]
+debug = 1
+
+[profile.wasm-release]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+

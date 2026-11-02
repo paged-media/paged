@@ -9,8 +9,6 @@ description = "The DrawingML chart model and reader shared by paged.sheet and pa
 
 # A workspace of its own, as platform/shared/ooxml is: sheet and slide take
 # it as a path dependency (docs/adr/PM-0005).
-[workspace]
-
 [features]
 default = []
 # serde derives on the model (paged.slide serialises its deck IR).
