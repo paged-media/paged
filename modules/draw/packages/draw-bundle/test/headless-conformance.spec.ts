@@ -96,7 +96,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.paintbrush",
         "media.paged.draw.tool.blobBrush",
         "media.paged.draw.tool.eraserBrush",
-        "media.paged.draw.tool.eyedropper",
         "media.paged.draw.tool.width",
         "media.paged.draw.tool.lassoSelect",
         "media.paged.draw.tool.livePaintBucket",
@@ -156,13 +155,12 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Three anchor editors + the pro set (Curvature,
         // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
         // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
-        // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
+        // wave-2 pair (Width, Lasso Select; the Eyedropper is the host's) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
         // (C-29) + the Repeat steering widget (§12.4, the one tool
         // with no shortcut — see tools.ts) + the Knife and Scissors
-        // at any point (keyless too) — twenty tools (the Pencil is the
+        // at any point (keyless too) — nineteen tools (the Pencil is the
         // host's, ADR 359).
-        "tool",
         "tool",
         "tool",
         "tool",

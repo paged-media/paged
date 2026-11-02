@@ -1032,18 +1032,6 @@ export {
   type DxfExport,
 } from "./interchange-wasm";
 export { insertPathMutationsForShape, resolveTargetPage } from "./target-page";
-// Wave 2 — Eyedropper: the sample/apply pure halves + the module
-// sample state, exported for the conformance spec (the no-second-copy
-// rule).
-export {
-  createEyedropperHandler,
-  sampledStyleFrom,
-  applyStyleMutationFor,
-  getEyedropperSample,
-  clearEyedropperSample,
-  type SampledStyle,
-  type StyleApplyTarget,
-} from "./handlers/eyedropper";
 // Wave 2 — Width tool v0: the handler factory + the v0 profile
 // constants (the widths bake through the brush module's exact
 // outlineStrokeVariable builder above).

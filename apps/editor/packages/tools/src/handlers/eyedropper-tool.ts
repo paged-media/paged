@@ -16,9 +16,20 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// C-32 — the host Eyedropper: click a page → sample the COMPOSITED
-// pixel → that colour becomes the document's default fill, and the
-// fill of anything selected.
+// C-32 — the host Eyedropper, in two modes (the `mode` option, double-click
+// the slot):
+//
+//  · PIXEL (default): click a page → sample the COMPOSITED pixel → that
+//    colour becomes the document's default fill, and the fill of anything
+//    selected.
+//  · OBJECT: click an element → sample its typed PROPERTIES (fill colour and
+//    tint, stroke colour and weight, opacity) → write them onto the
+//    selection in ONE batch. Alt+click samples only (the sample is held for
+//    inspection). Nothing under the click is a no-op. paged.draw carried
+//    this as a tool of its own; it is this mode now (PM-0017), and the
+//    sampling and the write are `@paged-media/helpers`' (`sampled-style`).
+//    Each target is written only what its own snapshot exposes, because a
+//    graphic line refuses a fill.
 //
 // The ruling and why colour is host vocabulary are argued in
 // `eyedropper-sample.ts`; the arithmetic lives there too. This file is
@@ -61,6 +72,59 @@ import {
   type SwatchLike,
 } from "./eyedropper-sample";
 import { CLICK_DRAG_THRESHOLD_PX } from "./shared";
+import {
+  applySampledStyle,
+  sampledStyleFrom,
+  type SampledStyle,
+  type SampledTarget,
+} from "@paged-media/helpers";
+import type { ElementId } from "@paged-media/client";
+import type { ToolOptionField } from "@paged-media/shell";
+import { t } from "@paged-media/strings";
+
+import { EYEDROPPER_TOOL } from "../messages";
+
+export const EYEDROPPER_TOOL_ID = "paged.tool.eyedropper";
+
+export type EyedropperMode = "pixel" | "object";
+
+/** The tool's options: what a click samples. */
+export const EYEDROPPER_OPTION_FIELDS: ToolOptionField[] = [
+  {
+    kind: "select",
+    key: "mode",
+    get label() {
+      return t(EYEDROPPER_TOOL.mode);
+    },
+    options: [
+      {
+        value: "pixel",
+        get label() {
+          return t(EYEDROPPER_TOOL.pixel);
+        },
+      },
+      {
+        value: "object",
+        get label() {
+          return t(EYEDROPPER_TOOL.object);
+        },
+      },
+    ],
+  },
+];
+
+/** The mode the tool's settings hold (Pixel when unset or unknown). */
+export function eyedropperModeOf(paged: PagedEditor): EyedropperMode {
+  const raw = paged.toolSettings?.getValue(EYEDROPPER_TOOL_ID, "mode");
+  return raw === "object" ? "object" : "pixel";
+}
+
+// The last style an Alt+click sampled, held for inspection.
+let lastSample: SampledStyle | null = null;
+export const getEyedropperSample = (): SampledStyle | null => lastSample;
+export const clearEyedropperSample = (): void => {
+  lastSample = null;
+};
 
 /** Snapshot density for a sample. Independent of zoom on purpose — see
  *  the header. */
@@ -102,8 +166,60 @@ export function createEyedropperHandler(): GestureHandler {
   // the same swatch and one of them loses.
   let sampling = false;
 
+  /** OBJECT mode: the element under the click lends its properties to the
+   *  selection. */
+  const copyStyleAt = async (e: CanvasPointerEvent) => {
+    if (!paged || !e.pageId || !e.pagePoint) return;
+    const client = paged.client;
+    let source: ElementId | null = null;
+    try {
+      const reply = await client.send({
+        kind: "hitTest",
+        payload: { pageId: e.pageId, docPoint: e.pagePoint, filter: "any" },
+      });
+      if (reply.kind === "hitResult") source = reply.payload.element ?? null;
+    } catch {
+      source = null;
+    }
+    if (!source) return; // nothing under the click: the documented no-op
+    const style = sampledStyleFrom(await client.elementProperties(source));
+    if (!style) return;
+    lastSample = style;
+    if (e.modifiers.alt) return; // Alt+click samples only
+    // The selection, minus the source itself (rewriting it with its own
+    // values would only pad the undo).
+    const ids = paged.selection.elementSelection.filter(
+      (id) =>
+        !(
+          id.kind === source.kind &&
+          (id as { id: unknown }).id === (source as { id: unknown }).id
+        ),
+    );
+    const targets: SampledTarget<ElementId>[] = [];
+    for (const id of ids) {
+      const props = await client.elementProperties(id);
+      targets.push({
+        id,
+        supports: new Set(
+          (props?.entries ?? []).map((en: { path: string }) => en.path),
+        ),
+      });
+    }
+    const batch = applySampledStyle(targets, style);
+    if (batch) await client.mutate(batch as never);
+  };
+
   const sampleAt = async (e: CanvasPointerEvent) => {
     if (!paged || sampling) return;
+    if (eyedropperModeOf(paged) === "object") {
+      sampling = true;
+      try {
+        await copyStyleAt(e);
+      } finally {
+        sampling = false;
+      }
+      return;
+    }
     // Off-page: the pasteboard has nothing composited to sample.
     if (!e.pageId || !e.pagePoint) return;
     sampling = true;

@@ -31,6 +31,12 @@ export const MESH_TOOL = defineMessages("tools.mesh", {
   points: "{count, plural, one {# mesh point} other {# mesh points}}",
 });
 
+export const EYEDROPPER_TOOL = defineMessages("tools.eyedropper", {
+  mode: "Sample",
+  pixel: "Pixel colour",
+  object: "Object appearance",
+});
+
 export const GRADIENT_TOOL = defineMessages("tools.gradient", {
   mode: "Mode",
   linear: "Linear",

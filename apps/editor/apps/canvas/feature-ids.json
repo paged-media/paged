@@ -7,7 +7,7 @@
     "keybinding": 167,
     "menu": 645,
     "panel": 151,
-    "tool": 130
+    "tool": 129
   },
   "features": [
     {
@@ -9411,11 +9411,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.eyedropper",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.flare",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -10309,6 +10304,12 @@
     {
       "id": "menu:Draw/Stroke/Dashes…",
       "replacement": "menu:Object/Stroke/Dashes…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.eyedropper",
+      "replacement": "tool:paged.tool.eyedropper",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

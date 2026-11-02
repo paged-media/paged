@@ -54,7 +54,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.paintbrush",
       "media.paged.draw.tool.blobBrush",
       "media.paged.draw.tool.eraserBrush",
-      "media.paged.draw.tool.eyedropper",
       "media.paged.draw.tool.width",
       "media.paged.draw.tool.lassoSelect",
       // LIVE PAINT v0 — the bucket + the face-selection tool.

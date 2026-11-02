@@ -274,8 +274,8 @@ Eyedropper) and `k` (a dead Measure). The current global picture:
   So the free registers WERE exactly `shift+t`, `i`, `k` and `shift+z`.
   UPDATE 2026-10-04: `k` now belongs to the Live Paint Bucket, its
   canonical key; the host's working Eyedropper holds `i` and paged.image
-  took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
-  (`shift+d`) stay where they are. Free now: `shift+o` only; paged.image
+  took `shift+t`, so Type on a Path (`shift+h`) stays where it is (draw's Eyedropper, `shift+d`, is the host's
+  Object mode since 2026-11-02). Free now: `shift+o` only; paged.image
   has since taken `shift+z` for its raster type tool. UPDATE 2026-10-25:
   the host's Artboard tool (engine ADR 1011) took `shift+o`; no
   single-letter or shift register is free now.

@@ -1,4 +1,7 @@
 {
+  "tools.eyedropper.mode": "Aufnahme",
+  "tools.eyedropper.object": "Objektdarstellung",
+  "tools.eyedropper.pixel": "Pixelfarbe",
   "tools.gradient.freeformLines": "Freiform: Linien",
   "tools.gradient.freeformPoints": "Freiform: Punkte",
   "tools.gradient.linear": "Linear",

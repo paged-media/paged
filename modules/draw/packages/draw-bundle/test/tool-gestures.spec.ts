@@ -352,31 +352,6 @@ describe("paged.draw tools through the gesture DSL — paint and shape", () => {
     );
   });
 
-  it("Eyedropper: a click on a path copies its paint onto the selection, as one undo step; alt+click only samples", async () => {
-    covers("tool:media.paged.draw.tool.eyedropper");
-    const { r, g } = rig([B]);
-    await arm(r, g, `${T}.eyedropper`);
-    await g.click([150, 150], { mods: ["alt"] }).settle();
-    expect(r.sent()).toEqual([]);
-    const before = r.picture();
-    await g.click([150, 150]).settle();
-    expect(paths(r.leaves())).toEqual([
-      "frameFillColor",
-      "frameStrokeColor",
-      "frameStrokeWeight",
-    ]);
-    expect(
-      r
-        .leaves()
-        .every(
-          (m) =>
-            (m as { args: { elementId: ElementId } }).args.elementId.id ===
-            "ub",
-        ),
-    ).toBe(true);
-    await oneUndoStep(r, before);
-  });
-
   it("Shape Builder: a drag across the overlapping pair unites them, as one undo step; Escape commits nothing", async () => {
     covers("tool:media.paged.draw.tool.shapeBuilder");
     const { r, g } = rig([A, B]);

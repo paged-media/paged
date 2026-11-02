@@ -148,7 +148,6 @@ describe("paged.draw tools through the gesture DSL", () => {
     "paintbrush",
     "blobBrush",
     "eraserBrush",
-    "eyedropper",
     "width",
     "lassoSelect",
     "livePaintBucket",

@@ -193,11 +193,14 @@ Status (draw items, one line each; updated as they land):
   Merging means adding those three things to the host wheel.
 - Measure: KEEP. The host has no Measure tool (`built-in-tools.ts` records its retirement in
   favour of draw's); nothing to delete until the host builds one.
-- Copy appearance: KEEP. The host eyedropper samples one composited pixel into a swatch and
-  fills with it; draw's copies a whole appearance (fills, strokes, effects). Different feature.
-
-### Reach (gaps between modules)
-
+- Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
+  and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
+  opacity land on the selection in one batch, each target written only what its own snapshot
+  exposes; Alt+click samples only. This is exactly what draw's tool sampled (typed properties; it
+  never copied effects, which an earlier note here got wrong). The sampling and the write are
+  shared in `platform/shared/helpers` (`sampled-style`). Draw's tool, its `shift+d` key and its
+  feature id are gone (draw ADR 359 amended). Slide's format painter was not touched: it copies
+  slide text and shape formatting, not this set.
 - **doc:** shapes (`dml-geom`), picture crop (`srcRect`), recolour, charts, SmartArt, drop caps,
   OpenType features, embedded fonts, equations.
 - **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.

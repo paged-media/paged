@@ -47,7 +47,11 @@ import type { CursorSpec, ToolContribution } from "@paged-media/shell";
 import { t } from "@paged-media/strings";
 
 import { createEllipseHandler } from "./handlers/ellipse-tool";
-import { createEyedropperHandler } from "./handlers/eyedropper-tool";
+import {
+  createEyedropperHandler,
+  EYEDROPPER_OPTION_FIELDS,
+  EYEDROPPER_TOOL_ID,
+} from "./handlers/eyedropper-tool";
 import { createGradientFeatherHandler } from "./handlers/gradient-feather-tool";
 import {
   createGradientSwatchHandler,
@@ -592,34 +596,32 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
   // vocabulary belongs to the host once a second plugin needs it, and
   // colour is host vocabulary.
   //
-  // The two Eyedroppers are NOT duplicates and both stay: paged.draw's
-  // samples typed ELEMENT PROPERTIES (fill/stroke/weight/opacity) and
-  // says in its own header that it does not do pixels; this one samples
-  // the COMPOSITED PIXEL, which only the host can see. Reclaiming `i`
-  // is safe — paged.draw's lives on `shift+d`.
+  // One Eyedropper (PM-0017). Its `mode` option picks what a click samples:
+  // the composited PIXEL (which only the host can see) or the OBJECT's typed
+  // properties (fill, stroke, weight, opacity), which paged.draw's tool of
+  // the same name used to do.
   {
     id: "paged.tool.eyedropper",
     title: "Eyedropper",
     description:
-      "Click the page to pick up a colour; it fills the selection and new objects.",
+      "Click the page to pick up a colour, or (Sample: Object appearance) click an object to copy its fill, stroke and opacity onto the selection.",
     icon: "tool-eyedropper",
     shortcut: "i",
     group: "eyedropper",
     section: "modNav",
     cluster: "colour",
-    // Order 0 + group default, ahead of paged.draw's `order: 2`. Not a
-    // land-grab: the group needs a default that WORKS EVERYWHERE, and
-    // this one does — draw's exists only when that bundle is loaded and
-    // is about vector appearance, while sampling a colour is something
-    // every context wants. The slot holds both; only the face changes.
     order: 0,
     isGroupDefault: true,
     gesture: createEyedropperHandler,
+    options: {
+      toolId: EYEDROPPER_TOOL_ID,
+      fields: EYEDROPPER_OPTION_FIELDS,
+    },
   },
   // RETIRED — Measure was an inert built-in holding `k` while
   // paged.draw shipped a working version
-  // (`media.paged.draw.tool.eyedropper` on `shift+d`, joining this same
-  // `eyedropper` slot, and `media.paged.draw.tool.measure` on `shift+m`
+  // (the eyedropper, now this one's object mode, and
+  // `media.paged.draw.tool.measure` on `shift+m`
   // in its own slot). The dead built-in Eyedropper was even the slot's
   // group DEFAULT, so the rail face was the broken one. Removing both
   // FREES `i` and `k` for paged.draw to claim (its repo, not ours), and

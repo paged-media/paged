@@ -46,7 +46,6 @@ import {
 } from "./handlers/brush";
 import { createCornerRadiusHandler } from "./handlers/corner-radius";
 import { createCurvatureHandler } from "./handlers/curvature";
-import { createEyedropperHandler } from "./handlers/eyedropper";
 import { createGradientAnnotatorHandler } from "./handlers/gradient-annotator";
 import { createKnifeHandler } from "./handlers/knife";
 import { createLassoSelectHandler } from "./handlers/lasso";
@@ -105,7 +104,6 @@ const M = defineMessages("draw.tools", {
   paintbrush: "Paintbrush",
   blobBrush: "Blob Brush",
   eraser: "Eraser",
-  eyedropper: "Eyedropper",
   width: "Width",
   lassoSelect: "Lasso Select",
   livePaintBucket: "Live Paint Bucket",
@@ -172,10 +170,9 @@ export const BRUSH_TOOL_IDS = [
   "media.paged.draw.tool.eraserBrush",
 ] as const;
 
-/** Wave 2 — the eyedropper / width / lasso ids, in rail order
+/** Wave 2 — the width / lasso ids (the eyedropper is the host's, PM-0017), in rail order
  *  (host-free, the PRO_TOOL_IDS pattern). */
 export const WAVE2_TOOL_IDS = [
-  "media.paged.draw.tool.eyedropper",
   "media.paged.draw.tool.width",
   "media.paged.draw.tool.lassoSelect",
 ] as const;
@@ -430,20 +427,6 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // Illustrator's own lasso key (q, whose single-key register is
     // editor-claimed).
     //
-    // Eyedropper — sample a clicked element's PROPERTIES (not
-    // composited pixels — handlers/eyedropper.ts documents the honest
-    // scope) and apply them to the selection; Alt+click samples only.
-    {
-      id: "media.paged.draw.tool.eyedropper",
-      title: t(M.eyedropper),
-      icon: "tool-eyedropper",
-      shortcut: "shift+d",
-      group: "eyedropper",
-      section: "modNav",
-      order: 2,
-      cursor: CROSS,
-      gesture: () => createEyedropperHandler(host),
-    },
     // Width v0 — drag near an anchor of the selected OPEN path to
     // peak a per-anchor width profile there, baked DESTRUCTIVELY via
     // outlineStrokeVariable on release (handlers/width.ts).
