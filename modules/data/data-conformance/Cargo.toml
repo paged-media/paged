@@ -1,5 +1,6 @@
 [package]
 name = "data-conformance"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -28,7 +29,7 @@ data-js = { path = "../data-js" }
 paged-data-store = { path = "../../../engine/core/crates/paged-data-store" }
 serde.workspace = true
 serde_norway.workspace = true
-serde_json.workspace = true
+serde_json = { version = "1", features = ["float_roundtrip"] }
 
 [dev-dependencies]
 proptest.workspace = true
