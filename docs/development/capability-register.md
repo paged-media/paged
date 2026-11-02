@@ -69,7 +69,7 @@ one function in `paged-colour-math` (f64; `paged-ooxml::colour` re-exports it, e
 sheet-chart, sheet-format and docx-core. `paged-colour-math` also owns the DrawingML colour-transform chain
 (`transform`: lumMod, satOff, tint, shade, alpha …) and `Rgba`, proved bit-identical to the former
 `paged-ooxml` code by `tests/oracle.rs`; the `srgb-transfer` single-owner rule baselines the other copies.
-The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-owner rule `office-theme-palette`; sheet-chart and sheet-xlsx took it from there). TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
+The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-owner rule `office-theme-palette`; sheet-chart and sheet-xlsx take it from there; engine ADR 1057 moves the presets into `paged_model::theme::presets`). TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
 
 ### Raster, kernels, blend
 
@@ -112,6 +112,7 @@ theme-coloured swatches follow a slot (engine ADR 1056, slice 4). `pptx-import` 
 reader (it reads through its own element tree and keeps colours unresolved, with the format scheme for
 slide's resolver) and `slide-resolve` its key/variant logic. The format scheme is not modelled (ADR 1056,
 Amendment 1).
+Themes in IDML (engine ADR 1057, designed): plain swatches for InDesign, the theme in the document label `x-paged:core.theme`, \"create theme from swatches\", font references on styles, presets owned by `paged_model::theme::presets`.
 Writable XML tree ×4. Minimal `.xlsx` writer ×3 (`slide-sheet`, `sheet-js` csv, ods). ODF layer
 shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 

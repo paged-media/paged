@@ -18,6 +18,7 @@ on:
       # The engine crates the module's crates depend on (PM-0015).
       - "engine/core/crates/paged-data-*/**"
       - "engine/core/crates/paged-action/**"
+      - "engine/core/Cargo.toml"
       - "engine/core/Cargo.lock"
       # The shared formatting crate (platform/shared/fmt), a path dependency.
       - "platform/shared/fmt/**"
@@ -40,6 +41,7 @@ on:
       # The engine crates the module's crates depend on (PM-0015).
       - "engine/core/crates/paged-data-*/**"
       - "engine/core/crates/paged-action/**"
+      - "engine/core/Cargo.toml"
       - "engine/core/Cargo.lock"
       # The shared formatting crate (platform/shared/fmt), a path dependency.
       - "platform/shared/fmt/**"
@@ -59,9 +61,12 @@ on:
 permissions:
   contents: read
 
+# data-js, data-cli, data-script and data-conformance are members of the engine's
+# Cargo workspace (docs/development/one-workspace.md): cargo runs in engine/core
+# and selects crates with -p.
 defaults:
   run:
-    working-directory: modules/data
+    working-directory: engine/core
 
 jobs:
   check:
@@ -78,14 +83,12 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            modules/data -> target
-            engine/core -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-data
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo fmt -p data-js -p data-cli -p data-script -p data-conformance --check
+      - run: cargo clippy -p data-js -p data-cli -p data-script -p data-conformance --all-targets -- -D warnings
       # Each guard fails explicitly: bash's errexit ignores a `!`-negated
       # command. The data-expr guard moved with the crate to core / ci
       # (paged-data-expr, PM-0015).
@@ -96,7 +99,7 @@ jobs:
           fi
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          manifest-path: modules/data/Cargo.toml
+          manifest-path: engine/core/Cargo.toml
 
   test:
     runs-on: ubuntu-latest
@@ -110,9 +113,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            modules/data -> target
-            engine/core -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-data
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -121,21 +122,17 @@ jobs:
       # results would still ship as evidence), which also meant the Rust lane
       # could never go red. Evidence still ships: the coverage gate and the
       # JUnit upload below run under `!cancelled()`.
+      # The module's crates and the engine-level data crates
+      # (engine/core/crates/paged-data-*) are one workspace, one run, one junit.
       - name: nextest (junit)
-        run: cargo nextest run --workspace --profile ci --no-fail-fast --no-tests=fail
-      # The engine-level data crates (engine/core/crates/paged-data-*) are
-      # tested in the engine's workspace; their junit joins the gate below.
-      - name: nextest, the engine's data crates (junit)
-        if: ${{ !cancelled() }}
-        working-directory: engine/core
-        run: cargo nextest run --profile ci --no-fail-fast --no-tests=fail -p paged-data-core -p paged-data-expr -p paged-data-query -p paged-data-bind -p paged-data-lower -p paged-data-barcode -p paged-data-dataset -p paged-data-sources -p paged-data-store -p paged-data-xlsx -p paged-data-automation -p paged-data-session -p paged-action
+        run: cargo nextest run --profile ci --no-fail-fast --no-tests=fail -p data-js -p data-cli -p data-script -p data-conformance -p paged-data-core -p paged-data-expr -p paged-data-query -p paged-data-bind -p paged-data-lower -p paged-data-barcode -p paged-data-dataset -p paged-data-sources -p paged-data-store -p paged-data-xlsx -p paged-data-automation -p paged-data-session -p paged-action
       # The §12.2 invariant, both halves: every `implemented` registry row
       # names a test that exists, AND (with --junit) that test ran in the
       # nextest run above and passed. An #[ignore]d skeleton or a red test is
       # a gap, not coverage.
       - name: coverage gate (the §12.2 verification invariant)
         if: ${{ !cancelled() }}
-        run: cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml --junit ../../engine/core/target/nextest/ci/junit.xml
+        run: cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the
       # PRIVATE paged-media/state repo, and GitHub refuses to resolve a private
@@ -151,9 +148,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: |
-            modules/data/target/nextest/ci/junit.xml
-            engine/core/target/nextest/ci/junit.xml
+          path: engine/core/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
       # A silent fallback to the default linker fails here: mold stamps
@@ -179,9 +174,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            modules/data -> target
-            engine/core -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-data
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -194,4 +187,5 @@ jobs:
           auto-install: true
           proto-version: "0.63.1"
       - name: build + budget gate (120 MB app-wide)
+        working-directory: modules/data
         run: bash scripts/build-wasm.sh

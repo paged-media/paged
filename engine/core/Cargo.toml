@@ -77,6 +77,10 @@ members = [
     "../../modules/draw/crates/draw-trace",
     "../../modules/draw/crates/draw-dxf",
     "../../modules/draw/crates/trace-js",
+    "../../modules/data/data-js",
+    "../../modules/data/data-cli",
+    "../../modules/data/data-script",
+    "../../modules/data/data-conformance",
     "spikes/vello-eval",
     "spikes/composer-calibration",
     "spikes/wasm-size",
@@ -183,6 +187,16 @@ visioncortex = "0.9.1"
 # its own entity model, nothing else of ours depends on it.
 dxf = "0.6.2"
 console_error_panic_hook = "0.1"
+# paged.data's wasm surface and tests (modules/data). serde_json is NOT here:
+# data's crates need `float_roundtrip` (every f64 parses back to the exact bits it
+# was written from), so they name it themselves and the feature is not unified into
+# crates that do not use it.
+js-sys = "0.3"
+serde-wasm-bindgen = "0.6"
+# YAML for the registry rows: the maintained fork of serde_yaml 0.9 (same parser,
+# same Value) on unsafe-libyaml-norway; serde_yaml is unmaintained (RUSTSEC-2024-0449).
+serde_norway = "0.9"
+proptest = "1"
 # W1.24 (audit B17) — benchmark harness (dev-only). `html_reports` is
 # off: the bench lane is local + CI-smoke, not a report-publishing gate,
 # and the gnuplot/plotters report deps bloat the dev build for no value
@@ -259,6 +273,12 @@ codegen-units = 1
 # The shipped paged.draw wasm (modules/draw/scripts/build-wasm.sh): size first,
 # and no unwinding. A profile applies to the whole build, so it is named, and the
 # module's script selects it.
+[profile.wasm-data]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+
 [profile.wasm-draw]
 inherits = "release"
 opt-level = "z"
