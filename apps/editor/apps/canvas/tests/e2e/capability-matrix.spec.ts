@@ -3460,6 +3460,47 @@ const REVIEW_PROBES: Probe[] = [
       args: { person: { id: "probe-person", name: "Probe Person" } },
     }),
   },
+  {
+    op: "setTheme",
+    build: async () => ({
+      op: "setTheme",
+      args: {
+        theme: {
+          name: "Probe",
+          colors: [{ slot: "accent1", value: "FF0000" }],
+        },
+      },
+    }),
+  },
+  {
+    op: "setThemeColor",
+    build: async ({ page }) =>
+      after(
+        page,
+        {
+          op: "setTheme",
+          args: { theme: { name: "Probe", colors: [] } },
+        },
+        { op: "setThemeColor", args: { slot: "accent1", value: "00FF00" } },
+      ),
+    setupUndo: 1,
+  },
+  {
+    op: "setThemeFonts",
+    build: async ({ page }) =>
+      after(
+        page,
+        {
+          op: "setTheme",
+          args: { theme: { name: "Probe", colors: [] } },
+        },
+        {
+          op: "setThemeFonts",
+          args: { which: "major", fonts: { latin: "Georgia" } },
+        },
+      ),
+    setupUndo: 1,
+  },
   { op: "recordChange", build: async ({ fx }) => scratchChange(fx) },
   {
     op: "acceptChange",
