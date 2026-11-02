@@ -378,6 +378,16 @@ Standard-Lab toggle (`setUseStandardLabForSpots`); per-spot: convert-to-process
 checkbox + alias select (`setInkSetting`); CMYK plates listed.
 **End state** — density/trapping when export consumes them.
 
+### Theme — `paged.theme` ✓
+
+Engine ADR 1056 / 1057, every application but slide (which has Design). The
+twelve colour slots (`setThemeColor`: the swatches that follow a slot recolour
+in the same undo step) and the headings / body fonts (`setThemeFonts`); presets
+from the `themePresets` collection applied with `setTheme`. A document with no
+theme (any IDML from InDesign) shows "Create theme from swatches": a swatch per
+slot and a link-matching-tints switch (`createThemeFromSwatches`).
+**End state** — style font references (`setStyleThemeFont`) in the style panels.
+
 ### Separations & Ink Limit — `paged.separations` ✓
 
 §21 advanced prepress, ink-coverage third. Press ink-limit presets

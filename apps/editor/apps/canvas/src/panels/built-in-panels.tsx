@@ -52,6 +52,7 @@ import {
   TextVariablesPanel,
 } from "./object-options-panels";
 import { InkManagerPanel } from "./ink-manager-panel";
+import { ThemePanel } from "./theme-panel";
 import { ConditionSetsPanel } from "./condition-sets-panel";
 import { ConditionsPanel } from "./conditions-panel";
 import { CrossReferencesPanel } from "./cross-references-panel";
@@ -156,6 +157,7 @@ const M = defineMessages("app.builtInPanels", {
   conditionSets: "Condition Sets",
   colorGroups: "Color groups",
   inkManager: "Ink Manager",
+  theme: "Theme",
   colorSettings: "Color settings",
   styleOptions: "Style Options",
   objectOptions: "Object Options",
@@ -504,6 +506,15 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.inkManager);
     },
     component: InkManagerPanel,
+    defaultDock: "right",
+    defaultGroup: "styles",
+  },
+  {
+    id: "paged.theme",
+    get title() {
+      return t(M.theme);
+    },
+    component: ThemePanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
