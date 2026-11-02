@@ -42,6 +42,14 @@ pub const SLOTS: [&str; 12] = [
     "hlink", "folHlink",
 ];
 
+/// The default Office theme (2013 and later: Word, Excel, PowerPoint) as
+/// `0xRRGGBB`, in [`SLOTS`] order: what a reader falls back on for a package
+/// without a theme part, and for a slot its theme part lacks.
+pub const OFFICE: [u32; 12] = [
+    0x000000, 0xFFFFFF, 0x44546A, 0xE7E6E6, 0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000, 0x5B9BD5,
+    0x70AD47, 0x0563C1, 0x954F72,
+];
+
 /// One half of a font scheme (`a:majorFont` or `a:minorFont`).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

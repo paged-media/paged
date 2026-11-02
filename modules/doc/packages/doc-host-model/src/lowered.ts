@@ -40,6 +40,14 @@ export interface LoweredStyle {
   props: StyleProp[];
 }
 
+/** One half of a theme's font scheme (`setTheme`'s `ThemeFontsSpec`). */
+export interface ThemeFontsIr {
+  latin?: string;
+  eastAsian?: string;
+  complex?: string;
+  scripts?: { script: string; typeface: string }[];
+}
+
 /** A color to mint via `createSwatch`. */
 export interface LoweredSwatch {
   /** `Color/docx-RRGGBB`, or `Color/docx-theme-…` for a theme colour. */
@@ -55,6 +63,10 @@ export interface LoweredSwatch {
     color: { slot: string; tint?: number; shade?: number };
     rgb: string;
   };
+  /** Engine ADR 1056 — the theme slot (and DrawingML transforms) the swatch
+   *  follows: `createSwatch` carries it as `themeRef`, so applying a theme
+   *  recolours the swatch and everything painted with it. */
+  themeRef?: { slot: string; transforms?: [string, number][] };
 }
 
 /** A colour group to mint via `createColorGroup` (the "Word theme" group). */
@@ -513,6 +525,17 @@ export interface Diagnostic {
 
 /** The whole Tier-0 lowering of one Word document body. */
 export interface LoweredDoc {
+  /** Engine ADR 1056 — the document's theme (slots, font scheme and the
+   *  part), sent as `setTheme` before the swatches that follow its slots. */
+  theme?: {
+    name: string;
+    colorSchemeName?: string;
+    colors: { slot: string; value: string; system?: string }[];
+    fontSchemeName?: string;
+    major: ThemeFontsIr;
+    minor: ThemeFontsIr;
+    source?: string;
+  };
   swatches: LoweredSwatch[];
   styles: LoweredStyle[];
   story: LoweredStory;

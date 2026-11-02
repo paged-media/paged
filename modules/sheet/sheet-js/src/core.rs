@@ -1697,6 +1697,13 @@ impl SheetSession {
         Ok(lower_range(model, sheet, cell_range, &view))
     }
 
+    /// The workbook's theme as the wire form of the engine's `setTheme`
+    /// (engine ADR 1056), `None` without a readable theme part.
+    pub fn theme_wire(&self) -> Option<dml_native::theme::ThemeWire> {
+        let theme = self.doc.visual_styles.palette().engine_theme.as_deref()?;
+        Some(dml_native::theme::ThemeWire::of(theme))
+    }
+
     /// Lower a range with the workbook's REAL per-cell visual styles resolved
     /// (the M1 style-map track: bold/italic, font size + face, cell fill, text
     /// colour, borders) instead of the frozen `NoStyles` table

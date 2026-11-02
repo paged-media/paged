@@ -348,7 +348,8 @@ pub fn parse_with_context(
         }
     }
 
-    let palette = sheet.palette(colors.theme_rgbs());
+    let mut palette = sheet.palette(colors.theme_rgbs());
+    palette.engine_theme = colors.engine_theme();
     let default_font = sheet.fonts.first().cloned().unwrap_or_default();
     let mut xf_to_style = Vec::with_capacity(sheet.cell_xfs.len());
     let mut visual = VisualStyles {
@@ -473,6 +474,12 @@ impl ColorContext {
                     .and_then(crate::parts::style_model::rgb_bytes)
             })
             .collect()
+    }
+
+    /// The workbook theme as the engine's theme, for colours that follow a
+    /// slot (engine ADR 1056).
+    pub fn engine_theme(&self) -> Option<std::sync::Arc<dml_native::theme::EngineTheme>> {
+        self.theme.as_ref().and_then(|t| t.engine_theme())
     }
 
     /// The context of a styles part (`styles_xml`'s `<indexedColors>`) under
@@ -611,6 +618,54 @@ mod tests {
             plain.format_color_rgb(sheet_format::FormatColor::Blue),
             "#0000FF"
         );
+    }
+
+    #[test]
+    fn a_theme_coloured_fill_and_text_follow_their_slot_and_rgb_does_not() {
+        use sheet_lower::VisualStyleSource;
+        const THEME: &str = r#"<?xml version="1.0"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="T"><a:themeElements><a:clrScheme name="C">
+<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+<a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>
+<a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2>
+<a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4>
+<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6>
+<a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink>
+</a:clrScheme></a:themeElements></a:theme>"#;
+        let xml = r#"<styleSheet>
+<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><sz val="11"/><color theme="1"/><name val="Calibri"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor theme="4" tint="0.5999938962981048"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF4472C4"/></patternFill></fill></fills>
+<borders count="1"><border/></borders>
+<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="0" applyFill="1"/>
+<xf numFmtId="0" fontId="0" fillId="3" borderId="0" applyFill="1"/></cellXfs></styleSheet>"#;
+        let theme = ThemePalette::parse(THEME.as_bytes()).unwrap();
+        let mut table = StyleTable::new();
+        let ctx = ColorContext::new(xml.as_bytes(), Some(theme));
+        let parsed = parse_with_colors(xml.as_bytes(), &mut table, &ctx).unwrap();
+        let themed = parsed.visual.visual(parsed.xf_to_style[1]).unwrap();
+        let fill = themed.fill_theme.expect("a theme fill follows its slot");
+        assert_eq!(fill.slot, "accent1");
+        assert_eq!(
+            fill.transforms,
+            [
+                ("lumMod".to_string(), 40_000),
+                ("lumOff".to_string(), 60_000)
+            ]
+        );
+        assert_eq!(themed.fill_rgb.as_deref(), Some("#B4C6E7"));
+        let text = themed.text_theme.expect("a theme text colour follows");
+        assert_eq!((text.slot.as_str(), text.transforms.len()), ("dk1", 0));
+        // The same blue as plain RGB is literal.
+        let literal = parsed.visual.visual(parsed.xf_to_style[2]).unwrap();
+        assert_eq!(literal.fill_rgb.as_deref(), Some("#4472C4"));
+        assert!(literal.fill_theme.is_none());
+        // No theme part: nothing follows.
+        let bare = ColorContext::new(xml.as_bytes(), None);
+        let parsed = parse_with_colors(xml.as_bytes(), &mut StyleTable::new(), &bare).unwrap();
+        let v = parsed.visual.visual(parsed.xf_to_style[1]).unwrap();
+        assert!(v.fill_theme.is_none() && v.text_theme.is_none());
     }
 
     #[test]

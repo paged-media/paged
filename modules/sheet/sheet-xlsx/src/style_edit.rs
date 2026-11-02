@@ -1479,7 +1479,8 @@ impl XlsxDocument {
         let al = xf.child("alignment");
         // The W2.2 facets, read through the visual model.
         let model = StyleSheet::parse(&xml)?;
-        let palette = model.palette(ctx.theme_rgbs());
+        let mut palette = model.palette(ctx.theme_rgbs());
+        palette.engine_theme = ctx.engine_theme();
         let visual = model.cell_visual(id.0 as usize, &palette);
         let hex = |c: &Option<sheet_core::ColorRef>| {
             c.as_ref()

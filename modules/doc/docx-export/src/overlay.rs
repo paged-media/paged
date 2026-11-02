@@ -602,6 +602,7 @@ pub fn add_canvas_colors(
             space: "RGB".into(),
             value: vec![r, g, b],
             theme: None,
+            theme_ref: None,
         });
     }
 }

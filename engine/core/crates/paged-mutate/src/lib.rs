@@ -95,7 +95,7 @@ pub use operation::{
     PathPointRole, PathfinderKind, PathfinderRegionVerb, PatternColorSpec, PatternItemSpec,
     PatternSpec, PersonSpec, PropertyPath, ReactionSpec, ScriptFontSpec, SourceBlobSpec,
     StopColorSpec, StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec,
-    ThemeColorSpec, ThemeFontsSpec, ThemeSpec, Value, ZOrderTarget,
+    ThemeColorSpec, ThemeFontsSpec, ThemeRefSpec, ThemeSpec, Value, ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 
@@ -609,6 +609,7 @@ mod tests {
             tint: None,
             alpha: None,
             pattern: None,
+            theme_ref: None,
         }
     }
 
@@ -682,6 +683,7 @@ mod tests {
             tint: Some(80.0),
             alpha: None,
             pattern: None,
+            theme_ref: None,
         };
         project
             .apply(Operation::CreateSwatch { spec: spot })

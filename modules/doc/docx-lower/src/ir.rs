@@ -37,6 +37,10 @@ pub use crate::ir_objects::*;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoweredDoc {
+    /// The document's theme (engine ADR 1056), sent as `setTheme` before the
+    /// swatches: colour slots, font scheme and the part itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<dml_native::theme::ThemeWire>,
     /// Colors to create (`createSwatch`) before styles reference them.
     pub swatches: Vec<LoweredSwatch>,
     /// Style catalog to create, **topologically ordered** so every `basedOn`
@@ -321,6 +325,11 @@ pub struct LoweredSwatch {
     /// A theme colour's swatch (`Color/docx-theme-…`): which one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<SwatchTheme>,
+    /// The engine theme slot (and DrawingML transforms) the swatch follows
+    /// (engine ADR 1056), so a theme change recolours it: set only where the
+    /// document's theme resolves it to `value`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_ref: Option<dml_native::theme::ThemeRef>,
 }
 
 /// A native style to create via `create{Paragraph,Character}Style` +

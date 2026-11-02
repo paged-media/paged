@@ -86,6 +86,11 @@ pub struct VisualAttrs {
     pub fill_swatch: Option<String>,
     /// The document swatch the text colour names (beside `text_rgb`).
     pub text_swatch: Option<String>,
+    /// The theme slot (and transforms) the fill colour follows (engine ADR
+    /// 1056); `fill_rgb` is the colour it shows today.
+    pub fill_theme: Option<ThemeRef>,
+    /// The theme slot (and transforms) the text colour follows.
+    pub text_theme: Option<ThemeRef>,
     /// A pattern fill other than solid; `fill_rgb` then holds the blend a
     /// surface that cannot draw the pattern shows.
     pub fill_pattern: Option<FillPattern>,
@@ -251,6 +256,8 @@ impl VisualAttrs {
             border_lines: self.border_lines,
             fill_swatch: self.fill_swatch,
             text_swatch: self.text_swatch,
+            fill_theme: self.fill_theme,
+            text_theme: self.text_theme,
             fill_pattern: self.fill_pattern,
             fill_gradient: self.fill_gradient,
             indent_pt: self.indent_pt,
@@ -275,7 +282,13 @@ use sheet_core::visual::{
     FontSpec, GradientKind, HAlign, PatternKind, UnderlineKind, VAlign, VertAlign,
     ROTATION_STACKED,
 };
-use sheet_format::resolve::{blend, hex, resolve, ColorPalette};
+use sheet_format::resolve::{blend, hex, resolve, ColorPalette, ThemeFollow};
+use sheet_format::ThemeRef;
+
+/// A resolved colour's theme slot as the reference the IR carries.
+fn theme_ref(t: Option<ThemeFollow>) -> Option<ThemeRef> {
+    t.map(|(slot, transforms)| ThemeRef { slot, transforms })
+}
 
 /// One edge → its resolved [`BorderLine`] (`None` without a line).
 fn line_of(edge: &BorderEdge, palette: &ColorPalette) -> Option<BorderLine> {
@@ -331,6 +344,7 @@ fn apply_fill(a: &mut VisualAttrs, fill: &CellFill, palette: &ColorPalette) {
             if let Some(r) = res(fg) {
                 a.fill_rgb = Some(r.hex());
                 a.fill_swatch = r.swatch;
+                a.fill_theme = theme_ref(r.theme);
             }
         }
         CellFill::Pattern { pattern, fg, bg } => {
@@ -412,6 +426,7 @@ fn apply_font(a: &mut VisualAttrs, font: &FontSpec, default: &FontSpec, palette:
     if let Some(r) = font.color.as_ref().and_then(|c| resolve(c, palette)) {
         a.text_rgb = Some(r.hex());
         a.text_swatch = r.swatch;
+        a.text_theme = theme_ref(r.theme);
     }
     a.underline = font.underline != UnderlineKind::None;
     a.underline_style = match font.underline {
@@ -472,12 +487,14 @@ pub fn run_attrs(
     let mut a = base.clone();
     a.text_rgb = None;
     a.text_swatch = None;
+    a.text_theme = None;
     a.font_size_pt = None;
     a.font_name = None;
     apply_font(&mut a, font, default_font, palette);
     if a.text_rgb.is_none() {
         a.text_rgb = base.text_rgb.clone();
         a.text_swatch = base.text_swatch.clone();
+        a.text_theme = base.text_theme.clone();
     }
     if a.font_size_pt.is_none() && font.size.is_none() {
         a.font_size_pt = base.font_size_pt;
@@ -535,6 +552,7 @@ pub fn resolve_delta(d: &DifferentialFormat, palette: &ColorPalette) -> VisualAt
         if let Some(r) = f.color.as_ref().and_then(|c| resolve(c, palette)) {
             a.text_rgb = Some(r.hex());
             a.text_swatch = r.swatch;
+            a.text_theme = theme_ref(r.theme);
         }
         a.underline = f.underline.is_some_and(|u| u != UnderlineKind::None);
         a.strike = f.strike.unwrap_or(false);

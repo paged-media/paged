@@ -55,6 +55,7 @@ pub(crate) fn parse_theme(bytes: &[u8]) -> Option<Theme> {
         major: fonts(&shared.major_font),
         minor: fonts(&shared.minor_font),
         mapping: Vec::new(),
+        source: std::str::from_utf8(bytes).ok().map(str::to_string),
     })
 }
 

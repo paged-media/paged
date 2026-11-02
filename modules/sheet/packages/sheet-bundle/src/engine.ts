@@ -493,6 +493,10 @@ export interface SheetEngine
    *  and the grid show — spec §8.3). Junk endpoints / an OOB sheet THROW the
    *  boundary error. */
   getRangeValues(sheet: number, range: string): string[][];
+  /** Engine ADR 1056 — the workbook's theme part as the argument of the
+   *  engine's `setTheme` (the one shared reader; the part rides along as
+   *  `source`), or null without one. Absent on an older wasm artifact. */
+  getTheme?(): WorkbookTheme | null;
   /** Paginate a range across the host frame chain's content boxes (Wave 2D
    *  / S-05). `frames` is the chain's content boxes (only height splits);
    *  returns one `Page` per filled frame — each a self-contained
@@ -1237,6 +1241,17 @@ export const SYSTEM_CLOCK: HostClock = {
 /** The snake_case wasm-bindgen surface (sheet-js). A structural subset —
  *  only the members the bundle drives. The artifact lands in Phase 2;
  *  this shape is the contract the facade maps over. */
+/** A theme as `setTheme` takes it (`ThemeSpec`, engine ADR 1056). */
+export interface WorkbookTheme {
+  name: string;
+  colorSchemeName?: string;
+  colors: { slot: string; value: string; system?: string }[];
+  fontSchemeName?: string;
+  major: Record<string, unknown>;
+  minor: Record<string, unknown>;
+  source?: string;
+}
+
 export interface SheetWasmEngine
   extends SheetWasmEngineW2, SheetWasmEngineFiles, SheetWasmEngineDocStyles {
   load_xlsx(bytes: Uint8Array): void;
@@ -1279,6 +1294,7 @@ export interface SheetWasmEngine
     opts?: LowerOptions,
   ): LoweredContent;
   get_range_values(sheet: number, range: string): string[][];
+  get_theme?(): WorkbookTheme | null;
   paginate(
     sheet: number,
     range: string,
@@ -1563,6 +1579,7 @@ export function wrapEngine(
     getRangeStyled: (sheet, range, opts) =>
       wasm.get_range_styled(sheet, range, opts),
     getRangeValues: (sheet, range) => wasm.get_range_values(sheet, range),
+    ...(wasm.get_theme ? { getTheme: () => wasm.get_theme!() } : {}),
     paginate: (sheet, range, frames, opts) =>
       wasm.paginate(sheet, range, frames, opts),
     getGridScene: (sheet, firstRow, firstCol, wPt, hPt, opts) =>

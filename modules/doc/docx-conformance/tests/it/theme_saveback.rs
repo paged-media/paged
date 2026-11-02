@@ -262,6 +262,66 @@ fn theme_colours_lower_to_the_word_theme_swatch_group__feat__plugin_doc_read_pat
     );
 }
 
+/// Engine ADR 1056: the document's theme rides in the lowering, part and all,
+/// and the Word theme swatches name the slot they follow.
+#[test]
+fn the_lowering_carries_the_theme_and_the_swatches_follow_its_slots__feat__plugin_doc_read_path() {
+    let original = theme_docx();
+    let ir = docx_lower::lower(&import_docx(&original).unwrap());
+    let theme = ir.theme.as_ref().expect("the document's theme");
+    assert_eq!(theme.name, "Office Theme");
+    assert_eq!(theme.colors.len(), 12);
+    assert_eq!(theme.colors[0].slot, "dk1");
+    assert_eq!(theme.colors[0].system.as_deref(), Some("windowText"));
+    // The part as the file wrote it, so the engine re-emits it untouched.
+    let part = paged_ooxml::OpcPackage::read(&original)
+        .unwrap()
+        .part("word/theme/theme1.xml")
+        .unwrap()
+        .to_vec();
+    assert_eq!(theme.source.as_deref().map(str::as_bytes), Some(&part[..]));
+    let follows = |id: &str| {
+        ir.swatches
+            .iter()
+            .find(|s| s.id == id)
+            .unwrap_or_else(|| panic!("{id}"))
+            .theme_ref
+            .clone()
+            .map(|r| (r.slot, r.transforms))
+    };
+    assert_eq!(
+        follows("Color/docx-theme-accent2"),
+        Some(("accent2".into(), vec![]))
+    );
+    // `text1` is `dark1` through the colour mapping.
+    assert_eq!(
+        follows("Color/docx-theme-text1"),
+        Some(("dk1".into(), vec![]))
+    );
+    assert_eq!(
+        follows("Color/docx-theme-followedHyperlink"),
+        Some(("folHlink".into(), vec![]))
+    );
+    // Word's tint and shade as the luminance step that computes them.
+    let tint = follows("Color/docx-theme-accent1-tint-99").expect("a tint follows");
+    assert_eq!(tint.0, "accent1");
+    assert_eq!(
+        tint.1.iter().map(|t| t.0.as_str()).collect::<Vec<_>>(),
+        ["lumMod", "lumOff"]
+    );
+    let shade = follows("Color/docx-theme-accent1-shade-BF").expect("a shade follows");
+    assert_eq!(
+        shade.1.iter().map(|t| t.0.as_str()).collect::<Vec<_>>(),
+        ["lumMod"]
+    );
+    // A literal colour never follows, whatever its value.
+    assert!(ir
+        .swatches
+        .iter()
+        .filter(|s| s.theme.is_none())
+        .all(|s| s.theme_ref.is_none()));
+}
+
 #[test]
 fn a_zero_edit_save_of_a_themed_document_is_byte_identical__feat__plugin_doc_save_back() {
     let original = theme_docx();

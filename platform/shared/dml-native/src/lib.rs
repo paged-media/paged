@@ -74,6 +74,7 @@ use std::collections::BTreeMap;
 
 pub mod native;
 pub mod pattern;
+pub mod theme;
 
 use paged_model::effect_stack::{
     ColorOverlayParams, Effect, EffectEntry, GaussianBlurParams, IndesignEffect, ReflectionParams,

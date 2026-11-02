@@ -22,6 +22,8 @@ sheet-calc = { path = "../sheet-calc" }
 sheet-fn = { path = "../sheet-fn" }
 sheet-format = { path = "../sheet-format" }
 sheet-xlsx = { path = "../sheet-xlsx", default-features = false }
+# The workbook theme on the wire (`setTheme`'s argument, engine ADR 1056).
+dml-native = { path = "../../../platform/shared/dml-native" }
 paged-ooxml = { path = "../../../platform/shared/ooxml" }
 sheet-lower = { path = "../sheet-lower" }
 sheet-grid = { path = "../sheet-grid" }

@@ -301,6 +301,7 @@ fn build() -> (CanvasModel, Targets) {
                 tint: None,
                 alpha: None,
                 pattern: None,
+                theme_ref: None,
             },
         },
     );

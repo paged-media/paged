@@ -204,14 +204,20 @@ export async function finishStandalone(
 ): Promise<Opened> {
   let storyIds = engine.skeletonStories();
   let midPageColumns = engine.usesMidPageColumns();
-  const refusals = await applyStyleOpsReporting(host, buildStyleMutations(ir));
+  const refusals = await applyStyleOpsReporting(
+    host,
+    buildStyleMutations(ir, { theme: true }),
+  );
   if (midPageColumns && SPAN_COLUMN_PATHS.some((p) => refusals.paths.has(p))) {
     engine.setMidPageColumns(false);
     midPageColumns = false;
     ir = engine.lowered();
     storyIds = engine.skeletonStories();
     await open(engine.skeletonPaged(name));
-    await applyStyleOpsReporting(host, buildStyleMutations(ir));
+    await applyStyleOpsReporting(
+      host,
+      buildStyleMutations(ir, { theme: true }),
+    );
     host.diagnostics.set(COLUMNS_DIAGNOSTICS_KEY, [
       {
         severity: "warning" as const,

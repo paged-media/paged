@@ -436,6 +436,16 @@ pub fn fold_override(base: &VisualAttrs, over: &VisualAttrs) -> VisualAttrs {
         } else {
             base.text_swatch.clone()
         },
+        fill_theme: if over.fill_rgb.is_some() {
+            over.fill_theme.clone()
+        } else {
+            base.fill_theme.clone()
+        },
+        text_theme: if over.text_rgb.is_some() {
+            over.text_theme.clone()
+        } else {
+            base.text_theme.clone()
+        },
         // A dxf fill replaces the base pattern / gradient.
         fill_pattern: if over.fill_rgb.is_some() {
             over.fill_pattern.clone()

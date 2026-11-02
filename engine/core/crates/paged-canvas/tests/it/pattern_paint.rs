@@ -126,6 +126,7 @@ fn create(m: &mut CanvasModel) -> String {
             tint: None,
             alpha: None,
             pattern: Some(pattern()),
+            theme_ref: None,
         },
     })
     .expect("create a pattern swatch");

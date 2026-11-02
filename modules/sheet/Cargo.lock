@@ -1102,6 +1102,7 @@ name = "sheet-format"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "dml-native",
  "paged-fmt",
  "paged-ooxml",
  "proptest",
@@ -1131,6 +1132,7 @@ version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
  "criterion",
+ "dml-native",
  "paged-fmt",
  "paged-ooxml",
  "serde",
@@ -1178,6 +1180,7 @@ dependencies = [
  "base64",
  "compact_str",
  "dml-chart",
+ "dml-native",
  "flate2",
  "paged-ooxml",
  "quick-xml",

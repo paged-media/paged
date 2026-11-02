@@ -603,6 +603,7 @@ impl StyleSheet {
         ColorPalette {
             theme,
             indexed: self.indexed.clone(),
+            engine_theme: None,
         }
     }
 }

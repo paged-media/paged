@@ -50,7 +50,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import type { ChartGeometry, NativeFx } from "./chart";
-import type { LoweredContent, LoweredStyle } from "./lowered";
+import type { LoweredContent, LoweredStyle, ThemeRefIr } from "./lowered";
 
 /** Which part of the workbook a palette colour came from. The facet is
  *  part of the swatch ID, not decoration: a chart blue and a data-bar
@@ -74,6 +74,9 @@ export interface PaletteEntry {
   hex: string;
   /** 0..255 RGB channels — the IDML convention core's `SwatchSpec` takes. */
   rgb: [number, number, number];
+  /** Engine ADR 1056 — the theme slot the swatch follows: its id names the
+   *  reference (not the hex), and `createSwatch` carries it as `themeRef`. */
+  themeRef?: ThemeRefIr;
 }
 
 /** Normalise a `#RGB` / `#RRGGBB` (any case) to the canonical uppercase
@@ -127,12 +130,39 @@ export function paletteSwatchId(facet: PaletteFacet, canonHex: string): string {
   return `${FACET_PREFIX[facet]}${canonHex}`;
 }
 
+/** The id of the swatch that follows theme reference `ref` in `facet`
+ *  (engine ADR 1056): content-addressed by slot and transforms, so every
+ *  cell with "Accent 1, Lighter 40%" shares one swatch, and applying a
+ *  theme recolours it. */
+export function themeSwatchId(facet: PaletteFacet, ref: ThemeRefIr): string {
+  const steps = (ref.transforms ?? []).map(([op, v]) => `${op}${v}`).join("");
+  return `${FACET_PREFIX[facet]}Theme${ref.slot}${steps}`;
+}
+
 /** THE swatch NAME for a workbook colour, likewise shared. */
 export function paletteSwatchName(
   facet: PaletteFacet,
   canonHex: string,
 ): string {
   return `${FACET_LABEL[facet]} ${canonHex}`;
+}
+
+/** The palette entry of a theme-following colour: `canonHex` is the colour it
+ *  shows now (what the swatch is created with). */
+export function themePaletteEntry(
+  facet: PaletteFacet,
+  ref: ThemeRefIr,
+  canonHex: string,
+): PaletteEntry {
+  const steps = (ref.transforms ?? []).map(([op, v]) => `${op}${v}`).join(" ");
+  return {
+    selfId: themeSwatchId(facet, ref),
+    name: `${FACET_LABEL[facet]} theme ${ref.slot}${steps ? ` ${steps}` : ""}`,
+    facet,
+    hex: canonHex,
+    rgb: paletteRgb255(canonHex),
+    themeRef: ref,
+  };
 }
 
 /** Build one palette entry from an already-canonical hex body. */
@@ -245,8 +275,70 @@ function distinctStyleHexes(
  *  colours `lower-to-table.ts` mints swatches for before referencing
  *  them from a `cellFillColor`. */
 export function distinctCellFillHexes(content: LoweredContent): string[] {
-  // A fill that names a document swatch mints nothing (sheet ADR 518).
-  return distinctStyleHexes(content, (s) => (s.fillSwatch ? null : s.fillRgb));
+  // A fill that names a document swatch mints nothing (sheet ADR 518); one
+  // that follows a theme slot mints its themed swatch instead.
+  return distinctStyleHexes(content, (s) =>
+    s.fillSwatch || (s.fillTheme && s.fillRgb) ? null : s.fillRgb,
+  );
+}
+
+/** The distinct theme-following colours a lowered region's style table
+ *  carries on one axis (engine ADR 1056), in styles-table order, each with
+ *  the colour it shows now. A malformed hex is dropped. */
+function distinctThemedEntries(
+  content: LoweredContent,
+  facet: PaletteFacet,
+  pick: (
+    s: LoweredStyle,
+  ) => [ThemeRefIr | null | undefined, string | null | undefined],
+): PaletteEntry[] {
+  const byId = new Map<string, PaletteEntry>();
+  for (const style of content.styles ?? []) {
+    if (style.key === 0) continue;
+    const [ref, raw] = pick(style);
+    if (!ref || raw == null) continue;
+    const hex = normalizePaletteHex(raw);
+    if (hex == null) continue;
+    const entry = themePaletteEntry(facet, ref, hex);
+    if (!byId.has(entry.selfId)) byId.set(entry.selfId, entry);
+  }
+  return [...byId.values()];
+}
+
+/** The theme-following cell FILL swatches of a lowered region. */
+export function themedCellFillEntries(content: LoweredContent): PaletteEntry[] {
+  return distinctThemedEntries(content, "cellFill", (s) =>
+    s.fillSwatch ? [null, null] : [s.fillTheme, s.fillRgb],
+  );
+}
+
+/** The theme-following cell TEXT swatches of a lowered region. */
+export function themedCellTextEntries(content: LoweredContent): PaletteEntry[] {
+  return distinctThemedEntries(content, "cellText", (s) =>
+    s.textSwatch ? [null, null] : [s.textTheme, s.textRgb],
+  );
+}
+
+/** The swatch a cell fill is painted with (sheet ADR 518, engine ADR 1056):
+ *  a document swatch as it is, else the theme-following swatch, else the
+ *  content-addressed swatch of its colour, else none. */
+export function cellFillRef(style: LoweredStyle): string | null {
+  if (style.fillSwatch) return style.fillSwatch;
+  const hex = style.fillRgb == null ? null : normalizePaletteHex(style.fillRgb);
+  if (hex == null) return null;
+  return style.fillTheme
+    ? themeSwatchId("cellFill", style.fillTheme)
+    : paletteSwatchId("cellFill", hex);
+}
+
+/** The swatch a cell's text is painted with (see [`cellFillRef`]). */
+export function cellTextRef(style: LoweredStyle): string | null {
+  if (style.textSwatch) return style.textSwatch;
+  const hex = style.textRgb == null ? null : normalizePaletteHex(style.textRgb);
+  if (hex == null) return null;
+  return style.textTheme
+    ? themeSwatchId("cellText", style.textTheme)
+    : paletteSwatchId("cellText", hex);
 }
 
 /** The distinct cell BORDER colours across a lowered region (every edge of
@@ -290,7 +382,9 @@ export function distinctCellStrokeHexes(content: LoweredContent): string[] {
  *  colours `lower-to-mutations.ts` mints swatches for before
  *  referencing them from a `characterFillColor`. */
 export function distinctCellTextHexes(content: LoweredContent): string[] {
-  return distinctStyleHexes(content, (s) => (s.textSwatch ? null : s.textRgb));
+  return distinctStyleHexes(content, (s) =>
+    s.textSwatch || (s.textTheme && s.textRgb) ? null : s.textRgb,
+  );
 }
 
 /** What the palette is derived FROM. Both members are optional: a
@@ -339,6 +433,8 @@ export function workbookPalette(sources: PaletteSources): PaletteEntry[] {
   for (const region of sources.regions ?? []) {
     for (const hex of distinctDataBarHexes(region)) push("dataBar", hex);
     for (const hex of distinctCellFillHexes(region)) push("cellFill", hex);
+    for (const entry of themedCellFillEntries(region))
+      if (!byId.has(entry.selfId)) byId.set(entry.selfId, entry);
     for (const hex of distinctCellStrokeHexes(region)) push("cellStroke", hex);
   }
   return [...byId.values()];
@@ -422,6 +518,25 @@ export function swatchMintOps(
   return ops;
 }
 
+/** The mint list for theme-following swatches (engine ADR 1056): one
+ *  `createSwatch` with `themeRef` per entry the document lacks, under the
+ *  same read-first ruling as [`swatchMintOps`]. */
+export function themedSwatchMintOps(
+  entries: readonly PaletteEntry[],
+  knownSwatchIds?: KnownSwatchIds,
+): Mutation[] {
+  if (knownSwatchIds === null) return [];
+  const ops: Mutation[] = [];
+  for (const entry of entries) {
+    if (knownSwatchIds?.has(entry.selfId)) continue;
+    ops.push({
+      op: "createSwatch",
+      args: { spec: paletteEntryToSpec(entry) },
+    });
+  }
+  return ops;
+}
+
 /** Project a palette entry onto core's `swatches` ROW shape. `kind`
  *  mirrors what core reports for a minted process colour, so the host's
  *  one row renderer draws a provider row and a core row identically —
@@ -440,5 +555,13 @@ export function paletteEntryToSpec(entry: PaletteEntry): SwatchSpec {
     space: "RGB",
     value: [...entry.rgb],
     model: "Process",
+    ...(entry.themeRef
+      ? {
+          themeRef: {
+            slot: entry.themeRef.slot,
+            transforms: entry.themeRef.transforms ?? [],
+          },
+        }
+      : {}),
   };
 }

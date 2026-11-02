@@ -187,6 +187,7 @@ fn strip_inherited_font(a: &mut VisualAttrs, inh: &VisualAttrs) {
     if a.text_rgb == inh.text_rgb && a.text_swatch == inh.text_swatch {
         a.text_rgb = None;
         a.text_swatch = None;
+        a.text_theme = None;
     }
     if a.underline == inh.underline && a.underline_style == inh.underline_style {
         a.underline = false;
@@ -210,6 +211,7 @@ fn strip_inherited_box(a: &mut VisualAttrs, inh: &VisualAttrs) {
     {
         a.fill_rgb = None;
         a.fill_swatch = None;
+        a.fill_theme = None;
         a.fill_pattern = None;
         a.fill_gradient = None;
     }

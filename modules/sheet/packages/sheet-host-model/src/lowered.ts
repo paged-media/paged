@@ -77,6 +77,13 @@ export interface LoweredCell {
  *  a flat, host-ready style description. T0 emits only the default (key 0,
  *  all-false / all-undefined); the style-map track fills real entries in
  *  Phase B. ADDITIVE on the wire. */
+/** A theme slot and the DrawingML transforms after it (`["lumMod", 60000]`),
+ *  the reference a swatch follows (engine ADR 1056). */
+export interface ThemeRefIr {
+  slot: string;
+  transforms?: [string, number][];
+}
+
 export interface LoweredStyle {
   key: number;
   bold: boolean;
@@ -108,6 +115,13 @@ export interface LoweredStyle {
   fillSwatch?: string | null;
   /** The document swatch the text colour names. */
   textSwatch?: string | null;
+  /** Engine ADR 1056 — the theme slot (and DrawingML transforms) the fill
+   *  colour follows: the page mints the fill's swatch with this reference,
+   *  so applying a theme recolours the cell. `fillRgb` is the colour it
+   *  shows today. */
+  fillTheme?: ThemeRefIr | null;
+  /** The same for the text colour. */
+  textTheme?: ThemeRefIr | null;
   /** A pattern fill (not solid); `fillRgb` holds its blend. */
   fillPattern?: FillPattern | null;
   /** A gradient fill; `fillRgb` holds its mean colour. */

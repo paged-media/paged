@@ -177,6 +177,7 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
         }
         if let Some(c) = format_color {
             base.text_rgb = Some(self.visual.format_color_rgb(c));
+            base.text_theme = None;
         }
         let effective = match self.cf_outcome(row, col, cell) {
             Some(o) => o.apply(&base),

@@ -1757,6 +1757,7 @@ fn swatch_for(session: &mut Session, intent: &ColorIntent) -> Result<String> {
                 tint: None,
                 alpha: None,
                 pattern: None,
+                theme_ref: None,
             },
         },
     )

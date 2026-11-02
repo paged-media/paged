@@ -87,6 +87,7 @@ fn a_master_item_is_edited_like_a_page_item() {
             tint: None,
             alpha: None,
             pattern: None,
+            theme_ref: None,
         },
     })
     .expect("mint a swatch");

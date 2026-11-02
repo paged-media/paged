@@ -42,29 +42,56 @@ use crate::sections::DEFAULT_PALETTE;
 pub struct ColorPalette {
     pub theme: Vec<Option<(u8, u8, u8)>>,
     pub indexed: Vec<Option<(u8, u8, u8)>>,
+    /// The workbook's theme as the engine holds it (engine ADR 1056): a
+    /// theme colour is followed (see [`ResolvedColor::theme`]) only where
+    /// this theme resolves it to the colour the cell shows. `None` = the
+    /// package has no readable theme part.
+    pub engine_theme: Option<std::sync::Arc<dml_native::theme::EngineTheme>>,
 }
 
-/// The Office theme's colours (index order), for slots a workbook lacks.
-pub const OFFICE_THEME: [(u8, u8, u8); 12] = [
-    (0xFF, 0xFF, 0xFF),
-    (0x00, 0x00, 0x00),
-    (0xE7, 0xE6, 0xE6),
-    (0x44, 0x54, 0x6A),
-    (0x44, 0x72, 0xC4),
-    (0xED, 0x7D, 0x31),
-    (0xA5, 0xA5, 0xA5),
-    (0xFF, 0xC0, 0x00),
-    (0x5B, 0x9B, 0xD5),
-    (0x70, 0xAD, 0x47),
-    (0x05, 0x63, 0xC1),
-    (0x95, 0x4F, 0x72),
+/// The Office theme's colours (index order), for slots a workbook lacks: the
+/// shared default palette (`paged_ooxml::drawingml::theme::OFFICE`, in
+/// DrawingML order) with each light/dark pair swapped, as SpreadsheetML
+/// numbers them.
+pub const OFFICE_THEME: [(u8, u8, u8); 12] = {
+    const fn rgb(v: u32) -> (u8, u8, u8) {
+        ((v >> 16) as u8, (v >> 8) as u8, v as u8)
+    }
+    let o = paged_ooxml::drawingml::theme::OFFICE;
+    [
+        rgb(o[1]),
+        rgb(o[0]),
+        rgb(o[3]),
+        rgb(o[2]),
+        rgb(o[4]),
+        rgb(o[5]),
+        rgb(o[6]),
+        rgb(o[7]),
+        rgb(o[8]),
+        rgb(o[9]),
+        rgb(o[10]),
+        rgb(o[11]),
+    ]
+};
+
+/// The DrawingML slot a SpreadsheetML `theme="N"` index names.
+pub const INDEX_SLOTS: [&str; 12] = [
+    "lt1", "dk1", "lt2", "dk2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
+    "hlink", "folHlink",
 ];
+
+/// A theme slot and the DrawingML transforms after it: what a theme-coloured
+/// cell follows (engine ADR 1056). See [`ResolvedColor::theme`].
+pub type ThemeFollow = (String, Vec<(String, i32)>);
 
 /// What a colour paints: its sRGB and the document swatch it names.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ResolvedColor {
     pub rgb: (u8, u8, u8),
     pub swatch: Option<String>,
+    /// The theme slot and transforms the colour follows, when it is a theme
+    /// colour the workbook's engine theme resolves to exactly `rgb`.
+    pub theme: Option<ThemeFollow>,
 }
 
 impl ResolvedColor {
@@ -103,15 +130,54 @@ pub fn resolve(color: &ColorRef, palette: &ColorPalette) -> Option<ResolvedColor
         return Some(ResolvedColor {
             rgb: doc.fallback_rgb,
             swatch: Some(doc.id.clone()),
+            theme: None,
         });
     }
+    let mut theme = None;
     let rgb = match &color.concrete {
         ConcreteColor::Rgb { r, g, b } => (*r, *g, *b),
-        ConcreteColor::Theme { index, tint } => tint_rgb(palette.theme_rgb(*index)?, *tint),
+        ConcreteColor::Theme { index, tint } => {
+            let rgb = tint_rgb(palette.theme_rgb(*index)?, *tint);
+            theme = follow_theme(palette, *index, *tint, rgb);
+            rgb
+        }
         ConcreteColor::Indexed { index } => palette.indexed_rgb(*index)?,
         ConcreteColor::Auto => return None,
     };
-    Some(ResolvedColor { rgb, swatch: None })
+    Some(ResolvedColor {
+        rgb,
+        swatch: None,
+        theme,
+    })
+}
+
+/// The slot and transforms a theme colour with `tint` follows: Excel's tint
+/// is a luminance step in HSL (`tint < 0`: `L·(1+tint)`, `tint > 0`:
+/// `L·(1−tint) + tint`), so it is `lumMod` / `lumOff`. Only where the
+/// workbook's engine theme resolves that to `rgb`, the colour shown.
+fn follow_theme(
+    palette: &ColorPalette,
+    index: u32,
+    tint: f64,
+    rgb: (u8, u8, u8),
+) -> Option<ThemeFollow> {
+    let theme = palette.engine_theme.as_deref()?;
+    let slot = INDEX_SLOTS.get(index as usize)?;
+    if !tint.is_finite() {
+        return None;
+    }
+    let transforms = if tint < 0.0 {
+        dml_native::theme::lum_transforms(1.0 + tint, 0.0)
+    } else {
+        dml_native::theme::lum_transforms(1.0 - tint, tint)
+    };
+    let r = dml_native::theme::ThemeRef {
+        slot: slot.to_string(),
+        transforms,
+    };
+    let value = [rgb.0 as f32, rgb.1 as f32, rgb.2 as f32];
+    let r = dml_native::theme::follow(theme, r, &value)?;
+    Some((r.slot, r.transforms))
 }
 
 /// [`resolve`] as `#RRGGBB` (`None` = automatic).
@@ -152,6 +218,7 @@ mod tests {
         let pal = ColorPalette {
             theme: vec![None, None, None, None, Some((0x4F, 0x81, 0xBD))],
             indexed: vec![],
+            engine_theme: None,
         };
         assert_eq!(
             resolve_hex(&ColorRef::rgb(1, 2, 3), &pal).as_deref(),
@@ -187,5 +254,53 @@ mod tests {
         assert_eq!(r.hex(), "#E3000F");
         assert_eq!(r.swatch.as_deref(), Some("Color/Brand"));
         assert_eq!(blend((0, 0, 0), (255, 255, 255), 0.125), (223, 223, 223));
+    }
+
+    const THEME_PART: &str = r#"<?xml version="1.0"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="T"><a:themeElements><a:clrScheme name="C">
+<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+<a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>
+<a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2>
+<a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4>
+<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6>
+<a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink>
+</a:clrScheme></a:themeElements></a:theme>"#;
+
+    #[test]
+    fn a_theme_colour_follows_its_slot_and_an_rgb_colour_does_not__feat__sheet_format_cell_style() {
+        let engine = dml_native::theme::engine_theme(THEME_PART.as_bytes()).unwrap();
+        let pal = ColorPalette {
+            theme: OFFICE_THEME.iter().map(|c| Some(*c)).collect(),
+            indexed: vec![],
+            engine_theme: Some(std::sync::Arc::new(engine)),
+        };
+        let r = resolve(&ColorRef::theme(4, 0.0), &pal).unwrap();
+        assert_eq!(r.theme, Some(("accent1".to_string(), vec![])));
+        // Excel's "Accent 1, Lighter 40%" and "Darker 25%" (index 4).
+        let light = resolve(&ColorRef::theme(4, 0.3999786376953125), &pal).unwrap();
+        assert_eq!(light.theme.as_ref().map(|t| t.0.as_str()), Some("accent1"));
+        assert_eq!(light.theme.as_ref().unwrap().1.len(), 2);
+        let dark = resolve(&ColorRef::theme(4, -0.249977111117893), &pal).unwrap();
+        assert_eq!(dark.theme.as_ref().unwrap().1.len(), 1);
+        // The pair swap: index 0 is lt1, index 1 is dk1.
+        assert_eq!(
+            resolve(&ColorRef::theme(1, 0.0), &pal).unwrap().theme,
+            Some(("dk1".to_string(), vec![]))
+        );
+        // A plain RGB colour, even one equal to a slot, is literal.
+        assert_eq!(
+            resolve(&ColorRef::rgb(0x44, 0x72, 0xC4), &pal)
+                .unwrap()
+                .theme,
+            None
+        );
+        // Without an engine theme nothing follows.
+        let bare = ColorPalette {
+            engine_theme: None,
+            ..pal
+        };
+        assert_eq!(
+            resolve(&ColorRef::theme(4, 0.0), &bare).unwrap().theme,
+            None
+        );
     }
 }

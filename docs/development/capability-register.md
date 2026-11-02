@@ -69,7 +69,7 @@ one function in `paged-colour-math` (f64; `paged-ooxml::colour` re-exports it, e
 sheet-chart, sheet-format and docx-core. `paged-colour-math` also owns the DrawingML colour-transform chain
 (`transform`: lumMod, satOff, tint, shade, alpha …) and `Rgba`, proved bit-identical to the former
 `paged-ooxml` code by `tests/oracle.rs`; the `srgb-transfer` single-owner rule baselines the other copies.
-Default Office palette ×2. TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
+The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-owner rule `office-theme-palette`; sheet-chart and sheet-xlsx took it from there). TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
 
 ### Raster, kernels, blend
 
@@ -105,10 +105,13 @@ Chart label width ×2 → `dml-chart`. Number and date formats: `paged-numfmt` o
 ### Office / OOXML / ODF
 
 Hand-written relationships remain in sheet links and chart_write; `sheet-xlsx` keeps its own
-`opc.rs` and `rels.rs`. Theme readers: `pptx-import` and `slide-resolve` still have their own;
-the engine model has a theme since engine ADR 1056 (slice 1: colour slots and font scheme on
-`Document.theme`, filled by slide's import; the collection, operations, swatch references and
-doc/sheet lowering are open; the format scheme is not modelled).
+`opc.rs` and `rels.rs`. Theme: one DrawingML reader (`paged-ooxml::drawingml::theme`) and one lowering
+onto the engine's `Document.theme` (`dml-native::theme`: the part, the wire form a module's IR carries,
+the swatch convention). Slide, doc and sheet use both; doc and sheet send `setTheme` on open and their
+theme-coloured swatches follow a slot (engine ADR 1056, slice 4). `pptx-import` keeps its own theme
+reader (it reads through its own element tree and keeps colours unresolved, with the format scheme for
+slide's resolver) and `slide-resolve` its key/variant logic. The format scheme is not modelled (ADR 1056,
+Amendment 1).
 Writable XML tree ×4. Minimal `.xlsx` writer ×3 (`slide-sheet`, `sheet-js` csv, ods). ODF layer
 shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 

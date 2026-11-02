@@ -191,6 +191,14 @@
       "patterns": ["0x428a2f98"],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
       "baseline": ["modules/image/image-conformance/src/abr_corpus/sha256.rs"]
+    },
+    {
+      "name": "office-theme-palette",
+      "description": "take the default Office theme colours from paged_ooxml::drawingml::theme::OFFICE",
+      "owner": ["platform/shared/ooxml/src/drawingml/theme.rs"],
+      "patterns": ["0xE7E6E6"],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "baseline": ["modules/sheet/sheet-chart/tests/kinds.rs"]
     }
   ]
 }

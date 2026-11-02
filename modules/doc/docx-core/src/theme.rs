@@ -99,6 +99,11 @@ pub struct Theme {
     /// ([`Theme::scheme_slot`]).
     #[serde(default)]
     pub mapping: Vec<(String, String)>,
+    /// The theme part as the file wrote it (engine ADR 1056): the lowering
+    /// hands it to the engine as the document's theme, which re-emits it
+    /// untouched until the theme is edited. Not part of the serialised model.
+    #[serde(skip)]
+    pub source: Option<String>,
 }
 
 /// The twelve scheme slots by Word's name, in scheme order, with their

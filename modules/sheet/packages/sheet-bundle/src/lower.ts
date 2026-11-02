@@ -784,6 +784,33 @@ async function readKnownParagraphStyleIds(
   }
 }
 
+/** Engine ADR 1056 — give the document the workbook's theme (`setTheme`, the
+ *  part kept as `source`, so it stays unedited) once, before the first
+ *  swatch that follows one of its slots is minted. Idempotent and never
+ *  destructive: a document that already has a theme (ours from an earlier
+ *  lowering, or the user's) is left alone, and an unreadable `theme`
+ *  collection counts as "has one" — a blind `setTheme` would replace it.
+ *  Returns whether it sent the op. */
+export async function ensureDocumentTheme(
+  host: BundleHost,
+  engine: SheetEngine,
+): Promise<boolean> {
+  try {
+    const theme = engine.getTheme?.();
+    if (!theme) return false;
+    const rows = await host.document.collection<unknown>("theme");
+    if (rows.length > 0) return false;
+    const r = await host.document.mutate({
+      op: "setTheme",
+      args: { theme },
+    } as Mutation);
+    return r.applied;
+  } catch (err) {
+    host.log.warn("lower: the workbook theme could not be set", err);
+    return false;
+  }
+}
+
 /** The document's cell-style ids, or null when the read failed. */
 async function readKnownCellStyleIds(
   host: BundleHost,
@@ -1411,6 +1438,8 @@ export async function lowerSelectionToFrame(
     return null;
   }
 
+  await ensureDocumentTheme(host, engine);
+
   // Engine-computed IR (all spreadsheet semantics in Rust): the PAGE door —
   // the workbook's real fills/borders with conditional formatting folded on
   // top (Wave 4; until then this read the frozen key-0 door and every
@@ -1817,6 +1846,7 @@ export async function lowerAreasToFrames(
     host.log.warn("lower: no page to place the sheet frames into");
     return [];
   }
+  await ensureDocumentTheme(host, engine);
   const ops: Mutation[] = [];
   const styles: Mutation[] = [];
   const built: {

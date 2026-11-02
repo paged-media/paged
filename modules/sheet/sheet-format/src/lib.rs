@@ -57,11 +57,12 @@ pub mod serial;
 use sheet_core::{CellValue, DateSystem, Locale};
 
 pub use cache::FormatCache;
+pub use dml_native::theme::ThemeRef;
 pub use general::format_general;
 pub use locale::{locale_data, locale_from_lcid, LocaleData};
 pub use number::{parse_number_locale, parse_number_seps};
 pub use parse::{compile, FormatError};
-pub use resolve::{resolve, resolve_hex, ColorPalette, ResolvedColor};
+pub use resolve::{resolve, resolve_hex, ColorPalette, ResolvedColor, ThemeFollow};
 pub use sections::{CompiledFormat, FormatColor, SystemFormat, DEFAULT_PALETTE};
 
 /// Context for a format pass (spec §9): the workbook date system AND the

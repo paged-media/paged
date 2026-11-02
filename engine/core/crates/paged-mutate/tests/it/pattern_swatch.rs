@@ -91,6 +91,7 @@ fn swatch(id: Option<&str>, p: PatternSpec) -> SwatchSpec {
         tint: None,
         alpha: None,
         pattern: Some(p),
+        theme_ref: None,
     }
 }
 

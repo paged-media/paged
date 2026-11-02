@@ -244,6 +244,14 @@ mod wasm {
             to_js(&result)
         }
 
+        /// The workbook's theme part (`xl/theme/theme1.xml`) as the argument
+        /// of the engine's `setTheme` (engine ADR 1056; the one shared
+        /// reader), or `null` when the workbook has none. The part rides
+        /// along as `source`, so the document re-emits it untouched.
+        pub fn get_theme(&self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.theme_wire())
+        }
+
         /// Lower a range (`"A1:D9"` or `"A1"`) to the `LoweredContent` IR.
         pub fn get_range_lowered(
             &self,
