@@ -85,6 +85,24 @@ export {
   type GraphicPaint,
   type GraphicStyleEntries,
 } from "./graphic-default.ts";
+export {
+  IDENTITY,
+  apply,
+  compose,
+  createTransformMemory,
+  invert,
+  linearChange,
+  reflectMatrix,
+  selectionCentre,
+  transformBounds,
+  transformMatrixOf,
+  translate,
+  type Affine,
+  type Bounds,
+  type Linear,
+  type TransformMemory,
+  type TransformRecord,
+} from "./transform.ts";
 export { escapeXmlAttr, escapeXmlText } from "./escape.ts";
 export { zip, type ZipOptions } from "./zip.ts";
 export {

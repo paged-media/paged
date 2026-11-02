@@ -57,7 +57,9 @@ import type {
 } from "@paged-media/shell";
 
 import type { GestureType } from "@paged-media/client";
-import { layoutPageRects } from "@paged-media/shell";
+import { layoutPageRects, scopeOf, TRANSFORM_MEMORY } from "@paged-media/shell";
+
+import { linearChange, type Affine } from "@paged-media/helpers";
 
 import { CLICK_DRAG_THRESHOLD_PX } from "./shared";
 
@@ -134,6 +136,44 @@ export async function pasteboardAnchor(
   const rect = rects[i];
   if (!pageId || !rect) return null;
   return { pageId, pointInPage: [docPoint[0] - rect.x, docPoint[1] - rect.y] };
+}
+
+/** The first target's `itemTransform` now (page space; its linear part is
+ *  the same as the stored one's), or null when nothing answers. */
+async function itemTransformOf(
+  paged: PagedEditor,
+  target: { kind: string; id: unknown } | undefined,
+): Promise<Affine | null> {
+  if (!target) return null;
+  const rows = await paged.client
+    .elementGeometry([target] as never)
+    .catch(() => []);
+  const m = (
+    rows[0] as { itemTransform?: readonly number[] | null } | undefined
+  )?.itemTransform;
+  return m && m.length === 6 ? (m as unknown as Affine) : null;
+}
+
+/**
+ * Transform Again's memory. The engine commits a tool drag on its own and
+ * reports no angle or factor, so what the drag did is read back: the linear
+ * part of the first target's transform change (a rotate, scale or shear
+ * about any pivot has the same one for every target it moved). A drag that
+ * changed nothing records nothing.
+ */
+export async function recordTransformOf(
+  paged: PagedEditor,
+  target: { kind: string; id: unknown } | undefined,
+  before: Promise<Affine | null>,
+): Promise<void> {
+  const linear = linearChange(
+    await before,
+    await itemTransformOf(paged, target),
+  );
+  if (linear)
+    scopeOf(paged)
+      .get(TRANSFORM_MEMORY)
+      .remember({ kind: "linear", linear, copy: false });
 }
 
 /** Modifier state a worker gesture update carries. */
@@ -352,10 +392,14 @@ export function createTransformGestureHandler(
           ...(set ? { pivotInPage: set.point } : {}),
         };
       });
+      const before = itemTransformOf(editor, targets[0]);
       drag = {
         run: runWorkerGesture(editor, targets, GESTURE_SPEC[kind], anchor, {
           label: kind,
           modifiers: { shift: e.modifiers.shift, alt: e.modifiers.alt },
+          onSettled: (committed) => {
+            if (committed) void recordTransformOf(editor, targets[0], before);
+          },
         }),
         startDoc: e.docPoint,
       };

@@ -48,7 +48,6 @@
       "media.paged.draw.tool.repeat",
       "media.paged.draw.tool.knife",
       "media.paged.draw.tool.scissorsAnyPoint",
-      "media.paged.draw.tool.reflect",
       "media.paged.draw.tool.reshape",
       "media.paged.draw.tool.shaper",
       "media.paged.draw.tool.pathEraser",
@@ -99,7 +98,6 @@
       "media.paged.draw.command.offsetPathOptions",
       "media.paged.draw.command.simplifyPathOptions",
       "media.paged.draw.command.outlineStrokeOptions",
-      "media.paged.draw.command.reflectOptions",
       "media.paged.draw.command.insertArcOptions",
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
@@ -114,9 +112,6 @@
       "media.paged.draw.command.reversePathDirection",
       "media.paged.draw.command.createOutlines",
       "media.paged.draw.command.rasterize",
-      "media.paged.draw.command.reflectHorizontal",
-      "media.paged.draw.command.reflectVertical",
-      "media.paged.draw.command.transformAgain",
       "media.paged.draw.command.makeCompoundPath",
       "media.paged.draw.command.releaseCompoundPath",
       "media.paged.draw.command.makePatternFromSelection",
@@ -1752,74 +1747,6 @@
                   "kind": "ref",
                   "to": "frame"
                 }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.transformAgain",
-          "title": "Transform again",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.reflectHorizontal",
-          "title": "Reflect horizontal",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              },
-              "copy": {
-                "kind": "bool"
-              },
-              "angleDeg": {
-                "kind": "number",
-                "unit": "deg"
-              },
-              "pivot": {
-                "kind": "point"
-              }
-            }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.reflectVertical",
-          "title": "Reflect vertical",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              },
-              "copy": {
-                "kind": "bool"
-              },
-              "angleDeg": {
-                "kind": "number",
-                "unit": "deg"
-              },
-              "pivot": {
-                "kind": "point"
               }
             }
           }

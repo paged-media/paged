@@ -106,7 +106,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.scissorsAnyPoint",
         // WP6.1 part 2 — keyless, in the host's transform / pencil / shape
         // flyouts.
-        "media.paged.draw.tool.reflect",
         "media.paged.draw.tool.reshape",
         "media.paged.draw.tool.shaper",
         "media.paged.draw.tool.pathEraser",
@@ -185,9 +184,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "tool",
         "tool",
         "tool",
-        // WP6.1 part 2 — Reflect, Reshape, Shaper, Path Eraser, Join,
-        // Star, Flare: twenty-seven tools.
-        ...Array<string>(7).fill("tool"),
+        // WP6.1 part 2 — Reshape, Shaper, Path Eraser, Join, Star,
+        // Flare: twenty-six tools (Reflect is the host's command).
+        ...Array<string>(6).fill("tool"),
         // WP6.7 — the seven Liquify tools, Puppet Warp, Perspective Grid
         // and Perspective Selection: thirty-seven; WP6.3 — the Envelope
         // Mesh tool (draw ADR 367): thirty-eight.
@@ -265,12 +264,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // PATH OPTIONS — the ten "…" commands (Offset / Simplify /
-        // Outline stroke / Stroke dashes / Reflect / Arc / Spiral / Rect
-        // grid / Polar grid / Select same stroke weight within): each
-        // raises the panel at its section and mutates nothing. (The
-        // Width profile section is raised by its own command, run bare.)
-        "command",
+        // PATH OPTIONS — the nine "…" commands (Offset / Simplify /
+        // Outline stroke / Arc / Spiral / Rect grid / Polar grid / Star /
+        // Flare / Select same stroke weight within): each raises the panel
+        // at its section and mutates nothing. (The Width profile section is
+        // raised by its own command, run bare.)
         "command",
         "command",
         "command",
@@ -289,11 +287,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Reverse path direction.
         "command",
         // Type ▸ Create outlines (protocol 66, RFI C-69).
-        "command",
-        // Object ▸ Transform — Reflect horizontally / vertically and
-        // Transform again.
-        "command",
-        "command",
         "command",
         // Illustrator Phase 2 — Make / Release compound path, then
         // PATTERN EDITING v1 (Bake / Re-plan / Select tiles / Delete

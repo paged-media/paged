@@ -48,12 +48,10 @@ import {
   createFlareHandler,
   createJoinHandler,
   createPathEraserHandler,
-  createReflectHandler,
   createReshapeHandler,
   createShaperHandler,
   createStarHandler,
   drawBundle,
-  forgetLastTransform,
   simplifyPreviewOf,
   showSimplifyPreview,
   clearSimplifyPreview,
@@ -130,7 +128,6 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
   beforeEach(async () => {
     await h.load(DOC());
     await h.host.selection.set([]);
-    forgetLastTransform();
   });
 
   it("every new tool is keyless, in the host flyout Illustrator keeps it in", () => {
@@ -201,63 +198,6 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       ]);
       await h.host.document.undo();
       expect((await tableOf(h, WAVE))!.anchors).toEqual(before!.anchors);
-    });
-  });
-
-  describe("Reflect tool", () => {
-    it("a click sets the axis point; a drag reflects the selection across the axis through it — one undo step", async () => {
-      await h.host.selection.set([SQ]);
-      const results: unknown[] = [];
-      let reflected!: () => void;
-      const done = new Promise<void>((r) => (reflected = r));
-      const handler = createReflectHandler(h.host, {
-        onReflect: (r) => {
-          results.push(r);
-          reflected();
-        },
-      });
-      handler.onActivate(undefined as never);
-      // Axis point at x = 250, then a vertical drag: a vertical axis.
-      handler.onPointerDown(pointerAt(PAGE_ID, [250, 150]));
-      handler.onPointerUp(pointerAt(PAGE_ID, [250, 150]));
-      handler.onPointerDown(pointerAt(PAGE_ID, [250, 160]));
-      handler.onPointerMove(pointerAt(PAGE_ID, [250, 220]));
-      handler.onPointerUp(pointerAt(PAGE_ID, [250, 260]));
-      await done;
-      expect(results).toHaveLength(1);
-      const [g] = await h.host.document.elementGeometry([SQ]);
-      const m = g!.itemTransform as number[];
-      // The square [100..200] mirrored about x = 250 lands on [300..400].
-      const x0 = m[0]! * 100 + m[2]! * 100 + m[4]!;
-      const x1 = m[0]! * 200 + m[2]! * 100 + m[4]!;
-      expect(Math.min(x0, x1)).toBeCloseTo(300, 3);
-      expect(Math.max(x0, x1)).toBeCloseTo(400, 3);
-      await h.host.document.undo();
-      const [back] = await h.host.document.elementGeometry([SQ]);
-      expect(back!.itemTransform ?? [1, 0, 0, 1, 0, 0]).toEqual([
-        1, 0, 0, 1, 0, 0,
-      ]);
-    });
-
-    it("Alt+click on a host with no panel door reflects with the last-used angle about the clicked point", async () => {
-      await h.host.selection.set([SQ]);
-      let raised: boolean | null = null;
-      let reflected!: () => void;
-      const done = new Promise<void>((r) => (reflected = r));
-      const handler = createReflectHandler(h.host, {
-        onOptions: (_p, r) => (raised = r),
-        onReflect: () => reflected(),
-      });
-      handler.onActivate(undefined as never);
-      handler.onPointerDown(pointerAt(PAGE_ID, [100, 300], { alt: true }));
-      handler.onPointerUp(pointerAt(PAGE_ID, [100, 300], { alt: true }));
-      await done;
-      await settle();
-      expect(raised).toBe(false);
-      // The default axis is vertical (90°): mirrored about x = 100.
-      const [g] = await h.host.document.elementGeometry([SQ]);
-      const m = g!.itemTransform as number[];
-      expect(m[0]! * 200 + m[4]!).toBeCloseTo(0, 3);
     });
   });
 

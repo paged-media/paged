@@ -51,6 +51,7 @@ import { buildInsertCommands } from "../../../src/insert-commands";
 import { buildObjectCommands } from "../../../src/object-commands";
 import { buildStrokeDashCommands } from "../../../src/stroke-dash-commands";
 import { buildAppearanceCommands } from "../../../src/appearance-commands";
+import { buildReflectCommands } from "../../../src/reflect-commands";
 import { buildCornerCommands } from "../../../src/corner-commands";
 import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
@@ -181,6 +182,11 @@ function tableIds(): string[] {
     ...GLOBAL_LIGHT_COMMANDS,
     ...buildEffectMenuCommands(),
     ...buildTransformEachDialogCommands(() => []),
+    ...buildReflectCommands({
+      objects: { batch: noop as never },
+      selectionOf: () => [],
+      openOptions: noop,
+    }),
     ...buildBatchCommands(),
     ...buildViewCommands(noop),
     ...OPEN_AS_TEMPLATE_COMMANDS,
@@ -271,6 +277,7 @@ describe("the host command inventory", () => {
       "GLOBAL_LIGHT_COMMANDS",
       "buildEffectMenuCommands()",
       "transformEachDialogCommands",
+      "reflectCommands",
       "buildBatchCommands()",
       "viewCommands",
       "OPEN_AS_TEMPLATE_COMMANDS",

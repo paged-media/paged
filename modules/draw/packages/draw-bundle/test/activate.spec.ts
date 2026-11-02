@@ -74,7 +74,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.scissorsAnyPoint",
       // WP6.1 part 2 — keyless, in the host's transform / pencil / shape
       // flyouts.
-      "media.paged.draw.tool.reflect",
       "media.paged.draw.tool.reshape",
       "media.paged.draw.tool.shaper",
       "media.paged.draw.tool.pathEraser",
@@ -126,7 +125,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.offsetPathOptions",
       "media.paged.draw.command.simplifyPathOptions",
       "media.paged.draw.command.outlineStrokeOptions",
-      "media.paged.draw.command.reflectOptions",
       "media.paged.draw.command.insertArcOptions",
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
@@ -143,10 +141,6 @@ describe("drawBundle.activate", () => {
       // Type ▸ Create outlines (protocol 66, RFI C-69).
       "media.paged.draw.command.createOutlines",
       "media.paged.draw.command.rasterize",
-      // Object ▸ Transform — Reflect ×2 and Transform again.
-      "media.paged.draw.command.reflectHorizontal",
-      "media.paged.draw.command.reflectVertical",
-      "media.paged.draw.command.transformAgain",
       // Illustrator Phase 2 — compound paths (Make / Release).
       "media.paged.draw.command.makeCompoundPath",
       "media.paged.draw.command.releaseCompoundPath",

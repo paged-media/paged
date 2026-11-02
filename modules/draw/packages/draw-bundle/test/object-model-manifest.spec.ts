@@ -70,7 +70,6 @@ describe("paged.draw object model — the manifest block", () => {
         "insertSpiralOptions",
         "offsetPathOptions",
         "outlineStrokeOptions",
-        "reflectOptions",
         "selectSameStrokeWeightOptions",
         "simplifyPathOptions",
       ].map((n) => `media.paged.draw.command.${n}`),

@@ -138,6 +138,11 @@ import {
   buildAppearanceCommands,
 } from "../../src/appearance-commands";
 import {
+  buildReflectCommands,
+  REFLECT_MENU_ITEMS,
+} from "../../src/reflect-commands";
+import { openReflectOptions } from "../../src/panels/reflect-dialog";
+import {
   buildCornerCommands,
   CORNER_DIAGNOSTIC_SOURCE,
 } from "../../src/corner-commands";
@@ -1049,6 +1054,16 @@ export async function createHeadlessEditor(
     objectRegistry,
     (address) => editorObjectsOf(scope).model.elementIdOf?.(address) ?? null,
   );
+  const reflectCommands = buildReflectCommands({
+    objects: objectRegistry,
+    selectionOf: (paged) =>
+      ((paged as PagedEditor | null)?.selection.elementSelection ?? []).map(
+        (id) => editorObjectsOf(scope).addressOfElement(id),
+      ),
+    elementIdOf: (address) =>
+      editorObjectsOf(scope).model.elementIdOf?.(address) ?? null,
+    openOptions: openReflectOptions,
+  });
   setAssistantOpener(scope, () => {
     opened.push({ kind: "assistant" });
   });
@@ -1102,6 +1117,7 @@ export async function createHeadlessEditor(
           (id) => editorObjectsOf(scope).addressOfElement(id),
         ),
       ),
+      ...reflectCommands,
       ...buildBatchCommands(),
       SELECT_ALL_COMMAND,
       ...FIND_COMMANDS,
@@ -1118,6 +1134,7 @@ export async function createHeadlessEditor(
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...TRANSFORM_EACH_MENU_ITEMS,
+      ...REFLECT_MENU_ITEMS,
       ...BATCH_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ].map((m) => registries.menus.register(m)),

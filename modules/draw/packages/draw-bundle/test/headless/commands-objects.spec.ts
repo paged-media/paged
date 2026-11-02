@@ -317,13 +317,6 @@ describe("paged.draw commands — objects (real engine)", () => {
       await expectRefuses(rig, F1(), [], `${C}.outlineStrokeOptions`);
     });
 
-    it("Reflect… reflects the selection about the last used axis", async () => {
-      covers("command:media.paged.draw.command.reflectOptions");
-      await rig.open(F1(), [POLY]);
-      await expectApplies(rig, `${C}.reflectOptions`);
-      await expectRefuses(rig, F1(), [], `${C}.reflectOptions`);
-    });
-
     it("Arc… inserts an arc with the last used parameters", async () => {
       covers("command:media.paged.draw.command.insertArcOptions");
       await rig.open(F1(), []);

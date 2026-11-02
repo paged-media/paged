@@ -466,19 +466,6 @@ describe("paged.draw tools through the gesture DSL — live constructs", () => {
 });
 
 describe("paged.draw tools through the gesture DSL — WP6.1 part 2 [plugin-draw.tool-wave-3]", () => {
-  it("Reflect: a click sets the axis point, a drag reflects the selection across the axis, as one undo step; Escape commits nothing", async () => {
-    covers("tool:media.paged.draw.tool.reflect");
-    const { r, g } = rig([A]);
-    await arm(r, g, `${T}.reflect`);
-    const before = r.picture();
-    await g.click([350, 200]).settle();
-    expect(r.sent()).toEqual([]);
-    await slowDrag(g, [350, 210], [350, 280]);
-    expect(paths(r.leaves())).toEqual(["frameTransform"]);
-    await oneUndoStep(r, before);
-    await cancelCommitsNothing(`${T}.reflect`, [A], [350, 210], [350, 280]);
-  });
-
   it("Reshape: dragging an anchor writes the reshaped table in one framePath batch, one undo step; Escape commits nothing", async () => {
     covers("tool:media.paged.draw.tool.reshape");
     const { r, g } = rig([]);

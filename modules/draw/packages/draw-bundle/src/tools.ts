@@ -57,7 +57,6 @@ import { createScissorsHandler } from "./handlers/scissors";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
 import { createTypeOnPathHandler } from "./handlers/text-on-path";
 import { createWidthHandler } from "./handlers/width";
-import { createReflectHandler } from "./handlers/reflect";
 import { createReshapeHandler } from "./handlers/reshape";
 import {
   createJoinHandler,
@@ -108,7 +107,6 @@ const M = defineMessages("draw.tools", {
   repeat: "Repeat (steer the selected repeat)",
   knife: "Knife",
   scissorsAnyPoint: "Scissors (any point)",
-  reflect: "Reflect",
   reshape: "Reshape",
   join: "Join",
   pathEraser: "Path Eraser",
@@ -201,7 +199,6 @@ export const CUT_TOOL_IDS = [
  *  key and it is reserved for the host's Artboard tool), so each joins
  *  the host flyout Illustrator keeps it in, without a key. */
 export const WAVE3_TOOL_IDS = [
-  "media.paged.draw.tool.reflect",
   "media.paged.draw.tool.reshape",
   "media.paged.draw.tool.join",
   "media.paged.draw.tool.pathEraser",
@@ -608,19 +605,9 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // of the host's map whose metaphor holds (an invented token renders
     // the rail button glyphless).
     //
-    // REFLECT and RESHAPE join the host's TRANSFORM flyout (Rotate, Scale,
-    // Shear); Illustrator nests Reflect under Rotate and Reshape under
-    // Scale — one flyout here.
-    {
-      id: "media.paged.draw.tool.reflect",
-      title: t(M.reflect),
-      icon: "tool-rotate",
-      group: "transform",
-      section: "transform",
-      order: 10,
-      cursor: CROSS,
-      gesture: () => createReflectHandler(host),
-    },
+    // RESHAPE joins the host's TRANSFORM flyout (Rotate, Scale, Shear);
+    // Illustrator nests it under Scale. Reflect is the host's command and
+    // dialog (Object ▸ Transform), not a tool.
     {
       id: "media.paged.draw.tool.reshape",
       title: t(M.reshape),

@@ -42,10 +42,9 @@ canary added is under [Releases](#releases).
   Builder, Corner Radius (on rotated and transformed shapes too), Eyedropper, Lasso Select
   (by intersection, or by centre), Live Paint Bucket and Live Paint Selection, Type on a
   Path, Repeat, Knife, and Scissors at any point on a path.
-- **WP6.1 tools (keyless, in the host's flyouts).** In the Transform flyout: **Reflect**
-  (a click sets the axis point, a drag turns the axis with a live preview and reflects the
-  selection, Alt at release reflects a copy, Shift snaps to 45°; Alt+click opens the Path
-  Options Reflect section about that point) and **Reshape** (press on a path, on an anchor or
+- **WP6.1 tools (keyless, in the host's flyouts).** In the Transform flyout: **Reshape**
+  (Reflect was a tool here; it is the host's Object ▸ Transform ▸ Reflect… dialog now, see
+  ADR 359; press on a path, on an anchor or
   on a segment, where an anchor is added, and drag: the contour follows with a cosine falloff
   along the path, the radius a tool option). In the Pencil flyout: **Shaper** (a freehand
   line, rectangle, ellipse, triangle or regular polygon is recognised and drawn clean; a
@@ -60,7 +59,7 @@ canary added is under [Releases](#releases).
   centre) and **Flare** (two drags: size, then the rings' end; centre, halo, rays and rings
   as one group). Each is one undo step. The pure halves are draw-geometry (`simplify-fit`,
   `path-locate`, `path-erase`, `reshape`, `star`, `shaper`) and draw-tools (`ScrubMachine`,
-  `ReflectMachine`, `ReshapeMachine`, `StarMachine`, `FlareMachine`).
+  `ReshapeMachine`, `StarMachine`, `FlareMachine`).
 - **Tool options.** Paintbrush, Blob Brush, Eraser, Width, Lasso Select, Reshape (falloff
   radius) and Star (points, Radius 2 as a percentage) publish their settings to the host's
   tool-options popover.
@@ -92,15 +91,10 @@ canary added is under [Releases](#releases).
   and text frames; Select same fill, stroke, stroke weight (with a tolerance), opacity,
   blending mode, appearance, graphic style, symbol instance or shape kind, and Global Edit
   (select every object of the same shape, optionally at any size); Insert arc,
-  spiral, rectangular grid, polar grid, star and flare; Reflect (horizontal, vertical, a typed axis, and
-  a copy) and Transform again; a dash editor; a width profile (start, middle and end widths)
+  spiral, rectangular grid, polar grid, star and flare; a width profile (start, middle and end widths)
   that replaces each selected open path with its outline. Parameters are typed in a Path
-  Options panel, which the menu's "…" entries open. Reflect writes a group's transform in the frame of the
-  group holding it, so a group nested in a rotated or scaled parent mirrors about the axis
-  asked for, on an engine that keeps a nested group's transform relative to its parent and
-  reports a group's geometry (canvas-wasm 0.71.11). On an engine that reports no geometry
-  for a group, the write is the reflection composed with the stored transform, which is
-  what that engine needs.
+  Options panel, which the menu's "…" entries open. (Reflect and Transform again are the
+  host's, `paged.transform.*`; the dash editor is the host's Stroke panel.)
 - **Appearance.** Several fills and strokes on one object, edited in a panel; Bake lowers
   the stack to a group of single-paint items and Release restores it.
 - **Graphic styles and symbols.** A named appearance that objects stay linked to; a named
@@ -239,8 +233,7 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   and so are the WP6.1 tools: `joinScrub { page, path, tolerance }`,
   `pathErase { page, path, width }`, `reshapeAt { point, to, radius, tolerance }`,
   `shaperStroke { page, path }`, `insertStar` and `insertFlare` (every parameter);
-  `simplifyPath` takes `cornerAngle` and the Reflect commands a page-space `pivot`,
-  and a cut that does nothing fails with its reason (`commands/cut-commands.ts`). A
+  `simplifyPath` takes `cornerAngle`, and a cut that does nothing fails with its reason (`commands/cut-commands.ts`). A
   scripted Shape Builder refuses ovals (the tool reads them through stand-ins).
 - **Width profile.** `widthProfile { targets, widths }` is the Width tool's bake with the
   profile as data: `widths` are full stroke widths at evenly spaced stops along the path by
@@ -400,8 +393,8 @@ Recolouring a raster is pixel work and is not registered.
   white (`Color/Paper`) with opacity and a radial gradient feather on the halo, in Normal
   blending and without Illustrator's tints. The Shaper's scribble acts on polygons and
   rectangles (ovals take part only through the Shape Builder tool). A click with Star or
-  Flare, and an Alt+click with Reflect, open their Path Options section; on a host that
-  cannot raise a panel they insert or reflect with the last-used values instead.
+  Flare opens its Path Options section; on a host that cannot raise a panel they insert with
+  the last-used values instead.
 - **What updates itself.** Editing a source rebuilds the patterns, repeats, blends,
   objects on a path and live-paint fills it feeds, in the edit's undo step (above). A symbol's
   definition is stored artwork, not a page item, so nothing edits it but Redefine, which

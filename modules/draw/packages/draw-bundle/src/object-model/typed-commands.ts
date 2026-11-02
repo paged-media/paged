@@ -254,10 +254,7 @@ export const TWINS: readonly TwinSpec[] = [
     "averageEndpoints",
     "reversePathDirection",
     "createOutlines",
-    "transformAgain",
   ].map(sel),
-  twin("reflectHorizontal", { ...T, copy: BOOL, angleDeg: DEG, pivot: POINT }),
-  twin("reflectVertical", { ...T, copy: BOOL, angleDeg: DEG, pivot: POINT }),
   // Compound paths (Pathfinder is the host's).
   ...["makeCompoundPath", "releaseCompoundPath"].map(sel),
   // Appearance.

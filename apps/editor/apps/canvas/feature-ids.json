@@ -6,8 +6,8 @@
     "command": 902,
     "keybinding": 167,
     "menu": 645,
-    "panel": 150,
-    "tool": 128
+    "panel": 149,
+    "tool": 127
   },
   "features": [
     {
@@ -1126,21 +1126,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "command:media.paged.draw.command.reflectHorizontal",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.reflectOptions",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.reflectVertical",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "command:media.paged.draw.command.regenerateLivePaint",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -1362,11 +1347,6 @@
     },
     {
       "id": "command:media.paged.draw.command.textToVectorOptions",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.transformAgain",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -4401,6 +4381,26 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.transform.again",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.transform.reflectHorizontal",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.transform.reflectOptions",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.transform.reflectVertical",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.firstPage",
       "kind": "command",
       "owner": "editor"
@@ -5827,26 +5827,6 @@
     },
     {
       "id": "menu:Draw/Text to vector…",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Draw/Transform/Reflect horizontally",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Draw/Transform/Reflect vertically",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Draw/Transform/Reflect…",
-      "kind": "menu",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Draw/Transform/Transform again",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -8051,6 +8031,26 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Transform/Reflect horizontally",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Reflect vertically",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Reflect…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Transform/Transform again",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Transform/Transform each…",
       "kind": "menu",
       "owner": "editor"
@@ -8776,11 +8776,6 @@
       "owner": "media.paged.slide"
     },
     {
-      "id": "panel:media.paged.slide.panel.comments",
-      "kind": "panel",
-      "owner": "media.paged.slide"
-    },
-    {
       "id": "panel:media.paged.slide.panel.customShows",
       "kind": "panel",
       "owner": "media.paged.slide"
@@ -9461,11 +9456,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.reflect",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.repeat",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -9993,216 +9983,6 @@
   ],
   "deprecated": [
     {
-      "id": "panel:media.paged.draw.panel.appearance",
-      "replacement": "panel:paged.appearance",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.makeOpacityMask",
-      "replacement": "command:paged.core.applyOpacityMask",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.releaseOpacityMask",
-      "replacement": "command:paged.core.releaseOpacityMask",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Opacity mask/Make",
-      "replacement": "menu:Object/Opacity mask/Make…",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Opacity mask/Release",
-      "replacement": "menu:Object/Opacity mask/Release",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderUnite",
-      "replacement": "command:paged.pathfinder.unite",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Unite",
-      "replacement": "menu:Object/Pathfinder/Unite",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderSubtract",
-      "replacement": "command:paged.pathfinder.subtract",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Subtract",
-      "replacement": "menu:Object/Pathfinder/Subtract",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderIntersect",
-      "replacement": "command:paged.pathfinder.intersect",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Intersect",
-      "replacement": "menu:Object/Pathfinder/Intersect",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderExclude",
-      "replacement": "command:paged.pathfinder.exclude",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Exclude",
-      "replacement": "menu:Object/Pathfinder/Exclude",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderDivide",
-      "replacement": "command:paged.pathfinder.divide",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Divide",
-      "replacement": "menu:Object/Pathfinder/Divide",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderTrim",
-      "replacement": "command:paged.pathfinder.trim",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Trim",
-      "replacement": "menu:Object/Pathfinder/Trim",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderMerge",
-      "replacement": "command:paged.pathfinder.merge",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Merge",
-      "replacement": "menu:Object/Pathfinder/Merge",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderCrop",
-      "replacement": "command:paged.pathfinder.crop",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Crop",
-      "replacement": "menu:Object/Pathfinder/Crop",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderOutline",
-      "replacement": "command:paged.pathfinder.outline",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Outline",
-      "replacement": "menu:Object/Pathfinder/Outline",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.pathfinderMinusBack",
-      "replacement": "command:paged.pathfinder.minusBack",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Pathfinder/Minus back",
-      "replacement": "menu:Object/Pathfinder/Minus back",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.cornersRounded",
-      "replacement": "command:paged.corners.rounded",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Corners/Rounded",
-      "replacement": "menu:Object/Corners/Rounded",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.cornersInverseRounded",
-      "replacement": "command:paged.corners.inverseRounded",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Corners/Inverse rounded",
-      "replacement": "menu:Object/Corners/Inverse rounded",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.cornersBevel",
-      "replacement": "command:paged.corners.bevel",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Corners/Bevel",
-      "replacement": "menu:Object/Corners/Bevel",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.cornersFancy",
-      "replacement": "command:paged.corners.fancy",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Corners/Fancy",
-      "replacement": "menu:Object/Corners/Fancy",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "command:media.paged.draw.command.cornersNone",
-      "replacement": "command:paged.corners.none",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
-      "id": "menu:Draw/Corners/None",
-      "replacement": "menu:Object/Corners/None",
-      "deprecatedIn": "0.78.0",
-      "removeIn": "0.80.0"
-    },
-    {
       "id": "command:media.paged.draw.command.appearanceAddFill",
       "replacement": "command:paged.appearance.addFill",
       "deprecatedIn": "0.78.0",
@@ -10221,14 +10001,176 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "command:media.paged.draw.command.appearanceMoveLayer",
+      "replacement": "command:paged.appearance.moveLayer",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "command:media.paged.draw.command.appearanceRemoveLayer",
       "replacement": "command:paged.appearance.removeLayer",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
     {
-      "id": "command:media.paged.draw.command.appearanceMoveLayer",
-      "replacement": "command:paged.appearance.moveLayer",
+      "id": "command:media.paged.draw.command.applyGuideColor",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersBevel",
+      "replacement": "command:paged.corners.bevel",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersFancy",
+      "replacement": "command:paged.corners.fancy",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersInverseRounded",
+      "replacement": "command:paged.corners.inverseRounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersNone",
+      "replacement": "command:paged.corners.none",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.cornersRounded",
+      "replacement": "command:paged.corners.rounded",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.makeOpacityMask",
+      "replacement": "command:paged.core.applyOpacityMask",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderCrop",
+      "replacement": "command:paged.pathfinder.crop",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderDivide",
+      "replacement": "command:paged.pathfinder.divide",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderExclude",
+      "replacement": "command:paged.pathfinder.exclude",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderIntersect",
+      "replacement": "command:paged.pathfinder.intersect",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderMerge",
+      "replacement": "command:paged.pathfinder.merge",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderMinusBack",
+      "replacement": "command:paged.pathfinder.minusBack",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderOutline",
+      "replacement": "command:paged.pathfinder.outline",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderSubtract",
+      "replacement": "command:paged.pathfinder.subtract",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderTrim",
+      "replacement": "command:paged.pathfinder.trim",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.pathfinderUnite",
+      "replacement": "command:paged.pathfinder.unite",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.reflectHorizontal",
+      "replacement": "command:paged.transform.reflectHorizontal",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.reflectOptions",
+      "replacement": "command:paged.transform.reflectOptions",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.reflectVertical",
+      "replacement": "command:paged.transform.reflectVertical",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.releaseOpacityMask",
+      "replacement": "command:paged.core.releaseOpacityMask",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDashDot",
+      "replacement": "command:paged.stroke.dashDashDot",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDashed",
+      "replacement": "command:paged.stroke.dashDashed",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashDotted",
+      "replacement": "command:paged.stroke.dashDotted",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashOptions",
+      "replacement": "panel:paged.stroke",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashSolid",
+      "replacement": "command:paged.stroke.dashSolid",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.transformAgain",
+      "replacement": "command:paged.transform.again",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
@@ -10251,38 +10193,104 @@
       "removeIn": "0.80.0"
     },
     {
-      "id": "command:media.paged.draw.command.strokeDashSolid",
-      "replacement": "command:paged.stroke.dashSolid",
+      "id": "menu:Draw/Corners/Bevel",
+      "replacement": "menu:Object/Corners/Bevel",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
     {
-      "id": "command:media.paged.draw.command.strokeDashDashed",
-      "replacement": "command:paged.stroke.dashDashed",
+      "id": "menu:Draw/Corners/Fancy",
+      "replacement": "menu:Object/Corners/Fancy",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
     {
-      "id": "command:media.paged.draw.command.strokeDashDotted",
-      "replacement": "command:paged.stroke.dashDotted",
+      "id": "menu:Draw/Corners/Inverse rounded",
+      "replacement": "menu:Object/Corners/Inverse rounded",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
     {
-      "id": "command:media.paged.draw.command.strokeDashDashDot",
-      "replacement": "command:paged.stroke.dashDashDot",
+      "id": "menu:Draw/Corners/None",
+      "replacement": "menu:Object/Corners/None",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
     {
-      "id": "panel:media.paged.slide.panel.comments",
-      "replacement": "panel:paged.comments",
+      "id": "menu:Draw/Corners/Rounded",
+      "replacement": "menu:Object/Corners/Rounded",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
     {
-      "id": "command:media.paged.draw.command.strokeDashOptions",
-      "replacement": "panel:paged.stroke",
+      "id": "menu:Draw/Opacity mask/Make",
+      "replacement": "menu:Object/Opacity mask/Make…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Opacity mask/Release",
+      "replacement": "menu:Object/Opacity mask/Release",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Crop",
+      "replacement": "menu:Object/Pathfinder/Crop",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Divide",
+      "replacement": "menu:Object/Pathfinder/Divide",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Exclude",
+      "replacement": "menu:Object/Pathfinder/Exclude",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Intersect",
+      "replacement": "menu:Object/Pathfinder/Intersect",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Merge",
+      "replacement": "menu:Object/Pathfinder/Merge",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Minus back",
+      "replacement": "menu:Object/Pathfinder/Minus back",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Outline",
+      "replacement": "menu:Object/Pathfinder/Outline",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Subtract",
+      "replacement": "menu:Object/Pathfinder/Subtract",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Trim",
+      "replacement": "menu:Object/Pathfinder/Trim",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Pathfinder/Unite",
+      "replacement": "menu:Object/Pathfinder/Unite",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
@@ -10293,14 +10301,32 @@
       "removeIn": "0.80.0"
     },
     {
-      "id": "tool:media.paged.draw.tool.eyedropper",
-      "replacement": "tool:paged.tool.eyedropper",
+      "id": "menu:Draw/Transform/Reflect horizontally",
+      "replacement": "menu:Object/Transform/Reflect horizontally",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
     {
-      "id": "tool:media.paged.draw.tool.measure",
-      "replacement": "tool:paged.tool.measure",
+      "id": "menu:Draw/Transform/Reflect vertically",
+      "replacement": "menu:Object/Transform/Reflect vertically",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Transform/Reflect…",
+      "replacement": "menu:Object/Transform/Reflect…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Transform/Transform again",
+      "replacement": "menu:Object/Transform/Transform again",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "panel:media.paged.draw.panel.appearance",
+      "replacement": "panel:paged.appearance",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
@@ -10311,14 +10337,32 @@
       "removeIn": "0.80.0"
     },
     {
-      "id": "command:media.paged.draw.command.applyGuideColor",
-      "replacement": null,
+      "id": "panel:media.paged.slide.panel.comments",
+      "replacement": "panel:paged.comments",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.eyedropper",
+      "replacement": "tool:paged.tool.eyedropper",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },
     {
       "id": "tool:media.paged.draw.tool.gradientAnnotator",
       "replacement": "tool:paged.tool.gradientSwatch",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.measure",
+      "replacement": "tool:paged.tool.measure",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.reflect",
+      "replacement": "command:paged.transform.reflectOptions",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

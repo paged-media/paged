@@ -39,52 +39,23 @@
 
 import type { ShellObjectOp } from "@paged-media/shell";
 
-/** `[a, b, c, d, tx, ty]`: x' = a·x + c·y + tx, y' = b·x + d·y + ty. */
-export type Affine = readonly [number, number, number, number, number, number];
-/** IDML bounds, `[top, left, bottom, right]`. */
-export type Bounds = readonly [number, number, number, number];
-
-export const IDENTITY: Affine = [1, 0, 0, 1, 0, 0];
-
-/** `m ∘ n`: n first, then m. */
-export function compose(m: Affine, n: Affine): Affine {
-  return [
-    m[0] * n[0] + m[2] * n[1],
-    m[1] * n[0] + m[3] * n[1],
-    m[0] * n[2] + m[2] * n[3],
-    m[1] * n[2] + m[3] * n[3],
-    m[0] * n[4] + m[2] * n[5] + m[4],
-    m[1] * n[4] + m[3] * n[5] + m[5],
-  ];
-}
-
-export function invert(m: Affine): Affine | null {
-  const det = m[0] * m[3] - m[1] * m[2];
-  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
-  const a = m[3] / det;
-  const b = -m[1] / det;
-  const c = -m[2] / det;
-  const d = m[0] / det;
-  return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
-}
-
-export function translate(dx: number, dy: number): Affine {
-  return [1, 0, 0, 1, dx, dy];
-}
-
-export function apply(m: Affine, x: number, y: number): [number, number] {
-  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
-}
-
-/** The axis-aligned box of `bounds` through `m`. */
-export function transformBounds(bounds: Bounds, m: Affine | null): Bounds {
-  if (!m) return bounds;
-  const [t, l, b, r] = bounds;
-  const pts = [apply(m, l, t), apply(m, r, t), apply(m, r, b), apply(m, l, b)];
-  const xs = pts.map((p) => p[0]);
-  const ys = pts.map((p) => p[1]);
-  return [Math.min(...ys), Math.min(...xs), Math.max(...ys), Math.max(...xs)];
-}
+export {
+  IDENTITY,
+  apply,
+  compose,
+  invert,
+  transformBounds,
+  translate,
+  type Affine,
+  type Bounds,
+} from "@paged-media/helpers";
+import {
+  IDENTITY,
+  compose,
+  invert,
+  type Affine,
+  type Bounds,
+} from "@paged-media/helpers";
 
 /** One object of a command, in SPREAD space. */
 export interface SpreadTarget {
@@ -98,6 +69,10 @@ export interface SpreadTarget {
   spreadId: string | null;
   /** E — its composed transform in spread space (null = identity). */
   composed: Affine | null;
+  /** The origin of its page inside the spread (`pageOrigin`): how a
+   *  PAGE-space point (a typed Reflect axis point) is taken to spread
+   *  space. Absent: unknown, the spread's own origin. */
+  origin?: readonly [number, number];
   /** A group: its STORED transform G (null = identity). Absent: a page item. */
   group?: { stored: Affine | null };
 }

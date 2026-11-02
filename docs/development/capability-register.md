@@ -168,8 +168,19 @@ Status (draw items, one line each; updated as they land):
   Draw's five commands, their menu entries, typed twins, strings and the native list functions
   that duplicated the panel's are gone (draw ADR 367 amended). Kept in draw: the stack model, the
   conversion and migration of old metadata stacks, the group bake and release, the graphic styles.
-- Reflect / Transform again: KEEP. The host has rotate, scale and shear tools and Transform
-  each, but no Reflect and no repeat-last-transform; nothing to delete.
+- Reflect / Transform again: MERGED 2026-11-02. The host declares `paged.transform.reflectHorizontal`,
+  `reflectVertical`, `reflectOptions` (a dialog: axis angle, optional page-space axis point, Copy)
+  and `again` (`reflect-commands.ts`, `panels/reflect-dialog.tsx`), with Object > Transform
+  entries. They write through Transform Each's door (`R ∘ M` for an item, `setGroupTransform` in
+  the parent frame for a group, one batch; Copy is `core.duplicateElements` first). The matrix
+  algebra and the session's last-transform record are one implementation in
+  `platform/shared/helpers` (`transform`); the host's Rotate, Scale and Shear tools record the
+  linear part of what a drag did, so Transform again repeats those as well (draw's repeated only
+  its own reflects). Draw's three commands, Reflect…, its Draw > Transform menu, typed twins,
+  Path Options Reflect section, Reflect tool and `ReflectMachine` are gone (ids left through the
+  deprecation window; draw ADR 359 amended). Not carried over: the tool's interactive axis (click
+  for the axis point, drag to turn it, Alt+click for the options). The dialog types the same
+  angle and point; a tool would need the host's tools to run a command.
 - Live corners: MERGED 2026-11-01. The host declares `paged.corners.*` (Rounded, Inverse rounded,
   Bevel, Fancy, None; `corner-commands.ts`) with Object > Corners entries; the eight writes are
   one shared builder in `platform/shared/helpers` (`cornerPresetOps`) that draw's Corner Radius

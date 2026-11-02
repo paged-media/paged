@@ -50,11 +50,6 @@ defineMessages("menu", {
   "Average endpoints": "Average endpoints",
   "Close path": "Close path",
   "Reverse path direction": "Reverse path direction",
-  Transform: "Transform",
-  "Reflect horizontally": "Reflect horizontally",
-  "Reflect vertically": "Reflect vertically",
-  "Reflect…": "Reflect…",
-  "Transform again": "Transform again",
   Stroke: "Stroke",
   "Width profile…": "Width profile…",
   "Brushes…": "Brushes…",
@@ -175,13 +170,8 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
     "path-direction",
   ],
 
-  // ── Transform — Reflect (the "…" row raises the Path Options panel's
-  //    Reflect section: a typed axis angle, and Copy where the engine can)
-  //    and Transform again, which repeats the last one. ──
-  ["Draw/Transform/Reflect horizontally", "reflectHorizontal", "transform"],
-  ["Draw/Transform/Reflect vertically", "reflectVertical", "transform"],
-  ["Draw/Transform/Reflect…", "reflectOptions", "transform"],
-  ["Draw/Transform/Transform again", "transformAgain", "transform-again"],
+  // ── Transform — Reflect and Transform again are the host's
+  //    (Object ▸ Transform). ──
 
   // ── Stroke — (the dash editor is the host's: Object ▸ Stroke ▸ Dashes…). ──
   //    The width profile (the Width tool's bake, typed): run bare, the

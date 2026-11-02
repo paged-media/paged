@@ -73,3 +73,18 @@ fill, stroke, weight and opacity and writes them onto the selection in one batch
 samples only). Sampling and the write are `platform/shared/helpers`' `sampled-style`. This
 bundle's Eyedropper tool, its `shift+d` key and its feature id are gone; the scissors stay two.
 
+## Amendment 2026-11-02 — Reflect and Transform again are the host's
+
+Same rule (PM-0017). The host declares `paged.transform.reflectHorizontal`, `reflectVertical`,
+`reflectOptions` (a dialog: axis angle, an optional page-space axis point, Copy) and `again`,
+with Object ▸ Transform entries, writing through the Transform Each door (`frameTransform` as
+`R ∘ M`, `core.setGroupTransform` for a group in its parent's frame, one batch; Copy is
+`core.duplicateElements` first). The matrix algebra and the session's last-transform record are
+`platform/shared/helpers`' `transform`; the host's Rotate, Scale and Shear tools record the
+linear part of what a drag did, so Transform again repeats those too (draw's repeated only its
+own reflects). This bundle's two reflect commands, Reflect… and Transform again, their Draw ▸
+Transform menu, typed twins, the Path Options Reflect section, the Reflect tool and its
+`ReflectMachine` are gone. One thing is not carried over: the Reflect tool's interactive axis
+(click for the axis point, drag to turn it with a live preview, Alt+click for the options). The
+dialog types the same angle and point; a tool would need the host's tools to run a command,
+which they do not yet.

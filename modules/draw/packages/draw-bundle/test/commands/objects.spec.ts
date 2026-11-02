@@ -468,11 +468,6 @@ describe("paged.draw commands, no engine — the Path Options “…” commands
     await raises(`${C}.outlineStrokeOptions`, "outlineStroke");
   });
 
-  it("Reflect… raises Path Options at Reflect", async () => {
-    covers("command:media.paged.draw.command.reflectOptions");
-    await raises(`${C}.reflectOptions`, "reflect");
-  });
-
   it("Arc… raises Path Options at Arc", async () => {
     covers("command:media.paged.draw.command.insertArcOptions");
     await raises(`${C}.insertArcOptions`, "arc");

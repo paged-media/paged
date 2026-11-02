@@ -34,17 +34,8 @@ import type {
   ElementId,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
-import {
-  affineReflect,
-  type Affine,
-  type AnchorTable,
-} from "@paged-media/draw-geometry";
+import { type Affine, type AnchorTable } from "@paged-media/draw-geometry";
 
-import {
-  applyReflect,
-  applyTransformAgain,
-  forgetLastTransform,
-} from "../../src/commands/transform";
 import {
   OBJECTS_ON_PATH_DEFAULTS,
   objectsOnPathBatchFor,
@@ -182,100 +173,6 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
   let engine: FakeEngine;
   beforeEach(() => {
     engine = new FakeEngine(shape);
-    forgetLastTransform();
-  });
-
-  // ------------------------------------------------------------ Reflect
-
-  describe("Reflect and Transform again", () => {
-    /** A right triangle at page (100, 100)–(200, 160) on the verso. */
-    const TRI: Vec[] = [
-      [0, 0],
-      [100, 0],
-      [0, 60],
-    ];
-
-    it("mirrors an item on a verso about its own centre, in place", async () => {
-      engine.addPath("tri", VERSO, TRI, T(100, 100));
-      const done = await applyReflect(fakeHost(engine, [poly("tri")]), 90);
-      expect(done.applied).toBe(true);
-      near(engine.pageOutline("tri", VERSO), [
-        [
-          [200, 100],
-          [100, 100],
-          [200, 160],
-        ],
-      ]);
-    });
-
-    it("keeps a rotated item's rotation and mirrors it about its box's centre", async () => {
-      const onPage = RT(30, 300, 200);
-      engine.addPath("tri", VERSO, TRI, onPage);
-      const before = engine.pageOutline("tri", VERSO);
-      await applyReflect(fakeHost(engine, [poly("tri")]), 90);
-      const c = centreOf(before);
-      near(
-        engine.pageOutline("tri", VERSO),
-        mapOutline(affineReflect(90, c), before),
-      );
-    });
-
-    it("a selection across the spine mirrors about ONE centre, in spread space", async () => {
-      engine.addPath("tri", VERSO, TRI, T(100, 100));
-      engine.addPath("sq", RECTO, square(40), T(300, 100));
-      const before = {
-        tri: engine.spreadOutline("tri"),
-        sq: engine.spreadOutline("sq"),
-      };
-      await applyReflect(fakeHost(engine, [poly("tri"), poly("sq")]), 90);
-      const c = centreOf([...before.tri, ...before.sq]);
-      near(
-        engine.spreadOutline("tri"),
-        mapOutline(affineReflect(90, c), before.tri),
-      );
-      near(
-        engine.spreadOutline("sq"),
-        mapOutline(affineReflect(90, c), before.sq),
-      );
-    });
-
-    it("a GROUP (spread-space box and transform) and an item mirror about one centre", async () => {
-      engine.addPath("tri", VERSO, TRI, T(100, 100));
-      engine.addPath("m", VERSO, square(40), T(300, 400));
-      engine.addGroup("g", ["m"]);
-      const before = {
-        tri: engine.spreadOutline("tri"),
-        m: engine.spreadOutline("m"),
-      };
-      const group = { kind: "group", id: "g" } as ElementId;
-      const done = await applyReflect(
-        fakeHost(engine, [poly("tri"), group]),
-        0,
-      );
-      expect(done.applied).toBe(true);
-      const c = centreOf([...before.tri, ...before.m]);
-      near(
-        engine.spreadOutline("tri"),
-        mapOutline(affineReflect(0, c), before.tri),
-      );
-      near(
-        engine.spreadOutline("m"),
-        mapOutline(affineReflect(0, c), before.m),
-      );
-    });
-
-    it("Transform again repeats it about the NEW selection's centre", async () => {
-      engine.addPath("tri", VERSO, TRI, T(100, 100));
-      engine.addPath("sq", RECTO, square(40), T(300, 100));
-      await applyReflect(fakeHost(engine, [poly("tri")]), 0);
-      const before = engine.pageOutline("sq", RECTO);
-      const again = await applyTransformAgain(fakeHost(engine, [poly("sq")]));
-      expect(again.applied).toBe(true);
-      near(
-        engine.pageOutline("sq", RECTO),
-        mapOutline(affineReflect(0, centreOf(before)), before),
-      );
-    });
   });
 
   // ---------------------------------------------------- objects on a path

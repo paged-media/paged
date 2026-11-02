@@ -84,7 +84,6 @@ const TOOLS = [
   "media.paged.draw.tool.knife",
   "media.paged.draw.tool.scissorsAnyPoint",
   // WP6.1 — keyless, in the host's transform / pencil / shape flyouts.
-  "media.paged.draw.tool.reflect",
   "media.paged.draw.tool.reshape",
   "media.paged.draw.tool.shaper",
   "media.paged.draw.tool.pathEraser",
@@ -240,14 +239,10 @@ const COMMANDS = [
   "media.paged.draw.command.insertPolarGridOptions",
   "media.paged.draw.command.selectSameStrokeWeightOptions",
   "media.paged.draw.command.reversePathDirection",
-  // canary.14 — Dashes… / Reflect… raise their Path Options sections;
-  // Reflect / Transform again (journey/plugins/draw-transform), Create
-  // outlines (journey/plugins/draw-outlines), Dashes… (draw-dash).
-  "media.paged.draw.command.reflectOptions",
+  // canary.14 — Create outlines (journey/plugins/draw-outlines), Dashes…
+  // (draw-dash). Reflect / Transform again are the host's (journey/plugins/
+  // draw-transform).
   "media.paged.draw.command.createOutlines",
-  "media.paged.draw.command.reflectHorizontal",
-  "media.paged.draw.command.reflectVertical",
-  "media.paged.draw.command.transformAgain",
   // G4 — the tool-only cuts as commands, the width profile as data, and
   // the update of the recipes a changed source feeds.
   "media.paged.draw.command.knife",
@@ -352,7 +347,6 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.repeat": "repeat",
   "media.paged.draw.tool.knife": "scissors",
   "media.paged.draw.tool.scissorsAnyPoint": "scissors",
-  "media.paged.draw.tool.reflect": "transform",
   "media.paged.draw.tool.reshape": "transform",
   "media.paged.draw.tool.shaper": "pencil",
   "media.paged.draw.tool.pathEraser": "pencil",
@@ -677,7 +671,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 43 registered.
+    // TOOLS — all 42 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -736,14 +730,14 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(43);
+    expect(TOOLS).toHaveLength(42);
     expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(144);
+    expect(COMMANDS).toHaveLength(140);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 43 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 42 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);
