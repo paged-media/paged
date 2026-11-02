@@ -10,13 +10,13 @@ holds the engine against them. Calibri 11 pt, US Letter, 72 pt margins.
 The XML in the fixture is what Word itself writes for a drop cap (a framed paragraph, `w:lines`
 3 or 2, an exact line of lines x 13.4 pt, the cap's run at `sz` 96 / 64 and lowered 13.5 / 6.5 pt).
 
-| | 3-line `T` | 2-line `Th` |
-|---|---|---|
-| cap font size (PDF) | 48.0 pt | 32.0 pt |
+|                               | 3-line `T`                | 2-line `Th`                |
+| ----------------------------- | ------------------------- | -------------------------- |
+| cap font size (PDF)           | 48.0 pt                   | 32.0 pt                    |
 | cap ink box (x0 y0 x1 y1, pt) | 72.46 111.04 95.26 141.52 | 72.24 164.46 101.76 186.30 |
-| cap ink height | 30.5 pt | 21.8 pt |
-| x of the lines beside the cap | 95.55 | 104.55 |
-| cap advance + indent | 23.39 + 0.14 | 32.30 + 0.20 |
+| cap ink height                | 30.5 pt                   | 21.8 pt                    |
+| x of the lines beside the cap | 95.55                     | 104.55                     |
+| cap advance + indent          | 23.39 + 0.14              | 32.30 + 0.20               |
 
 - The cap sits at the margin (x = 72.0); wrapped lines start at the cap's advance plus about 0.14 pt.
 - Word's line pitch here is 15.52 pt (the fixture's styles omit `pPrDefault`, and Word lays its own
@@ -29,15 +29,15 @@ The XML in the fixture is what Word itself writes for a drop cap (a framed parag
 
 ## paged against Word
 
-| | Word | paged | difference |
-|---|---|---|---|
-| `Th` cap ink height | 21.84 pt | 22.08 pt | +1.1 % |
-| `Th` x of lines beside the cap | 104.55 | 104.42 | -0.13 pt |
-| `Th` line breaks | "...pack" / "my box..." | same | none |
-| `T` cap ink height | 30.48 pt | 33.6 pt | +10 % |
-| `T` x of lines beside the cap | 95.55 | 97.67 | +2.12 pt |
-| `T` line 1 | ends "...pack my" | ends "...pack" | "my" moves down |
-| text after the cap's lines | flush | flush | none |
+|                                | Word                    | paged          | difference      |
+| ------------------------------ | ----------------------- | -------------- | --------------- |
+| `Th` cap ink height            | 21.84 pt                | 22.08 pt       | +1.1 %          |
+| `Th` x of lines beside the cap | 104.55                  | 104.42         | -0.13 pt        |
+| `Th` line breaks               | "...pack" / "my box..." | same           | none            |
+| `T` cap ink height             | 30.48 pt                | 33.6 pt        | +10 %           |
+| `T` x of lines beside the cap  | 95.55                   | 97.67          | +2.12 pt        |
+| `T` line 1                     | ends "...pack my"       | ends "...pack" | "my" moves down |
+| text after the cap's lines     | flush                   | flush          | none            |
 
 ## Known differences
 

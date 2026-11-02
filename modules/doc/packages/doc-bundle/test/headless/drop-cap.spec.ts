@@ -80,11 +80,13 @@ describe.skipIf(!docxPresent)(
       const storyId = doc.opened.storyIds[0]!;
       const content = (
         await send({ kind: "requestStoryContent", payload: { storyId } })
-      ).payload?.content?.paragraphs as Array<{ runs: Array<{ text: string }> }>;
+      ).payload?.content?.paragraphs as Array<{
+        runs: Array<{ text: string }>;
+      }>;
       let off = 0;
       for (const para of content) {
         const text = para.runs.map((r) => r.text).join("");
-                const b = (
+        const b = (
           await send({
             kind: "requestParagraphBounds",
             payload: { storyId, offset: off },
@@ -94,7 +96,11 @@ describe.skipIf(!docxPresent)(
         // (line 1) and the "my" the lines break at (line 2). The engine's
         // line bounds leave the cap's characters out, so the lines are not
         // walked.
-        const capChars = /^(P\d)/.test(text) ? 0 : text.startsWith("Th") ? 2 : 1;
+        const capChars = /^(P\d)/.test(text)
+          ? 0
+          : text.startsWith("Th")
+            ? 2
+            : 1;
         const starts = /^(P\d)/.test(text)
           ? [0]
           : [0, text.indexOf("my box") - capChars];
