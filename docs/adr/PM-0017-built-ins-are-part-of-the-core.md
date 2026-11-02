@@ -1,6 +1,6 @@
 # ADR PM-0017 — The built-in modules are part of the core: one build, modules stay
 
-- **Status:** Proposed 2026-11-01. The one-workspace spike (below) passed for the engine; the module profiles and four dependency splits remain.
+- **Status:** Proposed 2026-11-01. The one-workspace spike (below) passed for the engine. Amendment 1 (2026-11-02, below): the move is staged, module by module, in `engine/core`'s workspace; the profile and dependency blockers are settled.
 - **Amends:** [PM-0002](PM-0002-built-ins-and-extensions.md) (isolation between built-ins ends),
   [PM-0005](PM-0005-workspace-policy.md) (separate Cargo workspaces, conditional on a spike) and
   [PM-0014](PM-0014-capability-layering.md) (the placement rule is by genericity alone).
@@ -92,3 +92,29 @@ separate workspaces at the same commit.
 - Moving to one workspace needs a one-time lockfile and `deny.toml` merge, and a wasm-size
   measurement after each wave (`apps/editor/scripts/wasm-budget.mjs`; the app is at 99.6 of
   100 MB).
+
+## Amendment 1 (2026-11-02): the move is staged, module by module
+
+The owner approved a staged move: one module per step, each step its own commit, verified on
+real CI, reversible by `git revert`. The plan and operating manual is
+[docs/development/one-workspace.md](../development/one-workspace.md). Facts established:
+
+- **The four dependency splits are not blockers.** Cargo holds two semver-incompatible
+  versions of a crate in one lockfile and a build links only what its package reaches.
+  quick-xml 0.41 / 0.42 cannot be aligned today (ooxmlsdk requires `^0.41`, calamine 0.37
+  requires 0.42, the IDML reader and writer stay on 0.41; docs/migration/rust-majors.md) and
+  the engine's lock already holds both. getrandom 0.2 / 0.3 / 0.4 are already together in the
+  engine's lock. wasm-bindgen resolves to 0.2.129 in every lock, the CLI version bootstrap
+  installs; draw's exact pin stays on its crate. zip's requirement strings were aligned to
+  `9.0.4` (commit `1ab6a0d85`).
+- **Profiles became named profiles first** (commit `1c371d109`, valid in the separate
+  workspaces): `wasm-data`, `wasm-sheet`, `wasm-slide`, `wasm-doc`, `wasm-draw`, each with the
+  settings its module's `release` (doc: `wasm-release`) carried, selected by the module's
+  `scripts/build-wasm.sh`. Measured, same pinned toolchain, release against the new profile:
+  data_js 22,498,028 B and sheet_js 8,624,276 B, trace_js 1,977,642 B and slide_js 14,096,305 B
+  were byte-size identical (the files differ only in the OUT_DIR paths embedded by build
+  scripts).
+- **The root stays `engine/core/Cargo.toml` until the last module has joined.** A module joins
+  as a set of members with `workspace = "…/engine/core"` in each crate; hoisting the root to
+  `/Cargo.toml` is the last step.
+- **First step: publish.** See one-workspace.md for the measured wasm sizes and the CI runs.

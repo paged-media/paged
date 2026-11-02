@@ -1,7 +1,7 @@
 # PM-0005 — Separate Cargo workspaces, one JS workspace, the IDML crates in the engine
 
 - **Status:** Accepted 2026-10-18. The separate Cargo workspaces are amended by
-  [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) (2026-11-01): one workspace, gated on a spike.
+  [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) (2026-11-01): one workspace, gated on a spike; staged module by module from 2026-11-02 (PM-0017, amendment 1).
 - **Supersedes:** modules/publish ADR 650 (the IDML adapter and the engine pin each other by git
   revision).
 - **Scope:** every `Cargo.toml` workspace root, the root `package.json` workspace, and
