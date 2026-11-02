@@ -1,6 +1,6 @@
 # ADR PM-0013 — A fourth public package: `@paged-media/editor`
 
-- **Status:** Accepted 2026-10-23.
+- **Status:** Accepted 2026-10-23; amended 2026-11-02 (amendment 4: the `dist/` budget is 72.25 MiB).
 - **Amends:** [PM-0008](PM-0008-npm-packages-and-release.md) (three public packages since its
   amendment 3; four from here).
 - **Scope:** `apps/editor/packages/editor`, `tooling/release/*`, `.github/workflows/release.yml`
@@ -90,7 +90,7 @@ worker, and it is useless without it.
 release version, React a peer, and the package's own `scripts/check-dist.mjs` over the packed
 `dist/` (no private `@paged-media/*` import, every named file present, workers in the bundler
 form, no engine wasm, no paged.data engine, no source map, no path of the build machine, and the
-size budget: 72 MiB for `dist/` (amendment 3), 16 KiB for the `.` entry and for `./iframe` with what it
+size budget: 72.25 MiB for `dist/` (amendment 4), 16 KiB for the `.` entry and for `./iframe` with what it
 imports). `consumer-test.sh` installs it with React in clean projects under npm and Bun,
 imports `.` and `./iframe`, finds the engine's wasm where the package points, type-checks an
 embedder under `nodenext` and `bundler` with TypeScript 7 and 5.9, and builds a host page with
@@ -189,3 +189,12 @@ interpreter into the PDF bundle (3.75 MB, from 0.56; publish ADR 658), and slide
 brings MP4 export (5.5 MB, from 3.1; slide ADR 720). `dist/` measured 65.0 MiB. The budget catches
 an accidental gain, so it sits about a tenth above what the package measures; a feature that
 passes it raises it here, with its size. The entry budgets stay at 16 KiB.
+
+## Amendment 4 (2026-11-02): a 72.25 MiB budget for `dist/`
+
+The budget for `dist/` goes from 72 to 72.25 MiB (75,759,616 bytes, from 75,497,472). The engine now
+carries the theme model (engine ADR 1056: the theme operations, the `theme` collection, swatches that
+follow a slot) and the colour-arithmetic crate it resolves them with, in every module's wasm that links
+the engine; `dist/` measured 75,509,437 bytes, 11,965 over. The margin is the next slice's headroom (font
+references on styles, doc and sheet lowering). The precedent is the app-wide wasm budget, which moved to
+140 MB for the ML worker's runtime. The entry budgets stay at 16 KiB.
