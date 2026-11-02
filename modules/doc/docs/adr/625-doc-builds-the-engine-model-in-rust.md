@@ -144,8 +144,13 @@ operation sends the document to the old path whole. The styles the lowering inve
 formatting (`docx-auto-*`) are left out when nothing the old path still pours (headers, footers,
 notes, page items) names them: the document then holds only the styles Word defined.
 
-This reverses the size argument above: the doc wasm now links `paged-mutate`. Its measured size is
-in the commit that raised the manifest's `maxBytes`.
+This reverses the size argument above: the doc wasm now links `paged-mutate` (with `paged-geom`
+and `paged-vector-fx`). Measured by the wasm build in CI: `docx_js_bg.wasm` 8,170,515 bytes
+(7.79 MiB) before, 12,939,388 bytes (12.34 MiB) with it, +4.77 MiB. The manifest's `maxBytes` is
+raised from 8 MiB to 14 MiB (14,680,064); the 100 MB app limit of `build-wasm.sh` is unchanged. The
+price buys every remaining slice as the engine's own operations (floats, comments, changes, notes)
+rather than ports of them, and the removal of the TS pour and the IR at the end, which is where
+size is given back (bundle code) if not in the wasm.
 
 ### Save-back
 
