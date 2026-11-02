@@ -422,7 +422,7 @@ mod tests {
         apply_set_color(&mut doc, "accent1", "00FF00").unwrap();
         assert_eq!(doc.palette.colors["Color/t"].value, vec![0.0, 255.0, 0.0]);
         let del = apply_delete_swatch(&mut doc, "Color/t").unwrap();
-        assert!(doc.palette.colors.get("Color/t").is_none());
+        assert!(!doc.palette.colors.contains_key("Color/t"));
         let Operation::CreateSwatch { spec } = del.inverse else {
             panic!("inverse is CreateSwatch");
         };
