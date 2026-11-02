@@ -42,6 +42,7 @@ use std::collections::{BTreeMap, HashMap};
 use docx_lower::ir::{
     LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, PropValue, StyleProp,
 };
+use paged_model::script::{CharacterDirection, FontHint};
 use paged_model::{CharacterRun, Justification, Paragraph};
 
 /// The id prefix of the styles the lowering synthesizes for direct
@@ -114,10 +115,11 @@ pub fn resolve_style(doc: &LoweredDoc, id: &str) -> BTreeMap<String, PropValue> 
 }
 
 /// A synthesized style split into the Word style it stands on and its own
-/// properties.
+/// properties (a synthesized style may be based on another synthesized one:
+/// the chain is flattened, the nearest style's value last).
 struct Direct<'a> {
     base: Option<&'a str>,
-    props: &'a [StyleProp],
+    props: Vec<&'a StyleProp>,
 }
 
 fn split_style<'a>(
@@ -127,27 +129,34 @@ fn split_style<'a>(
     let Some(id) = id else {
         return Ok(Direct {
             base: None,
-            props: &[],
+            props: Vec::new(),
         });
     };
     if !is_synthesized(id) {
         return Ok(Direct {
             base: Some(id),
-            props: &[],
+            props: Vec::new(),
         });
     }
-    let Some(s) = styles.get(id) else {
-        return Err(format!("synthesized style {id} is not in the catalogue"));
-    };
-    // A synthesized style is based on a Word style, never on another
-    // synthesized one.
-    if s.based_on.as_deref().is_some_and(is_synthesized) {
-        return Err(format!("{id} is based on a synthesized style"));
+    let mut chain: Vec<&LoweredStyle> = Vec::new();
+    let mut at = Some(id);
+    let mut base = None;
+    while let Some(i) = at {
+        if !is_synthesized(i) {
+            base = Some(i);
+            break;
+        }
+        let Some(s) = styles.get(i) else {
+            return Err(format!("synthesized style {i} is not in the catalogue"));
+        };
+        if chain.len() > 16 {
+            return Err(format!("{id} is based on too long a chain"));
+        }
+        chain.push(s);
+        at = s.based_on.as_deref();
     }
-    Ok(Direct {
-        base: s.based_on.as_deref(),
-        props: &s.props,
-    })
+    let props = chain.iter().rev().flat_map(|s| s.props.iter()).collect();
+    Ok(Direct { base, props })
 }
 
 fn len_of(v: &PropValue) -> Option<f32> {
@@ -242,6 +251,40 @@ pub fn set_run_prop(r: &mut CharacterRun, prop: &StyleProp) -> bool {
         }
         "characterUnderline" => return bool_of(v).map(|b| r.underline = Some(b)).is_some(),
         "characterStrikethru" => return bool_of(v).map(|b| r.strikethru = Some(b)).is_some(),
+        // Engine ADR 1051 — the script slots (doc ADR 620).
+        "characterEastAsianFont" => {
+            return opt_text(v).map(|t| r.script.east_asian_font = t).is_some();
+        }
+        "characterComplexFont" => {
+            return opt_text(v).map(|t| r.script.complex_font = t).is_some();
+        }
+        "characterComplexFontSize" => {
+            return len_of(v)
+                .filter(|f| f.is_finite() && *f > 0.0)
+                .map(|f| r.script.complex_point_size = Some(f))
+                .is_some();
+        }
+        "characterComplexBold" => {
+            return bool_of(v)
+                .map(|b| r.script.complex_bold = Some(b))
+                .is_some();
+        }
+        "characterComplexItalic" => {
+            return bool_of(v)
+                .map(|b| r.script.complex_italic = Some(b))
+                .is_some();
+        }
+        "characterComplexScript" => {
+            return bool_of(v).map(|b| r.script.complex = Some(b)).is_some();
+        }
+        "characterDirection" => match text_of(v).and_then(CharacterDirection::from_name) {
+            Some(d) => r.script.direction = Some(d),
+            None => return false,
+        },
+        "characterFontHint" => match text_of(v).and_then(FontHint::from_name) {
+            Some(h) => r.script.hint = Some(h),
+            None => return false,
+        },
         "characterFillColor" => match v {
             PropValue::ColorRef(c) => r.fill_color = Some(c.clone()),
             _ => return false,
@@ -325,6 +368,33 @@ pub fn read_run_props(r: &CharacterRun) -> BTreeMap<String, PropValue> {
             put(k, PropValue::Length(f));
         }
     }
+    let sc = &r.script;
+    for (k, v) in [
+        ("characterEastAsianFont", &sc.east_asian_font),
+        ("characterComplexFont", &sc.complex_font),
+    ] {
+        if let Some(t) = v {
+            put(k, PropValue::Text(t.clone()));
+        }
+    }
+    if let Some(f) = sc.complex_point_size {
+        put("characterComplexFontSize", PropValue::Length(f));
+    }
+    for (k, v) in [
+        ("characterComplexBold", sc.complex_bold),
+        ("characterComplexItalic", sc.complex_italic),
+        ("characterComplexScript", sc.complex),
+    ] {
+        if let Some(b) = v {
+            put(k, PropValue::Bool(b));
+        }
+    }
+    if let Some(d) = sc.direction {
+        put("characterDirection", PropValue::Text(d.as_name().into()));
+    }
+    if let Some(h) = sc.hint {
+        put("characterFontHint", PropValue::Text(h.as_name().into()));
+    }
     if let Some(b) = r.underline {
         put("characterUnderline", PropValue::Bool(b));
     }
@@ -380,6 +450,7 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
 }
 
 fn build_paragraph(
+    doc: &LoweredDoc,
     styles: &HashMap<&str, &LoweredStyle>,
     p: &LoweredParagraph,
 ) -> Result<Paragraph, String> {
@@ -392,19 +463,27 @@ fn build_paragraph(
         ..Paragraph::default()
     };
     // Character properties that sit in a paragraph style (the line pitch, a
-    // size) reach each run as the run's own; they sit below a character
-    // style in the cascade and above it as run properties, so a run with a
-    // character style of its own is left to the old path.
+    // size) reach each run as the run's own. In the cascade they sit below a
+    // character style; as a run's own they would sit above it. A run's own
+    // synthesized properties are laid over them, as the old cascade does, so
+    // only a Word character style that sets one of the same paths changes
+    // the result: that paragraph is left to the old path.
     let mut para_chars = Vec::new();
-    for prop in direct.props {
+    for prop in &direct.props {
         if is_char_path(&prop.path) {
             para_chars.push(prop);
         } else if !set_paragraph_prop(&mut para, prop) {
             return Err(format!("no model field for {}", prop.path));
         }
     }
-    if !para_chars.is_empty() && p.runs.iter().any(|r| r.char_style_id.is_some()) {
-        return Err("paragraph character properties under a character style".into());
+    for r in &p.runs {
+        let Some(base) = split_style(styles, r.char_style_id.as_deref())?.base else {
+            continue;
+        };
+        let theirs = resolve_style(doc, base);
+        if para_chars.iter().any(|c| theirs.contains_key(&c.path)) {
+            return Err("paragraph character properties under a character style".into());
+        }
     }
     if !para_chars.is_empty() && p.runs.iter().all(|r| r.text.is_empty()) {
         return Err("paragraph character properties on an empty paragraph".into());
@@ -421,7 +500,7 @@ fn build_paragraph(
                 return Err(format!("no model field for {}", prop.path));
             }
         }
-        for prop in run_direct.props {
+        for prop in &run_direct.props {
             if !set_run_prop(&mut run, prop) {
                 return Err(format!("no model field for {}", prop.path));
             }
@@ -442,11 +521,58 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
             LoweredBlock::Table(_) => NativeBlock::Deferred {
                 reason: "table".into(),
             },
-            LoweredBlock::Paragraph(p) => match build_paragraph(&styles, p) {
+            LoweredBlock::Paragraph(p) => match build_paragraph(doc, &styles, p) {
                 Ok(para) => NativeBlock::Paragraph(Box::new(para)),
                 Err(reason) => NativeBlock::Deferred { reason },
             },
         })
         .collect();
     NativeBody { blocks }
+}
+
+/// The body's native stories, one per skeleton story and in its order, when
+/// the WHOLE body can be built natively; `None` otherwise (the document
+/// then opens by the old path, whole: a story half built here and half
+/// poured would split a paragraph range between two mechanisms).
+///
+/// Stories group the blocks as the bundle's `sectionBlocks` does: a section
+/// that joins the story before it adds its blocks to that story.
+pub fn native_stories(doc: &LoweredDoc) -> Option<Vec<Vec<Paragraph>>> {
+    // What the body carries outside its blocks and the old path places.
+    if !doc.comments.is_empty() || !doc.tocs.is_empty() || doc.track_changes {
+        return None;
+    }
+    let body = native_body(doc);
+    let mut paras = Vec::with_capacity(body.blocks.len());
+    for b in body.blocks {
+        match b {
+            NativeBlock::Paragraph(p) => {
+                // The old pour reads a line feed as a paragraph break.
+                if p.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
+                    return None;
+                }
+                paras.push(*p);
+            }
+            NativeBlock::Deferred { .. } => return None,
+        }
+    }
+    let sections: Vec<_> = if doc.sections.is_empty() {
+        vec![&doc.section]
+    } else {
+        doc.sections.iter().collect()
+    };
+    let mut starts = Vec::new();
+    for (k, s) in sections.iter().enumerate() {
+        let joins = k > 0 && s.story == sections[k - 1].story;
+        if !joins {
+            starts.push(s.first_block);
+        }
+    }
+    let mut out = Vec::with_capacity(starts.len());
+    for (k, &start) in starts.iter().enumerate() {
+        let end = starts.get(k + 1).copied().unwrap_or(paras.len());
+        let slice = paras.get(start..end.min(paras.len()))?;
+        out.push(slice.to_vec());
+    }
+    Some(out)
 }
