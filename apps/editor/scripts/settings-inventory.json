@@ -6,7 +6,10 @@
       "kind": "preference",
       "storage": "localStorage",
       "key": "paged.ml.settings",
-      "default": { "variants": {}, "acknowledged": {} },
+      "default": {
+        "variants": {},
+        "acknowledged": {}
+      },
       "effect": "Settings ▸ Models (editor ADR 290): the quantisation chosen per model and the licences acknowledged, by licence id (a changed licence asks again); read field by field (ADR 247)",
       "source": "apps/editor/apps/canvas/src/ml/service.ts",
       "marker": "\"paged.ml.settings\"",
@@ -537,6 +540,17 @@
         ["getItem", "key"],
         ["setItem", "key"],
         ["removeItem", "key"]
+      ]
+    },
+    {
+      "key": "paged.comments.author",
+      "storage": "localStorage",
+      "reason": "the name the Comments panel comments as (engine ADR 1055), remembered per browser so a reviewer does not retype it: an identity convenience for new comments, not configuration (the comment itself carries the name once written).",
+      "source": "apps/editor/apps/canvas/src/panels/comments-panel.tsx",
+      "marker": "\"paged.comments.author\"",
+      "sites": [
+        ["getItem", "AUTHOR_KEY"],
+        ["setItem", "AUTHOR_KEY"]
       ]
     }
   ]

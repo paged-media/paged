@@ -214,7 +214,7 @@ test.describe.serial("plugin menus — paged.slide", () => {
     await expect(live.locator('[data-comments-panel="ready"]')).toBeVisible({
       timeout: 10_000,
     });
-    await expect(live.locator("[data-comment-new]")).toBeVisible();
+    await expect(live.locator("[data-new-comment-input]")).toBeVisible();
   });
 
   test("Insert/Shapes… — opens the Shapes panel on the active slide", async () => {

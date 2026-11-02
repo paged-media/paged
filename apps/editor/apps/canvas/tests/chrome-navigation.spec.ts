@@ -122,9 +122,8 @@ test.describe("Top navigation", () => {
     }
     // Plugins ▸ Draw holds draw's command submenus AND its panels.
     await page.locator('[data-menu-submenu="Draw"]').click();
-    await expect(
-      page.locator('[data-menu-submenu="Pathfinder"]'),
-    ).toBeVisible();
+    // (Pathfinder is the host's now: Object ▸ Pathfinder.)
+    await expect(page.locator('[data-menu-submenu="Path"]')).toBeVisible();
     await expect(
       page.locator('[data-menu-group-label="Panels"]'),
     ).toBeVisible();
