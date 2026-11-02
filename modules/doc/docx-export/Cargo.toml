@@ -1,5 +1,6 @@
 [package]
 name = "docx-export"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,8 +14,8 @@ workspace = true
 [dependencies]
 docx-core.workspace = true
 docx-lower.workspace = true
-paged-ooxml.workspace = true
-quick-xml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
+quick-xml = "0.41"
 serde.workspace = true
 # The new-package writer (doc ADR 616): zip through flate2, as everywhere.
 zip.workspace = true

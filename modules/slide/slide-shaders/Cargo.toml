@@ -1,5 +1,6 @@
 [package]
 name = "slide-shaders"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,4 +19,4 @@ naga.workspace = true
 pptx-core.workspace = true
 # pptx-core reaches paged-ooxml through dml-chart; naming it here gives it the
 # workspace's deflate backend when this crate is built on its own.
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }

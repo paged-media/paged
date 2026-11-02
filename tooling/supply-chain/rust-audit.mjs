@@ -35,9 +35,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
  */
 const EXEMPT = {
   "modules/sheet/fuzz": {
-    advisoriesFrom: "modules/sheet/deny.toml",
+    advisoriesFrom: "engine/core/deny.toml",
     reason:
-      "cargo-fuzz harness (nightly, never shipped) over the sheet crates, which modules/sheet checks",
+      "cargo-fuzz harness (nightly, never shipped) over the sheet crates, which engine/core checks",
   },
   "engine/core/spikes/blitz-wasm": {
     advisoriesFrom: "engine/core/deny.toml",

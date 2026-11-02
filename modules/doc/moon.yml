@@ -37,7 +37,7 @@ fileGroups:
   rust-sources:
     - "**/*.rs"
     - "**/Cargo.toml"
-    - "Cargo.lock"
+    - "/engine/core/Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
     - "/engine/core/Cargo.toml"
@@ -60,7 +60,24 @@ fileGroups:
     - "/platform/shared/dml-native/src/**/*.rs"
     - "/platform/shared/dml-native/Cargo.toml"
 
+# The doc crates are members of the engine's Cargo workspace (one Cargo
+# workspace, docs/development/one-workspace.md): this directory has no
+# Cargo.toml, so the Rust tasks run cargo in engine/core and select the module's
+# crates with -p.
 tasks:
+  rust-fmt:
+    script: "cd ../../engine/core && cargo fmt -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance --check"
+  rust-check:
+    script: "cd ../../engine/core && cargo check -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance --all-targets"
+  rust-lint:
+    script: "cd ../../engine/core && cargo clippy -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance --all-targets -- -D warnings"
+  rust-test:
+    script: >-
+      cd ../../engine/core
+      && cargo nextest run -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance
+      && cargo test --doc -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance
+  rust-build:
+    script: "cd ../../engine/core && cargo build -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance"
   wasm:
     description: "docx-js wasm into packages/doc-bundle/bin/ (scripts/build-wasm.sh)."
     toolchains: ["rust"]

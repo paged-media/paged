@@ -36,6 +36,11 @@ directory has no `Cargo.toml`, so its commands run `cargo` in `engine/core` (or 
   and `ooxmlsdk`, and `serde_json`'s `float_roundtrip` to crates that do not use it
   (PM-0017 spike). `paged-cli`'s `--features schema` changes `cli.json` goldens when other
   members turn it on, for the same reason.
+- **Byte-pinned tests stay per package.** `sheet-conformance` pins XLSX container bytes; the
+  workspace-wide `cargo test` / `nextest --workspace` of core / ci unifies zip and flate2
+  features across all members and writes different deflate streams, so core / ci excludes
+  it (`--exclude sheet-conformance`) and sheet / rust runs it with sheet's own feature set.
+  Any module test that pins compressed bytes needs the same treatment.
 - **Build per package.** `cargo build -p <crate>` resolves features for that package's
   graph only. `--workspace` selects every member and unifies their features: engine CI keeps
   it for lint and test (where unification does not change an artifact), and every shipped
@@ -91,9 +96,26 @@ Smallest and least coupled first; the evidence is the path dependencies of each 
 4. `modules/image`.
 5. `platform/shared/{test-resources,fmt,ooxml,dml-*}`, then `modules/sheet`, `modules/slide`,
    `modules/doc` (they path-depend on the shared crates).
-6. `modules/web/packages/web-render` (the Blitz alpha line) and `apps/ml-host`,
-   `apps/server`: decided on their own.
+6. `modules/web/packages/web-render` (the Blitz alpha line): **blocked, and left out on
+   purpose.** Added as a member of the engine workspace it resolves, and builds a graph
+   without `links` conflicts, but `blitz-dom` (alpha.4 and alpha.6) requires `image =0.25.6`
+   exactly. Cargo allows one `0.25` of `image` in a lock, so the whole engine drops from
+   `image` 0.25.10 to 0.25.6 (and `gif` 0.14.2 to 0.13.3, `imagesize` 0.15 to 0.14): the
+   decoders of every module would change under it, which is an engine-wide change that
+   needs its own review against the corpus, not a side effect of a workspace move. web-render
+   joins when Blitz relaxes the pin or the engine accepts `image` 0.25.6 on purpose.
+   `apps/ml-host` and `apps/server` stay separate for their own reasons (the server's
+   Cloudflare worker build and Dockerfile copy the engine by path; ml-host is a sidecar
+   with a different toolchain story).
 7. Hoist the root to `/Cargo.toml`, one `Cargo.lock`, one `deny.toml`, one `target/`.
+   **Not taken while any workspace remains outside** (web-render, apps/server, apps/ml-host,
+   the sheet fuzz harness and the Blitz and Turso spikes keep their own locks): the hoist
+   moves `engine/core/Cargo.lock`, `.config/nextest.toml`, `rust-toolchain.toml`,
+   `deny.toml` and the `target/` directory in one commit, and about eighty references
+   (workflow path filters, cache keys, Moon file groups, scripts that read
+   `engine/core/target`) follow. It is safe only as a mechanical step of its own, after
+   the last module has joined, with `build.target-dir` or a repository-root `target/`
+   decided first.
 
 ## How to build one module's wasm
 
@@ -115,14 +137,15 @@ Dated 2026-11-02, origin/main `ec036079e`. Wasm sizes are the output of the modu
 `scripts/build-wasm.sh` (cargo, `wasm-bindgen --target web`, `wasm-opt -Oz`) with the
 pinned toolchain, before and after the step, in the same checkout state otherwise.
 
-| step        | what                                                                                           | wasm before                                                                                               | wasm after                                       |
-| ----------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 1. profiles | named `wasm-data/-sheet/-slide/-doc/-draw`                                                     | data_js 22,498,028; sheet_js 8,624,276; slide_js 14,096,305; trace_js 1,977,642 (cargo output, `release`) | identical sizes under the named profile          |
-| 2. publish  | `pdf-import` joins `engine/core`                                                               | pdf_import_bg 4,048,462                                                                                   | 4,048,677 (+215 B, longer embedded source paths) |
-| 3. draw     | `draw-trace`, `draw-dxf`, `trace-js` join                                                      | trace_js_bg 1,387,237                                                                                     | 1,387,007 (−230 B)                               |
-| 4. data     | `data-js`, `data-cli`, `data-script`, `data-conformance` join                                  | data_js_bg 14,793,447 (CI, main)                                                                          | 14,794,761 (CI, +1,314 B)                        |
-| 5. image    | the eight `image-*` crates join                                                                | resolved graph identical (cargo tree, 300 lines); wasm size not remeasured                                | same                                             |
-| 6. shared   | `paged-ooxml`, `dml-chart`, `dml-geom`, `dml-native`, `paged-fmt`, `paged-test-resources` join | n/a (no artifact of their own)                                                                            | n/a                                              |
+| step                 | what                                                                                           | wasm before                                                                                               | wasm after                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 1. profiles          | named `wasm-data/-sheet/-slide/-doc/-draw`                                                     | data_js 22,498,028; sheet_js 8,624,276; slide_js 14,096,305; trace_js 1,977,642 (cargo output, `release`) | identical sizes under the named profile          |
+| 2. publish           | `pdf-import` joins `engine/core`                                                               | pdf_import_bg 4,048,462                                                                                   | 4,048,677 (+215 B, longer embedded source paths) |
+| 3. draw              | `draw-trace`, `draw-dxf`, `trace-js` join                                                      | trace_js_bg 1,387,237                                                                                     | 1,387,007 (−230 B)                               |
+| 4. data              | `data-js`, `data-cli`, `data-script`, `data-conformance` join                                  | data_js_bg 14,793,447 (CI, main)                                                                          | 14,794,761 (CI, +1,314 B)                        |
+| 5. image             | the eight `image-*` crates join                                                                | resolved graph identical (cargo tree, 300 lines); wasm size not remeasured                                | same                                             |
+| 6. shared            | `paged-ooxml`, `dml-chart`, `dml-geom`, `dml-native`, `paged-fmt`, `paged-test-resources` join | n/a (no artifact of their own)                                                                            | n/a                                              |
+| 7. sheet, slide, doc | all member crates of the three join                                                            | see commit                                                                                                | see commit                                       |
 
 What a step changes besides the manifests, learned on publish:
 

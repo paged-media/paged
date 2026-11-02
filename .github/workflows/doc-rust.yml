@@ -68,7 +68,7 @@ permissions:
 
 defaults:
   run:
-    working-directory: modules/doc
+    working-directory: engine/core
 
 jobs:
   check:
@@ -85,18 +85,18 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/doc -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-doc
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo fmt -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance --check
+      - run: cargo clippy -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance --all-targets -- -D warnings
       - name: isolation guard (no core/plugin reach-around into docx-js wasm)
         run: |
           ! (cargo tree -p docx-js --target wasm32-unknown-unknown | grep -E 'docx-conformance|proptest')
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          manifest-path: modules/doc/Cargo.toml
+          manifest-path: engine/core/Cargo.toml
 
   test:
     runs-on: ubuntu-latest
@@ -110,7 +110,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/doc -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-doc
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -125,7 +125,7 @@ jobs:
           # lane report marks them <skipped> in the JUnit and fails a run
           # that executed nothing (docs/development/testing.md).
           export PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv"
-          cargo nextest run --workspace --profile ci --no-tests=fail \
+          cargo nextest run -p docx-core -p docx-import -p docx-lower -p docx-export -p docx-rtf -p docx-odt -p docx-js -p docx-skeleton -p docx-conformance --profile ci --no-tests=fail \
             || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
           test -s target/nextest/ci/junit.xml
           python3 ../../tooling/rust/skip-report.py --lane "doc nextest" --junit target/nextest/ci/junit.xml \
@@ -142,7 +142,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: modules/doc/target/nextest/ci/junit.xml
+          path: engine/core/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
       - name: tests failed
@@ -171,7 +171,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/doc -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-doc
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -184,4 +184,5 @@ jobs:
           auto-install: true
           proto-version: "0.63.1"
       - name: build + budget gate (120 MB app-wide)
+        working-directory: modules/doc
         run: bash scripts/build-wasm.sh

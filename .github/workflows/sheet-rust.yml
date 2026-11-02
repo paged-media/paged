@@ -73,7 +73,7 @@ permissions:
 
 defaults:
   run:
-    working-directory: modules/sheet
+    working-directory: engine/core
 
 jobs:
   check:
@@ -90,12 +90,12 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/sheet -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-sheet
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo fmt -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance --check
+      - run: cargo clippy -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance --all-targets -- -D warnings
       # Each guard fails explicitly. They used to be two `! (… | grep …)`
       # lines: bash's errexit ignores a `!`-negated command, so only the
       # LAST line's status reached the step and the sheet-fn guard could
@@ -110,7 +110,7 @@ jobs:
           fi
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          manifest-path: modules/sheet/Cargo.toml
+          manifest-path: engine/core/Cargo.toml
 
   test:
     runs-on: ubuntu-latest
@@ -124,7 +124,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/sheet -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-sheet
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -141,7 +141,7 @@ jobs:
         run: |
           echo "PAGED_SKIP_LOG=$RUNNER_TEMP/paged-skips.tsv" >> "$GITHUB_ENV"
           PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv" \
-            cargo nextest run --workspace --profile ci --no-tests=fail
+            cargo nextest run -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance --profile ci --no-tests=fail
       - name: lane report
         if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' }}
         run: python3 ../../tooling/rust/skip-report.py --lane "sheet nextest" --junit target/nextest/ci/junit.xml
@@ -162,7 +162,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: modules/sheet/target/nextest/ci/junit.xml
+          path: engine/core/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
       # A silent fallback to the default linker fails here: mold stamps
@@ -188,7 +188,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/sheet -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-sheet
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -201,4 +201,5 @@ jobs:
           auto-install: true
           proto-version: "0.63.1"
       - name: build + budget gate (120 MB app-wide)
+        working-directory: modules/sheet
         run: bash scripts/build-wasm.sh
