@@ -1961,6 +1961,13 @@ export interface ThemeSpec {
     fontSchemeName?: string | null;
     major?: ThemeFontsSpec;
     minor?: ThemeFontsSpec;
+    /**
+     * The theme part as the file wrote it (OOXML text). Given, the theme
+     * is that file read in: the part is kept and the theme is not marked
+     * edited, so a writer re-emits it byte for byte. Absent, the document\'s
+     * own source is kept and the theme is marked edited.
+     */
+    source?: string;
 }
 
 /**
@@ -1991,6 +1998,20 @@ export interface ThemeFontsSpec {
 export interface ScriptFontSpec {
     script: string;
     typeface: string;
+}
+
+/**
+ * Engine ADR 1056 — the slot a swatch follows, on the wire.
+ */
+export interface ThemeRefSpec {
+    /**
+     * One of `dk1` … `folHlink`.
+     */
+    slot: string;
+    /**
+     * The transforms after the slot, in order: `[\"lumMod\", 60000]`.
+     */
+    transforms?: [string, number][];
 }
 
 /**
@@ -4798,6 +4819,13 @@ export interface SwatchSpec {
      * absent). A frame shows it by naming the id as its fill or stroke.
      */
     pattern?: PatternSpec;
+    /**
+     * Engine ADR 1056 — the theme slot (and DrawingML transforms) the
+     * swatch follows: a theme change recolours it. `value` stays the colour
+     * it shows until then. Honoured by `createSwatch`; `editSwatch` leaves
+     * a swatch\'s reference alone.
+     */
+    themeRef?: ThemeRefSpec;
 }
 
 /**
