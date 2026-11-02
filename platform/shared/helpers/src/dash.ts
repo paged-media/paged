@@ -42,3 +42,49 @@ export function dashArrayOp(elementId: unknown, lengths: readonly number[]) {
     },
   };
 }
+
+// THE DASH EDITOR'S MODEL — up to three dash/gap pairs (Illustrator's six
+// fields). The engine's array is any alternating run; the editor shows the
+// first three pairs, and says how many it hides.
+
+/** The most dash/gap pairs the editor offers. */
+export const MAX_DASH_PAIRS = 3;
+
+/** One dash and the gap after it, in pt. */
+export interface DashPair {
+  dash: number;
+  gap: number;
+}
+
+/** The pairs of a dash array, or `null` for a solid stroke (empty, or every
+ *  length 0). An ODD-length array repeats to even (the SVG/PDF dash rule),
+ *  unreadable lengths are dropped, and `hiddenPairs` counts the pairs past
+ *  the third, which an edit would rewrite away. Pure. */
+export function dashPairsFromLengths(
+  lengths: readonly number[] | null,
+): { pairs: DashPair[]; hiddenPairs: number } | null {
+  const values = (lengths ?? []).filter((n) => Number.isFinite(n) && n >= 0);
+  if (values.length === 0 || values.every((n) => n === 0)) return null;
+  const even = values.length % 2 === 1 ? [...values, ...values] : values;
+  const pairs: DashPair[] = [];
+  for (let i = 0; i < even.length; i += 2)
+    pairs.push({ dash: even[i]!, gap: even[i + 1]! });
+  return {
+    pairs: pairs.slice(0, MAX_DASH_PAIRS),
+    hiddenPairs: Math.max(0, pairs.length - MAX_DASH_PAIRS),
+  };
+}
+
+/** The engine's array for `pairs`: the first pair and every later pair that
+ *  is not 0 / 0, in order; `[]` (solid) when every length is 0. A negative
+ *  or unreadable length is 0. Pure. */
+export function dashLengthsFromPairs(pairs: readonly DashPair[]): number[] {
+  const clean = (n: number) => (Number.isFinite(n) && n > 0 ? n : 0);
+  const out: number[] = [];
+  pairs.slice(0, MAX_DASH_PAIRS).forEach(({ dash, gap }, i) => {
+    const d = clean(dash);
+    const g = clean(gap);
+    if (i === 0 || d > 0 || g > 0) out.push(d, g);
+  });
+  return out.every((n) => n === 0) ? [] : out;
+}

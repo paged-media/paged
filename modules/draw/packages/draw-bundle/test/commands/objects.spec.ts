@@ -468,11 +468,6 @@ describe("paged.draw commands, no engine — the Path Options “…” commands
     await raises(`${C}.outlineStrokeOptions`, "outlineStroke");
   });
 
-  it("Dashes… raises Path Options at Stroke dashes", async () => {
-    covers("command:media.paged.draw.command.strokeDashOptions");
-    await raises(`${C}.strokeDashOptions`, "dash");
-  });
-
   it("Reflect… raises Path Options at Reflect", async () => {
     covers("command:media.paged.draw.command.reflectOptions");
     await raises(`${C}.reflectOptions`, "reflect");

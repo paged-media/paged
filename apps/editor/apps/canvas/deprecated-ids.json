@@ -288,6 +288,18 @@
       "replacement": "panel:paged.comments",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.strokeDashOptions",
+      "replacement": "panel:paged.stroke",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Stroke/Dashes…",
+      "replacement": "menu:Object/Stroke/Dashes…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

@@ -247,7 +247,6 @@ const COMMANDS = [
   // canary.14 — Dashes… / Reflect… raise their Path Options sections;
   // Reflect / Transform again (journey/plugins/draw-transform), Create
   // outlines (journey/plugins/draw-outlines), Dashes… (draw-dash).
-  "media.paged.draw.command.strokeDashOptions",
   "media.paged.draw.command.reflectOptions",
   "media.paged.draw.command.createOutlines",
   "media.paged.draw.command.reflectHorizontal",
@@ -748,7 +747,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(46);
     expect(PANELS).toHaveLength(14);
-    expect(COMMANDS).toHaveLength(146);
+    expect(COMMANDS).toHaveLength(145);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
