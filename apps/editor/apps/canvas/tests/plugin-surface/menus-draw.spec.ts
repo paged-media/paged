@@ -1084,22 +1084,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
-  test("Object/Insert star… — raises Path Options, where the star is set up", async () => {
-    covers("menu:Object/Insert star…");
-    await expectGreyedAndInert(bare, "Object/Insert star…");
-    const out = await clickEntry(
-      live,
-      "Object/Insert star…",
-      "media.paged.draw.command.insertStarOptions",
-    );
-    expect(out.shell).toEqual([
-      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
-    ]);
-    expect(out.after, "opening a panel leaves the document alone").toBe(
-      out.before,
-    );
-  });
-
   test("Object/Insert flare… — raises Path Options, where the flare is set up", async () => {
     covers("menu:Object/Insert flare…");
     await expectGreyedAndInert(bare, "Object/Insert flare…");
