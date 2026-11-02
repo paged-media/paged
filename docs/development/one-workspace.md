@@ -119,7 +119,7 @@ pinned toolchain, before and after the step, in the same checkout state otherwis
 | ----------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | 1. profiles | named `wasm-data/-sheet/-slide/-doc/-draw` | data_js 22,498,028; sheet_js 8,624,276; slide_js 14,096,305; trace_js 1,977,642 (cargo output, `release`) | identical sizes under the named profile          |
 | 2. publish  | `pdf-import` joins `engine/core`           | pdf_import_bg 4,048,462                                                                                   | 4,048,677 (+215 B, longer embedded source paths) |
-| 3. draw     | `draw-trace`, `draw-dxf`, `trace-js` join  | see the commit message                                                                                    | see the commit message                           |
+| 3. draw     | `draw-trace`, `draw-dxf`, `trace-js` join  | trace_js_bg 1,387,237                                                                                     | 1,387,007 (−230 B)                               |
 
 What a step changes besides the manifests, learned on publish:
 

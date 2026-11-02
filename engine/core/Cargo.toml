@@ -74,6 +74,9 @@ members = [
     # A member outside this directory names this root in its [package]
     # (`workspace = "…/engine/core"`).
     "../../modules/publish/crates/pdf-import",
+    "../../modules/draw/crates/draw-trace",
+    "../../modules/draw/crates/draw-dxf",
+    "../../modules/draw/crates/trace-js",
     "spikes/vello-eval",
     "spikes/composer-calibration",
     "spikes/wasm-size",
@@ -166,6 +169,20 @@ wasm-bindgen = "0.2"
 hayro-interpret = { version = "0.8", default-features = false }
 kurbo = "0.13"
 png = "0.18"
+# paged.draw's image-trace kernel, the colour clustering, path walking and spline
+# fitting under vtracer (MIT/Apache-2.0). It pulls bit-vec, num-traits and
+# flo_curves 0.3. READ THIS BEFORE BUMPING: the engine's [patch] below replaces
+# flo_curves 0.8 for a real abort (the point sort in `GraphPath::exterior_paths`
+# is not a strict weak ordering). That defect is not reachable from here:
+# visioncortex touches flo_curves only in `src/point.rs` (trait impls on its own
+# Point2) and `src/path/smooth.rs` (`Curve::fit_from_points`, the Schneider
+# curve fitter), never a `GraphPath` or a boolean, and 0.3.1 has no epsilon
+# `sort_by` at all. The patch needs 0.8, so it does not apply to 0.3 either way.
+visioncortex = "0.9.1"
+# DXF interchange (draw ADR 364). MIT. Reads ASCII and binary DXF, writes ASCII;
+# its own entity model, nothing else of ours depends on it.
+dxf = "0.6.2"
+console_error_panic_hook = "0.1"
 # W1.24 (audit B17) — benchmark harness (dev-only). `html_reports` is
 # off: the bench lane is local + CI-smoke, not a report-publishing gate,
 # and the gnuplot/plotters report deps bloat the dev build for no value
@@ -182,6 +199,11 @@ paged-model = { path = "crates/paged-model" }
 paged-scene = { path = "crates/paged-scene" }
 paged-store = { path = "crates/paged-store" }
 paged-pdf-annots = { path = "crates/paged-pdf-annots" }
+# The engine's SVG crate, for paged.draw's one walk over a usvg tree (engine ADR
+# 1031, plan item C9) and its paint reader: no default features, so neither the
+# mutation engine nor usvg's text shaper is linked. (The engine's own crates
+# spell the path directly with their default features.)
+paged-svg = { path = "crates/paged-svg", default-features = false }
 idml-import = { path = "crates/idml-import" }
 
 # C-21 — flo_curves upstream fix, pinned until it is released.
@@ -233,3 +255,14 @@ debug = 1
 inherits = "release"
 lto = "fat"
 codegen-units = 1
+
+# The shipped paged.draw wasm (modules/draw/scripts/build-wasm.sh): size first,
+# and no unwinding. A profile applies to the whole build, so it is named, and the
+# module's script selects it.
+[profile.wasm-draw]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

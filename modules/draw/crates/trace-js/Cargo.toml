@@ -1,5 +1,6 @@
 [package]
 name = "trace-js"
+workspace = "../../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,7 +23,11 @@ paged-svg = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = { workspace = true }
+# EXACT pin: the wasm-bindgen CRATE and the CLI that post-processes the artifact
+# must be the same version or the generated glue does not match the module.
+# tooling/rust/build-wasm.sh re-checks this against Cargo.lock and refuses to
+# build on a mismatch.
+wasm-bindgen = "=0.2.129"
 console_error_panic_hook = { workspace = true }
 # The `dxf` crate mints a UUID per drawing (uuid v4); on
 # wasm32-unknown-unknown uuid needs a randomness source, and `js` is the

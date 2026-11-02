@@ -31,6 +31,8 @@ on:
       - "modules/draw/**"
       # The engine crate the Cargo workspace path-depends on (draw ADR 364).
       - "engine/core/Cargo.toml"
+      - "engine/core/Cargo.lock"
+      - "engine/core/rust-toolchain.toml"
       - "engine/core/crates/paged-svg/**"
       - "platform/extensions/packages/plugin-sdk/bin/**"
       - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
@@ -74,19 +76,25 @@ jobs:
         run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/draw -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-draw
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The draw crates are members of the engine's Cargo workspace (one Cargo
+      # workspace, docs/development/one-workspace.md): cargo runs there and
+      # selects them with -p, so engine crates are neither linted nor tested here.
       - name: fmt
-        run: cargo fmt --all -- --check
+        working-directory: engine/core
+        run: cargo fmt -p draw-trace -p draw-dxf -p trace-js --check
       - name: clippy (native + wasm32)
+        working-directory: engine/core
         run: |
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo clippy --workspace --all-targets \
+          cargo clippy -p draw-trace -p draw-dxf -p trace-js --all-targets -- -D warnings
+          cargo clippy -p draw-trace -p draw-dxf -p trace-js --all-targets \
             --target wasm32-unknown-unknown -- -D warnings
       - name: test
-        run: cargo test --workspace
+        working-directory: engine/core
+        run: cargo test -p draw-trace -p draw-dxf -p trace-js
       # binaryen is PINNED: an old apt binaryen breaks wasm-bindgen
       # externref table grow (the "Table.grow failed" gotcha), and it also
       # validates bulk-memory off by default, which rustc emits.
@@ -96,7 +104,7 @@ jobs:
           echo "$RUNNER_TEMP/binaryen-version_126/bin" >> "$GITHUB_PATH"
       - name: wasm-bindgen-cli (version must match Cargo.lock)
         run: |
-          V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock \
+          V=$(grep -A1 '^name = "wasm-bindgen"$' ../../engine/core/Cargo.lock \
               | grep version | head -1 | cut -d'"' -f2)
           cargo install wasm-bindgen-cli --version "$V" --locked
       - name: build the wasm artifact (enforces the size budget)
