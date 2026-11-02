@@ -33,6 +33,12 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 /// opens with an inline 60 pt picture frame carrying `look` (its
 /// transparency blocks) and a placed `picture.png`, then a word.
 fn package(look: &str) -> Vec<u8> {
+    package_with(look, "0 0 60 60", "")
+}
+
+/// [`package`] with the picture frame's `GeometricBounds` and attributes
+/// for its `<Image>` (an `ItemTransform`, in the frame's own coordinates).
+fn package_with(look: &str, bounds: &str, image: &str) -> Vec<u8> {
     let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
     let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
     let mut put = |name: &str, body: &[u8]| {
@@ -70,9 +76,9 @@ fn package(look: &str) -> Vec<u8> {
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
 <Story Self="st1"><ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="12">
-<Rectangle Self="a1" GeometricBounds="0 0 60 60" StrokeWeight="0">
+<Rectangle Self="a1" GeometricBounds="{bounds}" StrokeWeight="0">
 {look}
-<Image Self="i1" LinkResourceURI="picture.png"/>
+<Image Self="i1" LinkResourceURI="picture.png" {image}/>
 <AnchoredObjectSetting AnchoredPosition="InlinePosition"/>
 </Rectangle>
 <Content>x</Content>
@@ -354,4 +360,67 @@ fn a_filled_anchored_frame_casts_its_shadow__feat__anchored_inline_objects_ancho
     })
     .expect("the frame's fill");
     assert!(shadow < fill, "the shadow is under the fill");
+}
+
+fn commands_of(bytes: &[u8]) -> Vec<DisplayCommand> {
+    let br = resolver();
+    let opts = PipelineOptions {
+        assets: Some(&br),
+        ..PipelineOptions::default()
+    };
+    let doc = idml_import::import_idml_doc(bytes).expect("import");
+    pipeline::build_document(&doc, &opts).unwrap().pages[0]
+        .list
+        .commands
+        .clone()
+}
+
+/// An anchored picture whose `<Image>` carries an `ItemTransform` is placed
+/// with its frame (engine ADR 1045, amendment 2026-11-02): the transform is
+/// in the frame's own coordinates, so the picture stands where the frame
+/// stands plus its offset inside the frame, whatever the frame's bounds
+/// are, as InDesign places an anchored object's content.
+#[test]
+fn an_anchored_picture_with_an_item_transform_is_placed_with_its_frame() {
+    // A frame whose own box starts at (40, 30), the picture (4 x 4 px at
+    // 15x) exactly over it: same place as the stretched picture.
+    let stretched = picture_box(&commands_of(&package_with("", "30 40 90 100", "")));
+    let over = picture_box(&commands_of(&package_with(
+        "",
+        "30 40 90 100",
+        r#"ItemTransform="15 0 0 15 40 30""#,
+    )));
+    let near = |a: [f32; 4], b: [f32; 4]| a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1e-3);
+    assert!(near(over, stretched), "{over:?} vs {stretched:?}");
+    // Offset 10 right and 5 down inside the frame: the picture moves by
+    // exactly that, with the frame not moving.
+    let moved = picture_box(&commands_of(&package_with(
+        "",
+        "30 40 90 100",
+        r#"ItemTransform="15 0 0 15 50 35""#,
+    )));
+    let shifted = [
+        stretched[0] + 10.0,
+        stretched[1] + 5.0,
+        stretched[2] + 10.0,
+        stretched[3] + 5.0,
+    ];
+    assert!(near(moved, shifted), "{moved:?} vs {shifted:?}");
+    // A frame at the origin of its own space (the lowering's) is the same
+    // rule with no correction.
+    let origin = picture_box(&commands_of(&package_with("", "0 0 60 60", "")));
+    let origin_moved = picture_box(&commands_of(&package_with(
+        "",
+        "0 0 60 60",
+        r#"ItemTransform="15 0 0 15 10 5""#,
+    )));
+    assert!(near(
+        origin_moved,
+        [
+            origin[0] + 10.0,
+            origin[1] + 5.0,
+            origin[2] + 10.0,
+            origin[3] + 5.0
+        ]
+    ));
 }

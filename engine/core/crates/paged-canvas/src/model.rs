@@ -8364,7 +8364,7 @@ impl CanvasModel {
         let default = AnchoredObjectSetting::default();
         let s = frame.setting.as_ref().unwrap_or(&default);
         let text = |v: &Option<String>| Value::Text(v.clone().unwrap_or_default());
-        let entries = vec![
+        let mut entries = vec![
             PropertyEntry {
                 path: PropertyPath::AnchoredPosition,
                 value: Some(text(&s.anchored_position)),
@@ -8406,6 +8406,14 @@ impl CanvasModel {
                 value: Some(Value::Bool(s.lock_position)),
             },
         ];
+        // Engine ADR 1045 (amendment 2026-11-02) — a picture frame lists
+        // its image placement, the path a crop is set through.
+        if frame.image_link.is_some() {
+            entries.push(PropertyEntry {
+                path: PropertyPath::ImageContentTransform,
+                value: Some(Value::Transform(frame.image_item_transform)),
+            });
+        }
         Some(ElementProperties {
             id: id.clone(),
             kind: id.kind_label().to_string(),
@@ -17421,7 +17429,29 @@ pub(crate) fn paragraph_content(para: &paged_model::Paragraph) -> crate::channel
                 change: crate::review::change_content(&pc.change),
                 before_paragraph_style: pc.before.paragraph_style.clone(),
             }),
+        pictures: picture_contents(para),
     }
+}
+
+/// Engine ADR 1045 (amendment 2026-11-02) — the pictures anchored in
+/// `para`: its anchored frames that hold an image, by anchor offset (frames
+/// at one offset keep the order they were anchored in).
+fn picture_contents(para: &paged_model::Paragraph) -> Vec<crate::channel::PictureContent> {
+    let mut out: Vec<crate::channel::PictureContent> = para
+        .anchored_frames
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.image_link.is_some())
+        .filter_map(|(i, f)| {
+            Some(crate::channel::PictureContent {
+                frame_id: f.self_id.clone()?,
+                offset: para.anchored_frame_offsets.get(i).copied().unwrap_or(0),
+                placement: f.image_item_transform,
+            })
+        })
+        .collect();
+    out.sort_by_key(|p| p.offset);
+    out
 }
 
 /// DOC-03 — one run as the content read gives it.

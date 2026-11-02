@@ -842,6 +842,13 @@ pub struct Image {
     /// cropped picture's size on the page, not the image's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop: Option<Crop>,
+    /// Doc ADR 623 — where the drawing stands in its part: the ordinal of
+    /// its `wp:inline` / `wp:anchor` among those of the part in document
+    /// order (one inside another counts once, as the outer). Save-back finds
+    /// the picture's `a:srcRect` by it. `None` for a picture that is not a
+    /// DrawingML drawing (VML, RTF, ODT).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<u32>,
 }
 
 /// An `a:srcRect`: `(l, t, r, b)` in 1 000ths of a percent.

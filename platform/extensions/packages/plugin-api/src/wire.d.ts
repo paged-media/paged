@@ -1010,6 +1010,13 @@ export interface ParagraphContent {
      * `auto`), when it sets one. Additive on 78.
      */
     direction?: string;
+    /**
+     * Engine ADR 1045 (amendment 2026-11-02) — the pictures anchored in this
+     * paragraph (anchored frames that hold an image), in the order of their
+     * anchor characters, each with the placement of its image in the frame. A
+     * content plugin reads a crop back from it. Additive on 78.
+     */
+    pictures?: PictureContent[];
 }
 
 /**
@@ -1770,6 +1777,29 @@ export interface PaintLayerSpec {
     miterLimit?: number | null;
     strokeType?: string | null;
     dash?: number[];
+}
+
+/**
+ * Engine ADR 1045 (amendment 2026-11-02) — one picture anchored in a
+ * paragraph, as the content read gives it.
+ */
+export interface PictureContent {
+    /**
+     * The anchored frame\'s own id (the id `imageContentTransform` and the
+     * anchored-object paths address it by).
+     */
+    frameId: string;
+    /**
+     * The character offset of its anchor in the paragraph (Unicode scalars,
+     * counted contiguously over the paragraph\'s runs).
+     */
+    offset: number;
+    /**
+     * The inner image transform `[a, b, c, d, e, f]` of the frame
+     * (`imageContentTransform`), in the frame\'s own box; absent while the
+     * picture fills its frame.
+     */
+    placement?: [number, number, number, number, number, number];
 }
 
 /**

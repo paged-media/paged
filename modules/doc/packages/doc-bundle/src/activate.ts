@@ -288,6 +288,7 @@ function activateDoc(
         sections,
         contents,
         sectionBlocks(ir).map((blocks) => pouredParagraphCount(blocks, layout)),
+        cells,
       );
       const bytes = engine.saveEditedFromContent({
         ...content,
@@ -389,6 +390,7 @@ function activateDoc(
           last.storyIds,
           contents,
           last.pouredParagraphs,
+          read.cells,
         );
         // This session poured it: each native table has its own paragraph.
         const bytes = engine.saveEditedFromContent({

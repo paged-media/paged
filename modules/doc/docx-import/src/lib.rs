@@ -87,9 +87,12 @@ struct ImportCtx<'a> {
 }
 
 /// Pictures' looks by `wp:docPr/@id`, each id's in document order (an id
-/// Word should keep unique may repeat in a hand-made file).
-type Looks =
-    std::collections::HashMap<u32, std::collections::VecDeque<(Option<PictureLook>, Option<Crop>)>>;
+/// Word should keep unique may repeat in a hand-made file): the look, the
+/// crop and the drawing's ordinal in its part (doc ADR 623).
+type Looks = std::collections::HashMap<
+    u32,
+    std::collections::VecDeque<(Option<PictureLook>, Option<Crop>, u32)>,
+>;
 
 impl ImportCtx<'_> {
     /// A `w:commentRangeStart` / `w:commentRangeEnd` met in the text.
@@ -114,16 +117,17 @@ impl ImportCtx<'_> {
         *self.objects.borrow_mut() = objects::PartObjects::for_part(part);
     }
 
-    /// The look and the crop of the next picture whose `wp:docPr` is `id`.
-    fn take_look(&self, id: u32) -> (Option<Box<PictureLook>>, Option<Crop>) {
+    /// The look, the crop and the ordinal of the next picture whose
+    /// `wp:docPr` is `id`.
+    fn take_look(&self, id: u32) -> (Option<Box<PictureLook>>, Option<Crop>, Option<u32>) {
         let taken = self
             .looks
             .borrow_mut()
             .get_mut(&id)
             .and_then(|q| q.pop_front());
         match taken {
-            Some((look, crop)) => (look.map(Box::new), crop),
-            None => (None, None),
+            Some((look, crop, ordinal)) => (look.map(Box::new), crop, Some(ordinal)),
+            None => (None, None, None),
         }
     }
 
@@ -2468,7 +2472,7 @@ fn map_drawing(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Image> {
     };
     // The look is taken before anything can fail, so a drawing that is not
     // placed still consumes its own.
-    let (look, crop) = doc_pr.map_or((None, None), |id| ctx.take_look(id));
+    let (look, crop, drawing) = doc_pr.map_or((None, None, None), |id| ctx.take_look(id));
     let embed_id = blip_embed(graphic)?;
     let (bytes, mime) = ctx.images.resolve(embed_id)?;
     Some(Image {
@@ -2480,6 +2484,7 @@ fn map_drawing(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Image> {
         band_offset_emu: None,
         look,
         crop,
+        drawing,
     })
 }
 
@@ -2501,7 +2506,7 @@ fn picture_looks(part: &[u8]) -> Looks {
         return out;
     };
     let no_rels = |_: &str| None;
-    for d in &drawings {
+    for (ordinal, d) in drawings.iter().enumerate() {
         let Some(id) = d
             .children
             .iter()
@@ -2533,9 +2538,11 @@ fn picture_looks(part: &[u8]) -> Looks {
                 .map(|b| drawingml::blip(b, &no_rels))
                 .unwrap_or_default(),
         });
-        out.entry(id)
-            .or_default()
-            .push_back((look.filter(|l| !l.is_plain()), crop));
+        out.entry(id).or_default().push_back((
+            look.filter(|l| !l.is_plain()),
+            crop,
+            ordinal as u32,
+        ));
     }
     out
 }
@@ -2712,6 +2719,7 @@ fn map_pict(p: &wml::Picture, ctx: &ImportCtx) -> Option<Image> {
             band_offset_emu,
             look: None,
             crop: None,
+            drawing: None,
         })
     })
 }
