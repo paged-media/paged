@@ -1020,29 +1020,6 @@ export interface ParagraphContent {
 }
 
 /**
- * Engine ADR 1045 (amendment 2026-11-02) — one picture anchored in a
- * paragraph, as the content read gives it.
- */
-export interface PictureContent {
-    /**
-     * The anchored frame\'s own id (the id `imageContentTransform` and the
-     * anchored-object paths address it by).
-     */
-    frameId: string;
-    /**
-     * The character offset of its anchor in the paragraph (Unicode scalars,
-     * counted contiguously over the paragraph\'s runs).
-     */
-    offset: number;
-    /**
-     * The inner image transform `[a, b, c, d, e, f]` of the frame
-     * (`imageContentTransform`), in the frame\'s own box; absent while the
-     * picture fills its frame.
-     */
-    placement?: [number, number, number, number, number, number];
-}
-
-/**
  * DOC-03 — one run\'s text + its applied character style + its DIRECT character
  * overrides (each `None` = inherit). A run styled only through an applied style
  * carries just `character_style`; direct editor formatting shows in the override
@@ -1800,6 +1777,29 @@ export interface PaintLayerSpec {
     miterLimit?: number | null;
     strokeType?: string | null;
     dash?: number[];
+}
+
+/**
+ * Engine ADR 1045 (amendment 2026-11-02) — one picture anchored in a
+ * paragraph, as the content read gives it.
+ */
+export interface PictureContent {
+    /**
+     * The anchored frame\'s own id (the id `imageContentTransform` and the
+     * anchored-object paths address it by).
+     */
+    frameId: string;
+    /**
+     * The character offset of its anchor in the paragraph (Unicode scalars,
+     * counted contiguously over the paragraph\'s runs).
+     */
+    offset: number;
+    /**
+     * The inner image transform `[a, b, c, d, e, f]` of the frame
+     * (`imageContentTransform`), in the frame\'s own box; absent while the
+     * picture fills its frame.
+     */
+    placement?: [number, number, number, number, number, number];
 }
 
 /**
