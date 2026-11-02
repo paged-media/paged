@@ -36,7 +36,14 @@ import { expect } from "@playwright/test";
 import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { CHAR, LAYER, STYLE, SWATCH, contentBox, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
-import { corner, draw, path, propOf } from "./00-support";
+import {
+  corner,
+  draw,
+  hostCommand,
+  hostIdOf,
+  path,
+  propOf,
+} from "./00-support";
 
 export async function build(ctx: PageContext): Promise<PageReport> {
   const { doc } = ctx;
@@ -205,7 +212,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ]);
     elements.push(rect);
     await doc.select("rectangle", rect);
-    await draw(ctx, suffix);
+    await hostCommand(ctx, hostIdOf(suffix, "corners"));
     await expect
       .poll(
         async () =>

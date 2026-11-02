@@ -35,6 +35,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
   appearanceBakeOf,
+  appearanceMutation,
   appearanceOf,
   bakeAppearance,
   commitAppearance,
@@ -80,7 +81,10 @@ describe("draw appearance on the engine's native appearance (draw ADR 367) [fram
   });
 
   it("Bake has nothing to bake on a native appearance, and says so", async () => {
-    await h.objects.invoke(`${C}.appearanceAddFill`, { targets: [] });
+    // A native appearance, written as the host's Appearance panel writes it.
+    await h.host.document.mutate(
+      appearanceMutation(RECT, [{ kind: "fill", color: "Color/Black" }]),
+    );
     const before = await kinds(h);
     await h.objects
       .invoke(`${C}.bakeAppearance`, { targets: [] })

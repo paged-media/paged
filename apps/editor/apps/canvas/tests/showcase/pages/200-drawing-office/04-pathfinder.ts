@@ -36,7 +36,14 @@ import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, SWATCH, contentBox, p } from "../../names-annual";
 import { refKey, type Ref } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
-import { anchorsOf, corner, draw, path, polygons } from "./00-support";
+import {
+  anchorsOf,
+  corner,
+  hostCommand,
+  hostIdOf,
+  path,
+  polygons,
+} from "./00-support";
 
 const VERBS_ROW1 = [
   ["pathfinderUnite", "Unite"],
@@ -157,7 +164,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       const underBefore = await tableOf(underRef);
       const overBefore = await tableOf(overRef);
       await doc.designer.selectElements([underRef, overRef]);
-      await draw(ctx, suffix);
+      await hostCommand(ctx, hostIdOf(suffix, "pathfinder"));
       // The verbs' outcomes differ in KIND: the shape modes consume and
       // mint, but a region verb like Trim may rewrite an operand's
       // anchor table IN PLACE — same ids, same count, different

@@ -136,6 +136,29 @@ export async function draw(
   );
 }
 
+/** Invoke a HOST command by its full id (`paged.pathfinder.unite`), with an
+ *  optional payload, through the same registry the menu bar drives. The
+ *  Pathfinder, corner, dash and appearance commands are the host's
+ *  (PM-0017), no longer draw's. */
+export async function hostCommand(
+  ctx: PageContext,
+  id: string,
+  payload?: unknown,
+): Promise<void> {
+  await ctx.page.evaluate(
+    async ({ id, payload }) => {
+      const c = (globalThis as unknown as ClientGlobal).__canvas;
+      await c.registries.commands.invoke(id, payload);
+    },
+    { id, payload },
+  );
+}
+
+/** The host id of a former draw command suffix: `pathfinderUnite` →
+ *  `paged.pathfinder.unite` (prefix `pathfinder`, namespace `paged.pathfinder.`). */
+export const hostIdOf = (suffix: string, prefix: string): string =>
+  `paged.${prefix}.${suffix.slice(prefix.length).replace(/^./, (c) => c.toLowerCase())}`;
+
 /** The current polygons, document-wide (paint order). */
 export const polygons = (ctx: PageContext): Promise<Ref[]> =>
   sceneRefs(ctx.page, "polygon");
