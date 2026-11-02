@@ -95,6 +95,8 @@ function fakeEngine() {
     skeletonStories: () => (mid ? ["docx_s0"] : ["docx_s0", "docx_s1"]),
     skeletonPaged: (name: string) =>
       new TextEncoder().encode(`${name}:${mid ? "split" : "pages"}`),
+    // Doc ADR 625 — this fake engine's body is never built natively.
+    skeletonPagedPrefilled: () => null,
   };
   return { engine, calls };
 }
