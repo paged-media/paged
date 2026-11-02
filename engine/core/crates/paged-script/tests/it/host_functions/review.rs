@@ -243,3 +243,44 @@ fn set_theme_fonts() {
         "true",
     );
 }
+
+#[test]
+fn create_theme_from_swatches() {
+    covers!("script:paged.createThemeFromSwatches");
+    let (mut m, _, _, _) = with_story("One two three");
+    refuses(
+        &mut m,
+        "paged.createThemeFromSwatches({slots: [{slot: 'accent1', swatch: 'Nope'}]})",
+        "false",
+    );
+    refuses(
+        &mut m,
+        "paged.createThemeFromSwatches({slots: []})",
+        "false",
+    );
+    ok(
+        &mut m,
+        "paged.createSwatch({name: 'Brand', space: 'RGB', value: [21, 96, 130]})",
+    );
+    writes(
+        &mut m,
+        "paged.createThemeFromSwatches({name: 'Mine', slots: [{slot: 'accent1', swatch: 'Brand'}], relink: true})",
+        "true",
+    );
+}
+
+#[test]
+fn set_style_theme_font() {
+    covers!("script:paged.setStyleThemeFont");
+    let (mut m, _, _, _) = with_story("One two three");
+    refuses(
+        &mut m,
+        "paged.setStyleThemeFont('paragraph', 'ParagraphStyle/Nope', 'major')",
+        "false",
+    );
+    refuses(
+        &mut m,
+        "paged.setStyleThemeFont('object', 'x', 'major')",
+        "false",
+    );
+}

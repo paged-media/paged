@@ -1936,6 +1936,9 @@ pub struct CanvasModel {
     /// document. Held here rather than on the scene `Document` so the model
     /// stays IDML-free (N9); the parts door reads container parts from it.
     pub(crate) source_archive: Option<idml_import::SourceArchive>,
+    /// What the import dropped or could not restore (engine ADR 1057: a
+    /// theme link edited outside paged), one line each.
+    pub(crate) import_notes: Vec<String>,
     /// W3.B2 — the IDML bytes this model was parsed from, retained so
     /// `export_idml` can hand them to `idml_export::write_idml` as the
     /// carry-through source package (it patches only the model-owned
@@ -2868,6 +2871,7 @@ impl CanvasModel {
         // other container part.
         // The raw source archive rides on the CanvasModel (below), not on the
         // scene `Document` — the model no longer carries the IDML archive (N9).
+        let mut import_notes: Vec<String> = Vec::new();
         let (scene, source_archive) = {
             let opened =
                 paged_renderer::container::open_document(bytes).map_err(LoadError::Parse)?;
@@ -2876,6 +2880,8 @@ impl CanvasModel {
             // symbols as labelled artwork; bring the instances back.
             if !opened.from_model_part {
                 paged_mutate::restore_symbols_from_labels(&mut doc);
+                // Engine ADR 1057 — and its theme, with the links that held.
+                import_notes = paged_mutate::restore_theme_from_labels(&mut doc);
             }
             if opened.from_model_part {
                 // The IDML parts beside the model keep each next /
@@ -3008,6 +3014,7 @@ impl CanvasModel {
             doc_id,
             scene,
             source_archive,
+            import_notes,
             // W3.B2 — retain the source package for save-back. One
             // compressed copy; replaced wholesale on the next load.
             source_idml: bytes.to_vec(),
@@ -5822,6 +5829,24 @@ impl CanvasModel {
                 which: which.clone(),
                 fonts: fonts.clone(),
             }),
+            Mutation::CreateThemeFromSwatches {
+                name,
+                slots,
+                relink,
+            } => Some(Operation::CreateThemeFromSwatches {
+                name: name.clone(),
+                slots: slots.clone(),
+                relink: *relink,
+            }),
+            Mutation::SetStyleThemeFont {
+                collection,
+                style_id,
+                which,
+            } => Some(Operation::SetStyleThemeFont {
+                collection: *collection,
+                style_id: style_id.clone(),
+                which: which.clone(),
+            }),
             Mutation::ResolveComment {
                 comment_id,
                 resolved,
@@ -7804,6 +7829,8 @@ impl CanvasModel {
         crate::pattern_export::lower_for_idml(&mut scene);
         // Engine ADR 1055 — a comment on a text range is written as a note.
         crate::comment_export::lower_for_idml(&mut scene);
+        // Engine ADR 1057 — the theme rides a document label.
+        paged_mutate::flatten_theme_for_interchange(&mut scene);
         let out = idml_export::write_idml_with(
             &scene,
             &self.source_idml,
@@ -7940,6 +7967,9 @@ impl CanvasModel {
         out.extend(crate::export_losses::media_losses(&self.scene));
         out.extend(crate::export_losses::blend_mode_losses(&self.scene));
         out.extend(crate::comment_export::comment_losses(&self.scene));
+        out.extend(paged_mutate::flatten_theme_for_interchange(
+            &mut self.scene.clone(),
+        ));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -12269,6 +12299,21 @@ impl CanvasModel {
         vec![row]
     }
 
+    /// What opening the document dropped or could not restore, one line
+    /// each (engine ADR 1057: a theme link edited outside paged).
+    pub fn import_notes(&self) -> &[String] {
+        &self.import_notes
+    }
+
+    /// Engine ADR 1057 — the `themePresets` collection: one row per preset
+    /// (`{ id, theme }`), the same in every document.
+    pub fn theme_preset_rows(&self) -> Vec<serde_json::Value> {
+        paged_model::theme::presets::all()
+            .into_iter()
+            .map(|(id, theme)| serde_json::json!({ "id": id, "theme": theme }))
+            .collect()
+    }
+
     /// Engine ADR 1020 — the document's comments, threads in story order,
     /// each story's editorial notes (ADR 172) after its range comments as
     /// rows of kind `note` (ADR 1055).
@@ -13143,6 +13188,7 @@ impl CanvasModel {
             TrackedChanges => json(self.tracked_changes()),
             Comments => json(self.comments()),
             Theme => json(self.theme_rows()),
+            ThemePresets => json(self.theme_preset_rows()),
             Endnotes => json(self.endnotes()),
             Inks => json(self.inks()),
             Sections => json(self.sections()),

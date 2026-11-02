@@ -2649,6 +2649,28 @@ pub enum Mutation {
         which: String,
         fonts: paged_mutate::operation::ThemeFontsSpec,
     },
+    // rides v78 (added before first consumer sync): engine ADR 1057.
+    /// Engine ADR 1057 — make a theme from swatches: each of `slots` takes
+    /// its (plain RGB) swatch's colour and the swatch follows it; with
+    /// `relink`, every other plain RGB swatch that is an exact Office tint
+    /// of a slot follows it. Refused when the document has a theme.
+    /// Undoable.
+    CreateThemeFromSwatches {
+        #[serde(default)]
+        name: String,
+        slots: Vec<paged_mutate::operation::ThemeSlotSwatchSpec>,
+        #[serde(default)]
+        relink: bool,
+    },
+    /// Engine ADR 1057 — make a paragraph or character style follow the
+    /// theme's `major` or `minor` font (`which` absent: stop following).
+    /// Undoable.
+    SetStyleThemeFont {
+        collection: paged_mutate::StyleCollection,
+        style_id: String,
+        #[serde(default)]
+        which: Option<String>,
+    },
     // ── W0.5 wire-expansion ─────────────────────────────────────────
     /// W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local
     /// `bounds` `(top, left, bottom, right)`; the model resolves the
@@ -3333,6 +3355,8 @@ mutation_vocabulary! {
     SetTheme,
     SetThemeColor,
     SetThemeFonts,
+    CreateThemeFromSwatches,
+    SetStyleThemeFont,
     InsertOval,
     InsertGuide,
     MoveGuide,

@@ -9331,6 +9331,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.theme",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.transparency",
       "kind": "panel",
       "owner": "editor"

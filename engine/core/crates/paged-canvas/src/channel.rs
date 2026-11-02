@@ -3302,6 +3302,8 @@ pub enum CollectionName {
     /// Engine ADR 1056 — the document's theme: one row (the colour slots and
     /// the font scheme, `source` as its format and size only), or none.
     Theme,
+    /// Engine ADR 1057 — the theme presets, read-only rows (id and theme).
+    ThemePresets,
     /// Concept 2 — the Ink Manager's ink list (one row per spot
     /// swatch, carrying its output-time settings).
     Inks,
@@ -3373,6 +3375,7 @@ impl CollectionName {
             Self::TrackedChanges => "trackedChanges",
             Self::Comments => "comments",
             Self::Theme => "theme",
+            Self::ThemePresets => "themePresets",
             Self::Endnotes => "endnotes",
             Self::Inks => "inks",
             Self::Sections => "sections",
@@ -3418,6 +3421,7 @@ impl CollectionName {
             "trackedChanges" => Self::TrackedChanges,
             "comments" => Self::Comments,
             "theme" => Self::Theme,
+            "themePresets" => Self::ThemePresets,
             "endnotes" => Self::Endnotes,
             "inks" => Self::Inks,
             "sections" => Self::Sections,

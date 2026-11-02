@@ -1331,6 +1331,20 @@
       "summary": "Set the 'major' (headings) or 'minor' (body) font set of the document's theme. Needs a theme. Undoable."
     },
     {
+      "name": "paged.createThemeFromSwatches",
+      "params": "({name?, slots: [{slot, swatch}], relink?})",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Make a theme from swatches (a document with no theme): each slot takes its plain RGB swatch's colour and the swatch follows it; with relink, every other RGB swatch that is an exact Office tint of a slot follows it too. Undoable."
+    },
+    {
+      "name": "paged.setStyleThemeFont",
+      "params": "(kind, styleId, which)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Make a 'paragraph' or 'character' style follow the theme's 'major' or 'minor' font (which = null: stop following). Needs a theme to follow. Undoable."
+    },
+    {
       "name": "paged.find",
       "params": "(text, {storyId?, mode?, matchCase?, wholeWord?, paragraphStyle?, characterStyle?, limit?})",
       "returns": "string",
@@ -2214,6 +2228,8 @@
     "setTheme",
     "setThemeColor",
     "setThemeFonts",
+    "createThemeFromSwatches",
+    "setStyleThemeFont",
     "insertOval",
     "insertGuide",
     "moveGuide",

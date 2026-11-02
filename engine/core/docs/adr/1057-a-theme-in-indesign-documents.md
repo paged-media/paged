@@ -1,12 +1,12 @@
 # ADR 1057 — A theme in InDesign documents: native source of truth, plain swatches in IDML, the theme in a document label
 
-- **Status:** Accepted 2026-11-02 (design; stage 2 builds it). Extends
+- **Status:** Accepted 2026-11-02; **stage 2 built** (the model, the operations, the label in `paged-mutate`'s `theme_interchange`, the `themePresets` collection). Open: the Theme panel (stage 3), the InDesign label-size measurement, CMYK slot swatches. Extends
   [ADR 1056](1056-one-theme-model-for-every-module.md) to the IDML / publish half, where the
   format has no theme. Part of the capability layering of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Themes").
 - **Scope:** `paged-model` (`theme.rs`: presets, font references), `paged-mutate` and `paged-wire`
-  (`createThemeFromSwatches`, the `theme-preset` rows), `paged-canvas` (`theme_export.rs`: the
-  lowering and its losses, beside `comment_export.rs`), `idml-export` (the document label is the
+  (`createThemeFromSwatches`, `setStyleThemeFont`, the `themePresets` rows), `paged-mutate` (`apply/theme_interchange.rs`: the label writer and reader, the symbols mechanism of
+  ADR 1039; the export loss lines come from it), `idml-export` (the document label is the
   existing one), `idml-import` (the label reader and the detach report), `sheet-chart` (the
   palette owner, follow-up).
 
@@ -73,11 +73,12 @@ the chain `lumMod` / `lumOff` at the standard 20, 40, 60, 80 and `lumMod 50 / 75
 Office "Lighter" and "Darker" names) resolves to the same sRGB value, compared exactly after the
 engine's rounding. Nothing is guessed beyond that: a swatch that matches no slot stays literal.
 
-- **Colour space.** A theme slot is sRGB. A swatch that follows one stays in its space: the
+- **Colour space (built: RGB swatches only).** A theme slot is sRGB. A swatch that follows one stays in its space: the
   slot's colour is converted through the one CMS (ADR 1032) when the theme changes. A **spot
   swatch never follows** a slot. A CMYK swatch chosen for a slot gives the slot its converted sRGB
-  value; the host says so before applying. (Stage 2 checks what slice 3's recolour does for a CMYK
-  follower today and aligns it.)
+  value; the host says so before applying. Stage 2 builds the RGB half: a CMYK or spot swatch named for a slot is refused, and a CMYK
+  swatch is not relinked. (Slice 3's recolour writes a following swatch's value as three RGB
+  bytes whatever its space; a CMYK follower is therefore not written to the label and is reported.)
 - **Which swatches.** The host proposes slots from a swatch group (darkest to `dk1`, lightest to
   `lt1`, the rest by chroma to `accent1..6`); the user edits the assignment. The engine takes the
   explicit list and never proposes.
@@ -97,13 +98,13 @@ renderer, the IDML export and every font-substitution path keep reading `font` a
 text in a styled document restyles through the style, which is what InDesign users expect of a
 style; byte-neutral for documents with no reference. Scripts (`east_asian`, `complex`, the
 per-script list) are not referenced in this slice: ADR 1051's script slots are a different
-field; a script-face reference is a later amendment. A style with `font_ref` whose `font` the user
-then sets by hand loses the reference (an `EditStyle` of `font` clears it, as an `EditSwatch` of a
-value cannot, because a swatch edit of the value is the user choosing a literal colour: it also
-clears the swatch reference in stage 2, amending slice 3's "leaves the reference alone", which
-made a recoloured swatch jump back on the next theme change).
+field; a script-face reference is a later amendment. **Built:** the reference is set and cleared by
+`setStyleThemeFont { collection, styleId, which? }` (`which` absent stops following and keeps the
+face); a `setStyleProperty` of `font` leaves the reference alone, as `EditSwatch` leaves a swatch's
+(slide's save path edits following swatches and relies on that), so the next theme change restyles
+the style again until the reference is cleared.
 
-### (d) Presets: defined once
+### (d) Presets: defined once (built)
 
 `paged_model::theme::presets` owns the preset themes as constants: `office-2013` (the Office
 theme of Word, Excel and PowerPoint 2013 to 2022: `dk2 44546A`, `accent1 4472C4`, `ED7D31`,
@@ -112,11 +113,12 @@ and `office-2023` (the PowerPoint oracle recorded in ADR 1056: `0E2841`, `E8E8E8
 `E97132`, `196B24`, `0F9ED5`, `A02B93`, `4EA72E`, `467886` / `96607D`; Aptos Display and Aptos),
 each a full `Theme` with `dk1` / `lt1` as system colours. Hosts read them as **read-only rows of a
 `theme-preset` collection** (no new message; applying one is `setTheme`). The capability register
-lists the default Office palette twice: `sheet-chart/src/colors.rs` `OFFICE_THEME` (a `[u32; 12]`
-of the 2013 palette) and the sheet-xlsx style table. Both become a read of
-`presets::OFFICE_2013` (a `[u32; 12]` accessor beside the `Theme`), and the duplicates are
-deleted; that edit is in sheet code and is made by the sheet owner after stage 2 lands the
-constant (the lowering work in doc and sheet is in progress and is not touched here).
+listed the default Office palette twice; the theme-lowering work has since made
+`paged_ooxml::drawingml::theme::OFFICE` the reader's one fallback. `presets::OFFICE_2013_RGB` is the
+engine-side owner (the model cannot depend on `paged-ooxml`, which sits above it, and `paged-ooxml`
+cannot yet take the model as a dependency without a workspace decision); a test in `dml-native`
+holds the two equal, and `sheet-chart`'s `OFFICE_THEME` remains for the sheet owner to fold into
+`OFFICE`.
 
 ### (e) Risk: a flattened swatch edited in InDesign
 

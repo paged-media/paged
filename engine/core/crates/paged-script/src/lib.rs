@@ -1451,6 +1451,17 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("setThemeFonts"),
             2,
         )
+        // Engine ADR 1057.
+        .function(
+            guarded(paged_create_theme_from_swatches),
+            js_string!("createThemeFromSwatches"),
+            1,
+        )
+        .function(
+            guarded(paged_set_style_theme_font),
+            js_string!("setStyleThemeFont"),
+            3,
+        )
         // Engine ADRs 1018 and 1021.
         .function(guarded(paged_find), js_string!("find"), 2)
         .function(guarded(paged_find_replace), js_string!("findReplace"), 3)
@@ -4157,6 +4168,56 @@ fn paged_set_theme_fonts(
         return Ok(JsValue::from(false));
     };
     Ok(apply_bool(&Mutation::SetThemeFonts { which, fonts }))
+}
+
+/// `paged.createThemeFromSwatches({ name?, slots: [{slot, swatch}], relink? })`
+/// — make a theme from swatches.
+fn paged_create_theme_from_swatches(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(serde::Deserialize)]
+    struct Args {
+        #[serde(default)]
+        name: String,
+        slots: Vec<paged_mutate::operation::ThemeSlotSwatchSpec>,
+        #[serde(default)]
+        relink: bool,
+    }
+    let Some(a) = from_js::<Args>(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::CreateThemeFromSwatches {
+        name: a.name,
+        slots: a.slots,
+        relink: a.relink,
+    }))
+}
+
+/// `paged.setStyleThemeFont('paragraph' | 'character', styleId, 'major' |
+/// 'minor' | null)` — make a style follow a theme font set (or stop).
+fn paged_set_style_theme_font(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let kind = str_arg(args, 0, ctx)?;
+    let style_id = str_arg(args, 1, ctx)?;
+    let which = match args.get_or_undefined(2) {
+        v if v.is_null_or_undefined() => None,
+        _ => Some(str_arg(args, 2, ctx)?),
+    };
+    let collection = match kind.as_str() {
+        "paragraph" => paged_mutate::StyleCollection::Paragraph,
+        "character" => paged_mutate::StyleCollection::Character,
+        _ => return Ok(JsValue::from(false)),
+    };
+    Ok(apply_bool(&Mutation::SetStyleThemeFont {
+        collection,
+        style_id,
+        which,
+    }))
 }
 
 /// `paged.deleteComment(commentId)` — a root takes its thread with it.

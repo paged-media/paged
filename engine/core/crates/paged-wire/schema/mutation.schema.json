@@ -5135,6 +5135,78 @@
           ]
         },
         {
+          "description": "Engine ADR 1057 — make a theme from swatches: each of `slots` takes\nits (plain RGB) swatch's colour and the swatch follows it; with\n`relink`, every other plain RGB swatch that is an exact Office tint\nof a slot follows it. Refused when the document has a theme.\nUndoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "createThemeFromSwatches"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "default": ""
+                },
+                "slots": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ThemeSlotSwatchSpec"
+                  }
+                },
+                "relink": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "slots"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1057 — make a paragraph or character style follow the\ntheme's `major` or `minor` font (`which` absent: stop following).\nUndoable.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setStyleThemeFont"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "collection": {
+                  "$ref": "#/$defs/StyleCollection"
+                },
+                "styleId": {
+                  "type": "string"
+                },
+                "which": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "collection",
+                "styleId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local\n`bounds` `(top, left, bottom, right)`; the model resolves the\nhost spread and mints the self id (mirrors `InsertFrame`).",
           "type": "object",
           "properties": {
@@ -13718,6 +13790,22 @@
       "required": [
         "script",
         "typeface"
+      ]
+    },
+    "ThemeSlotSwatchSpec": {
+      "description": "Engine ADR 1057 — a theme slot and the swatch (self id or name) it takes\nits colour from.",
+      "type": "object",
+      "properties": {
+        "slot": {
+          "type": "string"
+        },
+        "swatch": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "slot",
+        "swatch"
       ]
     },
     "GuideOrientationSpec": {

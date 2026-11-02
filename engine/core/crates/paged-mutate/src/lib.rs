@@ -72,6 +72,9 @@ pub use apply::apply;
 pub use apply::apply_checked;
 pub use apply::is_locked;
 pub use apply::review::{comment_story, next_change_id, next_comment_id, resolve_changes};
+pub use apply::theme_interchange::{
+    flatten_theme_for_interchange, restore_theme_from_labels, THEME_LABEL,
+};
 pub use apply::threads::find as thread_comment;
 pub use apply::{duplicate_demand, duplicate_roots, DuplicateDemand};
 pub use apply::{
@@ -95,7 +98,8 @@ pub use operation::{
     PathPointRole, PathfinderKind, PathfinderRegionVerb, PatternColorSpec, PatternItemSpec,
     PatternSpec, PersonSpec, PropertyPath, ReactionSpec, ScriptFontSpec, SourceBlobSpec,
     StopColorSpec, StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec,
-    ThemeColorSpec, ThemeFontsSpec, ThemeRefSpec, ThemeSpec, Value, ZOrderTarget,
+    ThemeColorSpec, ThemeFontsSpec, ThemeRefSpec, ThemeSlotSwatchSpec, ThemeSpec, Value,
+    ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 

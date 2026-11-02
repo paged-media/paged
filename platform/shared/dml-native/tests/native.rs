@@ -202,3 +202,13 @@ fn the_wire_form_round_trips_and_omits_what_is_unset__feat__plugin_doc_native_ef
     assert_eq!(serde_json::from_str::<NativeFx>(&json).unwrap(), fx);
     assert!(l.shape(&ShapeProperties::default(), 1.0, 1.0).is_empty());
 }
+
+/// Engine ADR 1057: the engine's Office 2013 preset and the OOXML reader's
+/// fallback palette are the same twelve colours.
+#[test]
+fn the_office_preset_is_the_readers_fallback_palette() {
+    assert_eq!(
+        paged_model::theme::presets::OFFICE_2013_RGB,
+        paged_ooxml::drawingml::theme::OFFICE
+    );
+}

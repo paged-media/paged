@@ -60,7 +60,9 @@ pub use script::{
     CharacterDirection, FontHint, ParagraphDirection, ResolvedDirection, ScriptClass,
     ScriptProperties,
 };
-pub use theme::{Theme, ThemeColor, ThemeFonts, ThemeRef, THEME_SLOTS, THEME_SOURCE_OOXML};
+pub use theme::{
+    Theme, ThemeColor, ThemeFontRef, ThemeFonts, ThemeRef, THEME_SLOTS, THEME_SOURCE_OOXML,
+};
 pub use word_field::{WordField, WordFieldKind};
 
 pub use mesh::{
@@ -6300,6 +6302,9 @@ pub struct CharacterStyleDef {
     pub based_on: Option<String>,
     pub font: Option<String>,
     pub font_style: Option<String>,
+    /// Engine ADR 1057 — the theme font this style's `font` follows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_ref: Option<ThemeFontRef>,
     pub point_size: Option<f32>,
     /// `Leading` in pt — the attribute, or InDesign's own spelling, the
     /// `<Properties><Leading type="unit">` child (an `enumeration`
@@ -6468,6 +6473,9 @@ pub struct ParagraphStyleDef {
     pub based_on: Option<String>,
     pub font: Option<String>,
     pub font_style: Option<String>,
+    /// Engine ADR 1057 — the theme font this style's `font` follows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_ref: Option<ThemeFontRef>,
     pub point_size: Option<f32>,
     /// `Leading` in pt — the attribute, or InDesign's own spelling, the
     /// `<Properties><Leading type="unit">` child (an `enumeration`

@@ -65,6 +65,12 @@ const SHARED_HOST_PANELS: readonly string[] = [
   "paged.picture-adjustments",
   "paged.history",
 ];
+/** Engine ADR 1057 — the Theme panel works in every application but slide,
+ *  which has its own Design panel. */
+const SHARED_HOST_PANELS_WITH_THEME: readonly string[] = [
+  ...SHARED_HOST_PANELS,
+  "paged.theme",
+];
 const SHARED_HOST_TOOLS: readonly string[] = ["paged.tool.freeTransform"];
 
 /** A profile's own list, then each shared id it does not name already. */
@@ -130,7 +136,7 @@ const DRAW_PROFILE: SoloProfile = {
   // Square, and large enough that the artboard reads as a canvas rather
   // than a page. Verified end-to-end at this exact size.
   documentSizePt: [2000, 2000],
-  panelIds: withShared(SHARED_HOST_PANELS, [
+  panelIds: withShared(SHARED_HOST_PANELS_WITH_THEME, [
     "paged.properties",
     "paged.object-transform",
     "paged.align",
@@ -238,7 +244,7 @@ const IMAGE_PROFILE: SoloProfile = {
   bundleId: "media.paged.image",
   title: "paged.image",
   documentSizePt: [1600, 1200],
-  panelIds: withShared(SHARED_HOST_PANELS, [
+  panelIds: withShared(SHARED_HOST_PANELS_WITH_THEME, [
     "paged.properties",
     "paged.object-transform",
     "paged.layers",
@@ -295,7 +301,7 @@ const SHEET_PROFILE: SoloProfile = {
   bundleId: "media.paged.sheet",
   title: "paged.sheet",
   documentSizePt: [1400, 900],
-  panelIds: withShared(SHARED_HOST_PANELS, [
+  panelIds: withShared(SHARED_HOST_PANELS_WITH_THEME, [
     "paged.properties",
     "paged.object-transform",
     "paged.table",
@@ -365,7 +371,7 @@ const DOC_PROFILE: SoloProfile = {
   bundleId: "media.paged.doc",
   title: "paged.doc",
   documentSizePt: [612, 792],
-  panelIds: withShared(SHARED_HOST_PANELS, [
+  panelIds: withShared(SHARED_HOST_PANELS_WITH_THEME, [
     "paged.properties",
     "paged.character",
     "paged.paragraph",
@@ -434,7 +440,7 @@ const WEB_PROFILE: SoloProfile = {
   bundleId: "media.paged.web",
   title: "paged.web",
   documentSizePt: [612, 792],
-  panelIds: withShared(SHARED_HOST_PANELS, [
+  panelIds: withShared(SHARED_HOST_PANELS_WITH_THEME, [
     "paged.properties",
     "paged.pages",
     "paged.stories",
@@ -494,7 +500,7 @@ const DATA_PROFILE: SoloProfile = {
   bundleId: "media.paged.data",
   title: "paged.data",
   documentSizePt: [612, 792],
-  panelIds: withShared(SHARED_HOST_PANELS, [
+  panelIds: withShared(SHARED_HOST_PANELS_WITH_THEME, [
     "paged.properties",
     "paged.pages",
     "paged.stories",

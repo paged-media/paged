@@ -188,6 +188,7 @@ is not written yet.
 | [1054](1054-headings-tag-and-outline-a-pdf.md) | A paragraph style's PDF tag is settable and a PDF's outline can come from its headings | Accepted 2026-11-01 |
 | [1055](1055-one-comment-model-for-every-module.md) | One comment model for every module: document-level threads with item, page, region and cell anchors, people, orphaning; compatible with Word, Excel, PowerPoint, InDesign and Acrobat (extends 172, 1020) | Accepted 2026-11-01 |
 | [1056](1056-one-theme-model-for-every-module.md) | One theme model for every module: twelve colour slots and a font scheme on the document, the original part kept as a source; slices 1 and 2 built (model, encoding, slide import, `theme` collection, set operations) | Accepted 2026-11-01 |
+| [1057](1057-a-theme-in-indesign-documents.md) | A theme in InDesign documents: plain swatches for InDesign, the theme in a document label, theme from swatches, font references on styles, presets defined once | Accepted 2026-11-02 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

@@ -167,8 +167,11 @@
     },
     {
       "name": "office-theme-palette",
-      "description": "take the default Office theme colours from paged_ooxml::drawingml::theme::OFFICE",
-      "owner": ["platform/shared/ooxml/src/drawingml/theme.rs"],
+      "description": "take the default Office theme colours from paged_ooxml::drawingml::theme::OFFICE (the OOXML reader) or paged_model::theme::presets (the engine; dml-native holds the two equal)",
+      "owner": [
+        "platform/shared/ooxml/src/drawingml/theme.rs",
+        "engine/core/crates/paged-model/src/theme.rs"
+      ],
       "patterns": ["0xE7E6E6"],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
       "baseline": ["modules/sheet/sheet-chart/tests/kinds.rs"]
