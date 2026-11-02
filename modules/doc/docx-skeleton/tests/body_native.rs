@@ -386,7 +386,16 @@ fn a_body_with_a_nested_table_is_not_prefilled() {
 fn a_plain_table_is_prefilled_in_a_paragraph_of_its_own() {
     let model = docx_import::import_docx(&docx_conformance::table_docx()).expect("import");
     let ir = docx_lower::lower(&model);
-    let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
+    let why: Vec<_> = native_body(&ir)
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Deferred { reason } => Some(reason.clone()),
+            _ => None,
+        })
+        .collect();
+    let stories = docx_skeleton::body::native_stories(&ir)
+        .unwrap_or_else(|| panic!("the whole body is native; deferred: {why:?}"));
     let tables = stories[0].iter().filter(|p| p.table.is_some()).count();
     assert_eq!(tables, 1);
     // The paragraphs before and after stand beside it.
