@@ -959,7 +959,6 @@ describe("Path options panel — rendered against the engine", () => {
         "Object/Insert spiral…",
         "Object/Insert rectangular grid…",
         "Object/Insert polar grid…",
-        "Object/Insert star…",
         "Object/Insert flare…",
         "Object/Rasterize…",
         "Edit/Select same/Stroke weight within…",
