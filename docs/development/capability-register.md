@@ -27,7 +27,7 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
 | XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`; `@paged-media/helpers` `escapeXmlText` / `escapeXmlAttr` | 12 (open)                                                                                              |
 | `[Content_Types].xml`          | `paged-ooxml` `content_types`                                                                              | 18 (open); every writer moved, what remains is test fixtures and the in-test tables of three src files |
 | Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                                                                            | 0 (done)                                                                                               |
-| sRGB transfer                  | `paged-color::math`, `paged-ooxml::colour`                                                                 | 11 (open)                                                                                              |
+| sRGB transfer                  | `paged-color::math`, `paged-colour-math`                                                                   | 11 (open)                                                                                              |
 | Blend modes                    | `paged-blend`                                                                                              | 6 (open)                                                                                               |
 | FNV hash                       | `@paged-media/helpers` `fnv1a32` / `fnv1a32Hex` (TS); no Rust owner yet                                    | 8 (open)                                                                                               |
 | CRC-32                         | `crc32fast` (Rust), `platform/shared/helpers` (TS)                                                         | 12 (open)                                                                                              |
@@ -65,7 +65,10 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
 sRGB and linear light, naive CMYK, HSL, HSB and ΔE copies in `paged-gpu`, `paged-model`,
 `paged-compose`, `paged-fidelity`, `slide-anim`, `image-conformance`, the image kernels and
 three TS files → `paged-color::math` (bit-exactness against the goldens first). Office tint:
-one function in `paged-ooxml::colour`, wrappers in sheet-chart, sheet-format and docx-core.
+one function in `paged-colour-math` (f64; `paged-ooxml::colour` re-exports it, engine ADR 1056), wrappers in
+sheet-chart, sheet-format and docx-core. `paged-colour-math` also owns the DrawingML colour-transform chain
+(`transform`: lumMod, satOff, tint, shade, alpha …) and `Rgba`, proved bit-identical to the former
+`paged-ooxml` code by `tests/oracle.rs`; the `srgb-transfer-curve` single-owner rule baselines the other copies.
 Default Office palette ×2. TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
 
 ### Raster, kernels, blend

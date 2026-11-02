@@ -29,8 +29,9 @@
 //! hue transforms work in HSL; `tint` and `shade` work on linear-light RGB
 //! ([`crate::colour`]); the alpha transforms move the alpha alone.
 
-use crate::colour::{dml_shade, dml_tint, hsl_to_rgb, linear_to_srgb, rgb_to_hsl};
 use crate::tree::{El, Ns};
+use paged_colour_math::{hsl_to_rgb, linear_to_srgb};
+pub use paged_colour_math::{transform, Rgba};
 
 /// A colour as authored: a base and its transform chain.
 #[derive(Debug, Clone, PartialEq)]
@@ -126,62 +127,6 @@ pub fn color(el: &El) -> Option<Color> {
         .map(|c| (c.local.clone(), c.attr_i32("val").unwrap_or(0)))
         .collect();
     Some(Color { base, transforms })
-}
-
-/// A resolved colour: sRGB 0–1 and alpha 0–1.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Rgba {
-    pub r: f64,
-    pub g: f64,
-    pub b: f64,
-    pub a: f64,
-}
-
-impl Rgba {
-    pub const BLACK: Rgba = Rgba {
-        r: 0.0,
-        g: 0.0,
-        b: 0.0,
-        a: 1.0,
-    };
-    pub const WHITE: Rgba = Rgba {
-        r: 1.0,
-        g: 1.0,
-        b: 1.0,
-        a: 1.0,
-    };
-
-    /// 0xRRGGBB, opaque.
-    pub fn from_hex(v: u32) -> Self {
-        Rgba {
-            r: ((v >> 16) & 0xff) as f64 / 255.0,
-            g: ((v >> 8) & 0xff) as f64 / 255.0,
-            b: (v & 0xff) as f64 / 255.0,
-            a: 1.0,
-        }
-    }
-
-    /// sRGB bytes, opaque.
-    pub fn from_bytes(rgb: [u8; 3]) -> Self {
-        Rgba {
-            r: rgb[0] as f64 / 255.0,
-            g: rgb[1] as f64 / 255.0,
-            b: rgb[2] as f64 / 255.0,
-            a: 1.0,
-        }
-    }
-
-    /// 0–255 channels, rounded.
-    pub fn bytes(&self) -> [u8; 3] {
-        let q = |x: f64| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
-        [q(self.r), q(self.g), q(self.b)]
-    }
-
-    /// 0xRRGGBB, rounded.
-    pub fn hex(&self) -> u32 {
-        let [r, g, b] = self.bytes();
-        (r as u32) << 16 | (g as u32) << 8 | b as u32
-    }
 }
 
 /// What the scheme slots of a colour are: the theme seen through the
@@ -435,88 +380,6 @@ pub fn resolve(c: &Color, schemes: &dyn SchemeColors) -> Rgba {
     rgba.b = rgba.b.clamp(0.0, 1.0);
     rgba.a = rgba.a.clamp(0.0, 1.0);
     rgba
-}
-
-/// One colour transform (`lumMod`, `tint`, `alpha`, …; `val` in its file
-/// units). An unknown one changes nothing.
-pub fn transform(rgba: Rgba, name: &str, val: i32) -> Rgba {
-    let v = val as f64 / 100_000.0;
-    let each = |f: &dyn Fn(f64) -> f64| Rgba {
-        r: f(rgba.r),
-        g: f(rgba.g),
-        b: f(rgba.b),
-        a: rgba.a,
-    };
-    match name {
-        "lumMod" | "lumOff" | "satMod" | "satOff" | "hueMod" | "hueOff" | "hue" | "sat" | "lum" => {
-            let (mut h, mut s, mut l) = rgb_to_hsl(rgba.r, rgba.g, rgba.b);
-            match name {
-                "lumMod" => l *= v,
-                "lumOff" => l += v,
-                "lum" => l = v,
-                "satMod" => s *= v,
-                "satOff" => s += v,
-                "sat" => s = v,
-                "hueMod" => h *= v,
-                "hueOff" => h += val as f64 / 21_600_000.0,
-                "hue" => h = val as f64 / 21_600_000.0,
-                _ => {}
-            }
-            let (r, g, b) = hsl_to_rgb(h.rem_euclid(1.0), s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
-            Rgba { r, g, b, a: rgba.a }
-        }
-        "tint" => each(&|c| dml_tint(c, v)),
-        "shade" => each(&|c| dml_shade(c, v)),
-        "alpha" => Rgba { a: v, ..rgba },
-        "alphaMod" => Rgba {
-            a: rgba.a * v,
-            ..rgba
-        },
-        "alphaOff" => Rgba {
-            a: rgba.a + v,
-            ..rgba
-        },
-        "comp" => {
-            let (h, s, l) = rgb_to_hsl(rgba.r, rgba.g, rgba.b);
-            let (r, g, b) = hsl_to_rgb((h + 0.5).rem_euclid(1.0), s, l);
-            Rgba { r, g, b, a: rgba.a }
-        }
-        "inv" => each(&|c| 1.0 - c),
-        "gray" => {
-            let y = 0.2126 * rgba.r + 0.7152 * rgba.g + 0.0722 * rgba.b;
-            each(&|_| y)
-        }
-        "gamma" => each(&linear_to_srgb),
-        "invGamma" => each(&crate::colour::srgb_to_linear),
-        "redMod" => Rgba {
-            r: rgba.r * v,
-            ..rgba
-        },
-        "greenMod" => Rgba {
-            g: rgba.g * v,
-            ..rgba
-        },
-        "blueMod" => Rgba {
-            b: rgba.b * v,
-            ..rgba
-        },
-        "redOff" => Rgba {
-            r: rgba.r + v,
-            ..rgba
-        },
-        "greenOff" => Rgba {
-            g: rgba.g + v,
-            ..rgba
-        },
-        "blueOff" => Rgba {
-            b: rgba.b + v,
-            ..rgba
-        },
-        "red" => Rgba { r: v, ..rgba },
-        "green" => Rgba { g: v, ..rgba },
-        "blue" => Rgba { b: v, ..rgba },
-        _ => rgba,
-    }
 }
 
 #[cfg(test)]

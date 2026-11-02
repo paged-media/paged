@@ -1,0 +1,13 @@
+[package]
+name = "paged-colour-math"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The one owner of colour arithmetic that needs no profile: the sRGB transfer curve in f64, HSL, SpreadsheetML tint, DrawingML tint, shade and the whole colour-transform chain (lumMod, satOff, alpha, …). paged-ooxml re-exports it; the engine's theme swatches use it."
+
+[lints]
+workspace = true
+
+[dependencies]

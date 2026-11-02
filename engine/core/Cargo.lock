@@ -3648,6 +3648,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-colour-math"
+version = "0.0.0"
+
+[[package]]
 name = "paged-compose"
 version = "0.0.0"
 dependencies = [

@@ -179,11 +179,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-colour-math"
+version = "0.0.0"
+
+[[package]]
 name = "paged-ooxml"
 version = "0.0.0"
 dependencies = [
  "flate2",
  "ooxmlsdk",
+ "paged-colour-math",
  "quick-xml",
  "serde",
  "thiserror",
