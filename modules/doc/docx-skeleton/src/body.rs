@@ -114,10 +114,11 @@ pub fn resolve_style(doc: &LoweredDoc, id: &str) -> BTreeMap<String, PropValue> 
 }
 
 /// A synthesized style split into the Word style it stands on and its own
-/// properties.
+/// properties (a synthesized style may be based on another synthesized one:
+/// the chain is flattened, the nearest style's value last).
 struct Direct<'a> {
     base: Option<&'a str>,
-    props: &'a [StyleProp],
+    props: Vec<&'a StyleProp>,
 }
 
 fn split_style<'a>(
@@ -127,27 +128,34 @@ fn split_style<'a>(
     let Some(id) = id else {
         return Ok(Direct {
             base: None,
-            props: &[],
+            props: Vec::new(),
         });
     };
     if !is_synthesized(id) {
         return Ok(Direct {
             base: Some(id),
-            props: &[],
+            props: Vec::new(),
         });
     }
-    let Some(s) = styles.get(id) else {
-        return Err(format!("synthesized style {id} is not in the catalogue"));
-    };
-    // A synthesized style is based on a Word style, never on another
-    // synthesized one.
-    if s.based_on.as_deref().is_some_and(is_synthesized) {
-        return Err(format!("{id} is based on a synthesized style"));
+    let mut chain: Vec<&LoweredStyle> = Vec::new();
+    let mut at = Some(id);
+    let mut base = None;
+    while let Some(i) = at {
+        if !is_synthesized(i) {
+            base = Some(i);
+            break;
+        }
+        let Some(s) = styles.get(i) else {
+            return Err(format!("synthesized style {i} is not in the catalogue"));
+        };
+        if chain.len() > 16 {
+            return Err(format!("{id} is based on too long a chain"));
+        }
+        chain.push(s);
+        at = s.based_on.as_deref();
     }
-    Ok(Direct {
-        base: s.based_on.as_deref(),
-        props: &s.props,
-    })
+    let props = chain.iter().rev().flat_map(|s| s.props.iter()).collect();
+    Ok(Direct { base, props })
 }
 
 fn len_of(v: &PropValue) -> Option<f32> {
@@ -399,7 +407,7 @@ fn build_paragraph(
     // only a Word character style that sets one of the same paths changes
     // the result: that paragraph is left to the old path.
     let mut para_chars = Vec::new();
-    for prop in direct.props {
+    for prop in &direct.props {
         if is_char_path(&prop.path) {
             para_chars.push(prop);
         } else if !set_paragraph_prop(&mut para, prop) {
@@ -430,7 +438,7 @@ fn build_paragraph(
                 return Err(format!("no model field for {}", prop.path));
             }
         }
-        for prop in run_direct.props {
+        for prop in &run_direct.props {
             if !set_run_prop(&mut run, prop) {
                 return Err(format!("no model field for {}", prop.path));
             }
