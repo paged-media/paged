@@ -73,6 +73,14 @@ fn is_char_path(k: &str) -> bool {
             | "characterUnderline"
             | "characterStrikethru"
             | "characterFillColor"
+            | "characterEastAsianFont"
+            | "characterComplexFont"
+            | "characterComplexFontSize"
+            | "characterComplexBold"
+            | "characterComplexItalic"
+            | "characterComplexScript"
+            | "characterDirection"
+            | "characterFontHint"
     )
 }
 
@@ -213,6 +221,15 @@ fn a_prefilled_skeleton_holds_the_body_as_model_paragraphs() {
     let bytes = docx_conformance::mixed_sizes_docx();
     let model = docx_import::import_docx(&bytes).expect("import");
     let ir = docx_lower::lower(&model);
+    let why: Vec<_> = native_body(&ir)
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Deferred { reason } => Some(reason.clone()),
+            NativeBlock::Paragraph(_) => None,
+        })
+        .collect();
+    assert!(why.is_empty(), "deferred: {why:?}");
     let sk = docx_skeleton::skeleton_prefilled(&model, &ir, "m.docx", Default::default())
         .expect("builds")
         .expect("the whole body is native");

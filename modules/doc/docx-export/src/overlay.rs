@@ -235,6 +235,10 @@ pub struct ControlIn {
 impl RunContentIn {
     /// The run's direct formatting as engine style properties (the paths
     /// `docx-lower` writes a synthesized character style with).
+    fn has_overrides(&self) -> bool {
+        !self.overrides().is_empty()
+    }
+
     pub(crate) fn overrides(&self) -> Vec<StyleProp> {
         let mut out = Vec::new();
         let mut push = |path: &str, value: PropValue| {
@@ -298,6 +302,122 @@ impl RunContentIn {
         }
         out
     }
+}
+
+/// The ids of the styles the lowering synthesizes for direct formatting.
+fn is_synthesized(id: &str) -> bool {
+    id.starts_with("ParagraphStyle/docx-auto-p") || id.starts_with("CharacterStyle/docx-auto-c")
+}
+
+/// A synthesized style's chain: the Word style it stands on and its
+/// properties (the nearest style's value last).
+fn synthesized_chain<'a>(
+    styles: &'a [LoweredStyle],
+    token: Option<&'a str>,
+) -> (Option<&'a str>, Vec<&'a StyleProp>) {
+    let mut chain: Vec<&LoweredStyle> = Vec::new();
+    let mut at = token;
+    while let Some(id) = at {
+        if !is_synthesized(id) || chain.len() > 16 {
+            break;
+        }
+        let Some(s) = styles.iter().find(|s| s.id == id) else {
+            return (None, Vec::new());
+        };
+        chain.push(s);
+        at = s.based_on.as_deref();
+    }
+    let props = chain.iter().rev().flat_map(|s| s.props.iter()).collect();
+    (at, props)
+}
+
+impl RunContentIn {
+    /// Forget the direct formatting this read carries.
+    fn clear_overrides(&mut self) {
+        self.font = None;
+        self.font_style = None;
+        self.point_size = None;
+        self.fill_color = None;
+        self.underline = None;
+        self.strikethru = None;
+        self.capitalization = None;
+        self.baseline_shift = None;
+        self.position = None;
+        self.tracking = None;
+        self.script = None;
+    }
+}
+
+/// Doc ADR 625 — a document opened with its body built natively holds
+/// Word's direct formatting as the paragraph's and the run's own properties
+/// instead of a synthesized style. When a read-back run's look (its Word
+/// style and its direct formatting, with the paragraph's character
+/// properties) is the look the baseline run's synthesized style has, the run
+/// is unchanged: it keeps the baseline token.
+fn keep_baseline_looks(
+    styles: &[LoweredStyle],
+    para: Option<&str>,
+    runs: &[LoweredRun],
+    read: &mut [RunContentIn],
+) {
+    if runs.len() != read.len() {
+        return;
+    }
+    let (_, para_props) = synthesized_chain(styles, para);
+    for (run, r) in runs.iter().zip(read.iter_mut()) {
+        let token = run.char_style_id.as_deref();
+        let (base, props) = synthesized_chain(styles, token);
+        if token.is_some_and(|t| !is_synthesized(t)) && !r.has_overrides() {
+            continue;
+        }
+        if base != r.character_style.as_deref() {
+            continue;
+        }
+        let read_props = r.overrides();
+        let mut expected: std::collections::BTreeMap<&str, &PropValue> = Default::default();
+        for p in para_props
+            .iter()
+            .filter(|p| p.path.starts_with("character"))
+            .chain(props.iter())
+        {
+            if read_props_cover(&p.path) {
+                expected.insert(p.path.as_str(), &p.value);
+            }
+        }
+        let got: std::collections::BTreeMap<&str, &PropValue> = read_props
+            .iter()
+            .map(|p| (p.path.as_str(), &p.value))
+            .collect();
+        if expected == got {
+            r.clear_overrides();
+            r.character_style = token.map(str::to_owned);
+        }
+    }
+}
+
+/// The paths [`RunContentIn::overrides`] reads back.
+fn read_props_cover(path: &str) -> bool {
+    matches!(
+        path,
+        "characterFontFamily"
+            | "characterFontStyle"
+            | "characterFontSize"
+            | "characterFillColor"
+            | "characterUnderline"
+            | "characterStrikethru"
+            | "characterCase"
+            | "characterBaselineShift"
+            | "characterPosition"
+            | "characterTracking"
+            | "characterEastAsianFont"
+            | "characterComplexFont"
+            | "characterComplexFontSize"
+            | "characterComplexBold"
+            | "characterComplexItalic"
+            | "characterComplexScript"
+            | "characterDirection"
+            | "characterFontHint"
+    )
 }
 
 /// The lowered style token a read-back run overlays with: its character
@@ -525,15 +645,23 @@ pub fn overlay_story_content_with(
         let end = (ci + parts).min(content.paragraphs.len());
         let folded = fold_segments(p, &content.paragraphs[ci..end]);
         ci = end;
+        let baseline_para = p.para_style_id.clone();
+        // Doc ADR 625 — a native body names the Word style a synthesized
+        // paragraph style stands on: the same paragraph.
+        let (para_base, _) = synthesized_chain(&styles, baseline_para.as_deref());
         if let Some(style) = folded
             .paragraph_style
             .as_deref()
             .filter(|t| known_para_style(&styles, t) || created(t))
         {
-            if p.para_style_id.as_deref() != Some(style) {
+            let unchanged =
+                baseline_para.as_deref().is_some_and(is_synthesized) && para_base == Some(style);
+            if p.para_style_id.as_deref() != Some(style) && !unchanged {
                 p.para_style_id = Some(style.to_string());
             }
         }
+        let mut folded = folded;
+        keep_baseline_looks(&styles, baseline_para.as_deref(), &p.runs, &mut folded.runs);
         // The run list as read back: the differ maps it onto the Word runs
         // character by character (text edits, runs the engine joined, a
         // run split by a new look, direct formatting).

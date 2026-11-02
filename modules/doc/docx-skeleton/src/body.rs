@@ -42,6 +42,7 @@ use std::collections::{BTreeMap, HashMap};
 use docx_lower::ir::{
     LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, PropValue, StyleProp,
 };
+use paged_model::script::{CharacterDirection, FontHint};
 use paged_model::{CharacterRun, Justification, Paragraph};
 
 /// The id prefix of the styles the lowering synthesizes for direct
@@ -250,6 +251,40 @@ pub fn set_run_prop(r: &mut CharacterRun, prop: &StyleProp) -> bool {
         }
         "characterUnderline" => return bool_of(v).map(|b| r.underline = Some(b)).is_some(),
         "characterStrikethru" => return bool_of(v).map(|b| r.strikethru = Some(b)).is_some(),
+        // Engine ADR 1051 — the script slots (doc ADR 620).
+        "characterEastAsianFont" => {
+            return opt_text(v).map(|t| r.script.east_asian_font = t).is_some();
+        }
+        "characterComplexFont" => {
+            return opt_text(v).map(|t| r.script.complex_font = t).is_some();
+        }
+        "characterComplexFontSize" => {
+            return len_of(v)
+                .filter(|f| f.is_finite() && *f > 0.0)
+                .map(|f| r.script.complex_point_size = Some(f))
+                .is_some();
+        }
+        "characterComplexBold" => {
+            return bool_of(v)
+                .map(|b| r.script.complex_bold = Some(b))
+                .is_some();
+        }
+        "characterComplexItalic" => {
+            return bool_of(v)
+                .map(|b| r.script.complex_italic = Some(b))
+                .is_some();
+        }
+        "characterComplexScript" => {
+            return bool_of(v).map(|b| r.script.complex = Some(b)).is_some();
+        }
+        "characterDirection" => match text_of(v).and_then(CharacterDirection::from_name) {
+            Some(d) => r.script.direction = Some(d),
+            None => return false,
+        },
+        "characterFontHint" => match text_of(v).and_then(FontHint::from_name) {
+            Some(h) => r.script.hint = Some(h),
+            None => return false,
+        },
         "characterFillColor" => match v {
             PropValue::ColorRef(c) => r.fill_color = Some(c.clone()),
             _ => return false,
@@ -332,6 +367,33 @@ pub fn read_run_props(r: &CharacterRun) -> BTreeMap<String, PropValue> {
         if let Some(f) = v {
             put(k, PropValue::Length(f));
         }
+    }
+    let sc = &r.script;
+    for (k, v) in [
+        ("characterEastAsianFont", &sc.east_asian_font),
+        ("characterComplexFont", &sc.complex_font),
+    ] {
+        if let Some(t) = v {
+            put(k, PropValue::Text(t.clone()));
+        }
+    }
+    if let Some(f) = sc.complex_point_size {
+        put("characterComplexFontSize", PropValue::Length(f));
+    }
+    for (k, v) in [
+        ("characterComplexBold", sc.complex_bold),
+        ("characterComplexItalic", sc.complex_italic),
+        ("characterComplexScript", sc.complex),
+    ] {
+        if let Some(b) = v {
+            put(k, PropValue::Bool(b));
+        }
+    }
+    if let Some(d) = sc.direction {
+        put("characterDirection", PropValue::Text(d.as_name().into()));
+    }
+    if let Some(h) = sc.hint {
+        put("characterFontHint", PropValue::Text(h.as_name().into()));
     }
     if let Some(b) = r.underline {
         put("characterUnderline", PropValue::Bool(b));
