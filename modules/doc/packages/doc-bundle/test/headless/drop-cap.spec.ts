@@ -10,6 +10,7 @@
 // paragraph.
 
 import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
@@ -25,6 +26,14 @@ const CALIBRI = [
   "/Applications/Microsoft Word.app/Contents/Resources/DFonts/Calibri.ttf",
   "/System/Library/Fonts/Supplemental/Calibri.ttf",
 ].find((p) => existsSync(p));
+// Without Calibri the carve is still checked, in the repository's own face
+// registered under Calibri's name.
+const STAND_IN = fileURLToPath(
+  new URL(
+    "../../../../../../engine/core/corpus/fonts/JetBrainsMono-VF.ttf",
+    import.meta.url,
+  ),
+);
 const WORD = JSON.parse(
   readFileSync(
     new URL(
@@ -55,16 +64,14 @@ describe.skipIf(!docxPresent)(
         const r = await send({ kind: "executeScript", payload: { source: s } });
         return JSON.parse(r.payload?.output?.[0] ?? "[]");
       };
-      if (CALIBRI) {
-        await send({
-          kind: "registerFont",
-          payload: {
-            family: "Calibri",
-            style: null,
-            bytes: Array.from(readFileSync(CALIBRI)),
-          },
-        });
-      }
+      await send({
+        kind: "registerFont",
+        payload: {
+          family: "Calibri",
+          style: null,
+          bytes: Array.from(readFileSync(CALIBRI ?? STAND_IN)),
+        },
+      });
       let last = -1;
       for (let i = 0; i < 50; i++) {
         const ps = (await script("paged.pages()")) as Array<{ selfId: string }>;
