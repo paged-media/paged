@@ -604,9 +604,6 @@ fn build_table(
         }
     }
     for lc in &t.cells {
-        if lc.look.is_some() {
-            return Err("table cell with borders or shading".into());
-        }
         if !lc.nested.is_empty() {
             return Err("nested table".into());
         }
@@ -629,6 +626,20 @@ fn build_table(
         }
         if let Some(v) = &lc.v_align {
             cell.vertical_justification = Some(v.clone());
+        }
+        // Word's borders and shading (doc ADR 614).
+        if let Some(look) = &lc.look {
+            cell.top_edge_stroke_weight = Some(look.top.weight_pt);
+            cell.top_edge_stroke_color = Some(look.top.color.clone());
+            cell.left_edge_stroke_weight = Some(look.left.weight_pt);
+            cell.left_edge_stroke_color = Some(look.left.color.clone());
+            cell.bottom_edge_stroke_weight = Some(look.bottom.weight_pt);
+            cell.bottom_edge_stroke_color = Some(look.bottom.color.clone());
+            cell.right_edge_stroke_weight = Some(look.right.weight_pt);
+            cell.right_edge_stroke_color = Some(look.right.color.clone());
+            if let Some(f) = &look.fill {
+                cell.fill_color = Some(f.clone());
+            }
         }
         let text_empty = lc
             .paragraphs

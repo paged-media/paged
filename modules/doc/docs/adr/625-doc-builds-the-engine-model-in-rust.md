@@ -98,11 +98,11 @@ mostly native, not before.
 
 `body::build_table` makes the table `insertTable` and the bundle's cell pour make: the whole
 grid of cells with InDesign's new-table edges, column-major, header rows, row heights and column
-widths from the lowering, Word's table layout (indent, autofit, width, cell widths, rows that may
+widths from the lowering, each cell's borders and shading, Word's table layout (indent, autofit, width, cell widths, rows that may
 not split), each cell's spans, insets and vertical alignment, and the cell's paragraphs built as
 body paragraphs. The table stands in a paragraph of its own, which takes the Word table
 paragraph's style (it aligns the table). Still deferred, and so the document opens by the old
-pour: cell borders and shading, nested tables, pictures in cells, a table poured as text, rows
+pour: nested tables, pictures in cells, a table poured as text, rows
 held at an exact height. The table's id is `Table/docx_t<n>`, not the engine's minted `u<hex>`.
 
 ### Save-back

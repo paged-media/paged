@@ -280,6 +280,7 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
         ("table", docx_conformance::table_docx()),
+        ("table look", docx_conformance::objects_table_look_docx()),
     ];
     let (mut built, mut direct) = (0, 0);
     for (label, bytes) in &fixtures {
@@ -305,10 +306,6 @@ fn what_slice_1_does_not_build_is_deferred_not_dropped() {
     assert!(deferred(
         &docx_conformance::objects_nested_tables_docx(),
         "nested table"
-    ));
-    assert!(deferred(
-        &docx_conformance::objects_table_look_docx(),
-        "table cell with borders or shading"
     ));
     let body = native_body(&lowered(&docx_conformance::hyperlink_docx()));
     assert!(body
