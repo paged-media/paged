@@ -20,10 +20,10 @@ if grep -rnE 'serialize_root\(|\.write_to\(|\.to_xml\(' docx-export/src/ >/dev/n
   exit 1
 fi
 
-# The `wasm-release` profile (Cargo.toml) keeps the artifact under the
+# The `wasm-doc` profile (Cargo.toml) keeps the artifact under the
 # manifest's `maxBytes`, which the build is also held to (a host that honours
 # it refuses a larger file).
 exec bash ../../tooling/rust/build-wasm.sh \
-  --package docx-js --artifact docx_js --profile wasm-release \
+  --package docx-js --artifact docx_js --profile wasm-doc \
   --out packages/doc-bundle/bin \
   --manifest packages/doc-bundle/manifest.json
