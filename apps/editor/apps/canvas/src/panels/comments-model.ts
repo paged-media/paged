@@ -208,16 +208,34 @@ export const itemCommentMutation = (
   },
 });
 
+/** A new comment thread on a page (a slide, an artboard): a point near its
+ *  top-left corner, where the pin stands. */
+export const pageCommentMutation = (
+  page: string,
+  text: string,
+  reviewer: Reviewer,
+  now: () => string,
+) => ({
+  op: "insertCommentThread",
+  args: {
+    anchor: { kind: "page", page, at: [16, 24] },
+    comment: stamp(reviewer, text, now),
+  },
+});
+
 /** What a new comment would attach to, from the current selection: a
- *  non-empty text range wins, then a single selected item. */
+ *  non-empty text range wins, then a single selected item, then the active
+ *  page (a slide has nothing else to comment on). */
 export type NewTarget =
   | { kind: "text"; storyId: string; start: number; end: number }
   | { kind: "item"; item: string }
+  | { kind: "page"; page: string }
   | null;
 
 export function newTargetOf(
   content: { storyId: string; start: number; end: number } | null,
   elements: readonly { kind?: string; id?: string }[],
+  activePage: string | null = null,
 ): NewTarget {
   if (content && content.end > content.start) {
     return {
@@ -229,5 +247,7 @@ export function newTargetOf(
   }
   const only = elements.length === 1 ? elements[0] : undefined;
   if (only?.id) return { kind: "item", item: only.id };
+  if (elements.length === 0 && activePage)
+    return { kind: "page", page: activePage };
   return null;
 }

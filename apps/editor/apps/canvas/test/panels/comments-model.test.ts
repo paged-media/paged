@@ -34,6 +34,7 @@ import {
   groupThreads,
   initialsOf,
   itemCommentMutation,
+  pageCommentMutation,
   newTargetOf,
   replyMutation,
   resolveMutation,
@@ -218,5 +219,22 @@ describe("Comments panel model", () => {
       editMutation("t9", "new", now),
     );
     expect(deleteFor(docNote)).toEqual(deleteMutation("t9"));
+  });
+
+  test("with nothing selected a new comment attaches to the active page", () => {
+    covers("panel:paged.comments");
+    expect(newTargetOf(null, [], "p3")).toEqual({ kind: "page", page: "p3" });
+    // A selection wins over the page, and two items are not one target.
+    expect(newTargetOf(null, [{ id: "a" }], "p3")).toEqual({
+      kind: "item",
+      item: "a",
+    });
+    expect(newTargetOf(null, [{ id: "a" }, { id: "b" }], "p3")).toBeNull();
+    expect(newTargetOf(null, [], null)).toBeNull();
+    const me = { name: "Ann Author" };
+    expect(pageCommentMutation("p3", "check", me, now)).toMatchObject({
+      op: "insertCommentThread",
+      args: { anchor: { kind: "page", page: "p3", at: [16, 24] } },
+    });
   });
 });

@@ -34,6 +34,7 @@ import {
   useCanvasClient,
   useCollection,
   useContentSelection,
+  useDocumentMeta,
   useEditorScope,
   useSelection,
 } from "@paged-media/shell";
@@ -49,6 +50,7 @@ import {
   initialsOf,
   itemCommentMutation,
   newTargetOf,
+  pageCommentMutation,
   replyMutation,
   resolveMutation,
   textCommentMutation,
@@ -126,6 +128,7 @@ export function CommentsPanel() {
   const rows = useCollection<CommentSummary>("comments");
   const { elementSelection } = useSelection();
   const { contentSelection } = useContentSelection();
+  const meta = useDocumentMeta();
   const scope = useEditorScope();
   // The thread a canvas pin (or a click here) points at.
   const focused = useSyncExternalStore(
@@ -156,6 +159,7 @@ export function CommentsPanel() {
   const target = newTargetOf(
     contentSelection,
     elementSelection as readonly { kind?: string; id?: string }[],
+    meta?.activePage ?? null,
   );
   const canAdd = target !== null && draft.trim() !== "";
 
@@ -172,7 +176,9 @@ export function CommentsPanel() {
             reviewer,
             now,
           )
-        : itemCommentMutation(target.item, text, reviewer, now),
+        : target.kind === "page"
+          ? pageCommentMutation(target.page, text, reviewer, now)
+          : itemCommentMutation(target.item, text, reviewer, now),
     );
     setDraft("");
   };

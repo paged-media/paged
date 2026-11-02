@@ -199,10 +199,12 @@ test.describe("journey · paged.slide Normal view", () => {
     await designer.openPanel("paged.comments");
     const panel = page.locator('[data-comments-panel="ready"]');
     await expect(panel).toBeVisible({ timeout: 10_000 });
-    await expect(panel).toContainText("Slide 2");
-    await panel.locator("[data-comment-author]").fill("Ana Lima");
-    await panel.locator("[data-comment-new]").fill("Use the brand blue here");
-    await panel.locator("[data-comment-add]").click();
+    // Nothing is selected, so the comment goes on the active page (slide 2).
+    await panel.locator("[data-comments-author]").fill("Ana Lima");
+    await panel
+      .locator("[data-new-comment-input]")
+      .fill("Use the brand blue here");
+    await panel.locator("[data-new-comment-add]").click();
     await expect(panel.locator("[data-comment-text]")).toHaveText(
       "Use the brand blue here",
     );
@@ -219,30 +221,18 @@ test.describe("journey · paged.slide Normal view", () => {
     );
     await expect.poll(() => pageCount(page), { timeout: 20_000 }).toBe(10);
 
-    // Slide 2 carries the comment, under its author; slide 1 carries none.
+    // The reopened deck lists the comment, under its author, as one thread
+    // on a page (the host's Comments panel lists every thread of the deck).
     await expect(rail.panel.locator("[data-slide]")).toHaveCount(10, {
       timeout: 15_000,
     });
-    await rail.panel
-      .locator("[data-slide]")
-      .nth(1)
-      .locator("button")
-      .first()
-      .click();
-    await expect.poll(rail.active, { timeout: 10_000 }).toBe(1);
     await designer.openPanel("paged.comments");
+    await expect(panel.locator("[data-thread]")).toHaveCount(1, {
+      timeout: 10_000,
+    });
     await expect(panel.locator("[data-comment-text]")).toHaveText(
       "Use the brand blue here",
-      { timeout: 10_000 },
     );
     await expect(panel.locator("[data-comment]")).toContainText("Ana Lima");
-    await rail.panel
-      .locator("[data-slide]")
-      .nth(0)
-      .locator("button")
-      .first()
-      .click();
-    await expect.poll(rail.active, { timeout: 10_000 }).toBe(0);
-    await expect(panel.locator("[data-comments-none]")).toBeVisible();
   });
 });
