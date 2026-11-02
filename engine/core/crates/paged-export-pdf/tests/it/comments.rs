@@ -26,6 +26,8 @@ use lopdf::{Dictionary, Document, Object, ObjectId};
 use paged_export_pdf::{
     export_pdf, ExportInkSettings, ExportInput, ExportOptions, ExportProfiles, PdfComment, PdfReply,
 };
+use paged_model::ReviewState;
+use paged_pdf_annots::ImportedAnchor;
 use paged_renderer::pipeline::{self, FontTable, PipelineOptions};
 
 fn export(comments: Vec<PdfComment>, page_range: Option<(usize, usize)>) -> Vec<u8> {
@@ -203,4 +205,94 @@ fn no_comments_write_no_annotations() {
     for i in 0..doc.get_pages().len() {
         assert!(text_annots(&doc, i).is_empty());
     }
+}
+
+/// Engine ADR 1055 — what `paged-export-pdf` writes, `paged-pdf-annots` reads
+/// back: the same threads with authors, dates to the second, replies, the
+/// resolved state and the point within half a point.
+#[test]
+fn exported_comments_read_back_as_the_same_threads() {
+    let mut resolved = comment(
+        "c1",
+        0,
+        "Why this word?\nSecond paragraph, with \u{00e4}\u{00f6}\u{00fc} and \u{2014}",
+    );
+    resolved.at = [50.0, 70.0];
+    resolved.resolved = true;
+    resolved.replies = vec![
+        PdfReply {
+            id: "c1.1".into(),
+            author: "Bob Builder".into(),
+            date: Some("2026-11-01T11:00:00+01:00".into()),
+            text: "Because".into(),
+        },
+        PdfReply {
+            id: "c1.2".into(),
+            author: "Ann Author".into(),
+            date: Some("2026-11-01T12:15:30Z".into()),
+            text: "OK".into(),
+        },
+    ];
+    let mut rejected = comment("c2", 1, "No");
+    rejected.at = [120.5, 33.25];
+    rejected.author = "Cy".into();
+    rejected.date = None;
+    rejected.review_state = Some("Rejected".into());
+    let open = comment("c3", 1, "Still open");
+
+    let pdf = export(vec![resolved, rejected, open], None);
+    let report = paged_pdf_annots::read_pdf_comments(&pdf).expect("reads");
+    assert!(report.losses.is_empty(), "{:?}", report.losses);
+    let ids: Vec<&str> = report.threads.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids, ["c1", "c2", "c3"]);
+
+    let c1 = &report.threads[0];
+    assert_eq!(c1.page_index, 0);
+    let ImportedAnchor::Point { at } = c1.anchor else {
+        panic!("a point")
+    };
+    assert!(
+        (at[0] - 50.0).abs() < 0.5 && (at[1] - 70.0).abs() < 0.5,
+        "{at:?}"
+    );
+    let texts: Vec<(&str, &str, Option<&str>)> = c1
+        .comments
+        .iter()
+        .map(|c| (c.id.as_str(), c.text.as_str(), c.author.as_deref()))
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            (
+                "c1",
+                "Why this word?\nSecond paragraph, with \u{00e4}\u{00f6}\u{00fc} and \u{2014}",
+                Some("Ann Author")
+            ),
+            ("c1.1", "Because", Some("Bob Builder")),
+            ("c1.2", "OK", Some("Ann Author")),
+        ]
+    );
+    assert_eq!(c1.comments[0].date.as_deref(), Some("2026-11-01T10:30:00Z"));
+    assert_eq!(
+        c1.comments[1].date.as_deref(),
+        Some("2026-11-01T11:00:00+01:00")
+    );
+    assert_eq!(c1.comments[2].date.as_deref(), Some("2026-11-01T12:15:30Z"));
+    assert!(c1.comments[0].resolved);
+    assert_eq!(c1.comments[0].review_state, Some(ReviewState::Completed));
+    assert_eq!(c1.comments[1].parent.as_deref(), Some("c1"));
+    assert!(c1.source.iter().all(|(_, b)| b.format == "pdf-annot"));
+
+    let c2 = &report.threads[1];
+    assert_eq!(c2.page_index, 1);
+    let ImportedAnchor::Point { at } = c2.anchor else {
+        panic!("a point")
+    };
+    assert!(
+        (at[0] - 120.5).abs() < 0.5 && (at[1] - 33.25).abs() < 0.5,
+        "{at:?}"
+    );
+    assert_eq!(c2.comments[0].review_state, Some(ReviewState::Rejected));
+    assert!(!c2.comments[0].resolved && c2.comments[0].date.is_none());
+    assert!(!report.threads[2].comments[0].resolved);
 }

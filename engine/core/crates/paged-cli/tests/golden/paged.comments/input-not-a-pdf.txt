@@ -1,0 +1,6 @@
+$ paged comments plain.pdf
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: plain.pdf: not a readable PDF

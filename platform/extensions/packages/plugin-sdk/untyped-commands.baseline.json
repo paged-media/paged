@@ -23,8 +23,7 @@
       "media.paged.draw.command.outlineStrokeOptions",
       "media.paged.draw.command.reflectOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
-      "media.paged.draw.command.simplifyPathOptions",
-      "media.paged.draw.command.strokeDashOptions"
+      "media.paged.draw.command.simplifyPathOptions"
     ],
     "media.paged.image": [],
     "media.paged.sheet": [

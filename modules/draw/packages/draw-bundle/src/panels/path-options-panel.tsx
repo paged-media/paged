@@ -58,7 +58,6 @@ import {
   STAR_MAX_POINTS,
   STAR_MIN_POINTS,
 } from "@paged-media/draw-geometry";
-import { dashArrayFrom, MAX_DASH_PAIRS } from "../commands/dash";
 import { supportsDuplicate, DUPLICATE_ENGINE } from "../commands/transform";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import { MAX_RASTERIZE_PPI, MIN_RASTERIZE_PPI } from "../commands/rasterize";
@@ -69,8 +68,6 @@ import {
 } from "../commands/path-ops";
 import {
   applyPathOptions,
-  dashLengthsOf,
-  dashOptionsFromLengths,
   lastUsedPathOptions,
   pathOptionsFocusOf,
   BIND_PATH_OPTIONS_FOCUS,
@@ -104,9 +101,7 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 const M = defineMessages("draw.pathOptionsPanel", {
   summary:
     "Set the values for the path commands in the Draw menu, then apply them to the selected paths or insert a new shape.",
-  note: "Apply runs the operation with these values and remembers them: the same command run from the menu or the command palette repeats the values last applied here, except Outline stroke, which then uses each path's own stroke. Offset, Simplify and Outline stroke are one undo step per selected path; each Insert, Stroke dashes and Reflect are one undo step; Select same only changes the selection. Image Trace has no options here yet.",
-  dashNote:
-    "Shows the first selected path's own dash and follows the selection. A pair whose dash and gap are both 0 is not used; untick Dashed for a solid stroke. Apply writes this pattern to every selected path.",
+  note: "Apply runs the operation with these values and remembers them: the same command run from the menu or the command palette repeats the values last applied here, except Outline stroke, which then uses each path's own stroke. Offset, Simplify and Outline stroke are one undo step per selected path; each Insert and Reflect are one undo step; Select same only changes the selection. Image Trace has no options here yet.",
   reflectNote:
     "Mirrors the selection across an axis at this angle through the centre of the selection's box: 90° flips left and right, 0° top and bottom. Draw ▸ Transform ▸ Transform again repeats it on whatever is selected next.",
   selectSameNote:
@@ -115,9 +110,6 @@ const M = defineMessages("draw.pathOptionsPanel", {
     "Replaces each selected open path with its outline, its width running from the start through the middle to the end. The outline is a filled shape and cannot be edited as a stroke again; closed and compound paths are left as they are.",
   reflectCopyUnavailable:
     "Copy needs a newer engine (version {version} or later).",
-  hiddenPairs:
-    "This path's dash has {count} pairs; the editor shows the first {shown}, and Apply writes only those.",
-  solid: "Solid",
   ownStroke: "{width} pt · {cap} cap · {join} join · miter limit {miterLimit}",
   fromPath: "From the path",
   offsetDelta: "Offset (pt, negative shrinks)",
@@ -135,13 +127,6 @@ const M = defineMessages("draw.pathOptionsPanel", {
   width: "Width (pt)",
   caps: "Caps",
   overrideMiterLimit: "Override the miter limit",
-  dashed: "Dashed line",
-  dash1: "Dash 1 (pt)",
-  gap1: "Gap 1 (pt)",
-  dash2: "Dash 2 (pt)",
-  gap2: "Gap 2 (pt)",
-  dash3: "Dash 3 (pt)",
-  gap3: "Gap 3 (pt)",
   axisAngle: "Axis angle (°)",
   copy: "Copy (reflect a copy)",
   centreX: "Centre X (pt)",
@@ -204,23 +189,6 @@ export const PATH_OPTIONS_SUMMARY = M.summary;
 
 /** The "About" text. Pinned by a test. */
 export const PATH_OPTIONS_PANEL_NOTE = M.note;
-
-/** What the Stroke dashes section says, verbatim (pinned by a test). */
-export const DASH_SECTION_NOTE = M.dashNote;
-
-/** What the section says when the path's dash has more pairs than the
- *  editor shows — an Apply would rewrite it with the three shown. */
-export function hiddenPairsNote(hidden: number): string {
-  return t(M.hiddenPairs, {
-    count: MAX_DASH_PAIRS + hidden,
-    shown: MAX_DASH_PAIRS,
-  });
-}
-
-/** "6 · 3 · 1 · 3 pt", or "Solid" — the pattern an Apply writes. Pure. */
-export function dashPatternLabel(lengths: readonly number[]): string {
-  return lengths.length === 0 ? t(M.solid) : `${lengths.join(" · ")} pt`;
-}
 
 /** What the Reflect section says, verbatim (pinned by a test). */
 export const REFLECT_SECTION_NOTE = M.reflectNote;
@@ -309,18 +277,11 @@ export function makePathOptionsPanel(host: BundleHost): {
     open: PathOptionSection;
     /** The newest focus request already honoured. */
     focusSeq: number;
-    /** The dash section follows the SELECTION: the path + dash it last
-     *  loaded, so a reload that changes neither keeps what was typed. */
-    dashFollowed: string | null;
-    /** Pairs the followed path's dash has beyond the three shown. */
-    dashHidden: number;
   } = {
     draft: null,
     followed: {},
     open: "offset",
     focusSeq: 0,
-    dashFollowed: null,
-    dashHidden: 0,
   };
 
   /** Take into the draft every section whose STORED values changed since
@@ -358,7 +319,6 @@ export function makePathOptionsPanel(host: BundleHost): {
      *  any kind that carries a stroke weight. */
     const [selected, setSelected] = React.useState(0);
     const [own, setOwn] = React.useState<OutlineStrokeParams | null>(null);
-    const [dashHidden, setDashHidden] = React.useState(session.dashHidden);
     /** Can this engine COPY (`duplicateElements`)? Probed when the
      *  Reflect section is first opened — never on a reload — and cached
      *  per host by the probe itself. Null until known. */
@@ -481,31 +441,9 @@ export function makePathOptionsPanel(host: BundleHost): {
         // Follow the STORED last-used values — only the sections that
         // changed since this panel last took them, so neither a reload
         // nor a remount throws away what was typed.
-        let next = followStored();
-        // …and the dash section follows the SELECTED PATH's own dash,
-        // when the path or its dash changed since it was last loaded.
-        if (first) {
-          const dash = dashArrayFrom(entries);
-          const key = JSON.stringify([first.kind, String(first.id), dash]);
-          if (key !== session.dashFollowed) {
-            session.dashFollowed = key;
-            const base = (next ?? session.draft ?? lastUsedPathOptions(host))
-              .dash;
-            const read = dashOptionsFromLengths(dash, base);
-            session.dashHidden = read.hiddenPairs;
-            setDashHidden(read.hiddenPairs);
-            next = {
-              ...(next ?? (session.draft as PathOptions)),
-              dash: read.options,
-            };
-            session.draft = next;
-          }
-        }
+        const next = followStored();
         if (next) {
-          followDraft(
-            JSON.stringify([session.followed, session.dashFollowed]),
-            next,
-          );
+          followDraft(JSON.stringify(session.followed), next);
         }
       },
     );
@@ -683,55 +621,6 @@ export function makePathOptionsPanel(host: BundleHost): {
               })}
             </>
           );
-        case "dash": {
-          const off = !draft.dash.dashed;
-          return (
-            <>
-              {checkRow("dash", "dashed", s.t(M.dashed))}
-              {numberRow("dash", "dash1", s.t(M.dash1), {
-                step: 0.5,
-                min: 0,
-                disabled: off,
-              })}
-              {numberRow("dash", "gap1", s.t(M.gap1), {
-                step: 0.5,
-                min: 0,
-                disabled: off,
-              })}
-              {numberRow("dash", "dash2", s.t(M.dash2), {
-                step: 0.5,
-                min: 0,
-                disabled: off,
-              })}
-              {numberRow("dash", "gap2", s.t(M.gap2), {
-                step: 0.5,
-                min: 0,
-                disabled: off,
-              })}
-              {numberRow("dash", "dash3", s.t(M.dash3), {
-                step: 0.5,
-                min: 0,
-                disabled: off,
-              })}
-              {numberRow("dash", "gap3", s.t(M.gap3), {
-                step: 0.5,
-                min: 0,
-                disabled: off,
-              })}
-              <div style={mutedStyle} data-draw-pathopts-dash-pattern>
-                {dashPatternLabel(dashLengthsOf(draft.dash))}
-              </div>
-              {dashHidden > 0 && (
-                <div style={mutedStyle} data-draw-pathopts-dash-hidden>
-                  {hiddenPairsNote(dashHidden)}
-                </div>
-              )}
-              <div style={mutedStyle} data-draw-pathopts-dash-note>
-                {s.t(DASH_SECTION_NOTE)}
-              </div>
-            </>
-          );
-        }
         case "reflect":
           return (
             <>

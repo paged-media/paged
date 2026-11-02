@@ -1,0 +1,11 @@
+$ paged comments
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <PDF>
+
+Usage: paged comments <PDF>
+
+For more information, try '--help'.

@@ -1,0 +1,21 @@
+$ paged comments --help
+--- exit: 0
+--- stdout
+List the review comments a PDF carries: its threads, then what was not imported.
+
+Reads the annotations Acrobat's Comment tool writes (sticky notes, free text, highlights and the other text markups, replies, review states) as comment threads (engine ADR 1055); every other annotation type is counted in a "not imported" line. The inverse of `paged export --comments`.
+
+Usage: paged comments [OPTIONS] <PDF>
+
+Arguments:
+  <PDF>
+          The PDF
+
+Options:
+      --json
+          Print the threads and losses as JSON
+
+  -h, --help
+          Print help (see a summary with '-h')
+--- stderr
+(empty)

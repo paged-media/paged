@@ -42,6 +42,8 @@ paged-script = { path = "../paged-script" }
 paged-color = { path = "../paged-color" }
 paged-fidelity = { path = "../paged-fidelity" }
 paged-gen = { path = "../paged-gen" }
+# `paged comments`: the annotations of a PDF as comment threads (ADR 1055).
+paged-pdf-annots = { path = "../paged-pdf-annots" }
 # Reads the declared `CMYKProfile` off a package's designmap BEFORE the
 # load that has to be told about it.
 idml-import = { path = "../idml-import" }

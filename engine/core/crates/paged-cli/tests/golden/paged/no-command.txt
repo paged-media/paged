@@ -25,6 +25,7 @@ Commands:
   data          The bindings a document carries (paged.data), read and applied by the engine (core ADR 1014)
   parts         List, read and write a `.paged` container's content parts
   query         List the objects a selector names, one canonical address per line
+  comments      List the review comments a PDF carries: its threads, then what was not imported
   describe      Print the capability catalog — what this engine can be asked to do
   digest        Print the document's verification digests
   session       Speak the headless NDJSON engine protocol on stdin/stdout

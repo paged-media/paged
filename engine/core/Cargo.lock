@@ -3620,6 +3620,7 @@ dependencies = [
  "paged-mcp",
  "paged-model",
  "paged-mutate",
+ "paged-pdf-annots",
  "paged-raster",
  "paged-repo",
  "paged-script",
@@ -3849,6 +3850,7 @@ dependencies = [
  "paged-gen",
  "paged-gpu",
  "paged-model",
+ "paged-pdf-annots",
  "paged-raster",
  "paged-renderer",
  "paged-scene",
@@ -4027,6 +4029,15 @@ dependencies = [
  "tsify-next",
  "wasm-bindgen",
  "zip",
+]
+
+[[package]]
+name = "paged-pdf-annots"
+version = "0.0.0"
+dependencies = [
+ "hayro-syntax",
+ "paged-model",
+ "serde",
 ]
 
 [[package]]

@@ -48,6 +48,7 @@ import type {
 import { buildIdmlFromRasters } from "../idml-fallback";
 import { extractPdf, pdfPageCount, rasterizePdf } from "../pdfium";
 import { loadPdfMapper } from "../engine-loader";
+import { importPdfComments } from "./comments";
 
 import importPdfArgs from "../../schema/import-pdf.args.json";
 
@@ -113,6 +114,10 @@ export interface PdfImportOptions {
   maxPages?: number;
   /** Raster resolution of the image path, ppi. */
   dpi: number;
+  /** Bring the PDF's review comments (Acrobat's sticky notes, free text,
+   *  text markup, replies, review states) into the document as engine comment
+   *  threads (engine ADR 1055). Default on; `false` leaves them out. */
+  comments?: boolean;
 }
 
 /** The schema's struct-field DEFAULTS (`schema/import-pdf.args.json`, the
@@ -137,6 +142,14 @@ export async function openPdf(
   sourcePageCount: number;
 }> {
   const read = await readPdf(host, bytes, options, open);
+  // The document is open: its pages take the PDF's comments, page for page.
+  if (options.comments !== false)
+    await importPdfComments(
+      host,
+      await loadPdfMapper(host),
+      bytes,
+      PDF_IMPORTER_ID,
+    );
   // Pages past the cap are left out: said, never silent.
   const sourcePageCount = (await pdfPageCount(bytes)) ?? read.pageCount;
   if (sourcePageCount > read.pageCount) {

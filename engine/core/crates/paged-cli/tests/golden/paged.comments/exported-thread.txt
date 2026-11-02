@@ -1,0 +1,9 @@
+$ paged comments out.pdf
+--- exit: 0
+--- stdout
+1 thread(s) on 1 page(s), 2 author(s)
+page 1 at (72.0, 100.0) Text t1 resolved
+  Ann Author 2026-11-01T10:30:00Z: Why this word?
+    Bob 2026-11-01T11:00:00+01:00: Because
+--- stderr
+(empty)

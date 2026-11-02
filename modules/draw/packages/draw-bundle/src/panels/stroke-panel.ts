@@ -61,7 +61,7 @@ const M = defineMessages("draw.strokePanel", {
   project: "Project",
   dashes: "Dashes",
   dashesText:
-    "Set the dash pattern in Draw ▸ Stroke ▸ Dashes… (up to three dash and gap pairs).",
+    "Set the dash pattern in Object ▸ Stroke ▸ Dashes… (up to three dash and gap pairs).",
   lineEnds: "Line ends",
   start: "Start",
   end: "End",

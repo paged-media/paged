@@ -108,6 +108,16 @@ pub fn pdf_place(bytes: &[u8], request_json: &str) -> Result<String, String> {
 
 /// The document name the fallback designmap carries. The IR has no source
 /// file name, so this stays the fixed name the private writer always used.
+/// The review comments a PDF carries (engine ADR 1055), as the JSON of
+/// [`paged_pdf_annots::PdfCommentsReport`]: threads in page space and one loss
+/// line per annotation type left out. The bundle turns it into the engine's
+/// comment operations after the document is open.
+pub fn pdf_comments(bytes: &[u8]) -> Result<String, String> {
+    let report =
+        paged_pdf_annots::read_pdf_comments(bytes).map_err(|e| format!("unreadable: {e}"))?;
+    serde_json::to_string(&report).map_err(|e| format!("unreadable: {e}"))
+}
+
 const FALLBACK_NAME: &str = "Imported.pdf";
 
 /// wasm-bindgen surface consumed by the bundle's `engine-loader.ts`. Returns
@@ -133,6 +143,12 @@ pub fn pdf_inspect_wasm(bytes: &[u8]) -> Result<String, wasm_bindgen::JsError> {
 }
 
 /// wasm-bindgen: [`pdf_place`].
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn pdf_comments_wasm(bytes: &[u8]) -> Result<String, wasm_bindgen::JsError> {
+    pdf_comments(bytes).map_err(|e| wasm_bindgen::JsError::new(&e))
+}
+
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn pdf_place_wasm(bytes: &[u8], request_json: &str) -> Result<String, wasm_bindgen::JsError> {

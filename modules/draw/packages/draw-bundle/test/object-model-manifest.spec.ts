@@ -73,7 +73,6 @@ describe("paged.draw object model — the manifest block", () => {
         "reflectOptions",
         "selectSameStrokeWeightOptions",
         "simplifyPathOptions",
-        "strokeDashOptions",
       ].map((n) => `media.paged.draw.command.${n}`),
     );
   });

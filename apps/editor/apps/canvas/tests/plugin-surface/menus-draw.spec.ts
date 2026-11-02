@@ -396,22 +396,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
-  test("Draw/Stroke/Dashes… — raises Path Options, where the dashes are set", async () => {
-    covers("menu:Draw/Stroke/Dashes…");
-    await expectGreyedAndInert(bare, "Draw/Stroke/Dashes…");
-    const out = await clickEntry(
-      live,
-      "Draw/Stroke/Dashes…",
-      "media.paged.draw.command.strokeDashOptions",
-    );
-    expect(out.shell).toEqual([
-      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
-    ]);
-    expect(out.after, "opening a panel leaves the document alone").toBe(
-      out.before,
-    );
-  });
-
   test("Draw/Stroke/Width profile… — raises Path Options, where the profile is set", async () => {
     covers("menu:Draw/Stroke/Width profile…");
     await expectGreyedAndInert(bare, "Draw/Stroke/Width profile…");

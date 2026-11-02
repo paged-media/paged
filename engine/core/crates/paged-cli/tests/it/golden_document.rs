@@ -822,6 +822,102 @@ fn query() {
         .golden("paged query", "filter-json");
 }
 
+/// A one-page PDF with a Highlight that has a reply, a Link and a Stamp
+/// (object `n` is `objects[n - 1]`), written with its xref.
+fn review_pdf() -> Vec<u8> {
+    let objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /Annots [4 0 R 5 0 R 6 0 R 7 0 R] >>",
+        "<< /Subtype /Highlight /NM (h1) /Rect [20 250 120 262] /T (Ann) /M (D:20261101103000Z) \
+            /Contents (Too loose) /QuadPoints [20 262 120 262 20 250 120 250] >>",
+        "<< /Subtype /Text /NM (h1.1) /Rect [20 250 40 270] /T (Bob) /M (D:20261101110000Z) \
+            /Contents (Agreed) /IRT 4 0 R /RT /R >>",
+        "<< /Subtype /Link /Rect [0 0 50 20] >>",
+        "<< /Subtype /Stamp /Rect [100 100 150 150] >>",
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    for off in offsets {
+        out.extend(format!("{off:010} 00000 n \n").as_bytes());
+    }
+    out.extend(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        )
+        .as_bytes(),
+    );
+    out
+}
+
+#[test]
+fn comments() {
+    covers!("cli:paged comments");
+    let fx = Fx::new("comments");
+    fx.help("paged comments");
+    fx.run(&["comments"])
+        .code(2)
+        .golden("paged comments", "usage-no-file");
+    fx.run(&["comments", "missing.pdf"])
+        .code(1)
+        .golden("paged comments", "input-missing-file");
+    fx.write("plain.pdf", "this is not a pdf");
+    fx.run(&["comments", "plain.pdf"])
+        .code(1)
+        .golden("paged comments", "input-not-a-pdf");
+
+    // A thread written by the engine and exported comes back as it was.
+    fx.seeded("doc.paged");
+    fx.run(&[
+        "invoke",
+        "doc.paged",
+        "insertCommentThread",
+        r#"{"anchor":{"kind":"page","page":"usp","at":[72,100]},"comment":{"id":"t1","author":"Ann Author","date":"2026-11-01T10:30:00Z","text":"Why this word?"}}"#,
+        "-o",
+        "one.paged",
+    ])
+    .code(0);
+    fx.run(&[
+        "invoke",
+        "one.paged",
+        "replyComment",
+        r#"{"parentId":"t1","comment":{"id":"t1.1","author":"Bob","date":"2026-11-01T11:00:00+01:00","text":"Because"}}"#,
+        "-o",
+        "two.paged",
+    ])
+    .code(0);
+    fx.run(&[
+        "invoke",
+        "two.paged",
+        "resolveComment",
+        r#"{"commentId":"t1","resolved":true}"#,
+        "-o",
+        "three.paged",
+    ])
+    .code(0);
+    fx.run(&["export", "three.paged", "--comments", "-o", "out.pdf"])
+        .code(0);
+    fx.run(&["comments", "out.pdf"])
+        .code(0)
+        .golden("paged comments", "exported-thread");
+
+    // A PDF from elsewhere: markup with a reply, and what is not a comment.
+    fx.write("review.pdf", review_pdf());
+    fx.run(&["comments", "review.pdf"])
+        .code(0)
+        .golden("paged comments", "markup-with-losses");
+    fx.run(&["comments", "review.pdf", "--json"])
+        .code(0)
+        .golden("paged comments", "markup-json");
+}
+
 #[test]
 fn describe() {
     covers!("cli:paged describe");
