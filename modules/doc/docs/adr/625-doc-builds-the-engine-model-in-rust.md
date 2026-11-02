@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slice 1 implemented; the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 and 2 implemented (2 behind a flag, off); the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
@@ -77,6 +77,22 @@ change, content control, bookmark, hyperlink, drop cap or in-paragraph break is 
 3. Tables. 4. Pictures and anchored frames. 5. Fields. 6. Comments and tracked changes.
 7. Notes and masters. After 7 the IR is deleted, together with `doc-host-model`'s mutation
    builders; the TS bundle keeps the panel and the file input (ADR 600's thin-glue rule).
+
+### Slice 2 as built: the prefilled skeleton
+
+Styles and swatches stay with the old path for now (about fifty property paths, and the
+catalogue is the part a save-back inverts); what slice 2 moves is the body. `skeleton_prefilled`
+(`docx-skeleton`) returns the skeleton with the stories already holding the model paragraphs of
+slice 1, or `None` unless the WHOLE body is native (a story half built here and half poured would
+split a paragraph's range between two mechanisms): any deferred block, a comment, a table of
+contents or tracked changes makes it `None`, and the document opens by the old pour. The bundle
+calls it when `NATIVE_BODY.enabled` (off) and then skips the body pour; the styles and swatches the
+paragraphs name are created after the open, as before. The real-engine spec
+`test/headless/native-body.spec.ts` opens a fixture both ways and requires the same text, the same
+page count and the same selection rectangles per paragraph, no `docx-auto` style on a native
+paragraph, and an unedited export equal to the source. The flag turns on when that spec and the
+conformance suites are green on the final commit and the remaining slices make the document
+mostly native, not before.
 
 ### Save-back
 

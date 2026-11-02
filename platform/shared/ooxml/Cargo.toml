@@ -1,5 +1,6 @@
 [package]
 name = "paged-ooxml"
+workspace = "../../../engine/core"
 version = "0.0.0"
 edition = "2021"
 rust-version = "1.99"
@@ -7,12 +8,8 @@ license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
 description = "The shared ECMA-376 (OOXML) foundation of paged.doc, paged.slide and paged.sheet: the OPC container with its uncompressed-size budget, the _rels graph, content types, byte-splice editing, the XML helpers, DrawingML colour, paint and effects (read, resolved to a neutral IR, written back), the units, and (feature `dom`) the ooxmlsdk typed part DOM."
 
-# A workspace of its own (as platform/shared/test-resources): this directory
-# is not inside any module's Cargo workspace. doc, slide and sheet take it as
-# a path dependency (docs/adr/PM-0005); Cargo reads their workspace's
-# profiles and lockfile, never this table.
-[workspace]
-
+# A member of the engine's Cargo workspace (docs/development/one-workspace.md).
+# The modules not yet moved take it as a path dependency (docs/adr/PM-0005).
 [features]
 default = []
 # The ooxmlsdk typed part DOM (`dom`). paged.doc reads WordprocessingML

@@ -15,15 +15,18 @@ project:
   description: "Shared OOXML foundation of doc, slide and sheet: OPC with a zip-bomb budget, rels, splice, XML helpers, colour."
 
 tasks:
-  # The standalone build takes every feature: `dom` is doc's alone, and a
-  # deflate backend is required (the consumers choose one).
+  # A member of the engine's Cargo workspace (docs/development/one-workspace.md):
+  # cargo finds the workspace from the crate's manifest, so the tasks select the
+  # crate with -p instead of the inherited --workspace / --all.
+  rust-fmt:
+    command: "cargo fmt -p paged-ooxml --check"
   rust-check:
-    command: "cargo check --workspace --all-targets --all-features"
+    command: "cargo check -p paged-ooxml --all-targets --all-features"
   rust-build:
-    command: "cargo build --workspace --all-features"
+    command: "cargo build -p paged-ooxml --all-features"
   rust-lint:
-    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+    command: "cargo clippy -p paged-ooxml --all-targets --all-features -- -D warnings"
   rust-test:
     script: >-
-      cargo nextest run --workspace --all-features
-      && cargo test --doc --workspace --all-features
+      cargo nextest run -p paged-ooxml --all-features
+      && cargo test --doc -p paged-ooxml --all-features

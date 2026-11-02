@@ -208,6 +208,56 @@ pub fn masters_with(
     docx_lower::structure::plan_masters(doc, &placements)
 }
 
+/// [`skeleton_with`] with the body already in its stories (doc ADR 625,
+/// slice 2): `None` when the document is not one the native builder takes
+/// whole ([`body::native_stories`]), so the caller opens it by the old path.
+/// The styles and swatches the paragraphs name are still created by the
+/// bundle after the open.
+pub fn skeleton_prefilled(
+    doc: &DocxDocument,
+    lowered: &docx_lower::ir::LoweredDoc,
+    name: &str,
+    options: LowerOptions,
+) -> Result<Option<Skeleton>, String> {
+    let Some(stories) = body::native_stories(lowered) else {
+        return Ok(None);
+    };
+    let pages = skeleton_pages_with(doc, options);
+    if stories.len() != pages.len() {
+        return Ok(None);
+    }
+    let (masters, _) = masters_with(doc, options);
+    let mut document = native::skeleton_document_with(&pages, &masters, name);
+    let items: Vec<_> = docx_lower::objects::plan_page_items(doc, options)
+        .into_iter()
+        .map(|(_, item)| item)
+        .collect();
+    items::add_page_items(&mut document, &items);
+    for (page, paragraphs) in pages.iter().zip(stories) {
+        if paragraphs.is_empty() {
+            continue;
+        }
+        let Some(parsed) = document
+            .stories
+            .iter_mut()
+            .find(|s| s.self_id == page.story_id)
+        else {
+            return Ok(None);
+        };
+        parsed.story.paragraphs = paragraphs;
+    }
+    let (w, h) = pages
+        .first()
+        .map(|p| (p.width, p.height))
+        .unwrap_or((612.0, 792.0));
+    let paged = paged_store::package::wrap_document(&document, name, w, h)
+        .map_err(|e| format!("package the skeleton: {e}"))?;
+    Ok(Some(Skeleton {
+        paged,
+        section_stories: pages.into_iter().map(|p| p.story_id).collect(),
+    }))
+}
+
 /// The skeleton packaged as a `.paged` document, named `name`.
 pub fn skeleton(doc: &DocxDocument, name: &str) -> Result<Skeleton, String> {
     skeleton_with(doc, name, LowerOptions::default())

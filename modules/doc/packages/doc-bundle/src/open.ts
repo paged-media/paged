@@ -163,6 +163,11 @@ export async function setGrowRules(
   return refused;
 }
 
+/** Doc ADR 625 — open a document whose body the engine's model builds
+ *  natively (slice 2). Off by default: the old pour stays the path until the
+ *  slices are proven on the real engine. */
+export const NATIVE_BODY = { enabled: false };
+
 /** True when this host can open a native document (the standalone path). */
 export function canOpenStandalone(host: BundleHost): boolean {
   return host.supports("document.openNative@1");
@@ -182,8 +187,19 @@ export async function openStandalone(
 ): Promise<Opened | null> {
   if (!canOpenStandalone(host)) return null;
   const open = (paged: Uint8Array) => host.nativeDocument.open(paged);
-  await open(engine.skeletonPaged(name));
-  return finishStandalone(host, engine, ir, source, name, open);
+  const prefilled = NATIVE_BODY.enabled
+    ? engine.skeletonPagedPrefilled(name)
+    : null;
+  await open(prefilled ?? engine.skeletonPaged(name));
+  return finishStandalone(
+    host,
+    engine,
+    ir,
+    source,
+    name,
+    open,
+    prefilled !== null,
+  );
 }
 
 /**
@@ -201,6 +217,9 @@ export async function finishStandalone(
   source: Uint8Array,
   name: string,
   open: (paged: Uint8Array) => Promise<unknown>,
+  /** Doc ADR 625 — the open skeleton already holds the body: skip the pour
+   *  of the body stories. */
+  bodyPrefilled = false,
 ): Promise<Opened> {
   let storyIds = engine.skeletonStories();
   let midPageColumns = engine.usesMidPageColumns();
@@ -211,6 +230,7 @@ export async function finishStandalone(
     ir = engine.lowered();
     storyIds = engine.skeletonStories();
     await open(engine.skeletonPaged(name));
+    bodyPrefilled = false;
     await applyStyleOpsReporting(host, buildStyleMutations(ir));
     host.diagnostics.set(COLUMNS_DIAGNOSTICS_KEY, [
       {
@@ -228,6 +248,7 @@ export async function finishStandalone(
   const notes = noteTexts(ir);
   const groups = sectionBlocks(ir);
   for (let k = 0; k < groups.length && k < storyIds.length; k++) {
+    if (bodyPrefilled) break;
     await pourSteps(
       host,
       buildStoryBlocks(groups[k], storyIds[k], {

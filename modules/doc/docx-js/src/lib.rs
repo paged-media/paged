@@ -123,6 +123,20 @@ mod wasm {
                 .map_err(|e| JsValue::from_str(&e))
         }
 
+        /// Doc ADR 625 — the skeleton with the body built natively in its
+        /// stories; an empty array when the document is not one the native
+        /// builder takes whole (the caller opens it by [`Self::skeleton_paged`]).
+        pub fn skeleton_paged_prefilled(&self, name: &str) -> Result<Vec<u8>, JsValue> {
+            let session = self
+                .session
+                .as_ref()
+                .ok_or_else(|| JsValue::from_str("no document loaded"))?;
+            session
+                .skeleton_prefilled(name)
+                .map(|s| s.map(|s| s.paged).unwrap_or_default())
+                .map_err(|e| JsValue::from_str(&e))
+        }
+
         /// The story ids of the skeleton, in story order, as JSON (sections
         /// that continue a page share their story, ADR 029).
         pub fn skeleton_stories(&self) -> Result<String, JsValue> {

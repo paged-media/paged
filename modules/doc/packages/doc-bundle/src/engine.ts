@@ -52,6 +52,7 @@ interface WasmDocEngine {
   last_save_skips(): string;
   style_tokens(): string;
   skeleton_paged(name: string): Uint8Array;
+  skeleton_paged_prefilled(name: string): Uint8Array;
   skeleton_stories(): string;
   set_mid_page_columns(on: boolean): void;
   uses_mid_page_columns(): boolean;
@@ -122,6 +123,16 @@ export class DocEngine {
    *  rules on the wire and the pour fills the stories afterwards. */
   skeletonPaged(name: string): Uint8Array {
     return this.inner.skeleton_paged(name);
+  }
+
+  /** Doc ADR 625 — the skeleton with the body already built in its stories
+   *  by the engine's model, or `null` when the document is not one the
+   *  native builder takes whole (open it with {@link skeletonPaged} and
+   *  pour it). The styles and swatches the paragraphs name are still
+   *  created by the bundle after the open. */
+  skeletonPagedPrefilled(name: string): Uint8Array | null {
+    const bytes = this.inner.skeleton_paged_prefilled(name);
+    return bytes.length > 0 ? bytes : null;
   }
 
   /** The skeleton's section story ids, in section order (the pour targets). */

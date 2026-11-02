@@ -9,7 +9,7 @@ next to the code you change. This file holds only what crosses components.
 - `engine/core` — Rust engine (own Cargo workspace and `rust-toolchain.toml`).
 - `modules/<name>` — built-in modules. Each still has its own Cargo workspace except those
   that have joined `engine/core`'s workspace (PM-0017, staged; docs/development/one-workspace.md).
-  Joined so far: publish, draw, data, image. A joined module has no `Cargo.toml` at its root: run cargo in
+  Joined so far: publish, draw, data, image, and the Rust crates of platform/shared. A joined module has no `Cargo.toml` at its root: run cargo in
   `engine/core` (or pass `--manifest-path`) and select its crates with `-p`.
 - JavaScript: ONE Bun workspace at the root (`package.json` `workspaces`, `bun.lock`,
   `bunfig.toml`; Bun from `.prototools`). `bun install` at the root installs every
@@ -29,8 +29,9 @@ next to the code you change. This file holds only what crosses components.
   doc, slide and sheet, with the DrawingML paint reader and the units), `dml-chart`
   (the DrawingML chart reader of sheet and slide), `dml-geom` (DrawingML preset
   geometry, handles and connection sites of slide and doc's shapes) and
-  `dml-native` (the DrawingML paint mapper onto the engine model), each its own
-  Cargo workspace and a path dependency of theirs.
+  `dml-native` (the DrawingML paint mapper onto the engine model), with `fmt` and
+  `test-resources`: members of `engine/core`'s Cargo workspace (PM-0017) and path
+  dependencies of the modules not yet moved.
 - `tooling/import` — how this repository was assembled; do not edit history-related files by hand.
 
 ## Tasks (Moon)
