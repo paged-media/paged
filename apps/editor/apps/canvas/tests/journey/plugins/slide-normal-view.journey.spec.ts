@@ -196,7 +196,7 @@ test.describe("journey · paged.slide Normal view", () => {
     await page.keyboard.press("PageDown");
     await expect.poll(rail.active, { timeout: 10_000 }).toBe(1);
 
-    await designer.openPanel("media.paged.slide.panel.comments");
+    await designer.openPanel("paged.comments");
     const panel = page.locator('[data-comments-panel="ready"]');
     await expect(panel).toBeVisible({ timeout: 10_000 });
     await expect(panel).toContainText("Slide 2");
@@ -230,7 +230,7 @@ test.describe("journey · paged.slide Normal view", () => {
       .first()
       .click();
     await expect.poll(rail.active, { timeout: 10_000 }).toBe(1);
-    await designer.openPanel("media.paged.slide.panel.comments");
+    await designer.openPanel("paged.comments");
     await expect(panel.locator("[data-comment-text]")).toHaveText(
       "Use the brand blue here",
       { timeout: 10_000 },

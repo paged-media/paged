@@ -55,7 +55,7 @@ describe("the slide profile", () => {
       "media.paged.slide.panel.transition",
       "media.paged.slide.panel.placeholder",
       "media.paged.slide.panel.deck",
-      "media.paged.slide.panel.comments",
+      "paged.comments",
       "media.paged.slide.panel.notes",
     ]);
     const named = [

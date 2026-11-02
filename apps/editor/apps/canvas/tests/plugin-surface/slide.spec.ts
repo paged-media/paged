@@ -117,7 +117,8 @@ const SLIDE_PANEL = "media.paged.slide.panel.slide";
 const TRANSITION_PANEL = "media.paged.slide.panel.transition";
 const PLACEHOLDER_PANEL = "media.paged.slide.panel.placeholder";
 const DECK_PANEL = "media.paged.slide.panel.deck";
-const COMMENTS_PANEL = "media.paged.slide.panel.comments";
+/** The host's Comments panel (engine ADR 1055): slide's own panel is gone. */
+const HOST_COMMENTS_PANEL = "paged.comments";
 const SHAPES_PANEL = "media.paged.slide.panel.shapes";
 const ICONS_PANEL = "media.paged.slide.panel.icons";
 const CUSTOM_SHOWS_PANEL = "media.paged.slide.panel.customShows";
@@ -276,7 +277,6 @@ const DECLARED = {
     TRANSITION_PANEL,
     PLACEHOLDER_PANEL,
     DECK_PANEL,
-    COMMENTS_PANEL,
     SHAPES_PANEL,
     ICONS_PANEL,
     CUSTOM_SHOWS_PANEL,
@@ -377,7 +377,6 @@ const PANEL_TITLES: Record<string, string> = {
   [TRANSITION_PANEL]: "Transition",
   [PLACEHOLDER_PANEL]: "Placeholder",
   [DECK_PANEL]: "Deck",
-  [COMMENTS_PANEL]: "Comments",
   [SHAPES_PANEL]: "Shapes",
   [ICONS_PANEL]: "Icons",
   [CUSTOM_SHOWS_PANEL]: "Custom shows",
@@ -716,7 +715,6 @@ test.describe("plugin surface · paged.slide", () => {
     const byId = Object.fromEntries(panels.map((p) => [p.id, p]));
     expect(byId[SLIDES_PANEL].defaultDock).toBe("left");
     expect(byId[NOTES_PANEL].defaultDock).toBe("bottom");
-    expect(byId[COMMENTS_PANEL].defaultDock).toBe("right");
     expect(byId[SHAPES_PANEL].defaultDock).toBe("right");
     expect(byId[CUSTOM_SHOWS_PANEL].defaultDock).toBe("right");
     expect(byId[ANIMATIONS_PANEL].defaultDock).toBe("right");
@@ -724,7 +722,6 @@ test.describe("plugin surface · paged.slide", () => {
     // The seven React panels carry their own glyph for the panel rail.
     expect(byId[SLIDES_PANEL].iconSvg).toBe(true);
     expect(byId[NOTES_PANEL].iconSvg).toBe(true);
-    expect(byId[COMMENTS_PANEL].iconSvg).toBe(true);
     expect(byId[SHAPES_PANEL].iconSvg).toBe(true);
     expect(byId[CUSTOM_SHOWS_PANEL].iconSvg).toBe(true);
     expect(byId[ANIMATIONS_PANEL].iconSvg).toBe(true);
@@ -800,8 +797,8 @@ test.describe("plugin surface · paged.slide", () => {
         timeout: 15_000,
       });
     }
-    // The Comments panel: outside a deck there is no slide to comment on.
-    await openPanel(page, COMMENTS_PANEL);
+    // The Comments panel is the host's: it mounts in every context.
+    await openPanel(page, HOST_COMMENTS_PANEL);
     await expect(page.locator("[data-comments-panel]")).toBeVisible({
       timeout: 15_000,
     });

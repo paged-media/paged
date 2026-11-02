@@ -282,6 +282,12 @@
       "replacement": "command:paged.stroke.dashDashDot",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.comments",
+      "replacement": "panel:paged.comments",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

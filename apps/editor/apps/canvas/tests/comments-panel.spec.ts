@@ -17,41 +17,35 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Comments panel — INERT AT HEAD, and this spec pins exactly that
-// (audit 17082026 B8/B9: the row was green via the panel-sweep mount
-// smoke + styleguide shots of OTHER panels). The registry says
-// `planned` ("collaboration backend"); the implementation is the
-// brand's honest ComingSoon shell. The behaviour to protect is the
-// HONESTY: the declared empty state renders, and there is NO
-// fake-interactive chrome that could dead-end a designer. When the
-// collaboration backend lands, this spec MUST be replaced by a real
-// threaded-comments behaviour test.
+// Comments panel — the host's one panel for every comment thread (engine
+// ADR 1055). This spec pins the empty document: the empty state renders, the
+// thread list does not, and the new-comment box is there. Thread behaviour
+// (grouping, filters, replies, pins) is covered by the model and DOM specs
+// next to the panel (test/panels/comments-model.test.ts, the shell's
+// comment-pins DOM spec).
 
 import { test, expect } from "@playwright/test";
 
 import { openCanvas, openPanel } from "./fidelity/canvas-driver";
 
-test.describe("Comments panel (honest stub)", () => {
-  test("AC-COMMENTS-1 — the declared ComingSoon empty state, with zero interactive chrome @feat:editor-shell.panels.comments @level:happy", async ({
+test.describe("Comments panel (engine ADR 1055)", () => {
+  test("AC-COMMENTS-1 — an empty document: the empty state and the new-comment box @feat:editor-shell.panels.comments @level:happy", async ({
     page,
   }) => {
     await openCanvas(page);
     await openPanel(page, "paged.comments");
 
-    const panel = page.locator("[data-comments-panel]");
+    const panel = page.locator('[data-comments-panel="ready"]');
     await expect(panel).toBeVisible();
 
-    // The declared empty state — visibly a stub, with its promise
-    // named (the collaboration backend), not a blank pane.
-    const stub = panel.locator("[data-coming-soon]");
-    await expect(stub).toBeVisible();
-    await expect(stub).toContainText("No comments yet");
-    await expect(stub).toContainText("collaboration backend");
+    // No threads yet: the empty state says what the panel is for.
+    const empty = panel.locator("[data-coming-soon]");
+    await expect(empty).toBeVisible();
+    await expect(empty).toContainText("No comments yet");
+    await expect(panel.locator("[data-thread-list]")).toHaveCount(0);
 
-    // No fake data and no dead interactive chrome: the panel offers
-    // nothing clickable/typable while the backend does not exist.
-    await expect(panel.locator("button, input, select, textarea")).toHaveCount(
-      0,
-    );
+    // The new-comment box is there, and offers nothing to send until
+    // something is selected to comment on.
+    await expect(panel.locator("[data-new-comment-input]")).toBeVisible();
   });
 });
