@@ -900,7 +900,7 @@ dependencies = [
  "log",
  "quick-xml 0.42.0",
  "serde",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -1495,6 +1495,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
  "libloading",
+]
+
+[[package]]
+name = "dml-chart"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
+name = "dml-geom"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
+name = "dml-native"
+version = "0.0.0"
+dependencies = [
+ "paged-model",
+ "paged-ooxml",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2555,7 +2581,7 @@ dependencies = [
  "quick-xml 0.41.0",
  "serde_json",
  "thiserror",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -2572,7 +2598,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -3177,6 +3203,31 @@ name = "lebe"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
+
+[[package]]
+name = "lexical-parse-float"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52a9f232fbd6f550bc0137dcb5f99ab674071ac2d690ac69704593cb4abbea56"
+dependencies = [
+ "lexical-parse-integer",
+ "lexical-util",
+]
+
+[[package]]
+name = "lexical-parse-integer"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a7a039f8fb9c19c996cd7b2fcce303c1b2874fe1aca544edc85c4a5f8489b34"
+dependencies = [
+ "lexical-util",
+]
+
+[[package]]
+name = "lexical-util"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2604dd126bb14f13fb5d1bd6a66155079cb9fa655b37f875b3a742c705dbed17"
 
 [[package]]
 name = "libc"
@@ -3810,6 +3861,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
+name = "ooxmlsdk"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4694306541ef0b5fa2e67bbbbed3e4ab9626c6780382395f36d0098a560ffc2e"
+dependencies = [
+ "bytes",
+ "itoa",
+ "lexical-parse-float",
+ "ooxmlsdk-derive",
+ "quick-xml 0.41.0",
+ "thiserror",
+ "zip 8.6.0",
+ "zmij",
+]
+
+[[package]]
+name = "ooxmlsdk-derive"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3df9395340d14d0dabbba439f6edce90c2f01908ea7d17c86d666fbfecd516d6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3941,7 +4019,7 @@ dependencies = [
  "unicode-segmentation",
  "wasm-bindgen",
  "web-sys",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -3964,7 +4042,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4001,7 +4079,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "ureq",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4230,7 +4308,7 @@ dependencies = [
  "tracing",
  "ttf-parser",
  "xmp-writer",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4272,7 +4350,7 @@ dependencies = [
  "paged-scene",
  "quick-xml 0.41.0",
  "sha2",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4396,7 +4474,20 @@ dependencies = [
  "thiserror",
  "tsify-next",
  "wasm-bindgen",
- "zip",
+ "zip 9.0.5",
+]
+
+[[package]]
+name = "paged-ooxml"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "ooxmlsdk",
+ "paged-colour-math",
+ "quick-xml 0.41.0",
+ "serde",
+ "thiserror",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4422,7 +4513,7 @@ dependencies = [
  "paged-mutate",
  "paged-store",
  "serde_json",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4539,7 +4630,7 @@ dependencies = [
  "ttf-parser",
  "usvg",
  "wasm-bindgen",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4555,7 +4646,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4596,7 +4687,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4615,7 +4706,7 @@ dependencies = [
  "paged-wire",
  "serde",
  "serde_json",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4655,7 +4746,7 @@ dependencies = [
  "paged-scene",
  "serde",
  "serde_json",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -4841,7 +4932,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "wasm-bindgen",
- "zip",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -7909,6 +8000,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "zip"
+version = "8.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "typed-path",
 ]
 
 [[package]]

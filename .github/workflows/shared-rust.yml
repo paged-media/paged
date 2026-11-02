@@ -23,6 +23,8 @@ on:
       - "platform/shared/dml-native/**"
       # dml-native builds on the engine model crate.
       - "engine/core/crates/paged-model/**"
+      - "engine/core/Cargo.toml"
+      - "engine/core/Cargo.lock"
       - ".github/workflows/shared-rust.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -35,6 +37,8 @@ on:
       - "platform/shared/dml-geom/**"
       - "platform/shared/dml-native/**"
       - "engine/core/crates/paged-model/**"
+      - "engine/core/Cargo.toml"
+      - "engine/core/Cargo.lock"
       - ".github/workflows/shared-rust.yml"
       - ".cargo/config.toml"
       - "tooling/rust/**"
@@ -51,9 +55,21 @@ jobs:
       fail-fast: false
       matrix:
         crate: [ooxml, dml-chart, dml-geom, dml-native]
+        include:
+          - crate: ooxml
+            package: paged-ooxml
+          - crate: dml-chart
+            package: dml-chart
+          - crate: dml-geom
+            package: dml-geom
+          - crate: dml-native
+            package: dml-native
+    # The crates are members of the engine's Cargo workspace (one Cargo
+    # workspace, docs/development/one-workspace.md): cargo runs there and
+    # selects the crate with -p, so the build graph is the crate's alone.
     defaults:
       run:
-        working-directory: platform/shared/${{ matrix.crate }}
+        working-directory: engine/core
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -66,20 +82,20 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: platform/shared/${{ matrix.crate }} -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-shared-${{ matrix.crate }}
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
-      - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo fmt -p ${{ matrix.package }} --check
+      - run: cargo clippy -p ${{ matrix.package }} --all-targets --all-features -- -D warnings
       - name: clippy (wasm32, the target the modules ship)
-        run: cargo clippy --all-features --target wasm32-unknown-unknown -- -D warnings
+        run: cargo clippy -p ${{ matrix.package }} --all-features --target wasm32-unknown-unknown -- -D warnings
       # JUnit from the `ci` profile (.config/nextest.toml); a red run still
       # uploads its report, and the gate after the upload fails the job.
       - name: nextest (junit; red results still upload)
         run: |
-          cargo nextest run --all-features --profile ci --no-tests=fail \
+          cargo nextest run -p ${{ matrix.package }} --all-features --profile ci --no-tests=fail \
             || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
           test -s target/nextest/ci/junit.xml
       - name: upload nextest JUnit artifact
@@ -87,13 +103,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit-${{ matrix.crate }}
-          path: platform/shared/${{ matrix.crate }}/target/nextest/ci/junit.xml
+          path: engine/core/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
       - name: tests failed
         if: ${{ env.RUST_FAILED == '1' }}
         run: exit 1
-      - run: cargo test --doc --all-features
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          manifest-path: platform/shared/${{ matrix.crate }}/Cargo.toml
+      - run: cargo test --doc -p ${{ matrix.package }} --all-features
+      # cargo deny runs over the whole workspace in core / licenses.

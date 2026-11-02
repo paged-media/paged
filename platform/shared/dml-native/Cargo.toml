@@ -1,5 +1,6 @@
 [package]
 name = "dml-native"
+workspace = "../../../engine/core"
 version = "0.0.0"
 edition = "2021"
 rust-version = "1.99"
@@ -7,11 +8,8 @@ license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
 description = "The one DrawingML-to-engine mapper of paged.slide, paged.doc and paged.sheet: paged-ooxml's neutral resolved paint (fills, gradients with alpha stops, patterns, lines, effect lists, picture effects) lowered onto paged-model (swatches, gradient swatches and placement, strokes, drop shadow, FrameEffects and the ordered effect stack, image filter stacks, the fill rule), with a loss report for what the engine cannot hold yet, and the inverse for the save paths."
 
-# A workspace of its own, as platform/shared/ooxml and dml-chart are: the
-# modules take it as a path dependency (docs/adr/PM-0005). It builds on the
-# engine's model crate, a path dependency at the same commit (PM-0014).
-[workspace]
-
+# A member of the engine's Cargo workspace (docs/development/one-workspace.md).
+# The modules not yet moved take it as a path dependency (docs/adr/PM-0005).
 [features]
 default = []
 # A zip backend for paged-ooxml, which requires one, in this crate's own
