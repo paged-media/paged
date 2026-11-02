@@ -13,6 +13,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 exec bash ../../tooling/rust/build-wasm.sh \
-  --package sheet-js --artifact sheet_js \
+  --package sheet-js --artifact sheet_js --profile wasm-sheet \
   --out packages/sheet-bundle/bin \
   --source-hash sheet --hash-env SHEET_JS_SOURCE_HASH

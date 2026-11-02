@@ -33,7 +33,7 @@ specs that boot it.
 toolset via `contributeTool` (the Add/Delete/Convert anchor editors in
 the pen flyout, plus the Curvature/Gradient-Annotator/Measure/
 Shape-Builder pro tools; the Pencil is the host's, built on this repo's
-`PencilMachine`, ADR 359), the Stroke + Fill schema panels, the
+`PencilMachine`, ADR 359), the (since deleted) Stroke + Fill schema panels, the
 Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, the
 Compound-Path pair (Make / Release), PATTERN EDITING v1 (a re-editable
 tile FIELD — pattern ARTWORK, the copies that preview a tile — and,

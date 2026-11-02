@@ -181,10 +181,8 @@ Status (draw items, one line each; updated as they land):
   ("6, 3"). The model (pairs of an array and back, the preset runs, the one write) is shared in
   `platform/shared/helpers`. The four preset commands are `paged.stroke.dash*` (palette) and
   Object > Stroke > Dashes… raises the panel. Draw's `Dashes…` command, its Path Options "Stroke
-  dashes" section and all its helpers are gone (ids left through the deprecation window). Still in
-  draw: the unregistered stroke schema (`panels/stroke-panel.ts`) whose dormant dash section only
-  carries a pointer text, and the binding driver its specs exercise; delete both with the rest of
-  that dormant module.
+  dashes" section and all its helpers are gone (ids left through the deprecation window). The dormant draw Stroke and Fill schema panels (never registered), their binding
+  drivers and specs are deleted too.
 - SVG import registration: KEEP. The host has File > Import / Export SVG commands
   (`svg-commands.ts`); draw's `importer.svg/dxf/ai/eps` and `exporter.svg/dxf` are registry
   doors (Place, drop, scripts, data bindings), a different entry. Whether the host's drop path
@@ -200,8 +198,12 @@ Status (draw items, one line each; updated as they land):
 
 ### Reach (gaps between modules)
 
-- **doc:** shapes (`dml-geom`), picture crop (`srcRect`), recolour, charts, SmartArt, drop caps,
-  OpenType features, embedded fonts, equations.
+- **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, OpenType features,
+  embedded fonts, equations. Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
+  against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following
+  paragraph is not wrapped beside a cap taller than its own (known differences, in the note). Picture crop (`srcRect`) is done (doc ADR 623): the lowering sets
+  the picture's placement on its anchored frame (`imageContentTransform`, engine ADR 1045's
+  amendment of 2026-11-02); the comparison with Word's own render is pending.
 - **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.
 - **slide:** autofit (stored `fontScale` is applied as fixed values). Done and checked against PowerPoint:
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet

@@ -2,7 +2,7 @@
 
 ## Wasm size (measured 2026-10-24)
 
-`docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-release` profile,
+`docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-doc` profile,
 then `wasm-opt -Oz`):
 
 |                       | bytes                |

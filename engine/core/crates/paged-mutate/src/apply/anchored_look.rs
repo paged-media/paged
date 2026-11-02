@@ -32,7 +32,9 @@
 
 use paged_scene::Document;
 
-use super::helpers::{expect_color_ref, expect_length, frame_style_hint, node_exists};
+use super::helpers::{
+    expect_color_ref, expect_length, expect_transform, frame_style_hint, node_exists,
+};
 use crate::error::OperationError;
 use crate::operation::{InvalidationHint, NodeId, PropertyPath, Value};
 
@@ -52,51 +54,21 @@ pub(super) fn names_anchored(doc: &Document, node: &NodeId) -> bool {
 }
 
 fn frame<'a>(doc: &'a Document, id: &str) -> Option<&'a paged_model::AnchoredFrame> {
-    fn find<'b>(
-        frames: &'b [paged_model::AnchoredFrame],
-        id: &str,
-    ) -> Option<&'b paged_model::AnchoredFrame> {
-        frames.iter().find_map(|f| {
-            if f.self_id.as_deref() == Some(id) {
-                Some(f)
-            } else {
-                find(&f.children, id)
-            }
-        })
-    }
+    // Engine ADR 1050: the frames in table cells too.
     doc.stories
         .iter()
-        .flat_map(|s| s.story.paragraphs.iter())
-        .find_map(|p| find(&p.anchored_frames, id))
+        .find_map(|s| paged_model::anchored_frame_in(&s.story.paragraphs, id))
 }
 
-/// The anchored frame `self_id`, at any depth of an anchored group.
+/// The anchored frame `self_id`, at any depth of an anchored group and in
+/// table cells.
 pub(super) fn find_anchored_frame_mut<'a>(
     doc: &'a mut Document,
     self_id: &str,
 ) -> Option<&'a mut paged_model::AnchoredFrame> {
-    fn find<'b>(
-        frames: &'b mut [paged_model::AnchoredFrame],
-        id: &str,
-    ) -> Option<&'b mut paged_model::AnchoredFrame> {
-        for f in frames.iter_mut() {
-            if f.self_id.as_deref() == Some(id) {
-                return Some(f);
-            }
-            if let Some(found) = find(&mut f.children, id) {
-                return Some(found);
-            }
-        }
-        None
-    }
-    for parsed in &mut doc.stories {
-        for para in &mut parsed.story.paragraphs {
-            if let Some(found) = find(&mut para.anchored_frames, self_id) {
-                return Some(found);
-            }
-        }
-    }
-    None
+    doc.stories
+        .iter_mut()
+        .find_map(|s| paged_model::anchored_frame_in_mut(&mut s.story.paragraphs, self_id))
 }
 
 /// The anchored frame `node` names (see [`names_anchored`]); the caller
@@ -125,11 +97,45 @@ pub(super) fn apply_paint(
             | PropertyPath::FrameStrokeWeight
             | PropertyPath::FrameFillTint
             | PropertyPath::FrameOpacity
+            | PropertyPath::ImageContentTransform
     ) || !names_anchored(doc, node)
     {
         return None;
     }
+    if path == PropertyPath::ImageContentTransform {
+        return Some(image_placement(doc, node, value));
+    }
     Some(paint(doc, node, path, value))
+}
+
+/// Engine ADR 1045 amendment — the placement of an anchored picture
+/// (`imageContentTransform`): the inner `<Image>` transform a free
+/// rectangle carries, in the frame's own box (origin at its top left,
+/// natural pixels to points), which is how a crop or a fit reaches a
+/// picture the lowering placed with `insertAnchoredFrame`. Only a
+/// picture frame has an image to place.
+fn image_placement(
+    doc: &mut Document,
+    node: &NodeId,
+    value: &Value,
+) -> Result<(Value, InvalidationHint), OperationError> {
+    let path = PropertyPath::ImageContentTransform;
+    let next = expect_transform(path, value)?;
+    let f = frame_mut(doc, node).ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+    if f.image_link.is_none() {
+        return Err(OperationError::UnsupportedProperty {
+            node: node.clone(),
+            path,
+        });
+    }
+    let prev = std::mem::replace(&mut f.image_item_transform, next);
+    Ok((
+        Value::Transform(prev),
+        InvalidationHint {
+            frame_geometry: vec![node.clone()],
+            ..Default::default()
+        },
+    ))
 }
 
 fn paint(

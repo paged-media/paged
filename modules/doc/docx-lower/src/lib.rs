@@ -160,7 +160,55 @@ fn lower_image(img: &docx_core::Image) -> LoweredImage {
         fx: None,
         losses: Vec::new(),
         layout: None,
+        crop: img.crop.and_then(|c| lower_crop(c, img)),
     }
+}
+
+/// Doc ADR 623 — an `a:srcRect` (1/1000 percent per side) as fractions,
+/// with the picture's placement in its frame; `None` for a rectangle that
+/// crops nothing or would leave no picture (the sides of a crop that
+/// overlap, or a negative one, which pads rather than crops).
+fn lower_crop((l, t, r, b): docx_core::Crop, img: &docx_core::Image) -> Option<ir::LoweredCrop> {
+    let f = |v: i32| v as f32 / 100_000.0;
+    let (l, t, r, b) = (f(l), f(t), f(r), f(b));
+    let valid = [l, t, r, b].iter().all(|v| *v >= 0.0) && l + r < 1.0 && t + b < 1.0;
+    if !valid || (l, t, r, b) == (0.0, 0.0, 0.0, 0.0) {
+        return None;
+    }
+    Some(ir::LoweredCrop {
+        l,
+        t,
+        r,
+        b,
+        placement: crop_placement(
+            (l, t, r, b),
+            (emu_to_pt(img.width_emu), emu_to_pt(img.height_emu)),
+            paged_ooxml::media::pixel_size(&img.bytes),
+        ),
+    })
+}
+
+/// The picture's placement in a frame of `size` points (`wp:extent`, the
+/// CROPPED picture): the image is shown at `w / (1 - l - r)` by
+/// `h / (1 - t - b)` with its top left corner `l` and `t` of that outside
+/// the frame, over `pixels` source pixels: the mapping slide's pictures use
+/// (`slide-native`, `image_item_transform`). `None` without a pixel size.
+fn crop_placement(
+    (l, t, r, b): (f32, f32, f32, f32),
+    (w, h): (f32, f32),
+    pixels: Option<(u32, u32)>,
+) -> Option<[f32; 6]> {
+    let (pw, ph) = pixels.filter(|&(pw, ph)| pw > 0 && ph > 0)?;
+    let disp_w = w / (1.0 - l - r);
+    let disp_h = h / (1.0 - t - b);
+    Some([
+        disp_w / pw as f32,
+        0.0,
+        0.0,
+        disp_h / ph as f32,
+        -l * disp_w,
+        -t * disp_h,
+    ])
 }
 
 /// Where a picture with `before` chars of its paragraph's `total` in front
@@ -656,6 +704,26 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
 
+    // Cropped pictures (doc ADR 623): the engine places an anchored frame's
+    // picture by the crop; one whose size the bytes do not give shows whole.
+    let unplaced = blocks
+        .iter()
+        .filter_map(|b| match b {
+            LoweredBlock::Paragraph(p) => Some(p),
+            _ => None,
+        })
+        .flat_map(|p| p.images.iter())
+        .filter(|i| i.crop.is_some_and(|c| c.placement.is_none()))
+        .count();
+    if unplaced > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{unplaced} cropped picture(s) (a:srcRect) in a format whose size is not read \
+                 from its bytes: shown whole, fitted to the cropped size"
+            ),
+            3,
+        ));
+    }
     if ctx.pictures_at_end + ctx.pictures_alone > 0 {
         ctx.diagnostics.push(Diagnostic::info(
             format!(
@@ -3509,6 +3577,7 @@ mod tests {
                 float: None,
                 band_offset_emu: Some(12700 * offset_pt),
                 look: None,
+                crop: None,
             }],
             ..Default::default()
         };
@@ -4022,6 +4091,7 @@ mod tests {
                 float: None,
                 band_offset_emu: None,
                 look: None,
+                crop: None,
             }],
             ..run("", RunProps::default())
         }

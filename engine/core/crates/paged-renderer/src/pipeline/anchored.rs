@@ -1496,7 +1496,22 @@ fn synthetic_rectangle(
         has_inline_pdf: false,
         has_inline_eps: false,
         placed_pdf: None,
-        image_item_transform: af.image_item_transform.filter(|_| with_image),
+        // The picture's placement is in the frame's own box, as the
+        // frame's `bounds` are; the box now sits where the anchored pass
+        // put it, so the placement moves with it (engine ADR 1045,
+        // amendment 2026-11-02), as the gradient start below does.
+        image_item_transform: af.image_item_transform.filter(|_| with_image).map(
+            |[a, b, c, d, e, f]| {
+                [
+                    a,
+                    b,
+                    c,
+                    d,
+                    e + bounds.left - af_left(af),
+                    f + bounds.top - af_top(af),
+                ]
+            },
+        ),
         image_bytes: None,
         image_clip: None,
         applied_object_style: af.applied_object_style.clone(),

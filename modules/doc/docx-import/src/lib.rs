@@ -26,7 +26,7 @@
 //! an unparseable main document part is a hard error.
 
 use docx_core::{
-    Block, BodyHeld, BreakKind, CellPath, DocxDocument, Float, FloatPosition, FloatWrap,
+    Block, BodyHeld, BreakKind, CellPath, Crop, DocxDocument, Float, FloatPosition, FloatWrap,
     HeaderFooter, HeaderFooterKind, HeaderFooterRef, HeaderFooterSet, Image, Justification,
     LineRule, LineSpacing, ListKind, ListMarker, MergeField, Note, NoteProps, NoteRestart,
     ParaProps, Paragraph, ParagraphHeld, PictureLook, PositionalTab, PtabAlignment, PtabBase, Run,
@@ -88,7 +88,8 @@ struct ImportCtx<'a> {
 
 /// Pictures' looks by `wp:docPr/@id`, each id's in document order (an id
 /// Word should keep unique may repeat in a hand-made file).
-type Looks = std::collections::HashMap<u32, std::collections::VecDeque<Option<PictureLook>>>;
+type Looks =
+    std::collections::HashMap<u32, std::collections::VecDeque<(Option<PictureLook>, Option<Crop>)>>;
 
 impl ImportCtx<'_> {
     /// A `w:commentRangeStart` / `w:commentRangeEnd` met in the text.
@@ -113,10 +114,17 @@ impl ImportCtx<'_> {
         *self.objects.borrow_mut() = objects::PartObjects::for_part(part);
     }
 
-    /// The look of the next picture whose `wp:docPr` is `id`.
-    fn take_look(&self, id: u32) -> Option<Box<PictureLook>> {
-        let look = self.looks.borrow_mut().get_mut(&id)?.pop_front()??;
-        Some(Box::new(look))
+    /// The look and the crop of the next picture whose `wp:docPr` is `id`.
+    fn take_look(&self, id: u32) -> (Option<Box<PictureLook>>, Option<Crop>) {
+        let taken = self
+            .looks
+            .borrow_mut()
+            .get_mut(&id)
+            .and_then(|q| q.pop_front());
+        match taken {
+            Some((look, crop)) => (look.map(Box::new), crop),
+            None => (None, None),
+        }
     }
 
     /// How many content controls the walk met before this one: the id of
@@ -2460,7 +2468,7 @@ fn map_drawing(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Image> {
     };
     // The look is taken before anything can fail, so a drawing that is not
     // placed still consumes its own.
-    let look = doc_pr.and_then(|id| ctx.take_look(id));
+    let (look, crop) = doc_pr.map_or((None, None), |id| ctx.take_look(id));
     let embed_id = blip_embed(graphic)?;
     let (bytes, mime) = ctx.images.resolve(embed_id)?;
     Some(Image {
@@ -2471,6 +2479,7 @@ fn map_drawing(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Image> {
         float,
         band_offset_emu: None,
         look,
+        crop,
     })
 }
 
@@ -2504,6 +2513,12 @@ fn picture_looks(part: &[u8]) -> Looks {
         let pic = d
             .path(&[(Ns::A, "graphic"), (Ns::A, "graphicData")])
             .and_then(|g| g.children.iter().find(|c| c.local == "pic"));
+        // Doc ADR 623 — `pic:blipFill/a:srcRect`, read by the shared reader
+        // with the blip; a rectangle that crops nothing is none.
+        let crop = pic
+            .and_then(|pic| pic.children.iter().find(|c| c.local == "blipFill"))
+            .and_then(|b| drawingml::blip(b, &no_rels).src_rect)
+            .filter(|r| *r != (0, 0, 0, 0));
         let look = pic.map(|pic| PictureLook {
             shape: pic
                 .children
@@ -2520,7 +2535,7 @@ fn picture_looks(part: &[u8]) -> Looks {
         });
         out.entry(id)
             .or_default()
-            .push_back(look.filter(|l| !l.is_plain()));
+            .push_back((look.filter(|l| !l.is_plain()), crop));
     }
     out
 }
@@ -2696,6 +2711,7 @@ fn map_pict(p: &wml::Picture, ctx: &ImportCtx) -> Option<Image> {
             float: None,
             band_offset_emu,
             look: None,
+            crop: None,
         })
     })
 }

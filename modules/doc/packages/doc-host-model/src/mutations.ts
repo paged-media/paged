@@ -25,6 +25,7 @@ import type {
   LoweredComment,
   LoweredCellLook,
   LoweredContentControl,
+  LoweredCrop,
   LoweredDoc,
   LoweredParagraph,
   LoweredStyle,
@@ -110,6 +111,27 @@ export function pictureLookOps(fx: NativeFx, handle: string): Mutation[] {
   });
 }
 
+/** The op that places the picture of the anchored frame `$h:<handle>` by
+ *  its crop (doc ADR 623): the inner image transform, which the engine
+ *  holds on an anchored frame as on a free rectangle (engine ADR 1045,
+ *  amendment 2026-11-02). Nothing for a picture that shows whole. */
+export function pictureCropOps(
+  crop: LoweredCrop | undefined,
+  handle: string,
+): Mutation[] {
+  if (!crop?.placement) return [];
+  return [
+    {
+      op: "setElementProperty",
+      args: {
+        elementId: { kind: "rectangle", id: `$h:${handle}` },
+        path: "imageContentTransform",
+        value: { type: "transform", value: crop.placement },
+      },
+    } as unknown as Mutation,
+  ];
+}
+
 /** Every picture look's gradient in `ir`, in document order. */
 function lookGradients(ir: LoweredDoc): NativeGradient[] {
   const out: NativeGradient[] = [];
@@ -182,6 +204,8 @@ interface ImageAt {
   anchor?: LoweredAnchor;
   /** Doc ADR 618 — the picture's look, painted on its frame (doc ADR 619). */
   fx?: NativeFx;
+  /** Doc ADR 623 — the picture's crop, as the frame's image placement. */
+  crop?: LoweredCrop;
   /** Engine ADR 1050 — a float's wrap, z-order and overlap. */
   layout?: LoweredFloatLayout;
   /** Engine ADR 1050 — a text box (an anchored text frame); `uri` unused. */
@@ -544,6 +568,7 @@ function poured(
         uri: img.uri,
         ...(img.anchor ? { anchor: img.anchor } : {}),
         ...(img.fx ? { fx: img.fx } : {}),
+        ...(img.crop?.placement ? { crop: img.crop } : {}),
         ...(img.layout ? { layout: img.layout } : {}),
       });
     }
@@ -793,13 +818,15 @@ export function buildTextPour(
     // 1045: the free frames' paths reach an anchored frame). A float
     // (doc ADR 614) names its frame in its own batch; the look rides it.
     const look = img.fx;
+    // Doc ADR 623 — the crop is the picture's placement in its frame,
+    // written with the look in the same batch (one undo step).
+    const frameOps = (handle: string): Mutation[] => [
+      ...(look ? pictureLookOps(look, handle) : []),
+      ...pictureCropOps(img.crop, handle),
+    ];
     if (img.anchor) {
-      ops.push(
-        anchoredFloat(insert, img.anchor, k, (handle) =>
-          look ? pictureLookOps(look, handle) : [],
-        ),
-      );
-    } else if (look) {
+      ops.push(anchoredFloat(insert, img.anchor, k, frameOps));
+    } else if (look || img.crop?.placement) {
       // `bindCreated` names a frame only as a batch child: the frame and
       // its look go in one batch, as a float's do.
       const handle = `docxPicture${k}`;
@@ -809,7 +836,7 @@ export function buildTextPour(
           ops: [
             insert,
             { op: "bindCreated", args: { handle } },
-            ...pictureLookOps(look, handle),
+            ...frameOps(handle),
           ],
         },
       } as unknown as Mutation);
@@ -1401,6 +1428,14 @@ export function buildTableCells(
             insert,
             { op: "bindCreated", args: { handle } } as unknown as Mutation,
             ...anchorSets(img.anchor, handle),
+            ...pictureCropOps(img.crop, handle),
+          );
+        } else if (img.crop?.placement) {
+          const handle = `docCellPicture${cell.row}_${cell.col}_${pIdx}_${ops.length}`;
+          ops.push(
+            insert,
+            { op: "bindCreated", args: { handle } } as unknown as Mutation,
+            ...pictureCropOps(img.crop, handle),
           );
         } else ops.push(insert);
       }

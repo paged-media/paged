@@ -273,6 +273,25 @@ export interface LoweredImage {
   losses?: string[];
   /** Engine ADR 1050 — a float's wrap, z-order and overlap. */
   layout?: LoweredFloatLayout;
+  /** Doc ADR 623 — the picture's crop (`a:srcRect`): the fractions of the
+   *  image left out at each side. `widthPt` x `heightPt` is the cropped
+   *  picture's size on the page. Absent for a picture shown whole. */
+  crop?: LoweredCrop;
+}
+
+/** The parts of an image a crop leaves out, as fractions (0–1). */
+export interface LoweredCrop {
+  l: number;
+  t: number;
+  r: number;
+  b: number;
+  /** The picture's placement in its frame: the engine's inner image
+   *  transform `[a, b, c, d, e, f]` (natural pixels to points, in the
+   *  frame's own box), set on the anchored frame as
+   *  `imageContentTransform` (engine ADR 1045, amendment 2026-11-02).
+   *  Absent when the picture's size is not read from its bytes: it then
+   *  shows whole. */
+  placement?: [number, number, number, number, number, number];
 }
 
 /** `dml_native::native::NativeFx` (doc ADR 618): the lowering kit's own
