@@ -19,6 +19,7 @@ workspace = true
 paged-scene = { workspace = true }
 paged-model = { workspace = true }
 paged-store = { workspace = true }
+paged-pdf-annots = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 base64 = { workspace = true }

@@ -410,6 +410,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-pdf-annots"
+version = "0.0.0"
+dependencies = [
+ "hayro-syntax",
+ "paged-model",
+ "serde",
+]
+
+[[package]]
 name = "paged-scene"
 version = "0.0.0"
 dependencies = [
@@ -445,6 +454,7 @@ dependencies = [
  "idml-import",
  "kurbo",
  "paged-model",
+ "paged-pdf-annots",
  "paged-scene",
  "paged-store",
  "png",
