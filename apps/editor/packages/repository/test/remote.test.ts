@@ -29,6 +29,7 @@ import { initSync, Repository } from "@paged-media/canvas-wasm/repo";
 
 import { memoryFs } from "../src/fs.ts";
 import { Library, RemoteError } from "../src/library.ts";
+import { crc32 } from "@paged-media/helpers";
 
 initSync({
   module: readFileSync(
@@ -43,16 +44,6 @@ const URL_ = process.env.PAGED_SERVER_URL;
 const enc = new TextEncoder();
 
 // The same STORED zip writer as library.test.ts, kept local to this file.
-const CRC = Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-function crc32(b: Uint8Array): number {
-  let c = 0xffffffff;
-  for (const x of b) c = CRC[(c ^ x) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
 function zip(parts: [string, Uint8Array][]): Uint8Array {
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];

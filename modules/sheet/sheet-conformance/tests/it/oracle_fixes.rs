@@ -309,13 +309,7 @@ fn items_workbook(formulas: &[(&str, &str)]) -> Vec<u8> {
     // Formulas go in column E, one row each from row 1.
     for (i, (_, f)) in formulas.iter().enumerate() {
         let r = i as u32 + 1;
-        let cell = fml(
-            r,
-            "E",
-            &f.replace('&', "&amp;")
-                .replace('<', "&lt;")
-                .replace('>', "&gt;"),
-        );
+        let cell = fml(r, "E", &paged_ooxml::xml::escape_text(f));
         if r <= 5 {
             rows[i] = rows[i].replace("</row>", &format!("{cell}</row>"));
         } else {

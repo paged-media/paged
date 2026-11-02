@@ -28,6 +28,7 @@
 import { writeFileSync, existsSync } from "node:fs";
 import { resolve, relative, basename } from "node:path";
 
+import { escapeXmlAttr as escapeHtml } from "@paged-media/helpers";
 import { FIDELITY_OUT_ROOT, FIDELITY_DPI } from "./fixtures";
 import type { PackThreshold } from "./thresholds";
 
@@ -329,14 +330,6 @@ function packStatus(p: DashboardPack): PackStatus {
 function formatNum(n: number | null, decimals: number): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toFixed(decimals);
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 // Helper used by the spec to construct the FIDELITY_DPI default

@@ -72,7 +72,7 @@ import type {
   BundleHost,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
-import { asciiJson, labelKey } from "@paged-media/helpers";
+import { asciiJson, fnv1a32Utf16, labelKey } from "@paged-media/helpers";
 
 import manifest from "../manifest.json";
 
@@ -120,21 +120,11 @@ export const recipeNameOf = (legacyPart: string): string =>
 export const recipePartPath = (name: string, h: string): string =>
   `recipes/${name}/${h}.json`;
 
-const fnv1a = (text: string, seed: number): number => {
-  let h = seed >>> 0;
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    h = Math.imul(h ^ (c & 0xff), 0x01000193) >>> 0;
-    h = Math.imul(h ^ (c >>> 8), 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-};
-
 /** 16 hex chars — content addressing, not security. */
 export function recipeHash(text: string): string {
   return (
-    fnv1a(text, 0x811c9dc5).toString(16).padStart(8, "0") +
-    fnv1a(text, 0x9dc5811c).toString(16).padStart(8, "0")
+    fnv1a32Utf16(text).toString(16).padStart(8, "0") +
+    fnv1a32Utf16(text, 0x9dc5811c).toString(16).padStart(8, "0")
   );
 }
 

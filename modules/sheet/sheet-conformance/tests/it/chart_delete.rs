@@ -188,10 +188,20 @@ fn a_deleted_chart_takes_only_the_parts_it_alone_reached__feat__sheet_objects() 
         "xl/charts/colors1.xml".into(),
         b"<cs:colorStyle xmlns:cs=\"x\"/>".to_vec(),
     ));
-    let types = text(&parts, TYPES).replace(
-        "</Types>",
-        r#"<Override PartName="/xl/charts/style3.xml" ContentType="application/vnd.ms-office.chartstyle+xml"/><Override PartName="/xl/charts/colors1.xml" ContentType="application/vnd.ms-office.chartcolorstyle+xml"/></Types>"#,
-    );
+    let types = {
+        let mut ct =
+            paged_ooxml::content_types::ContentTypes::parse(text(&parts, TYPES).as_bytes())
+                .expect("content types");
+        ct.add_override(
+            "/xl/charts/style3.xml",
+            "application/vnd.ms-office.chartstyle+xml",
+        );
+        ct.add_override(
+            "/xl/charts/colors1.xml",
+            "application/vnd.ms-office.chartcolorstyle+xml",
+        );
+        ct.render()
+    };
     for p in parts.iter_mut() {
         if p.0 == TYPES {
             p.1 = types.clone().into_bytes();

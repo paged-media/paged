@@ -169,6 +169,7 @@ import {
   type ElementProperties,
 } from "../link-index";
 
+import { fnv1a32Utf16 } from "@paged-media/helpers";
 import { registerCommand } from "../command-registry";
 import { oneBatchFor } from "./batch-handles";
 import {
@@ -660,16 +661,6 @@ function canonicalNativeParts(a: GraphicStyleAppearance): unknown[] | null {
   return [layers, effects, targets];
 }
 
-const fnv1a = (text: string, seed: number): number => {
-  let h = seed >>> 0;
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    h = Math.imul(h ^ (c & 0xff), 0x01000193) >>> 0;
-    h = Math.imul(h ^ (c >>> 8), 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-};
-
 /** A 16-hex-char content digest of a complete appearance — the value
  *  stamped as `ref.rev`. Pure + stable across sessions (no randomness,
  *  no key-order dependence). */
@@ -678,8 +669,8 @@ export function graphicAppearanceDigest(
 ): string {
   const text = canonicalGraphicAppearance(appearance);
   return (
-    fnv1a(text, 0x811c9dc5).toString(16).padStart(8, "0") +
-    fnv1a(text, 0x9dc5811c).toString(16).padStart(8, "0")
+    fnv1a32Utf16(text).toString(16).padStart(8, "0") +
+    fnv1a32Utf16(text, 0x9dc5811c).toString(16).padStart(8, "0")
   );
 }
 

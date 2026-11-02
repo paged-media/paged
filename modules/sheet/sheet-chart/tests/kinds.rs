@@ -432,7 +432,7 @@ fn svg(g: &ChartGeometry) -> String {
                     sheet_chart::TextAnchor::Middle => "middle",
                     sheet_chart::TextAnchor::End => "end",
                 };
-                let t = t.replace('&', "&amp;").replace('<', "&lt;");
+                let t = paged_ooxml::xml::escape_text(t);
                 s.push_str(&format!(
                     r#"<text x="{x:.2}" y="{y:.2}" font-size="{size_pt}" font-family="Helvetica" text-anchor="{a}" fill="{}"{}>{t}</text>"#,
                     color.clone().unwrap_or_else(|| "#595959".into()),

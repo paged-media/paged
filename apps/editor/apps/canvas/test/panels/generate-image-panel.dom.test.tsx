@@ -49,29 +49,20 @@ import { GenerateImagePanel } from "../../src/panels/generate-image-panel";
 import { ORIGIN, publicFetch } from "../unit/ml/kit";
 import { richScene } from "./fixtures";
 import { mountPanel, unmountAll } from "./harness";
+import { crc32 } from "@paged-media/helpers";
 
 afterEach(unmountAll);
 
 const settle = () =>
   act(async () => await new Promise((r) => setTimeout(r, 30)));
 
-const crcTable = Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-const crc = (bytes: Uint8Array) => {
-  let c = 0xffffffff;
-  for (const b of bytes) c = crcTable[(c ^ b) & 0xff]! ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-};
 const chunk = (type: string, data: Uint8Array) => {
   const out = new Uint8Array(12 + data.length);
   const view = new DataView(out.buffer);
   view.setUint32(0, data.length);
   out.set(new TextEncoder().encode(type), 4);
   out.set(data, 8);
-  view.setUint32(8 + data.length, crc(out.subarray(4, 8 + data.length)));
+  view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
   return out;
 };
 /** A real PNG (the engine decodes what it is given). */

@@ -21,23 +21,7 @@
 // `CompressionStream("deflate")` (browsers and Node 18+); without it the
 // image data is stored uncompressed (valid zlib, larger), never dropped.
 
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n += 1) {
-    let c = n;
-    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-
-function crc32(parts: Uint8Array[]): number {
-  let c = 0xffffffff;
-  for (const p of parts)
-    for (let i = 0; i < p.length; i += 1)
-      c = CRC_TABLE[(c ^ p[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
+import { crc32 } from "@paged-media/helpers";
 
 function adler32(data: Uint8Array): number {
   let a = 1;
@@ -57,9 +41,16 @@ const u32 = (v: number) =>
     v & 255,
   ]);
 
+const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+};
+
 function chunk(type: string, data: Uint8Array): Uint8Array[] {
   const t = new TextEncoder().encode(type);
-  return [u32(data.length), t, data, u32(crc32([t, data]))];
+  return [u32(data.length), t, data, u32(crc32(concat(t, data)))];
 }
 
 /** A zlib stream of `data` with stored (uncompressed) deflate blocks. */

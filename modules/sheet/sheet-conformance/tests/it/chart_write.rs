@@ -367,9 +367,15 @@ fn chartsheet_workbook() -> Vec<u8> {
                 .into_bytes(),
             "xl/worksheets/sheet1.xml" => text.replace(r#"<drawing r:id="rId1"/>"#, "").into_bytes(),
             "xl/worksheets/_rels/sheet1.xml.rels" => continue,
-            "[Content_Types].xml" => text
-                .replace("</Types>", r#"<Override PartName="/xl/chartsheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml"/></Types>"#)
-                .into_bytes(),
+            "[Content_Types].xml" => {
+                let mut ct = paged_ooxml::content_types::ContentTypes::parse(text.as_bytes())
+                    .expect("content types");
+                ct.add_override(
+                    "/xl/chartsheets/sheet1.xml",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml",
+                );
+                ct.render().into_bytes()
+            }
             _ => data,
         };
         parts.push((name, data));
