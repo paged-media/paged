@@ -3620,6 +3620,7 @@ dependencies = [
  "paged-mcp",
  "paged-model",
  "paged-mutate",
+ "paged-pdf-annots",
  "paged-raster",
  "paged-repo",
  "paged-script",

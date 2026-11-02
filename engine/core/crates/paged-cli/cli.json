@@ -6088,6 +6088,42 @@
       "subcommands": []
     },
     {
+      "about": "List the review comments a PDF carries: its threads, then what was not imported",
+      "args": [
+        {
+          "defaults": [],
+          "help": "The PDF",
+          "long": null,
+          "name": "pdf",
+          "positional": true,
+          "repeatable": false,
+          "required": true,
+          "short": null,
+          "takesValues": true,
+          "valueNames": [
+            "PDF"
+          ]
+        },
+        {
+          "defaults": [],
+          "help": "Print the threads and losses as JSON",
+          "long": "json",
+          "name": "json",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "JSON"
+          ]
+        }
+      ],
+      "longAbout": "List the review comments a PDF carries: its threads, then what was not imported.\n\nReads the annotations Acrobat's Comment tool writes (sticky notes, free text, highlights and the other text markups, replies, review states) as comment threads (engine ADR 1055); every other annotation type is counted in a \"not imported\" line. The inverse of `paged export --comments`.",
+      "name": "comments",
+      "subcommands": []
+    },
+    {
       "about": "Print the capability catalog — what this engine can be asked to do",
       "args": [
         {

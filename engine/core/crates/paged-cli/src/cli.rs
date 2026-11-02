@@ -311,6 +311,20 @@ pub enum Command {
         #[command(flatten)]
         assets: DocumentOptions,
     },
+    /// List the review comments a PDF carries: its threads, then what was not imported.
+    ///
+    /// Reads the annotations Acrobat's Comment tool writes (sticky notes,
+    /// free text, highlights and the other text markups, replies, review
+    /// states) as comment threads (engine ADR 1055); every other annotation
+    /// type is counted in a "not imported" line. The inverse of `paged export
+    /// --comments`.
+    Comments {
+        /// The PDF.
+        pdf: PathBuf,
+        /// Print the threads and losses as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print the capability catalog — what this engine can be asked to do.
     Describe {
         /// One JSON line instead of an indented block.
