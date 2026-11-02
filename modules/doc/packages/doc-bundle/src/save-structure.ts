@@ -23,6 +23,7 @@
 // anchors (Word's bookmarks), addressed in the merged body read-back.
 
 import { readTextBoxes } from "./page-items.js";
+import type { CellContent } from "./save-cells.js";
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { LoweredDoc, StoryContentLike } from "@paged-media/doc-host-model";
 
@@ -48,6 +49,55 @@ export interface StructureRead {
   anchors: Array<{ name: string; paragraph: number; offset: number }>;
   /** Doc ADR 614 — the text boxes' stories, by page item. */
   textBoxes?: Array<{ item: string; content: unknown }>;
+  /** Doc ADR 623 — the pictures of the read-back paragraphs with the
+   *  placement of each in its frame (a crop), for `docx-export`'s
+   *  `crop::save_crops`. */
+  pictures?: PicturesRead;
+}
+
+/** One picture of a read-back paragraph (the engine's `PictureContent`). */
+export interface PictureRead {
+  frameId: string;
+  offset: number;
+  placement?: [number, number, number, number, number, number];
+}
+
+/** The pictures per read-back paragraph (the merged body's, in order) and
+ *  per paragraph of each native table cell read with its paragraphs. */
+export interface PicturesRead {
+  body: PictureRead[][];
+  cells: Array<{ block: number; cell: number; paragraphs: PictureRead[][] }>;
+}
+
+/** The pictures a read-back paragraph lists (none on a host that does not
+ *  read them). */
+function picturesOfParagraph(p: unknown): PictureRead[] {
+  const list = (p as { pictures?: unknown } | null)?.pictures;
+  return Array.isArray(list) ? (list as PictureRead[]) : [];
+}
+
+/** Doc ADR 623 — the pictures of the stories read back (trailing empty
+ *  paragraphs dropped as the merged body drops them) and of the cells. */
+export function readPictures(
+  contents: readonly StoryContentLike[],
+  pouredParagraphs: readonly number[],
+  cells: readonly CellContent[],
+): PicturesRead {
+  const body: PictureRead[][] = [];
+  contents.forEach((c, k) => {
+    for (const p of c.paragraphs.slice(0, kept(c, pouredParagraphs[k])))
+      body.push(picturesOfParagraph(p));
+  });
+  return {
+    body,
+    cells: cells
+      .filter((c) => (c.paragraphs ?? []).length > 0)
+      .map((c) => ({
+        block: c.block,
+        cell: c.cell,
+        paragraphs: (c.paragraphs ?? []).map(picturesOfParagraph),
+      })),
+  };
 }
 
 /** The paragraphs `mergeSectionContents` keeps of each story: its trailing
@@ -100,6 +150,7 @@ export async function readStructure(
   storyIds: readonly string[],
   contents: readonly StoryContentLike[],
   pouredParagraphs: readonly number[],
+  cells: readonly CellContent[] = [],
 ): Promise<StructureRead> {
   const headers: StructureRead["headers"] = [];
   const readStory = host.document.storyContent;
@@ -131,5 +182,6 @@ export async function readStructure(
     endnotes: inOrder(await collection(host, "endnotes"), storyIds),
     anchors,
     textBoxes: await readTextBoxes(host, ir),
+    pictures: readPictures(contents, pouredParagraphs, cells),
   };
 }

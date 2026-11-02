@@ -22,7 +22,9 @@
 
 #![allow(non_snake_case)]
 
-use docx_conformance::{picture_crop_docx, CROP_CASES, CROP_PNG_H, CROP_PNG_W};
+use docx_conformance::{
+    picture_crop_cell_docx, picture_crop_docx, CELL_CROP_CASES, CROP_CASES, CROP_PNG_H, CROP_PNG_W,
+};
 use docx_core::{Block, DocxDocument};
 use docx_lower::ir::LoweredBlock;
 
@@ -102,6 +104,72 @@ fn every_srcrect_reaches_the_image_and_the_ir() {
     assert_eq!((a, d, e, f), (0.72, 0.72, -36.0, 0.0));
 
     // Every crop is placed: nothing is reported as shown whole.
+    assert!(
+        !lowered
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("cropped picture")),
+        "{:?}",
+        lowered.diagnostics
+    );
+}
+
+/// Cropped pictures in table cells take the same path as those in the body:
+/// the cell paragraph's images carry the crop and the placement, the
+/// floating one stands against its cell.
+#[test]
+fn a_cropped_picture_in_a_table_cell_reaches_the_ir_inline_and_anchored() {
+    let doc = docx_import::import_docx(&picture_crop_cell_docx()).expect("import");
+    let lowered = docx_lower::lower(&doc);
+    let table = lowered
+        .story
+        .blocks
+        .iter()
+        .find_map(|b| match b {
+            LoweredBlock::Table(t) => Some(t),
+            _ => None,
+        })
+        .expect("a table");
+    assert!(table.flow.is_empty(), "the table is native");
+    let images: Vec<_> = table
+        .cells
+        .iter()
+        .flat_map(|c| c.paragraphs.iter())
+        .flat_map(|p| p.images.iter())
+        .collect();
+    assert_eq!(images.len(), 2);
+    assert!(images[0].anchor.is_none(), "the first is inline");
+    assert!(
+        images[1].anchor.is_some(),
+        "the second floats against its cell"
+    );
+    let (pw, ph) = (CROP_PNG_W as f32, CROP_PNG_H as f32);
+    for (i, (((l, t, r, b), (cx, cy)), img)) in CELL_CROP_CASES.iter().zip(&images).enumerate() {
+        assert_eq!(
+            img.drawing,
+            Some(i as u32),
+            "picture {i}: its drawing ordinal"
+        );
+        let c = img.crop.expect("the cell picture is cropped");
+        let f = |v: i32| v as f32 / 100_000.0;
+        assert_eq!((c.l, c.t, c.r, c.b), (f(*l), f(*t), f(*r), f(*b)));
+        let [a, bb, cc, d, e, g] = c.placement.expect("a PNG's size is read");
+        assert_eq!((bb, cc), (0.0, 0.0), "picture {i}: axis aligned");
+        // The frame shows the image from `l` to `1 - r` and `t` to `1 - b`,
+        // the OOXML definition of `a:srcRect` (as the body pictures above).
+        let (w, h) = (*cx as f32 / 12_700.0, *cy as f32 / 12_700.0);
+        let near = |x: f32, y: f32| (x - y).abs() < 1e-3;
+        assert!(near((c.l * pw) * a + e, 0.0), "picture {i}: left edge");
+        assert!(
+            near(((1.0 - c.r) * pw) * a + e, w),
+            "picture {i}: right edge"
+        );
+        assert!(near((c.t * ph) * d + g, 0.0), "picture {i}: top edge");
+        assert!(
+            near(((1.0 - c.b) * ph) * d + g, h),
+            "picture {i}: bottom edge"
+        );
+    }
     assert!(
         !lowered
             .diagnostics

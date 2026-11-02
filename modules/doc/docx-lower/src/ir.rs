@@ -623,6 +623,12 @@ pub struct LoweredImage {
     /// amendment 2026-11-02).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crop: Option<LoweredCrop>,
+    /// Doc ADR 623 — where the drawing stands in the part it was read from
+    /// ([`docx_core::Image::drawing`]): save-back writes a changed crop into
+    /// that drawing's `a:srcRect`. Absent for a picture that is not a
+    /// DrawingML drawing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<u32>,
 }
 
 /// The parts of an image a crop leaves out, as fractions (0 to 1) of the

@@ -12,6 +12,7 @@ mod columns;
 mod conformance;
 mod container_bytes;
 mod continuous;
+mod crop_saveback;
 mod drop_cap;
 mod feature_evidence;
 mod files;

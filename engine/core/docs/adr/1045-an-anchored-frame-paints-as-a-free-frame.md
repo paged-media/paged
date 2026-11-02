@@ -123,3 +123,15 @@ Evidence: `crates/paged-canvas/tests/it/anchored_picture_crop.rs` (the part the 
 found by taking its clip back through the placement, is the middle half for `l = r = 25%`,
 and the same as a free frame's), `crates/paged-mutate/src/lib.rs`
 (`an_anchored_picture_takes_an_image_placement_and_undoes_it`).
+
+## Amendment 2026-11-02 (b) — the story read lists a paragraph's pictures
+
+`getElementProperties` on an anchored picture frame now lists `imageContentTransform` (the frame's
+inner image transform; a frame with no picture lists none), and `ParagraphContent` (the story read, and
+a table cell's `paragraphs` read) carries `pictures`: the anchored frames that hold an image, by anchor
+offset, each with its frame id and placement. Additive on protocol 78 (`serde(default)`, left out when
+empty); `wire.d.ts` re-synced; no catalog change. A content plugin reads a crop back from it (doc
+ADR 623, save-back). An IDML anchored picture with an `ItemTransform` is placed with its frame:
+`anchored_effects.rs` (`an_anchored_picture_with_an_item_transform_is_placed_with_its_frame`) holds that
+the picture stands at the frame plus its offset inside the frame whatever the frame's own bounds are
+(a comparison with InDesign's own render was not made).

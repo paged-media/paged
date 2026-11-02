@@ -69,6 +69,10 @@ pub struct StructureIn {
     /// Doc ADR 614: the text boxes' stories read back, by page item.
     #[serde(default, rename = "textBoxes")]
     pub text_boxes: Vec<crate::textbox::TextBoxIn>,
+    /// Doc ADR 623: the pictures of the read-back paragraphs with the
+    /// placement of each in its frame (a crop).
+    #[serde(default)]
+    pub pictures: crate::crop::PicturesIn,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

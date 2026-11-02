@@ -4744,6 +4744,31 @@ pub struct ParagraphContent {
     /// `auto`), when it sets one. Additive on 78.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub direction: Option<String>,
+    /// Engine ADR 1045 (amendment 2026-11-02) — the pictures anchored in this
+    /// paragraph (anchored frames that hold an image), in the order of their
+    /// anchor characters, each with the placement of its image in the frame. A
+    /// content plugin reads a crop back from it. Additive on 78.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pictures: Vec<PictureContent>,
+}
+
+/// Engine ADR 1045 (amendment 2026-11-02) — one picture anchored in a
+/// paragraph, as the content read gives it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PictureContent {
+    /// The anchored frame's own id (the id `imageContentTransform` and the
+    /// anchored-object paths address it by).
+    pub frame_id: String,
+    /// The character offset of its anchor in the paragraph (Unicode scalars,
+    /// counted contiguously over the paragraph's runs).
+    pub offset: u32,
+    /// The inner image transform `[a, b, c, d, e, f]` of the frame
+    /// (`imageContentTransform`), in the frame's own box; absent while the
+    /// picture fills its frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<[f32; 6]>,
 }
 
 /// Engine ADR 1051 — a run's own script slots and direction, as the

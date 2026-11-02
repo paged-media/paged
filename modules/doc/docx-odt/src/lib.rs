@@ -871,6 +871,7 @@ impl Odt<'_> {
             band_offset_emu: None,
             look: None,
             crop: None,
+            drawing: None,
         })
     }
 
