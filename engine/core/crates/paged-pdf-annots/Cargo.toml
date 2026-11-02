@@ -1,0 +1,19 @@
+[package]
+name = "paged-pdf-annots"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Reads the review annotations of a PDF (Acrobat comments: sticky notes, free text, text markup, replies, review states) as engine comment threads (ADR 1055), through hayro-syntax's object model. Pure: bytes in, threads and a loss list out."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-model = { path = "../paged-model" }
+serde = { workspace = true }
+# The object model of the PDF reader the renderer and the PDF import already
+# use (hayro-interpret depends on it); `default-features = false` leaves the
+# image decoders and the unsafe flate backend to those crates.
+hayro-syntax = { version = "0.8", default-features = false, features = ["std"] }

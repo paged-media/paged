@@ -57,6 +57,8 @@ paged-test-resources.workspace = true
 paged-renderer = { path = "../paged-renderer", features = ["cpu"] }
 anyhow = { workspace = true }
 lopdf = "0.45"
+# Engine ADR 1055 — the round trip reads the exported annotations back.
+paged-pdf-annots = { path = "../paged-pdf-annots" }
 serde_json = "1"
 paged-scene = { path = "../paged-scene" }
 paged-gen = { path = "../paged-gen" }
