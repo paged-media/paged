@@ -820,3 +820,50 @@ describe("Reflect and Transform again", () => {
     expect(e.problems()).toEqual([]);
   });
 });
+
+describe("Insert star", () => {
+  test("a payload inserts a live star (sides and inset) in one undo step; a turned star is a plain path", async () => {
+    covers("command:paged.insert.star");
+    const e = await open();
+    const before = await e.dump();
+    await e.invoke("paged.insert.star", {
+      radius1: 40,
+      radius2: 10,
+      points: 6,
+    });
+    await e.idle();
+    expect(e.problems()).toEqual([]);
+    const after = await e.dump();
+    expect(pageOne(after)).toHaveLength(pageOne(before).length + 1);
+    const created = pageOne(after).find((k) => !pageOne(before).includes(k))!;
+    const entries = (
+      after.elements[created] as {
+        entries: Array<{ path: string; value: { value: unknown } }>;
+      }
+    ).entries;
+    expect(entries.find((x) => x.path === "frameShapeSides")?.value.value).toBe(
+      6,
+    );
+    expect(
+      entries.find((x) => x.path === "frameShapeStarInset")?.value.value,
+    ).toBe(75);
+    await expectOneUndoStep(e, before);
+    await e.invoke("paged.insert.star", {
+      radius1: 40,
+      radius2: 10,
+      points: 6,
+      rotationDeg: 15,
+    });
+    await e.idle();
+    const turned = await e.dump();
+    expect(pageOne(turned)).toHaveLength(pageOne(before).length + 1);
+    await expectOneUndoStep(e, before);
+  });
+
+  test("run bare it opens the dialog and writes nothing", async () => {
+    covers("command:paged.insert.star");
+    const e = await open();
+    const { before, after } = await run(e, "paged.insert.star");
+    expect(dumpDiff(before, after)).toEqual([]);
+  });
+});

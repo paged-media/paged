@@ -1543,22 +1543,16 @@ export {
   type EraseResult,
 } from "./commands/path-tools";
 export {
-  applyInsertStar,
   applyInsertFlare,
   flareBatchFor,
   flareHandle,
-  starParamsFrom,
   flareParamsFrom,
-  starTableFor,
-  STAR_PARAM_DEFAULTS,
   FLARE_PARAM_DEFAULTS,
   FLARE_PAPER,
   FLARE_RAY_OPACITY,
   FLARE_RING_OPACITY,
-  INSERT_STAR_COMMAND_ID,
   INSERT_FLARE_COMMAND_ID,
   STAR_FLARE_COMMAND_IDS,
-  type StarParams,
   type FlareParams,
 } from "./commands/star-flare";
 export {
@@ -1576,11 +1570,10 @@ export {
   PATH_ERASER_WIDTH_PX,
 } from "./handlers/scrub-tools";
 export {
-  createStarHandler,
   createFlareHandler,
   flareParamsOfGesture,
 } from "./handlers/star-flare";
-export { RESHAPE_OPTIONS, STAR_OPTIONS } from "./tool-options";
+export { RESHAPE_OPTIONS } from "./tool-options";
 
 // WP6.7 — the distortion tools: the Liquify family, Puppet Warp, the
 // Perspective Grid and Perspective Selection; their commands, the grid

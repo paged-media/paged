@@ -78,7 +78,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.shaper",
       "media.paged.draw.tool.pathEraser",
       "media.paged.draw.tool.join",
-      "media.paged.draw.tool.star",
       "media.paged.draw.tool.flare",
       // WP6.7 — the distortion tools, keyless: the Liquify flyout, Puppet
       // Warp in the host's Free Transform flyout, the Perspective pair.
@@ -129,7 +128,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
       "media.paged.draw.command.insertPolarGridOptions",
-      "media.paged.draw.command.insertStarOptions",
       "media.paged.draw.command.insertFlareOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
       "media.paged.draw.command.rasterizeOptions",
@@ -205,12 +203,11 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.knife",
       "media.paged.draw.command.scissorsAt",
       "media.paged.draw.command.shapeBuild",
-      // WP6.1 part 2 — the new tools' gestures as data, and Star / Flare.
+      // WP6.1 part 2 — the new tools' gestures as data, and Flare.
       "media.paged.draw.command.joinScrub",
       "media.paged.draw.command.pathErase",
       "media.paged.draw.command.reshapeAt",
       "media.paged.draw.command.shaperStroke",
-      "media.paged.draw.command.insertStar",
       "media.paged.draw.command.insertFlare",
       // WP6.7 — the distortion tools and the perspective grid.
       "media.paged.draw.command.liquifyStroke",

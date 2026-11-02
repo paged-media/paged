@@ -63,7 +63,7 @@ import {
   createPathEraserHandler,
   createShaperHandler,
 } from "./handlers/scrub-tools";
-import { createFlareHandler, createStarHandler } from "./handlers/star-flare";
+import { createFlareHandler } from "./handlers/star-flare";
 import { createLiquifyHandler } from "./handlers/liquify";
 import { createNineSliceHandler } from "./handlers/nine-slice";
 import { createSymbolismHandler } from "./handlers/symbolism";
@@ -79,7 +79,6 @@ import {
   LASSO_OPTIONS,
   PAINTBRUSH_OPTIONS,
   RESHAPE_OPTIONS,
-  STAR_OPTIONS,
   WIDTH_OPTIONS,
   LIQUIFY_OPTIONS,
   PUPPET_WARP_OPTIONS,
@@ -110,7 +109,6 @@ const M = defineMessages("draw.tools", {
   reshape: "Reshape",
   join: "Join",
   pathEraser: "Path Eraser",
-  star: "Star",
   flare: "Flare",
   shaper: "Shaper",
   warp: "Warp",
@@ -202,7 +200,6 @@ export const WAVE3_TOOL_IDS = [
   "media.paged.draw.tool.reshape",
   "media.paged.draw.tool.join",
   "media.paged.draw.tool.pathEraser",
-  "media.paged.draw.tool.star",
   "media.paged.draw.tool.flare",
   "media.paged.draw.tool.shaper",
 ] as const;
@@ -652,19 +649,9 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       cursor: CROSS,
       gesture: () => createJoinHandler(host),
     },
-    // STAR and FLARE join the host's SHAPE flyout (Rectangle, Ellipse,
-    // Polygon).
-    {
-      id: "media.paged.draw.tool.star",
-      title: t(M.star),
-      icon: "tool-polygon",
-      group: "shape",
-      section: "drawType",
-      order: 10,
-      cursor: CROSS,
-      gesture: () => createStarHandler(host),
-      options: toolOptionsSpecOf(STAR_OPTIONS),
-    },
+    // FLARE joins the host's SHAPE flyout (Rectangle, Ellipse, Polygon).
+    // Star is the host's: Object ▸ Insert star… and the Polygon tool's
+    // Star option.
     {
       id: "media.paged.draw.tool.flare",
       title: t(M.flare),

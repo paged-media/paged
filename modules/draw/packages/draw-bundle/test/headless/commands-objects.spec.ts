@@ -347,12 +347,6 @@ describe("paged.draw commands — objects (real engine)", () => {
       await expectApplies(rig, `${C}.rasterizeOptions`);
     });
 
-    it("Star… inserts a star with the last used parameters [plugin-draw.tool-wave-3]", async () => {
-      covers("command:media.paged.draw.command.insertStarOptions");
-      await rig.open(F1(), []);
-      await expectApplies(rig, `${C}.insertStarOptions`);
-    });
-
     it("Flare… inserts a flare with the last used parameters [plugin-draw.tool-wave-3]", async () => {
       covers("command:media.paged.draw.command.insertFlareOptions");
       await rig.open(F1(), []);

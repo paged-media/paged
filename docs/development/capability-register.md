@@ -187,9 +187,15 @@ Status (draw items, one line each; updated as they land):
   tool also uses. Draw's five commands and Draw > Corners menu are gone (ids left through the
   deprecation window). The `liveCorners` metadata marker the commands stamped was never read;
   a stale one is inert (the InDesign round-trip recordings still echo it, see the case).
-- Star and Flare: KEEP. The host's polygon tool draws a live star by drag, but there is no host
-  command or dialog for a parametrised star (radius 1, radius 2, points, rotation) and nothing
-  like Flare; draw's `Insert star…` / `Insert flare` and their Path Options sections stay.
+- Star: MERGED 2026-11-02. The host declares `paged.insert.star` (`star-commands.ts`,
+  `panels/star-dialog.tsx`): bare it opens a dialog (radius 1, radius 2, points, rotation), with a
+  payload it inserts, centred on the page. The write is one implementation in
+  `platform/shared/helpers` (`star`): a live star (`frameShapeSides` + `frameShapeStarInset`) only
+  when upright and radius 2 < radius 1, else a plain path. The host Polygon tool has a Star option
+  (default inset 50 % when none is set). Draw's Insert star command, its Path Options section, the
+  Star tool, `StarMachine` and `starPath` are gone (ids left through the deprecation window; draw
+  ADR 359 amended). Not carried over: the old tool's rotate-by-drag and click-for-dialog.
+  Flare: KEEP (nothing like it in the host; draw's `Insert flare` and its section stay).
 - Fill / stroke / dash: DONE 2026-11-02. The schema panels were already gone. The host Stroke panel
   now has a dash editor (`panels/dash-editor.tsx`): the four presets, a "Dashed line" switch that
   keeps the typed pairs, three dash/gap pairs, and a read-back that follows the selection with a

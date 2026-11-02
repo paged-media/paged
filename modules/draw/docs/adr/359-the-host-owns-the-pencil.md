@@ -88,3 +88,13 @@ Transform menu, typed twins, the Path Options Reflect section, the Reflect tool 
 (click for the axis point, drag to turn it with a live preview, Alt+click for the options). The
 dialog types the same angle and point; a tool would need the host's tools to run a command,
 which they do not yet.
+
+## Amendment 2026-11-02 — Star is the host's
+
+`paged.insert.star` (Object ▸ Insert star…, a dialog for radius 1, radius 2, points and rotation)
+and the Polygon tool's Star option replace this bundle's Insert star command, its Path Options
+section, the Star tool and `StarMachine`. The write (`liveStarMutationFor`: a live star only when
+upright with radius 2 smaller, else a plain path) and the star's anchors are `platform/shared/helpers`'
+`star`; the Illustrator oracle spec checks that implementation. Not carried over: turning the star by
+dragging and the click that opened the dialog. Flare stays here.
+

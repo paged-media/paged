@@ -64,7 +64,7 @@ import type {
   SpiralParams,
 } from "../commands/insert-shapes";
 import { SYMBOL_REGISTRATIONS } from "../commands/symbols";
-import type { FlareParams, StarParams } from "../commands/star-flare";
+import type { FlareParams } from "../commands/star-flare";
 import {
   FLIP_PATH_EFFECTS,
   PATH_TYPE_ALIGNMENTS,
@@ -123,14 +123,6 @@ const titleOf = (id: string): string => {
 };
 
 /** Every field of a params interface, typed (exhaustive by construction). */
-const STAR: Record<keyof StarParams, ValueType> = {
-  cx: LEN,
-  cy: LEN,
-  radius1: LEN,
-  radius2: LEN,
-  points: INT,
-  rotationDeg: DEG,
-};
 const FLARE: Record<keyof FlareParams, ValueType> = {
   cx: LEN,
   cy: LEN,
@@ -499,12 +491,10 @@ export const TWINS: readonly TwinSpec[] = [
     tolerance: LEN,
   }),
   twin("shaperStroke", { ...T, page: TEXT, path: { kind: "list", of: POINT } }),
-  twin("insertStar", { ...STAR, page: TEXT }),
   twin("insertFlare", { ...FLARE, page: TEXT }),
   // Their "…" raisers are typed too (no arguments: they raise the Path
   // Options section, or insert the last-used one where no panel can be
   // raised) — the untyped baseline is a ratchet that does not grow.
-  twin("insertStarOptions", {}),
   twin("insertFlareOptions", {}),
   // Object ▸ Rasterize (extensions ADR 338): the selection as one image
   // frame at `ppi`, and its "…" raiser.

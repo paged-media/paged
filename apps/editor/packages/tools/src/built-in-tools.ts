@@ -61,7 +61,10 @@ import {
 import { createLineHandler } from "./handlers/line-tool";
 import { createMeasureHandler } from "./handlers/measure-tool";
 import { createMeshHandler, MESH_TOOL_ID } from "./handlers/mesh-tool";
-import { createPolygonHandler } from "./handlers/polygon-tool";
+import {
+  createPolygonHandler,
+  POLYGON_OPTION_FIELDS,
+} from "./handlers/polygon-tool";
 import { createArtboardHandler } from "./handlers/artboard-tool";
 import { createPageHandler } from "./handlers/page-tool";
 import {
@@ -349,26 +352,7 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     // Frame tools ONE shared Polygon Settings dialog.
     options: {
       toolId: "paged.tool.polygon",
-      fields: [
-        {
-          kind: "number",
-          key: "sides",
-          label: "Number of Sides",
-          min: 3,
-          max: 100,
-          step: 1,
-        },
-        {
-          kind: "number",
-          key: "starInset",
-          label: "Star Inset",
-          min: 0,
-          // Engine ADR 1047: a live star's inset stops at 99 %.
-          max: 99,
-          step: 1,
-          unit: "%",
-        },
-      ],
+      fields: POLYGON_OPTION_FIELDS,
     },
   },
   {
@@ -415,26 +399,7 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     // T8 — the canonical tool-options example (double-click the slot).
     options: {
       toolId: "paged.tool.polygon",
-      fields: [
-        {
-          kind: "number",
-          key: "sides",
-          label: "Number of Sides",
-          min: 3,
-          max: 100,
-          step: 1,
-        },
-        {
-          kind: "number",
-          key: "starInset",
-          label: "Star Inset",
-          min: 0,
-          // Engine ADR 1047: a live star's inset stops at 99 %.
-          max: 99,
-          step: 1,
-          unit: "%",
-        },
-      ],
+      fields: POLYGON_OPTION_FIELDS,
     },
   },
 

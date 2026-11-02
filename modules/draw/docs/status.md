@@ -54,14 +54,12 @@ canary added is under [Releases](#releases).
   paths painted like it, a path erased whole is deleted) and **Join** (a scrub over the gap
   between two open ends joins them with a straight segment, over one path's two ends closes
   it, over the overhangs of two crossing paths trims both at the crossing and joins them
-  there). In the Shape flyout: **Star** (Radius 1 to the pointer, Radius 2 by a ratio, Arrow
-  Up and Down change the points during the drag, a click opens the Star section at that
-  centre) and **Flare** (two drags: size, then the rings' end; centre, halo, rays and rings
+  there). In the Shape flyout: **Flare** (two drags: size, then the rings' end; centre, halo, rays and rings
   as one group). Each is one undo step. The pure halves are draw-geometry (`simplify-fit`,
-  `path-locate`, `path-erase`, `reshape`, `star`, `shaper`) and draw-tools (`ScrubMachine`,
-  `ReshapeMachine`, `StarMachine`, `FlareMachine`).
+  `path-locate`, `path-erase`, `reshape`, `shaper`) and draw-tools (`ScrubMachine`,
+  `ReshapeMachine`, `FlareMachine`).
 - **Tool options.** Paintbrush, Blob Brush, Eraser, Width, Lasso Select, Reshape (falloff
-  radius) and Star (points, Radius 2 as a percentage) publish their settings to the host's
+  radius) publish their settings to the host's
   tool-options popover.
 - **Snapping.** Curvature asks the engine through `host.document.snapPoint`: the point
   snaps against every visible element's anchors, centres and outlines, the page, ruler
@@ -232,7 +230,7 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   `shapeBuild { path, mode }` act on their `targets` as the tool would, in one undo step,
   and so are the WP6.1 tools: `joinScrub { page, path, tolerance }`,
   `pathErase { page, path, width }`, `reshapeAt { point, to, radius, tolerance }`,
-  `shaperStroke { page, path }`, `insertStar` and `insertFlare` (every parameter);
+  `shaperStroke { page, path }`, `insertFlare` (every parameter);
   `simplifyPath` takes `cornerAngle`, and a cut that does nothing fails with its reason (`commands/cut-commands.ts`). A
   scripted Shape Builder refuses ovals (the tool reads them through stand-ins).
 - **Width profile.** `widthProfile { targets, widths }` is the Width tool's bake with the

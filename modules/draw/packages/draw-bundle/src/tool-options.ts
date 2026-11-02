@@ -79,8 +79,6 @@ const M = defineMessages("draw.toolOptions", {
   touched: "Touched by the lasso",
   centre: "Centre inside the lasso",
   reshapeRadius: "Falloff along the path",
-  points: "Points",
-  radius2: "Radius 2",
   brushWidth: "Width",
   brushHeight: "Height",
   intensity: "Intensity",
@@ -472,33 +470,6 @@ export const RESHAPE_OPTIONS = defineToolOptions({
   ],
 });
 
-/** Star — the points a drag starts with and Radius 2 as a percentage of
- *  Radius 1 (Illustrator's dialog defaults: 5 points, 50 %). */
-export const STAR_OPTIONS = defineToolOptions({
-  toolId: "media.paged.draw.tool.star",
-  fields: [
-    {
-      kind: "number",
-      key: "points",
-      label: M.points,
-      min: 3,
-      max: 1000,
-      step: 1,
-      default: 5,
-    },
-    {
-      kind: "number",
-      key: "radius2",
-      label: M.radius2,
-      min: 1,
-      max: 1000,
-      step: 1,
-      unit: "%",
-      default: 50,
-    },
-  ],
-});
-
 // ------------------------------------------------- the distortion tools
 //
 // THE LIQUIFY FAMILY carries Illustrator's options dialog per tool: the
@@ -822,7 +793,6 @@ export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
   WIDTH_OPTIONS,
   LASSO_OPTIONS,
   RESHAPE_OPTIONS,
-  STAR_OPTIONS,
   ...Object.values(LIQUIFY_OPTIONS),
   PUPPET_WARP_OPTIONS,
   PERSPECTIVE_SELECT_OPTIONS,

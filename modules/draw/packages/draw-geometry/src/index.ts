@@ -309,14 +309,10 @@ export {
 } from "./path-erase";
 export { reshapeTable, reshapeWeight, pathDistancesFrom } from "./reshape";
 export {
-  starPath,
   regularPolygonPath,
   flareParts,
-  STAR_MIN_POINTS,
-  STAR_MAX_POINTS,
   FLARE_MAX_RAYS,
   FLARE_MAX_RINGS,
-  type StarSpec,
   type FlareSpec,
   type FlareParts,
 } from "./star";

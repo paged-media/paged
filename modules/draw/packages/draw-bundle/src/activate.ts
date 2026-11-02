@@ -557,12 +557,11 @@ export function activate(host: BundleHost): BundleHandle {
   // The Knife, Scissors and Shape Builder as commands (their gesture as data).
   const cutCommandsSub = contributeCutCommands(host);
   // WP6.1 part 2 — the Join / Path Eraser / Reshape / Shaper gestures as
-  // data, and the Star / Flare inserts (a payload-free run repeats the
+  // data, and the Flare insert (a payload-free run repeats the
   // Path Options panel's last-used values).
   const pathToolCommandsSub = contributePathToolCommands(host);
   const shaperCommandSub = contributeShaperCommand(host);
   const starFlareCommandsSub = contributeStarFlareCommands(host, {
-    star: () => lastUsedPayload(host, "star"),
     flare: () => lastUsedPayload(host, "flare"),
   });
   // WP6.7 — the distortion tools as commands (their gestures as data),

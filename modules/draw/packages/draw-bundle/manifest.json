@@ -52,7 +52,6 @@
       "media.paged.draw.tool.shaper",
       "media.paged.draw.tool.pathEraser",
       "media.paged.draw.tool.join",
-      "media.paged.draw.tool.star",
       "media.paged.draw.tool.flare",
       "media.paged.draw.tool.warp",
       "media.paged.draw.tool.twirl",
@@ -102,7 +101,6 @@
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
       "media.paged.draw.command.insertPolarGridOptions",
-      "media.paged.draw.command.insertStarOptions",
       "media.paged.draw.command.insertFlareOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
       "media.paged.draw.command.rasterizeOptions",
@@ -162,7 +160,6 @@
       "media.paged.draw.command.pathErase",
       "media.paged.draw.command.reshapeAt",
       "media.paged.draw.command.shaperStroke",
-      "media.paged.draw.command.insertStar",
       "media.paged.draw.command.insertFlare",
       "media.paged.draw.command.liquifyStroke",
       "media.paged.draw.command.puppetWarp",
@@ -3236,38 +3233,6 @@
           }
         },
         {
-          "id": "media.paged.draw.command.insertStar",
-          "title": "Insert star",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "cx": {
-                "kind": "length"
-              },
-              "cy": {
-                "kind": "length"
-              },
-              "radius1": {
-                "kind": "length"
-              },
-              "radius2": {
-                "kind": "length"
-              },
-              "points": {
-                "kind": "number",
-                "integer": true
-              },
-              "rotationDeg": {
-                "kind": "number",
-                "unit": "deg"
-              },
-              "page": {
-                "kind": "text"
-              }
-            }
-          }
-        },
-        {
           "id": "media.paged.draw.command.insertFlare",
           "title": "Insert flare",
           "args": {
@@ -3309,14 +3274,6 @@
                 "kind": "text"
               }
             }
-          }
-        },
-        {
-          "id": "media.paged.draw.command.insertStarOptions",
-          "title": "Insert star options",
-          "args": {
-            "kind": "struct",
-            "fields": {}
           }
         },
         {

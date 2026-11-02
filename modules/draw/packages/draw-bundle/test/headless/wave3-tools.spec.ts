@@ -50,7 +50,6 @@ import {
   createPathEraserHandler,
   createReshapeHandler,
   createShaperHandler,
-  createStarHandler,
   drawBundle,
   simplifyPreviewOf,
   showSimplifyPreview,
@@ -396,51 +395,7 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
     });
   });
 
-  describe("Star and Flare", () => {
-    it("a Star drag inserts a closed 2·points path; arrow keys add points; one undo step", async () => {
-      const handler = createStarHandler(h.host);
-      handler.onActivate(undefined as never);
-      const before = (await leafIds(h)).length;
-      handler.onPointerDown(pointerAt(PAGE_ID, [300, 500]));
-      handler.onPointerMove(pointerAt(PAGE_ID, [300, 470]));
-      handler.onKey!({ key: "ArrowUp" } as KeyboardEvent);
-      handler.onPointerUp(pointerAt(PAGE_ID, [300, 450]));
-      await settle();
-      const leaves = await leafIds(h);
-      expect(leaves).toHaveLength(before + 1);
-      const star = leaves.find(
-        (id) => !["sq", "wave", "a", "b"].includes(String(id.id)),
-      )!;
-      const t = (await tableOf(h, star))!;
-      expect(t.anchors).toHaveLength(12);
-      expect(t.subpathOpen ?? [false]).toEqual([false]);
-      expect(t.anchors[0]!.anchor[1]).toBeCloseTo(450, 2);
-      // Engine ADR 1047: an upright star is a LIVE star — the engine
-      // keeps its points and inset (1 − Radius 2 ÷ Radius 1).
-      const props = await h.host.document.elementProperties(star);
-      const read = (path: string) =>
-        (
-          props?.entries.find((e) => e.path === path)?.value as {
-            value: number | null;
-          } | null
-        )?.value;
-      expect(read("frameShapeSides")).toBe(6);
-      expect(read("frameShapeStarInset")).toBeGreaterThan(0);
-      await h.host.document.undo();
-      expect(await leafIds(h)).toHaveLength(before);
-    });
-
-    it("a Star click on a host with no panel door inserts the last-used star at the click", async () => {
-      const handler = createStarHandler(h.host);
-      handler.onActivate(undefined as never);
-      handler.onPointerDown(pointerAt(PAGE_ID, [500, 500]));
-      handler.onPointerUp(pointerAt(PAGE_ID, [500, 500]));
-      await settle();
-      await settle();
-      const leaves = await leafIds(h);
-      expect(leaves).toHaveLength(5);
-    });
-
+  describe("Flare", () => {
     it("a Flare is its parts GROUPED in one batch; the halo fades with a radial gradient feather", async () => {
       const { host, work } = countingHost(h.host);
       const parts = await applyInsertFlare(
@@ -613,19 +568,8 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       expect(await leafIds(h)).toHaveLength(5);
     });
 
-    it("insertStar and insertFlare insert on the named page", async () => {
-      covers("command:media.paged.draw.command.insertStar");
+    it("insertFlare inserts on the named page", async () => {
       covers("command:media.paged.draw.command.insertFlare");
-      await h.objects.invoke(`${C}.insertStar`, {
-        page: PAGE_ID,
-        cx: 300,
-        cy: 500,
-        radius1: 40,
-        radius2: 15,
-        points: 7,
-        rotationDeg: 0,
-      });
-      expect(await leafIds(h)).toHaveLength(5);
       await h.objects.invoke(`${C}.insertFlare`, {
         page: PAGE_ID,
         cx: 300,
@@ -639,9 +583,9 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
         endY: 560,
         ringRadius: 10,
       });
-      expect(await leafIds(h)).toHaveLength(5 + 7);
+      expect(await leafIds(h)).toHaveLength(4 + 7);
       await h.host.document.undo();
-      expect(await leafIds(h)).toHaveLength(5);
+      expect(await leafIds(h)).toHaveLength(4);
     });
   });
 });

@@ -16,14 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// STAR and FLARE — the two Illustrator shape tools whose geometry is
-// parametric. Pure; page-space pt, angles in DEGREES from +x toward +y
-// (y down), what the tools and the typed commands speak.
-//
-// A STAR is Illustrator's: `points` tips on Radius 1, `points` valleys on
-// Radius 2 between them, the first tip straight UP from the centre at
-// rotation 0. Either radius may be the larger one — Illustrator lets the
-// user drag Radius 2 past Radius 1 — so neither is called "outer".
+// FLARE and the regular polygon — the geometry that is parametric. Pure;
+// page-space pt, angles in DEGREES from +x toward +y (y down), what the
+// tools and the typed commands speak. (The star's geometry is the host's:
+// `@paged-media/helpers`' `star`.)
 //
 // A FLARE is Illustrator's four parts: a filled CENTRE, a larger HALO
 // around it, RAYS from the centre, and RINGS strung along the line from
@@ -41,48 +37,8 @@ const corner = (x: number, y: number): AnchorTriple => ({
   right: [x, y],
 });
 
-/** Illustrator's star point count range. */
-export const STAR_MIN_POINTS = 3;
-export const STAR_MAX_POINTS = 1000;
-
-export interface StarSpec {
-  cx: number;
-  cy: number;
-  /** pt — the tips. */
-  radius1: number;
-  /** pt — the valleys between them. */
-  radius2: number;
-  /** Tips, clamped to 3…1000. */
-  points: number;
-  /** Degrees; 0 = the first tip straight up. */
-  rotationDeg?: number;
-}
-
-/** The star as one CLOSED contour of 2·points corners, tip first.
- *  Degenerate input (a non-finite value, both radii 0) is an empty
- *  table. */
-export function starPath(spec: StarSpec): AnchorTable {
-  const { cx, cy } = spec;
-  const r1 = Math.abs(spec.radius1);
-  const r2 = Math.abs(spec.radius2);
-  const finite = [cx, cy, r1, r2, spec.points].every(Number.isFinite);
-  if (!finite || (r1 === 0 && r2 === 0))
-    return { anchors: [], subpathStarts: [], subpathOpen: [] };
-  const n = Math.round(
-    Math.min(STAR_MAX_POINTS, Math.max(STAR_MIN_POINTS, spec.points)),
-  );
-  const base = ((spec.rotationDeg ?? 0) - 90) * (Math.PI / 180);
-  const anchors: AnchorTriple[] = [];
-  for (let i = 0; i < 2 * n; i++) {
-    const r = i % 2 === 0 ? r1 : r2;
-    const a = base + (i * Math.PI) / n;
-    anchors.push(corner(cx + r * Math.cos(a), cy + r * Math.sin(a)));
-  }
-  return { anchors, subpathStarts: [0], subpathOpen: [false] };
-}
-
 /** A regular polygon (`sides` corners on `radius`, first corner up) —
- *  the Shaper's polygon and a star whose radii are equal halved. */
+ *  the Shaper's polygon. */
 export function regularPolygonPath(
   cx: number,
   cy: number,

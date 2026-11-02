@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 902,
+    "command": 901,
     "keybinding": 167,
     "menu": 645,
     "panel": 149,
-    "tool": 127
+    "tool": 126
   },
   "features": [
     {
@@ -932,16 +932,6 @@
     },
     {
       "id": "command:media.paged.draw.command.insertSpiralOptions",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.insertStar",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.insertStarOptions",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -4092,6 +4082,11 @@
     },
     {
       "id": "command:paged.insert.rectangle",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.insert.star",
       "kind": "command",
       "owner": "editor"
     },
@@ -7838,7 +7833,7 @@
     {
       "id": "menu:Object/Insert star…",
       "kind": "menu",
-      "owner": "media.paged.draw"
+      "owner": "editor"
     },
     {
       "id": "menu:Object/Insert table",
@@ -9486,11 +9481,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.star",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.symbolNineSlice",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -10049,6 +10039,18 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "command:media.paged.draw.command.insertStar",
+      "replacement": "command:paged.insert.star",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.insertStarOptions",
+      "replacement": "command:paged.insert.star",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "command:media.paged.draw.command.makeOpacityMask",
       "replacement": "command:paged.core.applyOpacityMask",
       "deprecatedIn": "0.78.0",
@@ -10363,6 +10365,12 @@
     {
       "id": "tool:media.paged.draw.tool.reflect",
       "replacement": "command:paged.transform.reflectOptions",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.star",
+      "replacement": "tool:paged.tool.polygon",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

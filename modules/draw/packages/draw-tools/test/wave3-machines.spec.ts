@@ -17,23 +17,17 @@
  */
 
 // The WP6.1 part-2 gesture machines: the shared scrub (Join, Path
-// Eraser, Shaper), Reshape, Star and Flare. Pure — points in,
+// Eraser, Shaper), Reshape and Flare. Pure — points in,
 // snapshots out.
 
 import { describe, expect, it } from "bun:test";
 
 import type { AnchorTable, AnchorTriple } from "@paged-media/draw-geometry";
 
-import {
-  FlareMachine,
-  ReshapeMachine,
-  ScrubMachine,
-  StarMachine,
-} from "../src";
+import { FlareMachine, ReshapeMachine, ScrubMachine } from "../src";
 
 type P = [number, number];
 const corner = (p: P): AnchorTriple => ({ anchor: p, left: p, right: p });
-const NONE = { alt: false, shift: false };
 
 describe("ScrubMachine [plugin-draw.tool-wave-3]", () => {
   it("records decimated samples and commits them with the release point", () => {
@@ -106,45 +100,7 @@ describe("ReshapeMachine [plugin-draw.tool-wave-3]", () => {
   });
 });
 
-describe("StarMachine / FlareMachine [plugin-draw.tool-wave-3]", () => {
-  it("a drag sizes Radius 1, keeps the Radius 2 ratio, turns with the pointer", () => {
-    const m = new StarMachine({ points: 5, ratio: 0.5, clickTolerance: 2 });
-    m.handle({ type: "down", point: [100, 100] });
-    m.handle({ type: "move", point: [140, 100] });
-    const s = m.handle({ type: "up", point: [160, 100] });
-    expect(s.commit).toMatchObject({
-      cx: 100,
-      cy: 100,
-      radius1: 60,
-      radius2: 30,
-      points: 5,
-    });
-    expect(s.commit!.rotationDeg).toBeCloseTo(90, 9);
-  });
-
-  it("arrow keys change the point count during the drag; Shift keeps it upright", () => {
-    const m = new StarMachine({ points: 5, ratio: 0.4, clickTolerance: 2 });
-    m.handle({ type: "down", point: [0, 0] });
-    m.handle({ type: "move", point: [30, 30] });
-    m.handle({ type: "key", key: "ArrowUp" });
-    m.handle({ type: "key", key: "ArrowUp" });
-    expect(m.handle({ type: "key", key: "ArrowDown" }).star!.points).toBe(6);
-    const s = m.handle({
-      type: "up",
-      point: [30, 30],
-      modifiers: { shift: true },
-    });
-    expect(s.commit!.points).toBe(6);
-    expect(s.commit!.rotationDeg).toBe(0);
-  });
-
-  it("a click asks for the options at the centre; points never drop below 3", () => {
-    const m = new StarMachine({ points: 3, ratio: 0.5, clickTolerance: 2 });
-    m.handle({ type: "down", point: [5, 5] });
-    m.handle({ type: "key", key: "ArrowDown" });
-    expect(m.handle({ type: "up", point: [5, 5] }).openOptions).toEqual([5, 5]);
-  });
-
+describe("FlareMachine [plugin-draw.tool-wave-3]", () => {
   it("a flare is two gestures: size, then the rings' end", () => {
     const m = new FlareMachine({ clickTolerance: 2 });
     m.handle({ type: "down", point: [100, 100] });

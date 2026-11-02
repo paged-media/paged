@@ -530,34 +530,6 @@ describe("paged.draw tools through the gesture DSL — WP6.1 part 2 [plugin-draw
     await cancelCommitsNothing(`${T}.join`, [], [95, 498], [405, 498]);
   });
 
-  it("Star: a drag inserts a closed 2·points path, one undo step; Escape commits nothing", async () => {
-    covers("tool:media.paged.draw.tool.star");
-    const { r, g } = rig([]);
-    await arm(r, g, `${T}.star`);
-    const before = r.picture();
-    await g.drag({ from: [600, 600], to: [600, 560], steps: 4 }).settle();
-    const insert = r.leaves().find((m) => m.op === "insertPath") as {
-      args: { anchors: unknown[]; open: boolean };
-    };
-    // Engine ADR 1047: an upright star is a LIVE star — the pentagon on
-    // Radius 1, then its points and inset in the same batch; the engine
-    // draws the ten points.
-    expect(insert.args.anchors).toHaveLength(5);
-    expect(insert.args.open).toBe(false);
-    expect(
-      r
-        .leaves()
-        .filter((m) =>
-          String((m.args as { path?: string }).path ?? "").startsWith(
-            "frameShape",
-          ),
-        )
-        .map((m) => (m.args as { path: string }).path),
-    ).toEqual(["frameShapeSides", "frameShapeStarInset"]);
-    await oneUndoStep(r, before);
-    await cancelCommitsNothing(`${T}.star`, [], [600, 600], [600, 560]);
-  });
-
   it("Flare: two drags insert the flare's parts grouped in one batch, one undo step; Escape in the first drag commits nothing", async () => {
     covers("tool:media.paged.draw.tool.flare");
     const { r, g } = rig([]);

@@ -110,7 +110,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.shaper",
         "media.paged.draw.tool.pathEraser",
         "media.paged.draw.tool.join",
-        "media.paged.draw.tool.star",
         "media.paged.draw.tool.flare",
         // WP6.7 — the distortion tools, keyless: the Liquify flyout, Puppet
         // Warp in the host's Free Transform flyout, the Perspective pair.
@@ -184,9 +183,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "tool",
         "tool",
         "tool",
-        // WP6.1 part 2 — Reshape, Shaper, Path Eraser, Join, Star,
-        // Flare: twenty-six tools (Reflect is the host's command).
-        ...Array<string>(6).fill("tool"),
+        // WP6.1 part 2 — Reshape, Shaper, Path Eraser, Join, Flare:
+        // twenty-five tools (Reflect and Star are the host's).
+        ...Array<string>(5).fill("tool"),
         // WP6.7 — the seven Liquify tools, Puppet Warp, Perspective Grid
         // and Perspective Selection: thirty-seven; WP6.3 — the Envelope
         // Mesh tool (draw ADR 367): thirty-eight.

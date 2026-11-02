@@ -98,7 +98,6 @@ defineMessages("menu", {
   "Insert arc…": "Insert arc…",
   "Insert spiral…": "Insert spiral…",
   "Insert rectangular grid…": "Insert rectangular grid…",
-  "Insert star…": "Insert star…",
   "Insert flare…": "Insert flare…",
   "Insert polar grid…": "Insert polar grid…",
   "Select same": "Select same",
@@ -271,9 +270,9 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Object/Insert spiral…", "insertSpiralOptions", "plugin-insert"],
   ["Object/Insert rectangular grid…", "insertRectGridOptions", "plugin-insert"],
   ["Object/Insert polar grid…", "insertPolarGridOptions", "plugin-insert"],
-  //    WP6.1 part 2 — the Star and Flare tools' dialogs, reached from the
-  //    menu as well (a click with either tool raises the same section).
-  ["Object/Insert star…", "insertStarOptions", "plugin-insert"],
+  //    WP6.1 part 2 — the Flare tool's dialog, reached from the menu as
+  //    well (a click with the tool raises the same section). Star is the
+  //    host's: Object ▸ Insert star….
   ["Object/Insert flare…", "insertFlareOptions", "plugin-insert"],
 
   // ── Rasterize — merges into Object, where Illustrator keeps it: the

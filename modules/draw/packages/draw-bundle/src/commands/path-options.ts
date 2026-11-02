@@ -105,13 +105,9 @@ import {
 } from "./select-same";
 import {
   FLARE_PARAM_DEFAULTS,
-  STAR_PARAM_DEFAULTS,
   applyInsertFlare,
-  applyInsertStar,
   flareParamsFrom,
-  starParamsFrom,
   type FlareParams,
-  type StarParams,
 } from "./star-flare";
 import {
   RASTERIZE_DEFAULTS,
@@ -134,7 +130,6 @@ const M = defineMessages("draw.pathOptions", {
   spiral: "Insert spiral",
   rectGrid: "Insert rectangular grid",
   polarGrid: "Insert polar grid",
-  star: "Insert star",
   flare: "Insert flare",
   selectSameWeight: "Select same stroke weight",
   widthProfile: "Width profile",
@@ -155,7 +150,6 @@ export const PATH_OPTION_SECTIONS = [
   "spiral",
   "rectGrid",
   "polarGrid",
-  "star",
   "flare",
   "selectSameWeight",
   "widthProfile",
@@ -173,7 +167,6 @@ export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
   spiral: M.spiral,
   rectGrid: M.rectGrid,
   polarGrid: M.polarGrid,
-  star: M.star,
   flare: M.flare,
   selectSameWeight: M.selectSameWeight,
   widthProfile: M.widthProfile,
@@ -279,7 +272,6 @@ export interface PathOptions {
   spiral: SpiralParams;
   rectGrid: RectGridParams;
   polarGrid: PolarGridParams;
-  star: StarParams;
   flare: FlareParams;
   selectSameWeight: SelectSameWeightOptions;
   widthProfile: WidthProfileOptions;
@@ -312,7 +304,6 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
   spiral: SPIRAL_PARAM_DEFAULTS,
   rectGrid: RECT_GRID_PARAM_DEFAULTS,
   polarGrid: POLAR_GRID_PARAM_DEFAULTS,
-  star: STAR_PARAM_DEFAULTS,
   flare: FLARE_PARAM_DEFAULTS,
   selectSameWeight: { tolerance: 0.5 },
   // A stroke that swells to 6 pt in the middle and tapers at both ends.
@@ -388,7 +379,6 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
     spiral: spiralParamsFrom(loose(r?.spiral)),
     rectGrid: rectGridParamsFrom(loose(r?.rectGrid)),
     polarGrid: polarGridParamsFrom(loose(r?.polarGrid)),
-    star: starParamsFrom(loose(r?.star)),
     flare: flareParamsFrom(loose(r?.flare)),
     selectSameWeight: {
       tolerance: Math.min(
@@ -529,8 +519,6 @@ export function lastUsedPayload(
       return { ...all.rectGrid };
     case "polarGrid":
       return { ...all.polarGrid };
-    case "star":
-      return { ...all.star };
     case "flare":
       return { ...all.flare };
   }
@@ -570,9 +558,6 @@ export async function applyPathOptions<S extends PathOptionSection>(
       return;
     case "polarGrid":
       await applyInsertPolarGrid(host, { ...all.polarGrid });
-      return;
-    case "star":
-      await applyInsertStar(host, { ...all.star });
       return;
     case "flare":
       await applyInsertFlare(host, { ...all.flare });
@@ -617,9 +602,6 @@ async function applyLastUsed(
       return;
     case "polarGrid":
       await applyInsertPolarGrid(host, lastUsedPayload(host, "polarGrid"));
-      return;
-    case "star":
-      await applyInsertStar(host, lastUsedPayload(host, "star"));
       return;
     case "flare":
       await applyInsertFlare(host, lastUsedPayload(host, "flare"));
@@ -711,7 +693,6 @@ export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   spiral: `${C}.insertSpiralOptions`,
   rectGrid: `${C}.insertRectGridOptions`,
   polarGrid: `${C}.insertPolarGridOptions`,
-  star: `${C}.insertStarOptions`,
   flare: `${C}.insertFlareOptions`,
   selectSameWeight: `${C}.selectSameStrokeWeightOptions`,
   widthProfile: WIDTH_PROFILE_COMMAND_ID,

@@ -10,5 +10,8 @@
   "tools.gradient.spread": "Ausbreitung",
   "tools.mesh.description": "Klicken Sie in eine Form, um einen Gitterpunkt hinzuzufügen; ziehen Sie einen Punkt oder seine Griffe; färben Sie die ausgewählten Punkte im Bedienfeld „Farbe“.",
   "tools.mesh.points": "{count, plural, one {# Gitterpunkt} other {# Gitterpunkte}}",
-  "tools.mesh.title": "Gitter"
+  "tools.mesh.title": "Gitter",
+  "tools.polygon.sides": "Anzahl der Seiten",
+  "tools.polygon.star": "Stern",
+  "tools.polygon.starInset": "Sterneinzug"
 }

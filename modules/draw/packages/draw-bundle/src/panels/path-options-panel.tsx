@@ -52,12 +52,7 @@ import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
 
 import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
-import {
-  FLARE_MAX_RAYS,
-  FLARE_MAX_RINGS,
-  STAR_MAX_POINTS,
-  STAR_MIN_POINTS,
-} from "@paged-media/draw-geometry";
+import { FLARE_MAX_RAYS, FLARE_MAX_RINGS } from "@paged-media/draw-geometry";
 import { supportsDuplicate } from "../commands/join-average";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import { MAX_RASTERIZE_PPI, MIN_RASTERIZE_PPI } from "../commands/rasterize";
@@ -139,10 +134,6 @@ const M = defineMessages("draw.pathOptionsPanel", {
   radius: "Radius (pt)",
   rings: "Rings",
   spokes: "Spokes",
-  radius1: "Radius 1 (pt, the tips)",
-  radius2: "Radius 2 (pt, between the tips)",
-  points: "Points",
-  rotation: "Rotation (°)",
   centreRadius: "Centre radius (pt)",
   haloScale: "Halo (× the centre)",
   rays: "Rays",
@@ -670,20 +661,6 @@ export function makePathOptionsPanel(host: BundleHost): {
                 min: 0,
                 max: INSERT_SHAPE_LIMITS.maxCount,
               })}
-            </>
-          );
-        case "star":
-          return (
-            <>
-              {numberRow("star", "cx", s.t(M.centreX))}
-              {numberRow("star", "cy", s.t(M.centreY))}
-              {numberRow("star", "radius1", s.t(M.radius1), { min: 0 })}
-              {numberRow("star", "radius2", s.t(M.radius2), { min: 0 })}
-              {numberRow("star", "points", s.t(M.points), {
-                min: STAR_MIN_POINTS,
-                max: STAR_MAX_POINTS,
-              })}
-              {numberRow("star", "rotationDeg", s.t(M.rotation))}
             </>
           );
         case "flare":

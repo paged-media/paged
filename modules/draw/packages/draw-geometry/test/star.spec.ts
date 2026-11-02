@@ -18,51 +18,9 @@
 
 import { describe, expect, it } from "bun:test";
 
-import {
-  flareParts,
-  regularPolygonPath,
-  starPath,
-  STAR_MIN_POINTS,
-} from "../src";
+import { flareParts, regularPolygonPath } from "../src";
 
-describe("starPath / flareParts — Star and Flare geometry [plugin-draw.tool-wave-3]", () => {
-  it("a 5-point star alternates Radius 1 and Radius 2, first tip straight up", () => {
-    const t = starPath({
-      cx: 100,
-      cy: 100,
-      radius1: 50,
-      radius2: 20,
-      points: 5,
-    });
-    expect(t.anchors).toHaveLength(10);
-    expect(t.subpathOpen).toEqual([false]);
-    expect(t.anchors[0]!.anchor[0]).toBeCloseTo(100, 9);
-    expect(t.anchors[0]!.anchor[1]).toBeCloseTo(50, 9);
-    t.anchors.forEach((a, i) => {
-      const r = Math.hypot(a.anchor[0] - 100, a.anchor[1] - 100);
-      expect(r).toBeCloseTo(i % 2 === 0 ? 50 : 20, 9);
-      expect(a.left).toEqual(a.anchor);
-    });
-  });
-
-  it("Radius 2 may exceed Radius 1, rotation turns it, points clamp to 3", () => {
-    const t = starPath({
-      cx: 0,
-      cy: 0,
-      radius1: 10,
-      radius2: 30,
-      points: 1,
-      rotationDeg: 90,
-    });
-    expect(t.anchors).toHaveLength(2 * STAR_MIN_POINTS);
-    expect(t.anchors[0]!.anchor[0]).toBeCloseTo(10, 9);
-    expect(t.anchors[0]!.anchor[1]).toBeCloseTo(0, 9);
-    expect(Math.hypot(...t.anchors[1]!.anchor)).toBeCloseTo(30, 9);
-    expect(
-      starPath({ cx: 0, cy: 0, radius1: 0, radius2: 0, points: 5 }).anchors,
-    ).toEqual([]);
-  });
-
+describe("regularPolygonPath / flareParts — Flare geometry [plugin-draw.tool-wave-3]", () => {
   it("a regular polygon puts its corners on the radius", () => {
     const t = regularPolygonPath(0, 0, 10, 6);
     expect(t.anchors).toHaveLength(6);

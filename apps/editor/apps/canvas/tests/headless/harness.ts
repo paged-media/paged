@@ -137,6 +137,7 @@ import {
   APPEARANCE_DIAGNOSTIC_SOURCE,
   buildAppearanceCommands,
 } from "../../src/appearance-commands";
+import { buildStarCommands, STAR_MENU_ITEMS } from "../../src/star-commands";
 import {
   buildReflectCommands,
   REFLECT_MENU_ITEMS,
@@ -1050,6 +1051,9 @@ export async function createHeadlessEditor(
       })(p, payload),
     newPage: freshInsert((p) => addPage(p, insertReport)),
   });
+  const starCommands = buildStarCommands(insertReport, () =>
+    problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE),
+  );
   const alignCommands = buildTransformCommands(
     objectRegistry,
     (address) => editorObjectsOf(scope).model.elementIdOf?.(address) ?? null,
@@ -1110,6 +1114,7 @@ export async function createHeadlessEditor(
       ...appearanceCommands,
       ...strokeDashCommands,
       ...insertCommands,
+      ...starCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
       ...buildTransformEachDialogCommands((paged) =>
@@ -1131,6 +1136,7 @@ export async function createHeadlessEditor(
       ...CLIPBOARD_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
+      ...STAR_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...TRANSFORM_EACH_MENU_ITEMS,
