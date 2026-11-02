@@ -53,7 +53,7 @@ const AUTO_CHAR: &str = "CharacterStyle/docx-auto-c";
 #[derive(Debug, Clone)]
 pub enum NativeBlock {
     /// Built as a model paragraph.
-    Paragraph(Paragraph),
+    Paragraph(Box<Paragraph>),
     /// Left to the old path, with the reason (an honest, countable
     /// degradation: nothing is dropped).
     Deferred { reason: String },
@@ -443,7 +443,7 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
                 reason: "table".into(),
             },
             LoweredBlock::Paragraph(p) => match build_paragraph(&styles, p) {
-                Ok(para) => NativeBlock::Paragraph(para),
+                Ok(para) => NativeBlock::Paragraph(Box::new(para)),
                 Err(reason) => NativeBlock::Deferred { reason },
             },
         })
