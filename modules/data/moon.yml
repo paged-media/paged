@@ -28,7 +28,8 @@ fileGroups:
   rust-sources:
     - "**/*.rs"
     - "**/Cargo.toml"
-    - "Cargo.lock"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
     - "/platform/shared/fmt/src/**/*.rs"
@@ -39,7 +40,25 @@ fileGroups:
     - "/engine/core/crates/paged-action/**/*.rs"
     - "/engine/core/crates/paged-action/Cargo.toml"
 
+# The data crates are members of the engine's Cargo workspace (one Cargo
+# workspace, docs/development/one-workspace.md): this directory has no
+# Cargo.toml, so the Rust tasks run cargo in engine/core and select the module's
+# crates with -p.
 tasks:
+  rust-fmt:
+    script: "cd ../../engine/core && cargo fmt -p data-js -p data-cli -p data-script -p data-conformance --check"
+  rust-check:
+    script: "cd ../../engine/core && cargo check -p data-js -p data-cli -p data-script -p data-conformance --all-targets"
+  rust-lint:
+    script: "cd ../../engine/core && cargo clippy -p data-js -p data-cli -p data-script -p data-conformance --all-targets -- -D warnings"
+  rust-test:
+    script: >-
+      cd ../../engine/core
+      && cargo nextest run -p data-js -p data-cli -p data-script -p data-conformance
+      && cargo test --doc -p data-js -p data-cli -p data-script -p data-conformance
+  rust-build:
+    script: "cd ../../engine/core && cargo build -p data-js -p data-cli -p data-script -p data-conformance"
+
   js-test:
     # data-vitest.yml builds the engine wasm (the query store is inside it)
     # before bun test.
