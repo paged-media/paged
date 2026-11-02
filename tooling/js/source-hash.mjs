@@ -53,7 +53,12 @@ export const MODULES = {
         ext: ".yaml",
       },
     ],
-    rootFiles: CARGO_WORKSPACE,
+    // data-* are members of engine/core's Cargo workspace.
+    rootFiles: [
+      "../../engine/core/Cargo.toml",
+      "../../engine/core/Cargo.lock",
+      "rust-toolchain.toml",
+    ],
   },
   image: {
     root: "modules/image",

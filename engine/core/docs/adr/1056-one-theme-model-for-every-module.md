@@ -3,7 +3,8 @@
 - **Status:** Accepted 2026-11-01; **slices 1 to 3 built** (the model, its `.paged` encoding,
   slide's import; the `theme` collection and the three operations, riding v78; swatches that follow
   a slot, with the colour arithmetic in `paged-colour-math`). Open: doc and sheet lowering, font
-  references on styles, export write-back from the model (slice 4 onward). Part of the capability layering of PM-0014 and PM-0017
+  references on styles (designed in [ADR 1057](1057-a-theme-in-indesign-documents.md), which also
+  amends the composition-time sentence below), export write-back from the model (slice 4 onward). Part of the capability layering of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Themes"). Amends
   slide [ADR 713](../../../../modules/slide/docs/adr/713-live-theme.md) and
   [ADR 719](../../../../modules/slide/docs/adr/719-document-styles.md) (see Migration).

@@ -69,7 +69,7 @@ one function in `paged-colour-math` (f64; `paged-ooxml::colour` re-exports it, e
 sheet-chart, sheet-format and docx-core. `paged-colour-math` also owns the DrawingML colour-transform chain
 (`transform`: lumMod, satOff, tint, shade, alpha …) and `Rgba`, proved bit-identical to the former
 `paged-ooxml` code by `tests/oracle.rs`; the `srgb-transfer` single-owner rule baselines the other copies.
-Default Office palette ×2. TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
+Default Office palette ×2 (`sheet-chart` `OFFICE_THEME` and the sheet-xlsx style table → `paged_model::theme::presets`, engine ADR 1057). TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
 
 ### Raster, kernels, blend
 
@@ -108,14 +108,20 @@ Hand-written relationships remain in sheet links and chart_write; `sheet-xlsx` k
 `opc.rs` and `rels.rs`. Theme readers: `pptx-import` and `slide-resolve` still have their own;
 the engine model has a theme since engine ADR 1056 (slice 1: colour slots and font scheme on
 `Document.theme`, filled by slide's import; the collection, operations, swatch references and
-doc/sheet lowering are open; the format scheme is not modelled).
+doc/sheet lowering are open; the format scheme is not modelled). Themes in IDML (engine ADR 1057,
+designed): plain swatches for InDesign, the theme in the document label `x-paged:core.theme`,
+"create theme from swatches", font references on styles, presets owned by `paged_model::theme::presets`.
 Writable XML tree ×4. Minimal `.xlsx` writer ×3 (`slide-sheet`, `sheet-js` csv, ods). ODF layer
 shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 
 ### Lowering
 
 `docx-lower` keeps a plugin-local IR and lowers through TS host commands; the target is Rust
-building `paged_model` directly, as slide does. Sheet and data each have their own lowering.
+building `paged_model` directly, as slide does (doc ADR 625: a seven-slice plan, the IR retires
+slice by slice, the old path stays until the last). Slice 1 is in: `docx_skeleton::body` builds
+body paragraphs with direct formatting as the model's own paragraph and run fields instead of
+`docx-auto-*` styles, proven equal to the IR on the conformance fixtures; it is not yet wired into
+the open path (that is slice 2, with styles and swatches). Sheet and data each have their own lowering.
 
 ### Charts, data, scripting, PDF
 

@@ -131,7 +131,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/data -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-data
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
