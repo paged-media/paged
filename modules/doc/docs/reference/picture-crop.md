@@ -30,7 +30,24 @@ then the same four anchored). The test in `docx-conformance/tests/it/reach.rs` h
 the expected geometry: the frame shows the image pixels from `l * width` to
 `(1 - r) * width` and from `t * height` to `(1 - b) * height`.
 
-The comparison against Word's own render is PENDING: Word on the build machine
-hangs on save-as-PDF from automation (a dialog that cannot be seen), so no
-measurements from Word are recorded here. Until then the crop is verified against
-the OOXML definition of `a:srcRect` and against slide's pictures, not against Word.
+Word's render (Microsoft Word, 2026-11-02, the document exported to PDF and rasterised at 144 dpi)
+matches that definition for all eight pictures. Each picture's extent in the fixture is the visible
+part at native scale (for example 72 x 72 pt for `l = r = 25 %`), and Word draws exactly the source
+image cropped by the `srcRect` fractions into it. Measured against the fixture's source image cropped
+by the same fractions and resampled to the measured box:
+
+| picture                   | `srcRect` (%)         | Word's size (pt) | expected (pt) | mean pixel difference |
+| ------------------------- | --------------------- | ---------------- | ------------- | --------------------- |
+| none, inline and anchored | none                  | 144.0 x 72.5     | 144 x 72      | 6.9 / 255             |
+| left and right            | `l=25 r=25`           | 72.0 x 71.5      | 72 x 72       | 4.5 / 255             |
+| top and bottom            | `t=10 b=40`           | 143.5 x 36.5     | 144 x 36      | 2.8 / 255             |
+| all four                  | `l=10 t=20 r=30 b=10` | 86.5 x 50.5      | 86.4 x 50.4   | 1.1 / 255             |
+
+The inline and anchored pictures agree to within half a point. The pixel difference is resampling of a
+200 x 100 source, not geometry. Not yet compared: a direct render of the same document by paged against
+Word's PDF; the engine's own tests (`anchored_picture_crop.rs`, `reach.rs`) assert the same rule on the
+frame's placement.
+
+An earlier version of this fixture was rejected by Word as corrupt (its theme part had empty format
+scheme lists); the fixture theme now carries the standard format scheme, and the document opens in Word
+without a repair prompt.
