@@ -56,11 +56,14 @@ import type { PageId } from "@paged-media/plugin-api";
 
 import { BINDING_KEY, type Binding } from "./binding";
 import {
+  cellTextRef,
   distinctCellTextHexes,
   distinctDataBarHexes,
   normalizePaletteHex,
   paletteSwatchId,
   swatchMintOps,
+  themedCellTextEntries,
+  themedSwatchMintOps,
   type KnownSwatchIds,
 } from "./palette";
 import type { Bounds } from "./placement";
@@ -232,12 +235,9 @@ export function styleProps(style: LoweredStyle): StyleProp[] {
   // colour at all (black), while the same document with a minted swatch
   // produced red glyphs. So this emits the deterministic swatch id
   // `cellTextSwatchOps` mints; a malformed hex emits nothing.
-  const textHex =
-    style.textRgb == null ? null : normalizePaletteHex(style.textRgb);
-  // A document swatch is named as it is (sheet ADR 518).
-  const textRef =
-    style.textSwatch ??
-    (textHex != null ? paletteSwatchId("cellText", textHex) : null);
+  // A document swatch is named as it is (sheet ADR 518); a theme colour
+  // names the swatch that follows its slot (engine ADR 1056).
+  const textRef = cellTextRef(style);
   if (textRef != null)
     props.push({
       path: "characterFillColor",
@@ -275,11 +275,14 @@ export function cellTextSwatchOps(
   content: LoweredContent,
   knownSwatchIds?: KnownSwatchIds,
 ): Mutation[] {
-  return swatchMintOps(
-    "cellText",
-    distinctCellTextHexes(content),
-    knownSwatchIds,
-  );
+  return [
+    ...swatchMintOps(
+      "cellText",
+      distinctCellTextHexes(content),
+      knownSwatchIds,
+    ),
+    ...themedSwatchMintOps(themedCellTextEntries(content), knownSwatchIds),
+  ];
 }
 
 /** Which cell facets a `LoweredStyle` carries that the tab-text fallback

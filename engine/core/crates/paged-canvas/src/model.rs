@@ -5241,6 +5241,7 @@ impl CanvasModel {
                         tint: None,
                         alpha: None,
                         pattern: None,
+                        theme_ref: None,
                     }
                 };
                 let mut groups: Vec<(String, Vec<String>)> = Vec::new();

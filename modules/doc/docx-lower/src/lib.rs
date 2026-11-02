@@ -507,6 +507,9 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             .as_ref()
             .map(docx_core::Theme::drawingml_slots)
             .unwrap_or_default(),
+        engine_theme: theme_wire_source(doc)
+            .and_then(|src| dml_native::theme::engine_theme(src.as_bytes())),
+        word_theme: doc.theme.clone(),
         ..Lowering::default()
     };
 
@@ -1235,6 +1238,8 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
     });
 
     LoweredDoc {
+        theme: theme_wire_source(doc)
+            .and_then(|src| dml_native::theme::ThemeWire::of_part(src.as_bytes())),
         swatches: ctx.swatches,
         styles,
         story: LoweredStory { blocks },
@@ -1419,6 +1424,10 @@ struct Lowering {
     /// The document theme as DrawingML scheme slots, for the pictures'
     /// looks (doc ADR 618).
     dml_slots: Vec<(String, paged_ooxml::drawingml::Rgba)>,
+    /// The document's theme as the engine holds it (engine ADR 1056), and
+    /// Word's view of it (the colour mapping), for the swatches' references.
+    engine_theme: Option<dml_native::theme::EngineTheme>,
+    word_theme: Option<docx_core::Theme>,
     /// Body pictures whose look lowered to native effects, and what those
     /// are (`drop shadow`, `glow`, …), by kind.
     looked_pictures: usize,
@@ -1580,9 +1589,39 @@ impl Lowering {
             space: "RGB".into(),
             value: vec![r, g, b],
             theme: None,
+            theme_ref: None,
         });
         self.swatch_index.insert(hex.to_string(), id.clone());
         id
+    }
+
+    /// The engine theme reference of a Word theme colour (engine ADR 1056):
+    /// the scheme slot it names through `w:clrSchemeMapping`, and a tint or
+    /// shade as the `lumMod` / `lumOff` step that computes it. Only when the
+    /// document's theme resolves it to `value`, the colour the swatch shows.
+    fn engine_ref(
+        &self,
+        r: &docx_core::ThemeColorRef,
+        value: [f32; 3],
+    ) -> Option<dml_native::theme::ThemeRef> {
+        let theme = self.engine_theme.as_ref()?;
+        let word = self.word_theme.as_ref()?;
+        let scheme = word.scheme_slot(&r.slot);
+        let (_, slot) = docx_core::theme::SCHEME_SLOTS
+            .iter()
+            .find(|(w, _)| *w == scheme)?;
+        // Word: tint `L·t + (1 − t)`, then shade `· s`.
+        let t = r.tint.map_or(1.0, |t| t as f64 / 255.0);
+        let sh = r.shade.map_or(1.0, |s| s as f64 / 255.0);
+        let transforms = dml_native::theme::lum_transforms(t * sh, (1.0 - t) * sh);
+        dml_native::theme::follow(
+            theme,
+            dml_native::theme::ThemeRef {
+                slot: slot.to_string(),
+                transforms,
+            },
+            &value,
+        )
     }
 
     /// Register a theme colour reference resolved to `hex` and return its
@@ -1602,6 +1641,7 @@ impl Lowering {
                 color: r.clone(),
                 rgb: hex.to_ascii_uppercase(),
             }),
+            theme_ref: self.engine_ref(r, [red, green, blue]),
         });
         id
     }
@@ -3395,6 +3435,11 @@ pub fn para_style_token(style_id: &str) -> String {
 }
 
 /// Parse `RRGGBB` into `[r, g, b]` on 0–255.
+/// The theme part's text, when the document has one.
+fn theme_wire_source(doc: &DocxDocument) -> Option<&str> {
+    doc.theme.as_ref()?.source.as_deref()
+}
+
 fn parse_hex(hex: &str) -> Option<(f32, f32, f32)> {
     if hex.len() != 6 {
         return None;

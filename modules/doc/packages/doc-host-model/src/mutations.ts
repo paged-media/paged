@@ -46,8 +46,18 @@ function codePointLen(s: string): number {
  * references resolve. Swatches precede styles (a style's `characterFillColor`
  * references a swatch); styles are already topologically ordered by `docx-lower`.
  */
-export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
+export function buildStyleMutations(
+  ir: LoweredDoc,
+  opts: { theme?: boolean } = {},
+): Mutation[] {
   const ops: Mutation[] = [];
+  // Engine ADR 1056 — on open, the theme first, so the swatches that follow
+  // its slots find it; the part rides along and stays unedited. A placement
+  // into an existing document brings neither the theme nor its references.
+  const themed = opts.theme === true && !!ir.theme;
+  if (ir.theme && themed) {
+    ops.push({ op: "setTheme", args: { theme: ir.theme } } as Mutation);
+  }
   for (const sw of ir.swatches) {
     ops.push({
       op: "createSwatch",
@@ -57,6 +67,7 @@ export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
           name: sw.name,
           space: sw.space,
           value: sw.value,
+          ...(themed && sw.themeRef ? { themeRef: sw.themeRef } : {}),
         },
       },
     } as Mutation);

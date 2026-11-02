@@ -510,6 +510,7 @@ impl<'a> Lower<'a> {
                             tint: None,
                             alpha: None,
                             pattern: None,
+                            theme_ref: None,
                         },
                     });
                     break;

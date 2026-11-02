@@ -190,6 +190,43 @@ describe.skipIf(!docxPresent)(
       );
     });
 
+    /** A swatch's colour as the document shows it (`#rrggbb`). */
+    async function swatchValue(id: string): Promise<string> {
+      const [row] = await host.document.swatchDisplay([id]);
+      return row!.rgbHex.toLowerCase();
+    }
+
+    it("applying a theme recolours the Word theme swatches in one undo step (engine ADR 1056)", async () => {
+      covers("importer:media.paged.doc.importer.docx");
+      await open();
+      const themes = await host.document.collection<{
+        name: string;
+        edited?: boolean;
+      }>("theme");
+      expect(themes).toHaveLength(1);
+      expect(themes[0]!.name).toBe("Office Theme");
+      expect(themes[0]!.edited ?? false).toBe(false);
+      const accent1 = await swatchValue("Color/docx-theme-accent1");
+      const lighter = await swatchValue("Color/docx-theme-accent1-tint-99");
+      const accent2 = await swatchValue("Color/docx-theme-accent2");
+      const done = await host.document.mutate({
+        op: "setThemeColor",
+        args: { slot: "accent1", value: "FF0000" },
+      } as never);
+      expect(done.applied).toBe(true);
+      expect(await swatchValue("Color/docx-theme-accent1")).toBe("#ff0000");
+      // The tint follows the new colour; another slot's swatch does not move.
+      expect(await swatchValue("Color/docx-theme-accent1-tint-99")).not.toEqual(
+        lighter,
+      );
+      expect(await swatchValue("Color/docx-theme-accent2")).toEqual(accent2);
+      await host.document.undo();
+      expect(await swatchValue("Color/docx-theme-accent1")).toEqual(accent1);
+      expect(await swatchValue("Color/docx-theme-accent1-tint-99")).toEqual(
+        lighter,
+      );
+    });
+
     it("File ▸ Export of an unedited themed document writes every part as it was", async () => {
       covers("exporter:media.paged.doc.exporter.docx");
       await open();

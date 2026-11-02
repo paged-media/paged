@@ -1450,6 +1450,7 @@ fn created_swatch_saves_to_graphic_and_reparses() {
                 tint: None,
                 alpha: None,
                 pattern: None,
+                theme_ref: None,
             },
         })
         .expect("create swatch");
@@ -1501,6 +1502,7 @@ fn created_swatch_then_undo_round_trips_byte_identical() {
                 tint: None,
                 alpha: None,
                 pattern: None,
+                theme_ref: None,
             },
         })
         .unwrap();
@@ -1609,6 +1611,7 @@ fn created_frame_with_new_swatch_and_style_round_trips() {
                 tint: None,
                 alpha: None,
                 pattern: None,
+                theme_ref: None,
             },
         })
         .expect("swatch");

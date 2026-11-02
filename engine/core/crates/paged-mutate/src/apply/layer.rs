@@ -211,7 +211,14 @@ pub(super) fn color_entry_from_spec(self_id: String, spec: &SwatchSpec) -> paged
         alternate_value: spec.alternate_value.clone(),
         tint: spec.tint,
         alpha: spec.alpha,
-        theme_ref: None,
+        theme_ref: spec
+            .theme_ref
+            .as_ref()
+            .filter(|r| paged_model::THEME_SLOTS.contains(&r.slot.as_str()))
+            .map(|r| paged_model::ThemeRef {
+                slot: r.slot.clone(),
+                transforms: r.transforms.clone(),
+            }),
     }
 }
 
@@ -230,6 +237,10 @@ pub fn swatch_spec_from_entry(entry: &paged_model::ColorEntry) -> SwatchSpec {
         tint: entry.tint,
         alpha: entry.alpha,
         pattern: None,
+        theme_ref: entry.theme_ref.as_ref().map(|r| crate::ThemeRefSpec {
+            slot: r.slot.clone(),
+            transforms: r.transforms.clone(),
+        }),
     }
 }
 
@@ -377,6 +388,7 @@ pub fn pattern_swatch_spec(entry: &paged_model::PatternEntry) -> SwatchSpec {
         tint: None,
         alpha: None,
         pattern: Some(crate::operation::PatternSpec::from_model(entry)),
+        theme_ref: None,
     }
 }
 

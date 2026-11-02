@@ -33,12 +33,12 @@ use crate::error::XlsxError;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ThemePalette {
     slots: [Option<String>; 12],
+    /// The part as the engine's theme (engine ADR 1056), shared by every
+    /// colour that follows a slot.
+    engine: Option<std::sync::Arc<dml_native::theme::EngineTheme>>,
 }
 
-const SLOT_NAMES: [&str; 12] = [
-    "lt1", "dk1", "lt2", "dk2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
-    "hlink", "folHlink",
-];
+use sheet_format::resolve::INDEX_SLOTS as SLOT_NAMES;
 
 impl ThemePalette {
     /// Parse a theme part's `a:clrScheme`. A slot holds `a:srgbClr val` or
@@ -47,7 +47,10 @@ impl ThemePalette {
     pub fn parse(xml: &[u8]) -> Result<ThemePalette, XlsxError> {
         let theme = paged_ooxml::drawingml::Theme::parse(xml)
             .ok_or_else(|| XlsxError::Structure("theme part has no a:themeElements".into()))?;
-        let mut out = ThemePalette::default();
+        let mut out = ThemePalette {
+            engine: dml_native::theme::engine_theme(xml).map(std::sync::Arc::new),
+            ..ThemePalette::default()
+        };
         for (i, name) in SLOT_NAMES.iter().enumerate() {
             out.slots[i] = theme.hex(name).map(|h| format!("#{h}"));
         }
@@ -57,10 +60,7 @@ impl ThemePalette {
     /// The twelve colours in DrawingML scheme order (dk1, lt1, dk2, lt2,
     /// accent1–6, hlink, folHlink), the Office theme's for a missing slot.
     pub fn drawing_order(&self) -> [u32; 12] {
-        const OFFICE: [u32; 12] = [
-            0x000000, 0xFFFFFF, 0x44546A, 0xE7E6E6, 0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000,
-            0x5B9BD5, 0x70AD47, 0x0563C1, 0x954F72,
-        ];
+        const OFFICE: [u32; 12] = paged_ooxml::drawingml::theme::OFFICE;
         // SLOT_NAMES is lt1, dk1, lt2, dk2, …
         const MAP: [usize; 12] = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11];
         let mut out = OFFICE;
@@ -73,6 +73,11 @@ impl ThemePalette {
             }
         }
         out
+    }
+
+    /// The part as the engine's theme.
+    pub fn engine_theme(&self) -> Option<std::sync::Arc<dml_native::theme::EngineTheme>> {
+        self.engine.clone()
     }
 
     /// The colour a `theme="N"` index names, `#RRGGBB`.

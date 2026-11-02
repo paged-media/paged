@@ -89,9 +89,11 @@ fn fold(acc: &mut VisualAttrs, el: &TableElementStyle, r: u32, c: u32, area: (u3
     let (er0, ec0, er1, ec1) = area;
     if el.fill.is_some() {
         acc.fill_rgb = el.fill.clone();
+        acc.fill_theme = None;
     }
     if el.text.is_some() {
         acc.text_rgb = el.text.clone();
+        acc.text_theme = None;
     }
     acc.bold |= el.bold;
     let mut set = |edge: usize, l: &(String, Option<String>)| {

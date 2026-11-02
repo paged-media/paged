@@ -125,7 +125,16 @@ pub(super) fn apply_set_theme(
     }
     colors.sort_by_key(|c| slot_rank(&c.slot));
     let inverse = capture(doc);
-    let source = doc.theme.as_ref().and_then(|t| t.source.clone());
+    // A source given is a file read in (kept, unedited); else the document's
+    // own source stays and the theme is edited.
+    let imported = spec.source.is_some();
+    let source = match &spec.source {
+        Some(text) => Some(paged_model::SourceBlob {
+            format: paged_model::THEME_SOURCE_OOXML.into(),
+            data: text.clone(),
+        }),
+        None => doc.theme.as_ref().and_then(|t| t.source.clone()),
+    };
     doc.theme = Some(Theme {
         name: spec.name.clone(),
         color_scheme_name: spec.color_scheme_name.clone(),
@@ -134,7 +143,7 @@ pub(super) fn apply_set_theme(
         major: fonts_of(&spec.major),
         minor: fonts_of(&spec.minor),
         source,
-        edited: true,
+        edited: !imported,
     });
     recolour(doc);
     Ok(applied(
@@ -380,6 +389,66 @@ mod tests {
         undo(&mut doc, a);
         assert_eq!(v(&doc, "Color/accent1"), vec![21.0, 96.0, 130.0]);
         assert_eq!(v(&doc, "Color/accent1 lighter"), vec![0.0; 3]);
+    }
+
+    #[test]
+    fn a_created_swatch_with_a_reference_follows_the_slot_and_keeps_it_through_delete_and_undo() {
+        use crate::apply::layer::{apply_create_swatch, apply_delete_swatch};
+        use crate::operation::{SwatchSpec, ThemeRefSpec};
+        let mut doc = doc_with_theme();
+        let spec = SwatchSpec {
+            self_id: Some("Color/t".into()),
+            name: None,
+            space: "RGB".into(),
+            value: vec![21.0, 96.0, 130.0],
+            model: None,
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+            pattern: None,
+            theme_ref: Some(ThemeRefSpec {
+                slot: "accent1".into(),
+                transforms: vec![],
+            }),
+        };
+        apply_create_swatch(&mut doc, &spec).unwrap();
+        // An unknown slot is no reference.
+        let mut bad = spec.clone();
+        bad.self_id = Some("Color/bad".into());
+        bad.theme_ref.as_mut().unwrap().slot = "accent9".into();
+        apply_create_swatch(&mut doc, &bad).unwrap();
+        assert!(doc.palette.colors["Color/bad"].theme_ref.is_none());
+        apply_set_color(&mut doc, "accent1", "00FF00").unwrap();
+        assert_eq!(doc.palette.colors["Color/t"].value, vec![0.0, 255.0, 0.0]);
+        let del = apply_delete_swatch(&mut doc, "Color/t").unwrap();
+        assert!(!doc.palette.colors.contains_key("Color/t"));
+        let Operation::CreateSwatch { spec } = del.inverse else {
+            panic!("inverse is CreateSwatch");
+        };
+        apply_create_swatch(&mut doc, &spec).unwrap();
+        assert_eq!(
+            doc.palette.colors["Color/t"]
+                .theme_ref
+                .as_ref()
+                .unwrap()
+                .slot,
+            "accent1"
+        );
+    }
+
+    #[test]
+    fn a_theme_given_with_its_source_is_a_file_read_in_and_not_edited() {
+        let mut doc = doc_with_theme();
+        let spec = ThemeSpec {
+            name: "Other".into(),
+            source: Some("<a:theme name=\"Other\"/>".into()),
+            ..ThemeSpec::default()
+        };
+        apply_set_theme(&mut doc, &spec).unwrap();
+        let t = doc.theme.as_ref().unwrap();
+        assert!(!t.edited);
+        assert_eq!(t.source.as_ref().unwrap().data, "<a:theme name=\"Other\"/>");
     }
 
     #[test]

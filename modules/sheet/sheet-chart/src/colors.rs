@@ -31,10 +31,7 @@ use crate::geometry::PlotData;
 use crate::model::{dml_to_sheet_index, ColorRef, ConcreteColor};
 
 /// The Office theme (2013+): dk1, lt1, dk2, lt2, accent1–6, hlink, folHlink.
-pub const OFFICE_THEME: [u32; 12] = [
-    0x000000, 0xFFFFFF, 0x44546A, 0xE7E6E6, 0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000, 0x5B9BD5,
-    0x70AD47, 0x0563C1, 0x954F72,
-];
+pub const OFFICE_THEME: [u32; 12] = paged_ooxml::drawingml::theme::OFFICE;
 
 /// A resolved paint: the colour and the document swatch it names.
 #[derive(Clone, Debug, PartialEq)]

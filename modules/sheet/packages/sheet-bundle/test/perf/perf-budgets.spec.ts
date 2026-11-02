@@ -271,8 +271,11 @@ describe.skipIf(!ENGINE_BUILT)(
         "selection.get": 1,
         "engine.listSheets": 1,
         "document.collection": 1, // the swatch read before the fill mints
+        // Engine ADR 1056: the workbook's theme, asked once per lowering
+        // (null here: no theme part, so no document read and no setTheme).
+        "engine.getTheme": 1,
         "=mutations": 1,
-        "=engineCalls": 3,
+        "=engineCalls": 4,
         "=reads": 2, // no frame-chain read: `minted` names the frame
         "=bytesWritten": 0,
         "=sceneItems": 0,

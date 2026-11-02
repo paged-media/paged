@@ -2438,56 +2438,16 @@ fn engine_theme(
     deck: &Deck,
     images: &dyn Fn(&str) -> Option<Vec<u8>>,
 ) -> Option<paged_model::Theme> {
-    use paged_model::{Theme, ThemeColor, ThemeFonts, THEME_SOURCE_OOXML};
-    use paged_ooxml::drawingml::theme::Theme as Ooxml;
-    use paged_ooxml::drawingml::{color_in, ColorBase};
-    use paged_ooxml::tree::{self, Ns};
+    use paged_model::{Theme, ThemeColor, ThemeFonts};
 
-    let bytes = deck.theme_part.as_deref().and_then(images);
-    if let Some(bytes) = &bytes {
-        if let Some(t) = Ooxml::parse(bytes) {
-            // `dk1` and `lt1` are system colours in Office's themes; the
-            // reader resolves them to their last value, so ask the tree.
-            let system = |slot: &str| -> Option<String> {
-                let root = tree::parse(bytes).ok()?;
-                let scheme = root
-                    .child(Ns::A, "themeElements")?
-                    .child(Ns::A, "clrScheme")?;
-                match color_in(scheme.child(Ns::A, slot)?)?.base {
-                    ColorBase::System { name, .. } => Some(name),
-                    _ => None,
-                }
-            };
-            let fonts = |f: &paged_ooxml::drawingml::FontSet| ThemeFonts {
-                latin: f.latin.clone(),
-                east_asian: f.east_asian.clone(),
-                complex: f.complex.clone(),
-                scripts: f.scripts.clone(),
-            };
-            return Some(Theme {
-                name: t.name.clone().unwrap_or_default(),
-                color_scheme_name: t.color_scheme_name.clone(),
-                colors: t
-                    .colors
-                    .iter()
-                    .map(|(slot, _)| ThemeColor {
-                        slot: slot.clone(),
-                        value: t.hex(slot).unwrap_or_default(),
-                        system: system(slot),
-                    })
-                    .collect(),
-                font_scheme_name: t.font_scheme_name.clone(),
-                major: fonts(&t.major_font),
-                minor: fonts(&t.minor_font),
-                source: std::str::from_utf8(bytes)
-                    .ok()
-                    .map(|x| paged_model::SourceBlob {
-                        format: THEME_SOURCE_OOXML.into(),
-                        data: x.to_string(),
-                    }),
-                edited: false,
-            });
-        }
+    // The part as the shared reader lowers it (dml-native, engine ADR 1056).
+    if let Some(t) = deck
+        .theme_part
+        .as_deref()
+        .and_then(images)
+        .and_then(|bytes| dml_native::theme::engine_theme(&bytes))
+    {
+        return Some(t);
     }
     let ir = deck.theme.as_ref()?;
     let face = |f: &str| Some(f.to_string()).filter(|f| !f.is_empty());
@@ -2519,13 +2479,14 @@ fn engine_theme(
 /// colour (so following it changes nothing today).
 fn theme_ref_of(theme: &paged_model::Theme, c: &ColorEntry) -> Option<paged_model::ThemeRef> {
     let key = Key::of_swatch(&c.self_id).filter(|k| k.theme.is_none())?;
-    let r = paged_model::ThemeRef {
-        slot: key.slot,
-        transforms: key.transforms,
-    };
-    let rgb = theme.resolve(&r)?;
-    let value: Vec<f32> = rgb.iter().map(|b| *b as f32).collect();
-    (c.value == value).then_some(r)
+    dml_native::theme::follow(
+        theme,
+        paged_model::ThemeRef {
+            slot: key.slot,
+            transforms: key.transforms,
+        },
+        &c.value,
+    )
 }
 
 /// Build `deck` and package it as `.paged`. `images` returns a package

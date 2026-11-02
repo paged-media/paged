@@ -53,6 +53,9 @@ base64 = "0.23"
 # SHA-512 of the sheet-protection hash (ECMA-376 agile); the same crate and version as the engine and the data module.
 sha2 = { version = "0.11", default-features = false }
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
+# The workbook theme as the engine's theme (engine ADR 1056): the one lowering
+# of a theme part, shared with doc and slide.
+dml-native = { path = "../../../platform/shared/dml-native" }
 # The DrawingML chart reader and model, shared with slide (slide ADR 709):
 # `parts::chart` folds it into `sheet_chart::ChartModel`, the Excel profile.
 dml-chart = { path = "../../../platform/shared/dml-chart" }

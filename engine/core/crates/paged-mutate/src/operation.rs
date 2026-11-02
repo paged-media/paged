@@ -4077,6 +4077,25 @@ pub struct SwatchSpec {
     /// absent). A frame shows it by naming the id as its fill or stroke.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern: Option<PatternSpec>,
+    /// Engine ADR 1056 — the theme slot (and DrawingML transforms) the
+    /// swatch follows: a theme change recolours it. `value` stays the colour
+    /// it shows until then. Honoured by `createSwatch`; `editSwatch` leaves
+    /// a swatch's reference alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_ref: Option<ThemeRefSpec>,
+}
+
+/// Engine ADR 1056 — the slot a swatch follows, on the wire.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeRefSpec {
+    /// One of `dk1` … `folHlink`.
+    pub slot: String,
+    /// The transforms after the slot, in order: `["lumMod", 60000]`.
+    #[serde(default)]
+    pub transforms: Vec<(String, i32)>,
 }
 
 /// Which style collection a `SetStyleProperty` targets.
@@ -7414,6 +7433,12 @@ pub struct ThemeSpec {
     pub major: ThemeFontsSpec,
     #[serde(default)]
     pub minor: ThemeFontsSpec,
+    /// The theme part as the file wrote it (OOXML text). Given, the theme
+    /// is that file read in: the part is kept and the theme is not marked
+    /// edited, so a writer re-emits it byte for byte. Absent, the document's
+    /// own source is kept and the theme is marked edited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Engine ADR 1055 — what a comment thread is attached to, on the wire.

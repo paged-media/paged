@@ -1,10 +1,12 @@
 # ADR 1056 — One theme model for every module: colour slots and a font scheme on the document
 
-- **Status:** Accepted 2026-11-01; **slices 1 to 3 built** (the model, its `.paged` encoding,
+- **Status:** Accepted 2026-11-01; **slices 1 to 4 built** (the model, its `.paged` encoding,
   slide's import; the `theme` collection and the three operations, riding v78; swatches that follow
-  a slot, with the colour arithmetic in `paged-colour-math`). Open: doc and sheet lowering, font
-  references on styles (designed in [ADR 1057](1057-a-theme-in-indesign-documents.md), which also
-  amends the composition-time sentence below), export write-back from the model (slice 4 onward). Part of the capability layering of PM-0014 and PM-0017
+  a slot, with the colour arithmetic in `paged-colour-math`; doc and sheet lower onto it, see
+  Amendment 1). Open: font references on styles (designed in
+  [ADR 1057](1057-a-theme-in-indesign-documents.md), which also amends the composition-time sentence
+  below), export write-back from the model, the format scheme (decided: not modelled, Amendment 1).
+  Part of the capability layering of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Themes"). Amends
   slide [ADR 713](../../../../modules/slide/docs/adr/713-live-theme.md) and
   [ADR 719](../../../../modules/slide/docs/adr/719-document-styles.md) (see Migration).
@@ -172,3 +174,52 @@ others stay with the deck's package).
 2. **doc, sheet.** Their readers keep lowering to literal swatches until slice 4; each adds the
    `Document.theme` fill (a call to the same constructor) at that point.
 3. **Old documents** read unchanged: no `theme` field means no theme.
+
+## Amendment 1 (2026-11-02): doc and sheet lower onto the model; the format scheme stays out
+
+**Wire.** `createSwatch`'s `SwatchSpec` gains `themeRef` (`ThemeRefSpec`: `slot`, `transforms`),
+honoured on create; `editSwatch` still leaves a swatch's reference alone, and deleting a swatch now
+undoes with its reference (the "comes back as a literal colour" gap of slice 3 is closed:
+`swatch_spec_from_entry` carries it). An unknown slot is no reference. `setTheme`'s `ThemeSpec` gains
+`source` (the part's text): given, the theme is that file read in, so the part is kept and the theme
+is *not* marked edited and a writer re-emits it byte for byte; absent, the document's own source
+stays and the theme is marked edited, as before. A picker that applies another theme file may send
+that file's source.
+
+**One lowering.** `dml-native::theme` is the only place a theme part becomes the engine's theme
+(`engine_theme`, used by slide, doc and sheet; it replaced slide-native's copy), the only wire form a
+module's IR carries (`ThemeWire`, the argument of `setTheme`), and the only arithmetic that turns a
+module's tint into a reference: `follow` gives a `ThemeRef` only where the theme resolves it to the
+colour the document shows, and `lum_transforms` spells a luminance step (Word `themeTint` /
+`themeShade`, Excel `tint`) as `lumMod` / `lumOff`. Swatch ids and names stay the module's
+(`Color/docx-theme-accent1-tint-99`, slide's `Color/accent1 lumMod60000`, sheet's content-addressed
+ids): they are identities the module's save path parses. The default Office palette is one constant,
+`paged_ooxml::drawingml::theme::OFFICE`.
+
+- **doc** reads the part through the shared reader (`docx-import`), keeps its text on `docx_core::Theme`
+  (not serialised), and lowers it with the swatches: `LoweredDoc.theme` and `LoweredSwatch.themeRef`
+  (Word's `text1` / `background1` through `w:clrSchemeMapping` to the scheme slot). The host sends
+  `setTheme` first on open and `createSwatch` with `themeRef`; a placement into another document
+  brings neither. A literal colour never follows, even where its value equals a theme colour.
+- **sheet** reads `xl/theme/theme1.xml` once (`ThemePalette` keeps the Excel index order and the
+  tint wrapper only), exposes it as the same wire form (`get_theme`), and sends `setTheme` once per
+  document that has none; theme-coloured cell fills and text colours carry a `ThemeRef` that the page
+  mints a swatch with.
+- Applying a theme (`setTheme`, `setThemeColor`) recolours these swatches, and so the content painted
+  with them, in one undo step.
+
+**Save-back.** Unchanged themes are byte-preserving: the part is never rewritten by doc or sheet, and
+the model's `source` is the part as read. Gap (open, slice 5): a theme *edited* in the engine is not
+yet written back into the Word or Excel theme part; doc's export writes a recoloured swatch as the
+literal colour (it writes a theme reference only while the swatch still shows the imported colour),
+sheet writes none. Font references on styles are open too: doc still bakes the theme fonts into its
+styles, so a font change does not reach Word content.
+
+**The format scheme (`a:fmtScheme`) is not modelled (decided).** Its fill, line, effect and
+background-fill lists are consumed by one thing, the `fillRef` / `lnRef` / `effectRef` index a shape's
+style names, and only slide's resolver follows those live today. To carry them the engine would need
+the lists as paint values and a per-item style-matrix index resolved at render time: a new kind of
+fill reference, not a cheap field. The part holds them already (`source`, re-emitted untouched, and
+kept by an edited theme's patch), so nothing is lost on save. Slide keeps its own reading (`pptx-import`,
+`ThemeIr::fill_styles`). Revisit when a second module needs a shape's matrix index live (doc's and
+sheet's drawing shapes resolve it at import today).

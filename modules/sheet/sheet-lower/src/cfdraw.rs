@@ -71,10 +71,12 @@ pub fn apply_delta(base: &VisualAttrs, d: &VisualDelta) -> VisualAttrs {
     if let Some((rgb, swatch)) = &d.text {
         a.text_rgb = Some(rgb.clone());
         a.text_swatch = swatch.clone();
+        a.text_theme = None;
     }
     if let Some(f) = &d.fill {
         a.fill_rgb = f.fill_rgb.clone();
         a.fill_swatch = f.fill_swatch.clone();
+        a.fill_theme = f.fill_theme.clone();
         a.fill_pattern = f.fill_pattern.clone();
         a.fill_gradient = f.fill_gradient.clone();
     }
@@ -148,6 +150,7 @@ impl CellCf {
             if self.delta.as_ref().is_none_or(|d| d.fill.is_none()) {
                 a.fill_rgb = Some(rgb.clone());
                 a.fill_swatch = None;
+                a.fill_theme = None;
                 a.fill_pattern = None;
                 a.fill_gradient = None;
             }

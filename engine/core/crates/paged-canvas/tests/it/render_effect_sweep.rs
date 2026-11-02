@@ -528,6 +528,7 @@ fn fresh_color(m: &mut CanvasModel) -> String {
             tint: None,
             alpha: None,
             pattern: None,
+            theme_ref: None,
         },
     })
     .expect("mint a distinct swatch");
@@ -3187,6 +3188,7 @@ fn palette_cases(c: &mut Vec<Case>) {
                 tint: None,
                 alpha: None,
                 pattern: None,
+                theme_ref: None,
             },
         },
         |m| {
@@ -3210,6 +3212,7 @@ fn palette_cases(c: &mut Vec<Case>) {
                 tint: None,
                 alpha: None,
                 pattern: None,
+                theme_ref: None,
             },
         }
     }));

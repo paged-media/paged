@@ -52,6 +52,7 @@ import {
   matchFunctions,
   paintGridScene,
   rowHeadingWidthPt,
+  themeSwatchId,
   type FunctionEntry,
   type GridScene,
 } from "../../../sheet-host-model/src";
@@ -603,12 +604,32 @@ function faceOfStyle(st: { bold?: boolean; italic?: boolean }): {
   };
 }
 
+/** The swatch a style's fill is read from: its document swatch, else the
+ *  swatch that follows its theme slot (engine ADR 1056) — which the page
+ *  lowering minted, so a theme change recolours the grid as the table. */
+function fillSwatchOf(st: GridScene["styles"][number]): string | null {
+  if (st.fillSwatch) return st.fillSwatch;
+  return st.fillTheme && st.fillRgb
+    ? themeSwatchId("cellFill", st.fillTheme)
+    : null;
+}
+
+/** [`fillSwatchOf`] for the text colour. */
+function textSwatchOf(st: GridScene["styles"][number]): string | null {
+  if (st.textSwatch) return st.textSwatch;
+  return st.textTheme && st.textRgb
+    ? themeSwatchId("cellText", st.textTheme)
+    : null;
+}
+
 /** The document swatch ids a scene's styles reference. */
 function swatchIdsOf(scene: GridScene): string[] {
   const ids = new Set<string>();
   for (const st of scene.styles) {
-    if (st.fillSwatch) ids.add(st.fillSwatch);
-    if (st.textSwatch) ids.add(st.textSwatch);
+    const fill = fillSwatchOf(st);
+    if (fill) ids.add(fill);
+    const text = textSwatchOf(st);
+    if (text) ids.add(text);
     for (const line of Object.values(st.borderLines ?? {}))
       if (line?.swatch) ids.add(line.swatch);
   }
@@ -630,7 +651,9 @@ export function withSwatchColors(
   return {
     ...scene,
     styles: scene.styles.map((st) => {
-      if (!st.fillSwatch && !st.textSwatch && !st.borderLines) return st;
+      const fill = fillSwatchOf(st);
+      const text = textSwatchOf(st);
+      if (!fill && !text && !st.borderLines) return st;
       const lines = st.borderLines
         ? Object.fromEntries(
             Object.entries(st.borderLines).map(([edge, line]) => [
@@ -643,8 +666,8 @@ export function withSwatchColors(
         : undefined;
       return {
         ...st,
-        fillRgb: st.fillSwatch ? pick(st.fillSwatch, st.fillRgb) : st.fillRgb,
-        textRgb: st.textSwatch ? pick(st.textSwatch, st.textRgb) : st.textRgb,
+        fillRgb: fill ? pick(fill, st.fillRgb) : st.fillRgb,
+        textRgb: text ? pick(text, st.textRgb) : st.textRgb,
         ...(lines ? { borderLines: lines } : {}),
       };
     }),

@@ -12543,6 +12543,17 @@
               "type": "null"
             }
           ]
+        },
+        "themeRef": {
+          "description": "Engine ADR 1056 — the theme slot (and DrawingML transforms) the\nswatch follows: a theme change recolours it. `value` stays the colour\nit shows until then. Honoured by `createSwatch`; `editSwatch` leaves\na swatch's reference alone.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThemeRefSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -12738,6 +12749,38 @@
           }
         }
       }
+    },
+    "ThemeRefSpec": {
+      "description": "Engine ADR 1056 — the slot a swatch follows, on the wire.",
+      "type": "object",
+      "properties": {
+        "slot": {
+          "description": "One of `dk1` … `folHlink`.",
+          "type": "string"
+        },
+        "transforms": {
+          "description": "The transforms after the slot, in order: `[\"lumMod\", 60000]`.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer",
+                "format": "int32"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "slot"
+      ]
     },
     "GradientSpec": {
       "description": "Wire description of a gradient swatch, mirroring `GradientEntry`.",
@@ -13593,6 +13636,13 @@
             "complex": null,
             "scripts": []
           }
+        },
+        "source": {
+          "description": "The theme part as the file wrote it (OOXML text). Given, the theme\nis that file read in: the part is kept and the theme is not marked\nedited, so a writer re-emits it byte for byte. Absent, the document's\nown source is kept and the theme is marked edited.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },

@@ -302,6 +302,15 @@ pub struct LoweredStyle {
     /// The document swatch the text colour names.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text_swatch: Option<String>,
+    /// The theme slot (and DrawingML transforms) the fill colour follows
+    /// (engine ADR 1056): the page mints the fill's swatch with this
+    /// reference, so applying a theme recolours the cell. Only where the
+    /// workbook's theme resolves it to `fill_rgb`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill_theme: Option<sheet_format::ThemeRef>,
+    /// The same for the text colour.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_theme: Option<sheet_format::ThemeRef>,
     /// A pattern fill (not solid); `fill_rgb` holds its blend.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fill_pattern: Option<style::FillPattern>,
@@ -360,6 +369,8 @@ impl LoweredStyle {
             border_lines: BorderLines::default(),
             fill_swatch: None,
             text_swatch: None,
+            fill_theme: None,
+            text_theme: None,
             fill_pattern: None,
             fill_gradient: None,
             indent_pt: None,

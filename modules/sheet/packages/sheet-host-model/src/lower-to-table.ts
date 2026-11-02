@@ -57,11 +57,14 @@ import type {
 
 import type { LoweredContent, Page } from "./lowered";
 import {
+  cellFillRef,
   distinctCellFillHexes,
   distinctCellStrokeHexes,
   normalizePaletteHex,
   paletteSwatchId,
   swatchMintOps,
+  themedCellFillEntries,
+  themedSwatchMintOps,
   type KnownSwatchIds,
 } from "./palette";
 
@@ -295,6 +298,7 @@ export function cellFillSwatchOps(
       distinctCellFillHexes(content),
       knownSwatchIds,
     ),
+    ...themedSwatchMintOps(themedCellFillEntries(content), knownSwatchIds),
     ...swatchMintOps(
       "cellStroke",
       distinctCellStrokeHexes(content),
@@ -466,11 +470,7 @@ export function tableDecorOps(
       // malformed hex degrades to "no fill", never a dangling ref.
       // A document swatch is named as it is (sheet ADR 518); a plain
       // workbook colour names its minted content-addressed swatch.
-      const fillHex =
-        style.fillRgb == null ? null : normalizePaletteHex(style.fillRgb);
-      const fillRef =
-        style.fillSwatch ??
-        (fillHex != null ? paletteSwatchId("cellFill", fillHex) : null);
+      const fillRef = cellFillRef(style);
       if (fillRef != null) {
         fills.push({
           op: "setElementProperty",
