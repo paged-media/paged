@@ -723,6 +723,21 @@ export const CAPABILITIES: Capability[] = [
     note: "proto 78, engine ADR 1055; {person}; the document's people list",
   },
   {
+    op: "setTheme",
+    status: "supported",
+    note: "proto 78, engine ADR 1056; {theme}; creates the document's theme when it has none",
+  },
+  {
+    op: "setThemeColor",
+    status: "supported",
+    note: "proto 78, engine ADR 1056; {slot, value}; refuses without a theme, so probed after a setTheme",
+  },
+  {
+    op: "setThemeFonts",
+    status: "supported",
+    note: "proto 78, engine ADR 1056; {which, fonts}; refuses without a theme, so probed after a setTheme",
+  },
+  {
     op: "recordChange",
     status: "supported",
     note: "proto 78, doc ADR 613; {storyId, start, end, cell?, paragraph?, change}; probed on the text fixture's first story",
