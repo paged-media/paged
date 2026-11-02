@@ -108,6 +108,7 @@ const radii = (anchors: Array<{ anchor: number[] }>) =>
 describe("the host tool options", () => {
   it("are exactly the options this file covers", () => {
     expect(DECLARED.map((d) => `${d.toolId}.${d.field.key}`).sort()).toEqual([
+      "paged.tool.eyedropper.mode",
       "paged.tool.gradientSwatch.mode",
       "paged.tool.gradientSwatch.spread",
       "paged.tool.pencil.closeDistance",

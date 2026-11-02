@@ -40,8 +40,6 @@ import { covers, waitFor } from "@paged-media/test-kit";
 import {
   drawBundle,
   imageTraceOf,
-  COLOR_GUIDE_PANEL_ID,
-  COLOR_GUIDE_PANEL_NOTE,
   IMAGE_TRACE_PANEL_ID,
   IMAGE_TRACE_PANEL_NOTE,
   RECOLOR_PANEL_ID,
@@ -167,32 +165,6 @@ describe("the colour and trace panels", () => {
     ).toBe("#ff0000");
     expect(ready.get("[data-draw-recolor-note]").textContent).toBe(
       t(RECOLOR_PANEL_NOTE),
-    );
-  });
-
-  it("COLOR GUIDE: the fill's harmony and its variations; a click fills the selection", async () => {
-    covers("panel:media.paged.draw.panel.colorGuide");
-    await h.host.selection.set([A]);
-    const panel = await mountContributed(h, COLOR_GUIDE_PANEL_ID);
-    expect(
-      panel.attr("[data-draw-color-guide-panel]", "data-draw-color-guide-base"),
-    ).toBe("#ff0000");
-    expect(panel.count("[data-draw-color-guide-harmony-chip]")).toBe(2);
-    // Two harmony colours × seven variations.
-    expect(panel.count("[data-draw-color-guide-chip]")).toBe(14);
-    panel.change("[data-draw-color-guide-rule]", "tetradic");
-    expect(panel.count("[data-draw-color-guide-chip]")).toBe(28);
-    // Click the complement (the second harmony chip).
-    const chips = panel.all("[data-draw-color-guide-harmony-chip]");
-    const hex = chips[1]!.getAttribute("data-draw-color-guide-harmony-chip");
-    await panel.click(`[data-draw-color-guide-harmony-chip="${hex}"]`);
-    const ref = String(await fillOf(h, A));
-    expect(ref).not.toBe("Color/ured");
-    expect(
-      (await h.host.document.swatchDisplay([ref]))[0]?.rgbHex.toLowerCase(),
-    ).toBe(hex);
-    expect(panel.get("[data-draw-color-guide-note]").textContent).toBe(
-      t(COLOR_GUIDE_PANEL_NOTE),
     );
   });
 

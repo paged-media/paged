@@ -554,7 +554,6 @@ export const TWINS: readonly TwinSpec[] = [
   twin("generativeRecolor", { ...T, prompt: TEXT }),
   twin("textToVectorOptions", {}),
   twin("generativeRecolorOptions", {}),
-  twin("applyGuideColor", { ...T, hex: TEXT, stroke: BOOL }),
   // WP6.4 — brushes and width profiles as live stroke styles (engine ADR
   // 1053): a brush by its id (built-in or the document's), its options,
   // its removal; a width profile by its library id or its points

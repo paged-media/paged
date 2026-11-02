@@ -222,6 +222,26 @@ pub struct Paragraph {
     /// tracked change of its properties.
     #[serde(default, skip_serializing_if = "ParagraphReview::is_empty")]
     pub review: ParagraphReview,
+    /// Doc ADR 624 — Word's drop cap: the paragraph's first
+    /// [`DropCap::chars`] characters stand large over [`DropCap::lines`]
+    /// lines. Word stores it as a framed paragraph of its own (`w:framePr
+    /// w:dropCap`) ahead of the paragraph; the import folds the cap's runs
+    /// in at the start of this one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drop_cap: Option<DropCap>,
+}
+
+/// A Word drop cap (`w:framePr w:dropCap` / `w:lines`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DropCap {
+    /// `w:dropCap="margin"`: the cap hangs in the margin; `false` for
+    /// `drop`, set into the text.
+    pub in_margin: bool,
+    /// `w:lines`: how many lines the cap spans (Word's default is 3).
+    pub lines: u32,
+    /// How many characters the cap holds: the length of the framed
+    /// paragraph's text.
+    pub chars: u32,
 }
 
 /// A paragraph's held content: the facts save-back needs to refuse an edit
@@ -243,6 +263,14 @@ pub struct ParagraphHeld {
     /// rewritten `w:pPr` would drop it.
     #[serde(default)]
     pub tracked_ppr: bool,
+    /// The paragraph is a Word drop cap shown as ONE native paragraph: the
+    /// framed paragraph that holds the cap characters (`w:framePr
+    /// w:dropCap`) was folded into the paragraph after it
+    /// ([`Paragraph::drop_cap`]). Two `w:p` stand behind one block, so an
+    /// edit, a delete or a structural op on it is refused rather than
+    /// written onto one of them.
+    #[serde(default)]
+    pub drop_cap: bool,
 }
 
 /// A footnote or endnote (`w:footnote` / `w:endnote` in the notes part), keyed by

@@ -76,9 +76,9 @@ editor's built-in Pen and Pencil import the same geometry through the published
 (`packages/draw-bundle/package.json:9-13`). Limits and contradictions at this commit:
 
 - Four handlers import nothing from `draw-tools`: `packages/draw-bundle/src/handlers/lasso.ts`,
-  `packages/draw-bundle/src/handlers/gradient-annotator.ts`,
-  `packages/draw-bundle/src/handlers/text-on-path.ts` and
-  `packages/draw-bundle/src/handlers/eyedropper.ts`. `PenMachine` is used only by its own test
+  (`gradient-annotator.ts` until 2026-11-02, the host's Gradient tool now),
+  `packages/draw-bundle/src/handlers/text-on-path.ts` (and, until 2026-11-02, `eyedropper.ts`, which
+  is the host's now). `PenMachine` is used only by its own test
   ([ADR 352](352-basic-operations-belong-to-the-host.md)).
 - One read goes past the facades: `packages/draw-bundle/src/handlers/measure.ts:168-173` calls
   `host.editor.client.send`, marked there as an escape hatch.

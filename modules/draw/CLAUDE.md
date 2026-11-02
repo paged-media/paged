@@ -31,8 +31,7 @@ specs that boot it.
 
 `draw-bundle` is past "skeleton" — `activate(host)` contributes a full
 toolset via `contributeTool` (the Add/Delete/Convert anchor editors in
-the pen flyout, plus the Curvature/Gradient-Annotator/Measure/
-Shape-Builder pro tools; the Pencil is the host's, built on this repo's
+the pen flyout, plus the Curvature/Shape-Builder pro tools; the Pencil is the host's, built on this repo's
 `PencilMachine`, ADR 359), the (since deleted) Stroke + Fill schema panels, the
 Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, the
 Compound-Path pair (Make / Release), PATTERN EDITING v1 (a re-editable
@@ -274,8 +273,8 @@ Eyedropper) and `k` (a dead Measure). The current global picture:
   So the free registers WERE exactly `shift+t`, `i`, `k` and `shift+z`.
   UPDATE 2026-10-04: `k` now belongs to the Live Paint Bucket, its
   canonical key; the host's working Eyedropper holds `i` and paged.image
-  took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
-  (`shift+d`) stay where they are. Free now: `shift+o` only; paged.image
+  took `shift+t`, so Type on a Path (`shift+h`) stays where it is (draw's Eyedropper, `shift+d`, is the host's
+  Object mode since 2026-11-02). Free now: `shift+o` only; paged.image
   has since taken `shift+z` for its raster type tool. UPDATE 2026-10-25:
   the host's Artboard tool (engine ADR 1011) took `shift+o`; no
   single-letter or shift register is free now.

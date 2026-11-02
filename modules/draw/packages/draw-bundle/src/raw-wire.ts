@@ -22,8 +22,6 @@
 // still needs it is a FACADE GAP, and gaps are easier to close when they
 // are counted in one file:
 //
-//   · `requestNearestPathPoint` — the Measure tool's snap (RFI K-14: no
-//     `document.nearestPathPoint` facade);
 //   · `requestGradientDetail` — a gradient swatch's STOPS, which the
 //     annotator's on-canvas stop markers draw and edit (no
 //     `document.gradientDetail` facade; `collection("gradients")` lists
@@ -45,10 +43,6 @@ import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 
 /** The request kinds this bundle sends raw — the facade gaps, named. */
 export type RawRequest =
-  | {
-      kind: "requestNearestPathPoint";
-      payload: { id: ElementId; point: [number, number] };
-    }
   | { kind: "requestGradientDetail"; payload: { gradientId: string } }
   | { kind: "requestTextOutlines"; payload: { id: ElementId } }
   | {
@@ -58,7 +52,6 @@ export type RawRequest =
 
 /** The reply kind each request expects. */
 const REPLY_KIND: Record<RawRequest["kind"], string> = {
-  requestNearestPathPoint: "nearestPathPoint",
   requestGradientDetail: "gradientDetailReply",
   requestTextOutlines: "textOutlines",
   requestStyleProperties: "styleProperties",
@@ -92,30 +85,6 @@ export async function rawRead(
   } catch {
     return null;
   }
-}
-
-/** `requestNearestPathPoint`'s answer — typed HERE because plugin-api's
- *  curated wire subset does not carry `NearestPathPointResult`. */
-export interface NearestPathPointWire {
-  segStart: number;
-  segEnd: number;
-  t: number;
-  point: [number, number];
-  distance: number;
-}
-
-/** The nearest point on `id`'s path to `point` (both in the element's
- *  OWN space), or null. */
-export async function rawNearestPathPoint(
-  host: BundleHost,
-  id: ElementId,
-  point: [number, number],
-): Promise<NearestPathPointWire | null> {
-  const payload = (await rawRead(host, {
-    kind: "requestNearestPathPoint",
-    payload: { id, point },
-  })) as { result?: NearestPathPointWire | null } | null;
-  return payload?.result ?? null;
 }
 
 /** One stop of a gradient swatch as the engine resolves it — typed HERE

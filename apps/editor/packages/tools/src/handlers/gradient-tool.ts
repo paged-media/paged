@@ -44,6 +44,7 @@ import type {
 import { t } from "@paged-media/strings";
 
 import { GRADIENT_TOOL } from "../messages";
+import { createGradientAnnotation } from "./gradient-annotation";
 import {
   createFreeformGradientEditor,
   type FreeformMode,
@@ -124,6 +125,8 @@ export function createGradientSwatchHandler(): GestureHandler {
   let paged: PagedEditor | null = null;
   let drag: PageDrag | null = null;
   const freeform = createFreeformGradientEditor(GRADIENT_SWATCH_TOOL_ID);
+  // Linear mode: the selection's gradient axis and its stop markers.
+  const annotation = createGradientAnnotation();
   let unsubscribeSettings: (() => void) | null = null;
   /** The mode this press started in: a gesture ends where it began. */
   let pressMode: GradientMode = "linear";
@@ -131,6 +134,8 @@ export function createGradientSwatchHandler(): GestureHandler {
   const cancel = () => {
     paged?.overlaySignals.setToolPreview(null);
     drag = null;
+    // The idle annotation comes back once the drag's preview is gone.
+    annotation.refresh();
   };
 
   const axisFor = (
@@ -158,12 +163,17 @@ export function createGradientSwatchHandler(): GestureHandler {
     onActivate(p) {
       paged = p;
       freeform.activate(p);
-      freeform.show(gradientModeOf(p) !== "linear");
+      annotation.activate(p);
+      const sync = () => {
+        if (!paged) return;
+        const linear = gradientModeOf(paged) === "linear";
+        freeform.show(!linear);
+        annotation.show(linear);
+      };
+      sync();
       unsubscribeSettings?.();
       unsubscribeSettings =
-        p.toolSettings?.subscribe(GRADIENT_SWATCH_TOOL_ID, () => {
-          if (paged) freeform.show(gradientModeOf(paged) !== "linear");
-        }) ?? null;
+        p.toolSettings?.subscribe(GRADIENT_SWATCH_TOOL_ID, sync) ?? null;
     },
     onDeactivate(reason) {
       if (reason === "suspend") return;
@@ -171,6 +181,7 @@ export function createGradientSwatchHandler(): GestureHandler {
       unsubscribeSettings?.();
       unsubscribeSettings = null;
       freeform.deactivate();
+      annotation.deactivate();
       paged?.overlaySignals.setToolPreview(null);
     },
     onPointerDown(e: CanvasPointerEvent) {
@@ -182,11 +193,17 @@ export function createGradientSwatchHandler(): GestureHandler {
         return;
       }
       if (paged.selection.elementSelection.length === 0) return;
+      // A press on a stop marker grabs that stop.
+      if (annotation.grab(e)) return;
       drag = beginPageDrag(e);
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (paged && pressMode !== "linear") {
         freeform.pointerMove(e);
+        return;
+      }
+      if (annotation.dragging()) {
+        annotation.move(e);
         return;
       }
       if (!paged || !drag) return;
@@ -200,6 +217,10 @@ export function createGradientSwatchHandler(): GestureHandler {
     onPointerUp(e: CanvasPointerEvent) {
       if (paged && pressMode !== "linear") {
         freeform.pointerUp(e, pressMode, spreadOf(paged));
+        return;
+      }
+      if (annotation.dragging()) {
+        annotation.up(e);
         return;
       }
       if (!paged || !drag) {
@@ -251,7 +272,10 @@ export function createGradientSwatchHandler(): GestureHandler {
         freeform.key(e);
         return;
       }
-      if (e.key === "Escape") cancel();
+      if (e.key === "Escape") {
+        annotation.cancel();
+        cancel();
+      }
     },
   };
 }

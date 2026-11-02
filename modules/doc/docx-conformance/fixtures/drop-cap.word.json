@@ -1,0 +1,96 @@
+{
+ "fixture": "docx_conformance::drop_cap_docx()",
+ "produced_by": "scripts/word-drop-cap-probe.sh (Microsoft Word 16, PDF export, macOS)",
+ "measured": "2026-11-02",
+ "method": "page 1 (US Letter, 72 pt margins): line x and top from pdftotext -bbox; the cap's ink box from a 300 dpi raster. Calibri 11 pt; the fixture's styles omit pPrDefault, and Word lays its own defaults (8 pt after, 1.158 line: pitch 15.52 pt)",
+ "caps": [
+  {
+   "text": "T",
+   "x0": 72.025,
+   "x1": 95.413175,
+   "size_pt": 48.03,
+   "ink": [
+    72.24,
+    111.04,
+    95.04,
+    141.52
+   ]
+  },
+  {
+   "text": "Th",
+   "x0": 72.025,
+   "x1": 104.325,
+   "size_pt": 32.0,
+   "ink": [
+    72.24,
+    164.46,
+    101.76,
+    186.3
+   ]
+  },
+  {
+   "text": "T",
+   "x0": 72.025,
+   "x1": 95.413175,
+   "size_pt": 48.03,
+   "ink": [
+    72.24,
+    236.57,
+    95.04,
+    267.05
+   ]
+  }
+ ],
+ "lines": [
+  {
+   "top_pt": 74.3,
+   "x0": 72.03,
+   "text": "P0 a plain paragraph before the drop cap"
+  },
+  {
+   "top_pt": 97.8,
+   "x0": 95.55,
+   "text": "he quick brown fox jumps over the lazy d"
+  },
+  {
+   "top_pt": 113.3,
+   "x0": 95.55,
+   "text": "box with five dozen liquor jugs, so that"
+  },
+  {
+   "top_pt": 137.1,
+   "x0": 95.55,
+   "text": "P2 a plain paragraph between them."
+  },
+  {
+   "top_pt": 160.6,
+   "x0": 104.55,
+   "text": "e quick brown fox jumps over the lazy do"
+  },
+  {
+   "top_pt": 176.1,
+   "x0": 104.55,
+   "text": "my box with five dozen liquor jugs, so t"
+  },
+  {
+   "top_pt": 199.6,
+   "x0": 72.03,
+   "text": "P4 a plain paragraph between them."
+  },
+  {
+   "top_pt": 223.3,
+   "x0": 95.55,
+   "text": "he quick brown fox jumps over the lazy d"
+  },
+  {
+   "top_pt": 238.8,
+   "x0": 95.55,
+   "text": "box with five dozen liquor jugs, so that"
+  },
+  {
+   "top_pt": 262.3,
+   "x0": 95.55,
+   "text": "P6 the last paragraph."
+  }
+ ]
+}

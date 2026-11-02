@@ -47,14 +47,11 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
       "media.paged.draw.tool.curvature",
-      "media.paged.draw.tool.gradientAnnotator",
-      "media.paged.draw.tool.measure",
       "media.paged.draw.tool.shapeBuilder",
       "media.paged.draw.tool.cornerRadius",
       "media.paged.draw.tool.paintbrush",
       "media.paged.draw.tool.blobBrush",
       "media.paged.draw.tool.eraserBrush",
-      "media.paged.draw.tool.eyedropper",
       "media.paged.draw.tool.width",
       "media.paged.draw.tool.lassoSelect",
       // LIVE PAINT v0 — the bucket + the face-selection tool.
@@ -293,7 +290,6 @@ describe("drawBundle.activate", () => {
       // apply.
       "media.paged.draw.command.recolorArtwork",
       "media.paged.draw.command.recolorArtworkOptions",
-      "media.paged.draw.command.applyGuideColor",
       "media.paged.draw.command.textToVector",
       "media.paged.draw.command.generativeRecolor",
       "media.paged.draw.command.textToVectorOptions",
@@ -352,7 +348,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.imageTrace",
       "media.paged.draw.panel.recolorArtwork",
       "media.paged.draw.panel.generative",
-      "media.paged.draw.panel.colorGuide",
       "media.paged.draw.panel.brushes",
       // ADR 323 — the Draw properties schema panel (property rows).
       "media.paged.draw.panel.properties",

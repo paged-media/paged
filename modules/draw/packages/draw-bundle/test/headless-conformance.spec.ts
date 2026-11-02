@@ -30,7 +30,7 @@
 //
 // CONTRIBUTION COUNT (honesty note): the bundle registers TWENTY
 // tools (three anchor-editing + the pro set: Curvature,
-// Gradient Annotator, Measure, Shape Builder, Corner Radius + the v0
+// Shape Builder, Corner Radius (the Gradient annotation and Measure are the host's) + the v0
 // brushes: Paintbrush, Blob Brush, Eraser + the wave-2 trio:
 // Eyedropper, Width, Lasso Select + the Live Paint pair: Bucket, Face
 // Selection + Type on a Path) AND TWO declarative SCHEMA panels
@@ -89,14 +89,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.deleteAnchor",
         "media.paged.draw.tool.convertAnchor",
         "media.paged.draw.tool.curvature",
-        "media.paged.draw.tool.gradientAnnotator",
-        "media.paged.draw.tool.measure",
         "media.paged.draw.tool.shapeBuilder",
         "media.paged.draw.tool.cornerRadius",
         "media.paged.draw.tool.paintbrush",
         "media.paged.draw.tool.blobBrush",
         "media.paged.draw.tool.eraserBrush",
-        "media.paged.draw.tool.eyedropper",
         "media.paged.draw.tool.width",
         "media.paged.draw.tool.lassoSelect",
         "media.paged.draw.tool.livePaintBucket",
@@ -154,17 +151,14 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature,
-        // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
+        // Shape Builder, Corner Radius (the Gradient annotation and Measure are the host's)) +
         // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
-        // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
+        // wave-2 pair (Width, Lasso Select; the Eyedropper is the host's) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
         // (C-29) + the Repeat steering widget (§12.4, the one tool
         // with no shortcut — see tools.ts) + the Knife and Scissors
-        // at any point (keyless too) — twenty tools (the Pencil is the
+        // at any point (keyless too) — seventeen tools (the Pencil is the
         // host's, ADR 359).
-        "tool",
-        "tool",
-        "tool",
         "tool",
         "tool",
         "tool",
@@ -235,10 +229,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Offset / Simplify / Outline stroke / the four Insert shapes).
         "panel",
         // WP6.6 — the IMAGE TRACE panel (presets, options, Trace /
-        // Re-trace); WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE;
+        // Re-trace); WP6.5 — RECOLOR ARTWORK (the Color Guide is the host's);
         // WP6.4 — BRUSHES; WP8.3 — the GENERATIVE panel (Text to vector,
         // Generative recolor).
-        "panel",
         "panel",
         "panel",
         "panel",
@@ -252,7 +245,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Symbol Options (draw ADR 365); WP6.3 — the seven Envelope
         // distort / Expand appearance commands and the graphic-style
         // library's import / export / merge (draw ADR 367).
-        ...Array<string>(36).fill("command"),
+        ...Array<string>(35).fill("command"),
         "command",
         "command",
         "command",
@@ -712,7 +705,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(46);
+    expect(harness.toolsContributed()).toHaveLength(43);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

@@ -120,7 +120,7 @@ test.beforeEach(async ({ page }) => {
   await loadViaReactPath(page, "gradients");
 });
 
-test("GR-01 — dragging the Gradient Annotator re-aims the selection's gradient axis; ONE undo restores it @feat:color-swatches.gradients @level:gesture", async ({
+test("GR-01 — dragging the Gradient tool re-aims the selection's gradient axis; ONE undo restores it @feat:color-swatches.gradients @level:gesture", async ({
   page,
 }) => {
   const ref = await firstGradientFilledRect(page);
@@ -137,7 +137,7 @@ test("GR-01 — dragging the Gradient Annotator re-aims the selection's gradient
   const cx = (rect.left + rect.right) / 2;
   const cy = (rect.top + rect.bottom) / 2;
 
-  await activateTool(page, "gradientAnnotator");
+  await activateTool(page, "gradientSwatch");
   // A deliberately oblique axis (≈34°) — no fixture ships one, so the
   // write cannot be a no-op.
   const from = await screenPoint(page, cx - 40, cy - 27);

@@ -256,6 +256,15 @@ interface AnchorAt {
   name: string;
 }
 
+/** A Word drop cap (doc ADR 624): the engine's paragraph drop cap on the
+ *  paragraph's first native paragraph. */
+interface DropCapAt {
+  start: number;
+  end: number;
+  lines: number;
+  characters: number;
+}
+
 /** Word's hidden bookmark for the last edit place: not a destination. */
 const SKIPPED_BOOKMARKS = new Set(["_GoBack"]);
 
@@ -286,6 +295,7 @@ function poured(
   controls: ControlAt[];
   atomics: AtomicAt[];
   anchors: AnchorAt[];
+  dropCaps: DropCapAt[];
   length: number;
   /** UTF-8 bytes of the finished pour (text, breaks and atomics). */
   bytes: number;
@@ -303,6 +313,7 @@ function poured(
   const controls: ControlAt[] = [];
   const atomics: AtomicAt[] = [];
   const anchors: AnchorAt[] = [];
+  const dropCaps: DropCapAt[] = [];
   let text = "";
   // Bytes of the finished pour so far: the text plus every atomic.
   let bytes = 0;
@@ -500,6 +511,13 @@ function poured(
         ),
       );
     }
+    if (para.dropCap) {
+      dropCaps.push({
+        start: paraStart,
+        end: Math.max(firstEnd, paraStart + 1),
+        ...para.dropCap,
+      });
+    }
     segs.forEach((seg, k) => {
       const start = paraStart + seg.at;
       const end = k + 1 < segs.length ? paraStart + segs[k + 1].at : offset;
@@ -587,6 +605,7 @@ function poured(
     controls,
     atomics,
     anchors,
+    dropCaps,
     length: offset - base,
     bytes,
     breaks,
@@ -849,6 +868,26 @@ export function buildTextPour(
         value: { type: "text", value: JSON.stringify(c.control) },
       },
     } as unknown as Mutation);
+  }
+  // Doc ADR 624 — Word's drop caps: the engine's paragraph drop cap, on the
+  // paragraph itself (the engine refuses these two paths on a style).
+  for (const d of body.dropCaps) {
+    for (const [path, n] of [
+      ["paragraphDropCapCharacters", d.characters],
+      ["paragraphDropCapLines", d.lines],
+    ] as const) {
+      ops.push({
+        op: "setElementProperty",
+        args: {
+          elementId: {
+            kind: "storyRange",
+            id: { story_id: storyId, start: d.start, end: d.end },
+          },
+          path,
+          value: { type: "length", value: n },
+        },
+      } as unknown as Mutation);
+    }
   }
   // Doc ADR 612 — Word bookmarks as named text anchors (engine ADR 1022).
   for (const a of body.anchors) {

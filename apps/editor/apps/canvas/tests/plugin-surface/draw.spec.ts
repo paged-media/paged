@@ -68,14 +68,11 @@ const TOOLS = [
   "media.paged.draw.tool.deleteAnchor",
   "media.paged.draw.tool.convertAnchor",
   "media.paged.draw.tool.curvature",
-  "media.paged.draw.tool.gradientAnnotator",
-  "media.paged.draw.tool.measure",
   "media.paged.draw.tool.shapeBuilder",
   "media.paged.draw.tool.cornerRadius",
   "media.paged.draw.tool.paintbrush",
   "media.paged.draw.tool.blobBrush",
   "media.paged.draw.tool.eraserBrush",
-  "media.paged.draw.tool.eyedropper",
   "media.paged.draw.tool.width",
   "media.paged.draw.tool.lassoSelect",
   "media.paged.draw.tool.livePaintBucket",
@@ -143,7 +140,6 @@ const PANELS = [
   // WP6.6 / WP6.5 — Image Trace options, Recolor Artwork, Color Guide.
   "media.paged.draw.panel.imageTrace",
   "media.paged.draw.panel.recolorArtwork",
-  "media.paged.draw.panel.colorGuide",
   // WP6.4 — brushes and width profiles as live stroke styles.
   "media.paged.draw.panel.brushes",
   "media.paged.draw.panel.properties",
@@ -273,7 +269,6 @@ const COMMANDS = [
   "media.paged.draw.command.imageTraceOptions",
   "media.paged.draw.command.recolorArtwork",
   "media.paged.draw.command.recolorArtworkOptions",
-  "media.paged.draw.command.applyGuideColor",
   // WP8.3 — Text to vector and Generative recolor, with their panel raisers.
   "media.paged.draw.command.textToVector",
   "media.paged.draw.command.textToVectorOptions",
@@ -347,11 +342,8 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.paintbrush": "pen",
   "media.paged.draw.tool.blobBrush": "pen",
   "media.paged.draw.tool.eraserBrush": "pen",
-  "media.paged.draw.tool.gradientAnnotator": "gradientAnnotator",
-  "media.paged.draw.tool.measure": "measure",
   "media.paged.draw.tool.shapeBuilder": "shapeBuilder",
   "media.paged.draw.tool.cornerRadius": "cornerRadius",
-  "media.paged.draw.tool.eyedropper": "eyedropper",
   "media.paged.draw.tool.width": "width",
   "media.paged.draw.tool.lassoSelect": "lassoSelect",
   "media.paged.draw.tool.livePaintBucket": "livePaintBucket",
@@ -402,7 +394,6 @@ const PANEL_MARKER: Record<string, string> = {
   "media.paged.draw.panel.pathOptions": "[data-draw-pathopts-panel]",
   "media.paged.draw.panel.imageTrace": "[data-draw-image-trace-panel]",
   "media.paged.draw.panel.recolorArtwork": "[data-draw-recolor-panel]",
-  "media.paged.draw.panel.colorGuide": "[data-draw-color-guide-panel]",
   "media.paged.draw.panel.brushes": "[data-draw-brushes-panel]",
   // ADR 323 — object properties as host PropertyFields (a schema panel).
   "media.paged.draw.panel.properties":
@@ -686,7 +677,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 46 registered.
+    // TOOLS — all 43 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -745,14 +736,14 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(46);
-    expect(PANELS).toHaveLength(14);
-    expect(COMMANDS).toHaveLength(145);
+    expect(TOOLS).toHaveLength(43);
+    expect(PANELS).toHaveLength(13);
+    expect(COMMANDS).toHaveLength(144);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 46 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 43 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);

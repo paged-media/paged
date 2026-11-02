@@ -333,50 +333,6 @@ describe("paged.draw tools through the gesture DSL — drawing", () => {
 });
 
 describe("paged.draw tools through the gesture DSL — paint and shape", () => {
-  it("Gradient Annotator: a drag across the selection sets its gradient's angle and length, as one undo step; Escape commits nothing", async () => {
-    covers("tool:media.paged.draw.tool.gradientAnnotator");
-    const { r, g } = rig([A]);
-    await arm(r, g, `${T}.gradientAnnotator`);
-    const before = r.picture();
-    await g.drag({ from: [120, 200], to: [280, 200], steps: 6 }).settle();
-    expect(paths(r.leaves())).toEqual([
-      "frameGradientFillAngle",
-      "frameGradientFillLength",
-    ]);
-    await oneUndoStep(r, before);
-    await cancelCommitsNothing(
-      `${T}.gradientAnnotator`,
-      [A],
-      [120, 200],
-      [280, 200],
-    );
-  });
-
-  it("Eyedropper: a click on a path copies its paint onto the selection, as one undo step; alt+click only samples", async () => {
-    covers("tool:media.paged.draw.tool.eyedropper");
-    const { r, g } = rig([B]);
-    await arm(r, g, `${T}.eyedropper`);
-    await g.click([150, 150], { mods: ["alt"] }).settle();
-    expect(r.sent()).toEqual([]);
-    const before = r.picture();
-    await g.click([150, 150]).settle();
-    expect(paths(r.leaves())).toEqual([
-      "frameFillColor",
-      "frameStrokeColor",
-      "frameStrokeWeight",
-    ]);
-    expect(
-      r
-        .leaves()
-        .every(
-          (m) =>
-            (m as { args: { elementId: ElementId } }).args.elementId.id ===
-            "ub",
-        ),
-    ).toBe(true);
-    await oneUndoStep(r, before);
-  });
-
   it("Shape Builder: a drag across the overlapping pair unites them, as one undo step; Escape commits nothing", async () => {
     covers("tool:media.paged.draw.tool.shapeBuilder");
     const { r, g } = rig([A, B]);
@@ -429,21 +385,6 @@ describe("paged.draw tools through the gesture DSL — paint and shape", () => {
 });
 
 describe("paged.draw tools through the gesture DSL — reading and selecting", () => {
-  it("Measure: a drag publishes the distance and angle and commits nothing", async () => {
-    covers("tool:media.paged.draw.tool.measure");
-    const { r, g } = rig([]);
-    await arm(r, g, `${T}.measure`);
-    await g.drag({ from: [100, 100], to: [400, 500] }).settle();
-    const shown = r.fake.previews().filter(Array.isArray).at(-1) as Array<
-      Record<string, unknown>
-    >;
-    expect(shown.at(-1)).toMatchObject({
-      kind: "text",
-      text: "500.00 pt · 53.1°",
-    });
-    expect(r.sent()).toEqual([]);
-  });
-
   it("Lasso Select: a lasso around the first quad selects what it encloses and commits nothing", async () => {
     covers("tool:media.paged.draw.tool.lassoSelect");
     const { r, g } = rig([]);

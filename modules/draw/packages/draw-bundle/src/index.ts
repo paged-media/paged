@@ -111,33 +111,13 @@ export {
   type SelectOption,
 } from "./tool-options";
 export { createCurvatureHandler } from "./handlers/curvature";
-export {
-  createMeasureHandler,
-  nearestPathPointOnPage,
-  measureReadoutLabel,
-  measureTextPreview,
-  BIND_MEASURE_READOUT,
-  OVERLAY_TEXT_FEATURE,
-  OVERLAY_MULTI_FEATURE,
-  type ToolPreviewTextMirror,
-} from "./handlers/measure";
-export {
-  createGradientAnnotatorHandler,
-  gradientAxisMutationFor,
-  gradientSpecWithStop,
-  gradientStopMutationFor,
-  stopMarker,
-  type GradientAnnotatorOptions,
-} from "./handlers/gradient-annotator";
 // THE RAW WIRE — the one guarded seam over the `host.editor.client.send`
 // hatch (the facade gaps it covers are named in the module).
 export {
   hasRawWire,
   rawRead,
-  rawNearestPathPoint,
   rawGradientDetail,
   type RawRequest,
-  type NearestPathPointWire,
   type GradientDetailWire,
   type GradientStopWire,
 } from "./raw-wire";
@@ -1032,18 +1012,6 @@ export {
   type DxfExport,
 } from "./interchange-wasm";
 export { insertPathMutationsForShape, resolveTargetPage } from "./target-page";
-// Wave 2 — Eyedropper: the sample/apply pure halves + the module
-// sample state, exported for the conformance spec (the no-second-copy
-// rule).
-export {
-  createEyedropperHandler,
-  sampledStyleFrom,
-  applyStyleMutationFor,
-  getEyedropperSample,
-  clearEyedropperSample,
-  type SampledStyle,
-  type StyleApplyTarget,
-} from "./handlers/eyedropper";
 // Wave 2 — Width tool v0: the handler factory + the v0 profile
 // constants (the widths bake through the brush module's exact
 // outlineStrokeVariable builder above).
@@ -1448,14 +1416,12 @@ export {
   type GenerativeRoute,
 } from "./commands/generative";
 export { makeGenerativePanel } from "./panels/generative-panel";
-// WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE.
+// WP6.5 — RECOLOR ARTWORK (the Color Guide is the host's).
 export {
   RECOLOR_ARTWORK_COMMAND_ID,
   RECOLOR_ARTWORK_OPTIONS_COMMAND_ID,
-  APPLY_GUIDE_COLOR_COMMAND_ID,
   RECOLOR_COMMAND_IDS,
   RECOLOR_PANEL_ID,
-  COLOR_GUIDE_PANEL_ID,
   RECOLOR_DEFAULTS,
   RECOLOR_MODES,
   readArtworkColors,
@@ -1467,8 +1433,6 @@ export {
   requestHarmony,
   harmonyBaseOf,
   applyRecolorArtwork,
-  applyGuideColor,
-  guideBaseOf,
   contributeRecolorCommands,
   type ArtworkColor,
   type ArtworkRead,
@@ -1481,10 +1445,6 @@ export {
   type RecolorOutcome,
 } from "./commands/recolor";
 export { makeRecolorPanel, RECOLOR_PANEL_NOTE } from "./panels/recolor-panel";
-export {
-  makeColorGuidePanel,
-  COLOR_GUIDE_PANEL_NOTE,
-} from "./panels/color-guide-panel";
 // WP6.4 — brushes and width profiles as live stroke styles (engine ADR
 // 1053, draw ADR 366).
 export {

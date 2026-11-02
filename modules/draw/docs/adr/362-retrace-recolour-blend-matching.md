@@ -50,3 +50,13 @@ change of paint references.
 - A traced stroke has one width; a variable-width centreline is not reconstructed.
 - Live Paint gap detection and edge stroking stay out: they need the engine arrangement's
   tolerance and edge ids (WP2.4).
+
+## Amendment 2026-11-02 — the Color Guide is the host's
+
+Status: Accepted, amended. The Color Guide panel this record describes is gone from draw
+(PM-0017): the host's Color Wheel panel has a Color Guide section (`color-guide.ts`,
+`panels/color-guide-section.tsx`) with the same reads (the first selected item's fill as the
+document shows it) and the same write (a swatch named for the hex, found or created, one batch;
+Alt-click strokes). `harmonyOf` and `variationsOf` stay in draw-geometry, which Recolor Artwork
+shares. Draw's `applyGuideColor` command left with it.
+

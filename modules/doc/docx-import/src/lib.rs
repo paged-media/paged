@@ -913,6 +913,7 @@ fn map_body(body: &wml::Body, ctx: &ImportCtx) -> MappedBody {
         refs: Vec::new(),
         section_start: 0,
         pending_bookmarks: Vec::new(),
+        pending_cap: None,
     };
     for choice in &body.body_choice {
         match choice {
@@ -931,6 +932,7 @@ fn map_body(body: &wml::Body, ctx: &ImportCtx) -> MappedBody {
         walk.sections.push(section);
         walk.refs.push(section_refs(sp));
     }
+    walk.flush_cap();
     (walk.blocks, walk.sections, walk.refs)
 }
 
@@ -956,6 +958,9 @@ struct BodyWalk<'c, 'a> {
     section_start: usize,
     // Bookmarks started between paragraphs belong to the next one.
     pending_bookmarks: Vec<String>,
+    // Doc ADR 624 — a drop cap's framed paragraph waits for the paragraph
+    // it belongs to (`in_margin`, `lines`).
+    pending_cap: Option<(Paragraph, bool, u32)>,
 }
 
 impl BodyWalk<'_, '_> {
@@ -968,6 +973,21 @@ impl BodyWalk<'_, '_> {
         if !self.pending_bookmarks.is_empty() {
             self.pending_bookmarks.append(&mut para.bookmarks);
             para.bookmarks = std::mem::take(&mut self.pending_bookmarks);
+        }
+        // Doc ADR 624 — a drop cap: the framed cap paragraph is folded into
+        // the paragraph after it. Inside a content control it stays a
+        // paragraph of its own (the patcher cannot address it).
+        if !in_content_control {
+            if let Some((margin, lines)) = drop_cap_frame(p) {
+                self.flush_cap();
+                self.pending_cap = Some((para, margin, lines));
+                return;
+            }
+            if let Some((cap, margin, lines)) = self.pending_cap.take() {
+                fold_drop_cap(cap, margin, lines, &mut para);
+            }
+        } else {
+            self.flush_cap();
         }
         let sect = p
             .paragraph_properties
@@ -986,7 +1006,17 @@ impl BodyWalk<'_, '_> {
         }
     }
 
+    /// A drop cap's framed paragraph with no paragraph after it to fold
+    /// into (a table, a content control, the end of the body) stays the
+    /// paragraph it is.
+    fn flush_cap(&mut self) {
+        if let Some((cap, _, _)) = self.pending_cap.take() {
+            self.blocks.push(Block::Paragraph(cap));
+        }
+    }
+
     fn table(&mut self, t: &wml::Table) {
+        self.flush_cap();
         self.blocks
             .push(Block::Table(map_table(t, self.ctx, self.table_ord)));
         self.table_ord += 1;
@@ -996,6 +1026,7 @@ impl BodyWalk<'_, '_> {
     /// content — a Word table of contents is one, holding its cached
     /// entries. Its paragraphs are not on the patcher's path; its tables are.
     fn content_control(&mut self, sdt: &wml::SdtBlock) {
+        self.flush_cap();
         self.ctx.bump(|h| h.content_controls += 1);
         for c in sdt
             .sdt_content_block
@@ -1153,10 +1184,56 @@ fn map_paragraph(
             in_content_control: false,
             unshown_runs: unshown,
             tracked_ppr,
+            drop_cap: false,
         },
         toc_field,
         review: paragraph_review(p),
+        drop_cap: None,
     }
+}
+
+/// Doc ADR 624 — a paragraph that is the framed cap of a Word drop cap
+/// (`w:framePr w:dropCap="drop"|"margin"`): `(in_margin, lines)`. Word's
+/// default is three lines.
+fn drop_cap_frame(p: &wml::Paragraph) -> Option<(bool, u32)> {
+    let f = p
+        .paragraph_properties
+        .as_deref()?
+        .frame_properties
+        .as_ref()?;
+    let margin = match f.drop_cap.as_ref()? {
+        wml::DropCapLocationValues::Drop => false,
+        wml::DropCapLocationValues::Margin => true,
+        wml::DropCapLocationValues::None => return None,
+    };
+    let lines = f.lines.as_ref().map_or(3, |l| (*l).clamp(1, 10) as u32);
+    Some((margin, lines))
+}
+
+/// Fold the framed cap paragraph `cap` into the paragraph `para` after it:
+/// the cap's runs lead `para`, which becomes the drop cap (doc ADR 624).
+/// The engine sizes the cap itself, so the frame's own enlarged size and
+/// lowered baseline (Word writes them on the cap's run to make it span the
+/// lines) are dropped from its runs.
+fn fold_drop_cap(mut cap: Paragraph, in_margin: bool, lines: u32, para: &mut Paragraph) {
+    let chars: usize = cap.runs.iter().map(|r| r.text.chars().count()).sum();
+    for r in &mut cap.runs {
+        r.props.size_half_pts = None;
+        r.props.baseline_half_pts = None;
+    }
+    cap.runs.append(&mut para.runs);
+    para.runs = cap.runs;
+    // The cap's bookmarks start before the paragraph's own.
+    cap.bookmarks.append(&mut para.bookmarks);
+    para.bookmarks = cap.bookmarks;
+    para.held.drop_cap = true;
+    para.held.unshown_runs += cap.held.unshown_runs;
+    para.held.tracked_ppr |= cap.held.tracked_ppr;
+    para.drop_cap = Some(docx_core::DropCap {
+        in_margin,
+        lines,
+        chars: chars as u32,
+    });
 }
 
 /// One piece of paragraph content, from any of the run containers ooxmlsdk
