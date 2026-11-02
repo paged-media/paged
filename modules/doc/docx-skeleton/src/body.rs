@@ -450,3 +450,50 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
         .collect();
     NativeBody { blocks }
 }
+
+/// The body's native stories, one per skeleton story and in its order, when
+/// the WHOLE body can be built natively; `None` otherwise (the document
+/// then opens by the old path, whole: a story half built here and half
+/// poured would split a paragraph range between two mechanisms).
+///
+/// Stories group the blocks as the bundle's `sectionBlocks` does: a section
+/// that joins the story before it adds its blocks to that story.
+pub fn native_stories(doc: &LoweredDoc) -> Option<Vec<Vec<Paragraph>>> {
+    // What the body carries outside its blocks and the old path places.
+    if !doc.comments.is_empty() || !doc.tocs.is_empty() || doc.track_changes {
+        return None;
+    }
+    let body = native_body(doc);
+    let mut paras = Vec::with_capacity(body.blocks.len());
+    for b in body.blocks {
+        match b {
+            NativeBlock::Paragraph(p) => {
+                // The old pour reads a line feed as a paragraph break.
+                if p.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
+                    return None;
+                }
+                paras.push(*p);
+            }
+            NativeBlock::Deferred { .. } => return None,
+        }
+    }
+    let sections: Vec<_> = if doc.sections.is_empty() {
+        vec![&doc.section]
+    } else {
+        doc.sections.iter().collect()
+    };
+    let mut starts = Vec::new();
+    for (k, s) in sections.iter().enumerate() {
+        let joins = k > 0 && s.story == sections[k - 1].story;
+        if !joins {
+            starts.push(s.first_block);
+        }
+    }
+    let mut out = Vec::with_capacity(starts.len());
+    for (k, &start) in starts.iter().enumerate() {
+        let end = starts.get(k + 1).copied().unwrap_or(paras.len());
+        let slice = paras.get(start..end.min(paras.len()))?;
+        out.push(slice.to_vec());
+    }
+    Some(out)
+}

@@ -142,6 +142,15 @@ impl DocSession {
         docx_skeleton::skeleton_with(self.model(), name, self.options)
     }
 
+    /// The skeleton with the body already in its stories (doc ADR 625), or
+    /// `None` when the document is not one the native builder takes whole.
+    pub fn skeleton_prefilled(
+        &self,
+        name: &str,
+    ) -> Result<Option<docx_skeleton::Skeleton>, String> {
+        docx_skeleton::skeleton_prefilled(self.model(), &self.lowered(), name, self.options)
+    }
+
     /// Number of top-level body blocks.
     pub fn block_count(&self) -> usize {
         self.model.body.len()
