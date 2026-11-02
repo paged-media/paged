@@ -123,6 +123,12 @@ makes). A merge field needs nothing native (its text pours as text; the object m
 IR). Hyperlinks and bookmarks (which need document-level objects: hyperlink sources, destinations
 and text anchors) and a table of contents stay deferred.
 
+### Slice 2 amendment: list items
+
+A list item is a paragraph with the engine's list fields (`bullets_list_type`, `bullet_character`,
+`numbering_format`) beside its indents; the identity the IR keeps (`numId`, level) is the object
+model's, not the model's.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

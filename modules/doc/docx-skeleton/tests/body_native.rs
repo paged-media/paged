@@ -52,6 +52,9 @@ fn is_para_path(k: &str) -> bool {
             | "paragraphSpaceBefore"
             | "paragraphSpaceAfter"
             | "paragraphAutoLeading"
+            | "paragraphListType"
+            | "paragraphBulletCharacter"
+            | "paragraphNumberingFormat"
             | "paragraphKeepWithNext"
             | "paragraphKeepFirstLines"
             | "paragraphKeepLastLines"
@@ -323,6 +326,7 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
         ("table", docx_conformance::table_docx()),
+        ("list", docx_conformance::list_docx()),
         ("cell fields", docx_conformance::cell_fields_docx()),
         ("image", docx_conformance::image_docx()),
         ("picture crop", docx_conformance::picture_crop_docx()),
@@ -527,4 +531,27 @@ fn the_bundles_field_fixture_is_built_whole() {
         })
         .sum::<usize>();
     assert_eq!(fields, 2);
+}
+
+#[test]
+fn the_bundles_list_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/list-body.docx");
+    let ir = lowered(bytes);
+    let reasons: Vec<String> = native_body(&ir)
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| match b {
+            NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
+            _ => None,
+        })
+        .collect();
+    assert!(reasons.is_empty(), "deferred: {reasons:?}");
+    compare("list-body", &ir);
+    let items = native_body(&ir)
+        .blocks
+        .iter()
+        .filter(|b| matches!(b, NativeBlock::Paragraph(p) if p.bullets_list_type.is_some()))
+        .count();
+    assert_eq!(items, 4);
 }

@@ -212,6 +212,21 @@ pub fn set_paragraph_prop(p: &mut Paragraph, prop: &StyleProp) -> bool {
                 .map(|f| p.line_setting.auto_leading = Some(f))
                 .is_some();
         }
+        "paragraphListType" => {
+            return text_of(v)
+                .map(|t| p.bullets_list_type = (!t.is_empty()).then(|| t.to_owned()))
+                .is_some();
+        }
+        "paragraphBulletCharacter" => {
+            return text_of(v)
+                .map(|t| p.bullet_character = t.chars().next().map(|c| c as u32))
+                .is_some();
+        }
+        "paragraphNumberingFormat" => {
+            return text_of(v)
+                .map(|t| p.numbering_format = (!t.is_empty()).then(|| t.to_owned()))
+                .is_some();
+        }
         "paragraphKeepWithNext" => {
             return len_of(v)
                 .map(|f| p.keep_with_next = Some(count(f)))
@@ -340,6 +355,15 @@ pub fn read_paragraph_props(p: &Paragraph) -> BTreeMap<String, PropValue> {
             put(k, PropValue::Length(f));
         }
     }
+    if let Some(t) = &p.bullets_list_type {
+        put("paragraphListType", PropValue::Text(t.clone()));
+    }
+    if let Some(c) = p.bullet_character.and_then(char::from_u32) {
+        put("paragraphBulletCharacter", PropValue::Text(c.to_string()));
+    }
+    if let Some(t) = &p.numbering_format {
+        put("paragraphNumberingFormat", PropValue::Text(t.clone()));
+    }
     let bools = [
         ("paragraphKeepLinesTogether", p.keep_lines_together),
         ("paragraphKeepAllLinesTogether", p.keep_all_lines_together),
@@ -449,8 +473,6 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
         Some("page or column break inside the paragraph")
     } else if !p.bookmarks.is_empty() {
         Some("bookmark")
-    } else if p.list.is_some() {
-        Some("list item")
     } else if p.mark_change.is_some() || p.props_change.is_some() {
         Some("tracked change")
     } else if !p.text_boxes.is_empty() {
