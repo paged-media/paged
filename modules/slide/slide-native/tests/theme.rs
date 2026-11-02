@@ -211,3 +211,43 @@ fn the_decks_theme_is_the_documents_theme__feat__plugin_slide_import_native() {
         );
     }
 }
+
+// Engine ADR 1056, slice 3 — the theme swatches follow the engine theme's
+// slots: every swatch with a reference holds the colour its slot resolves to
+// (so following it changes nothing), the slots and their tints all have one,
+// and a literal colour has none.
+#[test]
+fn the_theme_swatches_follow_the_engine_themes_slots__feat__plugin_slide_import_native() {
+    for name in ["placeholders", "text", "tables"] {
+        let doc = open(name);
+        let theme = doc.theme.as_ref().expect("theme");
+        let group = &doc.palette.color_groups["ColorGroup/Theme"];
+        let mut followers = 0;
+        for id in &group.members {
+            let c = &doc.palette.colors[id];
+            let r = c
+                .theme_ref
+                .as_ref()
+                .unwrap_or_else(|| panic!("{name}: {id}"));
+            let rgb = theme.resolve(r).expect("resolves");
+            assert_eq!(
+                c.value,
+                rgb.iter().map(|b| *b as f32).collect::<Vec<_>>(),
+                "{name}: {id}"
+            );
+            followers += 1;
+        }
+        assert!(followers >= 62, "{name}: {followers}");
+        let lighter = &doc.palette.colors["Color/accent1 lumMod60000 lumOff40000"];
+        let r = lighter.theme_ref.as_ref().unwrap();
+        assert_eq!(r.slot, "accent1");
+        assert_eq!(
+            r.transforms,
+            vec![
+                ("lumMod".to_string(), 60_000),
+                ("lumOff".to_string(), 40_000)
+            ]
+        );
+        assert!(doc.palette.colors["Color/Black"].theme_ref.is_none());
+    }
+}

@@ -1,8 +1,9 @@
 # ADR 1056 — One theme model for every module: colour slots and a font scheme on the document
 
-- **Status:** Accepted 2026-11-01; **slices 1 and 2 built** (the model, its `.paged` encoding,
-  slide's import; the `theme` collection and the three operations, riding v78). Open: swatches
-  that reference slots, doc and sheet lowering, export write-back from the model (slice 3 onward). Part of the capability layering of PM-0014 and PM-0017
+- **Status:** Accepted 2026-11-01; **slices 1 to 3 built** (the model, its `.paged` encoding,
+  slide's import; the `theme` collection and the three operations, riding v78; swatches that follow
+  a slot, with the colour arithmetic in `paged-colour-math`). Open: doc and sheet lowering, font
+  references on styles, export write-back from the model (slice 4 onward). Part of the capability layering of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Themes"). Amends
   slide [ADR 713](../../../../modules/slide/docs/adr/713-live-theme.md) and
   [ADR 719](../../../../modules/slide/docs/adr/719-document-styles.md) (see Migration).
@@ -56,13 +57,27 @@ ThemeFonts { latin?, east_asian?, complex?, scripts: [(script, typeface)] }
 - **Not in slice 1: the format scheme** (fill, line and effect styles). Slide's resolver reads them
   and lowers references; the engine model gets them when a second consumer needs them.
 
-### How content follows a theme change (slice 3)
+### How content follows a theme change (slice 3, built for swatches)
 
 A swatch gains an optional **theme reference**: `slot` plus the transforms after it (the key
 slide already writes, `accent1 lumMod60000 lumOff40000`). A swatch with a reference takes its value
 from the theme: setting a slot colour recolours every such swatch, and so every item that uses it,
 in the same undo step. This is slide's mechanism (swatch id = key), moved into the engine; the
 swatch group "Theme" becomes a view of the theme (its slots and tints) rather than a stored list.
+**Built.** `ColorEntry.theme_ref: Option<ThemeRef { slot, transforms }>` (absent from the encoding
+when `None`, so every existing output is unchanged). `SetTheme` and `SetThemeColor` recolour, in the
+same step, every swatch that has one: `Theme::resolve` takes the slot's colour and applies the
+transform chain with `paged-colour-math` (the one owner of the sRGB curve, HSL and the DrawingML
+transforms, moved out of `paged-ooxml` with an oracle test that keeps the old code and compares
+bit for bit), clamps and rounds as a scheme colour resolves. A slot the theme lacks leaves its
+swatch alone. `RestoreTheme` (the inverse of all three) carries the theme and the followers'
+values, so undo restores both. `EditSwatch` leaves the reference alone (the reference is the
+theme's, not the spec's); a deleted swatch that is brought back by undo comes back as a literal
+colour (a known gap). Slide's import gives a reference to each swatch that is a key of the deck's
+own theme and whose colour its theme resolves to (so following it changes nothing today); slide's
+`applyTheme` sends `setTheme` first, then the swatch edits it always sent, which stay as the fallback
+for decks whose swatches carry no reference and for a remapped slot's stand-in.
+
 Fonts: a **theme font reference** (`major` / `minor`, per script) on a character and paragraph
 style's font, resolved against the theme at composition time. Until slice 3 the references are
 the two slide character styles and the root paragraph styles, written as today.
@@ -116,8 +131,9 @@ is a reported loss. Word's and Excel's theme parts, and a `.thmx`, read into the
 
 ### Slices after
 
-2. (built) The `theme` collection and the three operations. 3. Swatch and font theme
-references; slide's `applyTheme` becomes `setTheme`; the Design panel reads the collection.
+2. (built) The `theme` collection and the three operations. 3. (swatches built; font references open)
+Swatch and font theme references; slide's `applyTheme` sends `setTheme`; the Design panel reads the
+collection.
 4. doc and sheet lower onto it (their literal swatches become references; the doc's theme fonts
 leave the styles); export writes back from the model. 5. The format scheme.
 

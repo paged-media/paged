@@ -60,7 +60,7 @@ pub use script::{
     CharacterDirection, FontHint, ParagraphDirection, ResolvedDirection, ScriptClass,
     ScriptProperties,
 };
-pub use theme::{Theme, ThemeColor, ThemeFonts, THEME_SLOTS, THEME_SOURCE_OOXML};
+pub use theme::{Theme, ThemeColor, ThemeFonts, ThemeRef, THEME_SLOTS, THEME_SOURCE_OOXML};
 pub use word_field::{WordField, WordFieldKind};
 
 pub use mesh::{
@@ -3905,6 +3905,10 @@ pub struct ColorEntry {
     /// renderer when a `<GradientStop>` in spec form references a
     /// `<Color>` whose alpha defines the stop's opacity.
     pub alpha: Option<f32>,
+    /// Engine ADR 1056 — the theme slot (and transforms) this swatch follows.
+    /// A theme change recolours it; `EditSwatch` leaves the reference alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_ref: Option<ThemeRef>,
 }
 
 impl ColorEntry {
@@ -4034,6 +4038,7 @@ impl InlineStopColor {
             alternate_value: Vec::new(),
             tint: None,
             alpha: None,
+            theme_ref: None,
         }
     }
 }

@@ -38,6 +38,20 @@ pub const THEME_SLOTS: [&str; 12] = [
 /// The `source.format` of a theme read from an OOXML package.
 pub const THEME_SOURCE_OOXML: &str = "ooxml-theme";
 
+/// A swatch that follows a theme slot (engine ADR 1056, slice 3): the slot
+/// and the DrawingML transforms after it (`accent1` with `lumMod 60000`,
+/// `lumOff 40000` is "Accent 1, Lighter 40%"). A theme change recolours
+/// every swatch that carries one.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeRef {
+    /// One of [`THEME_SLOTS`].
+    pub slot: String,
+    /// The transforms in document order (`lumMod`, `lumOff`, `tint`, …).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transforms: Vec<(String, i32)>,
+}
+
 /// One colour slot of a theme.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,6 +129,26 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// The sRGB colour a swatch following `r` takes under this theme: the
+    /// slot's colour with the transforms applied, as `paged-ooxml` resolves
+    /// a scheme colour. `None` when the theme gives no such slot.
+    pub fn resolve(&self, r: &ThemeRef) -> Option<[u8; 3]> {
+        let base = paged_colour_math::Rgba::from_bytes(self.color(&r.slot)?.rgb()?);
+        let mut c = base;
+        for (name, val) in &r.transforms {
+            c = paged_colour_math::transform(c, name, *val);
+        }
+        Some(
+            paged_colour_math::Rgba {
+                r: c.r.clamp(0.0, 1.0),
+                g: c.g.clamp(0.0, 1.0),
+                b: c.b.clamp(0.0, 1.0),
+                a: c.a.clamp(0.0, 1.0),
+            }
+            .bytes(),
+        )
+    }
+
     /// The slot's colour.
     pub fn color(&self, slot: &str) -> Option<&ThemeColor> {
         self.colors.iter().find(|c| c.slot == slot)
@@ -171,6 +205,28 @@ mod tests {
         let t = sample();
         assert_eq!(t.color("accent1").unwrap().rgb(), Some([255, 0, 0]));
         assert!(t.color("accent2").is_none());
+    }
+
+    #[test]
+    fn a_swatch_reference_resolves_with_its_transforms() {
+        let t = sample();
+        let plain = ThemeRef {
+            slot: "accent1".into(),
+            transforms: vec![],
+        };
+        assert_eq!(t.resolve(&plain), Some([255, 0, 0]));
+        let lighter = ThemeRef {
+            slot: "accent1".into(),
+            transforms: vec![("lumMod".into(), 60_000), ("lumOff".into(), 40_000)],
+        };
+        assert_eq!(t.resolve(&lighter), Some([255, 102, 102]));
+        assert_eq!(
+            t.resolve(&ThemeRef {
+                slot: "accent2".into(),
+                transforms: vec![]
+            }),
+            None
+        );
     }
 
     #[test]

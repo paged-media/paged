@@ -267,6 +267,7 @@ impl Palette {
             alternate_value: Vec::new(),
             tint: None,
             alpha: None,
+            theme_ref: None,
         };
         let mut out: Vec<ColorEntry> = self
             .colors

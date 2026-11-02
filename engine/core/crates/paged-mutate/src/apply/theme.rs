@@ -34,12 +34,34 @@ fn refuse(msg: impl Into<String>) -> OperationError {
 }
 
 fn capture(doc: &Document) -> Operation {
+    let followers: Vec<(&String, &Vec<f32>)> = doc
+        .palette
+        .colors
+        .iter()
+        .filter(|(_, c)| c.theme_ref.is_some())
+        .map(|(id, c)| (id, &c.value))
+        .collect();
     Operation::RestoreTheme {
         // Plain data: serializing it cannot fail.
         theme_json: doc
             .theme
             .as_ref()
             .map(|t| serde_json::to_string(t).expect("model data serializes")),
+        swatches_json: Some(serde_json::to_string(&followers).expect("model data serializes")),
+    }
+}
+
+/// The swatches that follow a theme slot take their colour under the
+/// document's theme (a slot the theme lacks leaves its swatch as it is).
+fn recolour(doc: &mut Document) {
+    let Some(theme) = &doc.theme else {
+        return;
+    };
+    for c in doc.palette.colors.values_mut() {
+        let Some(rgb) = c.theme_ref.as_ref().and_then(|r| theme.resolve(r)) else {
+            continue;
+        };
+        c.value = rgb.iter().map(|b| *b as f32).collect();
     }
 }
 
@@ -114,6 +136,7 @@ pub(super) fn apply_set_theme(
         source,
         edited: true,
     });
+    recolour(doc);
     Ok(applied(
         Operation::SetTheme {
             theme: spec.clone(),
@@ -154,6 +177,7 @@ pub(super) fn apply_set_color(
         }
     }
     theme.edited = true;
+    recolour(doc);
     Ok(applied(
         Operation::SetThemeColor {
             slot: slot.to_string(),
@@ -197,16 +221,27 @@ pub(super) fn apply_set_fonts(
 pub(super) fn apply_restore(
     doc: &mut Document,
     theme_json: Option<&str>,
+    swatches_json: Option<&str>,
 ) -> Result<AppliedOperation, OperationError> {
     let theme: Option<Theme> = theme_json
         .map(serde_json::from_str)
         .transpose()
         .map_err(|e| refuse(format!("theme: {e}")))?;
+    let swatches: Option<Vec<(String, Vec<f32>)>> = swatches_json
+        .map(serde_json::from_str)
+        .transpose()
+        .map_err(|e| refuse(format!("theme swatches: {e}")))?;
     let inverse = capture(doc);
     doc.theme = theme;
+    for (id, value) in swatches.into_iter().flatten() {
+        if let Some(c) = doc.palette.colors.get_mut(&id) {
+            c.value = value;
+        }
+    }
     Ok(applied(
         Operation::RestoreTheme {
             theme_json: theme_json.map(str::to_string),
+            swatches_json: swatches_json.map(str::to_string),
         },
         inverse,
     ))
@@ -245,10 +280,14 @@ mod tests {
     }
 
     fn undo(doc: &mut Document, a: AppliedOperation) {
-        let Operation::RestoreTheme { theme_json } = a.inverse else {
+        let Operation::RestoreTheme {
+            theme_json,
+            swatches_json,
+        } = a.inverse
+        else {
             panic!("inverse is RestoreTheme");
         };
-        apply_restore(doc, theme_json.as_deref()).unwrap();
+        apply_restore(doc, theme_json.as_deref(), swatches_json.as_deref()).unwrap();
     }
 
     #[test]
@@ -287,6 +326,60 @@ mod tests {
         let mut none = Document::default();
         assert!(apply_set_color(&mut none, "accent1", "FF0000").is_err());
         assert!(apply_set_fonts(&mut none, "major", &ThemeFontsSpec::default()).is_err());
+    }
+
+    #[test]
+    fn swatches_that_follow_a_slot_are_recoloured_in_the_same_step_and_undone_with_it() {
+        use paged_model::{ColorEntry, ColorModel, ColorSpace, ThemeRef};
+        let mut doc = doc_with_theme();
+        let entry = |id: &str, r: ThemeRef, v: Vec<f32>| ColorEntry {
+            self_id: id.into(),
+            name: None,
+            space: ColorSpace::Rgb,
+            value: v,
+            model: ColorModel::Process,
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+            theme_ref: Some(r),
+        };
+        let slot = |s: &str, t: Vec<(String, i32)>| ThemeRef {
+            slot: s.into(),
+            transforms: t,
+        };
+        doc.palette.colors.insert(
+            "Color/accent1".into(),
+            entry(
+                "Color/accent1",
+                slot("accent1", vec![]),
+                vec![21.0, 96.0, 130.0],
+            ),
+        );
+        doc.palette.colors.insert(
+            "Color/accent1 lighter".into(),
+            entry(
+                "Color/accent1 lighter",
+                slot(
+                    "accent1",
+                    vec![("lumMod".into(), 60_000), ("lumOff".into(), 40_000)],
+                ),
+                vec![0.0; 3],
+            ),
+        );
+        // A literal swatch is left alone.
+        let mut plain = entry("Color/Plain", slot("accent1", vec![]), vec![1.0, 2.0, 3.0]);
+        plain.theme_ref = None;
+        doc.palette.colors.insert("Color/Plain".into(), plain);
+
+        let a = apply_set_color(&mut doc, "accent1", "FF0000").unwrap();
+        let v = |d: &Document, id: &str| d.palette.colors[id].value.clone();
+        assert_eq!(v(&doc, "Color/accent1"), vec![255.0, 0.0, 0.0]);
+        assert_eq!(v(&doc, "Color/accent1 lighter"), vec![255.0, 102.0, 102.0]);
+        assert_eq!(v(&doc, "Color/Plain"), vec![1.0, 2.0, 3.0]);
+        undo(&mut doc, a);
+        assert_eq!(v(&doc, "Color/accent1"), vec![21.0, 96.0, 130.0]);
+        assert_eq!(v(&doc, "Color/accent1 lighter"), vec![0.0; 3]);
     }
 
     #[test]

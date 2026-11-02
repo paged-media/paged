@@ -16331,6 +16331,7 @@ impl CanvasModel {
             alternate_value: alternate_value.map(|v| v.to_vec()).unwrap_or_default(),
             tint,
             alpha: None,
+            theme_ref: None,
         };
         let cmm = self.active_cmm();
         let working = working_color_of_with(&entry, self.use_standard_lab_for_spots);

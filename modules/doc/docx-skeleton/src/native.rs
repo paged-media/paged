@@ -299,6 +299,7 @@ fn palette() -> Graphic {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                theme_ref: None,
             },
         );
     }

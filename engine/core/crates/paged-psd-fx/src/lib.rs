@@ -126,6 +126,7 @@ fn rgb_swatch(rgb: [u8; 3], colors: &mut Vec<ColorEntry>) -> String {
             alternate_value: Vec::new(),
             tint: None,
             alpha: None,
+            theme_ref: None,
         });
     }
     id

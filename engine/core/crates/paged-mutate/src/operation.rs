@@ -6308,8 +6308,9 @@ pub enum Operation {
     },
     /// Engine ADR 1056 — replace the document's theme (colour slots, font
     /// scheme) with `theme`, keeping the source part of the theme it replaces
-    /// (the format scheme lives there) and marking the theme edited.
-    /// Inverse: `RestoreTheme`.
+    /// (the format scheme lives there) and marking the theme edited. The
+    /// swatches that follow a theme slot take their new colours in the same
+    /// step. Inverse: `RestoreTheme`.
     SetTheme {
         theme: ThemeSpec,
     },
@@ -6330,6 +6331,10 @@ pub enum Operation {
     RestoreTheme {
         #[serde(default)]
         theme_json: Option<String>,
+        /// The `[id, value]` pairs of the swatches that follow a theme slot,
+        /// as they were (JSON); `None` leaves the swatches alone.
+        #[serde(default)]
+        swatches_json: Option<String>,
     },
     /// Inverse-only (engine ADR 1055) — set the document's comment threads
     /// and people list to what they were. Its inverse carries what it replaced.

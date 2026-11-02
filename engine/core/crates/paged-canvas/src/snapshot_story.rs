@@ -208,6 +208,7 @@ fn rgb_colour(palette: &mut paged_model::Graphic, [r, g, b]: [u8; 3]) -> String 
             alternate_value: Vec::new(),
             tint: None,
             alpha: None,
+            theme_ref: None,
         });
     id
 }

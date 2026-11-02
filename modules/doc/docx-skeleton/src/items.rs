@@ -73,6 +73,7 @@ fn item_swatch(doc: &mut Document, hex: &str) -> String {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                theme_ref: None,
             },
         );
     }

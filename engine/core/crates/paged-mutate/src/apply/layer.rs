@@ -211,6 +211,7 @@ pub(super) fn color_entry_from_spec(self_id: String, spec: &SwatchSpec) -> paged
         alternate_value: spec.alternate_value.clone(),
         tint: spec.tint,
         alpha: spec.alpha,
+        theme_ref: None,
     }
 }
 
@@ -297,7 +298,10 @@ pub(super) fn apply_edit_swatch(
     let prior = swatch_spec_from_entry(existing);
     // Replace the editable fields in place; the id (map key) is the
     // identity and never changes here.
-    let updated = color_entry_from_spec(swatch_id.to_string(), spec);
+    let mut updated = color_entry_from_spec(swatch_id.to_string(), spec);
+    // A swatch that follows a theme slot (engine ADR 1056) keeps following
+    // it: the reference is the theme's, not the spec's.
+    updated.theme_ref = existing.theme_ref.clone();
     colors.insert(swatch_id.to_string(), updated);
     Ok(AppliedOperation {
         op: Operation::EditSwatch {

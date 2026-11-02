@@ -156,6 +156,7 @@ name = "paged-model"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "paged-colour-math",
  "serde",
  "serde_json",
 ]

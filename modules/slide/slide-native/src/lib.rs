@@ -2179,6 +2179,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                theme_ref: None,
             },
         );
     };
@@ -2189,7 +2190,13 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         vec![0.0, 0.0, 0.0, 100.0],
     );
     color("Color/Paper", "Paper", ColorSpace::Cmyk, vec![0.0; 4]);
-    for c in w.dml.palette.color_entries() {
+    // The engine's theme (ADR 1056): the swatches that are keys of its
+    // slots follow them, so a theme change recolours the art.
+    let theme = engine_theme(deck, images);
+    for mut c in w.dml.palette.color_entries() {
+        if let Some(t) = &theme {
+            c.theme_ref = theme_ref_of(t, &c);
+        }
         palette.colors.insert(c.self_id.clone(), c);
     }
     for g in w.dml.palette.gradient_entries() {
@@ -2406,7 +2413,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         symbols: Vec::new(),
         comment_threads: Vec::new(),
         people: Vec::new(),
-        theme: engine_theme(deck, images),
+        theme,
     };
     Built {
         document,
@@ -2505,6 +2512,20 @@ fn engine_theme(
         },
         ..Theme::default()
     })
+}
+
+/// The theme slot (and transforms) a swatch follows, when its id is a key
+/// of the deck's own theme and the engine theme resolves it to the swatch's
+/// colour (so following it changes nothing today).
+fn theme_ref_of(theme: &paged_model::Theme, c: &ColorEntry) -> Option<paged_model::ThemeRef> {
+    let key = Key::of_swatch(&c.self_id).filter(|k| k.theme.is_none())?;
+    let r = paged_model::ThemeRef {
+        slot: key.slot,
+        transforms: key.transforms,
+    };
+    let rgb = theme.resolve(&r)?;
+    let value: Vec<f32> = rgb.iter().map(|b| *b as f32).collect();
+    (c.value == value).then_some(r)
 }
 
 /// Build `deck` and package it as `.paged`. `images` returns a package

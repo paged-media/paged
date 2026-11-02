@@ -30,6 +30,7 @@ import type { BundleHost } from "@paged-media/plugin-api";
 
 import {
   applyThemeOps,
+  engineThemeSpec,
   contributeDesignCommands,
   DESIGN_CMD,
   DESIGN_MENU,
@@ -128,6 +129,45 @@ describe("[plugin-slide.import-native] the theme as document resources", () => {
     ).toEqual({ "Color/accent6": "Color/X" });
   });
 
+  it("builds the engine's theme over what it holds besides the gallery's", () => {
+    const dark = {
+      name: "Paper",
+      colors: [
+        ["dk1", "111111"],
+        ["lt1", "FEFEFE"],
+        ["accent1", "FF0000"],
+      ],
+      major: "Georgia",
+      minor: "Verdana",
+      variant: "Dark",
+    } as unknown as ThemeIr;
+    const t = engineThemeSpec(dark, {
+      colorSchemeName: "Office",
+      fontSchemeName: "Office",
+      colors: [
+        { slot: "dk1", value: "000000", system: "windowText" },
+        { slot: "lt1", value: "FEFEFE", system: "window" },
+      ],
+      major: { latin: "Aptos Display", scripts: [["Jpan", "Yu Gothic"]] },
+      minor: { latin: "Aptos" },
+    });
+    expect(t.name).toBe("Paper");
+    expect(t.colorSchemeName).toBe("Office");
+    // A system colour is kept only while its slot keeps its value.
+    expect(t.colors).toEqual([
+      { slot: "dk1", value: "111111", system: null },
+      { slot: "lt1", value: "FEFEFE", system: "window" },
+      { slot: "accent1", value: "FF0000", system: null },
+    ]);
+    expect(t.major).toMatchObject({
+      latin: "Georgia",
+      scripts: [{ script: "Jpan", typeface: "Yu Gothic" }],
+    });
+    expect(t.minor.latin).toBe("Verdana");
+    // No current theme: just the gallery's.
+    expect(engineThemeSpec(dark, null).major.scripts).toEqual([]);
+  });
+
   it("applies a theme as one batch: every theme swatch, the fonts, the label", async () => {
     const engine = await slideEngine();
     const paper = engine.themeGallery().find((g) => g.id === "paper")!;
@@ -157,6 +197,9 @@ describe("[plugin-slide.import-native] the theme as document resources", () => {
       ["CharacterStyle/Headings font", "Georgia"],
       ["CharacterStyle/Body font", "Verdana"],
     ]);
+    // The engine's theme goes first (swatches that follow a slot take their
+    // colours from it); the edits stay for the ones that do not.
+    expect(ops[0]!.op).toBe("setTheme");
     const last = ops.at(-1)! as unknown as {
       op: string;
       args: { value: string };

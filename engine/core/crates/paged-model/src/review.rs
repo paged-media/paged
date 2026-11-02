@@ -317,6 +317,7 @@ static REVIEW_COLORS: std::sync::LazyLock<Vec<ColorEntry>> = std::sync::LazyLock
         alternate_value: Vec::new(),
         tint: None,
         alpha: None,
+        theme_ref: None,
     };
     let mut out = Vec::new();
     for (k, rgb) in AUTHOR_RGB.iter().enumerate() {

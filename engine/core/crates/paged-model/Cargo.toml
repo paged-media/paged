@@ -18,6 +18,8 @@ schema = ["dep:schemars"]
 
 [dependencies]
 serde = { workspace = true }
+# The theme swatches' colour transforms (engine ADR 1056).
+paged-colour-math = { path = "../paged-colour-math" }
 base64 = { workspace = true }
 # The effect stack's IDML label (engine ADR 1008).
 serde_json = "1"

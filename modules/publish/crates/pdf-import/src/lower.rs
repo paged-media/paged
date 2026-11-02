@@ -95,6 +95,7 @@ impl Palette {
                 alternate_value: Vec::new(),
                 tint: None,
                 alpha: None,
+                theme_ref: None,
             },
         );
         self.seen.insert(key, id.clone());

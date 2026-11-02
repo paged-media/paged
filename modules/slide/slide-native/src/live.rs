@@ -702,6 +702,7 @@ pub fn new_shape(prst: &str, w: f64, h: f64, key: &str) -> Option<NewShape> {
         alternate_value: Vec::new(),
         tint: None,
         alpha: None,
+        theme_ref: None,
     };
     let elements = spread.frames_in_order.len();
     let snippet = json!({

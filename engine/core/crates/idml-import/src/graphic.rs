@@ -208,6 +208,7 @@ fn parse_color(e: &quick_xml::events::BytesStart) -> Option<ColorEntry> {
         alternate_value,
         tint,
         alpha,
+        theme_ref: None,
     })
 }
 

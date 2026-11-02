@@ -244,7 +244,55 @@ function withTheme(
   };
 }
 
-/** The ops that apply `theme` to the document: every theme swatch it has
+/** A row of the engine's `theme` collection (engine ADR 1056), as far as the
+ *  gallery needs it: what `setTheme` keeps of the theme it replaces. */
+export interface EngineTheme {
+  colorSchemeName?: string | null;
+  fontSchemeName?: string | null;
+  colors?: { slot: string; value: string; system?: string | null }[];
+  major?: EngineFonts;
+  minor?: EngineFonts;
+}
+interface EngineFonts {
+  latin?: string | null;
+  eastAsian?: string | null;
+  complex?: string | null;
+  scripts?: [string, string][];
+}
+
+/** The engine theme `setTheme` takes for gallery theme `theme`: its name,
+ *  twelve slots and Latin fonts, over what the current engine theme has
+ *  besides (scheme names, system colours of unchanged slots, the other
+ *  scripts' faces). */
+export function engineThemeSpec(theme: ThemeIr, current?: EngineTheme | null) {
+  const fonts = (now: EngineFonts | undefined, latin: string) => ({
+    latin: latin || now?.latin || null,
+    eastAsian: now?.eastAsian ?? null,
+    complex: now?.complex ?? null,
+    scripts: (now?.scripts ?? []).map(([script, typeface]) => ({
+      script,
+      typeface,
+    })),
+  });
+  return {
+    name: theme.name,
+    colorSchemeName: current?.colorSchemeName ?? null,
+    colors: theme.colors.map(([slot, value]) => {
+      const was = current?.colors?.find((c) => c.slot === slot);
+      return {
+        slot,
+        value,
+        system: was && was.value === value ? (was.system ?? null) : null,
+      };
+    }),
+    fontSchemeName: current?.fontSchemeName ?? null,
+    major: fonts(current?.major, theme.major),
+    minor: fonts(current?.minor, theme.minor),
+  };
+}
+
+/** The ops that apply `theme` to the document: the engine's own theme (so a
+ *  swatch that follows a slot recolours with it), every theme swatch it has
  *  takes the colour of its key under the theme (a remapped slot's stand-in
  *  takes the slot's), the root styles and the theme-font character styles
  *  take the theme's fonts, and the label names it. One batch, one undo. */
@@ -253,6 +301,7 @@ export function applyThemeOps(
   theme: ThemeIr,
   label: Label | null,
   lists: DocLists,
+  current?: EngineTheme | null,
 ): MutationInput[] {
   const state = themeState(label);
   const names = new Map(lists.swatch.map((s) => [s.id, s.name]));
@@ -260,7 +309,16 @@ export function applyThemeOps(
     theme,
     lists.swatch.map((s) => s.id),
   );
-  const ops: MutationInput[] = [];
+  // The engine's theme first: swatches that follow a slot take their colours
+  // from it. The edits below stay for the swatches that do not (a deck opened
+  // before they did) and for a remapped slot's stand-in, which is not the
+  // slot's own swatch.
+  const ops: MutationInput[] = [
+    {
+      op: "setTheme",
+      args: { theme: engineThemeSpec(theme, current) },
+    } as MutationInput,
+  ];
   const edit = (id: string, rgb: readonly number[]) =>
     ops.push({
       op: "editSwatch",
@@ -471,7 +529,14 @@ export class DesignStore implements Disposable {
     const l = label === undefined ? await this.label() : label;
     const lists = await readDocLists(this.host);
     if (!lists) return false;
-    const ops = applyThemeOps(await this.engine(), theme, l, lists);
+    let current: EngineTheme | null = null;
+    try {
+      const rows = await this.host.document.collection<EngineTheme>("theme");
+      current = rows[0] ?? null;
+    } catch {
+      current = null;
+    }
+    const ops = applyThemeOps(await this.engine(), theme, l, lists, current);
     const out = await this.host.document.mutate({
       op: "batch",
       args: { ops },

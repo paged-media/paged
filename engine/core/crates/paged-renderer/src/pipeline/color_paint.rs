@@ -1462,6 +1462,7 @@ mod tests {
             alternate_value: vec![],
             tint,
             alpha: None,
+            theme_ref: None,
         }
     }
 
@@ -1620,6 +1621,7 @@ mod tests {
             alternate_value: vec![],
             tint: None,
             alpha: None,
+            theme_ref: None,
         };
         let paint = lab_entry_to_paint(&entry).expect("lab resolves");
         match paint {

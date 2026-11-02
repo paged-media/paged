@@ -1269,6 +1269,7 @@ mod tests {
                     alternate_value: vec![0.0, 85.0, 90.0, 5.0],
                     tint,
                     alpha: None,
+                    theme_ref: None,
                 },
             );
         }

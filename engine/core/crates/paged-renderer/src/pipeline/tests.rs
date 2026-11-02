@@ -902,6 +902,7 @@ fn midpoint_governs_segment_before_its_stop() {
                 alternate_value: vec![],
                 tint: None,
                 alpha: None,
+                theme_ref: None,
             },
         );
     }
