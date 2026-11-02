@@ -111,7 +111,9 @@ An inline picture is an anchored frame on its paragraph (`AnchoredFrame`, a rect
 image, a character of its line at the picture's offset), its crop the frame's inner image
 placement. Floating pictures (anchored objects with wrap), pictures with a DrawingML look and text
 boxes stay deferred (4b), as do pictures whose frame ids the old path takes from the engine's
-mint: a native frame is `docx_img<n>`.
+mint: a native frame is `docx_img<n>`. A paragraph that holds a picture and no text, under a
+paragraph style with character properties (the picture line's pitch), is deferred too: the model
+has no paragraph-level character properties and an empty run is not known to carry them.
 
 ### Save-back
 
