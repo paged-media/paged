@@ -12,3 +12,20 @@ tags: ["rust", "shared"]
 project:
   title: "platform/shared/test-resources"
   description: "Optional test resources: unavailable: <reason>, PAGED_REQUIRE_<X>=1, PAGED_CORPUS_DIR."
+
+tasks:
+  # A member of the engine's Cargo workspace (docs/development/one-workspace.md):
+  # cargo finds the workspace from the crate's manifest, so the tasks select the
+  # crate with -p instead of the inherited --workspace / --all.
+  rust-fmt:
+    command: "cargo fmt -p paged-test-resources --check"
+  rust-check:
+    command: "cargo check -p paged-test-resources --all-targets"
+  rust-build:
+    command: "cargo build -p paged-test-resources"
+  rust-lint:
+    command: "cargo clippy -p paged-test-resources --all-targets -- -D warnings"
+  rust-test:
+    script: >-
+      cargo nextest run -p paged-test-resources
+      && cargo test --doc -p paged-test-resources

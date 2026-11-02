@@ -19,15 +19,18 @@ dependsOn:
     scope: "production"
 
 tasks:
-  # The standalone build takes every feature (paged-ooxml needs a zip
-  # backend, which `standalone` supplies here and the modules supply there).
+  # A member of the engine's Cargo workspace (docs/development/one-workspace.md):
+  # cargo finds the workspace from the crate's manifest, so the tasks select the
+  # crate with -p instead of the inherited --workspace / --all.
+  rust-fmt:
+    command: "cargo fmt -p dml-geom --check"
   rust-check:
-    command: "cargo check --workspace --all-targets --all-features"
+    command: "cargo check -p dml-geom --all-targets --all-features"
   rust-build:
-    command: "cargo build --workspace --all-features"
+    command: "cargo build -p dml-geom --all-features"
   rust-lint:
-    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+    command: "cargo clippy -p dml-geom --all-targets --all-features -- -D warnings"
   rust-test:
     script: >-
-      cargo nextest run --workspace --all-features
-      && cargo test --doc --workspace --all-features
+      cargo nextest run -p dml-geom --all-features
+      && cargo test --doc -p dml-geom --all-features

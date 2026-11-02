@@ -11,3 +11,20 @@ tags: ["rust", "shared"]
 project:
   title: "platform/shared/fmt"
   description: "Shared formatting facts: proleptic-Gregorian calendar, locale table, digit grouping."
+
+tasks:
+  # A member of the engine's Cargo workspace (docs/development/one-workspace.md):
+  # cargo finds the workspace from the crate's manifest, so the tasks select the
+  # crate with -p instead of the inherited --workspace / --all.
+  rust-fmt:
+    command: "cargo fmt -p paged-fmt --check"
+  rust-check:
+    command: "cargo check -p paged-fmt --all-targets"
+  rust-build:
+    command: "cargo build -p paged-fmt"
+  rust-lint:
+    command: "cargo clippy -p paged-fmt --all-targets -- -D warnings"
+  rust-test:
+    script: >-
+      cargo nextest run -p paged-fmt
+      && cargo test --doc -p paged-fmt

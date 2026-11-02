@@ -152,31 +152,13 @@ jobs:
             exit 1
           fi
 
-      # The skip convention every Rust workspace's tests use
-      # (docs/development/testing.md). It is a path dev-dependency, so
-      # neither its own tests nor its lints run in a consumer's workspace.
-      - name: test-resources (fmt, clippy, tests)
+      # test-resources and paged-fmt are members of this workspace now
+      # (docs/development/one-workspace.md): fmt, clippy and tests of both run
+      # in the workspace steps above and below. paged-fmt is compiled into wasm,
+      # hence its wasm32 clippy.
+      - name: paged-fmt (wasm32 clippy)
         if: runner.os == 'Linux'
-        run: |
-          set -euo pipefail
-          m=../../platform/shared/test-resources/Cargo.toml
-          cargo fmt --manifest-path "$m" --check
-          cargo clippy --manifest-path "$m" --target-dir target/test-resources --all-targets -- -D warnings
-          cargo test --manifest-path "$m" --target-dir target/test-resources
-
-      # The shared formatting crate (calendar, locale table, digit grouping):
-      # a path dependency of the engine, sheet, data and slide, so like
-      # test-resources its own tests and lints run nowhere else. It is
-      # compiled into wasm, hence the wasm32 clippy.
-      - name: paged-fmt (fmt, clippy, tests)
-        if: runner.os == 'Linux'
-        run: |
-          set -euo pipefail
-          m=../../platform/shared/fmt/Cargo.toml
-          cargo fmt --manifest-path "$m" --check
-          cargo clippy --manifest-path "$m" --target-dir target/paged-fmt --all-targets -- -D warnings
-          cargo clippy --manifest-path "$m" --target-dir target/paged-fmt --target wasm32-unknown-unknown -- -D warnings
-          cargo test --manifest-path "$m" --target-dir target/paged-fmt
+        run: cargo clippy -p paged-fmt --target wasm32-unknown-unknown -- -D warnings
 
       # Tests that miss a resource print `unavailable: <resource>: <reason>`
       # and append it here; the lane report below turns the lines into

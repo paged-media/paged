@@ -1,5 +1,6 @@
 [package]
 name = "paged-fmt"
+workspace = "../../../engine/core"
 version = "0.0.0"
 edition = "2021"
 rust-version = "1.99"
@@ -12,7 +13,3 @@ description = "Shared formatting facts of the built-ins: the proleptic-Gregorian
 # it adds one line to each consumer's Cargo.lock and nothing else.
 [dependencies]
 
-# A workspace of its own: this directory is not inside any other Cargo
-# workspace, and the consumers ignore this table (cargo reads only the
-# root workspace's).
-[workspace]
