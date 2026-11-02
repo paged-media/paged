@@ -68,7 +68,7 @@ three TS files → `paged-color::math` (bit-exactness against the goldens first)
 one function in `paged-colour-math` (f64; `paged-ooxml::colour` re-exports it, engine ADR 1056), wrappers in
 sheet-chart, sheet-format and docx-core. `paged-colour-math` also owns the DrawingML colour-transform chain
 (`transform`: lumMod, satOff, tint, shade, alpha …) and `Rgba`, proved bit-identical to the former
-`paged-ooxml` code by `tests/oracle.rs`; the `srgb-transfer-curve` single-owner rule baselines the other copies.
+`paged-ooxml` code by `tests/oracle.rs`; the `srgb-transfer` single-owner rule baselines the other copies.
 Default Office palette ×2. TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
 
 ### Raster, kernels, blend

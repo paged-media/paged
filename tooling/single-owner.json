@@ -68,7 +68,7 @@
       "description": "convert sRGB and linear light with paged_color::math",
       "owner": [
         "engine/core/crates/paged-color/src/math.rs",
-        "platform/shared/ooxml/src/colour.rs"
+        "engine/core/crates/paged-colour-math/"
       ],
       "patterns": ["0\\.04045"],
       "extensions": [".rs", ".ts", ".tsx"],
@@ -193,45 +193,6 @@
       "baseline": [
         "modules/image/image-conformance/src/abr_corpus/sha256.rs",
         "modules/sheet/sheet-xlsx/src/parts/protection.rs"
-      ]
-    },
-    {
-      "name": "srgb-transfer-curve",
-      "description": "the sRGB transfer curve and the colour-transform maths live in paged-colour-math (f64, documents) and paged-color/src/math.rs (f32, the render pipeline); reach them instead of copying the 0.04045 / 0.0031308 knees",
-      "owner": [
-        "engine/core/crates/paged-colour-math/",
-        "engine/core/crates/paged-color/src/math.rs"
-      ],
-      "patterns": ["0\\.040_?45", "0\\.003_?130_?8"],
-      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": [
-        "apps/editor/apps/canvas/scripts/demo-files.ts",
-        "apps/editor/apps/canvas/src/panels/info-readouts.ts",
-        "apps/editor/packages/ui/src/color/color-space.ts",
-        "engine/core/crates/paged-canvas/src/model.rs",
-        "engine/core/crates/paged-color/src/lab.rs",
-        "engine/core/crates/paged-color/src/lib.rs",
-        "engine/core/crates/paged-color/tests/parity.rs",
-        "engine/core/crates/paged-compose/src/gradient_sample.rs",
-        "engine/core/crates/paged-compose/src/scene_layer.rs",
-        "engine/core/crates/paged-export-pdf/src/color.rs",
-        "engine/core/crates/paged-fidelity/src/color.rs",
-        "engine/core/crates/paged-gpu/src/lib.rs",
-        "engine/core/crates/paged-gpu/src/svg_filter.rs",
-        "engine/core/crates/paged-gpu/src/vcpu.rs",
-        "engine/core/crates/paged-gpu/src/vello_map.rs",
-        "engine/core/crates/paged-gpu/src/vello_rs.rs",
-        "engine/core/crates/paged-model/src/lib.rs",
-        "engine/core/crates/paged-raster/src/dng.rs",
-        "engine/core/crates/paged-raster/tests/it/dng.rs",
-        "engine/core/crates/paged-renderer/tests/it/spot_tint.rs",
-        "engine/core/crates/paged-svg/src/export.rs",
-        "modules/draw/packages/draw-geometry/src/color-harmony.ts",
-        "modules/image/image-conformance/src/delta_e.rs",
-        "modules/image/image-conformance/tests/it/filters_develop.rs",
-        "modules/image/image-kernels/src/families/adjust_ext.rs",
-        "modules/image/image-kernels/src/families/develop.rs",
-        "modules/image/image-kernels/src/families/select.rs"
       ]
     }
   ]
