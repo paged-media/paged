@@ -45,6 +45,7 @@
 //! assigns each section the same story index, so the pour and save-back stay
 //! aligned with this skeleton.
 
+pub mod body;
 pub mod items;
 pub mod native;
 
