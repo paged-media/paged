@@ -143,9 +143,15 @@ export function ThemePanel() {
   const current = theme?.[0] ?? null;
   const run = (m: unknown) => {
     setError(null);
-    client.mutate(m as never).catch((e: unknown) => {
-      setError(strings.t(M.failed, { error: String(e) }));
-    });
+    client
+      .mutate(m as never)
+      .then((reply) => {
+        if (reply.kind === "mutationFailed")
+          setError(strings.t(M.failed, { error: String(reply.payload.error) }));
+      })
+      .catch((e: unknown) => {
+        setError(strings.t(M.failed, { error: String(e) }));
+      });
   };
 
   const applyPreset = () => {
@@ -183,6 +189,7 @@ export function ThemePanel() {
       <select
         className="text-xs border border-input rounded px-1 py-0.5"
         data-action="preset"
+        aria-label={strings.t(M.presets)}
         value={preset}
         onChange={(e) => setPreset(e.target.value)}
       >
@@ -226,6 +233,7 @@ export function ThemePanel() {
                   <input
                     type="color"
                     data-theme-slot={slot}
+                    aria-label={strings.t(label)}
                     value={`#${colorOf(current, slot)}`}
                     onChange={(e) =>
                       run({
@@ -287,6 +295,7 @@ export function ThemePanel() {
                 <select
                   className="border border-input rounded px-1 py-0.5 flex-1 min-w-0"
                   data-pick-slot={slot}
+                  aria-label={strings.t(label)}
                   value={picks[slot] ?? ""}
                   onChange={(e) =>
                     setPicks({ ...picks, [slot]: e.target.value })
