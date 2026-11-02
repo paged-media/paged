@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slices 1 to 4a implemented (2 to 4a behind a flag, off); the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented (2 to 5 behind a flag, off); the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
@@ -114,6 +114,14 @@ boxes stay deferred (4b), as do pictures whose frame ids the old path takes from
 mint: a native frame is `docx_img<n>`. A paragraph that holds a picture and no text, under a
 paragraph style with character properties (the picture line's pitch), is deferred too: the model
 has no paragraph-level character properties and an empty run is not known to carry them.
+
+### Slice 5 as built: fields
+
+A Word field the engine keeps live is one native run carrying `WordField::parse(code)`, its result
+the joined text of the field's runs, in the first run's look (what the bundle's `insertField`
+makes). A merge field needs nothing native (its text pours as text; the object model reads the
+IR). Hyperlinks and bookmarks (which need document-level objects: hyperlink sources, destinations
+and text anchors) and a table of contents stay deferred.
 
 ### Save-back
 

@@ -123,11 +123,27 @@ fn compare_paragraph(
     );
     assert_eq!(old_p, new_p, "{at}: paragraph properties");
     // Text and runs.
-    let old_runs: Vec<_> = p.runs.iter().filter(|r| !r.text.is_empty()).collect();
+    // A field's runs are one native run, in the first run's look.
+    let mut old_runs: Vec<(String, &docx_lower::ir::LoweredRun)> = Vec::new();
+    let mut open: Option<u32> = None;
+    for r in p.runs.iter().filter(|r| !r.text.is_empty()) {
+        match (&r.field, open) {
+            (Some(f), Some(seq)) if f.seq == seq => {
+                old_runs.last_mut().unwrap().0.push_str(&r.text);
+            }
+            _ => old_runs.push((r.text.clone(), r)),
+        }
+        open = r.field.as_ref().map(|f| f.seq);
+    }
     assert_eq!(old_runs.len(), np.runs.len(), "{at}: run count");
-    for (j, (or, nr)) in old_runs.iter().zip(&np.runs).enumerate() {
+    for (j, ((text, or), nr)) in old_runs.iter().zip(&np.runs).enumerate() {
         let at = format!("{at} run {j}");
-        assert_eq!(or.text, nr.text, "{at}: text");
+        assert_eq!(*text, nr.text, "{at}: text");
+        assert_eq!(
+            or.field.as_ref().map(|f| f.code.trim().to_string()),
+            nr.field.as_ref().map(|f| f.code.clone()),
+            "{at}: field"
+        );
         assert!(
             !nr.character_style.as_deref().is_some_and(is_synthesized),
             "{at}: names a synthesized character style"
@@ -307,6 +323,7 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
         ("table", docx_conformance::table_docx()),
+        ("cell fields", docx_conformance::cell_fields_docx()),
         ("image", docx_conformance::image_docx()),
         ("picture crop", docx_conformance::picture_crop_docx()),
         ("table look", docx_conformance::objects_table_look_docx()),
@@ -484,4 +501,30 @@ fn the_bundles_picture_fixture_is_built_whole() {
     let (built, _) = compare("picture-body", &ir);
     assert!(built >= 3);
     assert!(docx_skeleton::body::native_stories(&ir).is_some());
+}
+
+#[test]
+fn the_bundles_field_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/field-body.docx");
+    let ir = lowered(bytes);
+    let reasons: Vec<String> = native_body(&ir)
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| match b {
+            NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
+            _ => None,
+        })
+        .collect();
+    assert!(reasons.is_empty(), "deferred: {reasons:?}");
+    compare("field-body", &ir);
+    let fields = native_body(&ir)
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Paragraph(p) => Some(p.runs.iter().filter(|r| r.field.is_some()).count()),
+            _ => None,
+        })
+        .sum::<usize>();
+    assert_eq!(fields, 2);
 }

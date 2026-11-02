@@ -46,7 +46,7 @@ use docx_lower::ir::{
 use paged_model::script::{CharacterDirection, FontHint};
 use paged_model::{
     AnchoredFrame, AnchoredFrameKind, Bounds, CellWidth, CharacterRun, Justification, Paragraph,
-    Table, TableCell, TableColumn, TableRow, TableWidth, WordTableLayout,
+    Table, TableCell, TableColumn, TableRow, TableWidth, WordField, WordTableLayout,
 };
 
 /// The id prefix of the styles the lowering synthesizes for direct
@@ -424,10 +424,8 @@ pub fn read_run_props(r: &CharacterRun) -> BTreeMap<String, PropValue> {
 fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
     if r.hyperlink_url.is_some() {
         Some("hyperlink")
-    } else if r.merge_field.is_some() {
-        Some("merge field")
-    } else if r.field.is_some() {
-        Some("field")
+    } else if r.field.is_some() && r.text.is_empty() {
+        Some("field without a result")
     } else if r.note.is_some() {
         Some("note reference")
     } else if r.change.is_some() || r.format_change.is_some() {
@@ -512,11 +510,26 @@ fn build_paragraph(
     if !para_chars.is_empty() && p.runs.iter().all(|r| r.text.is_empty()) {
         return Err("paragraph character properties on an empty paragraph".into());
     }
+    // The field the previous run belongs to (its runs are one engine field,
+    // with their joined text as its result, in its first run's look).
+    let mut open_field: Option<u32> = None;
     for r in p.runs.iter().filter(|r| !r.text.is_empty()) {
+        if let Some(f) = &r.field {
+            if open_field == Some(f.seq) {
+                if let Some(last) = para.runs.last_mut() {
+                    last.text.push_str(&r.text);
+                }
+                continue;
+            }
+            open_field = Some(f.seq);
+        } else {
+            open_field = None;
+        }
         let run_direct = split_style(styles, r.char_style_id.as_deref())?;
         let mut run = CharacterRun {
             character_style: run_direct.base.map(str::to_owned),
             text: r.text.clone(),
+            field: r.field.as_ref().map(|f| WordField::parse(&f.code)),
             ..CharacterRun::default()
         };
         for prop in &para_chars {
