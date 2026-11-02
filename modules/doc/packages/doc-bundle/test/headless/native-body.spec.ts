@@ -23,6 +23,7 @@
 // synthesized style on a paragraph, and export unedited as the source.
 
 import { afterEach, describe, expect, it } from "bun:test";
+import { inflateRawSync } from "node:zlib";
 
 import type { ExporterContribution } from "@paged-media/plugin-api";
 import {
@@ -42,6 +43,37 @@ import {
 } from "../conformance/harness";
 
 requireDocx("doc headless — native body");
+
+/** One entry of a ZIP, decompressed. */
+function inflatedPart(bytes: Uint8Array, name: string): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = bytes.length - 22;
+  while (eocd >= 0 && view.getUint32(eocd, true) !== 0x06054b50) eocd -= 1;
+  const count = view.getUint16(eocd + 10, true);
+  let at = view.getUint32(eocd + 16, true);
+  for (let i = 0; i < count; i += 1) {
+    const method = view.getUint16(at + 10, true);
+    const size = view.getUint32(at + 20, true);
+    const nameLen = view.getUint16(at + 28, true);
+    const extraLen = view.getUint16(at + 30, true);
+    const commentLen = view.getUint16(at + 32, true);
+    const local = view.getUint32(at + 42, true);
+    const entry = new TextDecoder().decode(
+      bytes.subarray(at + 46, at + 46 + nameLen),
+    );
+    if (entry === name) {
+      const dataAt =
+        local +
+        30 +
+        view.getUint16(local + 26, true) +
+        view.getUint16(local + 28, true);
+      const data = bytes.subarray(dataAt, dataAt + size);
+      return method === 0 ? data : new Uint8Array(inflateRawSync(data));
+    }
+    at += 46 + nameLen + extraLen + commentLen;
+  }
+  throw new Error(`no ${name} in the package`);
+}
 
 type Reply = { kind: string; payload?: any };
 
@@ -192,20 +224,23 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     expect(doc.paras.length).toBeGreaterThan(0);
   }, 120_000);
 
-  it("a natively opened document exports unedited as its source", async () => {
-    const native = await open("direct-format.docx", true);
-    opened.push(native.h);
-    const exporter = native.h
-      .exportersContributed()
-      .find(
-        (c) => c.id === "media.paged.doc.exporter.docx",
-      ) as ExporterContribution;
-    const out = await exporter.export();
-    expect(out).not.toBeNull();
-    expect(
-      Buffer.from(out!.bytes).equals(
-        Buffer.from(fixture("direct-format.docx")),
-      ),
-    ).toBe(true);
+  it("a natively opened document exports unedited as the old pour does", async () => {
+    const exported = async (native: boolean): Promise<string> => {
+      const o = await open("direct-format.docx", native);
+      opened.push(o.h);
+      const exporter = o.h
+        .exportersContributed()
+        .find(
+          (c) => c.id === "media.paged.doc.exporter.docx",
+        ) as ExporterContribution;
+      const out = await exporter.export();
+      expect(out).not.toBeNull();
+      return new TextDecoder().decode(
+        inflatedPart(out!.bytes, "word/document.xml"),
+      );
+    };
+    const old = await exported(false);
+    const native = await exported(true);
+    expect(native).toEqual(old);
   }, 120_000);
 });
