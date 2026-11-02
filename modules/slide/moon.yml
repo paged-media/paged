@@ -57,7 +57,7 @@ fileGroups:
   rust-sources:
     - "**/*.rs"
     - "**/Cargo.toml"
-    - "Cargo.lock"
+    - "/engine/core/Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
     - "/engine/core/Cargo.toml"
@@ -72,7 +72,6 @@ fileGroups:
     - "/platform/shared/dml-geom/Cargo.toml"
     - "/platform/shared/dml-native/src/**/*.rs"
     - "/platform/shared/dml-native/Cargo.toml"
-    - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"
     - "/modules/sheet/sheet-fn/**/*"
@@ -101,7 +100,6 @@ fileGroups:
     - "/platform/shared/dml-geom/Cargo.toml"
     - "/platform/shared/dml-native/src/**/*.rs"
     - "/platform/shared/dml-native/Cargo.toml"
-    - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"
     - "/modules/sheet/sheet-fn/**/*"
@@ -114,7 +112,24 @@ fileGroups:
     - "/platform/shared/fmt/src/**/*.rs"
     - "/platform/shared/fmt/Cargo.toml"
 
+# The slide crates are members of the engine's Cargo workspace (one Cargo
+# workspace, docs/development/one-workspace.md): this directory has no
+# Cargo.toml, so the Rust tasks run cargo in engine/core and select the module's
+# crates with -p.
 tasks:
+  rust-fmt:
+    script: "cd ../../engine/core && cargo fmt -p pptx-core -p pptx-import -p pptx-fonts -p slide-chart -p slide-sheet -p slide-resolve -p slide-native -p pptx-export -p slide-js -p slide-shaders -p slide-anim -p slide-output --check"
+  rust-check:
+    script: "cd ../../engine/core && cargo check -p pptx-core -p pptx-import -p pptx-fonts -p slide-chart -p slide-sheet -p slide-resolve -p slide-native -p pptx-export -p slide-js -p slide-shaders -p slide-anim -p slide-output --all-targets"
+  rust-lint:
+    script: "cd ../../engine/core && cargo clippy -p pptx-core -p pptx-import -p pptx-fonts -p slide-chart -p slide-sheet -p slide-resolve -p slide-native -p pptx-export -p slide-js -p slide-shaders -p slide-anim -p slide-output --all-targets -- -D warnings"
+  rust-test:
+    script: >-
+      cd ../../engine/core
+      && cargo nextest run -p pptx-core -p pptx-import -p pptx-fonts -p slide-chart -p slide-sheet -p slide-resolve -p slide-native -p pptx-export -p slide-js -p slide-shaders -p slide-anim -p slide-output
+      && cargo test --doc -p pptx-core -p pptx-import -p pptx-fonts -p slide-chart -p slide-sheet -p slide-resolve -p slide-native -p pptx-export -p slide-js -p slide-shaders -p slide-anim -p slide-output
+  rust-build:
+    script: "cd ../../engine/core && cargo build -p pptx-core -p pptx-import -p pptx-fonts -p slide-chart -p slide-sheet -p slide-resolve -p slide-native -p pptx-export -p slide-js -p slide-shaders -p slide-anim -p slide-output"
   js-test:
     # slide-bundle's bun test boots the engine wasm; build it first.
     deps: ["~:wasm"]

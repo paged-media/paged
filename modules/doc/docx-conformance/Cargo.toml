@@ -1,5 +1,6 @@
 [package]
 name = "docx-conformance"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,13 +15,13 @@ workspace = true
 docx-core.workspace = true
 docx-import.workspace = true
 docx-lower.workspace = true
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
 zip.workspace = true
 flate2.workspace = true
 
 [dev-dependencies]
 # The zip-bomb builders and the peak-allocation counter (tests/zip_budget.rs).
-paged-ooxml = { workspace = true, features = ["testing"] }
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2", "testing"] }
 paged-test-resources.workspace = true
 docx-js.workspace = true
 docx-export.workspace = true

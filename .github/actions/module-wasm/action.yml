@@ -66,7 +66,7 @@ runs:
         [ "$M" = web ] && CRATE=modules/web/packages/web-render
         # A module that is a member of the engine's Cargo workspace
         # (docs/development/one-workspace.md) builds in engine/core/target.
-        case "$M" in publish | draw | data | image) CRATE=engine/core ;; esac
+        case "$M" in publish | draw | data | image | sheet | slide | doc) CRATE=engine/core ;; esac
         # modules/<m>/rust-toolchain.toml; web-render has none, and web-vitest
         # pins 1.93.0 for it.
         TOOLCHAIN=1.93.0
@@ -81,6 +81,9 @@ runs:
           # pdf-import's path dependencies into the engine.
           if [ "$M" = publish ]; then git ls-files -s -- engine/core/crates engine/core/Cargo.toml engine/core/Cargo.lock; fi
           # A member of the engine's workspace is built from its lock and manifest.
+          if [ "$M" = sheet ] || [ "$M" = slide ] || [ "$M" = doc ]; then
+            git ls-files -s -- engine/core/Cargo.toml engine/core/Cargo.lock platform/shared/ooxml platform/shared/dml-chart platform/shared/dml-geom platform/shared/dml-native platform/shared/fmt platform/shared/test-resources engine/core/crates/paged-model engine/core/crates/paged-scene engine/core/crates/paged-store engine/core/crates/paged-colour-math
+          fi
           if [ "$M" = draw ] || [ "$M" = data ] || [ "$M" = image ]; then git ls-files -s -- engine/core/Cargo.toml engine/core/Cargo.lock; fi
           if [ "$M" = image ]; then git ls-files -s -- engine/core/crates/paged-pixel engine/core/crates/paged-psd engine/core/crates/paged-resample engine/core/crates/paged-kernels engine/core/crates/paged-raster engine/core/crates/paged-color engine/core/crates/paged-warp engine/core/crates/paged-blend; fi
           if [ "$M" = data ]; then git ls-files -s -- 'engine/core/crates/paged-data-*' engine/core/crates/paged-action; fi

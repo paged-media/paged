@@ -1,5 +1,6 @@
 [package]
 name = "docx-odt"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,9 +13,8 @@ workspace = true
 
 [dependencies]
 docx-core.workspace = true
-paged-ooxml.workspace = true
-quick-xml.workspace = true
-
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
+quick-xml = "0.41"
 [dev-dependencies]
 zip.workspace = true
 flate2.workspace = true

@@ -35,7 +35,7 @@ fileGroups:
   rust-sources:
     - "**/*.rs"
     - "**/Cargo.toml"
-    - "Cargo.lock"
+    - "/engine/core/Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
     - "/platform/shared/fmt/src/**/*.rs"
@@ -64,7 +64,24 @@ fileGroups:
     - "/engine/core/crates/paged-model/**/*.rs"
     - "/engine/core/crates/paged-model/Cargo.toml"
 
+# The sheet crates are members of the engine's Cargo workspace (one Cargo
+# workspace, docs/development/one-workspace.md): this directory has no
+# Cargo.toml, so the Rust tasks run cargo in engine/core and select the module's
+# crates with -p.
 tasks:
+  rust-fmt:
+    script: "cd ../../engine/core && cargo fmt -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance --check"
+  rust-check:
+    script: "cd ../../engine/core && cargo check -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance --all-targets"
+  rust-lint:
+    script: "cd ../../engine/core && cargo clippy -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance --all-targets -- -D warnings"
+  rust-test:
+    script: >-
+      cd ../../engine/core
+      && cargo nextest run -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance
+      && cargo test --doc -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance
+  rust-build:
+    script: "cd ../../engine/core && cargo build -p sheet-core -p sheet-parser -p sheet-calc -p sheet-fn -p sheet-format -p sheet-xlsx -p sheet-lower -p sheet-grid -p sheet-chart -p sheet-js -p sheet-conformance"
   js-test:
     # sheet-vitest.yml builds the engine wasm before bun test.
     deps: ["~:wasm"]

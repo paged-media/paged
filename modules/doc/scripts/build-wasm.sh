@@ -24,6 +24,7 @@ fi
 # manifest's `maxBytes`, which the build is also held to (a host that honours
 # it refuses a larger file).
 exec bash ../../tooling/rust/build-wasm.sh \
+  --manifest-path docx-js/Cargo.toml \
   --package docx-js --artifact docx_js --profile wasm-doc \
   --out packages/doc-bundle/bin \
   --manifest packages/doc-bundle/manifest.json

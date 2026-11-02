@@ -1,5 +1,6 @@
 [package]
 name = "slide-js"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +15,7 @@ workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 pptx-core.workspace = true
 pptx-import.workspace = true
 base64.workspace = true
@@ -30,6 +31,6 @@ wasm-bindgen.workspace = true
 
 [dev-dependencies]
 # The zip-bomb builders and the peak-allocation counter (tests/zip_budget.rs).
-paged-ooxml = { workspace = true, features = ["testing"] }
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde", "testing"] }
 # The live-chart tests (tests/live_charts.rs).
 slide-chart.workspace = true

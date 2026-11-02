@@ -1,5 +1,6 @@
 [package]
 name = "slide-native"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +15,7 @@ workspace = true
 pptx-core.workspace = true
 slide-resolve.workspace = true
 slide-geom.workspace = true
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 paged-model.workspace = true
 dml-native.workspace = true
 paged-scene.workspace = true

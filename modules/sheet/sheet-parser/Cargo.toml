@@ -1,5 +1,6 @@
 [package]
 name = "sheet-parser"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

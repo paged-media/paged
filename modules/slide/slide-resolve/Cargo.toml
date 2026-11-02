@@ -1,5 +1,6 @@
 [package]
 name = "slide-resolve"
+workspace = "../../../engine/core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,7 +13,7 @@ workspace = true
 
 [dependencies]
 # DrawingML colour arithmetic (HSL, linear-light tint and shade).
-paged-ooxml.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 pptx-core.workspace = true
 slide-geom.workspace = true
 slide-chart.workspace = true
