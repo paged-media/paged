@@ -17,11 +17,7 @@ docx-lower.workspace = true
 paged-model.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true
-# The catalogue (theme, swatches, styles) is applied with the engine's own
-# operations (doc ADR 625): the doc wasm grows by this crate.
-paged-mutate = { path = "../../../engine/core/crates/paged-mutate" }
-serde.workspace = true
-serde_json.workspace = true
+dml-native = { path = "../../../platform/shared/dml-native" }
 
 [dev-dependencies]
 docx-conformance = { path = "../docx-conformance" }

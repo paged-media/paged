@@ -1645,17 +1645,15 @@ dependencies = [
 name = "docx-skeleton"
 version = "0.0.0"
 dependencies = [
+ "dml-native",
  "docx-conformance",
  "docx-core",
  "docx-import",
  "docx-lower",
  "flate2",
  "paged-model",
- "paged-mutate",
  "paged-scene",
  "paged-store",
- "serde",
- "serde_json",
  "zip 9.0.5",
 ]
 

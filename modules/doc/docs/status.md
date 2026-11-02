@@ -13,7 +13,7 @@ then `wasm-opt -Oz`):
 | raw                   | 6,879,227 (6.56 MiB)                    |
 | gzip -9               | 1,876,393 (1.79 MiB)                    |
 | brotli -q 11          | 1,070,924 (1.02 MiB)                    |
-| manifest `maxBytes`   | 14,680,064 (14 MiB, ADR 625; was 8 MiB) |
+| manifest `maxBytes`   | 8,388,608 (8 MiB)    |
 
 That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
 panel audit (2026-10-11) was measured before the `wasm-release` profile existed.

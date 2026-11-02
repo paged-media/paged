@@ -247,7 +247,7 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
 After a standalone open the lowering's diagnostics are shown in the panel but not sent to
 `host.diagnostics`. The manifest declares `document` (read `broad`, write `scoped`,
 `readNative`, `openNative`), `rendering` (`hitTest`), `editContext` (`wordDocument`),
-`clipboard: "none"` and one wasm module, `bin/docx_js_bg.wasm`, with `maxBytes` 14680064 (ADR 625). No
+`clipboard: "none"` and one wasm module, `bin/docx_js_bg.wasm`, with `maxBytes` 8388608. No
 code uses `readNative` or the declared part type `docLowered`.
 
 ## Build and test

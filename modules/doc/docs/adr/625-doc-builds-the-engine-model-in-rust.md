@@ -134,23 +134,26 @@ model's, not the model's.
 
 A Word drop cap (ADR 624) is the paragraph's `drop_cap_characters` and `drop_cap_lines`.
 
-### Slice 2 amendment: the catalogue, by the engine's own operations
+### Slice 2 amendment: the catalogue
 
-The theme, swatches, colour groups and styles of a prefilled skeleton are made by
-`paged_mutate::apply` (`docx-skeleton` `catalog`), the operations `buildStyleMutations` sends, in
-its order, so a style property is read exactly as the host reads it and nothing is re-implemented
-(about fifty paths, each with its own undo default, would have been a second copy). A refused
-operation sends the document to the old path whole. The styles the lowering invented for direct
-formatting (`docx-auto-*`) are left out when nothing the old path still pours (headers, footers,
-notes, page items) names them: the document then holds only the styles Word defined.
+The theme, swatches, colour groups and styles of a prefilled skeleton are set on the model by
+`docx-skeleton` `catalog`, in the order `buildStyleMutations` sends them. Each style property is
+the field the engine's `setStyleProperty` sets, read the way it reads it (`""` clears a text slot,
+a count rounds, an enum is parsed by the model's own `from_idml`); a property the model has no
+field for (a language, say) refuses the whole catalogue and the document opens by the old pour,
+which reports it. The styles the lowering invented for direct formatting (`docx-auto-*`) are left
+out when nothing the old path still pours (headers, footers, notes, page items) names them: the
+document then holds only the styles Word defined.
 
-This reverses the size argument above: the doc wasm now links `paged-mutate` (with `paged-geom`
-and `paged-vector-fx`). Measured by the wasm build in CI: `docx_js_bg.wasm` 8,170,515 bytes
-(7.79 MiB) before, 12,939,388 bytes (12.34 MiB) with it, +4.77 MiB. The manifest's `maxBytes` is
-raised from 8 MiB to 14 MiB (14,680,064); the 100 MB app limit of `build-wasm.sh` is unchanged. The
-price buys every remaining slice as the engine's own operations (floats, comments, changes, notes)
-rather than ports of them, and the removal of the TS pour and the IR at the end, which is where
-size is given back (bundle code) if not in the wasm.
+**Why not the engine's operations.** The first version applied the catalogue with
+`paged_mutate::apply`, which is exact and short. Measured by the wasm build in CI it takes
+`docx_js_bg.wasm` from 8,170,515 bytes (7.79 MiB) to 12,939,388 (12.34 MiB): `paged-mutate`, with
+`paged-geom` and `paged-vector-fx`. That passes the manifest only by raising `maxBytes` and it
+fails the editor package's `dist/` budget (PM-0013 amendment 5: 80.6 MB against 76.5 MB), a public
+budget whose rise is "a decision, not a drift". So the catalogue is a port of about fifty field
+assignments, kept equal to the engine's by the same comparison tests, and `paged-mutate` stays out
+of the doc wasm. Slices 4b, 6 and 7 are therefore ports too (the picture look's translation, the
+review records, the notes), or they wait for that budget to be decided.
 
 ### The flag is on
 
