@@ -9,7 +9,7 @@ next to the code you change. This file holds only what crosses components.
 - `engine/core` — Rust engine (own Cargo workspace and `rust-toolchain.toml`).
 - `modules/<name>` — built-in modules. Each still has its own Cargo workspace except those
   that have joined `engine/core`'s workspace (PM-0017, staged; docs/development/one-workspace.md).
-  Joined so far: publish. A joined module has no `Cargo.toml` at its root: run cargo in
+  Joined so far: publish, draw. A joined module has no `Cargo.toml` at its root: run cargo in
   `engine/core` (or pass `--manifest-path`) and select its crates with `-p`.
 - JavaScript: ONE Bun workspace at the root (`package.json` `workspaces`, `bun.lock`,
   `bunfig.toml`; Bun from `.prototools`). `bun install` at the root installs every

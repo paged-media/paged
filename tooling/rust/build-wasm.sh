@@ -128,8 +128,8 @@ WS_TARGET=""
 if [ -n "$MANIFEST_PATH" ]; then
   META=$(cd "$CRATE_DIR" && cargo metadata --no-deps --format-version 1 --manifest-path "$MANIFEST_PATH") \
     || die "cargo metadata failed for $MANIFEST_PATH"
-  LOCK_DIR=$(printf '%s' "$META" | bun -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).workspace_root)')
-  WS_TARGET=$(printf '%s' "$META" | bun -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).target_directory)')
+  LOCK_DIR=$(printf '%s' "$META" | python3 -c 'import json,sys; print(json.load(sys.stdin)["workspace_root"])')
+  WS_TARGET=$(printf '%s' "$META" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
 fi
 
 # The pin check, before the (long) build.

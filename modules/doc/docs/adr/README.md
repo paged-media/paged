@@ -34,6 +34,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [621](621-word-headings-tag-a-pdf.md) | Word headings tag the PDF and give it an outline: `heading N` styles carry the PDF export tag (engine ADR 1054) | Accepted 2026-11-01 |
 | [622](622-word-comment-identity-and-exact-dates.md) | Word comments carry an author identity (`people.xml`) and an exact UTC time (`commentsExtensible.xml`), read and written | Accepted 2026-11-01 |
 | [623](623-a-cropped-picture-is-placed-in-its-anchored-frame.md) | A cropped picture is placed in its anchored frame: `a:srcRect` lowered to the picture's placement and set as `imageContentTransform` | Accepted 2026-11-02 |
+| [624](624-word-drop-caps.md) | Word drop caps (the framed paragraph) fold into the following paragraph and lower to the engine's paragraph drop cap; the folded block is held on save-back | Accepted 2026-11-02 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

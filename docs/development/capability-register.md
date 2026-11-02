@@ -233,8 +233,10 @@ Status (draw items, one line each; updated as they land):
 
 ### Reach (gaps between modules)
 
-- **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, drop caps, OpenType features,
-  embedded fonts, equations. Picture crop (`srcRect`) is done (doc ADR 621): the lowering sets
+- **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, OpenType features,
+  embedded fonts, equations. Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
+  against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following
+  paragraph is not wrapped beside a cap taller than its own (known differences, in the note). Picture crop (`srcRect`) is done (doc ADR 623): the lowering sets
   the picture's placement on its anchored frame (`imageContentTransform`, engine ADR 1045's
   amendment of 2026-11-02); the comparison with Word's own render is pending.
 - **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.

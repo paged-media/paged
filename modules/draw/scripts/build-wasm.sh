@@ -25,6 +25,7 @@ cd "$(dirname "$0")/.."
 # unoptimized artifact is correct, only larger, and the size gate is the
 # real check either way.
 exec bash ../../tooling/rust/build-wasm.sh \
+  --manifest-path crates/trace-js/Cargo.toml \
   --package trace-js --artifact trace_js --profile wasm-draw \
   --out packages/draw-bundle/wasm \
   --wasm-opt-flags "--enable-bulk-memory --enable-bulk-memory-opt --enable-sign-ext --enable-mutable-globals --enable-nontrapping-float-to-int --enable-reference-types" \

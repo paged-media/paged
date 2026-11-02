@@ -1,6 +1,6 @@
 $schema: "../../.moon/cache/schemas/project.json"
 
-# paged.draw: a Cargo workspace (image trace) and JS packages
+# paged.draw: the image-trace crates (members of the engine's Cargo workspace) and JS packages
 # (draw-geometry, draw-tools, draw-bundle).
 language: "rust"
 layer: "library"
@@ -29,10 +29,10 @@ fileGroups:
   rust-sources:
     - "**/*.rs"
     - "**/Cargo.toml"
-    - "Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
     - "/engine/core/Cargo.toml"
+    - "/engine/core/Cargo.lock"
     - "/engine/core/crates/paged-svg/**/*.rs"
     - "/engine/core/crates/paged-svg/Cargo.toml"
   rust-tests:
@@ -41,14 +41,31 @@ fileGroups:
     - "!**/*.md"
     - "/.cargo/*.toml"
     - "/engine/core/Cargo.toml"
+    - "/engine/core/Cargo.lock"
     - "/engine/core/crates/paged-svg/**/*"
 
+# The draw crates are members of the engine's Cargo workspace (one Cargo
+# workspace, docs/development/one-workspace.md): this directory has no
+# Cargo.toml, so the Rust tasks run cargo in engine/core and select the crates
+# with -p.
 tasks:
+  rust-fmt:
+    script: "cd ../../engine/core && cargo fmt -p draw-trace -p draw-dxf -p trace-js --check"
+  rust-check:
+    script: "cd ../../engine/core && cargo check -p draw-trace -p draw-dxf -p trace-js --all-targets"
   rust-lint:
     description: "clippy as draw-rust runs it: native, then wasm32."
     script: >-
-      cargo clippy --workspace --all-targets -- -D warnings
-      && cargo clippy --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings
+      cd ../../engine/core
+      && cargo clippy -p draw-trace -p draw-dxf -p trace-js --all-targets -- -D warnings
+      && cargo clippy -p draw-trace -p draw-dxf -p trace-js --all-targets --target wasm32-unknown-unknown -- -D warnings
+  rust-test:
+    script: >-
+      cd ../../engine/core
+      && cargo nextest run -p draw-trace -p draw-dxf -p trace-js
+      && cargo test --doc -p draw-trace -p draw-dxf -p trace-js
+  rust-build:
+    script: "cd ../../engine/core && cargo build -p draw-trace -p draw-dxf -p trace-js"
 
   js-test:
     # The image-trace specs boot the wasm; draw-vitest.yml builds it first.
