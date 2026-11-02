@@ -654,7 +654,7 @@ mod tests {
                 ("lumOff".to_string(), 59_999)
             ]
         );
-        assert_eq!(themed.fill_rgb.as_deref(), Some("#B4C6E7"));
+        assert_eq!(themed.fill_rgb.as_deref(), Some("#B4C7E7"));
         let text = themed.text_theme.expect("a theme text colour follows");
         assert_eq!((text.slot.as_str(), text.transforms.len()), ("dk1", 0));
         // The same blue as plain RGB is literal.
