@@ -119,7 +119,11 @@ shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 ### Lowering
 
 `docx-lower` keeps a plugin-local IR and lowers through TS host commands; the target is Rust
-building `paged_model` directly, as slide does. Sheet and data each have their own lowering.
+building `paged_model` directly, as slide does (doc ADR 625: a seven-slice plan, the IR retires
+slice by slice, the old path stays until the last). Slice 1 is in: `docx_skeleton::body` builds
+body paragraphs with direct formatting as the model's own paragraph and run fields instead of
+`docx-auto-*` styles, proven equal to the IR on the conformance fixtures; it is not yet wired into
+the open path (that is slice 2, with styles and swatches). Sheet and data each have their own lowering.
 
 ### Charts, data, scripting, PDF
 
