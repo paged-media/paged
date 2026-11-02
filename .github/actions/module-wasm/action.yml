@@ -64,6 +64,9 @@ runs:
         esac
         CRATE="modules/$M"
         [ "$M" = web ] && CRATE=modules/web/packages/web-render
+        # A module that is a member of the engine's Cargo workspace
+        # (docs/development/one-workspace.md) builds in engine/core/target.
+        [ "$M" = publish ] && CRATE=engine/core
         # modules/<m>/rust-toolchain.toml; web-render has none, and web-vitest
         # pins 1.93.0 for it.
         TOOLCHAIN=1.93.0

@@ -15,6 +15,12 @@
 #   --out DIR             where the glue and the wasm land
 #   --out-name NAME       wasm-bindgen --out-name (default: STEM)
 #   --crate-dir DIR       where cargo runs and Cargo.lock is read (default .)
+#   --manifest-path FILE  a module that is a member of another Cargo workspace
+#                         (docs/development/one-workspace.md) has no workspace
+#                         manifest in its own directory: name a member's
+#                         Cargo.toml (relative to --crate-dir). Cargo.lock and
+#                         the default target directory are then the workspace's
+#                         (cargo metadata), not --crate-dir's.
 #   --profile NAME        cargo profile (default release)
 #   --features LIST       cargo --features
 #   --target-dir DIR      cargo --target-dir (default: CARGO_TARGET_DIR, else
@@ -58,7 +64,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TARGET="wasm32-unknown-unknown"
 BUDGET=$((100 * 1000 * 1000))
 
-PACKAGE="" ARTIFACT="" OUT="" OUT_NAME="" CRATE_DIR="." PROFILE="release"
+PACKAGE="" ARTIFACT="" OUT="" OUT_NAME="" CRATE_DIR="." PROFILE="release" MANIFEST_PATH=""
 FEATURES="" TARGET_DIR="" HASH_MODULE="" HASH_ENV="" OPT_FLAGS=""
 OPT=1 OPT_OPTIONAL=0 MANIFEST="" GATE=1 ENSURE_TARGET=0 BROTLI=0
 
@@ -74,6 +80,7 @@ while [ $# -gt 0 ]; do
     --out) OUT=$2; shift 2 ;;
     --out-name) OUT_NAME=$2; shift 2 ;;
     --crate-dir) CRATE_DIR=$2; shift 2 ;;
+    --manifest-path) MANIFEST_PATH=$2; shift 2 ;;
     --profile) PROFILE=$2; shift 2 ;;
     --features) FEATURES=$2; shift 2 ;;
     --target-dir) TARGET_DIR=$2; shift 2 ;;
@@ -113,9 +120,21 @@ if [ "$ENSURE_TARGET" = 1 ] && ! rustup target list --installed 2>/dev/null | gr
   rustup target add "$TARGET"
 fi
 
+# The workspace this build belongs to: the module's own, or (--manifest-path)
+# the one its member crate is in. Cargo.lock and the target directory are the
+# workspace's.
+LOCK_DIR=$CRATE_DIR
+WS_TARGET=""
+if [ -n "$MANIFEST_PATH" ]; then
+  META=$(cd "$CRATE_DIR" && cargo metadata --no-deps --format-version 1 --manifest-path "$MANIFEST_PATH") \
+    || die "cargo metadata failed for $MANIFEST_PATH"
+  LOCK_DIR=$(printf '%s' "$META" | bun -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).workspace_root)')
+  WS_TARGET=$(printf '%s' "$META" | bun -e 'console.log(JSON.parse(require("fs").readFileSync(0, "utf8")).target_directory)')
+fi
+
 # The pin check, before the (long) build.
 WB=${WASM_BINDGEN:-wasm-bindgen}
-LOCKED=$(grep -A1 '^name = "wasm-bindgen"$' "$CRATE_DIR/Cargo.lock" | grep version | head -1 | cut -d'"' -f2)
+LOCKED=$(grep -A1 '^name = "wasm-bindgen"$' "$LOCK_DIR/Cargo.lock" | grep version | head -1 | cut -d'"' -f2)
 command -v "$WB" >/dev/null 2>&1 \
   || die "wasm-bindgen not found; cargo install wasm-bindgen-cli --version $LOCKED"
 CLI=$("$WB" --version | awk '{print $2}')
@@ -144,6 +163,7 @@ CARGO_REGISTRY_SRC="${CARGO_HOME:-$HOME/.cargo}/registry/src/"
 export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$REPO/= --remap-path-prefix=$CARGO_REGISTRY_SRC=registry/"
 
 CARGO_ARGS=(build --profile "$PROFILE" --target "$TARGET")
+[ -n "$MANIFEST_PATH" ] && CARGO_ARGS+=(--manifest-path "$MANIFEST_PATH")
 [ -n "$PACKAGE" ] && CARGO_ARGS+=(-p "$PACKAGE")
 [ -n "$FEATURES" ] && CARGO_ARGS+=(--features "$FEATURES")
 [ -n "$TARGET_DIR" ] && CARGO_ARGS+=(--target-dir "$TARGET_DIR")
@@ -156,7 +176,7 @@ CARGO_ARGS=(build --profile "$PROFILE" --target "$TARGET")
 # Where cargo wrote it: --target-dir, else CARGO_TARGET_DIR, else target/,
 # a relative one under the directory cargo ran in. The release and dev
 # profiles keep their historical directory names.
-DIR=${TARGET_DIR:-${CARGO_TARGET_DIR:-target}}
+DIR=${TARGET_DIR:-${CARGO_TARGET_DIR:-${WS_TARGET:-target}}}
 [[ "$DIR" = /* ]] || DIR="$CRATE_DIR/$DIR"
 case "$PROFILE" in
   dev) PROFILE_DIR=debug ;;

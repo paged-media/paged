@@ -1,6 +1,6 @@
 $schema: "../../.moon/cache/schemas/project.json"
 
-# paged.publish: a Cargo workspace (IDML import/export, PDF import) and JS
+# paged.publish: the PDF import crate (a member of the engine's Cargo workspace) and JS
 # packages without a component package.json (packages/pdf-bundle,
 # packages/publish-bundle).
 language: "rust"
@@ -34,10 +34,10 @@ fileGroups:
   rust-sources:
     - "**/*.rs"
     - "**/Cargo.toml"
-    - "Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
     - "/engine/core/Cargo.toml"
+    - "/engine/core/Cargo.lock"
     - "/engine/core/crates/**/*.rs"
     - "/engine/core/crates/**/Cargo.toml"
   rust-tests:
@@ -46,16 +46,34 @@ fileGroups:
     - "!**/*.md"
     - "/.cargo/*.toml"
     - "/engine/core/Cargo.toml"
+    - "/engine/core/Cargo.lock"
     - "/engine/core/crates/**/*.rs"
     - "/engine/core/crates/**/Cargo.toml"
     # pdf-import's mesh round trip reads the engine's exported mesh PDFs.
     - "/engine/core/crates/paged-export-pdf/tests/fixtures/mesh-oracle/**"
 
+# pdf-import is a member of the engine's Cargo workspace (one Cargo workspace,
+# docs/development/one-workspace.md): this directory has no Cargo.toml, so the
+# Rust tasks run cargo in engine/core and select the crate with -p. The
+# engine's Cargo.lock and rust-toolchain.toml are inputs through the
+# restated groups above.
 tasks:
+  rust-fmt:
+    script: "cd ../../engine/core && cargo fmt -p pdf-import --check"
+  rust-check:
+    script: "cd ../../engine/core && cargo check -p pdf-import --all-targets"
+  rust-lint:
+    script: "cd ../../engine/core && cargo clippy -p pdf-import --all-targets -- -D warnings"
+  rust-test:
+    script: >-
+      cd ../../engine/core
+      && cargo nextest run -p pdf-import
+      && cargo test --doc -p pdf-import
   rust-build:
     description: "publish-ci build: every native target, then the wasm32 build of the bundle crates."
     script: >-
-      cargo build --workspace --all-targets
+      cd ../../engine/core
+      && cargo build -p pdf-import --all-targets
       && cargo build -p pdf-import --target wasm32-unknown-unknown
     options:
       # publish-ci.yml builds the same; `moon ci` runs no Rust task.
