@@ -181,6 +181,13 @@ fn compare_paragraph(
         );
         assert_eq!(old_run, new_run, "{at}: character properties");
     }
+    assert_eq!(
+        p.drop_cap
+            .map(|d| (d.characters, d.lines))
+            .unwrap_or((0, 0)),
+        (np.drop_cap_characters, np.drop_cap_lines),
+        "{at}: drop cap"
+    );
     // Inline pictures: anchored frames at their offsets, crop as placement.
     assert_eq!(p.images.len(), np.anchored_frames.len(), "{at}: pictures");
     for (k, (img, f)) in p.images.iter().zip(&np.anchored_frames).enumerate() {
@@ -331,6 +338,7 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
         ("table", docx_conformance::table_docx()),
+        ("drop cap", docx_conformance::drop_cap_docx()),
         ("hyperlink", docx_conformance::hyperlink_docx()),
         ("field hyperlink", docx_conformance::field_hyperlink_docx()),
         ("list", docx_conformance::list_docx()),

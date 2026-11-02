@@ -479,8 +479,6 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
         Some("tracked change")
     } else if !p.text_boxes.is_empty() {
         Some("text box")
-    } else if p.drop_cap.is_some() {
-        Some("drop cap")
     } else {
         p.runs.iter().find_map(run_deferral)
     }
@@ -590,6 +588,12 @@ fn build_paragraph(
             }
         }
         para.runs.push(run);
+    }
+    // Doc ADR 624 — Word's drop cap: the engine's paragraph drop cap, set on
+    // the paragraph itself (the engine refuses these on a style).
+    if let Some(d) = &p.drop_cap {
+        para.drop_cap_characters = d.characters;
+        para.drop_cap_lines = d.lines;
     }
     // Inline pictures: anchored frames, characters of their line (engine
     // ADR 1050), their crop the picture's placement (doc ADR 623).

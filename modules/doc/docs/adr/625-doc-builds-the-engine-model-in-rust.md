@@ -130,6 +130,10 @@ A list item is a paragraph with the engine's list fields (`bullets_list_type`, `
 `numbering_format`) beside its indents; the identity the IR keeps (`numId`, level) is the object
 model's, not the model's.
 
+### Slice 2 amendment: drop caps
+
+A Word drop cap (ADR 624) is the paragraph's `drop_cap_characters` and `drop_cap_lines`.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map
