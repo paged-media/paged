@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented (2 to 5 behind a flag, off); the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented, with 4 in part (2 to 5 behind a flag, off); 4b, 6 and 7 and the styles remain; the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
