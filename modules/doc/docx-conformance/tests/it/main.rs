@@ -28,6 +28,7 @@ mod paragraph_spacing;
 mod picture_effects;
 mod pictures;
 mod poi_corpus;
+mod reach;
 mod real_docx;
 mod real_word_corpus;
 mod review;

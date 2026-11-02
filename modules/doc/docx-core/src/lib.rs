@@ -807,7 +807,17 @@ pub struct Image {
     /// none of them, and for a legacy VML picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub look: Option<Box<PictureLook>>,
+    /// Doc ADR 623 — the picture's crop (`pic:blipFill/a:srcRect`): the
+    /// parts of the image left out at the left, top, right and bottom, each
+    /// in 1 000ths of a percent of the image, as authored. `None` for a
+    /// picture shown whole. The extent ([`Self::width_emu`]) is the
+    /// cropped picture's size on the page, not the image's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<Crop>,
 }
+
+/// An `a:srcRect`: `(l, t, r, b)` in 1 000ths of a percent.
+pub type Crop = (i32, i32, i32, i32);
 
 /// A picture's DrawingML look, as authored: theme colours are still slot
 /// names; the lowering resolves them against the document theme.

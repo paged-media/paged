@@ -197,8 +197,10 @@ Status (draw items, one line each; updated as they land):
 
 ### Reach (gaps between modules)
 
-- **doc:** shapes (`dml-geom`), picture crop (`srcRect`), recolour, charts, SmartArt, drop caps,
-  OpenType features, embedded fonts, equations.
+- **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, drop caps, OpenType features,
+  embedded fonts, equations. Picture crop (`srcRect`) is done (doc ADR 621): the lowering sets
+  the picture's placement on its anchored frame (`imageContentTransform`, engine ADR 1045's
+  amendment of 2026-11-02); the comparison with Word's own render is pending.
 - **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.
 - **slide:** autofit (stored `fontScale` is applied as fixed values). Done and checked against PowerPoint:
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet

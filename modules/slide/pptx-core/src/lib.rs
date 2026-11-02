@@ -34,7 +34,9 @@
 pub mod anim;
 pub mod av;
 pub mod chart;
-pub mod media;
+// Picture formats and sizes: one reader for doc, slide and sheet, in the
+// shared OOXML crate.
+pub use paged_ooxml::media;
 pub mod transcode;
 
 use serde::{Deserialize, Serialize};

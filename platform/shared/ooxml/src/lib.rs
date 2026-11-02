@@ -74,6 +74,7 @@ pub mod content_types;
 pub mod dom;
 pub mod drawingml;
 pub mod error;
+pub mod media;
 pub mod opc;
 pub mod rels;
 pub mod splice;
