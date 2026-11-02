@@ -30,7 +30,7 @@
 //
 // CONTRIBUTION COUNT (honesty note): the bundle registers TWENTY
 // tools (three anchor-editing + the pro set: Curvature,
-// Gradient Annotator, Measure, Shape Builder, Corner Radius + the v0
+// Shape Builder, Corner Radius (the Gradient annotation and Measure are the host's) + the v0
 // brushes: Paintbrush, Blob Brush, Eraser + the wave-2 trio:
 // Eyedropper, Width, Lasso Select + the Live Paint pair: Bucket, Face
 // Selection + Type on a Path) AND TWO declarative SCHEMA panels
@@ -151,16 +151,14 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature,
-        // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
+        // Shape Builder, Corner Radius (the Gradient annotation and Measure are the host's)) +
         // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
         // wave-2 pair (Width, Lasso Select; the Eyedropper is the host's) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
         // (C-29) + the Repeat steering widget (§12.4, the one tool
         // with no shortcut — see tools.ts) + the Knife and Scissors
-        // at any point (keyless too) — nineteen tools (the Pencil is the
+        // at any point (keyless too) — seventeen tools (the Pencil is the
         // host's, ADR 359).
-        "tool",
-        "tool",
         "tool",
         "tool",
         "tool",

@@ -117,24 +117,6 @@ describe("paged.draw tools through the gesture DSL", () => {
     }
   });
 
-  it("Measure: a drag publishes the line and its readout in ONE multi-shape preview, and changes nothing @level:gesture", async () => {
-    const { fake, g } = drawHarness({ hitTest: () => null });
-    await g
-      .tool("measure")
-      .drag({ from: [100, 100], to: [400, 500] })
-      .settle();
-    const shown = fake.previews().filter(Array.isArray).at(-1) as Array<
-      Record<string, unknown>
-    >;
-    expect(shown).toHaveLength(2);
-    expect(shown[1]).toMatchObject({
-      kind: "text",
-      text: "500.00 pt · 53.1°",
-      anchor: "middle",
-    });
-    expect(fake.mutations()).toEqual([]);
-  });
-
   const warn = console.warn;
   for (const id of [
     "addAnchor",
