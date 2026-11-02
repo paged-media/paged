@@ -15,6 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 exec bash ../../tooling/rust/build-wasm.sh \
+  --manifest-path data-js/Cargo.toml \
   --package data-js --artifact data_js --profile wasm-data \
   --out packages/data-bundle/bin \
   --source-hash data --hash-env DATA_JS_SOURCE_HASH
