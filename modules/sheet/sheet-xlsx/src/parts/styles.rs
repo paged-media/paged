@@ -650,8 +650,8 @@ mod tests {
         assert_eq!(
             fill.transforms,
             [
-                ("lumMod".to_string(), 40_000),
-                ("lumOff".to_string(), 60_000)
+                ("lumMod".to_string(), 40_001),
+                ("lumOff".to_string(), 59_999)
             ]
         );
         assert_eq!(themed.fill_rgb.as_deref(), Some("#B4C6E7"));

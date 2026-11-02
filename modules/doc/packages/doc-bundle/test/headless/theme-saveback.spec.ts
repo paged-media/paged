@@ -190,13 +190,10 @@ describe.skipIf(!docxPresent)(
       );
     });
 
-    /** A swatch's colour as the document holds it. */
-    async function swatchValue(id: string): Promise<number[]> {
-      const rows = await host.document.collection<{
-        selfId: string;
-        value: number[];
-      }>("swatches");
-      return rows.find((r) => r.selfId === id)!.value;
+    /** A swatch's colour as the document shows it (`#rrggbb`). */
+    async function swatchValue(id: string): Promise<string> {
+      const [row] = await host.document.swatchDisplay([id]);
+      return row!.rgbHex.toLowerCase();
     }
 
     it("applying a theme recolours the Word theme swatches in one undo step (engine ADR 1056)", async () => {
@@ -217,9 +214,7 @@ describe.skipIf(!docxPresent)(
         args: { slot: "accent1", value: "FF0000" },
       } as never);
       expect(done.applied).toBe(true);
-      expect(await swatchValue("Color/docx-theme-accent1")).toEqual([
-        255, 0, 0,
-      ]);
+      expect(await swatchValue("Color/docx-theme-accent1")).toBe("#ff0000");
       // The tint follows the new colour; another slot's swatch does not move.
       expect(await swatchValue("Color/docx-theme-accent1-tint-99")).not.toEqual(
         lighter,
