@@ -52,6 +52,9 @@ fn is_para_path(k: &str) -> bool {
             | "paragraphSpaceBefore"
             | "paragraphSpaceAfter"
             | "paragraphAutoLeading"
+            | "paragraphListType"
+            | "paragraphBulletCharacter"
+            | "paragraphNumberingFormat"
             | "paragraphKeepWithNext"
             | "paragraphKeepFirstLines"
             | "paragraphKeepLastLines"
@@ -140,6 +143,11 @@ fn compare_paragraph(
         let at = format!("{at} run {j}");
         assert_eq!(*text, nr.text, "{at}: text");
         assert_eq!(
+            or.hyperlink_url.is_some(),
+            nr.hyperlink_source.is_some(),
+            "{at}: hyperlink"
+        );
+        assert_eq!(
             or.field.as_ref().map(|f| f.code.trim().to_string()),
             nr.field.as_ref().map(|f| f.code.clone()),
             "{at}: field"
@@ -173,6 +181,13 @@ fn compare_paragraph(
         );
         assert_eq!(old_run, new_run, "{at}: character properties");
     }
+    assert_eq!(
+        p.drop_cap
+            .map(|d| (d.characters, d.lines))
+            .unwrap_or((0, 0)),
+        (np.drop_cap_characters, np.drop_cap_lines),
+        "{at}: drop cap"
+    );
     // Inline pictures: anchored frames at their offsets, crop as placement.
     assert_eq!(p.images.len(), np.anchored_frames.len(), "{at}: pictures");
     for (k, (img, f)) in p.images.iter().zip(&np.anchored_frames).enumerate() {
@@ -323,6 +338,10 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
         ("table", docx_conformance::table_docx()),
+        ("drop cap", docx_conformance::drop_cap_docx()),
+        ("hyperlink", docx_conformance::hyperlink_docx()),
+        ("field hyperlink", docx_conformance::field_hyperlink_docx()),
+        ("list", docx_conformance::list_docx()),
         ("cell fields", docx_conformance::cell_fields_docx()),
         ("image", docx_conformance::image_docx()),
         ("picture crop", docx_conformance::picture_crop_docx()),
@@ -358,10 +377,8 @@ fn what_slice_1_does_not_build_is_deferred_not_dropped() {
         "nested table"
     ));
     let body = native_body(&lowered(&docx_conformance::hyperlink_docx()));
-    assert!(body
-        .blocks
-        .iter()
-        .any(|b| matches!(b, NativeBlock::Deferred { reason } if reason == "hyperlink")));
+    assert!(!body.links.is_empty(), "the hyperlink run makes a link");
+    assert!(body.built() > 0);
 }
 
 // Slice 2 — the skeleton with the body built in its stories.
@@ -442,7 +459,8 @@ fn a_plain_table_is_prefilled_in_a_paragraph_of_its_own() {
         })
         .collect();
     let stories = docx_skeleton::body::native_stories(&ir)
-        .unwrap_or_else(|| panic!("the whole body is native; deferred: {why:?}"));
+        .unwrap_or_else(|| panic!("the whole body is native; deferred: {why:?}"))
+        .stories;
     let tables = stories[0].iter().filter(|p| p.table.is_some()).count();
     assert_eq!(tables, 1);
     // The paragraphs before and after stand beside it.
@@ -527,4 +545,46 @@ fn the_bundles_field_fixture_is_built_whole() {
         })
         .sum::<usize>();
     assert_eq!(fields, 2);
+}
+
+#[test]
+fn the_bundles_list_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/list-body.docx");
+    let ir = lowered(bytes);
+    let reasons: Vec<String> = native_body(&ir)
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| match b {
+            NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
+            _ => None,
+        })
+        .collect();
+    assert!(reasons.is_empty(), "deferred: {reasons:?}");
+    compare("list-body", &ir);
+    let items = native_body(&ir)
+        .blocks
+        .iter()
+        .filter(|b| matches!(b, NativeBlock::Paragraph(p) if p.bullets_list_type.is_some()))
+        .count();
+    assert_eq!(items, 4);
+}
+
+#[test]
+fn the_bundles_hyperlink_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/hyperlink-body.docx");
+    let ir = lowered(bytes);
+    let body = native_body(&ir);
+    let reasons: Vec<String> = body
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| match b {
+            NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
+            _ => None,
+        })
+        .collect();
+    assert!(reasons.is_empty(), "deferred: {reasons:?}");
+    assert_eq!(body.links.len(), 2);
+    compare("hyperlink-body", &ir);
 }

@@ -70,6 +70,8 @@ pub enum NativeBlock {
 #[derive(Debug, Clone, Default)]
 pub struct NativeBody {
     pub blocks: Vec<NativeBlock>,
+    /// The hyperlinks the blocks' runs name.
+    pub links: Vec<NativeLink>,
 }
 
 impl NativeBody {
@@ -212,6 +214,21 @@ pub fn set_paragraph_prop(p: &mut Paragraph, prop: &StyleProp) -> bool {
                 .map(|f| p.line_setting.auto_leading = Some(f))
                 .is_some();
         }
+        "paragraphListType" => {
+            return text_of(v)
+                .map(|t| p.bullets_list_type = (!t.is_empty()).then(|| t.to_owned()))
+                .is_some();
+        }
+        "paragraphBulletCharacter" => {
+            return text_of(v)
+                .map(|t| p.bullet_character = t.chars().next().map(|c| c as u32))
+                .is_some();
+        }
+        "paragraphNumberingFormat" => {
+            return text_of(v)
+                .map(|t| p.numbering_format = (!t.is_empty()).then(|| t.to_owned()))
+                .is_some();
+        }
         "paragraphKeepWithNext" => {
             return len_of(v)
                 .map(|f| p.keep_with_next = Some(count(f)))
@@ -340,6 +357,15 @@ pub fn read_paragraph_props(p: &Paragraph) -> BTreeMap<String, PropValue> {
             put(k, PropValue::Length(f));
         }
     }
+    if let Some(t) = &p.bullets_list_type {
+        put("paragraphListType", PropValue::Text(t.clone()));
+    }
+    if let Some(c) = p.bullet_character.and_then(char::from_u32) {
+        put("paragraphBulletCharacter", PropValue::Text(c.to_string()));
+    }
+    if let Some(t) = &p.numbering_format {
+        put("paragraphNumberingFormat", PropValue::Text(t.clone()));
+    }
     let bools = [
         ("paragraphKeepLinesTogether", p.keep_lines_together),
         ("paragraphKeepAllLinesTogether", p.keep_all_lines_together),
@@ -422,8 +448,8 @@ pub fn read_run_props(r: &CharacterRun) -> BTreeMap<String, PropValue> {
 /// Why a run is not slice 1's, if it is not: everything beyond text and
 /// formatting waits for its own slice.
 fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
-    if r.hyperlink_url.is_some() {
-        Some("hyperlink")
+    if r.hyperlink_url.is_some() && r.field.is_some() {
+        Some("hyperlinked field")
     } else if r.field.is_some() && r.text.is_empty() {
         Some("field without a result")
     } else if r.note.is_some() {
@@ -449,14 +475,10 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
         Some("page or column break inside the paragraph")
     } else if !p.bookmarks.is_empty() {
         Some("bookmark")
-    } else if p.list.is_some() {
-        Some("list item")
     } else if p.mark_change.is_some() || p.props_change.is_some() {
         Some("tracked change")
     } else if !p.text_boxes.is_empty() {
         Some("text box")
-    } else if p.drop_cap.is_some() {
-        Some("drop cap")
     } else {
         p.runs.iter().find_map(run_deferral)
     }
@@ -468,6 +490,18 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
 struct Minted {
     tables: usize,
     frames: usize,
+    links: Vec<NativeLink>,
+}
+
+/// A hyperlink the body makes: its text source on a run, its URL
+/// destination and the link joining them (the document's design map holds
+/// the last two).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeLink {
+    pub source_id: String,
+    pub destination_id: String,
+    pub hyperlink_id: String,
+    pub url: String,
 }
 
 fn build_paragraph(
@@ -532,6 +566,17 @@ fn build_paragraph(
             field: r.field.as_ref().map(|f| WordField::parse(&f.code)),
             ..CharacterRun::default()
         };
+        if let Some(url) = &r.hyperlink_url {
+            let n = minted.links.len();
+            let link = NativeLink {
+                source_id: format!("HyperlinkTextSource/docx_h{n}"),
+                destination_id: format!("HyperlinkURLDestination/docx_h{n}"),
+                hyperlink_id: format!("Hyperlink/docx_h{n}"),
+                url: url.clone(),
+            };
+            run.hyperlink_source = Some(link.source_id.clone());
+            minted.links.push(link);
+        }
         for prop in &para_chars {
             if !set_run_prop(&mut run, prop) {
                 return Err(format!("no model field for {}", prop.path));
@@ -543,6 +588,12 @@ fn build_paragraph(
             }
         }
         para.runs.push(run);
+    }
+    // Doc ADR 624 — Word's drop cap: the engine's paragraph drop cap, set on
+    // the paragraph itself (the engine refuses these on a style).
+    if let Some(d) = &p.drop_cap {
+        para.drop_cap_characters = d.characters;
+        para.drop_cap_lines = d.lines;
     }
     // Inline pictures: anchored frames, characters of their line (engine
     // ADR 1050), their crop the picture's placement (doc ADR 623).
@@ -772,7 +823,17 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
             },
         })
         .collect();
-    NativeBody { blocks }
+    NativeBody {
+        blocks,
+        links: minted.links,
+    }
+}
+
+/// The native stories of a body and the hyperlinks its runs name.
+#[derive(Debug, Clone, Default)]
+pub struct NativeStories {
+    pub stories: Vec<Vec<Paragraph>>,
+    pub links: Vec<NativeLink>,
 }
 
 /// The body's native stories, one per skeleton story and in its order, when
@@ -782,12 +843,13 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
 ///
 /// Stories group the blocks as the bundle's `sectionBlocks` does: a section
 /// that joins the story before it adds its blocks to that story.
-pub fn native_stories(doc: &LoweredDoc) -> Option<Vec<Vec<Paragraph>>> {
+pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     // What the body carries outside its blocks and the old path places.
     if !doc.comments.is_empty() || !doc.tocs.is_empty() || doc.track_changes {
         return None;
     }
     let body = native_body(doc);
+    let links = body.links;
     let mut paras = Vec::with_capacity(body.blocks.len());
     for b in body.blocks {
         match b {
@@ -819,5 +881,8 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<Vec<Vec<Paragraph>>> {
         let slice = paras.get(start..end.min(paras.len()))?;
         out.push(slice.to_vec());
     }
-    Some(out)
+    Some(NativeStories {
+        stories: out,
+        links,
+    })
 }

@@ -120,11 +120,14 @@ shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 
 `docx-lower` keeps a plugin-local IR and lowers through TS host commands; the target is Rust
 building `paged_model` directly, as slide does (doc ADR 625: a seven-slice plan, the IR retires
-slice by slice, the old path stays until the last). Slices 1 and 2 are in: `docx_skeleton::body` builds
-body paragraphs with direct formatting as the model's own paragraph and run fields instead of
-`docx-auto-*` styles, proven equal to the IR on the conformance fixtures; slice 2 wires it into the
-standalone open as a prefilled skeleton when the whole body is native, behind a flag that is off
-until the real-engine spec is green (styles and swatches still come from the old path). Sheet and data each have their own lowering.
+slice by slice, the old path stays until the last). Built so far in `docx_skeleton::body` (each proven
+against the old pour on the real engine: same text, page count and per-paragraph geometry, same unedited
+export): body paragraphs and runs with direct formatting as the model's own fields instead of
+`docx-auto-*` styles, lists, drop caps, plain tables (spans, insets, borders, shading, Word layout),
+inline pictures with crop, live fields and hyperlinks. They open as a prefilled skeleton when the whole
+body is native, behind `NATIVE_BODY.enabled` (off). Still the IR and the TS pour: styles and swatches,
+floating pictures and text boxes, picture looks, comments and tracked changes, notes, headers and footers,
+bookmarks, nested tables, breaks inside a paragraph, tables of contents. Sheet and data each have their own lowering.
 
 ### Charts, data, scripting, PDF
 

@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented (2 to 5 behind a flag, off); the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented, with 4 in part (2 to 5 behind a flag, off); 4b, 6 and 7 and the styles remain; the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
@@ -120,8 +120,19 @@ has no paragraph-level character properties and an empty run is not known to car
 A Word field the engine keeps live is one native run carrying `WordField::parse(code)`, its result
 the joined text of the field's runs, in the first run's look (what the bundle's `insertField`
 makes). A merge field needs nothing native (its text pours as text; the object model reads the
-IR). Hyperlinks and bookmarks (which need document-level objects: hyperlink sources, destinations
-and text anchors) and a table of contents stay deferred.
+IR). A hyperlink is a text source on the run plus a URL destination and a link in the document's
+design map (`skeleton_prefilled` writes them); a hyperlinked field is deferred. Bookmarks (text
+anchors) and a table of contents stay deferred.
+
+### Slice 2 amendment: list items
+
+A list item is a paragraph with the engine's list fields (`bullets_list_type`, `bullet_character`,
+`numbering_format`) beside its indents; the identity the IR keeps (`numId`, level) is the object
+model's, not the model's.
+
+### Slice 2 amendment: drop caps
+
+A Word drop cap (ADR 624) is the paragraph's `drop_cap_characters` and `drop_cap_lines`.
 
 ### Save-back
 
