@@ -5,14 +5,14 @@
 `docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-doc` profile,
 then `wasm-opt -Oz`):
 
-|                       | bytes                                   |
-| --------------------- | --------------------------------------- |
-| raw (2026-10-30, W4)  | 7,721,704 (7.36 MiB)                    |
-| raw (2026-10-29, W4a) | 7,686,229 (7.33 MiB)                    |
-| raw (2026-10-25, W5)  | 7,321,347 (6.98 MiB)                    |
-| raw                   | 6,879,227 (6.56 MiB)                    |
-| gzip -9               | 1,876,393 (1.79 MiB)                    |
-| brotli -q 11          | 1,070,924 (1.02 MiB)                    |
+|                       | bytes                |
+| --------------------- | -------------------- |
+| raw (2026-10-30, W4)  | 7,721,704 (7.36 MiB) |
+| raw (2026-10-29, W4a) | 7,686,229 (7.33 MiB) |
+| raw (2026-10-25, W5)  | 7,321,347 (6.98 MiB) |
+| raw                   | 6,879,227 (6.56 MiB) |
+| gzip -9               | 1,876,393 (1.79 MiB) |
+| brotli -q 11          | 1,070,924 (1.02 MiB) |
 | manifest `maxBytes`   | 8,388,608 (8 MiB)    |
 
 That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
