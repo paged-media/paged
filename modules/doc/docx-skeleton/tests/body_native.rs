@@ -588,3 +588,48 @@ fn the_bundles_hyperlink_fixture_is_built_whole() {
     assert_eq!(body.links.len(), 2);
     compare("hyperlink-body", &ir);
 }
+
+#[test]
+fn a_prefilled_skeleton_holds_the_styles_without_the_invented_ones() {
+    use std::io::Read;
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/direct-format.docx");
+    let model = docx_import::import_docx(bytes).expect("import");
+    let ir = docx_lower::lower(&model);
+    assert!(
+        ir.styles.iter().any(|s| is_synthesized(&s.id)),
+        "the lowering invents styles for the fixture"
+    );
+    let sk = docx_skeleton::skeleton_prefilled(&model, &ir, "d.docx", Default::default())
+        .expect("builds")
+        .expect("the whole body is native and the catalogue applies");
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&sk.paged)).expect("zip");
+    let mut pgm = Vec::new();
+    zip.by_name(paged_store::DOCUMENT_PGM_PATH)
+        .expect("model part")
+        .read_to_end(&mut pgm)
+        .unwrap();
+    let doc: paged_scene::Document = paged_store::from_bytes(&pgm).expect("decodes");
+    for s in ir.styles.iter().filter(|s| !is_synthesized(&s.id)) {
+        let known = match s.collection {
+            docx_lower::ir::StyleCollection::Paragraph => {
+                doc.styles.paragraph_styles.contains_key(&s.id)
+            }
+            docx_lower::ir::StyleCollection::Character => {
+                doc.styles.character_styles.contains_key(&s.id)
+            }
+        };
+        assert!(known, "{} is in the document", s.id);
+    }
+    assert!(
+        !doc.styles
+            .paragraph_styles
+            .keys()
+            .chain(doc.styles.character_styles.keys())
+            .any(|k| is_synthesized(k)),
+        "no invented style in the document"
+    );
+    // A swatch the lowering mints is in the palette.
+    for sw in &ir.swatches {
+        assert!(doc.palette.colors.contains_key(&sw.id), "{}", sw.id);
+    }
+}

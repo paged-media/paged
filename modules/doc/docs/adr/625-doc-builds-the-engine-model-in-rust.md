@@ -134,6 +134,19 @@ model's, not the model's.
 
 A Word drop cap (ADR 624) is the paragraph's `drop_cap_characters` and `drop_cap_lines`.
 
+### Slice 2 amendment: the catalogue, by the engine's own operations
+
+The theme, swatches, colour groups and styles of a prefilled skeleton are made by
+`paged_mutate::apply` (`docx-skeleton` `catalog`), the operations `buildStyleMutations` sends, in
+its order, so a style property is read exactly as the host reads it and nothing is re-implemented
+(about fifty paths, each with its own undo default, would have been a second copy). A refused
+operation sends the document to the old path whole. The styles the lowering invented for direct
+formatting (`docx-auto-*`) are left out when nothing the old path still pours (headers, footers,
+notes, page items) names them: the document then holds only the styles Word defined.
+
+This reverses the size argument above: the doc wasm now links `paged-mutate`. Its measured size is
+in the commit that raised the manifest's `maxBytes`.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

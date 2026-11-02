@@ -46,6 +46,7 @@
 //! aligned with this skeleton.
 
 pub mod body;
+pub mod catalog;
 pub mod items;
 pub mod native;
 
@@ -234,6 +235,11 @@ pub fn skeleton_prefilled(
         .map(|(_, item)| item)
         .collect();
     items::add_page_items(&mut document, &items);
+    // The theme, swatches and styles the paragraphs name: the engine's own
+    // operations, so a refused property sends the document to the old path.
+    if catalog::apply_catalog(&mut document, lowered).is_err() {
+        return Ok(None);
+    }
     for l in &native.links {
         document
             .designmap

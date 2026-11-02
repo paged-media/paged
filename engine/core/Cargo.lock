@@ -1651,8 +1651,11 @@ dependencies = [
  "docx-lower",
  "flate2",
  "paged-model",
+ "paged-mutate",
  "paged-scene",
  "paged-store",
+ "serde",
+ "serde_json",
  "zip 9.0.5",
 ]
 
