@@ -116,9 +116,12 @@ env:
 permissions:
   contents: read
 
+# The image crates are members of the engine's Cargo workspace (one Cargo
+# workspace, docs/development/one-workspace.md): cargo runs in engine/core and
+# selects the module's crates with -p.
 defaults:
   run:
-    working-directory: modules/image
+    working-directory: engine/core
 
 jobs:
   # The Rust engine: fmt + clippy + test, the three isolation-contract
@@ -152,16 +155,16 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/image -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-image
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: fmt
-        run: cargo fmt --all --check
+        run: cargo fmt -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance --check
 
       - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance --all-targets -- -D warnings
 
       # There is no adapter on ubuntu-latest, so this lane does NOT test the
       # GPU: its device tests print `unavailable: GPU adapter` and return,
@@ -176,7 +179,7 @@ jobs:
           set -o pipefail
           echo "PAGED_SKIP_LOG=$RUNNER_TEMP/paged-skips.tsv" >> "$GITHUB_ENV"
           PAGED_SKIP_LOG="$RUNNER_TEMP/paged-skips.tsv" \
-            cargo test --workspace 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+            cargo test -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
       - name: lane report
         if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' }}
         run: python3 ../../tooling/rust/skip-report.py --lane "image rust engine (no GPU)" --cargo-log "$RUNNER_TEMP/cargo-test.log"
@@ -223,10 +226,7 @@ jobs:
       # Guard 3 (§4 dep rule 3): deny.toml [sources] forbids a path/git
       # reach-around into core/editor internals; licenses + advisories +
       # bans round out the SDK-only Rust posture.
-      - name: install cargo-deny
-        uses: taiki-e/install-action@cargo-deny
-      - name: guard — cargo deny check
-        run: cargo deny check
+      # cargo deny runs over the whole workspace in core / licenses.
 
       # --- wasm artifact size report (BREAKAGE I-07) --------------------
       # The bundle's compute artifact is image-js. The wasm packaging
@@ -316,7 +316,7 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/image -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-image
           key: gpu-sw
           # Only main writes the cache; pull requests restore main's (A10).
@@ -338,7 +338,7 @@ jobs:
         id: cargo_test
         run: |
           set -o pipefail
-          cargo test --workspace --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+          cargo test -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
       # A lane that executed nothing fails.
       - name: lane report
         if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' }}
@@ -365,7 +365,7 @@ jobs:
           toolchain: ${{ steps.pin.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/image -> target
+          workspaces: engine/core -> target
           prefix-key: v0-rust-image
           key: gpu-metal
           # Only main writes the cache; pull requests restore main's (A10).
@@ -376,7 +376,7 @@ jobs:
         id: cargo_test
         run: |
           set -o pipefail
-          cargo test --workspace --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+          cargo test -p image-kernels -p image-gpu -p image-pipeline -p image-graph -p image-cms -p image-codecs -p image-js -p image-conformance --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
       # A lane that executed nothing fails.
       - name: lane report
         if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' }}
@@ -390,6 +390,9 @@ jobs:
   ts:
     name: ts bundle
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/image
     steps:
       - uses: actions/checkout@v4
       # Bun and Node at the versions in /.prototools, installed by proto.

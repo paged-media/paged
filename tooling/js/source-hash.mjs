@@ -67,7 +67,12 @@ export const MODULES = {
     crateDirs: ["src"],
     crateFiles: ["build.rs", "Cargo.toml"],
     extra: [{ dir: "registry", ext: ".yaml" }],
-    rootFiles: CARGO_WORKSPACE,
+    // image-* are members of engine/core's Cargo workspace.
+    rootFiles: [
+      "../../engine/core/Cargo.toml",
+      "../../engine/core/Cargo.lock",
+      "rust-toolchain.toml",
+    ],
   },
   sheet: {
     root: "modules/sheet",
@@ -109,7 +114,15 @@ function specOf(module) {
  * their old names, image ADR 466).
  */
 function workspacePathDeps(root) {
-  const file = join(root, "Cargo.toml");
+  // A module that is a member of engine/core's Cargo workspace has no
+  // Cargo.toml of its own: its `workspace = true` dependencies resolve through
+  // the engine's table, whose paths are relative to engine/core.
+  let base = root;
+  let file = join(root, "Cargo.toml");
+  if (!existsSync(file)) {
+    base = join(REPO, "engine", "core");
+    file = join(base, "Cargo.toml");
+  }
   const out = new Map();
   if (!existsSync(file)) return out;
   let section = "";
@@ -124,7 +137,7 @@ function workspacePathDeps(root) {
       /^\s*([A-Za-z0-9_-]+)\s*=\s*\{.*\bpath\s*=\s*"([^"]+)"/,
     );
     if (m)
-      out.set(m[1], relative(root, join(root, m[2])).split("\\").join("/"));
+      out.set(m[1], relative(root, join(base, m[2])).split("\\").join("/"));
   }
   return out;
 }
