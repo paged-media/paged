@@ -188,10 +188,14 @@ Status (draw items, one line each; updated as they land):
   Object > Stroke > Dashes… raises the panel. Draw's `Dashes…` command, its Path Options "Stroke
   dashes" section and all its helpers are gone (ids left through the deprecation window). The dormant draw Stroke and Fill schema panels (never registered), their binding
   drivers and specs are deleted too.
-- SVG import registration: KEEP. The host has File > Import / Export SVG commands
-  (`svg-commands.ts`); draw's `importer.svg/dxf/ai/eps` and `exporter.svg/dxf` are registry
-  doors (Place, drop, scripts, data bindings), a different entry. Whether the host's drop path
-  could use the registry's SVG door instead is open; not proven, not touched.
+- SVG import registration: KEEP, with the evidence for it (2026-11-02). There is one reader: the
+  engine's (`requestSvgImport` / `exportSvg`, `paged-svg`). The host's File > Import / Export SVG
+  commands (`svg-commands.ts`) and draw's `importer.svg` / `exporter.svg` registry doors both call that
+  door and nothing else (draw ADR 364: the module's own TS reader and writer are deleted); AI and EPS
+  go through paged.pdf's placement. What draw adds is the registration in the plugin registry
+  (Place, drop, scripts and data bindings find importers there), and DXF, which the host does not
+  have. Unifying the two entry points means a host importer registry the extension contract does
+  not have; that is a contract change, not a duplicate to delete, so it is not done here.
 - Colour guide: DONE 2026-11-02. The host Color Wheel panel has a Color Guide section: the
   selection's fill as the base (as the document shows it), a harmony rule menu, the harmony chips,
   and a row of variations per harmony colour (shades and tints, warm and cool, vivid and muted);
