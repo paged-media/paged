@@ -73,6 +73,14 @@ fn is_char_path(k: &str) -> bool {
             | "characterUnderline"
             | "characterStrikethru"
             | "characterFillColor"
+            | "characterEastAsianFont"
+            | "characterComplexFont"
+            | "characterComplexFontSize"
+            | "characterComplexBold"
+            | "characterComplexItalic"
+            | "characterComplexScript"
+            | "characterDirection"
+            | "characterFontHint"
     )
 }
 
@@ -203,4 +211,85 @@ fn what_slice_1_does_not_build_is_deferred_not_dropped() {
         .blocks
         .iter()
         .any(|b| matches!(b, NativeBlock::Deferred { reason } if reason == "hyperlink")));
+}
+
+// Slice 2 — the skeleton with the body built in its stories.
+
+#[test]
+fn a_prefilled_skeleton_holds_the_body_as_model_paragraphs() {
+    use std::io::Read;
+    let bytes = docx_conformance::mixed_sizes_docx();
+    let model = docx_import::import_docx(&bytes).expect("import");
+    let ir = docx_lower::lower(&model);
+    let why: Vec<_> = native_body(&ir)
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Deferred { reason } => Some(reason.clone()),
+            NativeBlock::Paragraph(_) => None,
+        })
+        .collect();
+    assert!(why.is_empty(), "deferred: {why:?}");
+    let sk = docx_skeleton::skeleton_prefilled(&model, &ir, "m.docx", Default::default())
+        .expect("builds")
+        .expect("the whole body is native");
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&sk.paged)).expect("zip");
+    let mut pgm = Vec::new();
+    zip.by_name(paged_store::DOCUMENT_PGM_PATH)
+        .expect("model part")
+        .read_to_end(&mut pgm)
+        .unwrap();
+    let doc: paged_scene::Document = paged_store::from_bytes(&pgm).expect("decodes");
+    let story = doc
+        .stories
+        .iter()
+        .find(|s| s.self_id == docx_skeleton::section_story_id(0))
+        .expect("story 0");
+    let texts: Vec<String> = story
+        .story
+        .paragraphs
+        .iter()
+        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect())
+        .collect();
+    let want: Vec<String> = ir
+        .story
+        .paragraphs()
+        .iter()
+        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect())
+        .collect();
+    assert_eq!(texts, want);
+    assert!(story
+        .story
+        .paragraphs
+        .iter()
+        .flat_map(|p| &p.runs)
+        .any(|r| r.point_size.is_some()));
+}
+
+#[test]
+fn a_body_with_a_table_is_not_prefilled() {
+    let model = docx_import::import_docx(&docx_conformance::table_docx()).expect("import");
+    let ir = docx_lower::lower(&model);
+    assert!(
+        docx_skeleton::skeleton_prefilled(&model, &ir, "t.docx", Default::default())
+            .expect("builds")
+            .is_none()
+    );
+}
+
+#[test]
+fn the_bundles_direct_format_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/direct-format.docx");
+    let ir = lowered(bytes);
+    let reasons: Vec<String> = native_body(&ir)
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| match b {
+            NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
+            NativeBlock::Paragraph(_) => None,
+        })
+        .collect();
+    assert!(reasons.is_empty(), "deferred: {reasons:?}");
+    assert!(docx_skeleton::body::native_stories(&ir).is_some());
 }
