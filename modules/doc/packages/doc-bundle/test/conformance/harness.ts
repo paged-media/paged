@@ -40,7 +40,7 @@ import {
 
 import { docBundle } from "../../src";
 import { DocEngine } from "../../src/engine";
-import { finishStandalone, type Opened } from "../../src/open";
+import { finishStandalone, NATIVE_BODY, type Opened } from "../../src/open";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
@@ -62,6 +62,10 @@ export function requireDocx(suite: string): void {
   }
 }
 
+// Doc ADR 625 — run the whole suite on natively opened bodies:
+// PAGED_DOC_NATIVE=1 turns the prefilled skeleton on where the body allows it.
+NATIVE_BODY.enabled = process.env.PAGED_DOC_NATIVE === "1";
+
 export const fixture = (name: string): Uint8Array =>
   new Uint8Array(readFileSync(new URL(`../fixtures/${name}`, import.meta.url)));
 
@@ -82,7 +86,10 @@ export async function openDoc(name: string): Promise<OpenedDoc> {
   try {
     engine.loadDocx(bytes);
     const ir = engine.lowered();
-    await h.load(engine.skeletonPaged(name));
+    const pre = NATIVE_BODY.enabled
+      ? engine.skeletonPagedPrefilled(name)
+      : null;
+    await h.load(pre ?? engine.skeletonPaged(name));
     h.loadBundle(docBundle);
     const host = h.host;
     const opened = await finishStandalone(
@@ -92,6 +99,7 @@ export async function openDoc(name: string): Promise<OpenedDoc> {
       bytes,
       name,
       (paged) => h.load(paged),
+      pre !== null,
     );
     return { h, host, opened };
   } finally {

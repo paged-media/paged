@@ -95,6 +95,7 @@ jobs:
       - name: bun test (junit per package; red results still upload)
         env:
           REQUIRE_REAL_DOCX: "1"
+          PAGED_DOC_NATIVE: "1"
         run: |
           set -uo pipefail
           bun run --filter './packages/*' test \
