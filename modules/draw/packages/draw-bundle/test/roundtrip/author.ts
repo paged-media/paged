@@ -64,7 +64,6 @@ import {
   commitAppearance,
   cornerStyleMutationFor,
   drawBundle,
-  gradientAxisMutationFor,
   groupMutationFor,
   importSvg,
   resetBlendSwatchSeq,
@@ -746,10 +745,26 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       const id = await ctx.pen(box(100, 100, 400, 300), true);
       await ctx.select([id]);
       await ctx.command(D + "fillGradientLinear");
-      // The Gradient Annotator's drag commits the axis (angle, length).
+      // The editor's Gradient tool commits the axis (angle, length) as one
+      // batch of two property writes (PM-0017).
       ctx.surfaces.add("builder");
       await ctx.mutate(
-        gradientAxisMutationFor([id], 30, 250) as MutationInput,
+        {
+          op: "batch",
+          args: {
+            ops: [
+              ["frameGradientFillAngle", 30],
+              ["frameGradientFillLength", 250],
+            ].map(([path, value]) => ({
+              op: "setElementProperty",
+              args: {
+                elementId: id,
+                path,
+                value: { type: "length", value },
+              },
+            })),
+          },
+        } as MutationInput,
         "gradient axis",
       );
     },

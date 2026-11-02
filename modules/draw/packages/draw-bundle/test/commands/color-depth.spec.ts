@@ -119,28 +119,6 @@ describe("paged.draw commands, no engine — Recolor Artwork", () => {
     expect(r.opened).toEqual([RECOLOR_PANEL_ID]);
     expect(r.sent()).toEqual([]);
   });
-
-  it("the Color Guide's apply fills the selection in one batch, reusing a swatch named for the colour", async () => {
-    covers("command:media.paged.draw.command.applyGuideColor");
-    const r = rig();
-    await r.run(`${C}.applyGuideColor`, { hex: "#0000ff" });
-    expect(r.steps()).toBe(1);
-    expect(ops(r.leaves(), "createSwatch")).toHaveLength(0);
-    const w = ops(r.leaves(), "setElementProperty");
-    expect(w.map((x) => (x.args.value as { value: string }).value)).toEqual([
-      "Color/ublue",
-      "Color/ublue",
-    ]);
-    r.reset();
-    await r.run(`${C}.applyGuideColor`, { hex: "#123456", stroke: true });
-    expect(ops(r.leaves(), "createSwatch")).toHaveLength(1);
-    expect(ops(r.leaves(), "setElementProperty")[0]!.args.path).toBe(
-      "frameStrokeColor",
-    );
-    r.reset();
-    await r.run(`${C}.applyGuideColor`, {});
-    expect(r.sent()).toEqual([]);
-  });
 });
 
 describe("Recolor Artwork — the pure halves", () => {

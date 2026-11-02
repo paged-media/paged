@@ -63,3 +63,13 @@ The machine cancels a stroke that simplifies to fewer than two anchors.
 - [ADR 350](350-three-typescript-layers.md) — host-agnostic machines; the host's tools are shims
 - [ADR 352](352-basic-operations-belong-to-the-host.md) — what the host owns
 - [ADR 358](358-one-snapper-the-engine-resolves.md) — the other tool shared with the host
+
+## Amendment 2026-11-02 — the eyedroppers are one
+
+The bullet "The eyedroppers and the scissors stay two" no longer holds for the eyedropper
+(PM-0017: one implementation per capability). The host's Eyedropper has a `mode` option: Pixel
+(the composited pixel, as before) and Object appearance, which samples a clicked element's
+fill, stroke, weight and opacity and writes them onto the selection in one batch (Alt+click
+samples only). Sampling and the write are `platform/shared/helpers`' `sampled-style`. This
+bundle's Eyedropper tool, its `shift+d` key and its feature id are gone; the scissors stay two.
+

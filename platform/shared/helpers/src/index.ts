@@ -57,6 +57,18 @@ export {
   type DashPair,
 } from "./dash.ts";
 export {
+  gradientSpecWithStop,
+  type GradientRead,
+  type GradientStopRead,
+} from "./gradient-stop.ts";
+export {
+  applySampledStyle,
+  sampledStyleFrom,
+  type SampledEntry,
+  type SampledStyle,
+  type SampledTarget,
+} from "./sampled-style.ts";
+export {
   LIVE_CORNER_KINDS,
   cornerPresetOps,
   supportsLiveCornerKind,

@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 903,
+    "command": 902,
     "keybinding": 167,
     "menu": 645,
-    "panel": 151,
-    "tool": 130
+    "panel": 150,
+    "tool": 128
   },
   "features": [
     {
@@ -682,11 +682,6 @@
     },
     {
       "id": "command:media.paged.draw.command.applyGraphicStyle",
-      "kind": "command",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "command:media.paged.draw.command.applyGuideColor",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -8676,11 +8671,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "panel:media.paged.draw.panel.colorGuide",
-      "kind": "panel",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "panel:media.paged.draw.panel.generative",
       "kind": "panel",
       "owner": "media.paged.draw"
@@ -9411,17 +9401,7 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.eyedropper",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.flare",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "tool:media.paged.draw.tool.gradientAnnotator",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
@@ -9447,11 +9427,6 @@
     },
     {
       "id": "tool:media.paged.draw.tool.livePaintSelect",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
-      "id": "tool:media.paged.draw.tool.measure",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
@@ -9926,6 +9901,11 @@
       "owner": "editor"
     },
     {
+      "id": "tool:paged.tool.measure",
+      "kind": "tool",
+      "owner": "editor"
+    },
+    {
       "id": "tool:paged.tool.mesh",
       "kind": "tool",
       "owner": "editor"
@@ -10309,6 +10289,36 @@
     {
       "id": "menu:Draw/Stroke/Dashes…",
       "replacement": "menu:Object/Stroke/Dashes…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.eyedropper",
+      "replacement": "tool:paged.tool.eyedropper",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.measure",
+      "replacement": "tool:paged.tool.measure",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "panel:media.paged.draw.panel.colorGuide",
+      "replacement": "panel:paged.color-wheel",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.applyGuideColor",
+      "replacement": null,
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.gradientAnnotator",
+      "replacement": "tool:paged.tool.gradientSwatch",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }

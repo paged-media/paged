@@ -152,11 +152,16 @@ Status (draw items, one line each; updated as they land):
   other tools build on (`pathfinderMutationFor`, the paint-order readers, the faces builder).
   Neither side had keybindings. After a success the shape modes leave the kept object selected
   and the region verbs clear the selection (draw's behaviour, now the host's).
-- Gradient annotator and stop machine: KEEP. The host gradient tool commits an axis drag
-  (and the freeform modes) but draws no axis for an existing gradient and has no stop markers on
-  the canvas; draw's annotator shows the axis with a marker per stop and drags a stop along it
-  (`GradientStopMachine`). The host's `gradient-editor.tsx` is a panel, not the canvas lane.
-  Delete draw's when the host tool shows the axis and stops.
+- Gradient annotator and stop machine: DONE 2026-11-02. The host Gradient tool (linear mode) now
+  shows the selected object's gradient axis with a diamond marker at every stop
+  (`handlers/gradient-annotation.ts`); a press on a marker grabs that stop, it slides along the axis
+  between its neighbours, and the release writes one `editGradient` (one undo step, every other stop
+  field kept; the spec of a moved stop is shared in `platform/shared/helpers`). A press elsewhere is
+  the axis drag as before, Esc cancels. The line is drawn from the frame's centre and the gradient
+  is a swatch (every object using it changes), as draw's note said. Draw's tool, handler, specs and
+  the axis builder are gone (tool id left through the deprecation window). The stop machine stays
+  in `@paged-media/draw/machines`. The annotation's gesture tests run on the fake client; the
+  canvas behaviour is covered by the gradient e2e (now on the host tool).
 - Appearance stack: MERGED 2026-11-01. The host declares `paged.appearance.*` (Add fill, Add
   stroke, Clear, Remove layer, Move layer; `appearance-commands.ts`) over the panel's own list
   functions, with Object > Appearance entries for the first three and draw's payload addressing.
@@ -183,18 +188,37 @@ Status (draw items, one line each; updated as they land):
   Object > Stroke > Dashes… raises the panel. Draw's `Dashes…` command, its Path Options "Stroke
   dashes" section and all its helpers are gone (ids left through the deprecation window). The dormant draw Stroke and Fill schema panels (never registered), their binding
   drivers and specs are deleted too.
-- SVG import registration: KEEP. The host has File > Import / Export SVG commands
-  (`svg-commands.ts`); draw's `importer.svg/dxf/ai/eps` and `exporter.svg/dxf` are registry
-  doors (Place, drop, scripts, data bindings), a different entry. Whether the host's drop path
-  could use the registry's SVG door instead is open; not proven, not touched.
-- Colour guide: KEEP. The host colour wheel (`color-wheel-panel.tsx`) authors a harmony from the
-  wheel's own colour and adds swatches; draw's panel reads the selection's fill, offers the
-  shade/tint, warm/cool and vivid/muted variation grids and paints the selection from a chip.
-  Merging means adding those three things to the host wheel.
-- Measure: KEEP. The host has no Measure tool (`built-in-tools.ts` records its retirement in
-  favour of draw's); nothing to delete until the host builds one.
-- Copy appearance: KEEP. The host eyedropper samples one composited pixel into a swatch and
-  fills with it; draw's copies a whole appearance (fills, strokes, effects). Different feature.
+- SVG import registration: KEEP, with the evidence for it (2026-11-02). There is one reader: the
+  engine's (`requestSvgImport` / `exportSvg`, `paged-svg`). The host's File > Import / Export SVG
+  commands (`svg-commands.ts`) and draw's `importer.svg` / `exporter.svg` registry doors both call that
+  door and nothing else (draw ADR 364: the module's own TS reader and writer are deleted); AI and EPS
+  go through paged.pdf's placement. What draw adds is the registration in the plugin registry
+  (Place, drop, scripts and data bindings find importers there), and DXF, which the host does not
+  have. Unifying the two entry points means a host importer registry the extension contract does
+  not have; that is a contract change, not a duplicate to delete, so it is not done here.
+- Colour guide: DONE 2026-11-02. The host Color Wheel panel has a Color Guide section: the
+  selection's fill as the base (as the document shows it), a harmony rule menu, the harmony chips,
+  and a row of variations per harmony colour (shades and tints, warm and cool, vivid and muted);
+  a click paints the selection's fill through a swatch named for the hex (found or created, one
+  batch), Alt-click its stroke. The maths is `@paged-media/draw/geometry`'s, shared with Recolor
+  Artwork. Draw's panel and its `applyGuideColor` command are gone (ids left through the
+  deprecation window; draw ADR 362 amended). Not verified locally: the section's DOM behaviour
+  (no DOM test could run without wasm); the reads and the write are unit-tested.
+- Measure: DONE 2026-11-02. The host has a Measure tool again (`paged.tool.measure`,
+  `handlers/measure-tool.ts`, `shift+m`): drag to read a distance and an angle, the segment and its
+  label as one preview that stays after the release, Esc clears, Shift snaps to 45 degrees, and the
+  origin snaps to the nearest point on the path under the press (the hit-test's transform is reused,
+  so no anchor table is read). It drives `MeasureMachine` from `@paged-media/draw/machines`. Draw's
+  tool, handler, the raw nearest-point read, its readout binding (nothing read it) and specs are
+  gone; the tool id leaves through the deprecation window.
+- Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
+  and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
+  opacity land on the selection in one batch, each target written only what its own snapshot
+  exposes; Alt+click samples only. This is exactly what draw's tool sampled (typed properties; it
+  never copied effects, which an earlier note here got wrong). The sampling and the write are
+  shared in `platform/shared/helpers` (`sampled-style`). Draw's tool, its `shift+d` key and its
+  feature id are gone (draw ADR 359 amended). Slide's format painter was not touched: it copies
+  slide text and shape formatting, not this set.
 
 ### Reach (gaps between modules)
 

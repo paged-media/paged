@@ -175,7 +175,6 @@ import {
 import { contributeLiveRetrace } from "./commands/image-trace-live";
 import {
   contributeRecolorCommands,
-  COLOR_GUIDE_PANEL_ID,
   RECOLOR_COMMAND_IDS,
   RECOLOR_PANEL_ID,
 } from "./commands/recolor";
@@ -236,7 +235,6 @@ import { makePathOptionsPanel } from "./panels/path-options-panel";
 import { makeImageTracePanel } from "./panels/image-trace-panel";
 import { makeRecolorPanel } from "./panels/recolor-panel";
 import { makeGenerativePanel } from "./panels/generative-panel";
-import { makeColorGuidePanel } from "./panels/color-guide-panel";
 import { makeBrushesPanel } from "./panels/brushes-panel";
 import {
   BRUSHES_PANEL_ID,
@@ -421,11 +419,7 @@ export function activate(host: BundleHost): BundleHandle {
     icon: "ui-sparkle",
     ...makeGenerativePanel(host),
   });
-  host.contribute.panel({
-    id: COLOR_GUIDE_PANEL_ID,
-    icon: "ui-sun",
-    ...makeColorGuidePanel(host),
-  });
+  // The Color Guide is the host's: a section of its Color Wheel panel.
   // WP6.4 — the BRUSHES panel: brush libraries, Brush Options and the
   // width profile library (live stroke styles, engine ADR 1053).
   host.contribute.panel({

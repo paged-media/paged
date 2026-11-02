@@ -35,14 +35,11 @@
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
       "media.paged.draw.tool.curvature",
-      "media.paged.draw.tool.gradientAnnotator",
-      "media.paged.draw.tool.measure",
       "media.paged.draw.tool.shapeBuilder",
       "media.paged.draw.tool.cornerRadius",
       "media.paged.draw.tool.paintbrush",
       "media.paged.draw.tool.blobBrush",
       "media.paged.draw.tool.eraserBrush",
-      "media.paged.draw.tool.eyedropper",
       "media.paged.draw.tool.width",
       "media.paged.draw.tool.lassoSelect",
       "media.paged.draw.tool.livePaintBucket",
@@ -90,7 +87,6 @@
       "media.paged.draw.panel.imageTrace",
       "media.paged.draw.panel.recolorArtwork",
       "media.paged.draw.panel.generative",
-      "media.paged.draw.panel.colorGuide",
       "media.paged.draw.panel.brushes",
       "media.paged.draw.panel.properties"
     ],
@@ -229,7 +225,6 @@
       "media.paged.draw.command.imageTraceOptions",
       "media.paged.draw.command.recolorArtwork",
       "media.paged.draw.command.recolorArtworkOptions",
-      "media.paged.draw.command.applyGuideColor",
       "media.paged.draw.command.textToVector",
       "media.paged.draw.command.generativeRecolor",
       "media.paged.draw.command.textToVectorOptions",
@@ -3804,28 +3799,6 @@
           "args": {
             "kind": "struct",
             "fields": {}
-          }
-        },
-        {
-          "id": "media.paged.draw.command.applyGuideColor",
-          "title": "Apply guide color",
-          "args": {
-            "kind": "struct",
-            "fields": {
-              "targets": {
-                "kind": "list",
-                "of": {
-                  "kind": "ref",
-                  "to": "frame"
-                }
-              },
-              "hex": {
-                "kind": "text"
-              },
-              "stroke": {
-                "kind": "bool"
-              }
-            }
           }
         },
         {
