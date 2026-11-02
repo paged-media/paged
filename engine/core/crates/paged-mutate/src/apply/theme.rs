@@ -42,6 +42,9 @@ fn refuse(msg: impl Into<String>) -> OperationError {
 /// `(kind, id, font, font_ref)` with `kind` `paragraph` or `character`.
 type StyleFont = (String, String, Option<String>, Option<ThemeFontRef>);
 
+/// One swatch's `(id, themeRef, value)`, as `RestoreTheme` carries it.
+type SwatchRef = (String, Option<ThemeRef>, Vec<f32>);
+
 fn style_fonts(doc: &Document, extra: &[(&str, &str)]) -> Vec<StyleFont> {
     let mut out = Vec::new();
     for (id, d) in &doc.styles.paragraph_styles {
@@ -298,7 +301,7 @@ pub(super) fn apply_restore(
         .map(serde_json::from_str)
         .transpose()
         .map_err(|e| refuse(format!("theme swatches: {e}")))?;
-    let refs: Option<Vec<(String, Option<ThemeRef>, Vec<f32>)>> = refs_json
+    let refs: Option<Vec<SwatchRef>> = refs_json
         .map(serde_json::from_str)
         .transpose()
         .map_err(|e| refuse(format!("theme swatch references: {e}")))?;
