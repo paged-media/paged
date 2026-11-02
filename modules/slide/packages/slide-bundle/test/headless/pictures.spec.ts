@@ -32,7 +32,7 @@ import type {
   ElementId,
   ExporterContribution,
 } from "@paged-media/plugin-api";
-import { bytesToBase64 } from "@paged-media/helpers";
+import { bytesToBase64, crc32 } from "@paged-media/helpers";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { activate, keepSource } from "../../src/activate";
@@ -114,20 +114,6 @@ function zipParts(bytes: Uint8Array): Map<string, Buffer> {
 
 // ── test pictures, written here (no file of the corpus) ──────────────────
 
-const CRC = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-function crc32(b: Uint8Array): number {
-  let c = 0xffffffff;
-  for (const x of b) c = CRC[(c ^ x) & 0xff]! ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
 const W = 8;
 const H = 4;
 /** An opaque blue picture, `W` × `H`. */

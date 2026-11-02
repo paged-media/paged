@@ -37,16 +37,9 @@
 // line, oval, a rotated path, a group inside a group); `dense` is many
 // overlapping frames and a three-deep group nest.
 
-export type Pt = readonly [number, number];
+import { crc32, escapeXmlText } from "@paged-media/helpers";
 
-function crc32(buf: Uint8Array): number {
-  let c = ~0;
-  for (let i = 0; i < buf.length; i++) {
-    c ^= buf[i];
-    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
-  }
-  return ~c >>> 0;
-}
+export type Pt = readonly [number, number];
 
 /** A ZIP of stored entries, in order (the IDML `mimetype` first). */
 export function storedZip(
@@ -210,8 +203,7 @@ export const textFrame = (
   ) +
   `</TextFrame>`;
 
-const escapeXml = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const escapeXml = escapeXmlText;
 
 export const group = (
   self: string,

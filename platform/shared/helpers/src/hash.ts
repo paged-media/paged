@@ -78,6 +78,23 @@ export function fnv1a32(input: string | Uint8Array, seed = 0x811c9dc5): number {
   return h >>> 0;
 }
 
+/**
+ * FNV-1a 32 over a string's UTF-16 code units, each fed as two bytes (low,
+ * then high). Persisted content addresses (draw's recipe and graphic-style
+ * digests) use this form, so it stays distinct from [`fnv1a32`], which XORs a
+ * whole code unit. `seed` defaults to the offset basis; a second seed makes an
+ * independent 32-bit lane.
+ */
+export function fnv1a32Utf16(input: string, seed = 0x811c9dc5): number {
+  let h = seed >>> 0;
+  for (let i = 0; i < input.length; i += 1) {
+    const c = input.charCodeAt(i);
+    h = Math.imul(h ^ (c & 0xff), 0x01000193) >>> 0;
+    h = Math.imul(h ^ (c >>> 8), 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
 /** [`fnv1a32`] as eight lower-case hex digits. */
 export function fnv1a32Hex(input: string | Uint8Array): string {
   return fnv1a32(input).toString(16).padStart(8, "0");

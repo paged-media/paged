@@ -312,9 +312,7 @@ fn items_workbook(formulas: &[(&str, &str)]) -> Vec<u8> {
         let cell = fml(
             r,
             "E",
-            &f.replace('&', "&amp;")
-                .replace('<', "&lt;")
-                .replace('>', "&gt;"),
+            &paged_ooxml::xml::escape_text(f),
         );
         if r <= 5 {
             rows[i] = rows[i].replace("</row>", &format!("{cell}</row>"));

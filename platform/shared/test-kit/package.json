@@ -21,6 +21,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@paged-media/helpers": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*"
   }

@@ -21,6 +21,7 @@
 // envelope: the sheet perf workloads need one empty page to place into.
 
 import { deflateRawSync } from "node:zlib";
+import { crc32 } from "@paged-media/helpers";
 
 interface IdmlEntry {
   name: string;
@@ -28,15 +29,6 @@ interface IdmlEntry {
   /** mimetype must be STORED (uncompressed) + first, per the IDML
    *  package convention; everything else deflates. */
   store?: boolean;
-}
-
-function crc32(buf: Uint8Array): number {
-  let c = ~0;
-  for (let i = 0; i < buf.length; i++) {
-    c ^= buf[i];
-    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
-  }
-  return ~c >>> 0;
 }
 
 /** Assemble a minimal ZIP (local headers + central directory + EOCD).

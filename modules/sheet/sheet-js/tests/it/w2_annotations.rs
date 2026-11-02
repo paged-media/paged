@@ -280,10 +280,18 @@ fn in_cell_workbook() -> Vec<u8> {
         "</sheetData>",
         r#"<row r="3"><c r="B3" t="e" vm="1"><v>#VALUE!</v></c></row></sheetData>"#,
     );
-    let ct = part(&base, "[Content_Types].xml").unwrap().replace(
-        "</Types>",
-        r#"<Default Extension="png" ContentType="image/png"/><Override PartName="/xl/metadata.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml"/></Types>"#,
-    );
+    let ct = {
+        let mut ct = paged_ooxml::content_types::ContentTypes::parse(
+            part(&base, "[Content_Types].xml").unwrap().as_bytes(),
+        )
+        .expect("content types");
+        ct.add_default("png", "image/png");
+        ct.add_override(
+            "/xl/metadata.xml",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml",
+        );
+        ct.render()
+    };
     let metadata = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:xlrd="http://schemas.microsoft.com/office/spreadsheetml/2017/richdata"><metadataTypes count="1"><metadataType name="XLRICHVALUE" minSupportedVersion="120000"/></metadataTypes><futureMetadata name="XLRICHVALUE" count="1"><bk><extLst><ext uri="{3e2802c4-a4d2-4d8b-9148-e3be6c30e623}"><xlrd:rvb i="0"/></ext></extLst></bk></futureMetadata><valueMetadata count="1"><bk><rc t="1" v="0"/></bk></valueMetadata></metadata>"#;
     let rv = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

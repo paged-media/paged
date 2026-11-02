@@ -52,7 +52,10 @@ pub use format::{
     AlphaMode, ChannelLayout, ColorSpaceRef, IccHash, NamedSpace, PixelFormat, SampleDepth,
     Transfer, TransferCurve, PIXEL_FORMAT_VERSION,
 };
-pub use generation::{ContentHash, GenerationId, ParamsHash};
+pub use generation::{
+    fnv1a_64, fnv1a_64_update, ContentHash, GenerationId, ParamsHash, FNV1A_64_OFFSET,
+    FNV1A_64_PRIME,
+};
 pub use region::Region;
 pub use slice::{TileSliceMut, TileSliceRef};
 pub use tile::{OpfsKey, TextureSlot, Tile, TileCoord, TileData, TILE};
