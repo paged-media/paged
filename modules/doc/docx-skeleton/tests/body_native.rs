@@ -409,3 +409,21 @@ fn the_bundles_direct_format_fixture_is_built_whole() {
     assert!(reasons.is_empty(), "deferred: {reasons:?}");
     assert!(docx_skeleton::body::native_stories(&ir).is_some());
 }
+
+#[test]
+fn the_bundles_table_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/table-body.docx");
+    let ir = lowered(bytes);
+    let reasons: Vec<String> = native_body(&ir)
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| match b {
+            NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
+            _ => None,
+        })
+        .collect();
+    assert!(reasons.is_empty(), "deferred: {reasons:?}");
+    assert!(docx_skeleton::body::native_stories(&ir).is_some());
+    compare("table-body", &ir);
+}
