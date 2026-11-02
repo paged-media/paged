@@ -29,6 +29,17 @@ use std::time::Duration;
 use base64::Engine as _;
 use serde_json::{json, Value};
 
+/// A port nobody holds right now: the OS picks it (bind to 0). A fixed
+/// `20000 + pid % 20000` collided with other processes on a busy runner, and
+/// the readiness probe then connected to the wrong server.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind(("127.0.0.1", 0))
+        .expect("bind a free port")
+        .local_addr()
+        .expect("its address")
+        .port()
+}
+
 fn call(port: u16, body: &Value) -> (u16, Value) {
     let text = body.to_string();
     let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
@@ -50,7 +61,7 @@ fn one_call_loads_scripts_renders_and_exports() {
         .status()
         .unwrap()
         .success());
-    let port = 20000 + (std::process::id() % 20000) as u16;
+    let port = free_port();
     let mut child = Command::new(env!("CARGO_BIN_EXE_paged"))
         .args(["engine-serve", "--port", &port.to_string()])
         .stderr(Stdio::null())
@@ -111,7 +122,7 @@ impl Drop for Served {
     }
 }
 
-fn serve(tag: &str, offset: u16, extra: &[&str]) -> Served {
+fn serve(tag: &str, extra: &[&str]) -> Served {
     let dir = std::env::temp_dir().join(format!("paged-engine-serve-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let doc = dir.join("d.paged");
@@ -120,7 +131,7 @@ fn serve(tag: &str, offset: u16, extra: &[&str]) -> Served {
         .status()
         .unwrap()
         .success());
-    let port = 20000 + ((std::process::id() + u32::from(offset)) % 20000) as u16;
+    let port = free_port();
     let child = Command::new(env!("CARGO_BIN_EXE_paged"))
         .args(["engine-serve", "--port", &port.to_string()])
         .args(extra)
@@ -150,7 +161,7 @@ const TEXT_SCRIPT: &str = r#"
 
 #[test]
 fn exports_pdf_alone_and_beside_the_paged() {
-    let s = serve("pdf", 7, &[]);
+    let s = serve("pdf", &[]);
     let b64 = base64::engine::general_purpose::STANDARD;
     let (status, out) = call(
         s.port,
@@ -196,7 +207,7 @@ fn exports_pdf_x4_with_the_calls_own_profile() {
             paged_color::test_profiles::NO_PROFILE_HINT
         );
     };
-    let s = serve("pdfx", 13, &[]);
+    let s = serve("pdfx", &[]);
     let b64 = base64::engine::general_purpose::STANDARD;
     let (status, out) = call(
         s.port,
@@ -218,7 +229,7 @@ fn exports_pdf_x4_with_the_calls_own_profile() {
 
 #[test]
 fn concurrent_calls_each_run_on_an_engine_of_their_own() {
-    let s = serve("conc", 19, &["--workers", "4"]);
+    let s = serve("conc", &["--workers", "4"]);
     let b64 = base64::engine::general_purpose::STANDARD;
     let port = s.port;
     let base_script = r#"const t = paged.stories(); console.log("stories:" + (typeof t === "string" ? JSON.parse(t) : t).length);"#;
@@ -296,7 +307,7 @@ const FILL_SCRIPT: &str = r#"
 /// object was written.
 #[test]
 fn text_a_script_sets_on_a_blank_page_is_set_in_the_fallback_face() {
-    let s = serve("text", 23, &[]);
+    let s = serve("text", &[]);
     let b64 = base64::engine::general_purpose::STANDARD;
     let file = blank_a4_idml(&s.dir);
     let (status, out) = call(
@@ -348,7 +359,6 @@ fn server_fonts_reach_every_call() {
     let fonts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts");
     let s = serve(
         "fonts",
-        29,
         &["--fonts", fonts.to_str().unwrap(), "--no-default-font"],
     );
     let b64 = base64::engine::general_purpose::STANDARD;
@@ -378,7 +388,7 @@ fn server_fonts_reach_every_call() {
 /// intent.
 #[test]
 fn a_call_profile_that_is_not_icc_cmyk_is_refused() {
-    let s = serve("badicc", 31, &[]);
+    let s = serve("badicc", &[]);
     let b64 = base64::engine::general_purpose::STANDARD;
     let pdfx4 = json!({ "format": "pdf", "pdf": { "standard": "pdfx4" } });
     let mut rgb = vec![0u8; 128];
@@ -436,7 +446,7 @@ fn a_server_profile_that_is_not_icc_cmyk_refuses_to_start() {
 /// not fit is answered 422 with the problem.
 #[test]
 fn a_call_fills_template_fields_as_a_filler() {
-    let s = serve("template", 37, &[]);
+    let s = serve("template", &[]);
     let port = s.port;
     // The author makes a text frame a field.
     let author = r#"
