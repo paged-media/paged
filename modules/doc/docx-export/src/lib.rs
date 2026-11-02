@@ -28,6 +28,7 @@
 
 mod bindings;
 pub mod controls;
+pub mod crop;
 mod diff;
 mod edit;
 mod native;

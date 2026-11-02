@@ -20,8 +20,24 @@ image transform, `[w / (1 - l - r) / pixels_w, 0, 0, h / (1 - t - b) / pixels_h,
   since engine ADR 1045's amendment of 2026-11-02, in the body and in table cells.
 - A crop that leaves no picture (the sides overlap) or pads (a negative side) is not
   carried; the picture shows whole.
-- Save-back does not write a changed crop back (the splice only touches edited
-  text); an unedited picture keeps its XML byte for byte.
+- Save-back writes a changed crop back (below); an unedited picture keeps its XML byte for byte.
+- Table cells take the same path: `picture_crop_cell_docx` (`dump-fixture <out> picture-crop-cell`)
+  holds an inline and an anchored cropped picture in two cells; `reach.rs` checks their crop and
+  placement against the definition, `picture-crop-cell.spec.ts` the cell's pour.
+
+## Save-back
+
+The editor changes a crop by setting `imageContentTransform` on the anchored frame. The host reads each
+paragraph's pictures with the story (`pictures`: frame id, anchor offset, placement), `docx-export`
+(`crop.rs`) inverts the placement and splices `a:srcRect` into the drawing found by its ordinal:
+
+`l = -e / (a * pw)`, `t = -f / (d * ph)`, `r = 1 - l - w / (a * pw)`, `b = 1 - t - h / (d * ph)`
+
+in 1/1000 percent (`l="25000"` is 25 %), only the non-zero sides. A picture whose placement the
+lowering made is not touched. Refused with a line in the ledger: a picture of unknown size (a metafile),
+a flipped, rotated or skewed placement, one that does not cover its frame (negative `a:srcRect`), one the
+import cannot find. Not saved: pictures in nested tables, headers and text boxes, VML pictures, frame
+resizes. Evidence: `docx-conformance/tests/it/crop_saveback.rs`.
 
 ## Word's render
 

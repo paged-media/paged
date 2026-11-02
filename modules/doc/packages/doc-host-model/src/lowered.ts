@@ -277,6 +277,10 @@ export interface LoweredImage {
    *  image left out at each side. `widthPt` x `heightPt` is the cropped
    *  picture's size on the page. Absent for a picture shown whole. */
   crop?: LoweredCrop;
+  /** Doc ADR 623 — where the drawing stands in its part (the ordinal of its
+   *  `wp:inline` / `wp:anchor`): save-back writes a changed crop into that
+   *  drawing's `a:srcRect`. Absent for a picture that is not DrawingML. */
+  drawing?: number;
 }
 
 /** The parts of an image a crop leaves out, as fractions (0–1). */

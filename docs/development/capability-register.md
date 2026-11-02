@@ -227,7 +227,10 @@ Status (draw items, one line each; updated as they land):
   against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following
   paragraph is not wrapped beside a cap taller than its own (known differences, in the note). Picture crop (`srcRect`) is done (doc ADR 623): the lowering sets
   the picture's placement on its anchored frame (`imageContentTransform`, engine ADR 1045's
-  amendment of 2026-11-02); the comparison with Word's own render is pending.
+  amendment of 2026-11-02), and Word's render matches the OOXML definition for all eight fixture
+  pictures. A crop changed in the editor is written back as the picture's `a:srcRect` (inverse of the
+  placement; unchanged crops stay byte-identical; a picture of unknown size, a metafile, is
+  reported), in the body and in table cells; pictures in nested tables and in headers are not.
 - **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.
 - **slide:** autofit (stored `fontScale` is applied as fixed values). Done and checked against PowerPoint:
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet

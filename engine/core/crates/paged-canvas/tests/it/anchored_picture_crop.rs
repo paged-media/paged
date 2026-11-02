@@ -333,3 +333,80 @@ fn a_text_frame_has_no_picture_to_place() {
     });
     assert!(r.is_err(), "a frame with no picture refuses a placement");
 }
+
+#[test]
+fn the_story_read_lists_a_picture_with_its_placement() {
+    let t = crop_placement(0.25, 0.0, 0.25, 0.0);
+    let mut m = load();
+    let id = anchored(&mut m, Some(t));
+    let content = m.story_content("st1").expect("the story reads");
+    let pictures = &content.paragraphs[0].pictures;
+    assert_eq!(pictures.len(), 1);
+    assert_eq!(pictures[0].frame_id, id.raw_id());
+    assert_eq!(pictures[0].offset, 0);
+    assert_eq!(pictures[0].placement, Some(t));
+    // A paragraph with no picture lists none (and the key is left out).
+    let mut plain = load();
+    let content = plain.story_content("st1").expect("the story reads");
+    assert!(content.paragraphs[0].pictures.is_empty());
+    // A picture that fills its frame has no placement; a placement written
+    // later is the one the read gives back.
+    let id = anchored(&mut plain, None);
+    let read = plain.story_content("st1").unwrap().paragraphs[0].pictures[0].clone();
+    assert_eq!(read.placement, None);
+    plain
+        .apply_mutation(&Mutation::SetElementProperty {
+            element_id: id,
+            path: PropertyPath::ImageContentTransform,
+            value: Value::Transform(Some(t)),
+        })
+        .expect("placement");
+    assert_eq!(
+        plain.story_content("st1").unwrap().paragraphs[0].pictures[0].placement,
+        Some(t)
+    );
+}
+
+#[test]
+fn an_anchored_picture_frame_lists_its_image_placement() {
+    let t = crop_placement(0.1, 0.2, 0.3, 0.1);
+    let mut m = load();
+    let id = anchored(&mut m, Some(t));
+    let props = m.element_properties(&id).expect("the frame answers");
+    let entry = props
+        .entries
+        .iter()
+        .find(|e| e.path == PropertyPath::ImageContentTransform)
+        .expect("a picture frame lists imageContentTransform");
+    assert_eq!(entry.value, Some(Value::Transform(Some(t))));
+}
+
+#[test]
+fn an_anchored_text_frame_lists_no_image_placement() {
+    let mut m = load();
+    m.apply_mutation(&Mutation::Batch {
+        ops: vec![Mutation::InsertAnchoredFrame {
+            paragraph: None,
+            story_id: "st1".into(),
+            offset: 0,
+            width: W,
+            height: H,
+            image_uri: None,
+            kind: None,
+            layout: None,
+            cell: None,
+        }],
+    })
+    .expect("batch");
+    let id = ElementId::Rectangle(
+        m.scene().stories[0].story.paragraphs[0].anchored_frames[0]
+            .self_id
+            .clone()
+            .unwrap(),
+    );
+    let props = m.element_properties(&id).expect("the frame answers");
+    assert!(props
+        .entries
+        .iter()
+        .all(|e| e.path != PropertyPath::ImageContentTransform));
+}
