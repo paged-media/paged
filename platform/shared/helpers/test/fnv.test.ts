@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { fnv1a32, fnv1a32Hex } from "../src/hash.ts";
+import { fnv1a32, fnv1a32Hex, fnv1a32Utf16 } from "../src/hash.ts";
 
 describe("fnv1a32", () => {
   it("matches the published FNV-1a 32 vectors", () => {
@@ -36,5 +36,56 @@ describe("fnv1a32", () => {
   });
   it("takes a seed for chained hashing", () => {
     expect(fnv1a32("bar", fnv1a32("foo"))).toBe(fnv1a32("foobar"));
+  });
+});
+
+describe("fnv1a32Utf16", () => {
+  // The loop draw's recipe-store and graphic-styles carried before it moved here.
+  const legacy = (text: string, seed: number): number => {
+    let h = seed >>> 0;
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      h = Math.imul(h ^ (c & 0xff), 0x01000193) >>> 0;
+      h = Math.imul(h ^ (c >>> 8), 0x01000193) >>> 0;
+    }
+    return h >>> 0;
+  };
+  it("is bit-identical to the copies it replaced", () => {
+    for (const text of [
+      "",
+      "a",
+      "foobar",
+      "€ ünï \u{1F600} \u0000",
+      "x".repeat(500),
+    ]) {
+      for (const seed of [0x811c9dc5, 0x9dc5811c]) {
+        expect(fnv1a32Utf16(text, seed)).toBe(legacy(text, seed));
+      }
+    }
+  });
+  it("is FNV-1a over the UTF-16LE bytes", () => {
+    const text = "h€llo";
+    const bytes = new Uint8Array(text.length * 2);
+    for (let i = 0; i < text.length; i++) {
+      bytes[2 * i] = text.charCodeAt(i) & 0xff;
+      bytes[2 * i + 1] = text.charCodeAt(i) >>> 8;
+    }
+    expect(fnv1a32Utf16(text)).toBe(fnv1a32(bytes));
+  });
+});
+
+describe("siteHash and bytes fingerprints", () => {
+  it("the shift-form FNV the journal carried equals fnv1a32", () => {
+    const shifted = (m: string): number => {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < m.length; i += 1) {
+        h ^= m.charCodeAt(i);
+        h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+      }
+      return h;
+    };
+    for (const m of ["", "plugin said hi", "€ ünï \u{1F600}"]) {
+      expect(fnv1a32(m)).toBe(shifted(m));
+    }
   });
 });

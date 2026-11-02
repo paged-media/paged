@@ -463,7 +463,7 @@ fn xlsx_with_numfmt(format_code: &str) -> Vec<u8> {
         // The styles part carries the custom numFmt whose code we vary. XML-
         // escape the code for the attribute (the format codes here contain no
         // `<`/`>`/`&`/`"`, but escape defensively).
-        let escaped = format_code.replace('&', "&amp;").replace('"', "&quot;");
+        let escaped = paged_ooxml::xml::escape_attr(format_code);
         add(
             "xl/styles.xml",
             format!(

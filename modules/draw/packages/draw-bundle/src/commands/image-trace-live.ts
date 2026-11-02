@@ -50,6 +50,7 @@ import type {
   ElementId,
 } from "@paged-media/plugin-api";
 
+import { fnv1a32 } from "@paged-media/helpers";
 import { applyRetraceImage, imageTraceOf } from "./image-trace";
 import { recipeAutoUpdateEnabled, runInStep } from "./recipe-auto-update";
 import { leafIdsOf, linkIndex } from "../link-index";
@@ -77,14 +78,11 @@ export function linkPrintsOf(
 /** A cheap fingerprint of encoded image bytes: the length and FNV-1a
  *  over at most 64 KiB sampled evenly. Pure. */
 export function bytesPrint(bytes: Uint8Array): string {
-  let hash = 0x811c9dc5;
   const n = bytes.length;
   const step = Math.max(1, Math.floor(n / 65536));
-  for (let i = 0; i < n; i += step) {
-    hash ^= bytes[i]!;
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return `${n}:${hash.toString(16)}`;
+  const sampled = new Uint8Array(Math.ceil(n / step));
+  for (let i = 0, k = 0; i < n; i += step) sampled[k++] = bytes[i]!;
+  return `${n}:${fnv1a32(sampled).toString(16)}`;
 }
 
 /** The frames whose row changed between two prints (a frame that

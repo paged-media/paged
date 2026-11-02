@@ -51,6 +51,8 @@
 // which is why it is not called telemetry (ADR 025 §1).
 
 /** Ordered so callers can filter (`>= "warn"`); see `SEVERITY_RANK`. */
+import { fnv1a32 } from "@paged-media/helpers";
+
 export type JournalSeverity = "debug" | "info" | "warn" | "error";
 
 /** Where an entry was minted. Closed set — a new origin is a code change. */
@@ -235,11 +237,5 @@ export function errorIdent(err: unknown): string {
  * §5 — the journal is a log census, not a log mirror.
  */
 export function siteHash(message: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < message.length; i += 1) {
-    h ^= message.charCodeAt(i);
-    // FNV prime 16777619, via shifts to stay in 32-bit range.
-    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
-  }
-  return h.toString(36);
+  return fnv1a32(message).toString(36);
 }

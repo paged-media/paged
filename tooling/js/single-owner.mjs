@@ -87,7 +87,11 @@ const matchesOf = (rule) => {
   return [...found].sort();
 };
 
-const owns = (rule, file) => rule.owner.some((o) => file.startsWith(o));
+// `allow` lists exact files that may hold a copy for a stated reason (`allowReason`):
+// code that cannot import the owner. It is never a place to park a copy that could move.
+const owns = (rule, file) =>
+  rule.owner.some((o) => file.startsWith(o)) ||
+  (rule.allow ?? []).includes(file);
 
 const write = process.argv.includes("--write");
 const problems = [];

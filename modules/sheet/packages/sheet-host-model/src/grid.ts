@@ -49,6 +49,8 @@ import type {
   ScenePathSeg,
 } from "@paged-media/plugin-api";
 
+import { escapeXmlAttr } from "@paged-media/helpers";
+
 import type { ChartPrimitive } from "./chart";
 import type {
   Align,
@@ -546,12 +548,7 @@ function textX(align: Align, x0: number, x1: number, pad: number): number {
  *  text / attribute values. The cell text is ALREADY the formatted value
  *  (Rust); this only makes it XML-safe. */
 function xmlEscape(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+  return escapeXmlAttr(s).replace(/'/g, "&apos;");
 }
 
 /** Look up a style by key in the scene's table (the default key-0 style

@@ -40,6 +40,7 @@ import {
   ENGINE_ANCHOR,
   requireDocx,
 } from "../conformance/harness";
+import { crc32 } from "@paged-media/helpers";
 
 requireDocx("doc headless — text around native tables");
 
@@ -48,18 +49,6 @@ const DOCX_MIME =
 
 // ---------------------------------------------------------------------------
 // A minimal .docx, zipped here (stored entries), so the fixture is readable.
-
-const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-
-function crc32(bytes: Uint8Array): number {
-  let c = 0xffffffff;
-  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff]! ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
 
 /** Zip `parts` without compression (a valid OPC package). */
 function zipStored(parts: ReadonlyArray<[string, string]>): Uint8Array {

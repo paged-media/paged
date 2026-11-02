@@ -941,7 +941,7 @@ fn hash_rgba(raw: &[u8]) -> [u8; 32] {
     // single-byte change (FNV-1a's avalanche is adequate for a
     // pixel-equality gate; this is not a security boundary).
     const SEEDS: [u64; 4] = [
-        0xcbf29ce484222325,
+        paged_pixel::FNV1A_64_OFFSET,
         0x100000001b3,
         0x9e3779b97f4a7c15,
         0xff51afd7ed558ccd,

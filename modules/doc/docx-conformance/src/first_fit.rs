@@ -271,12 +271,6 @@ const PNG_1X1: &[u8] = &[
     0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 ];
 
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
 fn inline_picture(id: usize, w_pt: f32, h_pt: f32) -> String {
     let (cx, cy) = ((w_pt * 12700.0) as i64, (h_pt * 12700.0) as i64);
     format!(
@@ -303,7 +297,7 @@ pub fn first_fit_docx() -> Vec<u8> {
         let run = |t: &str| {
             format!(
                 r#"<w:r><w:t xml:space="preserve">{}</w:t></w:r>"#,
-                xml_escape(t)
+                paged_ooxml::xml::escape_text(t)
             )
         };
         let runs = match (c.picture, c.text.split_once('\u{FFFC}')) {

@@ -35,6 +35,8 @@
 // node's text against the engine's before it edits, and refuses on a
 // mismatch — an edit lands where the user clicked or not at all.
 
+import { escapeXmlText } from "@paged-media/helpers";
+
 /** Elements whose content is not numbered as text (raw text, form text,
  *  templates) — the same list as `web-render/src/inspect.rs`. */
 const NO_TEXT = new Set([
@@ -259,11 +261,7 @@ export function scanTextNodes(html: string): SourceTextNode[] {
 
 /** Escape text for an HTML text position. */
 export function escapeText(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\u00A0/g, "&nbsp;");
+  return escapeXmlText(text).replace(/\u00A0/g, "&nbsp;");
 }
 
 /**

@@ -31,7 +31,7 @@ export interface ZipEntry {
 
 /** A placed text field to turn into a Data Merge placeholder. */
 
-import { escapeXmlAttr, escapeXmlText } from "@paged-media/helpers";
+import { crc32, escapeXmlAttr, escapeXmlText } from "@paged-media/helpers";
 export interface TextField {
   /** The story's `Self` as the engine lists it (`Story/u0` or `u0`). */
   storyId: string;
@@ -310,22 +310,6 @@ export function utf16Csv(
 }
 
 // ── zip (stored + deflate), browser-safe ────────────────────────────────────
-
-let crcTable: Uint32Array | null = null;
-function crc32(bytes: Uint8Array): number {
-  if (!crcTable) {
-    crcTable = new Uint32Array(256);
-    for (let n = 0; n < 256; n++) {
-      let c = n;
-      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-      crcTable[n] = c >>> 0;
-    }
-  }
-  let c = 0xffffffff;
-  for (let i = 0; i < bytes.length; i++)
-    c = crcTable[(c ^ bytes[i]!) & 0xff]! ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
 
 async function pipe(
   bytes: Uint8Array,

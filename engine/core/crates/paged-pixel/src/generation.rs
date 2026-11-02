@@ -34,13 +34,25 @@ pub struct ContentHash(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ParamsHash(pub u64);
 
-/// FNV-1a 64 — the one hash used for content/params identity in M0.
+/// FNV-1a 64 offset basis: the seed of [`fnv1a_64`] and [`fnv1a_64_update`].
+pub const FNV1A_64_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+
+/// FNV-1a 64 prime.
+pub const FNV1A_64_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+/// FNV-1a 64 — the one hash used for content/params identity in M0, and the
+/// engine's single owner of the 64-bit FNV (a cache key, a stable id).
 /// Deliberately dependency-free; stable across platforms.
 pub fn fnv1a_64(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    fnv1a_64_update(FNV1A_64_OFFSET, bytes)
+}
+
+/// Continue an FNV-1a 64 hash `h` (start from [`FNV1A_64_OFFSET`]) over
+/// `bytes`: hashing in pieces gives the hash of the concatenation.
+pub fn fnv1a_64_update(mut h: u64, bytes: &[u8]) -> u64 {
     for &b in bytes {
         h ^= b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        h = h.wrapping_mul(FNV1A_64_PRIME);
     }
     h
 }
@@ -66,5 +78,6 @@ mod tests {
         // Known FNV-1a 64 vector.
         assert_eq!(fnv1a_64(b""), 0xcbf2_9ce4_8422_2325);
         assert_eq!(fnv1a_64(b"a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a_64_update(fnv1a_64(b"ab"), b"cd"), fnv1a_64(b"abcd"));
     }
 }

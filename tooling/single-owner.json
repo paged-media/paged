@@ -13,18 +13,8 @@
       ],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
       "baseline": [
-        "apps/editor/apps/canvas/tests/fidelity/dashboard.ts",
         "engine/core/crates/paged-gen/src/samples/xref.rs",
-        "engine/core/crates/paged-store/src/package.rs",
-        "modules/doc/docx-conformance/src/first_fit.rs",
-        "modules/sheet/packages/sheet-host-model/src/grid.ts",
-        "modules/sheet/sheet-chart/tests/kinds.rs",
-        "modules/sheet/sheet-conformance/tests/it/locale.rs",
-        "modules/sheet/sheet-conformance/tests/it/oracle_fixes.rs",
-        "modules/web/packages/web-bundle/test/conformance/source-roundtrip.spec.ts",
-        "modules/web/packages/web-model/src/source-text.ts",
-        "platform/shared/test-kit/src/gestures/fixture-idml.ts",
-        "tooling/js/bun-junit.mjs"
+        "engine/core/crates/paged-store/src/package.rs"
       ]
     },
     {
@@ -40,19 +30,15 @@
         "modules/doc/docx-conformance/src/structure.rs",
         "modules/doc/docx-conformance/tests/it/line_spacing.rs",
         "modules/doc/docx-conformance/tests/it/template_fields.rs",
-        "modules/sheet/sheet-conformance/tests/it/chart_delete.rs",
-        "modules/sheet/sheet-conformance/tests/it/chart_write.rs",
         "modules/sheet/sheet-conformance/tests/it/locale.rs",
         "modules/sheet/sheet-conformance/tests/it/oracle_fixes.rs",
         "modules/sheet/sheet-conformance/tests/it/spill_roundtrip.rs",
-        "modules/sheet/sheet-js/tests/it/w2_annotations.rs",
         "modules/sheet/sheet-js/tests/it/w5_files.rs",
         "modules/sheet/sheet-js/tests/it/wave4_features.rs",
         "modules/sheet/sheet-js/tests/it/wave6_format.rs",
         "modules/sheet/sheet-js/tests/it/wave9_colors.rs",
         "modules/sheet/sheet-xlsx/src/lib.rs",
-        "modules/slide/pptx-export/src/presentation.rs",
-        "modules/slide/pptx-export/tests/comments.rs"
+        "modules/slide/pptx-export/src/presentation.rs"
       ]
     },
     {
@@ -100,8 +86,17 @@
     },
     {
       "name": "fnv-hash",
-      "description": "hash with fnv1a32 / fnv1a32Hex from @paged-media/helpers (TypeScript); the Rust 64-bit variant has no shared owner yet",
-      "owner": ["platform/shared/helpers/src/hash.ts"],
+      "description": "hash with fnv1a32 / fnv1a32Utf16 from @paged-media/helpers (TypeScript) and paged_pixel::fnv1a_64 / fnv1a_64_update (Rust, 64 bit; every engine crate can depend on paged-pixel)",
+      "owner": [
+        "platform/shared/helpers/src/hash.ts",
+        "platform/shared/helpers/test/fnv.test.ts",
+        "engine/core/crates/paged-pixel/src/generation.rs"
+      ],
+      "allowReason": "page.evaluate bodies are serialised into the browser page, which cannot import the helper",
+      "allow": [
+        "apps/editor/apps/canvas/tests/plugin-surface/draw.spec.ts",
+        "apps/editor/apps/canvas/tests/plugin-surface/menu-driver.ts"
+      ],
       "patterns": [
         "0xcbf29ce484222325",
         "14695981039346656037",
@@ -109,37 +104,15 @@
         "2166136261"
       ],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": [
-        "apps/editor/apps/canvas/tests/plugin-surface/draw.spec.ts",
-        "apps/editor/apps/canvas/tests/plugin-surface/menu-driver.ts",
-        "apps/editor/packages/client/src/journal/entry.ts",
-        "engine/core/crates/paged-renderer/src/bin/inspect.rs",
-        "engine/core/crates/paged-renderer/src/pipeline/geom.rs",
-        "modules/draw/packages/draw-bundle/src/commands/graphic-styles.ts",
-        "modules/draw/packages/draw-bundle/src/commands/image-trace-live.ts",
-        "modules/draw/packages/draw-bundle/src/recipe-store.ts"
-      ]
+      "baseline": []
     },
     {
       "name": "crc32-polynomial",
-      "description": "no owner yet: use the crc32fast crate in Rust and platform/shared/helpers in TypeScript",
+      "description": "use crc32 from @paged-media/helpers in TypeScript and the crc32fast crate in Rust",
       "owner": ["platform/shared/helpers/"],
       "patterns": ["0xEDB88320", "0xedb88320"],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": [
-        "apps/cli/test/cli-image-template.spec.ts",
-        "apps/editor/apps/canvas/scripts/demo-files.ts",
-        "apps/editor/apps/canvas/test/panels/generate-image-panel.dom.test.tsx",
-        "apps/editor/apps/canvas/tests/e2e/harness/build-min-idml.ts",
-        "apps/editor/packages/repository/test/library.test.ts",
-        "apps/editor/packages/repository/test/remote.test.ts",
-        "modules/data/packages/data-bundle/src/datamerge-export.ts",
-        "modules/doc/packages/doc-bundle/test/headless/pour-after-table.spec.ts",
-        "modules/sheet/packages/sheet-bundle/test/perf/build-idml.ts",
-        "modules/slide/packages/slide-bundle/test/headless/pictures.spec.ts",
-        "modules/web/packages/web-bundle/src/png.ts",
-        "platform/shared/test-kit/src/gestures/fixture-idml.ts"
-      ]
+      "baseline": []
     },
     {
       "name": "base64-alphabet",
