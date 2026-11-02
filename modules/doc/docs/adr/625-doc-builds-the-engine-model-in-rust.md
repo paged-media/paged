@@ -120,8 +120,9 @@ has no paragraph-level character properties and an empty run is not known to car
 A Word field the engine keeps live is one native run carrying `WordField::parse(code)`, its result
 the joined text of the field's runs, in the first run's look (what the bundle's `insertField`
 makes). A merge field needs nothing native (its text pours as text; the object model reads the
-IR). Hyperlinks and bookmarks (which need document-level objects: hyperlink sources, destinations
-and text anchors) and a table of contents stay deferred.
+IR). A hyperlink is a text source on the run plus a URL destination and a link in the document's
+design map (`skeleton_prefilled` writes them); a hyperlinked field is deferred. Bookmarks (text
+anchors) and a table of contents stay deferred.
 
 ### Slice 2 amendment: list items
 

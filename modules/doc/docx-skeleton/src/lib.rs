@@ -219,9 +219,10 @@ pub fn skeleton_prefilled(
     name: &str,
     options: LowerOptions,
 ) -> Result<Option<Skeleton>, String> {
-    let Some(stories) = body::native_stories(lowered) else {
+    let Some(native) = body::native_stories(lowered) else {
         return Ok(None);
     };
+    let stories = native.stories;
     let pages = skeleton_pages_with(doc, options);
     if stories.len() != pages.len() {
         return Ok(None);
@@ -233,6 +234,21 @@ pub fn skeleton_prefilled(
         .map(|(_, item)| item)
         .collect();
     items::add_page_items(&mut document, &items);
+    for l in &native.links {
+        document
+            .designmap
+            .hyperlink_destinations
+            .push(paged_model::HyperlinkDestination {
+                self_id: l.destination_id.clone(),
+                kind: paged_model::HyperlinkDestinationKind::Url(l.url.clone()),
+            });
+        document.designmap.hyperlinks.push(paged_model::Hyperlink {
+            self_id: l.hyperlink_id.clone(),
+            name: None,
+            source: Some(l.source_id.clone()),
+            destination: Some(l.destination_id.clone()),
+        });
+    }
     for (page, paragraphs) in pages.iter().zip(stories) {
         if paragraphs.is_empty() {
             continue;
