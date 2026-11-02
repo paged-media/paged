@@ -309,6 +309,10 @@ import {
   APPEARANCE_MENU_ITEMS,
   buildAppearanceCommands,
 } from "../appearance-commands";
+import { buildReflectCommands, REFLECT_MENU_ITEMS } from "../reflect-commands";
+import { buildStarCommands, STAR_MENU_ITEMS } from "../star-commands";
+import { StarDialog } from "../panels/star-dialog";
+import { openReflectOptions, ReflectDialog } from "../panels/reflect-dialog";
 import {
   buildCornerCommands,
   CORNER_DIAGNOSTIC_SOURCE,
@@ -1604,6 +1608,22 @@ function CanvasAppIntegration() {
           (id) => instance.services.objects.addressOfElement(id),
         ),
     );
+    // `paged.transform.*` — Reflect and Transform again, over the same
+    // addresses and the same batch door.
+    const reflectCommands = buildReflectCommands({
+      objects: instance.services.objects.registry,
+      selectionOf: (paged) =>
+        ((paged as PagedEditor | null)?.selection.elementSelection ?? []).map(
+          (id) => instance.services.objects.addressOfElement(id),
+        ),
+      elementIdOf: (address) =>
+        instance.services.objects.model.elementIdOf?.(address) ?? null,
+      openOptions: openReflectOptions,
+    });
+    // `paged.insert.star` — Insert star…, beside the other inserts.
+    const starCommands = buildStarCommands(insertReport, () =>
+      problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE),
+    );
     const alignCommands = buildTransformCommands(
       instance.services.objects.registry,
       (address) =>
@@ -1677,11 +1697,13 @@ function CanvasAppIntegration() {
       ...appearanceCommands,
       ...strokeDashCommands,
       ...insertCommands,
+      ...starCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
       // Editor ADR 309 — Object ▸ Effects ▸ <group> ▸ <effect>.
       ...buildEffectMenuCommands(),
       ...transformEachDialogCommands,
+      ...reflectCommands,
       ...buildBatchCommands(),
       ...viewCommands,
       ...OPEN_AS_TEMPLATE_COMMANDS,
@@ -1705,10 +1727,12 @@ function CanvasAppIntegration() {
       ...APPEARANCE_MENU_ITEMS,
       ...STROKE_DASH_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
+      ...STAR_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...buildEffectMenuItems(),
       ...TRANSFORM_EACH_MENU_ITEMS,
+      ...REFLECT_MENU_ITEMS,
       ...BATCH_MENU_ITEMS,
       ...VIEW_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
@@ -1932,6 +1956,8 @@ function CanvasAppRoot() {
       <GlobalLightDialog />
       <ViewPreferencesDialog />
       <TransformEachDialog />
+      <ReflectDialog />
+      <StarDialog />
       <BatchDialog />
       <OpenAsTemplateDialog />
       <FindReplaceDialog />

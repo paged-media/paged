@@ -209,10 +209,6 @@ import {
 } from "./commands/reverse-path";
 import { contributeCreateOutlinesCommands } from "./commands/create-outlines";
 import { contributeRasterizeCommand } from "./commands/rasterize";
-import {
-  contributeTransformCommands,
-  TRANSFORM_COMMAND_IDS,
-} from "./commands/transform";
 import { vectorGraphicEditContext } from "./edit-context";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import {
@@ -468,13 +464,7 @@ export function activate(host: BundleHost): BundleHandle {
     host,
     () => lastUsedPathOptions(host).rasterize,
   );
-  // Object ▸ Transform — REFLECT (horizontal / vertical / a typed angle,
-  // about the selection's centre, composed onto each object's own
-  // transform because `frameTransform` replaces) and TRANSFORM AGAIN,
-  // which repeats the last one on the current selection. The copy
-  // variant needs engine 0.65's `duplicateElements` and is probed, not
-  // assumed (commands/transform.ts).
-  const transformCommandsSub = contributeTransformCommands(host);
+  // Reflect and Transform Again are the host's: `paged.transform.*`.
   // Pathfinder (all ten verbs) is the host's: `paged.pathfinder.*`.
   // Illustrator Phase 2 — Make / Release COMPOUND PATH. No new wire op:
   // `framePath` replaces a whole anchor table (contour boundaries
@@ -567,12 +557,11 @@ export function activate(host: BundleHost): BundleHandle {
   // The Knife, Scissors and Shape Builder as commands (their gesture as data).
   const cutCommandsSub = contributeCutCommands(host);
   // WP6.1 part 2 — the Join / Path Eraser / Reshape / Shaper gestures as
-  // data, and the Star / Flare inserts (a payload-free run repeats the
+  // data, and the Flare insert (a payload-free run repeats the
   // Path Options panel's last-used values).
   const pathToolCommandsSub = contributePathToolCommands(host);
   const shaperCommandSub = contributeShaperCommand(host);
   const starFlareCommandsSub = contributeStarFlareCommands(host, {
-    star: () => lastUsedPayload(host, "star"),
     flare: () => lastUsedPayload(host, "flare"),
   });
   // WP6.7 — the distortion tools as commands (their gestures as data),
@@ -719,7 +708,6 @@ export function activate(host: BundleHost): BundleHandle {
         PATH_OPTIONS_COMMAND_IDS.length +
         JOIN_AVERAGE_COMMAND_IDS.length +
         REVERSE_PATH_COMMAND_IDS.length +
-        TRANSFORM_COMMAND_IDS.length +
         COMPOUND_PATH_COMMAND_IDS.length +
         PATTERN_COMMAND_IDS.length +
         REPEAT_COMMAND_IDS.length +
@@ -805,7 +793,6 @@ export function activate(host: BundleHost): BundleHandle {
       repeatCommandsSub.dispose();
       patternCommandsSub.dispose();
       compoundPathCommandsSub.dispose();
-      transformCommandsSub.dispose();
       reversePathCommandsSub.dispose();
       createOutlinesCommandsSub.dispose();
       rasterizeCommandSub.dispose();

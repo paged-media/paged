@@ -17,10 +17,10 @@
  */
 
 // ORACLE — Illustrator's POLYGON and STAR against the live shapes (engine
-// ADR 1047): the Star tool makes an upright live star from draw-geometry's
-// `regularPolygonPath` on Radius 1 plus its points and inset, which the
-// engine draws as `starPath` draws it; the Polygon tool's live polygon
-// follows InDesign's polygon tool.
+// ADR 1047): the host's Insert star makes an upright live star from the
+// regular polygon on Radius 1 plus its points and inset, which the engine
+// draws as `starAnchors` (`@paged-media/helpers`) draws it; the Polygon
+// tool's live polygon follows InDesign's polygon tool.
 //
 // The recording (`scripts/illustrator/probes/live-shapes.jsx`) asks
 // `PathItems.polygon(cx, cy, r, sides)` and `PathItems.star(cx, cy, r, ri,
@@ -29,7 +29,7 @@
 //
 //   1. A STAR is ours to 0.01 pt: the first point straight up, the points
 //      running clockwise on the page, the inner points between them on the
-//      inner radius — `starPath` exactly, so a live star's points and inset
+//      inner radius — `starAnchors` exactly, so a live star's points and inset
 //      are Illustrator's star.
 //   2. A POLYGON is the same set of corners as ours for an ODD side count
 //      (a point straight up), wound the other way (Illustrator runs
@@ -44,7 +44,8 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { regularPolygonPath, starPath } from "@paged-media/draw-geometry";
+import { regularPolygonPath } from "@paged-media/draw-geometry";
+import { starAnchors } from "@paged-media/helpers";
 
 import { loadOracle, type Vec2 } from "./oracle";
 
@@ -79,15 +80,16 @@ describe("oracle — Illustrator polygon and star vs the live shapes (engine ADR
   });
 
   for (const c of FIXTURE.cases.filter((c) => c.parameters.kind === "star")) {
-    it(`${c.id}: Illustrator's star is starPath, point for point`, () => {
+    it(`${c.id}: Illustrator's star is starAnchors, point for point`, () => {
       const p = c.parameters;
-      const ours = starPath({
+      const ours = starAnchors({
         cx: p.centre[0],
         cy: p.centre[1],
         radius1: p.radius,
         radius2: p.innerRadius,
         points: p.sides,
-      }).anchors.map((a) => a.anchor as Vec2);
+        rotationDeg: 0,
+      }).map((a) => a.anchor as Vec2);
       const theirs = pts(c);
       expect(theirs).toHaveLength(ours.length);
       theirs.forEach((q, i) => expect(close(q, ours[i]!)).toBe(true));

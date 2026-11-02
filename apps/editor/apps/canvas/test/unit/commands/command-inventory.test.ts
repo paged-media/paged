@@ -51,6 +51,8 @@ import { buildInsertCommands } from "../../../src/insert-commands";
 import { buildObjectCommands } from "../../../src/object-commands";
 import { buildStrokeDashCommands } from "../../../src/stroke-dash-commands";
 import { buildAppearanceCommands } from "../../../src/appearance-commands";
+import { buildStarCommands } from "../../../src/star-commands";
+import { buildReflectCommands } from "../../../src/reflect-commands";
 import { buildCornerCommands } from "../../../src/corner-commands";
 import { buildPathfinderCommands } from "../../../src/pathfinder-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
@@ -176,11 +178,17 @@ function tableIds(): string[] {
     ...buildAppearanceCommands(noop as never, noop, noop),
     ...buildStrokeDashCommands(noop as never, noop, noop),
     ...buildInsertCommands(noop),
+    ...buildStarCommands(noop, noop),
     ...buildCoreCommandEntries(),
     ...buildTransformCommands(noop),
     ...GLOBAL_LIGHT_COMMANDS,
     ...buildEffectMenuCommands(),
     ...buildTransformEachDialogCommands(() => []),
+    ...buildReflectCommands({
+      objects: { batch: noop as never },
+      selectionOf: () => [],
+      openOptions: noop,
+    }),
     ...buildBatchCommands(),
     ...buildViewCommands(noop),
     ...OPEN_AS_TEMPLATE_COMMANDS,
@@ -267,10 +275,12 @@ describe("the host command inventory", () => {
       "appearanceCommands",
       "strokeDashCommands",
       "insertCommands",
+      "starCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",
       "buildEffectMenuCommands()",
       "transformEachDialogCommands",
+      "reflectCommands",
       "buildBatchCommands()",
       "viewCommands",
       "OPEN_AS_TEMPLATE_COMMANDS",

@@ -31,6 +31,12 @@ export const MESH_TOOL = defineMessages("tools.mesh", {
   points: "{count, plural, one {# mesh point} other {# mesh points}}",
 });
 
+export const POLYGON_TOOL = defineMessages("tools.polygon", {
+  sides: "Number of Sides",
+  star: "Star",
+  starInset: "Star Inset",
+});
+
 export const EYEDROPPER_TOOL = defineMessages("tools.eyedropper", {
   mode: "Sample",
   pixel: "Pixel colour",

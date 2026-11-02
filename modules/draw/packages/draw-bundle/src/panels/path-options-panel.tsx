@@ -52,13 +52,8 @@ import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
 
 import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
-import {
-  FLARE_MAX_RAYS,
-  FLARE_MAX_RINGS,
-  STAR_MAX_POINTS,
-  STAR_MIN_POINTS,
-} from "@paged-media/draw-geometry";
-import { supportsDuplicate, DUPLICATE_ENGINE } from "../commands/transform";
+import { FLARE_MAX_RAYS, FLARE_MAX_RINGS } from "@paged-media/draw-geometry";
+import { supportsDuplicate } from "../commands/join-average";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import { MAX_RASTERIZE_PPI, MIN_RASTERIZE_PPI } from "../commands/rasterize";
 import {
@@ -101,15 +96,11 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 const M = defineMessages("draw.pathOptionsPanel", {
   summary:
     "Set the values for the path commands in the Draw menu, then apply them to the selected paths or insert a new shape.",
-  note: "Apply runs the operation with these values and remembers them: the same command run from the menu or the command palette repeats the values last applied here, except Outline stroke, which then uses each path's own stroke. Offset, Simplify and Outline stroke are one undo step per selected path; each Insert and Reflect are one undo step; Select same only changes the selection. Image Trace has no options here yet.",
-  reflectNote:
-    "Mirrors the selection across an axis at this angle through the centre of the selection's box: 90° flips left and right, 0° top and bottom. Draw ▸ Transform ▸ Transform again repeats it on whatever is selected next.",
+  note: "Apply runs the operation with these values and remembers them: the same command run from the menu or the command palette repeats the values last applied here, except Outline stroke, which then uses each path's own stroke. Offset, Simplify and Outline stroke are one undo step per selected path; each Insert is one undo step; Select same only changes the selection. Image Trace has no options here yet.",
   selectSameNote:
     "Matches every object whose stroke weight is within this many points of the first selected object's, the reference included; 0 is an exact match. Colours take no tolerance: an object's fill and stroke are read as swatch references, and this plugin cannot read a swatch's colour values to compare them yet.",
   widthProfileNote:
     "Replaces each selected open path with its outline, its width running from the start through the middle to the end. The outline is a filled shape and cannot be edited as a stroke again; closed and compound paths are left as they are.",
-  reflectCopyUnavailable:
-    "Copy needs a newer engine (version {version} or later).",
   ownStroke: "{width} pt · {cap} cap · {join} join · miter limit {miterLimit}",
   fromPath: "From the path",
   offsetDelta: "Offset (pt, negative shrinks)",
@@ -120,15 +111,10 @@ const M = defineMessages("draw.pathOptionsPanel", {
   simplifyPreview: "Preview: {before} → {after} anchors",
   simplifyEngineNote:
     "The dashed outline previews the result. With no corner angle, Apply runs the engine's own simplify, which can keep a slightly different number of anchors; with a corner angle, anchors at least that sharp stay corners and Apply writes exactly what is previewed.",
-  aboutPoint: "About a point (else the selection's centre)",
-  pointX: "Point X (pt)",
-  pointY: "Point Y (pt)",
   overrideWidth: "Override the width",
   width: "Width (pt)",
   caps: "Caps",
   overrideMiterLimit: "Override the miter limit",
-  axisAngle: "Axis angle (°)",
-  copy: "Copy (reflect a copy)",
   centreX: "Centre X (pt)",
   centreY: "Centre Y (pt)",
   radiusX: "Radius X (pt)",
@@ -148,10 +134,6 @@ const M = defineMessages("draw.pathOptionsPanel", {
   radius: "Radius (pt)",
   rings: "Rings",
   spokes: "Spokes",
-  radius1: "Radius 1 (pt, the tips)",
-  radius2: "Radius 2 (pt, between the tips)",
-  points: "Points",
-  rotation: "Rotation (°)",
   centreRadius: "Centre radius (pt)",
   haloScale: "Halo (× the centre)",
   rays: "Rays",
@@ -165,7 +147,6 @@ const M = defineMessages("draw.pathOptionsPanel", {
   needSomething: "Select something first.",
   needPath: "Select a path first.",
   selectMatching: "Select matching",
-  reflectN: "{count, plural, one {Reflect # object} other {Reflect # objects}}",
   applyToN: "{count, plural, one {Apply to # path} other {Apply to # paths}}",
   insert: "Insert",
   profileStart: "Width at the start (pt)",
@@ -190,15 +171,9 @@ export const PATH_OPTIONS_SUMMARY = M.summary;
 /** The "About" text. Pinned by a test. */
 export const PATH_OPTIONS_PANEL_NOTE = M.note;
 
-/** What the Reflect section says, verbatim (pinned by a test). */
-export const REFLECT_SECTION_NOTE = M.reflectNote;
-
 /** What the Simplify section says about its preview, verbatim (pinned by
  *  a test). */
 export const SIMPLIFY_PREVIEW_ENGINE_NOTE = M.simplifyEngineNote;
-
-/** What the Reflect section says when the engine cannot copy. */
-export const REFLECT_COPY_UNAVAILABLE_NOTE = M.reflectCopyUnavailable;
 
 /** What the Select same stroke weight section says, verbatim (pinned by
  *  a test) — the colour half of the request, and why it is not here. */
@@ -320,7 +295,7 @@ export function makePathOptionsPanel(host: BundleHost): {
     const [selected, setSelected] = React.useState(0);
     const [own, setOwn] = React.useState<OutlineStrokeParams | null>(null);
     /** Can this engine COPY (`duplicateElements`)? Probed when the
-     *  Reflect section is first opened — never on a reload — and cached
+     *  Offset section is first opened — never on a reload — and cached
      *  per host by the probe itself. Null until known. */
     const [copyAvailable, setCopyAvailable] = React.useState<boolean | null>(
       null,
@@ -370,13 +345,11 @@ export function makePathOptionsPanel(host: BundleHost): {
       return () => sub.dispose();
     }, [setOpen]);
 
-    // The engine-0.65 probe — once, when Reflect or Offset is first shown:
-    // Reflect ▸ Copy needs `duplicateElements`, and the same release made
-    // the offset honour its join (OFFSET_JOIN_NOTE is only for an older
-    // engine).
+    // The engine-0.65 probe — once, when Offset is first shown: that
+    // release made the offset honour its join (OFFSET_JOIN_NOTE is only for
+    // an older engine); `duplicateElements` arrived in it.
     React.useEffect(() => {
-      if ((open !== "reflect" && open !== "offset") || copyAvailable !== null)
-        return;
+      if (open !== "offset" || copyAvailable !== null) return;
       let live = true;
       void supportsDuplicate(host).then((ok) => {
         if (live) setCopyAvailable(ok);
@@ -621,35 +594,6 @@ export function makePathOptionsPanel(host: BundleHost): {
               })}
             </>
           );
-        case "reflect":
-          return (
-            <>
-              {numberRow("reflect", "angleDeg", s.t(M.axisAngle), {
-                min: -360,
-                max: 360,
-              })}
-              {checkRow("reflect", "copy", s.t(M.copy), {
-                disabled: copyAvailable !== true,
-              })}
-              {checkRow("reflect", "aboutPoint", s.t(M.aboutPoint))}
-              {numberRow("reflect", "x", s.t(M.pointX), {
-                disabled: !draft.reflect.aboutPoint,
-              })}
-              {numberRow("reflect", "y", s.t(M.pointY), {
-                disabled: !draft.reflect.aboutPoint,
-              })}
-              {copyAvailable === false && (
-                <div style={mutedStyle} data-draw-pathopts-reflect-copy-note>
-                  {s.t(REFLECT_COPY_UNAVAILABLE_NOTE, {
-                    version: DUPLICATE_ENGINE,
-                  })}
-                </div>
-              )}
-              <div style={mutedStyle} data-draw-pathopts-reflect-note>
-                {s.t(REFLECT_SECTION_NOTE)}
-              </div>
-            </>
-          );
         case "arc":
           return (
             <>
@@ -717,20 +661,6 @@ export function makePathOptionsPanel(host: BundleHost): {
                 min: 0,
                 max: INSERT_SHAPE_LIMITS.maxCount,
               })}
-            </>
-          );
-        case "star":
-          return (
-            <>
-              {numberRow("star", "cx", s.t(M.centreX))}
-              {numberRow("star", "cy", s.t(M.centreY))}
-              {numberRow("star", "radius1", s.t(M.radius1), { min: 0 })}
-              {numberRow("star", "radius2", s.t(M.radius2), { min: 0 })}
-              {numberRow("star", "points", s.t(M.points), {
-                min: STAR_MIN_POINTS,
-                max: STAR_MAX_POINTS,
-              })}
-              {numberRow("star", "rotationDeg", s.t(M.rotation))}
             </>
           );
         case "flare":
@@ -827,11 +757,10 @@ export function makePathOptionsPanel(host: BundleHost): {
           const isOpen = section === open;
           const needsSelection = SELECTION_SECTIONS.has(section);
           const selects = section === "selectSameWeight";
-          const reflects = section === "reflect";
           const rasterizes = section === "rasterize";
           // A path operation needs a PATH; Select same needs a reference;
-          // Reflect and Rasterize take any object (groups included).
-          const have = selects || reflects || rasterizes ? selected : targets;
+          // Rasterize takes any object (groups included).
+          const have = selects || rasterizes ? selected : targets;
           return (
             <div
               key={section}
@@ -857,7 +786,7 @@ export function makePathOptionsPanel(host: BundleHost): {
                     <div style={mutedStyle} data-draw-pathopts-needs-selection>
                       {selects
                         ? s.t(M.needReference)
-                        : reflects || rasterizes
+                        : rasterizes
                           ? s.t(M.needSomething)
                           : s.t(M.needPath)}
                     </div>
@@ -875,13 +804,11 @@ export function makePathOptionsPanel(host: BundleHost): {
                   >
                     {selects
                       ? s.t(M.selectMatching)
-                      : reflects
-                        ? s.t(M.reflectN, { count: selected })
-                        : rasterizes
-                          ? s.t(M.rasterizeN, { count: selected })
-                          : needsSelection
-                            ? s.t(M.applyToN, { count: targets })
-                            : s.t(M.insert)}
+                      : rasterizes
+                        ? s.t(M.rasterizeN, { count: selected })
+                        : needsSelection
+                          ? s.t(M.applyToN, { count: targets })
+                          : s.t(M.insert)}
                   </button>
                 </div>
               )}

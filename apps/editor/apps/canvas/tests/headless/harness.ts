@@ -137,6 +137,12 @@ import {
   APPEARANCE_DIAGNOSTIC_SOURCE,
   buildAppearanceCommands,
 } from "../../src/appearance-commands";
+import { buildStarCommands, STAR_MENU_ITEMS } from "../../src/star-commands";
+import {
+  buildReflectCommands,
+  REFLECT_MENU_ITEMS,
+} from "../../src/reflect-commands";
+import { openReflectOptions } from "../../src/panels/reflect-dialog";
 import {
   buildCornerCommands,
   CORNER_DIAGNOSTIC_SOURCE,
@@ -1045,10 +1051,23 @@ export async function createHeadlessEditor(
       })(p, payload),
     newPage: freshInsert((p) => addPage(p, insertReport)),
   });
+  const starCommands = buildStarCommands(insertReport, () =>
+    problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE),
+  );
   const alignCommands = buildTransformCommands(
     objectRegistry,
     (address) => editorObjectsOf(scope).model.elementIdOf?.(address) ?? null,
   );
+  const reflectCommands = buildReflectCommands({
+    objects: objectRegistry,
+    selectionOf: (paged) =>
+      ((paged as PagedEditor | null)?.selection.elementSelection ?? []).map(
+        (id) => editorObjectsOf(scope).addressOfElement(id),
+      ),
+    elementIdOf: (address) =>
+      editorObjectsOf(scope).model.elementIdOf?.(address) ?? null,
+    openOptions: openReflectOptions,
+  });
   setAssistantOpener(scope, () => {
     opened.push({ kind: "assistant" });
   });
@@ -1095,6 +1114,7 @@ export async function createHeadlessEditor(
       ...appearanceCommands,
       ...strokeDashCommands,
       ...insertCommands,
+      ...starCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
       ...buildTransformEachDialogCommands((paged) =>
@@ -1102,6 +1122,7 @@ export async function createHeadlessEditor(
           (id) => editorObjectsOf(scope).addressOfElement(id),
         ),
       ),
+      ...reflectCommands,
       ...buildBatchCommands(),
       SELECT_ALL_COMMAND,
       ...FIND_COMMANDS,
@@ -1115,9 +1136,11 @@ export async function createHeadlessEditor(
       ...CLIPBOARD_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
+      ...STAR_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...TRANSFORM_EACH_MENU_ITEMS,
+      ...REFLECT_MENU_ITEMS,
       ...BATCH_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ].map((m) => registries.menus.register(m)),

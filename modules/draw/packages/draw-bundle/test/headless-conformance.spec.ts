@@ -106,12 +106,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.scissorsAnyPoint",
         // WP6.1 part 2 — keyless, in the host's transform / pencil / shape
         // flyouts.
-        "media.paged.draw.tool.reflect",
         "media.paged.draw.tool.reshape",
         "media.paged.draw.tool.shaper",
         "media.paged.draw.tool.pathEraser",
         "media.paged.draw.tool.join",
-        "media.paged.draw.tool.star",
         "media.paged.draw.tool.flare",
         // WP6.7 — the distortion tools, keyless: the Liquify flyout, Puppet
         // Warp in the host's Free Transform flyout, the Perspective pair.
@@ -185,9 +183,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "tool",
         "tool",
         "tool",
-        // WP6.1 part 2 — Reflect, Reshape, Shaper, Path Eraser, Join,
-        // Star, Flare: twenty-seven tools.
-        ...Array<string>(7).fill("tool"),
+        // WP6.1 part 2 — Reshape, Shaper, Path Eraser, Join, Flare:
+        // twenty-five tools (Reflect and Star are the host's).
+        ...Array<string>(5).fill("tool"),
         // WP6.7 — the seven Liquify tools, Puppet Warp, Perspective Grid
         // and Perspective Selection: thirty-seven; WP6.3 — the Envelope
         // Mesh tool (draw ADR 367): thirty-eight.
@@ -265,14 +263,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
-        // PATH OPTIONS — the ten "…" commands (Offset / Simplify /
-        // Outline stroke / Stroke dashes / Reflect / Arc / Spiral / Rect
-        // grid / Polar grid / Select same stroke weight within): each
-        // raises the panel at its section and mutates nothing. (The
-        // Width profile section is raised by its own command, run bare.)
-        "command",
-        "command",
-        "command",
+        // PATH OPTIONS — the "…" commands (Offset / Simplify / Outline
+        // stroke / Arc / Spiral / Rect grid / Polar grid / Flare / Select
+        // same stroke weight within): each raises the panel at its section
+        // and mutates nothing. (The Width profile section is raised by its
+        // own command, run bare.)
         "command",
         "command",
         "command",
@@ -289,11 +284,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Reverse path direction.
         "command",
         // Type ▸ Create outlines (protocol 66, RFI C-69).
-        "command",
-        // Object ▸ Transform — Reflect horizontally / vertically and
-        // Transform again.
-        "command",
-        "command",
         "command",
         // Illustrator Phase 2 — Make / Release compound path, then
         // PATTERN EDITING v1 (Bake / Re-plan / Select tiles / Delete
@@ -705,7 +695,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(43);
+    expect(harness.toolsContributed()).toHaveLength(41);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

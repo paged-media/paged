@@ -268,8 +268,8 @@ export {
   type Snapper,
 } from "./snapper";
 
-// WP6.1 part 2 — the Join / Path Eraser / Shaper scrub, and the Reflect,
-// Reshape, Star and Flare tools' gesture machines.
+// WP6.1 part 2 — the Join / Path Eraser / Shaper scrub, and the
+// Reshape and Flare tools' gesture machines.
 export {
   ScrubMachine,
   type ScrubEvent,
@@ -277,32 +277,16 @@ export {
   type ScrubSnapshot,
 } from "./scrub-machine";
 export {
-  ReflectMachine,
-  axisAngleOf,
-  REFLECT_SNAP_DEG,
-  type ReflectEvent,
-  type ReflectOptions,
-  type ReflectCommit,
-  type ReflectSnapshot,
-  type ReflectModifiers,
-} from "./reflect-machine";
-export {
   ReshapeMachine,
   type ReshapeEvent,
   type ReshapeOptions,
   type ReshapeSnapshot,
 } from "./reshape-machine";
 export {
-  StarMachine,
   FlareMachine,
-  type StarEvent,
-  type StarMachineOptions,
-  type StarShape,
-  type StarSnapshot,
   type FlareEvent,
   type FlareGesture,
   type FlareSnapshot,
-  type ShapeModifiers,
 } from "./star-machine";
 
 // WP6.7 — the distortion tools' machines: the Liquify family (one machine,

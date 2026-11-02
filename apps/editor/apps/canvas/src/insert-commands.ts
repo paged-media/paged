@@ -106,6 +106,7 @@ const M = defineMessages("app.insertCommands", {
   insertEllipse: "Insert ellipse",
   insertLine: "Insert line",
   insertTable: "Insert table",
+  insertStar: "Insert star",
   deletePage: "Delete page",
   placeImage: "Place image…",
   generateImage: "Generate image",
@@ -135,6 +136,7 @@ defineMessages("menu", {
   "Insert ellipse": "Insert ellipse",
   "Insert line": "Insert line",
   "Insert table": "Insert table",
+  "Insert star…": "Insert star…",
   "Place…": "Place…",
   "Add page": "Add page",
   "Delete page": "Delete page",
@@ -390,7 +392,7 @@ export function evenColumnWidths(totalPt: number, cols: number): number[] {
  * re-checked by the runner guard below, because a shortcut reaches
  * the handler with no menu in between.
  */
-const insertApplies = (state: unknown): boolean => {
+export const insertApplies = (state: unknown): boolean => {
   const s = state as {
     document?: { handle?: { pageCount?: number } | null } | null;
     editContext?: unknown;
@@ -413,6 +415,7 @@ const VERB_KEYS: Readonly<Record<string, string>> = {
   "Insert ellipse": M.insertEllipse,
   "Insert line": M.insertLine,
   "Insert table": M.insertTable,
+  "Insert star": M.insertStar,
   "Delete page": M.deletePage,
   "Place image": M.placeImageVerb,
   "Generate image": M.generateImage,

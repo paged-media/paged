@@ -503,7 +503,14 @@ describe("paged.draw commands — recipes (real engine)", () => {
       await withSymbol();
       const instance = await placed();
       await rig.h.host.selection.set([instance]);
-      await rig.run(`${C}.reflectVertical`);
+      await rig.h.host.document.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: instance,
+          path: "frameTransform",
+          value: { type: "transform", value: [1, 0, 0, -1, 0, 100] },
+        },
+      });
       await rig.h.host.selection.set([instance]);
       await expectApplies(rig, `${C}.resetSymbolTransform`);
       await expectRefuses(rig, F6(), [OUTER], `${C}.resetSymbolTransform`);

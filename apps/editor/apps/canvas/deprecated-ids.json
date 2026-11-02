@@ -330,6 +330,78 @@
       "replacement": "tool:paged.tool.gradientSwatch",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.reflectHorizontal",
+      "replacement": "command:paged.transform.reflectHorizontal",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.reflectVertical",
+      "replacement": "command:paged.transform.reflectVertical",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.reflectOptions",
+      "replacement": "command:paged.transform.reflectOptions",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.transformAgain",
+      "replacement": "command:paged.transform.again",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Transform/Reflect horizontally",
+      "replacement": "menu:Object/Transform/Reflect horizontally",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Transform/Reflect vertically",
+      "replacement": "menu:Object/Transform/Reflect vertically",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Transform/Reflect…",
+      "replacement": "menu:Object/Transform/Reflect…",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "menu:Draw/Transform/Transform again",
+      "replacement": "menu:Object/Transform/Transform again",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.reflect",
+      "replacement": "command:paged.transform.reflectOptions",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.insertStar",
+      "replacement": "command:paged.insert.star",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:media.paged.draw.command.insertStarOptions",
+      "replacement": "command:paged.insert.star",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.star",
+      "replacement": "tool:paged.tool.polygon",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

@@ -543,6 +543,7 @@ describe("the reads", () => {
         pageId: "p1",
         spreadId: "s1",
         composed: [1, 0, 0, 1, -607, -391],
+        origin: [-612, -396],
       },
       {
         address: "group:g",

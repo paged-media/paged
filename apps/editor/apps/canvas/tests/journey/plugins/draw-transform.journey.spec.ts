@@ -17,9 +17,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Journey: paged.draw TRANSFORM — Reflect horizontally / vertically,
-// Reflect… (typed axis, the Path Options panel's Reflect section) and
-// Transform again (Draw ▸ Transform).
+// Journey: TRANSFORM — Reflect horizontally / vertically, Reflect… (typed
+// axis, the host's Reflect dialog) and Transform again (Object ▸ Transform,
+// `paged.transform.*`; they were paged.draw's until PM-0017).
 //
 // A reflection is written as `R ∘ M` through `frameTransform`, about the
 // centre of the SELECTION's page box, in one batch (one undo step). So
@@ -32,9 +32,9 @@
 //   · Transform again — repeats the LAST reflection on the current
 //     selection; reflecting twice about the same axis is the identity,
 //     so the matrix returns to identity and the page renders as before.
-//   · Reflect… — raises the panel at its section (mutating nothing);
-//     Apply with a typed axis angle writes that reflection, and is what
-//     Transform again then repeats.
+//   · Reflect… — raises the dialog (mutating nothing); OK with a typed
+//     axis angle writes that reflection, and is what Transform again then
+//     repeats.
 //
 // The artwork is an asymmetric filled triangle so a reflection is
 // VISIBLE (a mirrored rectangle renders identically) — the render
@@ -155,7 +155,7 @@ async function triangle(designer: Designer): Promise<Ref> {
   return { kind: "polygon", id };
 }
 
-test.describe("journey · paged.draw transform", () => {
+test.describe("journey · transform", () => {
   test("a designer reflects horizontally and vertically, then repeats it with Transform again @feat:geometry-coordinates.item-transform @feat:plugin-draw.pro-path-toolset @feat:plugin-platform.command-registration @level:happy", async ({
     page,
   }) => {
@@ -181,7 +181,7 @@ test.describe("journey · paged.draw transform", () => {
     const original = await designer.renderBytes();
 
     // ── 1. TRANSFORM AGAIN WITH NOTHING TO REPEAT — an honest no-op. ──
-    await designer.runCommand("media.paged.draw.command.transformAgain");
+    await designer.runCommand("paged.transform.again");
     await page.waitForTimeout(300);
     expect(
       near(await transformOf(page, ref), IDENTITY),
@@ -189,7 +189,7 @@ test.describe("journey · paged.draw transform", () => {
     ).toBe(true);
 
     // ── 2. REFLECT HORIZONTALLY — mirror left ↔ right about cx. ──
-    await designer.runCommand("media.paged.draw.command.reflectHorizontal");
+    await designer.runCommand("paged.transform.reflectHorizontal");
     await expectTransform(
       page,
       ref,
@@ -208,7 +208,7 @@ test.describe("journey · paged.draw transform", () => {
 
     // ── 3. TRANSFORM AGAIN — repeats the horizontal mirror; twice about
     //    the same axis is the identity, and the page renders as before. ──
-    await designer.runCommand("media.paged.draw.command.transformAgain");
+    await designer.runCommand("paged.transform.again");
     await expectTransform(
       page,
       ref,
@@ -226,7 +226,7 @@ test.describe("journey · paged.draw transform", () => {
       .toBeLessThanOrEqual(16);
 
     // ── 4. REFLECT VERTICALLY — mirror top ↔ bottom about cy. ──
-    await designer.runCommand("media.paged.draw.command.reflectVertical");
+    await designer.runCommand("paged.transform.reflectVertical");
     await expectTransform(
       page,
       ref,
@@ -237,7 +237,7 @@ test.describe("journey · paged.draw transform", () => {
 
     // ── 5. TRANSFORM AGAIN now repeats the VERTICAL one (the memory is
     //    the last transform, not the first). ──
-    await designer.runCommand("media.paged.draw.command.transformAgain");
+    await designer.runCommand("paged.transform.again");
     await expectTransform(
       page,
       ref,
@@ -256,7 +256,7 @@ test.describe("journey · paged.draw transform", () => {
     );
   });
 
-  test("a designer reflects across a typed axis in the Reflect… options panel @feat:geometry-coordinates.item-transform @feat:plugin-draw.pro-path-toolset @feat:plugin-platform.panel-registration @level:happy", async ({
+  test("a designer reflects across a typed axis in the Reflect… dialog @feat:geometry-coordinates.item-transform @feat:plugin-draw.pro-path-toolset @feat:plugin-platform.panel-registration @level:happy", async ({
     page,
   }) => {
     const designer = new Designer(page);
@@ -270,35 +270,24 @@ test.describe("journey · paged.draw transform", () => {
     const cy = (top + bottom) / 2;
     const original = await designer.renderBytes();
 
-    // ── 1. THE "…" COMMAND RAISES THE PANEL AT REFLECT — no write. ──
-    await designer.runCommand("media.paged.draw.command.reflectOptions");
-    const panel = page.locator('[data-draw-pathopts-panel="reflect"]');
-    await expect(panel, "the Path Options panel opened at Reflect").toBeVisible(
-      {
-        timeout: 8_000,
-      },
-    );
-    await expect(
-      page.locator(
-        '[data-draw-pathopts-section="reflect"][data-draw-pathopts-open="true"]',
-      ),
-    ).toBeVisible();
-    const apply = page.locator('[data-draw-pathopts-apply="reflect"]');
-    await expect(
-      apply,
-      "the button names the selection it will reflect",
-    ).toHaveText("Reflect 1 object");
+    // ── 1. THE "…" COMMAND RAISES THE DIALOG — no write. ──
+    await designer.runCommand("paged.transform.reflectOptions");
+    const dialog = page.locator("[data-reflect-dialog]");
+    await expect(dialog, "the Reflect dialog opened").toBeVisible({
+      timeout: 8_000,
+    });
+    const ok = page.locator("[data-reflect-ok]");
     expect(
       near(await transformOf(page, ref), IDENTITY),
-      "opening the panel wrote nothing",
+      "opening the dialog wrote nothing",
     ).toBe(true);
 
     // ── 2. TYPE AN AXIS — 0° is the horizontal axis (top ↔ bottom) —
-    //    and Apply. ──
-    await page
-      .locator('[data-draw-pathopts-field="reflect.angleDeg"]')
-      .fill("0");
-    await apply.click();
+    //    and OK. ──
+    const angle = dialog.getByLabel("Axis angle");
+    await angle.fill("0");
+    await angle.press("Enter");
+    await ok.click();
     await expectTransform(
       page,
       ref,
@@ -308,7 +297,7 @@ test.describe("journey · paged.draw transform", () => {
     await designer.expectRenderChangesFrom(original);
 
     // ── 3. TRANSFORM AGAIN repeats what the PANEL applied. ──
-    await designer.runCommand("media.paged.draw.command.transformAgain");
+    await designer.runCommand("paged.transform.again");
     await expectTransform(
       page,
       ref,
@@ -318,10 +307,13 @@ test.describe("journey · paged.draw transform", () => {
 
     // ── 4. A 90° axis is the horizontal mirror — the typed angle, not a
     //    fixed one, drives the matrix. ──
-    await page
-      .locator('[data-draw-pathopts-field="reflect.angleDeg"]')
-      .fill("90");
-    await apply.click();
+    await designer.runCommand("paged.transform.reflectOptions");
+    const angle90 = page
+      .locator("[data-reflect-dialog]")
+      .getByLabel("Axis angle");
+    await angle90.fill("90");
+    await angle90.press("Enter");
+    await page.locator("[data-reflect-ok]").click();
     await expectTransform(
       page,
       ref,
@@ -330,15 +322,13 @@ test.describe("journey · paged.draw transform", () => {
     );
 
     // ── 5. REFLECT ▸ COPY — the engine carries `duplicateElements`
-    //    (protocol 65+), so the Copy box enables; Apply leaves the
-    //    untouched clone above and reflects the source back. ──
-    const copy = page.locator('[data-draw-pathopts-toggle="reflect.copy"]');
-    await expect(copy, "Copy is offered on this engine").toBeEnabled({
-      timeout: 8_000,
-    });
+    //    (protocol 65+); OK leaves the untouched clone above and reflects
+    //    the source back. ──
+    await designer.runCommand("paged.transform.reflectOptions");
+    const copy = page.locator('[data-reflect-check="copy"]');
     await copy.check();
     const polysBefore = await designer.count("polygon");
-    await apply.click();
+    await page.locator("[data-reflect-ok]").click();
     await expect
       .poll(() => designer.count("polygon"), { timeout: 8_000 })
       .toBe(polysBefore + 1);

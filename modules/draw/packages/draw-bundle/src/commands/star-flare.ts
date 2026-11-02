@@ -16,14 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// STAR and FLARE — the two Illustrator shape tools' inserts, as commands
-// (`insertStar`, `insertFlare`) with their full parameters as the
-// payload, the Path Options panel's two sections, and what the tools'
-// drags and clicks commit. Geometry: draw-geometry `starPath` /
-// `flareParts`.
-//
-// A STAR is one closed path, painted with the graphic default a drawing
-// tool gives its shape (`../handlers/graphic-default.ts`) — one batch.
+// FLARE — Illustrator's Flare shape tool's insert, as a command
+// (`insertFlare`) with its full parameters as the payload, the Path Options
+// panel's section, and what the tool's drags and clicks commit. Geometry:
+// draw-geometry `flareParts`. (Star is the host's: `paged.insert.star`.)
 //
 // A FLARE is Illustrator's four parts as separate paths, GROUPED, in one
 // batch (each insert named by `bindCreated`, the group made of the
@@ -51,12 +47,8 @@ import type {
 } from "@paged-media/plugin-api";
 import {
   flareParts,
-  regularPolygonPath,
-  starPath,
   FLARE_MAX_RAYS,
   FLARE_MAX_RINGS,
-  STAR_MAX_POINTS,
-  STAR_MIN_POINTS,
   type AnchorTable,
 } from "@paged-media/draw-geometry";
 
@@ -67,32 +59,17 @@ import {
 } from "./batch-handles";
 import { groupMutationFor } from "./group";
 import { resolveTargetPage } from "../target-page";
-import { graphicPaintFor, withGraphicPaint } from "../handlers/graphic-default";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { registerCommand } from "../command-registry";
 import { defineMessages } from "@paged-media/strings";
 
 const M = defineMessages("draw.starFlare", {
-  star: "Insert: Star (last used values)",
   flare: "Insert: Flare (last used values)",
 });
 
 const C = "media.paged.draw.command";
-export const INSERT_STAR_COMMAND_ID = `${C}.insertStar`;
 export const INSERT_FLARE_COMMAND_ID = `${C}.insertFlare`;
-export const STAR_FLARE_COMMAND_IDS = [
-  INSERT_STAR_COMMAND_ID,
-  INSERT_FLARE_COMMAND_ID,
-] as const;
-
-export interface StarParams {
-  cx: number;
-  cy: number;
-  radius1: number;
-  radius2: number;
-  points: number;
-  rotationDeg: number;
-}
+export const STAR_FLARE_COMMAND_IDS = [INSERT_FLARE_COMMAND_ID] as const;
 
 export interface FlareParams {
   cx: number;
@@ -111,17 +88,6 @@ export interface FlareParams {
   /** pt — the largest ring. */
   ringRadius: number;
 }
-
-/** Illustrator's Star dialog defaults (Radius 1 50 pt, Radius 2 25 pt,
- *  5 points) at the insert commands' usual spot. */
-export const STAR_PARAM_DEFAULTS: StarParams = {
-  cx: 200,
-  cy: 200,
-  radius1: 50,
-  radius2: 25,
-  points: 5,
-  rotationDeg: 0,
-};
 
 /** Illustrator's Flare dialog, scaled to a page: 15 rays, 10 rings. */
 export const FLARE_PARAM_DEFAULTS: FlareParams = {
@@ -144,18 +110,6 @@ const num = (v: unknown, fallback: number): number =>
 const count = (v: unknown, fallback: number, min: number, max: number) =>
   Math.min(max, Math.max(min, Math.round(num(v, fallback))));
 
-export function starParamsFrom(payload?: Payload): StarParams {
-  const d = STAR_PARAM_DEFAULTS;
-  return {
-    cx: num(payload?.cx, d.cx),
-    cy: num(payload?.cy, d.cy),
-    radius1: Math.abs(num(payload?.radius1, d.radius1)),
-    radius2: Math.abs(num(payload?.radius2, d.radius2)),
-    points: count(payload?.points, d.points, STAR_MIN_POINTS, STAR_MAX_POINTS),
-    rotationDeg: num(payload?.rotationDeg, d.rotationDeg),
-  };
-}
-
 export function flareParamsFrom(payload?: Payload): FlareParams {
   const d = FLARE_PARAM_DEFAULTS;
   return {
@@ -173,83 +127,6 @@ export function flareParamsFrom(payload?: Payload): FlareParams {
     endY: num(payload?.endY, d.endY),
     ringRadius: Math.abs(num(payload?.ringRadius, d.ringRadius)),
   };
-}
-
-/** The star's table. Pure. */
-export function starTableFor(p: StarParams): AnchorTable {
-  return starPath(p);
-}
-
-/** The engine's star-inset ceiling (engine ADR 1047, percent). */
-const MAX_LIVE_STAR_INSET = 99;
-
-/**
- * Engine ADR 1047 — the star as a LIVE shape, or null when the engine's
- * live star cannot be this one: the insert is the plain polygon on
- * Radius 1, and the engine draws the star from its points and inset
- * (`frameShapeSides`, `frameShapeStarInset`, written to `$created`), so
- * the Transform panel and the canvas widgets edit it later. Only an
- * upright star whose inner radius is the smaller one is a live star
- * (the engine's points start at twelve o'clock; its inset is
- * `1 − Radius 2 ÷ Radius 1`). Pure.
- */
-export function liveStarMutationFor(
-  pageId: string,
-  p: StarParams,
-): Mutation | null {
-  const turned = ((p.rotationDeg % 360) + 360) % 360 !== 0;
-  if (turned || !(p.radius1 > 0) || !(p.radius2 < p.radius1)) return null;
-  const inset = Math.round((1 - p.radius2 / p.radius1) * 1e4) / 100;
-  if (inset > MAX_LIVE_STAR_INSET) return null;
-  const polygon = regularPolygonPath(p.cx, p.cy, p.radius1, p.points);
-  const elementId = { kind: "polygon", id: "$created" } as ElementId;
-  return {
-    op: "batch",
-    args: {
-      ops: [
-        insertPathMutationFor(pageId, polygon.anchors, false),
-        prop(elementId, "frameShapeSides", { type: "length", value: p.points }),
-        prop(elementId, "frameShapeStarInset", {
-          type: "length",
-          value: inset,
-        }),
-      ],
-    },
-  } as Mutation;
-}
-
-// ----------------------------------------------------------------- star
-
-/** Insert a star on `pageId` (default: the active page). Answers the new
- *  path's id, or null. */
-export async function applyInsertStar(
-  host: BundleHost,
-  payload?: Payload,
-  pageId?: string,
-): Promise<ElementId | null> {
-  const page = pageId ?? (await resolveTargetPage(host));
-  if (!page) return null;
-  const params = starParamsFrom(payload);
-  const table = starTableFor(params);
-  if (table.anchors.length < 3) return null;
-  const paint = await graphicPaintFor(host).catch(() => null);
-  // A live star; the plain path where the star is not one the engine draws.
-  const live = liveStarMutationFor(page, params);
-  const outcome = await host.document.mutate(
-    withGraphicPaint(
-      live ?? insertPathMutationFor(page, table.anchors, false),
-      paint,
-    ),
-  );
-  if (!outcome.applied) {
-    host.log.warn(
-      `insertStar rejected by engine: ${JSON.stringify(outcome.error)}`,
-    );
-    return null;
-  }
-  const id = outcome.createdId ?? null;
-  if (id) await host.selection.set([id]);
-  return id;
 }
 
 // ---------------------------------------------------------------- flare
@@ -354,7 +231,6 @@ export async function applyInsertFlare(
 }
 
 export interface StarFlareLastUsed {
-  star?(): Payload;
   flare?(): Payload;
 }
 
@@ -367,17 +243,6 @@ export function contributeStarFlareCommands(
     return typeof v === "string" && v !== "" ? v : undefined;
   };
   const disposers = [
-    registerCommand(host, {
-      id: INSERT_STAR_COMMAND_ID,
-      title: M.star,
-      category: "Insert",
-      handler: (_paged, payload) =>
-        applyInsertStar(
-          host,
-          (payload as Payload) ?? lastUsed.star?.(),
-          page(payload),
-        ),
-    }),
     registerCommand(host, {
       id: INSERT_FLARE_COMMAND_ID,
       title: M.flare,

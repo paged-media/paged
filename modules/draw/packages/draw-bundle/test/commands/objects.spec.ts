@@ -468,11 +468,6 @@ describe("paged.draw commands, no engine — the Path Options “…” commands
     await raises(`${C}.outlineStrokeOptions`, "outlineStroke");
   });
 
-  it("Reflect… raises Path Options at Reflect", async () => {
-    covers("command:media.paged.draw.command.reflectOptions");
-    await raises(`${C}.reflectOptions`, "reflect");
-  });
-
   it("Arc… raises Path Options at Arc", async () => {
     covers("command:media.paged.draw.command.insertArcOptions");
     await raises(`${C}.insertArcOptions`, "arc");
@@ -491,11 +486,6 @@ describe("paged.draw commands, no engine — the Path Options “…” commands
   it("Polar grid… raises Path Options at Polar grid", async () => {
     covers("command:media.paged.draw.command.insertPolarGridOptions");
     await raises(`${C}.insertPolarGridOptions`, "polarGrid");
-  });
-
-  it("Star… raises Path Options at Star [plugin-draw.tool-wave-3]", async () => {
-    covers("command:media.paged.draw.command.insertStarOptions");
-    await raises(`${C}.insertStarOptions`, "star");
   });
 
   it("Flare… raises Path Options at Flare [plugin-draw.tool-wave-3]", async () => {

@@ -124,6 +124,7 @@ export async function readSpreadTargets(
       pageId: g.pageId ?? null,
       spreadId: g.spreadId ?? null,
       composed,
+      ...(o && o.length === 2 ? { origin: [o[0]!, o[1]!] as const } : {}),
     };
     if (id.kind === "group") {
       const props = await client.elementProperties(id).catch(() => null);

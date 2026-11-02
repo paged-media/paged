@@ -74,12 +74,10 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.scissorsAnyPoint",
       // WP6.1 part 2 — keyless, in the host's transform / pencil / shape
       // flyouts.
-      "media.paged.draw.tool.reflect",
       "media.paged.draw.tool.reshape",
       "media.paged.draw.tool.shaper",
       "media.paged.draw.tool.pathEraser",
       "media.paged.draw.tool.join",
-      "media.paged.draw.tool.star",
       "media.paged.draw.tool.flare",
       // WP6.7 — the distortion tools, keyless: the Liquify flyout, Puppet
       // Warp in the host's Free Transform flyout, the Perspective pair.
@@ -126,12 +124,10 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.offsetPathOptions",
       "media.paged.draw.command.simplifyPathOptions",
       "media.paged.draw.command.outlineStrokeOptions",
-      "media.paged.draw.command.reflectOptions",
       "media.paged.draw.command.insertArcOptions",
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
       "media.paged.draw.command.insertPolarGridOptions",
-      "media.paged.draw.command.insertStarOptions",
       "media.paged.draw.command.insertFlareOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
       "media.paged.draw.command.rasterizeOptions",
@@ -143,10 +139,6 @@ describe("drawBundle.activate", () => {
       // Type ▸ Create outlines (protocol 66, RFI C-69).
       "media.paged.draw.command.createOutlines",
       "media.paged.draw.command.rasterize",
-      // Object ▸ Transform — Reflect ×2 and Transform again.
-      "media.paged.draw.command.reflectHorizontal",
-      "media.paged.draw.command.reflectVertical",
-      "media.paged.draw.command.transformAgain",
       // Illustrator Phase 2 — compound paths (Make / Release).
       "media.paged.draw.command.makeCompoundPath",
       "media.paged.draw.command.releaseCompoundPath",
@@ -211,12 +203,11 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.knife",
       "media.paged.draw.command.scissorsAt",
       "media.paged.draw.command.shapeBuild",
-      // WP6.1 part 2 — the new tools' gestures as data, and Star / Flare.
+      // WP6.1 part 2 — the new tools' gestures as data, and Flare.
       "media.paged.draw.command.joinScrub",
       "media.paged.draw.command.pathErase",
       "media.paged.draw.command.reshapeAt",
       "media.paged.draw.command.shaperStroke",
-      "media.paged.draw.command.insertStar",
       "media.paged.draw.command.insertFlare",
       // WP6.7 — the distortion tools and the perspective grid.
       "media.paged.draw.command.liquifyStroke",
