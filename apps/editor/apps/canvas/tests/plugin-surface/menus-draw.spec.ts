@@ -1686,8 +1686,8 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
-  test("Draw/Path/Reverse path direction — the Draw CONTEXT menu sits on the bar while artwork is selected, and runs the same command", async () => {
-    covers("menu:Draw/Path/Reverse path direction");
+  test("Draw/Compound path/Make — the Draw CONTEXT menu sits on the bar while artwork is selected, and runs the same command", async () => {
+    covers("menu:Draw/Compound path/Make");
     const bar = live.locator('nav[aria-label="Main menu"]');
     await expect(bar.locator('[data-menu-trigger="Draw"]')).toHaveAttribute(
       "data-menu-context",
@@ -1695,16 +1695,12 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
     const out = await clickEntry(
       live,
-      "Draw/Path/Reverse path direction",
-      "media.paged.draw.command.reversePathDirection",
-      { route: contextRouteOf("Draw/Path/Reverse path direction") },
+      "Draw/Compound path/Make",
+      "media.paged.draw.command.makeCompoundPath",
+      { route: contextRouteOf("Draw/Compound path/Make") },
     );
     expect(out.after).not.toBe(out.before);
-    await expectOneUndoRestores(
-      live,
-      "Draw/Path/Reverse path direction",
-      out.before,
-    );
+    await expectOneUndoRestores(live, "Draw/Compound path/Make", out.before);
     // Nothing selected, the context menu leaves the bar (Plugins ▸ Draw stays).
     await new Designer(live).selectElements([]);
     await expect(bar.locator('[data-menu-trigger="Draw"]')).toHaveCount(0);
