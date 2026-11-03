@@ -103,3 +103,14 @@ features, and `image-kernels`' `reference` and `cpu` forward to them; image-ci's
 the reference feature in the wasm tree now matches either crate. `image-kernels` brings the
 macro into scope with `#[macro_use] extern crate paged_kernels` and re-exports it as
 `image_kernels::kernel_family`.
+
+### Step 4, the point-op families moved so far
+
+`linear`, `arithmetic`, `cast` and `adjust` moved whole by `git mv`; the only text changes are
+`use crate::{…}` becoming `use crate::def::{…}` and, in `adjust`, the params re-export naming
+`crate::params`. `paged-kernels` takes bytemuck's `min_const_generics` (the 3D LUT block is a
+729-entry array, which the workspace dependency already enabled). `families/mod.rs` of
+`paged-kernels` lists them; the `image-kernels` files are one-line re-exports, so the registry
+rows, `ALL_FAMILIES`, the conformance paths and `cpu.rs` resolve unchanged. Not moved yet:
+`boolean`, `relational`, `minmax` and `band` (point operations too, with no engine caller),
+`adjust_ext`, `develop`, `compose`, `select`, `stylize`, `gallery` and `blurgal`.
