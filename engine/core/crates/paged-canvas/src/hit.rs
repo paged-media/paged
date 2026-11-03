@@ -669,19 +669,7 @@ fn lookup_z(layer_z: &HashMap<&str, usize>, item_layer_ref: Option<&str>) -> usi
 /// degenerate matrix (zero determinant — shouldn't occur in well-formed
 /// IDML but we handle it defensively).
 pub(crate) fn invert_affine(m: [f32; 6]) -> Option<[f32; 6]> {
-    let [a, b, c, d, tx, ty] = m;
-    let det = a * d - b * c;
-    if det == 0.0 || !det.is_finite() {
-        return None;
-    }
-    let inv_det = 1.0 / det;
-    let ia = d * inv_det;
-    let ib = -b * inv_det;
-    let ic = -c * inv_det;
-    let id = a * inv_det;
-    let itx = -(ia * tx + ic * ty);
-    let ity = -(ib * tx + id * ty);
-    Some([ia, ib, ic, id, itx, ity])
+    paged_geom::affine::invert_if(&m, |det| det == 0.0 || !det.is_finite())
 }
 
 /// True iff `point` (in spread/world coords) lies within the oriented

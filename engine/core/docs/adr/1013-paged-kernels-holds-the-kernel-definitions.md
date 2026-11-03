@@ -114,3 +114,13 @@ macro into scope with `#[macro_use] extern crate paged_kernels` and re-exports i
 rows, `ALL_FAMILIES`, the conformance paths and `cpu.rs` resolve unchanged. Not moved yet:
 `boolean`, `relational`, `minmax` and `band` (point operations too, with no engine caller),
 `adjust_ext`, `develop`, `compose`, `select`, `stylize`, `gallery` and `blurgal`.
+
+### Step 4, the rest of the engine-reachable families
+
+`boolean`, `relational`, `minmax`, `band`, `adjust_ext`, `develop`, `compose`, `select`,
+`stylize`, `gallery` and `blurgal` moved the same way, in three commits. `select` and `gallery`
+carry tests of their own that naga-validate their assembled modules; they moved with the family,
+and `paged-kernels` takes `naga` as a dev-dependency (the leaf guard reads normal edges). No
+family left in `image-kernels` uses `kernel_family!`, so its `#[macro_use] extern crate` is gone;
+the re-export `image_kernels::kernel_family` stays. The single-owner baseline for the WGSL
+sRGB literals follows `adjust_ext`, `develop` and `select` to their new paths.

@@ -367,20 +367,7 @@ fn recover_member_transform(
 /// singular (a degenerate group transform — the member then can't be
 /// de-composed and keeps its on-disk transform verbatim).
 fn invert_matrix(m: &[f32; 6]) -> Option<[f32; 6]> {
-    let [a, b, c, d, tx, ty] = *m;
-    let det = a * d - b * c;
-    if det.abs() < 1e-9 {
-        return None;
-    }
-    let inv_det = 1.0 / det;
-    let ia = d * inv_det;
-    let ib = -b * inv_det;
-    let ic = -c * inv_det;
-    let id = a * inv_det;
-    // Inverse translation: -(inv_linear · t).
-    let itx = -(ia * tx + ic * ty);
-    let ity = -(ib * tx + id * ty);
-    Some([ia, ib, ic, id, itx, ity])
+    paged_geom::affine::invert_if(m, |det| det.abs() < 1e-9)
 }
 
 /// One attribute patch: the value to write for `key`, or `Remove` to
