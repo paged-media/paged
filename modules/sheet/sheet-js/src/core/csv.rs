@@ -38,6 +38,8 @@ use sheet_core::{CellError, CellValue, DateSystem, Locale};
 use sheet_format::entry::{parse_entry, EntryCtx, FormatHint};
 use sheet_format::locale::locale_data;
 
+use sheet_xlsx::minimal::{self, col_name};
+
 use super::{SessionError, SheetSession};
 
 /// The style index of each typed cell kind in the generated `cellXfs`.
@@ -202,20 +204,6 @@ pub fn type_field_at(s: &str, locale: Locale, sys: DateSystem, now_serial: f64) 
     }
 }
 
-/// Column letters for a 0-based index.
-fn col_name(mut c: usize) -> String {
-    let mut s = Vec::new();
-    loop {
-        s.push(b'A' + (c % 26) as u8);
-        if c < 26 {
-            break;
-        }
-        c = c / 26 - 1;
-    }
-    s.reverse();
-    String::from_utf8(s).expect("ascii")
-}
-
 /// Build the XLSX package for delimited `text`.
 pub fn csv_to_xlsx(text: &str, delim: Option<char>, locale: Locale, sheet_name: &str) -> Vec<u8> {
     csv_to_xlsx_at(text, delim, locale, sheet_name, 0.0)
@@ -251,7 +239,7 @@ pub fn csv_to_xlsx_at(
     for (r, rec) in records.iter().enumerate() {
         let mut cells = String::new();
         for (c, field) in rec.iter().enumerate() {
-            let a1 = format!("{}{}", col_name(c), r + 1);
+            let a1 = format!("{}{}", col_name(c as u32), r + 1);
             match type_field_at(field, locale, sys, now_serial) {
                 Typed::Empty => {}
                 Typed::Number(n) => cells.push_str(&format!(r#"<c r="{a1}"><v>{n}</v></c>"#)),
@@ -273,16 +261,10 @@ pub fn csv_to_xlsx_at(
                     r#"<c r="{a1}" t="e"><v>{}</v></c>"#,
                     esc(e.as_str())
                 )),
-                Typed::Text(t) => cells.push_str(&format!(
-                    r#"<c r="{a1}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,
-                    esc(&t)
-                )),
+                Typed::Text(t) => cells.push_str(&minimal::inline_str_cell(&a1, None, &t)),
                 Typed::Quoted(t) => {
                     let xf = xf_of(ExtraXf::Quote);
-                    cells.push_str(&format!(
-                        r#"<c r="{a1}" s="{xf}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,
-                        esc(&t)
-                    ));
+                    cells.push_str(&minimal::inline_str_cell(&a1, Some(xf), &t));
                 }
             }
         }
@@ -328,41 +310,18 @@ pub fn csv_to_xlsx_at(
         }
     }
     let xf_count = XF_FIRST_EXTRA as usize + extra.len();
-    let mut ct = paged_ooxml::content_types::ContentTypes::new();
-    ct.add_default(
-        "rels",
-        "application/vnd.openxmlformats-package.relationships+xml",
+    let styles = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="{num_fmt_count}">{num_fmts}</numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="{xf_count}"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>{extra_xfs}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#
     );
-    ct.add_default("xml", "application/xml");
-    ct.add_override(
-        "/xl/workbook.xml",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
-    );
-    ct.add_override(
-        "/xl/worksheets/sheet1.xml",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
-    );
-    ct.add_override(
-        "/xl/styles.xml",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
-    );
-    let content_types = ct.render_with_decl_newline();
-    let files: [(&str, String); 7] = [
-        ("[Content_Types].xml", content_types),
-        ("_rels/.rels", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#.to_string()),
-        ("xl/workbook.xml", format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="{}" sheetId="1" r:id="rId1"/></sheets></workbook>"#, esc(sheet_name))),
-        ("xl/_rels/workbook.xml.rels", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#.to_string()),
-        ("xl/styles.xml", format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="{num_fmt_count}">{num_fmts}</numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="{xf_count}"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>{extra_xfs}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#)),
-        ("xl/worksheets/sheet1.xml", format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>{sheet}</sheetData></worksheet>"#)),
-        ("docProps/app.xml", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>paged.sheet</Application></Properties>"#.to_string()),
-    ];
-    sheet_xlsx::write::write_package(files.iter().map(|(n, b)| (*n, b.as_bytes())))
+    let app = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>paged.sheet</Application></Properties>"#;
+    minimal::package(
+        sheet_name,
+        &styles,
+        &format!("<sheetData>{sheet}</sheetData>"),
+        Some(app),
+    )
 }
 
 impl SheetSession {
@@ -432,6 +391,5 @@ mod tests {
             type_field("Q1 2026", de, sys),
             Typed::Text("Q1 2026".into())
         );
-        assert_eq!(col_name(27), "AB");
     }
 }

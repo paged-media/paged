@@ -26,6 +26,7 @@
 
 use dml_chart::write::{self as dw, DataOut};
 use paged_ooxml::tree::{El, Ns};
+use sheet_xlsx::minimal::{self, col_name};
 
 const SHEET: &str = "Sheet1";
 
@@ -36,19 +37,6 @@ struct Cached {
     numeric_categories: bool,
     values: Vec<Option<f64>>,
     scatter: bool,
-}
-
-fn col_name(mut c: u32) -> String {
-    let mut s = Vec::new();
-    loop {
-        s.push(b'A' + (c % 26) as u8);
-        if c < 26 {
-            break;
-        }
-        c = c / 26 - 1;
-    }
-    s.reverse();
-    String::from_utf8(s).unwrap_or_default()
 }
 
 fn cached(root: &El) -> Vec<Cached> {
@@ -106,10 +94,7 @@ pub fn synthesize_xlsx(chart_xml: &[u8]) -> Result<Vec<u8>, String> {
     sheet.push_str(r#"<row r="1">"#);
     for (i, s) in series.iter().enumerate() {
         let r = format!("{}1", col_name(1 + i as u32));
-        sheet.push_str(&format!(
-            r#"<c r="{r}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,
-            esc(&s.name)
-        ));
+        sheet.push_str(&minimal::inline_str_cell(&r, None, &s.name));
     }
     sheet.push_str("</row>");
     for p in 0..n {
@@ -120,10 +105,7 @@ pub fn synthesize_xlsx(chart_xml: &[u8]) -> Result<Vec<u8>, String> {
                 Ok(v) if cats.numeric_categories => {
                     sheet.push_str(&format!(r#"<c r="A{row}"><v>{v}</v></c>"#));
                 }
-                _ => sheet.push_str(&format!(
-                    r#"<c r="A{row}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,
-                    esc(c)
-                )),
+                _ => sheet.push_str(&minimal::inline_str_cell(&format!("A{row}"), None, c)),
             }
         }
         for (i, s) in series.iter().enumerate() {
@@ -140,65 +122,13 @@ pub fn synthesize_xlsx(chart_xml: &[u8]) -> Result<Vec<u8>, String> {
     }
     sheet.push_str("</sheetData>");
     let last = format!("{}{}", col_name(series.len() as u32), n + 1);
-    let mut ct = paged_ooxml::content_types::ContentTypes::new();
-    ct.add_default(
-        "rels",
-        "application/vnd.openxmlformats-package.relationships+xml",
-    );
-    ct.add_default("xml", "application/xml");
-    ct.add_override(
-        "/xl/workbook.xml",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
-    );
-    ct.add_override(
-        "/xl/worksheets/sheet1.xml",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
-    );
-    ct.add_override(
-        "/xl/styles.xml",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml",
-    );
-    let content_types = ct.render_with_decl_newline();
-    let parts: Vec<(&str, String)> = vec![
-        (
-            "[Content_Types].xml",
-            content_types,
-        ),
-        (
-            "_rels/.rels",
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#
-                .into(),
-        ),
-        (
-            "xl/workbook.xml",
-            format!(
-                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="{SHEET}" sheetId="1" r:id="rId1"/></sheets></workbook>"#
-            ),
-        ),
-        (
-            "xl/_rels/workbook.xml.rels",
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#
-                .into(),
-        ),
-        (
-            "xl/styles.xml",
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#
-                .into(),
-        ),
-        (
-            "xl/worksheets/sheet1.xml",
-            format!(
-                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:{last}"/>{sheet}</worksheet>"#
-            ),
-        ),
-    ];
-    Ok(sheet_xlsx::write::write_package(
-        parts.iter().map(|(n, b)| (*n, b.as_bytes())),
+    let styles = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#;
+    Ok(minimal::package(
+        SHEET,
+        styles,
+        &format!(r#"<dimension ref="A1:{last}"/>{sheet}"#),
+        None,
     ))
 }
 

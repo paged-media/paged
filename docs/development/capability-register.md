@@ -127,7 +127,7 @@ reader (it reads through its own element tree and keeps colours unresolved, with
 slide's resolver) and `slide-resolve` its key/variant logic. The format scheme is not modelled (ADR 1056,
 Amendment 1).
 Themes in IDML (engine ADR 1057, built): plain swatches for InDesign, the theme in the document label `x-paged:core.theme`, \"create theme from swatches\", font references on styles, presets owned by `paged_model::theme::presets`.
-Writable XML tree ×4. Minimal `.xlsx` writer ×3 (`slide-sheet`, `sheet-js` csv, ods). ODF layer
+Writable XML tree ×4. Minimal `.xlsx` writer: DONE (W5), one `sheet_xlsx::minimal` (package, A1 addressing, inline-string cell) used by `slide-sheet`, `sheet-js` csv and ods. ODF layer
 shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 
 ### Lowering
