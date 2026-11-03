@@ -31,6 +31,7 @@ import {
   silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 
+import { docBundle } from "../../src";
 import { DocEngine } from "../../src/engine";
 import { NATIVE_PLACE, placeEmbedded } from "../../src/place";
 import {
@@ -66,6 +67,8 @@ async function place(name: string, native: boolean): Promise<Placed> {
     console: silent,
   });
   await h.newBlank(612, 792);
+  // The bundle owns its metadata namespace, as in the editor.
+  h.loadBundle(docBundle);
   const firstPage = (
     await h.host.document.collection<{ selfId: string }>("pages")
   )[0]!.selfId;
