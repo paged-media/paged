@@ -787,3 +787,26 @@ fn bookmarks_and_a_table_of_contents_are_built_whole() {
         assert!((d.paragraph as usize) < stories.stories[0].len());
     }
 }
+
+#[test]
+fn the_bundles_breaks_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/breaks-body.docx");
+    let ir = lowered(bytes);
+    let body = native_body(&ir);
+    let why: Vec<_> = body
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Deferred { reason } => Some(reason.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(why.is_empty(), "deferred: {why:?}");
+    let splits = body
+        .blocks
+        .iter()
+        .filter(|b| matches!(b, NativeBlock::Split(_)))
+        .count();
+    assert_eq!(splits, 2);
+    assert!(docx_skeleton::body::native_stories(&ir).is_some(), "whole");
+}
