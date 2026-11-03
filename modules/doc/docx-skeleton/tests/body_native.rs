@@ -863,12 +863,17 @@ fn text_boxes_get_their_stories() {
         .iter()
         .filter(|i| matches!(i.item, docx_lower::ir::LoweredItemKind::TextBox { .. }))
         .count();
+    // The inline boxes of the paragraphs that were built (one with a look
+    // is left to the old pour).
     let inline_boxes: usize = ir
         .story
         .blocks
         .iter()
-        .map(|b| match b {
-            LoweredBlock::Paragraph(p) => p.text_boxes.len(),
+        .zip(&body.blocks)
+        .map(|(b, n)| match (b, n) {
+            (LoweredBlock::Paragraph(p), NativeBlock::Paragraph(_) | NativeBlock::Split(_)) => {
+                p.text_boxes.len()
+            }
             _ => 0,
         })
         .sum();
