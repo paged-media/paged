@@ -12,6 +12,7 @@ description = "paged.slide: a resolved deck as a native document (the engine's m
 workspace = true
 
 [dependencies]
+paged-geom = { path = "../../../engine/core/crates/paged-geom" }
 pptx-core.workspace = true
 slide-resolve.workspace = true
 slide-geom.workspace = true

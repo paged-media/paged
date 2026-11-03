@@ -21,14 +21,28 @@
 //! the pixel type, the param blocks and the shipped CPU twins of the
 //! adjustment and convolution kernels, which the engine's image filter
 //! stack (engine ADR 1037) evaluates. The kernel definitions themselves
-//! (`KernelDef`, the WGSL, the registry build) are still in
-//! `modules/image/image-kernels`, which re-exports everything here under
-//! its old paths; the rest of the crate moves into this one by `git mv`.
+//! (`def`, and the families in `families` that the engine can reach, engine
+//! ADR 1013) move here by `git mv`; the registry build and the families only
+//! paged.image runs are still in `modules/image/image-kernels`, which
+//! re-exports everything here under its old paths.
+//!
+//! The kernel macro (`family`), the ABI assembler (`abi`) and the reference
+//! prelude moved here with the first families that need them (engine ADR 1013).
 //!
 //! Pure Rust, no I/O, wasm-safe; depends on nothing in the workspace.
 
+pub mod abi;
 pub mod cpu;
+pub mod def;
+// Before `families`: textual macro scope runs in declaration order.
+#[macro_use]
+pub mod family;
+pub mod families;
 pub mod params;
 mod px;
+/// The Rust half of the kernel DSL: the scalar twins' prelude. Test-only
+/// under `reference`, the shipped CPU path under `cpu` (image ADR 465).
+#[cfg(any(feature = "reference", feature = "cpu"))]
+pub mod reference_prelude;
 
 pub use px::Px;

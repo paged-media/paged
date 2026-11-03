@@ -167,11 +167,7 @@ fn srgb_to_linear_table() -> &'static [u8; 256] {
     T.get_or_init(|| {
         std::array::from_fn(|i| {
             let v = i as f64 / 255.0;
-            let l = if v <= 0.04045 {
-                v / 12.92
-            } else {
-                ((v + 0.055) / 1.055).powf(2.4)
-            };
+            let l = paged_colour_math::srgb_to_linear(v);
             (l * 255.0).round() as u8
         })
     })
@@ -182,11 +178,7 @@ fn linear_to_srgb_table() -> &'static [u8; 256] {
     T.get_or_init(|| {
         std::array::from_fn(|i| {
             let v = i as f64 / 255.0;
-            let s = if v <= 0.003_130_8 {
-                v * 12.92
-            } else {
-                1.055 * v.powf(1.0 / 2.4) - 0.055
-            };
+            let s = paged_colour_math::linear_to_srgb(v);
             (s * 255.0).round() as u8
         })
     })

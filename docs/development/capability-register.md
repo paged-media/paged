@@ -22,16 +22,16 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
 
 ## Enforced by the ratchet
 
-| Capability                     | Owner                                                                                                      | Copies outside it (baseline)                                                                                  |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`; `@paged-media/helpers` `escapeXmlText` / `escapeXmlAttr` | 2 (open): `paged-gen`, `paged-store` (engine crates cannot depend on `paged-ooxml`)                           |
-| `[Content_Types].xml`          | `paged-ooxml` `content_types`                                                                              | 15 (open): every writer moved; what remains is hand-written minimal packages used as independent reader input |
-| Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                                                                            | 0 (done)                                                                                                      |
-| sRGB transfer                  | `paged-color::math`, `paged-colour-math`                                                                   | 9 (open)                                                                                                      |
-| Blend modes                    | `paged-blend`                                                                                              | 5 (open)                                                                                                      |
-| FNV hash                       | `@paged-media/helpers` `fnv1a32` / `fnv1a32Utf16` (TS); `paged_pixel::fnv1a_64` (Rust)                     | 0 (done); two Playwright `page.evaluate` bodies are allowed (the page cannot import)                          |
-| CRC-32                         | `crc32fast` (Rust), `@paged-media/helpers` `crc32` (TS)                                                    | 0 (done)                                                                                                      |
-| Base64                         | `base64` crate, `platform/shared/helpers`                                                                  | 1 (open)                                                                                                      |
+| Capability                     | Owner                                                                                                      | Copies outside it (baseline)                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`; `@paged-media/helpers` `escapeXmlText` / `escapeXmlAttr` | 2 (open): `paged-gen`, `paged-store` (engine crates cannot depend on `paged-ooxml`)                               |
+| `[Content_Types].xml`          | `paged-ooxml` `content_types`                                                                              | 15 (open): every writer moved; what remains is hand-written minimal packages used as independent reader input     |
+| Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                                                                            | 0 (done)                                                                                                          |
+| sRGB transfer                  | `paged-color::math`, `paged-colour-math`; `@paged-media/helpers` `srgbToLinear` / `linearToSrgb` (TS)      | 0 (done); the WGSL sources of three image kernel families are allowed (the GPU cannot call Rust)                  |
+| Blend modes                    | `paged-blend` (`compose_twin::Blend` is now `paged_blend::BlendMode`)                                      | 0 (done); the wire vocabularies `SceneBlendMode` and `web-render`'s two mirrors, and the ABR wrapper, are allowed |
+| FNV hash                       | `@paged-media/helpers` `fnv1a32` / `fnv1a32Utf16` (TS); `paged_pixel::fnv1a_64` (Rust)                     | 0 (done); two Playwright `page.evaluate` bodies are allowed (the page cannot import)                              |
+| CRC-32                         | `crc32fast` (Rust), `@paged-media/helpers` `crc32` (TS)                                                    | 0 (done)                                                                                                          |
+| Base64                         | `base64` crate, `platform/shared/helpers`                                                                  | 1 (open)                                                                                                          |
 
 ## Landed (do not redo)
 
@@ -73,23 +73,37 @@ The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-ow
 
 ### Raster, kernels, blend
 
-Blend enums remaining: `scene_layer.rs` (`SceneBlendMode`), `paged-psd` ×2, `web-render` ×2,
-`image-kernels` `compose_twin`; blend math in `svg_filter.rs` and the image WGSL. Kernel
-definitions: `paged-kernels` is ~1.1k lines, `image-kernels/families` ~22k (ADR 1013 has no
-file). Decoders bypassing `paged-raster`: renderer `image_decode.rs`, `paged-export-pdf/image.rs`
-(loses CMYK/ICC), `pdf-import` encoders, `web-bundle/png.ts`. `paged-psd-fx` is wired nowhere.
+Blend enums: one, `paged_blend::BlendMode` (the image twin's `Blend` is that type; `compose_twin::from_kernel_id`
+resolves `compose.<id>`). Allowed with a reason: the camelCase wire enum `SceneBlendMode` in `scene_layer.rs`,
+`web-render`'s two mirrors of it, and the ABR wrapper in `paged-psd` (it adds ABR-only texture modes). Kernel
+definitions (engine ADR 1013): the model (`KernelDef` and its types), the `kernel_family!` macro, the ABI assembler (`abi`), the reference prelude and the `conv`, `linear`, `arithmetic`, `cast` and `adjust` families are in
+`paged-kernels` (`image-kernels` re-exports them; its `reference` / `cpu` features forward to `paged-kernels`); the other families (~19k lines in `image-kernels/families`) move one at a time, by the
+rule in the record (the engine can reach the kernel), each behind the registry gate and the conformance goldens. Decoders: `paged-export-pdf/image.rs` decodes an encoded-only image through
+`paged_raster::decode_rgba8_at_with` (a TIFF or PSD converts through its profile; PNG, WebP and the other
+`image` formats are byte-identical to before), and `web-bundle`'s PNG writer is `@paged-media/helpers`'
+`encodePng` with `storeBelow` (output byte-identical, pinned). Not routed, with reasons: the renderer's
+`image_decode.rs` keeps `jpeg-decoder` for the DCT-scaled decode of oversized JPEGs (`paged-raster` has no
+DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-raster` could not read (HDR);
+`pdf-import`'s `encode::png` writes through the `png` crate, whose bytes differ from `paged-raster`'s encoder
+for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere.
 Path coverage rasterizers ×3 in image-js.
 
 ### Geometry and vector
 
-Fixed-step f32 flattening is `paged_geom::flatten` (renderer stroke/placed-SVG/text-path, compose
+Fixed-step f32 flattening is `paged_geom::flatten` (`cubic_point_f64` for the engine crates that measure in double, `paged-canvas` group extents) (renderer stroke/placed-SVG/text-path, compose
 mask/dash-fit, text frame shapes; bit-identical, tested against the old copies). Left: `winding.rs`
 (`paged-model` sits below `paged-geom`), `image-js` masking (no engine geometry dependency in the
 image bundle) and the tolerance-driven ones (`psd_vector_mask`, kurbo in `paged-ps`). Kappa:
-`paged_geom::KAPPA` / `KAPPA_F32` (the `paged-gen` samples and the TS copies stay). The IDML
+`paged_geom::KAPPA` / `KAPPA_F32`, and `KAPPA` from `@paged-media/helpers` in TypeScript (`bake-plan.ts` and the full-precision
+specs import it; the `paged-gen` samples and the specs that pin a truncated literal stay, allowed).
+The TS sRGB curve is `srgbToLinear` / `linearToSrgb` there (four editor and draw copies removed);
+`paged-gpu`'s filter tables use `paged_colour_math`; the image conformance twin uses `paged_color::math`.
+The f64 samplers of `winding.rs`, `draw-trace`, `slide-anim` and `image-js` stay (allowed: those crates sit
+below or beside `paged-geom`). The IDML
 `[f32;6]` product and point map are `paged_geom::affine` (`paged-mutate`, `paged-canvas`, the
-renderer); the inverse (three singularity tests), the `[f64;6]` copies (slide ×3, draw-dxf) and
-the `Affine`/`Transform` newtypes of `paged-svg` and `paged-compose` → `paged-geom`.
+renderer); the f64 affine (`[f64;6]`: slide-resolve, pptx-export's `geom`, `dml-geom::live`, `slide-native`, draw-dxf) is `paged_geom::affine64`, product, point map and the inverse (one singularity rule, `|det| < 1e-12`), bit-identical and tested against each old copy (single-owner rule `affine-product`). Open: the f32 inverse (three singularity tests differ) and `slide-native`'s pattern-tile inverse, which solves the translation in another arrangement (not bit-identical, so left). The `Affine` of
+`paged-svg` and `Transform` of `paged-compose` keep their types but their product and point map call
+`paged_geom::affine`.
 Draw's TS copies of width, brush,
 along-path, envelope and `appearance-bake.ts` → `paged-vector-fx`. `dml-native` still maps
 pattern fill to a two-colour mix, drops gradient alpha and loses `clrChange`: adopt paint v2.

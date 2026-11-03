@@ -53,11 +53,7 @@ fn get(s: &[[f32; 4]; 16], i: usize) -> f32 {
 }
 
 fn to_lin(c: f32) -> f32 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
+    paged_color::math::srgb_to_linear(c)
 }
 
 fn to_srgb(v: f32) -> f32 {

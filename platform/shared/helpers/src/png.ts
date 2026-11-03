@@ -44,6 +44,17 @@ async function through(
   return new Uint8Array(await out.arrayBuffer());
 }
 
+async function zlib(raw: Uint8Array, storeBelow?: number): Promise<Uint8Array> {
+  if (storeBelow === undefined)
+    return through(raw, new CompressionStream("deflate"));
+  if (raw.length < storeBelow) return zlibStored(raw);
+  try {
+    return await through(raw, new CompressionStream("deflate"));
+  } catch {
+    return zlibStored(raw);
+  }
+}
+
 function chunk(type: string, data: Uint8Array): Uint8Array {
   const out = new Uint8Array(12 + data.length);
   const view = new DataView(out.buffer);
@@ -54,8 +65,54 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
   return out;
 }
 
+function adler32(data: Uint8Array): number {
+  let a = 1;
+  let b = 0;
+  for (let i = 0; i < data.length; i += 1) {
+    a = (a + data[i]) % 65521;
+    b = (b + a) % 65521;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+/** A zlib stream of `data` in stored (uncompressed) deflate blocks. Its bytes
+ *  are the same on every platform. */
+export function zlibStored(data: Uint8Array): Uint8Array {
+  const blocks = Math.max(1, Math.ceil(data.length / 65535));
+  const out = new Uint8Array(2 + data.length + blocks * 5 + 4);
+  out[0] = 0x78;
+  out[1] = 0x01;
+  let o = 2;
+  for (let i = 0; i < blocks; i += 1) {
+    const start = i * 65535;
+    const len = Math.min(65535, data.length - start);
+    out[o++] = i === blocks - 1 ? 1 : 0;
+    out[o++] = len & 255;
+    out[o++] = len >>> 8;
+    out[o++] = ~len & 255;
+    out[o++] = (~len >>> 8) & 255;
+    out.set(data.subarray(start, start + len), o);
+    o += len;
+  }
+  new DataView(out.buffer).setUint32(o, adler32(data));
+  return out;
+}
+
+/** How {@link encodePng} writes its zlib stream. */
+export interface EncodePngOptions {
+  /** Store (do not compress) a stream whose raw rows are shorter than this
+   *  many bytes, and whenever `CompressionStream` is missing or fails:
+   *  tiny images gain nothing from deflate, and stored bytes are the same on
+   *  every platform (a bake that hashes its output needs that). Without it
+   *  the stream is always deflated and a missing `CompressionStream` throws. */
+  storeBelow?: number;
+}
+
 /** RGBA → an 8-bit RGBA PNG. */
-export async function encodePng(image: RgbaImage): Promise<Uint8Array> {
+export async function encodePng(
+  image: RgbaImage,
+  options: EncodePngOptions = {},
+): Promise<Uint8Array> {
   const { width, height, data } = image;
   if (data.length !== width * height * 4)
     throw new Error(
@@ -76,7 +133,7 @@ export async function encodePng(image: RgbaImage): Promise<Uint8Array> {
   const parts = [
     new Uint8Array(SIGNATURE),
     chunk("IHDR", ihdr),
-    chunk("IDAT", await through(raw, new CompressionStream("deflate"))),
+    chunk("IDAT", await zlib(raw, options.storeBelow)),
     chunk("IEND", new Uint8Array()),
   ];
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));

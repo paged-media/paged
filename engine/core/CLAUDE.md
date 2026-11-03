@@ -118,9 +118,10 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   image ADR 466), which still names them `image-psd` / `image-core` through `package`
   aliases; they stay leaf crates (a core-ci `cargo tree` guard).
 - `crates/paged-kernels/` — one kernel definition for the engine and paged.image (PM-0014,
-  ADR 1013's first step): the pixel type, the param blocks and the shipped CPU twins of the
-  adjustment and convolution kernels, moved from `image-kernels` (which re-exports them and
-  keeps the WGSL and the registry until the rest moves). The renderer evaluates an image
+  ADR 1013): the pixel type, the kernel model (`def`), the param blocks, the shipped CPU twins
+  of the adjustment and convolution kernels and the convolution family's definitions (`families`),
+  moved from `image-kernels` (which re-exports them and keeps the registry and the other
+  families; ADR 1013 says which move next). The renderer evaluates an image
   frame's filter stack through them (ADR 1037). A leaf crate.
 - `crates/paged-resample/` — the CPU resample of RGBA8 rasters (separable Lanczos-3 /
   bilinear, premultiplied; a bilinear rotate-and-crop): the supported backend of paged.image's

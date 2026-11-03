@@ -5,10 +5,19 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Kernel definitions shared by the engine and paged.image (PM-0014, ADR 1013's first step): the pixel type, the param blocks and the shipped CPU twins of the adjustment and convolution kernels. Leaf crate: depends on nothing in the workspace."
+description = "Kernel definitions shared by the engine and paged.image (PM-0014, engine ADR 1013): the pixel type, the kernel model, the param blocks, the shipped CPU twins of the adjustment and convolution kernels, and the convolution family's definitions. Leaf crate: depends on nothing in the workspace."
 
 [lints]
 workspace = true
 
+[features]
+default = []
+# The scalar reference twins `kernel_family!` emits (test-only golden source,
+# image spec 6.3). Enabled solely through image-conformance, via image-kernels.
+reference = []
+# The shipped CPU twins' prelude (image ADR 465). image-js turns it on, via
+# image-kernels.
+cpu = []
+
 [dependencies]
-bytemuck = { version = "1", features = ["derive"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }

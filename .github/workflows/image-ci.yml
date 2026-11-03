@@ -218,7 +218,7 @@ jobs:
       - name: guard — image-js wasm tree excludes the reference feature
         run: |
           if cargo tree -p image-js --target wasm32-unknown-unknown -e normal,features \
-               | grep -F 'image-kernels feature "reference"'; then
+               | grep -E '(image|paged)-kernels feature "reference"'; then
             echo "::error::image-js wasm32 tree enables image-kernels/reference (TEST-ONLY)"
             exit 1
           fi

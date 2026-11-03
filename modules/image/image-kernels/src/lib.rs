@@ -26,9 +26,10 @@
 //! WGSL body and (behind the `reference` feature, test-only) the
 //! scalar Rust twin from a single expression — one source of truth.
 
-pub mod abi;
 #[macro_use]
-pub mod family;
+extern crate paged_kernels;
+
+pub mod abi;
 /// The compose family's scalar twins: the test-only reference and (feature
 /// `cpu`) the layer fold's CPU path (image ADR 480).
 #[cfg(any(feature = "reference", feature = "cpu"))]
@@ -39,88 +40,12 @@ pub mod compose_twin;
 pub mod cpu;
 pub mod families;
 #[cfg(any(feature = "reference", feature = "cpu"))]
-pub mod reference_prelude;
+pub use paged_kernels::reference_prelude;
+pub use paged_kernels::{family, kernel_family};
 
-/// Frozen kernel ABI version (spec §9.2). Bumps are orchestrator-level
-/// amendments.
-pub const ABI_VERSION: u32 = 1;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum KernelClass {
-    /// out(x,y) = f(in₀(x,y), …)
-    Point,
-    /// Needs an expanded input window (ROI inflation in the engines).
-    Windowed { radius: (u16, u16) },
-    /// Rational scale with kernel support.
-    Resample { support: f32 },
-    /// min/max/avg/histogram → scalar/table.
-    Reduction(ReductionKind),
-    /// No inputs (gradients, noise, constants).
-    Generator,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReductionKind {
-    Min,
-    Max,
-    Avg,
-    Histogram,
-}
-
-/// Per-kernel GPU-vs-reference tolerance (spec §6.3): GPU output is
-/// verified against the scalar-reference golden by tolerance, never
-/// byte-golden-tested.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Tolerance {
-    /// Bit-identical after f16 quantization of the reference.
-    Exact,
-    /// Max per-channel distance in f16 ULPs.
-    ChannelEpsF16(u32),
-    /// Mean perceptual ΔE bound (color kernels, T1+).
-    PerceptualDeltaE(f32),
-}
-
-/// One field of a param block — drives the WGSL `struct Params`
-/// emission (1:1 with the `#[repr(C)]` Rust layout).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ParamField {
-    pub name: &'static str,
-    /// `f32` | `u32` | `i32` — the token is valid in both languages.
-    pub wgsl_ty: &'static str,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ParamsLayout {
-    /// `size_of` the Rust param struct (uniform upload size).
-    pub size: usize,
-    pub fields: &'static [ParamField],
-}
-
-/// The kernel definition (spec §6.1, frozen M0 phase 0).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct KernelDef {
-    /// Registry id (dispatch key), e.g. `math.linear`, `conv.gaussian`.
-    pub id: &'static str,
-    pub class: KernelClass,
-    /// Input texture arity (group 0): 1 = unary, 2 = binary,
-    /// 0 = generator.
-    pub inputs: u8,
-    pub params: ParamsLayout,
-    /// The kernel WGSL — interpreted per `module`: an expression body
-    /// in the restricted DSL spliced into the ABI template
-    /// (`kernel_family!` output), or a complete handwritten compute
-    /// module conforming to the ABI binding interface (T1
-    /// windowed/resample kernels, spec §9.2 "handwritten WGSL"). The
-    /// WGSL is the production implementation either way.
-    pub wgsl: &'static str,
-    /// ABI v1.1 amendment (M1): `true` = `wgsl` is a complete module
-    /// (see `abi` docs for the module-authoring contract); `false` =
-    /// expression body. `kernel_family!` always emits `false`.
-    pub module: bool,
-    /// Safe to evaluate at mip levels with scaled params? (§8.3)
-    pub mip_exact: bool,
-    pub gpu_tolerance: Tolerance,
-}
+pub use paged_kernels::def::{
+    KernelClass, KernelDef, ParamField, ParamsLayout, ReductionKind, Tolerance, ABI_VERSION,
+};
 
 // The dispatch table, GENERATED from registry/kernels.yaml by build.rs
 // (spec §12.2.1): a kernel without a registry row is unreachable by

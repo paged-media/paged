@@ -82,14 +82,14 @@ macro_rules! kernel_family {
         }
 
         $(#[doc = $doc])*
-        pub static $def: $crate::KernelDef = $crate::KernelDef {
+        pub static $def: $crate::def::KernelDef = $crate::def::KernelDef {
             id: $id,
             class: $class,
             inputs: $inputs,
-            params: $crate::ParamsLayout {
+            params: $crate::def::ParamsLayout {
                 size: ::core::mem::size_of::<$params>(),
                 fields: &[
-                    $( $crate::ParamField {
+                    $( $crate::def::ParamField {
                         name: stringify!($pf),
                         wgsl_ty: stringify!($pty),
                     }, )*

@@ -20,9 +20,9 @@
 // (as other encoders write them), grey and RGB inputs, refusals.
 
 import { describe, expect, test } from "bun:test";
-import { deflateSync } from "node:zlib";
+import { deflateSync, inflateSync } from "node:zlib";
 
-import { crc32, decodePng, encodePng } from "../src/index.ts";
+import { crc32, decodePng, encodePng, zlibStored } from "../src/index.ts";
 
 const img = {
   width: 3,
@@ -130,5 +130,31 @@ describe("8-bit PNG codec", () => {
     await expect(
       encodePng({ width: 2, height: 2, data: new Uint8Array(3) }),
     ).rejects.toThrow(/not RGBA/);
+  });
+});
+
+describe("encodePng storeBelow", () => {
+  test("a small image is written with a stored stream and decodes back", async () => {
+    const png = await encodePng(img, { storeBelow: 1024 });
+    const raw = new Uint8Array(img.height * (img.width * 4 + 1));
+    for (let y = 0; y < img.height; y++)
+      raw.set(
+        img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4),
+        y * (img.width * 4 + 1) + 1,
+      );
+    const stored = zlibStored(raw);
+    // The IDAT payload sits after the signature and the 25-byte IHDR chunk.
+    const idat = png.subarray(41, 41 + stored.length);
+    expect([...idat]).toEqual([...stored]);
+    expect([...(await decodePng(png)).data]).toEqual([...img.data]);
+  });
+  test("a stored stream inflates to its input", () => {
+    const data = new Uint8Array(70000).map((_, i) => i % 251);
+    expect(
+      Buffer.compare(
+        Buffer.from(inflateSync(zlibStored(data))),
+        Buffer.from(data),
+      ),
+    ).toBe(0);
   });
 });
