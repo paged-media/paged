@@ -190,6 +190,18 @@ async function place(name: string, native: boolean): Promise<Placed> {
         payload: { storyId, offset: 0 },
       })
     ).payload?.bounds ?? null;
+  if (name === "direct-format.docx" && native) {
+    const pg = await send({
+      kind: "requestPage",
+      payload: { pageId: pageIds[0], lod: "live" },
+    });
+    console.warn(`diag page ${JSON.stringify(pg).slice(0, 500)}`);
+    console.warn(
+      `diag line ${JSON.stringify(await send({ kind: "requestLineBounds", payload: { storyId, offset: 0 } })).slice(0, 300)}`,
+    );
+    console.warn(`diag frame ${JSON.stringify(placed).slice(0, 300)}`);
+    console.warn(`diag para ${JSON.stringify(paras[0]).slice(0, 300)}`);
+  }
   expect(await composed()).not.toBeNull();
   await h.host.document.undo();
   expect(await composed()).toBeNull();
