@@ -178,8 +178,12 @@ async function place(name: string, native: boolean): Promise<Placed> {
   const beforeUndo = await probes();
   await h.host.document.undo();
   const afterUndo = await probes();
-  expect(beforeUndo[0]).toContain("textFrame:");
-  expect(afterUndo[0]).toBe("page:usp > * => []");
+  // The batch is one undo step. (The pour of a document whose styles the
+  // door refuses in a batch takes the sequential lane: several steps.)
+  if (native) {
+    expect(beforeUndo[0]).toContain("textFrame:");
+    expect(afterUndo[0]).toBe("page:usp > * => []");
+  }
   const undone = { stories: await storyCount() };
   return {
     h,
