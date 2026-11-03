@@ -243,6 +243,47 @@ for it (the old pour's way), and the catalogue includes that style and its inven
 case in which a prefilled document holds a `docx-auto-p` style. A break in such a paragraph stays
 deferred.
 
+### Amendment: what removing the IR and `mutations.ts` takes (design, not built)
+
+The plan said the IR goes after the last slice. Having built the slices, that is not one step. Three
+things hold the IR up, and only one of them is the pour:
+
+1. **The standalone pour** (`mutations.ts` for a document opened as the document). This is what the
+   slices replaced: for a document the builder takes whole the pour is not run. What is left for it
+   is the fallback (picture looks, endnotes, comments in table cells, a document the catalogue
+   refuses). Deleting the pour means closing those four; then `buildStoryBlocks`,
+   `buildStyleMutations`, `pourSteps`, `page-items.ts` and `pourHeadersFooters` go, and the open is
+   one door.
+2. **Embedded placement** (`place.ts`, ADR 603: a `.docx` placed in a frame of a host layout). It
+   works on a live host document that already has its own styles, swatches and stories, so it can
+   only add to it through the host's mutation door (`insertText`, `applyStyle`, `insertTable`, ...)
+   or through a door that takes finished model content. The plugin API has no such door (there is no
+   snippet or paragraphs door in `host.ts`). Two ways: (a) a Rust entry returns the placement as a
+   `Vec<Mutation>` batch, built from the same builder (tables, pictures, fields and so on become the
+   batch's `insertTable`/`insertAnchoredFrame`/... ops), which keeps the wire as it is but is the
+   old pour written in Rust; or (b) a new host door, `host.document.insertContent(model)`, taking the
+   builder's paragraphs, styles and swatches, with the engine merging the catalogue (id clashes, the
+   host's theme). (b) is the cleaner end state and is an engine change, hence a contract bump (a
+   plugin-api edit, canary +1) and a wire/engine resync in one commit; (a) needs no engine change.
+3. **Save-back.** `docx-export` takes the `LoweredDoc` as the baseline it diffs the edited story
+   against (82 uses; `bindings.rs`' ordinal map, `diff.rs`, `overlay.rs`, `review.rs`, `splice.rs`,
+   17 000 lines in all). The IR is the Word-side view of the file, not only the input to the pour:
+   it holds what a model paragraph does not (Word style ids, `numId`, the original run boundaries,
+   `source_index`). Replacing it means a baseline built from `docx-core` plus a model read-back, and
+   that is the live save-back this ADR set out for; it is a project of its own.
+
+So `docx-lower` does not emit model paragraphs *instead of* the IR: the builder reads the IR and
+that is a sound split (Word semantics in `docx-lower`, the model in `docx-skeleton::body`). The
+tractable removal is (1) and, with (a) or (b), (2). The IR stays as the save-back baseline (3), renamed
+at the end to what it is.
+
+Cost, in the order I would do it: (1) close the four fallbacks, about four slices of the size of those
+already landed (picture looks ~400 lines of field ports and presets; endnotes need the page and frame
+`CreateEndnoteStory` makes, ~300 lines; comments in cells need the engine to anchor them first),
+then delete the pour and its tests, about a week with the CI cycle this repository has; (2a) a Rust
+batch builder for placement, about a week; (2b) the door, about two weeks across engine, contract and
+bundle; (3) several weeks and out of scope here. Deleting `mutations.ts` before (2) breaks Insert.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map
