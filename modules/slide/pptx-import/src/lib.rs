@@ -138,6 +138,10 @@ pub fn import_pptx(bytes: &[u8]) -> Result<Presentation, ImportError> {
             .map(|s| (s.attr_i64("cx").unwrap_or(0), s.attr_i64("cy").unwrap_or(0)))
     };
     let mut deck = Presentation {
+        properties: paged_ooxml::docprops::read(
+            pkg.part("docProps/core.xml"),
+            pkg.part("docProps/app.xml"),
+        ),
         slide_size: size("sldSz").unwrap_or((12_192_000, 6_858_000)),
         notes_size: size("notesSz").unwrap_or((6_858_000, 9_144_000)),
         default_text_style: pres_el

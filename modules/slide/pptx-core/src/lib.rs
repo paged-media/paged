@@ -50,6 +50,10 @@ pub use paged_ooxml::units::EMU_PER_PT;
 /// A whole deck.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Presentation {
+    /// The package's document properties (`docProps/core.xml`, `app.xml`) as
+    /// `(name, text)` in file order (`paged_ooxml::docprops`). Read only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<(String, String)>,
     /// `p:sldSz` (cx, cy).
     pub slide_size: (Emu, Emu),
     /// `p:notesSz` (cx, cy).

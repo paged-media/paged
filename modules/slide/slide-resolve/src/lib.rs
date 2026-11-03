@@ -1225,6 +1225,7 @@ pub fn resolve_with(deck: &Presentation, draw: &ChartDrawer) -> Deck {
     let mut out = Deck {
         width: w,
         height: h,
+        properties: deck.properties.clone(),
         ..Default::default()
     };
 

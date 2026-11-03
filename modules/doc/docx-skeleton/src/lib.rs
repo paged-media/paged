@@ -241,6 +241,7 @@ pub fn skeleton_prefilled(
     }
     let (masters, _) = masters_with(doc, options);
     let mut document = native::skeleton_document_with(&pages, &masters, name);
+    add_properties(&mut document, doc);
     let items: Vec<_> = docx_lower::objects::plan_page_items(doc, options)
         .into_iter()
         .map(|(_, item)| item)
@@ -340,6 +341,7 @@ pub fn skeleton_with(
     let pages = skeleton_pages_with(doc, options);
     let (masters, _) = masters_with(doc, options);
     let mut document = native::skeleton_document_with(&pages, &masters, name);
+    add_properties(&mut document, doc);
     // Doc ADR 614: the floats and text boxes placed as page items.
     let items: Vec<_> = docx_lower::objects::plan_page_items(doc, options)
         .into_iter()
@@ -359,4 +361,15 @@ pub fn skeleton_with(
         section_stories: pages.into_iter().map(|p| p.story_id).collect(),
         notes: Vec::new(),
     })
+}
+
+/// The imported document properties as the document label
+/// `paged_ooxml::docprops::LABEL_KEY` (nothing when the package had none).
+fn add_properties(document: &mut paged_scene::Document, doc: &DocxDocument) {
+    if let Some(v) = paged_ooxml::docprops::label_value(&doc.properties) {
+        document
+            .designmap
+            .labels
+            .push((paged_ooxml::docprops::LABEL_KEY.to_string(), v));
+    }
 }

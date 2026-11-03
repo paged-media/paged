@@ -15,6 +15,7 @@ workspace = true
 docx-core.workspace = true
 docx-lower.workspace = true
 paged-model.workspace = true
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
 serde.workspace = true
 serde_json.workspace = true
 paged-scene.workspace = true

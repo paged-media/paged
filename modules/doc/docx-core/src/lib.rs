@@ -55,6 +55,12 @@ pub use theme::{Shading, Theme, ThemeColorRef, ThemeFonts};
 /// sections (page geometry).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DocxDocument {
+    /// The package's document properties (`docProps/core.xml` and `app.xml`:
+    /// title, author, dates, producing application) as `(name, text)` in file
+    /// order (`paged_ooxml::docprops`). Read only: a save keeps both parts
+    /// as they were. The native builder carries them in a document label.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<(String, String)>,
     /// Footnotes + endnotes from the notes parts, keyed by `w:id`
     /// ([`Run::note_ref`]). Empty when the document has none.
     #[serde(default)]

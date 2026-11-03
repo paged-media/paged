@@ -34,3 +34,4 @@ keeps its text.
 | [PM-0015](PM-0015-data-and-actions-are-platform-layers.md) | Data and actions are platform layers: bindings in the engine, `data@1` and `actions@1`, Turso replaces DuckDB, one script interpreter (amended 2026-11-01: PM-0017) |
 | [PM-0016](PM-0016-extensions-adr-range.md) | The extensions' records continue at 1100–1199; 300–349 keep their numbers |
 | [PM-0017](PM-0017-built-ins-are-part-of-the-core.md) | The built-in modules are part of the core: one build, modules stay; isolation ends; one workspace gated on a spike (amends PM-0002, PM-0005, PM-0014) |
+| [PM-0018](PM-0018-document-properties-as-a-label.md) | Imported OOXML document properties (core/app) travel as the document label `x-paged:core.docprops`; no model field; parts untouched on save |
