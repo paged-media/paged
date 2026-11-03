@@ -54,9 +54,9 @@
       "description": "convert sRGB and linear light with paged_color::math",
       "allowReason": "the kernels' WGSL source strings run on the GPU and cannot call Rust; each carries the same curve as its CPU twin",
       "allow": [
-        "modules/image/image-kernels/src/families/adjust_ext.rs",
-        "modules/image/image-kernels/src/families/develop.rs",
-        "modules/image/image-kernels/src/families/select.rs"
+        "engine/core/crates/paged-kernels/src/families/adjust_ext.rs",
+        "engine/core/crates/paged-kernels/src/families/develop.rs",
+        "engine/core/crates/paged-kernels/src/families/select.rs"
       ],
       "owner": [
         "engine/core/crates/paged-color/src/math.rs",
@@ -194,6 +194,17 @@
       "patterns": [
         "\\b\\w+\\[0\\] \\* \\w+\\[0\\] \\+ \\w+\\[2\\] \\* \\w+\\[1\\]"
       ],
+      "extensions": [".rs"],
+      "baseline": []
+    },
+    {
+      "name": "affine-inverse",
+      "description": "invert a 2x3 affine with paged_geom::affine::invert_if (f32) or paged_geom::affine64::invert (f64); the pattern is the reciprocal determinant scaling the adjugate",
+      "owner": [
+        "engine/core/crates/paged-geom/src/affine.rs",
+        "engine/core/crates/paged-geom/src/affine64.rs"
+      ],
+      "patterns": ["-\\w+ \\* inv_det"],
       "extensions": [".rs"],
       "baseline": []
     }

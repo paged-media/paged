@@ -2711,6 +2711,7 @@ dependencies = [
  "idml-import",
  "paged-blend",
  "paged-gen",
+ "paged-geom",
  "paged-model",
  "paged-mutate",
  "paged-scene",
@@ -4569,6 +4570,7 @@ name = "paged-kernels"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
+ "naga",
 ]
 
 [[package]]

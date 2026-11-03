@@ -21,3 +21,7 @@ cpu = []
 
 [dependencies]
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
+
+[dev-dependencies]
+# WGSL validation of the assembled modules the moved families test in place.
+naga = { workspace = true }

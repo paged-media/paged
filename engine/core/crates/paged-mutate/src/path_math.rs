@@ -221,23 +221,7 @@ pub use paged_geom::affine::multiply as affine_multiply;
 /// Invert a 2D affine. Returns `None` when the linear part is
 /// singular (det ≈ 0); callers fall back to identity.
 pub fn affine_inverse(m: Affine) -> Option<Affine> {
-    let det = m[0] * m[3] - m[1] * m[2];
-    if det.abs() < 1e-9 {
-        return None;
-    }
-    let inv = 1.0 / det;
-    // Inverse of the linear 2x2:
-    //   | a c |^-1   1   |  d -c |
-    //   | b d |    = --- | -b  a |
-    //                det
-    let ia = m[3] * inv;
-    let ib = -m[1] * inv;
-    let ic = -m[2] * inv;
-    let id = m[0] * inv;
-    // Translation: inverse * (-t)
-    let itx = -(ia * m[4] + ic * m[5]);
-    let ity = -(ib * m[4] + id * m[5]);
-    Some([ia, ib, ic, id, itx, ity])
+    paged_geom::affine::invert_if(&m, |det| det.abs() < 1e-9)
 }
 
 /// Track L — rebase delta for a group transform change from `G_old`

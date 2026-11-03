@@ -21,7 +21,18 @@
 //! `families::<name>` path and keeps the registry that points at them.
 
 pub mod adjust;
+pub mod adjust_ext;
 pub mod arithmetic;
+pub mod band;
+pub mod blurgal;
+pub mod boolean;
 pub mod cast;
+pub mod compose;
 pub mod conv;
+pub mod develop;
+pub mod gallery;
 pub mod linear;
+pub mod minmax;
+pub mod relational;
+pub mod select;
+pub mod stylize;

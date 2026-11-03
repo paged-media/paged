@@ -23,8 +23,11 @@
 //! One definition of the product and the point map the mutation engine, the
 //! canvas and the renderer each wrote out. The expressions are the ones
 //! those copies shared, term for term (`tests::*_match_the_replaced_copies`),
-//! so results are unchanged bit for bit. The inverse is not here: its
-//! singularity test differs between callers (see the capability register).
+//! so results are unchanged bit for bit. The inverse's arithmetic is one
+//! function ([`invert_if`]); the singularity test stays the caller's, because
+//! it differs between them (`|det| < 1e-9` in the mutation engine and the
+//! IDML writer, `< 1e-12` in the display list, zero or non-finite in the
+//! canvas hit test) and a change would change which matrices invert.
 
 /// `[a, b, c, d, tx, ty]`.
 pub type Affine = [f32; 6];
@@ -50,6 +53,27 @@ pub fn multiply(outer: Affine, inner: Affine) -> Affine {
 #[inline]
 pub fn apply(m: &Affine, x: f32, y: f32) -> (f32, f32) {
     (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
+}
+
+/// The inverse of `m`, or `None` when `singular(det)` holds for its
+/// determinant `a d - b c`. The arithmetic is the one every caller wrote:
+/// the reciprocal of the determinant scales the adjugate, and the
+/// translation is `-(inverse linear part * t)`.
+#[inline]
+pub fn invert_if(m: &Affine, singular: impl FnOnce(f32) -> bool) -> Option<Affine> {
+    let [a, b, c, d, tx, ty] = *m;
+    let det = a * d - b * c;
+    if singular(det) {
+        return None;
+    }
+    let inv_det = 1.0 / det;
+    let ia = d * inv_det;
+    let ib = -b * inv_det;
+    let ic = -c * inv_det;
+    let id = a * inv_det;
+    let itx = -(ia * tx + ic * ty);
+    let ity = -(ib * tx + id * ty);
+    Some([ia, ib, ic, id, itx, ity])
 }
 
 #[cfg(test)]
@@ -154,5 +178,54 @@ mod tests {
         let m = [2.0, 1.0, -1.0, 3.0, 5.0, 6.0];
         assert_eq!(multiply(IDENTITY, m), m);
         assert_eq!(multiply(m, IDENTITY), m);
+    }
+
+    /// The four replaced inverses, each with its own test, written out as
+    /// they were (`paged_mutate::path_math::affine_inverse` and
+    /// `idml_export::rewrite::invert_matrix` were the same text).
+    fn old_inverse(m: &Affine, singular: impl Fn(f32) -> bool) -> Option<Affine> {
+        let [a, b, c, d, tx, ty] = *m;
+        let det = a * d - b * c;
+        if singular(det) {
+            return None;
+        }
+        let inv_det = 1.0 / det;
+        let ia = d * inv_det;
+        let ib = -b * inv_det;
+        let ic = -c * inv_det;
+        let id = a * inv_det;
+        Some([ia, ib, ic, id, -(ia * tx + ic * ty), -(ib * tx + id * ty)])
+    }
+
+    #[test]
+    fn the_inverse_matches_the_replaced_copies_under_each_singularity_test() {
+        let mut all = samples();
+        all.extend([
+            // Determinants either side of 1e-9 and 1e-12, zero, and non-finite.
+            [1e-4, 0.0, 0.0, 1e-5, 3.0, 4.0],
+            [1e-4, 0.0, 0.0, 1e-4, 3.0, 4.0],
+            [1e-6, 0.0, 0.0, 1e-6, 3.0, 4.0],
+            [1e-7, 0.0, 0.0, 1e-7, 3.0, 4.0],
+            [f32::NAN, 0.0, 0.0, 1.0, 0.0, 0.0],
+            [f32::INFINITY, 0.0, 0.0, 1.0, 0.0, 0.0],
+            [f32::MAX, 0.0, 0.0, f32::MAX, 1.0, 1.0],
+            [1.0, 2.0, 2.0, 4.0, 0.0, 0.0],
+        ]);
+        type Test = (&'static str, fn(f32) -> bool);
+        let tests: [Test; 3] = [
+            ("1e-9", |d| d.abs() < 1e-9),
+            ("1e-12", |d| d.abs() < 1e-12),
+            ("zero or non-finite", |d| d == 0.0 || !d.is_finite()),
+        ];
+        for (name, singular) in tests {
+            let mut none = 0;
+            for m in &all {
+                let new = invert_if(m, singular);
+                let old = old_inverse(m, singular);
+                assert_eq!(new.map(bits), old.map(bits), "{name}: {m:?}");
+                none += new.is_none() as usize;
+            }
+            assert!(none >= 2, "{name} never reported a singular matrix");
+        }
     }
 }
