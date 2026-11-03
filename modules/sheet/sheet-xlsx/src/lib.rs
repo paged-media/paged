@@ -53,6 +53,7 @@ pub mod doc_style_map;
 pub mod error;
 pub mod kind;
 pub mod links;
+pub mod minimal;
 #[cfg(feature = "ods")]
 pub mod ods;
 pub mod opc;

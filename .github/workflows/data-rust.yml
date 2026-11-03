@@ -22,6 +22,16 @@ on:
       - "engine/core/Cargo.lock"
       # The shared formatting crate (platform/shared/fmt), a path dependency.
       - "platform/shared/fmt/**"
+      # The XLSX reader paged-data-xlsx runs on (sheet-xlsx and what it builds on).
+      - "modules/sheet/sheet-core/**"
+      - "modules/sheet/sheet-format/**"
+      - "modules/sheet/sheet-xlsx/**"
+      - "modules/sheet/sheet-lower/**"
+      - "modules/sheet/sheet-chart/**"
+      - "modules/sheet/sheet-parser/**"
+      - "modules/sheet/sheet-fn/**"
+      - "platform/shared/ooxml/**"
+      - "platform/shared/dml-*/**"
       - ".github/workflows/data-rust.yml"
       - ".github/actions/wasm-tools/**"
       # The wasm-bindgen and binaryen pins the action reads.
@@ -45,6 +55,16 @@ on:
       - "engine/core/Cargo.lock"
       # The shared formatting crate (platform/shared/fmt), a path dependency.
       - "platform/shared/fmt/**"
+      # The XLSX reader paged-data-xlsx runs on (sheet-xlsx and what it builds on).
+      - "modules/sheet/sheet-core/**"
+      - "modules/sheet/sheet-format/**"
+      - "modules/sheet/sheet-xlsx/**"
+      - "modules/sheet/sheet-lower/**"
+      - "modules/sheet/sheet-chart/**"
+      - "modules/sheet/sheet-parser/**"
+      - "modules/sheet/sheet-fn/**"
+      - "platform/shared/ooxml/**"
+      - "platform/shared/dml-*/**"
       - ".github/workflows/data-rust.yml"
       - ".github/actions/wasm-tools/**"
       # The wasm-bindgen and binaryen pins the action reads.

@@ -30,7 +30,7 @@
 //!   its JSON text.
 //! - **Parquet**: the `parquet` crate's row reader (no Arrow). Snappy, gzip,
 //!   brotli and lz4 pages read; zstd does not (its crate binds C).
-//! - **XLSX**: `data-xlsx` (calamine), one worksheet.
+//! - **XLSX**: `data-xlsx` (over `sheet-xlsx`), one worksheet.
 
 use data_core::temporal::civil_from_days;
 use serde::Serialize;

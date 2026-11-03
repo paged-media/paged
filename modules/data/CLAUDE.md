@@ -65,7 +65,7 @@ The ENGINE is far ahead of what a user can reach from the panels:
   writer) matches all 8 InDesign recordings on real core; record flow writes
   frames (`src/flow-writer.ts`); tables/barcodes re-lower in place
   (`src/relower.ts`). SOURCES + QUERY (wave 6): local import of CSV/TSV/JSON/Parquet/XLSX
-  (all read in Rust by `data-store`; XLSX via `data-xlsx`/calamine), saved with
+  (all read in Rust by `data-store`; XLSX via `data-xlsx` over `sheet-xlsx`), saved with
   the document; a Data query panel (SQL + builders + preview); every query
   passes a lexer allow-list guard (`src/query/sql.ts`: one SELECT over source
   tables, no file/URL reads, no PRAGMA/ATTACH; asks the engine nothing) and runs

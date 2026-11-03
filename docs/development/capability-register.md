@@ -127,7 +127,7 @@ reader (it reads through its own element tree and keeps colours unresolved, with
 slide's resolver) and `slide-resolve` its key/variant logic. The format scheme is not modelled (ADR 1056,
 Amendment 1).
 Themes in IDML (engine ADR 1057, built): plain swatches for InDesign, the theme in the document label `x-paged:core.theme`, \"create theme from swatches\", font references on styles, presets owned by `paged_model::theme::presets`.
-Writable XML tree ×4. Minimal `.xlsx` writer ×3 (`slide-sheet`, `sheet-js` csv, ods). ODF layer
+Writable XML tree ×4. Minimal `.xlsx` writer: DONE (W5), one `sheet_xlsx::minimal` (package, A1 addressing, inline-string cell) used by `slide-sheet`, `sheet-js` csv and ods. ODF layer
 shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 
 ### Lowering
@@ -149,7 +149,7 @@ data each have their own lowering. Sheet and data each have their own lowering.
 ### Charts, data, scripting, PDF
 
 Doc has no charts (reuse `dml-chart` and the sheet engine). Slide's chart data editing carries a
-second compiled sheet engine. `paged-data-xlsx` (calamine) → `sheet-xlsx`; CSV ×2; two Boa
+second compiled sheet engine. `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` overlap `paged-script` and `paged-cli`. PDF read has two
 hayro devices (placed PDF, pdf-import); blank IDML / OCF zip writers ×5.
 

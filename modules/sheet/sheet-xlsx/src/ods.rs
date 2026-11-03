@@ -1446,22 +1446,7 @@ fn esc(s: &str) -> String {
     paged_ooxml::xml::escape_attr(s)
 }
 
-fn col_name(mut c: u32) -> String {
-    let mut s = Vec::new();
-    loop {
-        s.push(b'A' + (c % 26) as u8);
-        if c < 26 {
-            break;
-        }
-        c = c / 26 - 1;
-    }
-    s.reverse();
-    String::from_utf8(s).expect("ascii")
-}
-
-fn a1(row: u32, col: u32) -> String {
-    format!("{}{}", col_name(col), row + 1)
-}
+use crate::minimal::a1;
 
 fn num_text(n: f64) -> String {
     if n.fract() == 0.0 && n.abs() < 1e15 {
