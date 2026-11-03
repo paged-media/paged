@@ -52,37 +52,35 @@
     {
       "name": "srgb-transfer",
       "description": "convert sRGB and linear light with paged_color::math",
-      "owner": [
-        "engine/core/crates/paged-color/src/math.rs",
-        "engine/core/crates/paged-colour-math/"
-      ],
-      "patterns": ["0\\.04045"],
-      "extensions": [".rs", ".ts", ".tsx"],
-      "baseline": [
-        "apps/editor/apps/canvas/scripts/demo-files.ts",
-        "apps/editor/apps/canvas/src/panels/info-readouts.ts",
-        "apps/editor/packages/ui/src/color/color-space.ts",
-        "engine/core/crates/paged-gpu/src/svg_filter.rs",
-        "modules/draw/packages/draw-geometry/src/color-harmony.ts",
-        "modules/image/image-conformance/tests/it/filters_develop.rs",
+      "allowReason": "the kernels' WGSL source strings run on the GPU and cannot call Rust; each carries the same curve as its CPU twin",
+      "allow": [
         "modules/image/image-kernels/src/families/adjust_ext.rs",
         "modules/image/image-kernels/src/families/develop.rs",
         "modules/image/image-kernels/src/families/select.rs"
-      ]
+      ],
+      "owner": [
+        "engine/core/crates/paged-color/src/math.rs",
+        "engine/core/crates/paged-colour-math/",
+        "platform/shared/helpers/src/colour.ts"
+      ],
+      "patterns": ["0\\.04045"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "baseline": []
     },
     {
       "name": "blend-mode-enum",
       "description": "name blend modes with paged_blend::BlendMode",
+      "allowReason": "a wire vocabulary that must not change spelling (SceneBlendMode: camelCase, 15 modes, the C-1 wire core deserializes; web-render's two mirror it and web-render has no engine dependency) or a wrapper around paged_blend::BlendMode that adds ABR-only texture modes (paged-psd)",
+      "allow": [
+        "engine/core/crates/paged-compose/src/scene_layer.rs",
+        "engine/core/crates/paged-psd/src/abr/blend.rs",
+        "modules/web/packages/web-render/src/display_list.rs",
+        "modules/web/packages/web-render/src/wire.rs"
+      ],
       "owner": ["engine/core/crates/paged-blend/"],
       "patterns": ["enum\\s+\\w*Blend\\w*\\s*\\{"],
       "extensions": [".rs"],
-      "baseline": [
-        "engine/core/crates/paged-compose/src/scene_layer.rs",
-        "engine/core/crates/paged-psd/src/abr/blend.rs",
-        "modules/image/image-kernels/src/compose_twin.rs",
-        "modules/web/packages/web-render/src/display_list.rs",
-        "modules/web/packages/web-render/src/wire.rs"
-      ]
+      "baseline": []
     },
     {
       "name": "fnv-hash",
@@ -127,35 +125,38 @@
     {
       "name": "bezier-fixed-step",
       "description": "sample a cubic at a fixed step count with paged_geom::flatten (cubic_point, sample_cubic, flatten_cubic); the pattern is the Bernstein weight 3(1-t)^2 t",
+      "allowReason": "f64 samplers in crates below or beside paged-geom's dependency reach: paged-model's winding sits under paged-geom, draw-trace and slide-anim depend on no engine crate, and the image bundle takes no engine geometry; paged_geom::flatten is f32 (cubic_point_f64 serves the engine crates)",
+      "allow": [
+        "engine/core/crates/paged-model/src/winding.rs",
+        "modules/draw/crates/draw-trace/src/contour.rs",
+        "modules/image/image-js/src/masking.rs",
+        "modules/slide/slide-anim/src/path.rs"
+      ],
       "owner": [
         "engine/core/crates/paged-geom/src/flatten.rs",
         "engine/core/crates/paged-geom/src/planar_dcel.rs"
       ],
       "patterns": ["3\\.0 \\* (mt|u|inv) \\* (mt|u|inv) \\* (t|s)\\b"],
       "extensions": [".rs"],
-      "baseline": [
-        "engine/core/crates/paged-canvas/src/group_box.rs",
-        "engine/core/crates/paged-model/src/winding.rs",
-        "modules/draw/crates/draw-trace/src/contour.rs",
-        "modules/image/image-js/src/masking.rs",
-        "modules/slide/slide-anim/src/path.rs"
-      ]
+      "baseline": []
     },
     {
       "name": "bezier-kappa",
       "description": "the circle's cubic control distance is paged_geom::KAPPA / KAPPA_F32; arcs and ellipses come from kurbo / paged-geom (capability register, geometry)",
-      "owner": ["engine/core/crates/paged-geom/src/lib.rs"],
-      "patterns": ["0?\\.55228"],
-      "extensions": [".rs", ".ts", ".tsx"],
-      "baseline": [
-        "modules/draw/packages/draw-bundle/test/oracle/perspective-grid.spec.ts",
+      "allowReason": "test fixtures that pin a literal, truncated number on purpose (the oracle recordings and the bake fidelity case); the full-precision uses import KAPPA",
+      "allow": [
         "modules/draw/packages/draw-bundle/test/roundtrip/author.ts",
         "modules/draw/packages/draw-geometry/test/bench-data.ts",
         "modules/draw/packages/draw-geometry/test/polygon.spec.ts",
-        "modules/draw/packages/draw-geometry/test/warp/liquify.spec.ts",
-        "modules/web/packages/web-bundle/src/bake-plan.ts",
         "modules/web/packages/web-bundle/test/bake-fidelity.spec.ts"
-      ]
+      ],
+      "owner": [
+        "engine/core/crates/paged-geom/src/lib.rs",
+        "platform/shared/helpers/src/geometry.ts"
+      ],
+      "patterns": ["0?\\.55228"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "baseline": []
     },
     {
       "name": "sha2-constants",

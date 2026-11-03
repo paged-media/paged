@@ -51,6 +51,8 @@
 
 import { describe, expect, it } from "bun:test";
 
+import { KAPPA } from "@paged-media/helpers";
+
 import {
   applyHomography,
   homographyFromQuads,
@@ -235,7 +237,7 @@ describe("oracle — the perspective grid (Illustrator 30.1) [plugin-draw.distor
       expect(c.measured.paths[0]!.anchors).toHaveLength(4);
       // The same ellipse through the fitted plane map, ours.
       const p = c.parameters;
-      const k = 0.5522847498307936;
+      const k = KAPPA;
       const cx = p.left + p.width / 2;
       const cy = p.top - p.height / 2;
       const rx = p.width / 2;

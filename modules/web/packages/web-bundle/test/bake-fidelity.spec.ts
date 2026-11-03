@@ -585,6 +585,18 @@ describe("bake fidelity — images @feat:plugin-web.bake-to-native", () => {
     expect([...raw]).toEqual([0, ...rgba]);
   });
 
+  it("a small image's bytes are the stored stream, the same on every platform", async () => {
+    const png = await encodePng(
+      new Uint8Array([255, 0, 0, 255, 0, 255, 0, 128]),
+      2,
+      1,
+    );
+    // Recorded from the encoder before it moved onto @paged-media/helpers.
+    expect(Buffer.from(png).toString("hex")).toBe(
+      "89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a00000014494441547801010900f6ff00ff0000ff00ff00801079037e36a068600000000049454e44ae426082",
+    );
+  });
+
   it("a stored zlib stream inflates to its input", () => {
     const data = new Uint8Array(70000).map((_, i) => i % 251);
     expect(

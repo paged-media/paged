@@ -28,7 +28,7 @@
 
 // ───────────────────────────────────────────────────────── ICC profile
 
-import { crc32 } from "@paged-media/helpers";
+import { crc32, linearToSrgb, srgbToLinear } from "@paged-media/helpers";
 
 const D50 = [0.9642, 1, 0.8249] as const;
 
@@ -56,10 +56,8 @@ function invert3(m: readonly (readonly number[])[]): number[][] {
 const XYZ_TO_RGB = invert3(RGB_TO_XYZ);
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-const toLinear = (v: number) =>
-  v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-const toGamma = (v: number) =>
-  v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055;
+const toLinear = srgbToLinear;
+const toGamma = linearToSrgb;
 
 function rgbToLab(rgb: readonly number[]): [number, number, number] {
   const lin = rgb.map(toLinear);

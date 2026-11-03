@@ -41,7 +41,7 @@
 //! adjustments. A plan with one of them composites in RGB, as before,
 //! and [`LayerStack::ink_fold_declines`] says why.
 
-use image_kernels::compose_twin::Blend;
+use image_kernels::compose_twin::from_kernel_id;
 
 use super::super::{LayerStack, Plate};
 use super::Step;
@@ -52,7 +52,7 @@ use image_gpu::GpuContext;
 
 /// Is a blend applied channel by channel?
 fn separable(def: &image_kernels::KernelDef) -> bool {
-    Blend::from_kernel_id(def.id).is_some_and(|b| !b.is_non_separable())
+    from_kernel_id(def.id).is_some_and(|b| !b.is_non_separable())
 }
 
 /// Hue, Saturation, Color and Luminosity in a CMYK document (image ADR

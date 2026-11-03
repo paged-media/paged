@@ -403,6 +403,27 @@ fn compose_psd_key_roundtrip() {
     assert_eq!(Blend::from_psd_key(b"zzzz"), None, "unknown key → None");
 }
 
+/// The twin's operators are the engine's modes (engine ADR 1034): every mode
+/// but Dissolve has a `compose.<id>` kernel in the registry, and the twin
+/// resolves the id back to the mode.
+#[test]
+fn compose_twin_covers_the_engine_modes() {
+    use image_kernels::compose_twin::{from_kernel_id, ALL};
+    let mut covered = 0;
+    for mode in paged_blend::BlendMode::MENU {
+        let id = format!("compose.{}", mode.id());
+        if mode == paged_blend::BlendMode::Dissolve {
+            assert!(from_kernel_id(&id).is_none());
+            continue;
+        }
+        assert_eq!(from_kernel_id(&id), Some(mode), "{mode:?}");
+        assert!(ALL.contains(&mode), "{mode:?}");
+        covered += 1;
+    }
+    assert_eq!(covered, ALL.len());
+    assert_eq!(from_kernel_id("adjust.levels"), None);
+}
+
 #[test]
 fn compose_normal_gamma_parity() {
     use image_conformance::compose_ref::composite_normal_gamma;

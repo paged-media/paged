@@ -165,9 +165,9 @@ pub fn write_image(
     let rgba: bytes::Bytes = if !img.rgba.is_empty() {
         img.rgba.clone()
     } else if !img.encoded.is_empty() {
-        match image::load_from_memory(&img.encoded) {
-            Ok(decoded) => bytes::Bytes::from(decoded.to_rgba8().into_raw()),
-            Err(_) => {
+        match decode_encoded_rgba(img) {
+            Some(rgba) => rgba,
+            None => {
                 diagnostics.push(ExportDiagnostic::ImageMissingBytes { image_index });
                 return None;
             }
@@ -250,6 +250,17 @@ pub fn write_image(
     Some(img_ref)
 }
 
+/// RGBA8 of an image that carries only its encoded bytes, decoded as the
+/// rasterizer decodes it (`paged_raster::decode_rgba8_at_with`, the frame's
+/// rendering intent): a TIFF or PSD converts through its embedded profile
+/// instead of arriving as `image`'s RGB guess. PNG, WebP and the other
+/// formats `image` reads decode to the same bytes as before.
+fn decode_encoded_rgba(img: &DecodedImage) -> Option<bytes::Bytes> {
+    let conv = paged_raster::PagedColour::new(img.rendering.unwrap_or_default());
+    paged_raster::decode_rgba8_at_with(&img.encoded, img.width, img.height, &conv)
+        .map(bytes::Bytes::from)
+}
+
 fn write_icc(state: &mut DocState, icc: &[u8]) -> Ref {
     let r = state.refs.alloc();
     let mut s = state.pdf.icc_profile(r, icc);
@@ -268,7 +279,91 @@ fn _name_check(_: Name) {}
 
 #[cfg(test)]
 mod tests {
-    use super::downsample_target;
+    use super::{decode_encoded_rgba, downsample_target};
+    use paged_compose::DecodedImage;
+
+    fn encoded_only(bytes: Vec<u8>, width: u32, height: u32) -> DecodedImage {
+        DecodedImage {
+            width,
+            height,
+            encoded: bytes::Bytes::from(bytes),
+            rgba: bytes::Bytes::new(),
+            icc: None,
+            rendering: None,
+        }
+    }
+
+    fn png(w: u32, h: u32) -> Vec<u8> {
+        let img = image::RgbaImage::from_fn(w, h, |x, y| {
+            image::Rgba([
+                (x * 40) as u8,
+                (y * 30) as u8,
+                (x * y) as u8,
+                200 + (x % 3) as u8,
+            ])
+        });
+        let mut out = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+            .unwrap();
+        out
+    }
+
+    /// The lazy fallback decodes a PNG to the bytes `image` gave before.
+    #[test]
+    fn encoded_only_png_decodes_as_the_image_crate_did() {
+        let bytes = png(7, 5);
+        let old = image::load_from_memory(&bytes)
+            .unwrap()
+            .to_rgba8()
+            .into_raw();
+        let new = decode_encoded_rgba(&encoded_only(bytes, 7, 5)).unwrap();
+        assert_eq!(new.as_ref(), old.as_slice());
+    }
+
+    /// A TIFF the file carries only encoded: with no profile its CMYK
+    /// converts as `image` converted it; the bytes are unchanged.
+    #[test]
+    fn encoded_only_profile_less_cmyk_tiff_is_unchanged() {
+        use paged_raster::{Alpha, ColorModel, RasterImage, RasterInfo, Samples};
+        let (w, h) = (6u32, 4u32);
+        let samples: Vec<u8> = (0..w * h * 4).map(|i| (i * 7 % 251) as u8).collect();
+        let info = RasterInfo {
+            format: paged_raster::Format::Tiff,
+            width: w,
+            height: h,
+            channels: 4,
+            bits_per_sample: 8,
+            sample_format: paged_raster::SampleFormat::UInt,
+            color_model: ColorModel::Cmyk,
+            alpha: Alpha::None,
+            icc: None,
+            xmp: None,
+            iptc: None,
+            exif: None,
+            photoshop_irb: None,
+            has_layers: false,
+            layer_count: Some(0),
+            resolution: None,
+            orientation: 1,
+            page_count: 1,
+        };
+        let img = RasterImage {
+            info,
+            width: w,
+            height: h,
+            model: ColorModel::Cmyk,
+            alpha: Alpha::None,
+            data: Samples::U8(samples),
+        };
+        let bytes =
+            paged_raster::encode_tiff(&img, paged_raster::TiffEncodeOptions::default()).unwrap();
+        let old = image::load_from_memory(&bytes)
+            .unwrap()
+            .to_rgba8()
+            .into_raw();
+        let new = decode_encoded_rgba(&encoded_only(bytes, w, h)).unwrap();
+        assert_eq!(new.as_ref(), old.as_slice());
+    }
 
     // the-renderer.pdf-image-downsampling: bicubic resample of over-resolution
     // placed images down to the target ppi on PDF export.

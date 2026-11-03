@@ -49,6 +49,28 @@ pub fn cubic_point(p0: Pt, c1: Pt, c2: Pt, p1: Pt, t: f32) -> Pt {
     )
 }
 
+/// [`cubic_point`] in double precision, for the callers that measure
+/// (exact extents, areas) rather than draw: the same Bernstein form with the
+/// same expression order, so each `f64` copy it replaces keeps its bits.
+#[inline]
+pub fn cubic_point_f64(
+    p0: (f64, f64),
+    c1: (f64, f64),
+    c2: (f64, f64),
+    p1: (f64, f64),
+    t: f64,
+) -> (f64, f64) {
+    let mt = 1.0 - t;
+    let w0 = mt * mt * mt;
+    let w1 = 3.0 * mt * mt * t;
+    let w2 = 3.0 * mt * t * t;
+    let w3 = t * t * t;
+    (
+        w0 * p0.0 + w1 * c1.0 + w2 * c2.0 + w3 * p1.0,
+        w0 * p0.1 + w1 * c1.1 + w2 * c2.1 + w3 * p1.1,
+    )
+}
+
 /// The point at parameter `t` of the quadratic `p0 → c → p1`.
 #[inline]
 pub fn quad_point(p0: Pt, c: Pt, p1: Pt, t: f32) -> Pt {
@@ -221,6 +243,27 @@ mod tests {
                     let b: Vec<_> = old.iter().copied().map(bits).collect();
                     assert_eq!(a, b, "curve {p:?} at {n} steps");
                 }
+            }
+        }
+    }
+
+    /// `paged-canvas`'s `group_box::cubic_extent` evaluation (before).
+    #[test]
+    fn f64_cubics_match_the_replaced_copy_bit_for_bit() {
+        for p in curves() {
+            let q = p.map(|(x, y)| (x as f64 * 1.000_001, y as f64 * 0.999_999));
+            for i in 0..=64 {
+                let t = i as f64 / 64.0 * 0.999_7 + 0.000_1 * (i % 3) as f64;
+                let mt = 1.0 - t;
+                let (w0, w1, w2, w3) =
+                    (mt * mt * mt, 3.0 * mt * mt * t, 3.0 * mt * t * t, t * t * t);
+                let x = w0 * q[0].0 + w1 * q[1].0 + w2 * q[2].0 + w3 * q[3].0;
+                let y = w0 * q[0].1 + w1 * q[1].1 + w2 * q[2].1 + w3 * q[3].1;
+                let new = cubic_point_f64(q[0], q[1], q[2], q[3], t);
+                assert_eq!(
+                    (new.0.to_bits(), new.1.to_bits()),
+                    (x.to_bits(), y.to_bits())
+                );
             }
         }
     }

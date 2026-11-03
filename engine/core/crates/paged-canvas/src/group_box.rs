@@ -42,6 +42,7 @@
 use paged_model::{Bounds, FrameRef, PathAnchor, Spread};
 
 use paged_geom::affine::{apply, multiply, Affine, IDENTITY};
+use paged_geom::flatten::cubic_point_f64;
 
 /// The box of the group at `group_idx` in `spread`: bounds in the group's
 /// own space and the composed transform that places them in spread space
@@ -198,10 +199,8 @@ fn cubic_extent(p0: (f32, f32), p1: (f32, f32), p2: (f32, f32), p3: (f32, f32)) 
         roots
     };
     let eval = |t: f64| -> (f32, f32) {
-        let mt = 1.0 - t;
-        let (w0, w1, w2, w3) = (mt * mt * mt, 3.0 * mt * mt * t, 3.0 * mt * t * t, t * t * t);
-        let x = w0 * p0.0 as f64 + w1 * p1.0 as f64 + w2 * p2.0 as f64 + w3 * p3.0 as f64;
-        let y = w0 * p0.1 as f64 + w1 * p1.1 as f64 + w2 * p2.1 as f64 + w3 * p3.1 as f64;
+        let w = |p: (f32, f32)| (p.0 as f64, p.1 as f64);
+        let (x, y) = cubic_point_f64(w(p0), w(p1), w(p2), w(p3), t);
         (x as f32, y as f32)
     };
     for t in axis(p0.0, p1.0, p2.0, p3.0)
