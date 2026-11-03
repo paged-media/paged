@@ -74,3 +74,15 @@ export function rgbToCmyk(
     Math.round(k * 100),
   ];
 }
+
+/** sRGB-encoded `c` (0..1) in linear light (the sRGB EOTF). The Rust twin is
+ *  `paged_color::math::srgb_to_linear` (f32); this one is f64. */
+export function srgbToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** Linear light `c` as sRGB-encoded (the sRGB OETF, the inverse of
+ *  {@link srgbToLinear}). Not clamped above 1. */
+export function linearToSrgb(c: number): number {
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
+}

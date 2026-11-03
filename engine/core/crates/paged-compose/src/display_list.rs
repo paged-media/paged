@@ -222,8 +222,7 @@ impl Transform {
 
     /// Apply to a point.
     pub fn apply(&self, x: f32, y: f32) -> (f32, f32) {
-        let [a, b, c, d, tx, ty] = self.0;
-        (a * x + c * y + tx, b * x + d * y + ty)
+        paged_geom::affine::apply(&self.0, x, y)
     }
 
     /// Build the transform that maps the unit rect `[0,0,1,1]` onto
@@ -239,16 +238,7 @@ impl Transform {
     /// Compose `self` with `inner`: the result applies `inner` first,
     /// then `self`. I.e. `self.compose(inner).apply(p) == self.apply(inner.apply(p))`.
     pub fn compose(&self, inner: &Transform) -> Transform {
-        let [a1, b1, c1, d1, tx1, ty1] = self.0;
-        let [a2, b2, c2, d2, tx2, ty2] = inner.0;
-        Transform([
-            a1 * a2 + c1 * b2,
-            b1 * a2 + d1 * b2,
-            a1 * c2 + c1 * d2,
-            b1 * c2 + d1 * d2,
-            a1 * tx2 + c1 * ty2 + tx1,
-            b1 * tx2 + d1 * ty2 + ty1,
-        ])
+        Transform(paged_geom::affine::multiply(self.0, inner.0))
     }
 
     /// Inverse of this affine, or `None` when the 2×2 linear block is

@@ -23,6 +23,7 @@
 // display pixel allows (sRGB → hex and CIE L*a*b*, D50 as ICC's PCS).
 
 import type { ElementGeometryItem } from "@paged-media/client";
+import { srgbToLinear } from "@paged-media/helpers";
 
 export interface SelectionReadout {
   /** Top-left of the selection's axis-aligned box, page space, pt. */
@@ -158,7 +159,7 @@ export function srgbToLab(
 ): [number, number, number] {
   const lin = (v: number) => {
     const c = v / 255;
-    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    return srgbToLinear(c);
   };
   const R = lin(r);
   const G = lin(g);

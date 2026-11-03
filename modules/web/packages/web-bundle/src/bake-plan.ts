@@ -49,7 +49,7 @@
 // Geometry stays in the SceneLayer's own frame-content POINTS; the
 // orchestrator offsets by the frame's page origin.
 
-import { fnv1a32Hex } from "@paged-media/helpers";
+import { fnv1a32Hex, KAPPA } from "@paged-media/helpers";
 import type {
   MutationInput,
   PageId,
@@ -279,10 +279,6 @@ export function pathAsRect(
   const yArr = [...ys].sort((a, b) => a - b);
   return [yArr[0], xArr[0], yArr[1], xArr[1]];
 }
-
-/** The control-point distance of a cubic quarter circle, as a fraction of
- *  its radius. */
-const KAPPA = 0.552284749831;
 
 /** A path is a rectangle with ONE corner radius iff it is a single subpath of
  *  four circular quarter arcs (cubics, control points at {@link KAPPA} of the

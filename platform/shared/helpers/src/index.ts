@@ -39,7 +39,14 @@ export {
   dataUrlBytes,
 } from "./base64.ts";
 export { PT_PER_PX, PT_PER_UNIT, PX_PER_PT, parseLength } from "./units.ts";
-export { cmykToRgb, hexToRgb, rgbToCmyk, rgbToHex } from "./colour.ts";
+export {
+  cmykToRgb,
+  hexToRgb,
+  linearToSrgb,
+  rgbToCmyk,
+  rgbToHex,
+  srgbToLinear,
+} from "./colour.ts";
 export {
   LABEL_PREFIX,
   asciiEscape,
@@ -125,3 +132,4 @@ export {
   trustedHtml,
   trustedScript,
 } from "./trusted-types.ts";
+export { KAPPA } from "./geometry.ts";

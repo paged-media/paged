@@ -48,21 +48,12 @@ impl Affine {
 
     /// `self ∘ inner`: apply `inner`, then `self`.
     pub fn compose(self, inner: Affine) -> Affine {
-        let [a, b, c, d, e, f] = self.0;
-        let [a2, b2, c2, d2, e2, f2] = inner.0;
-        Affine([
-            a * a2 + c * b2,
-            b * a2 + d * b2,
-            a * c2 + c * d2,
-            b * c2 + d * d2,
-            a * e2 + c * f2 + e,
-            b * e2 + d * f2 + f,
-        ])
+        Affine(paged_geom::affine::multiply(self.0, inner.0))
     }
 
     pub fn apply(&self, p: [f32; 2]) -> [f32; 2] {
-        let [a, b, c, d, e, f] = self.0;
-        [a * p[0] + c * p[1] + e, b * p[0] + d * p[1] + f]
+        let (x, y) = paged_geom::affine::apply(&self.0, p[0], p[1]);
+        [x, y]
     }
 
     /// The factor a length scales by on average: `√|det|`.

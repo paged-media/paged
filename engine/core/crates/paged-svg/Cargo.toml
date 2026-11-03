@@ -21,6 +21,7 @@ import = [
     "usvg/text",
     "dep:paged-wire",
     "dep:paged-mutate",
+    "dep:paged-geom",
     "dep:base64",
     "dep:serde",
     "dep:tsify-next",
@@ -56,6 +57,8 @@ flate2 = { workspace = true }
 # The import's output is the wire's own vocabulary.
 paged-wire = { path = "../paged-wire", optional = true }
 paged-mutate = { path = "../paged-mutate", optional = true }
+# The affine product and point map the import's `Affine` delegates to.
+paged-geom = { path = "../paged-geom", optional = true }
 # The export's input: a page's display list.
 paged-compose = { path = "../paged-compose", optional = true }
 # Images of the export that are not PNG or JPEG are re-encoded as PNG.

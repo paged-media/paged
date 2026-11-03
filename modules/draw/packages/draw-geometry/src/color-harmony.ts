@@ -17,7 +17,7 @@
  */
 
 // COLOUR HARMONY — the pure half of Recolor Artwork and the Color Guide
-// (Illustrator §18). Zero dependencies, no host: sRGB 0..255 in and out.
+// (Illustrator §18). No host and only the shared colour helpers: sRGB 0..255 in and out.
 //
 // THREE COLOUR SPACES, each for what it is good at:
 //   · HSB (= HSV) is the WHEEL. A harmony rule is a set of hue angles, a
@@ -35,6 +35,8 @@
 // (ties by input order) and runs a fixed number of iterations, so "reduce
 // to 3" on the same selection gives the same three colours every time —
 // a recolour preview the user accepts is exactly what applies.
+
+import { linearToSrgb, srgbToLinear } from "@paged-media/helpers";
 
 import type { Rgb } from "./svg-color";
 
@@ -94,10 +96,10 @@ export function hsbToRgb(c: Hsb): Rgb {
 
 const toLinear = (v: number): number => {
   const c = v / 255;
-  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  return srgbToLinear(c);
 };
 const fromLinear = (v: number): number => {
-  const c = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
+  const c = linearToSrgb(v);
   return c * 255;
 };
 
