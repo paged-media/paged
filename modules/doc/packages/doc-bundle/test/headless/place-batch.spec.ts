@@ -158,16 +158,20 @@ async function place(name: string, native: boolean): Promise<Placed> {
     off = b.end + 1;
   }
   // One undo step takes the whole placement back.
+  // The frame is gone: nothing answers a hit where it stood.
+  const hitAt = async () =>
+    (
+      await h.host.document
+        .hitTest(
+          (await h.host.document.collection<{ selfId: string }>("pages"))[0]!
+            .selfId,
+          [306, 396],
+        )
+        .catch(() => null)
+    )?.storyId ?? null;
+  expect(await hitAt()).toBe(storyId);
   await h.host.document.undo();
-  const after = await send({
-    kind: "requestStoryContent",
-    payload: { storyId },
-  });
-  const left = (after.payload?.content?.paragraphs ?? [])
-    .flatMap((p: { runs: Array<{ text: string }> }) => p.runs)
-    .map((x: { text: string }) => x.text)
-    .join("");
-  expect(left).toBe("");
+  expect(await hitAt()).toBeNull();
   const undone = { stories: await storyCount() };
   return {
     h,

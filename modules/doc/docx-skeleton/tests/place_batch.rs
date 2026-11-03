@@ -249,7 +249,7 @@ fn a_document_with_something_not_yet_in_the_batch_is_refused_with_the_reason() {
     for (bytes, why) in [
         (docx_conformance::tracked_changes_docx(), "tracked"),
         (docx_conformance::picture_effects_docx(), "picture look"),
-        (docx_conformance::objects_text_boxes_docx(), "text box"),
+        (docx_conformance::objects_text_boxes_docx(), "floating objects"),
     ] {
         let err = place_batch(&lowered(&bytes), STORY).expect_err("refused");
         assert!(err.contains(why), "{why}: {err}");
