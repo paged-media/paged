@@ -929,7 +929,6 @@ export {
   type ResolvedFieldTargets,
 } from "./catalog/object-property-field";
 export {
-  PROPERTY_BINDINGS_COMMAND,
   probeBound,
   BIND_PROPERTY_ARGS,
   BIND_PROPERTY_COMMAND,

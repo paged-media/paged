@@ -30,7 +30,7 @@
 //     a Name or an `x-paged:oid` label — never a session address, plus the
 //     path and the schema row; its Bindings panel opens with the draft;
 //   · the binding badge appears once paged.data reports a property binding
-//     on the path (its typed `media.paged.data.propertyBindings` query).
+//     on the path (the data door's bindings).
 
 import { test, expect, type Page } from "@playwright/test";
 import { dirname, resolve as pathResolve } from "node:path";
@@ -159,7 +159,7 @@ test.describe("ADR 323 — object model in the editor", () => {
     await expect(page.locator(FIELD)).not.toHaveAttribute("data-bound", "");
   });
 
-  test("OM-3 — the durable target resolves back to the frame; a binding defined through the REAL data bundle lights the badge (asked via media.paged.data.propertyBindings, never by parsing labels) @feat:editor-shell.panels.stroke @feat:data.bind.authoring @level:happy", async ({
+  test("OM-3 — the durable target resolves back to the frame; a binding defined through the REAL data bundle lights the badge (asked of the data door (data@1), never by parsing labels) @feat:editor-shell.panels.stroke @feat:data.bind.authoring @level:happy", async ({
     page,
   }) => {
     const { selector } = await bindToData(

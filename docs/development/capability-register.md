@@ -313,6 +313,14 @@ Status (draw items, one line each; updated as they land):
   move / marquee / resize) or the host's Selection tool routing handle hits to the owning bundle (a
   contract change, as editor ADR 310 decided for the live-shape widgets). Neither is a safe port, so
   `adjust-handles.tsx` stays on `contribute.overlay`.
+- Bind from the property field: PARTLY DONE 2026-11-03. The badge's "is this path bound" read no longer
+  invokes `media.paged.data.propertyBindings`: `probeBound` asks the data door (`data@1`
+  `bindings()`, the target an address or a selector resolved through `host.objects.query`), whichever
+  bundle serves it (spec: `test/state/property-bound-probe.test.ts`). The bind popover already used
+  `data@1` when a service is up. Still there: the no-service fallback that invokes
+  `media.paged.data.bindProperty` (it opens paged.data's Bindings panel prefilled) in `object-field.tsx`
+  and its typed args in `registries/command.ts`; with no data door nothing can bind, so it is dead
+  weight to delete next, with the `BindNotice` command text.
 
 ### Reach (gaps between modules)
 

@@ -459,38 +459,40 @@ export function quoteSelectorValue(text: string): string {
   return `"${text.replace(/["\\]/g, (c) => `\\${c}`)}"`;
 }
 
-/** paged.data's typed query for the badge: the property bindings that
- *  target `{ address, path }`. The editor never parses paged.data's
- *  labels (`x-paged:media.paged.data`, its own layout) — it asks. */
-export const PROPERTY_BINDINGS_COMMAND = "media.paged.data.propertyBindings";
-
 interface BindingsProbeObjects {
-  commands(): Promise<readonly { id: string }[]>;
-  invoke(command: string, args: unknown): Promise<unknown>;
+  query(selector: string): Promise<readonly string[]>;
 }
 
-/** Is `path` bound on any of `addresses`? `false` when no data plugin
- *  offers the query (nothing can be bound then) or it fails. */
+/** What the badge reads of the data door (`data@1`): the defined bindings. */
+interface BindingsProbeService {
+  bindings?(): Promise<readonly { target: string; path: string }[]>;
+}
+
+/** Is `path` bound on any of `addresses`? Asked of the document's data door
+ *  (`data@1`, whichever bundle serves it): a binding counts when it binds
+ *  `path` and its target is one of the addresses or a selector that selects
+ *  one. `false` when no service is up, it lists no bindings, or it fails. */
 export async function probeBound(
+  service: BindingsProbeService | null,
   objects: BindingsProbeObjects,
   addresses: readonly string[],
   path: string,
 ): Promise<boolean> {
-  if (addresses.length === 0) return false;
-  const offered = await objects.commands().then(
-    (cs) => cs.some((c) => c.id === PROPERTY_BINDINGS_COMMAND),
-    () => false,
-  );
-  if (!offered) return false;
-  for (const address of addresses) {
+  if (addresses.length === 0 || !service?.bindings) return false;
+  let bindings: readonly { target: string; path: string }[];
+  try {
+    bindings = await service.bindings();
+  } catch {
+    return false;
+  }
+  for (const b of bindings) {
+    if (b.path !== path || !b.target) continue;
+    if (addresses.includes(b.target)) return true;
     try {
-      const hits = await objects.invoke(PROPERTY_BINDINGS_COMMAND, {
-        address,
-        path,
-      });
-      if (Array.isArray(hits) && hits.length > 0) return true;
+      const hits = await objects.query(b.target);
+      if (hits.some((h) => addresses.includes(h))) return true;
     } catch {
-      /* a failing query is "not known to be bound" */
+      /* a selector that does not resolve selects nothing */
     }
   }
   return false;
