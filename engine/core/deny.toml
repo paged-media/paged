@@ -20,11 +20,11 @@ ignore = [
     "RUSTSEC-2025-0048", # tsify-next — unmaintained (use tsify)
     "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via usvg; no safe upgrade, awaits upstream skrifa migration)
     "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via usvg; no safe upgrade available)
-    # zip 8, via calamine in paged-data-xlsx only (PM-0015): the three
-    # advisories are in zip's extract() (path traversal, the extraction
-    # destination, permissions applied through symlinks), which nothing here
-    # calls: calamine reads the XLSX in memory, entry by entry. Remove them
-    # when calamine depends on zip >= 9.
+    # zip 8, via ooxmlsdk only (calamine, the other reach, is gone: XLSX is
+    # read by sheet-xlsx): the advisories are in zip's extract() (path
+    # traversal, the extraction destination, permissions applied through
+    # symlinks), which nothing here calls: the packages are read in memory,
+    # entry by entry. Remove them when ooxmlsdk depends on zip >= 9.
     "RUSTSEC-2026-0367", # zip — extract() only, never called
     "RUSTSEC-2026-0368", # zip — extract() only, never called
     "RUSTSEC-2026-0369", # zip — extract() only, never called

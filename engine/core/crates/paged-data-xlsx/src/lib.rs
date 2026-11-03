@@ -19,7 +19,8 @@
 //! # data-xlsx — one worksheet of an `.xlsx` as a typed table
 //!
 //! The store (`data-store`) reads CSV, JSON and Parquet with its own readers;
-//! this crate reads a workbook with calamine (MIT, ~0.4 MB of wasm) and hands
+//! this crate reads a workbook with `sheet-xlsx` (the one XLSX reader of the
+//! repository, no second parser) and hands
 //! the store one worksheet as typed rows, so the table is made without
 //! guessing. (It was written for DuckDB-WASM 1.29.0, whose `excel` extension
 //! had no wasm build.)
@@ -40,10 +41,11 @@
 //!
 //! Error cells (`#N/A`, `#DIV/0!`, …) become NULL and are counted.
 
-use std::io::Cursor;
+use std::collections::BTreeMap;
 
-use calamine::{Data, ExcelDateTime, ExcelDateTimeType, Reader, Xlsx};
 use serde_json::{Map, Number, Value as Json};
+use sheet_core::{CellValue, DateSystem};
+use sheet_xlsx::XlsxDocument;
 use thiserror::Error;
 
 /// Why a workbook could not be read.
@@ -113,47 +115,87 @@ enum Cell {
     Text(String),
 }
 
+/// A cell of the used range as the sheet reader hands it over: a value, an
+/// error cell, or a text cell that is empty (it widens the used range and
+/// the header, as a blank string does, but is no value).
+#[derive(Debug, Clone, PartialEq)]
+enum Raw {
+    EmptyText,
+    Error,
+    Value(Cell),
+}
+
 /// The worksheet names of a workbook, in workbook order.
 pub fn sheet_names(bytes: &[u8]) -> Result<Vec<String>, XlsxError> {
-    let wb = open(bytes)?;
-    Ok(wb.sheet_names())
+    let doc = open(bytes)?;
+    Ok(doc
+        .model
+        .sheets
+        .iter()
+        .map(|s| s.name.to_string())
+        .collect())
 }
 
 /// Read one worksheet (`None` = the first) as a [`SheetTable`].
 pub fn read_sheet(bytes: &[u8], sheet: Option<&str>) -> Result<SheetTable, XlsxError> {
-    let mut wb = open(bytes)?;
-    let names = wb.sheet_names();
-    let name = match sheet {
-        Some(s) => {
-            if !names.iter().any(|n| n == s) {
-                return Err(XlsxError::NoSuchSheet(s.to_string()));
+    let doc = open(bytes)?;
+    let model = &doc.model;
+    let names: Vec<&str> = model.sheets.iter().map(|s| s.name.as_str()).collect();
+    let index = match sheet {
+        Some(s) => names
+            .iter()
+            .position(|n| *n == s)
+            .ok_or_else(|| XlsxError::NoSuchSheet(s.to_string()))?,
+        None => {
+            if names.is_empty() {
+                return Err(XlsxError::NoSheets);
             }
-            s.to_string()
+            0
         }
-        None => names.first().cloned().ok_or(XlsxError::NoSheets)?,
     };
-    let range = wb.worksheet_range(&name).map_err(|e| XlsxError::Sheet {
-        sheet: name.clone(),
-        reason: e.to_string(),
-    })?;
+    let name = names[index].to_string();
+    let ws = &model.sheets[index];
+    let system = model.calc.date_system;
 
-    let mut rows = range.rows();
-    let header = rows.next().ok_or_else(|| XlsxError::Empty(name.clone()))?;
-    let columns = column_names(header);
+    // The used range is the box around every non-blank cell; the first row
+    // of it is the header.
+    let mut grid: BTreeMap<u32, BTreeMap<u32, Raw>> = BTreeMap::new();
+    let (mut c0, mut c1) = (u32::MAX, 0u32);
+    for (&(r, c), cell) in ws.iter_cells() {
+        let raw = match &cell.value {
+            CellValue::Empty => continue,
+            CellValue::Error(_) => Raw::Error,
+            CellValue::Text(t) if t.is_empty() => Raw::EmptyText,
+            CellValue::Text(t) => Raw::Value(Cell::Text(t.to_string())),
+            CellValue::Bool(b) => Raw::Value(Cell::Bool(*b)),
+            CellValue::Number(n) => Raw::Value(number_cell(
+                *n,
+                date_kind(model.styles.num_fmt_of(cell.style)),
+                system,
+            )),
+        };
+        c0 = c0.min(c);
+        c1 = c1.max(c);
+        grid.entry(r).or_default().insert(c, raw);
+    }
+    let mut rows = grid.into_iter();
+    let (_, header) = rows.next().ok_or_else(|| XlsxError::Empty(name.clone()))?;
+    let header: Vec<Option<&Raw>> = (c0..=c1).map(|c| header.get(&c)).collect();
+    let columns = column_names(&header);
     if columns.is_empty() {
         return Err(XlsxError::Empty(name));
     }
 
     let mut error_cells = 0usize;
     let mut cells: Vec<Vec<Cell>> = Vec::new();
-    for row in rows {
+    for (_, row) in rows {
         let mut out = Vec::with_capacity(columns.len());
         for i in 0..columns.len() {
-            let c = row.get(i).unwrap_or(&Data::Empty);
-            if matches!(c, Data::Error(_)) {
+            let raw = row.get(&(c0 + i as u32));
+            if matches!(raw, Some(Raw::Error)) {
                 error_cells += 1;
             }
-            out.push(cell_of(c));
+            out.push(cell_of(raw));
         }
         // A wholly empty row inside the used range is not a record.
         if out.iter().all(|c| *c == Cell::Empty) {
@@ -202,22 +244,22 @@ impl SheetTable {
     }
 }
 
-fn open(bytes: &[u8]) -> Result<Xlsx<Cursor<Vec<u8>>>, XlsxError> {
-    Xlsx::new(Cursor::new(bytes.to_vec())).map_err(|e| XlsxError::Open(e.to_string()))
+fn open(bytes: &[u8]) -> Result<XlsxDocument, XlsxError> {
+    XlsxDocument::open(bytes).map_err(|e| XlsxError::Open(e.to_string()))
 }
 
 /// Header row → unique, non-empty column names. Trailing empty header cells
 /// past the last named one are dropped (a used range often runs wider than
 /// the table's header).
-fn column_names(header: &[Data]) -> Vec<String> {
+fn column_names(header: &[Option<&Raw>]) -> Vec<String> {
     let last = header
         .iter()
-        .rposition(|c| !matches!(c, Data::Empty))
+        .rposition(|c| c.is_some())
         .map(|i| i + 1)
         .unwrap_or(0);
     let mut seen: Vec<String> = Vec::with_capacity(last);
     for (i, c) in header[..last].iter().enumerate() {
-        let base = match cell_of(c) {
+        let base = match cell_of(*c) {
             Cell::Empty => format!("column_{}", i + 1),
             other => text_of(&other).trim().to_string(),
         };
@@ -237,79 +279,115 @@ fn column_names(header: &[Data]) -> Vec<String> {
     seen
 }
 
-fn cell_of(c: &Data) -> Cell {
+fn cell_of(c: Option<&Raw>) -> Cell {
     match c {
-        Data::Empty | Data::Error(_) => Cell::Empty,
-        Data::Int(i) => Cell::Int(*i),
-        Data::Float(f) => {
-            if f.is_finite() && f.fract() == 0.0 && f.abs() < 9.007_199_254_740_992e15 {
-                Cell::Int(*f as i64)
-            } else {
-                Cell::Float(*f)
+        None | Some(Raw::EmptyText) | Some(Raw::Error) => Cell::Empty,
+        Some(Raw::Value(v)) => v.clone(),
+    }
+}
+
+/// How a number-format code reads a number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DateKind {
+    Plain,
+    /// A date, a time of day or both.
+    DateTime,
+    /// An elapsed time (`[h]:mm:ss`): kept as the number of days.
+    TimeDelta,
+}
+
+/// Whether a number-format code makes a number a date or a time: a date/time
+/// letter (`d m y h s`, or `AM/PM`) outside quotes, brackets and escapes in
+/// the first section; `[h]`/`[m]`/`[s]` alone is an elapsed time.
+fn date_kind(format: &str) -> DateKind {
+    let mut escaped = false;
+    let mut quoted = false;
+    let mut brackets = 0u8;
+    let mut prev = ' ';
+    let mut elapsed = false;
+    let mut am_pm = false;
+    for s in format.chars() {
+        match (s, escaped, quoted, am_pm, brackets) {
+            (_, true, ..) => escaped = false,
+            ('_' | '\\' | '*', ..) => escaped = true,
+            ('"', _, true, _, _) => quoted = false,
+            (_, _, true, _, _) => (),
+            ('"', ..) => quoted = true,
+            (';', ..) => return DateKind::Plain,
+            ('[', ..) => brackets += 1,
+            (']', .., 1) if elapsed => return DateKind::TimeDelta,
+            (']', ..) => brackets = brackets.saturating_sub(1),
+            ('a' | 'A', _, _, false, 0) => am_pm = true,
+            ('p' | 'm' | '/' | 'P' | 'M', _, _, true, 0) => return DateKind::DateTime,
+            ('d' | 'm' | 'h' | 'y' | 's' | 'D' | 'M' | 'H' | 'Y' | 'S', _, _, false, 0) => {
+                return DateKind::DateTime
+            }
+            _ => {
+                if !(elapsed && s.eq_ignore_ascii_case(&prev)) {
+                    elapsed = prev == '[' && matches!(s, 'm' | 'h' | 's' | 'M' | 'H' | 'S');
+                }
             }
         }
-        Data::Bool(b) => Cell::Bool(*b),
-        Data::String(s) => {
-            if s.is_empty() {
-                Cell::Empty
-            } else {
-                Cell::Text(s.clone())
+        prev = s;
+    }
+    DateKind::Plain
+}
+
+/// A stored number as a cell: an integral number is an integer, a date
+/// format makes it a date (no time of day) or a date-time.
+fn number_cell(f: f64, kind: DateKind, system: DateSystem) -> Cell {
+    match kind {
+        DateKind::DateTime => {
+            if let Some((y, mo, da, h, mi, s, ms)) = date_time_parts(f, system) {
+                return if h == 0 && mi == 0 && s == 0 && ms == 0 {
+                    Cell::Date(format!("{y:04}-{mo:02}-{da:02}"))
+                } else if ms == 0 {
+                    Cell::DateTime(format!("{y:04}-{mo:02}-{da:02} {h:02}:{mi:02}:{s:02}"))
+                } else {
+                    Cell::DateTime(format!(
+                        "{y:04}-{mo:02}-{da:02} {h:02}:{mi:02}:{s:02}.{ms:03}"
+                    ))
+                };
             }
-        }
-        Data::DateTime(d) if d.is_datetime() => {
-            let (y, mo, da, h, mi, s, ms) = date_time_parts(d);
-            if h == 0 && mi == 0 && s == 0 && ms == 0 {
-                Cell::Date(format!("{y:04}-{mo:02}-{da:02}"))
-            } else if ms == 0 {
-                Cell::DateTime(format!("{y:04}-{mo:02}-{da:02} {h:02}:{mi:02}:{s:02}"))
-            } else {
-                Cell::DateTime(format!(
-                    "{y:04}-{mo:02}-{da:02} {h:02}:{mi:02}:{s:02}.{ms:03}"
-                ))
-            }
+            Cell::Float(f)
         }
         // A duration-formatted number: keep the number of days as written.
-        Data::DateTime(d) => Cell::Float(d.as_f64()),
-        Data::DateTimeIso(s) => {
-            if s.len() == 10 {
-                Cell::Date(s.clone())
+        DateKind::TimeDelta => Cell::Float(f),
+        DateKind::Plain => {
+            if f.is_finite() && f.fract() == 0.0 && f.abs() < 9.007_199_254_740_992e15 {
+                Cell::Int(f as i64)
             } else {
-                Cell::DateTime(s.replacen('T', " ", 1))
+                Cell::Float(f)
             }
         }
-        Data::DurationIso(s) => Cell::Text(s.clone()),
     }
 }
 
 /// A date-time serial as `(year, month, day, hour, minute, second, milli)`,
-/// rounded to the nearest millisecond. calamine 0.31's own
-/// `to_ymd_hms_milli` truncates the seconds but rounds the milliseconds, so
-/// 18:45:15 stored as 0.78142361111… came back as 18:45:14 + 1000 ms; here
-/// the time of day is rounded as a whole and a round-up past midnight moves
-/// to the next day. calamine still does the calendar (both epochs).
-fn date_time_parts(d: &ExcelDateTime) -> (u16, u8, u8, u8, u8, u8, u16) {
-    let v = d.as_f64();
-    // The epoch is private to calamine: the 1900 reading of the same serial
-    // differs from the 1904 one by 1 462 days, so comparing names it.
-    let is_1904 = ExcelDateTime::new(v, ExcelDateTimeType::DateTime, false).to_ymd_hms_milli()
-        != d.to_ymd_hms_milli();
+/// rounded to the nearest millisecond: the time of day is rounded as a whole
+/// (18:45:15 stored as 0.78142361111… is 18:45:15, not 18:45:14 + 1000 ms)
+/// and a round-up past midnight moves to the next day. The calendar is
+/// `sheet-format`'s, in either date system.
+fn date_time_parts(v: f64, system: DateSystem) -> Option<(i32, u32, u32, u32, u32, u32, u32)> {
+    if !v.is_finite() {
+        return None;
+    }
     let mut day = v.floor();
     let mut ms = ((v - day) * 86_400_000.0).round() as u64;
     if ms >= 86_400_000 {
         ms -= 86_400_000;
         day += 1.0;
     }
-    let (y, mo, da, ..) =
-        ExcelDateTime::new(day, ExcelDateTimeType::DateTime, is_1904).to_ymd_hms_milli();
-    (
+    let (y, mo, da) = sheet_format::serial::serial_to_ymd(day, system)?;
+    Some((
         y,
         mo,
         da,
-        (ms / 3_600_000) as u8,
-        (ms / 60_000 % 60) as u8,
-        (ms / 1000 % 60) as u8,
-        (ms % 1000) as u16,
-    )
+        (ms / 3_600_000) as u32,
+        (ms / 60_000 % 60) as u32,
+        (ms / 1000 % 60) as u32,
+        (ms % 1000) as u32,
+    ))
 }
 
 fn column_type<'a>(cells: impl Iterator<Item = &'a Cell>) -> ColumnType {
@@ -385,18 +463,17 @@ mod tests {
         assert_eq!(column_type(text.iter()), ColumnType::Varchar);
         let nothing = [Cell::Empty];
         assert_eq!(column_type(nothing.iter()), ColumnType::Varchar);
-        assert_eq!(cell_of(&Data::Float(4.0)), Cell::Int(4));
+        assert_eq!(
+            number_cell(4.0, DateKind::Plain, DateSystem::Date1900),
+            Cell::Int(4)
+        );
     }
 
     #[test]
     fn header_names_are_unique_and_never_empty() {
-        let header = [
-            Data::String("sku".into()),
-            Data::Empty,
-            Data::String("SKU".into()),
-            Data::String(" price ".into()),
-            Data::Empty,
-        ];
+        let t = |s: &str| Raw::Value(Cell::Text(s.into()));
+        let (sku, upper, price) = (t("sku"), t("SKU"), t(" price "));
+        let header = [Some(&sku), None, Some(&upper), Some(&price), None];
         assert_eq!(
             column_names(&header),
             vec!["sku", "column_2", "SKU_2", "price"]
@@ -421,16 +498,30 @@ mod tests {
 
     #[test]
     fn times_round_to_the_millisecond_and_carry_past_midnight() {
-        let at =
-            |v: f64| date_time_parts(&ExcelDateTime::new(v, ExcelDateTimeType::DateTime, false));
+        let at = |v: f64| date_time_parts(v, DateSystem::Date1900).unwrap();
         // 2026-03-01 18:45:15 as openpyxl writes it (just under :15).
         assert_eq!(at(46_082.781_423_611_11), (2026, 3, 1, 18, 45, 15, 0));
         assert_eq!(at(46037.0 + 0.4 / 86_400.0), (2026, 1, 15, 0, 0, 0, 400));
         // 23:59:59.9999 rounds to the next midnight.
         assert_eq!(at(46_037.999_999_999), (2026, 1, 16, 0, 0, 0, 0));
         // The 1904 epoch is kept.
-        let d1904 = ExcelDateTime::new(0.5, ExcelDateTimeType::DateTime, true);
-        assert_eq!(date_time_parts(&d1904), (1904, 1, 1, 12, 0, 0, 0));
+        assert_eq!(
+            date_time_parts(0.5, DateSystem::Date1904),
+            Some((1904, 1, 1, 12, 0, 0, 0))
+        );
+    }
+
+    #[test]
+    fn number_formats_name_dates_times_and_elapsed_times() {
+        assert_eq!(date_kind("DD/MM/YY"), DateKind::DateTime);
+        assert_eq!(date_kind("H:MM:SS;@"), DateKind::DateTime);
+        assert_eq!(date_kind("m\"M\"d\"D\";@"), DateKind::DateTime);
+        assert_eq!(date_kind("[h]:mm:ss"), DateKind::TimeDelta);
+        assert_eq!(date_kind("General"), DateKind::Plain);
+        assert_eq!(date_kind("0.00"), DateKind::Plain);
+        assert_eq!(date_kind("#,##0\\ [$\\u20bd-46D]"), DateKind::Plain);
+        assert_eq!(date_kind("\"$\"#,##0_);[Red](\"$\"#,##0)"), DateKind::Plain);
+        assert_eq!(date_kind("h:mm AM/PM"), DateKind::DateTime);
     }
 
     #[test]

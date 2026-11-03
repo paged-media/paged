@@ -23,6 +23,16 @@ dependsOn:
     scope: "development"
   - id: "fmt"
     scope: "production"
+  # paged-data-xlsx reads a workbook through sheet-xlsx (W5): the sheet
+  # project and what its XLSX reader builds on.
+  - id: "sheet"
+    scope: "production"
+  - id: "ooxml"
+    scope: "production"
+  - id: "dml-chart"
+    scope: "production"
+  - id: "dml-native"
+    scope: "production"
 
 fileGroups:
   rust-sources:

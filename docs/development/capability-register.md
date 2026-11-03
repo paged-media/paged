@@ -149,7 +149,7 @@ data each have their own lowering. Sheet and data each have their own lowering.
 ### Charts, data, scripting, PDF
 
 Doc has no charts (reuse `dml-chart` and the sheet engine). Slide's chart data editing carries a
-second compiled sheet engine. `paged-data-xlsx` (calamine) → `sheet-xlsx`; CSV ×2; two Boa
+second compiled sheet engine. `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2; two Boa
 sandboxes; `data-script` and `data-cli` overlap `paged-script` and `paged-cli`. PDF read has two
 hayro devices (placed PDF, pdf-import); blank IDML / OCF zip writers ×5.
 

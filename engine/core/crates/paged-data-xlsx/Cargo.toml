@@ -16,6 +16,10 @@ name = "data_xlsx"
 workspace = true
 
 [dependencies]
-calamine = { version = "0.38", default-features = false }
+# The one XLSX reader (PM-0017): the workbook's cells, number formats and date
+# system come from the sheet model. Without the ODS import.
+sheet-xlsx = { path = "../../../../modules/sheet/sheet-xlsx", default-features = false }
+sheet-core = { path = "../../../../modules/sheet/sheet-core" }
+sheet-format = { path = "../../../../modules/sheet/sheet-format" }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "2"

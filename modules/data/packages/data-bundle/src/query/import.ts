@@ -6,7 +6,7 @@
 //   json       an array of objects or one object per line; nested values
 //              are kept as their JSON text.
 //   parquet    the row reader (snappy, gzip, brotli, lz4; not zstd).
-//   xlsx       one worksheet, typed per column by data-xlsx (calamine).
+//   xlsx       one worksheet, typed per column by data-xlsx (over sheet-xlsx).
 //
 // Every source is materialised as a table, so a query names it the same way
 // whatever it was imported from (`SELECT * FROM products`).
