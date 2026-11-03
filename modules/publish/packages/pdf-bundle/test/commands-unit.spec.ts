@@ -42,6 +42,11 @@ import {
   PLACE_VECTORS_COMMAND,
 } from "../src/commands";
 import { CONVERT_COMMAND, VECTORS_DIAGNOSTICS } from "../src/vectors/menu";
+import {
+  IMPORT_VECTORS_COMMAND,
+  IMPORT_VECTORS_MENU_PATH,
+  IMPORT_VECTORS_PANEL,
+} from "../src/vectors/import-panel";
 import { aiWithoutPdfContent, vectorPdf } from "./fixtures/vector-pdf";
 import { _resetPdfMapperCache } from "../src/engine-loader";
 import { tinyPdf } from "./fixtures/tiny-pdf";
@@ -301,4 +306,25 @@ describe("place-as-vectors (unit, publish ADR 658)", () => {
     expect(b.fake.mutations()).toEqual([]);
     b.dispose();
   }, 60_000);
+
+  it("File > Import > PDF or AI as Vectors… is the bundle's: a panel, a command and a menu row", () => {
+    covers(
+      "command:media.paged.pdf.command.importVectors",
+      "panel:media.paged.pdf.panel.importVectors",
+      "menu:File/Import/PDF or AI as Vectors…",
+    );
+    const b = boot();
+    expect(
+      b.fake.registered<{ id: string }>("panels").map((p) => p.id),
+    ).toContain(IMPORT_VECTORS_PANEL);
+    expect(
+      b.fake.registered<{ id: string }>("commands").map((c) => c.id),
+    ).toContain(IMPORT_VECTORS_COMMAND);
+    expect(
+      b.fake
+        .registered<{ path: string; command: string }>("menus")
+        .map((m) => [m.path, m.command]),
+    ).toContainEqual([IMPORT_VECTORS_MENU_PATH, IMPORT_VECTORS_COMMAND]);
+    b.dispose();
+  });
 });

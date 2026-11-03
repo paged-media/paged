@@ -523,6 +523,7 @@
       "version": "0.2.6-canary.0",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
+        "@paged-media/panel-kit": "workspace:*",
         "@paged-media/strings": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
         "jszip": "^3.10.2",
@@ -534,11 +535,14 @@
         "@paged-media/test-kit": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+        "@types/react": "catalog:",
+        "react": "catalog:",
         "typescript": "catalog:",
       },
       "peerDependencies": {
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
+        "react": ">=19.3",
       },
     },
     "modules/publish/packages/publish-bundle": {

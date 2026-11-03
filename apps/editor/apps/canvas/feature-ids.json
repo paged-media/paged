@@ -6,7 +6,7 @@
     "command": 920,
     "keybinding": 167,
     "menu": 664,
-    "panel": 150,
+    "panel": 151,
     "tool": 126
   },
   "features": [
@@ -2881,6 +2881,11 @@
       "owner": "media.paged.pdf"
     },
     {
+      "id": "command:media.paged.pdf.command.importVectors",
+      "kind": "command",
+      "owner": "media.paged.pdf"
+    },
+    {
       "id": "command:media.paged.pdf.convertPlacedToVectors",
       "kind": "command",
       "owner": "media.paged.pdf"
@@ -3962,11 +3967,6 @@
     },
     {
       "id": "command:paged.file.exportSvgSelection",
-      "kind": "command",
-      "owner": "editor"
-    },
-    {
-      "id": "command:paged.file.importPdfVectors",
       "kind": "command",
       "owner": "editor"
     },
@@ -6173,7 +6173,7 @@
     {
       "id": "menu:File/Import/PDF or AI as Vectors…",
       "kind": "menu",
-      "owner": "editor"
+      "owner": "media.paged.pdf"
     },
     {
       "id": "menu:File/Import/SVG…",
@@ -8936,6 +8936,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "panel:media.paged.pdf.panel.importVectors",
+      "kind": "panel",
+      "owner": "media.paged.pdf"
+    },
+    {
       "id": "panel:media.paged.sheet.panel.datasets",
       "kind": "panel",
       "owner": "media.paged.sheet"
@@ -10368,6 +10373,12 @@
     {
       "id": "command:media.paged.draw.command.transformAgain",
       "replacement": "command:paged.transform.again",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:paged.file.importPdfVectors",
+      "replacement": "command:media.paged.pdf.command.importVectors",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },

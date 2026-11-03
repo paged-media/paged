@@ -18,7 +18,7 @@
  */
 
 // E2E — WP4.12 (PDF half), publish ADR 658, in the real editor: File ▸
-// Import ▸ PDF or AI as Vectors… opens the host's dialog; a picked PDF
+// Import ▸ PDF or AI as Vectors… opens paged.pdf's panel; a picked PDF
 // lists its pages; Place lands the page as native items (a clip group, a
 // gradient-filled path, an opacity mask, a text frame) in ONE undo step,
 // through paged.pdf's typed commands. Object ▸ Convert Placed PDF to
@@ -63,12 +63,12 @@ test.describe("WP4.12 — PDF or AI as vectors", () => {
     test.setTimeout(180_000);
     covers(
       "menu:File/Import/PDF or AI as Vectors…",
-      "command:paged.file.importPdfVectors",
+      "command:media.paged.pdf.command.importVectors",
     );
     await openShell(page, { doc: true });
     const before = await tree(page);
     await clickMenuRow(page, "File/Import/PDF or AI as Vectors…");
-    const dialog = page.locator("[data-pdf-vectors-dialog]");
+    const dialog = page.locator("[data-pdf-vectors-panel]");
     await expect(dialog).toBeVisible();
     const chooser = page.waitForEvent("filechooser");
     await dialog.locator("[data-pdf-vectors-choose]").click();
@@ -89,24 +89,13 @@ test.describe("WP4.12 — PDF or AI as vectors", () => {
       "1 — 300 × 300 pt",
     );
     await dialog.locator("[data-pdf-vectors-place]").click();
-    // Nothing to report beyond the shared facts closes the dialog; a
-    // report keeps it open with a Close button.
-    await expect
-      .poll(
-        async () =>
-          (await dialog.count()) === 0 ||
-          (await dialog.locator("[data-pdf-vectors-report]").count()) > 0,
-        {
-          timeout: 60_000,
-        },
-      )
-      .toBe(true);
-    if ((await dialog.count()) > 0) {
-      await expect(
-        dialog.locator('[data-pdf-vectors-loss="colours"]'),
-      ).toBeVisible();
-      await dialog.locator("[data-pdf-vectors-cancel]").click();
-    }
+    // The panel stays and reports what was placed (the shared facts included).
+    await expect(dialog.locator("[data-pdf-vectors-report]")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(
+      dialog.locator('[data-pdf-vectors-loss="colours"]'),
+    ).toBeVisible();
     await expect
       .poll(() => tree(page), { timeout: 30_000 })
       .toBeGreaterThan(before + 4);

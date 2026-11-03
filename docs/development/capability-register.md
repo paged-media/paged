@@ -298,6 +298,21 @@ Status (draw items, one line each; updated as they land):
   doc, not generic: the multilevel list presets (`lists.ts`: Word's `1. a. i.` / `1.1.1.`), styles,
   highlight, borders. Not done: host key bindings for the verbs (no default Cmd+B yet, to avoid
   shadowing the text input's own keys); slide's own format painter was not touched.
+- PDF vectors dialog: DONE 2026-11-03. File > Import > PDF or AI as Vectors… is paged.pdf's now: a
+  panel (`media.paged.pdf.panel.importVectors`, `vectors/import-panel.tsx`), the command
+  `media.paged.pdf.command.importVectors` and the same menu row, all contributed by the bundle. The panel
+  calls `inspectPdf` / `placeVectors` directly (the host dialog went through the two typed commands,
+  which stay for scripts and the CLI) and picks the file with `host.shell.pickFile`. The host dialog,
+  its DOM spec and its `app.pdfVectors.*` strings are gone; `paged.file.importPdfVectors` left through
+  the deprecation window. Differences: a panel instead of a modal (it stays open after Place and always
+  lists the report; "Start over" replaces Cancel).
+- Slide adjust handles: KEEP for now, with the evidence (2026-11-03). `overlay.handles@1` reports a
+  hit only to the bundle's OWN tools (`hitHandle` on their pointer events, extensions ADR 339), and
+  slide contributes no tool: the selection is the host's Selection tool, which never asks a bundle's
+  handle set. Moving the handles means slide shipping a selection tool of its own (losing the host's
+  move / marquee / resize) or the host's Selection tool routing handle hits to the owning bundle (a
+  contract change, as editor ADR 310 decided for the live-shape widgets). Neither is a safe port, so
+  `adjust-handles.tsx` stays on `contribute.overlay`.
 
 ### Reach (gaps between modules)
 

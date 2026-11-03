@@ -64,7 +64,6 @@ import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { buildEffectMenuCommands } from "../../../src/effect-menu";
 import { buildViewCommands } from "../../../src/view-commands";
 import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
-import { PDF_VECTORS_COMMANDS } from "../../../src/panels/pdf-vectors-dialog";
 import { buildBatchCommands } from "../../../src/panels/batch-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
 import { FIND_COMMANDS } from "../../../src/find/find-commands";
@@ -194,7 +193,6 @@ function tableIds(): string[] {
     ...buildBatchCommands(),
     ...buildViewCommands(noop),
     ...OPEN_AS_TEMPLATE_COMMANDS,
-    ...PDF_VECTORS_COMMANDS,
     SELECT_ALL_COMMAND,
     ...FIND_COMMANDS,
     // Registered only when an embedding host supplies the action.
@@ -287,7 +285,6 @@ describe("the host command inventory", () => {
       "buildBatchCommands()",
       "viewCommands",
       "OPEN_AS_TEMPLATE_COMMANDS",
-      "PDF_VECTORS_COMMANDS",
       "SELECT_ALL_COMMAND",
       "FIND_COMMANDS",
       "buildCoreCommandEntries()",

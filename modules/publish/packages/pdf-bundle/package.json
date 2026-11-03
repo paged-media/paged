@@ -15,14 +15,16 @@
     "test": "bun test --timeout 30000 --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
-    "@paged-media/strings": "workspace:*",
     "@paged-media/helpers": "workspace:*",
+    "@paged-media/panel-kit": "workspace:*",
+    "@paged-media/strings": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*",
     "jszip": "^3.10.2"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
-    "@paged-media/plugin-sdk": "workspace:*"
+    "@paged-media/plugin-sdk": "workspace:*",
+    "react": ">=19.3"
   },
   "devDependencies": {
     "@paged-media/canvas-wasm": "workspace:*",
@@ -31,6 +33,8 @@
     "@paged-media/test-kit": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:"
   },
   "files": [

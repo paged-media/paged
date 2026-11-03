@@ -402,6 +402,12 @@
       "replacement": "tool:paged.tool.polygon",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "command:paged.file.importPdfVectors",
+      "replacement": "command:media.paged.pdf.command.importVectors",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }
