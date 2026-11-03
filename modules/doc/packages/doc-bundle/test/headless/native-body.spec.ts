@@ -83,6 +83,89 @@ interface Opened {
   prefilled: boolean;
   paras: Array<{ text: string; style: string | null; rects: number[][] }>;
   pages: number;
+  /** The look of every anchored frame, from the exported IDML. */
+  looks: string[];
+  /** The endnote elements of the exported IDML, ids normalised. */
+  endnotes: string[];
+}
+
+/** Every entry of a ZIP under `prefix`, decompressed, as text. */
+function zipTexts(bytes: Uint8Array, prefix: string): string[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = bytes.length - 22;
+  while (eocd >= 0 && view.getUint32(eocd, true) !== 0x06054b50) eocd -= 1;
+  const count = view.getUint16(eocd + 10, true);
+  let at = view.getUint32(eocd + 16, true);
+  const out: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const method = view.getUint16(at + 10, true);
+    const size = view.getUint32(at + 20, true);
+    const nameLen = view.getUint16(at + 28, true);
+    const extraLen = view.getUint16(at + 30, true);
+    const commentLen = view.getUint16(at + 32, true);
+    const local = view.getUint32(at + 42, true);
+    const entry = new TextDecoder().decode(
+      bytes.subarray(at + 46, at + 46 + nameLen),
+    );
+    if (entry.startsWith(prefix)) {
+      const dataAt =
+        local +
+        30 +
+        view.getUint16(local + 26, true) +
+        view.getUint16(local + 28, true);
+      const data = bytes.subarray(dataAt, dataAt + size);
+      out.push(
+        new TextDecoder().decode(
+          method === 0 ? data : new Uint8Array(inflateRawSync(data)),
+        ),
+      );
+    }
+    at += 46 + nameLen + extraLen + commentLen;
+  }
+  return out;
+}
+
+/** What an anchored frame's look is, apart from its ids and geometry. */
+function lookOf(xml: string): string {
+  const attrs = [
+    "FillColor",
+    "StrokeColor",
+    "StrokeWeight",
+    "StrokeType",
+    "StrokeDashAndGap",
+    "EndCap",
+    "EndJoin",
+    "MiterLimit",
+    "GradientFillAngle",
+    "GradientFillLength",
+    "GradientFillStart",
+  ]
+    .map((a) => xml.match(new RegExp(`\\b${a}="[^"]*"`))?.[0] ?? "")
+    .join(" ");
+  const blocks = (
+    xml.match(
+      /<(TransparencySetting|DropShadowSetting|InnerShadowSetting|OuterGlowSetting|FeatherSetting|GradientFeatherSetting|BlendingSetting)\b[\s\S]*?(\/>|<\/\1>)/g,
+    ) ?? []
+  ).join("");
+  const label = xml.match(/<Label>[\s\S]*?<\/Label>/)?.[0] ?? "";
+  return `${attrs}|${blocks}|${label}`;
+}
+
+/** Endnote elements of every part, with their ids numbered by appearance. */
+function endnoteElements(idml: Uint8Array): string[] {
+  const all = [...zipTexts(idml, "Stories/"), ...zipTexts(idml, "Spreads/")];
+  const found = all.flatMap(
+    (xml) =>
+      xml.match(/<(Endnote|EndnoteRange|EndnoteTextFrame)\b[^>]*>/g) ?? [],
+  );
+  const ids = new Map<string, string>();
+  for (const el of found) {
+    const self = el.match(/\bSelf="([^"]*)"/)?.[1];
+    if (self && !ids.has(self)) ids.set(self, `#${ids.size}`);
+  }
+  return found.map((el) =>
+    el.replace(/="([^"]*)"/g, (_m, v: string) => `="${ids.get(v) ?? v}"`),
+  );
 }
 
 async function open(name: string, native: boolean): Promise<Opened> {
@@ -189,7 +272,20 @@ async function open(name: string, native: boolean): Promise<Opened> {
       off = b.end + 1;
     }
   }
-  return { h, prefilled, paras, pages: pageIds.length };
+  const idml = (await h.exportDocument("idml")).bytes;
+  const looks = zipTexts(idml, "Stories/")
+    .flatMap(
+      (xml) => xml.match(/<(Rectangle|TextFrame)\b[\s\S]*?<\/\1>/g) ?? [],
+    )
+    .map(lookOf);
+  return {
+    h,
+    prefilled,
+    paras,
+    pages: pageIds.length,
+    looks,
+    endnotes: endnoteElements(idml),
+  };
 }
 
 describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
@@ -217,6 +313,11 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     "review-body.docx",
     "toc-body.docx",
     "breaks-body.docx",
+    "picture-effects.docx",
+    "objects-text-boxes.docx",
+    "objects-languages.docx",
+    "endnote-body.docx",
+    "break-kept-body.docx",
   ];
 
   for (const name of FIXTURES) {
@@ -234,6 +335,10 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
       expect(native.paras.map((p) => p.rects)).toEqual(
         old.paras.map((p) => p.rects),
       );
+      // Doc ADR 625 — the looks of pictures and text boxes, and the endnote
+      // story, are the old pour's.
+      expect(native.looks).toEqual(old.looks);
+      expect(native.endnotes).toEqual(old.endnotes);
       // Where nothing keeps one, no paragraph names a style the lowering
       // invented for direct formatting.
       if (MUST_OPEN.includes(name)) {
@@ -264,7 +369,7 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
   });
 
   it("a document the builder cannot take whole opens by the old pour", async () => {
-    const doc = await open("structure.docx", true);
+    const doc = await open("controls.docx", true);
     opened.push(doc.h);
     expect(doc.prefilled).toBe(false);
     expect(doc.paras.length).toBeGreaterThan(0);

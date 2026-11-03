@@ -124,10 +124,13 @@ slice by slice, the old path stays until the last). Built so far in `docx_skelet
 against the old pour on the real engine: same text, page count and per-paragraph geometry, same unedited
 export): body paragraphs and runs with direct formatting as the model's own fields instead of
 `docx-auto-*` styles, lists, drop caps, plain tables (spans, insets, borders, shading, Word layout),
-inline pictures with crop, live fields and hyperlinks. They open as a prefilled skeleton when the whole
-body is native, behind `NATIVE_BODY.enabled` (off). Still the IR and the TS pour: styles and swatches,
-floating pictures and text boxes, picture looks, comments and tracked changes, notes, headers and footers,
-bookmarks, nested tables, breaks inside a paragraph, tables of contents. Sheet and data each have their own lowering.
+inline and floating pictures with crop and DrawingML looks (shadows, glows, gradients, effect stacks, a hand
+port of the lowering kit's translator), text boxes with their looks, live fields and hyperlinks, footnotes
+and endnotes (the endnote story and its page), comments and tracked changes, bookmarks, nested tables, breaks
+inside a paragraph, headers and footers. They open as a prefilled skeleton when the whole body is native
+(`NATIVE_BODY.enabled`, on); no `paged-mutate` is linked into the doc wasm. Still the old pour (the whole
+document, never half): content controls, hyperlinked or reviewed fields, an endnote in a table cell. Sheet and
+data each have their own lowering. Sheet and data each have their own lowering.
 
 ### Charts, data, scripting, PDF
 

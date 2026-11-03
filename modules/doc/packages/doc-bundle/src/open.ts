@@ -49,6 +49,7 @@ import { pourPageItems } from "./page-items.js";
 import {
   applyStyleOpsReporting,
   pourSteps,
+  STYLE_DIAGNOSTICS_KEY,
   type StyleRefusals,
 } from "./pour.js";
 
@@ -230,12 +231,23 @@ export async function finishStandalone(
   let storyIds = engine.skeletonStories();
   let midPageColumns = engine.usesMidPageColumns();
   // Doc ADR 625 — a prefilled skeleton holds the theme, swatches and styles.
+  // What it left out for want of a model field is told as the old pour told
+  // what the engine refused (ADR-007).
   const refusals: StyleRefusals = bodyPrefilled
     ? { messages: [], paths: new Set() }
     : await applyStyleOpsReporting(
         host,
         buildStyleMutations(ir, { theme: true }),
       );
+  if (bodyPrefilled) {
+    host.diagnostics.set(
+      STYLE_DIAGNOSTICS_KEY,
+      engine.prefilledNotes().map((what) => ({
+        severity: "warning" as const,
+        message: t(DOC.cannotApply, { what, reason: t(DOC.noModelField) }),
+      })),
+    );
+  }
   if (midPageColumns && SPAN_COLUMN_PATHS.some((p) => refusals.paths.has(p))) {
     engine.setMidPageColumns(false);
     midPageColumns = false;

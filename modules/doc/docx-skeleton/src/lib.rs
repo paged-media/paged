@@ -47,7 +47,9 @@
 
 pub mod body;
 pub mod catalog;
+pub mod endnote;
 pub mod items;
+pub mod look;
 pub mod native;
 
 use docx_core::{DocxDocument, Section};
@@ -60,6 +62,10 @@ use docx_lower::sections::{LowerOptions, StoryColumns};
 pub struct Skeleton {
     pub paged: Vec<u8>,
     pub section_stories: Vec<String>,
+    /// What a prefilled skeleton leaves out for want of a model field (a
+    /// language, say), one line each: the open reports them as the old pour
+    /// reported what the engine refused. Empty for a plain skeleton.
+    pub notes: Vec<String>,
 }
 
 /// Id of native story `k` (0-based).
@@ -239,11 +245,17 @@ pub fn skeleton_prefilled(
         .map(|(_, item)| item)
         .collect();
     items::add_page_items(&mut document, &items);
-    // The theme, swatches and styles the paragraphs name: the engine's own
-    // operations, so a refused property sends the document to the old path.
-    if catalog::apply_catalog(&mut document, lowered, &native.keep_styles).is_err() {
-        return Ok(None);
-    }
+    // The theme, swatches and styles the paragraphs name: a property the
+    // model has no field for (other than the ones left out and reported)
+    // sends the document to the old path.
+    let mut notes = match catalog::apply_catalog(&mut document, lowered, &native.keep_styles) {
+        Ok(skipped) => skipped,
+        Err(_) => return Ok(None),
+    };
+    notes.extend(native.skipped);
+    // Doc ADR 619 — the swatches the looks of pictures and text boxes paint
+    // with (the colours the lowering did not mint, the gradients).
+    native.looks.make(&mut document);
     // Doc ADR 611 — each master frame's story holds its part.
     for (story, paragraphs) in parts {
         if paragraphs.is_empty() {
@@ -295,6 +307,11 @@ pub fn skeleton_prefilled(
         parsed.story.comments = comments[k].clone();
         parsed.story.destinations = destinations[k].clone();
     }
+    // Doc ADR 625 — the endnote story, a page at the end holding the
+    // endnotes the paragraphs reference.
+    if endnote::add_endnote_story(&mut document, &native.endnotes).is_err() {
+        return Ok(None);
+    }
     let (w, h) = pages
         .first()
         .map(|p| (p.width, p.height))
@@ -304,6 +321,7 @@ pub fn skeleton_prefilled(
     Ok(Some(Skeleton {
         paged,
         section_stories: pages.into_iter().map(|p| p.story_id).collect(),
+        notes,
     }))
 }
 
@@ -338,5 +356,6 @@ pub fn skeleton_with(
     Ok(Skeleton {
         paged,
         section_stories: pages.into_iter().map(|p| p.story_id).collect(),
+        notes: Vec::new(),
     })
 }

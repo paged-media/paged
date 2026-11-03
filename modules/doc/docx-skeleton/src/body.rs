@@ -50,7 +50,13 @@ use paged_model::{
     TextWrap, TextWrapMode, TextWrapSide, WordField, WordTableLayout,
 };
 use paged_model::{Change, ChangeKind, Comment, FormatChange, ParaPropsChange};
-use paged_model::{Footnote, StartParagraph, StoryDestination, FOOTNOTE_REFERENCE_MARKER};
+use paged_model::{
+    EndnoteReference, Footnote, StartParagraph, StoryDestination, ENDNOTE_REFERENCE_MARKER,
+    FOOTNOTE_REFERENCE_MARKER,
+};
+
+use crate::endnote::NativeEndnote;
+use crate::look::{paint_frame, LookNeeds};
 
 /// The id prefix of the styles the lowering synthesizes for direct
 /// formatting (`docx-lower` `synthesize`).
@@ -88,6 +94,14 @@ pub struct NativeBody {
     pub extra: Vec<(String, Vec<Paragraph>)>,
     /// The styles the lowering invented that paragraphs keep.
     pub keep_styles: std::collections::BTreeSet<String>,
+    /// The endnotes the paragraphs reference, in reference order (doc ADR
+    /// 625, slice 7): the endnote story is built from them.
+    pub endnotes: Vec<NativeEndnote>,
+    /// What the pictures' and text boxes' looks need of the document.
+    pub looks: LookNeeds,
+    /// The properties left out because the model has no field for them (the
+    /// old pour's engine refused them the same way).
+    pub skipped: std::collections::BTreeSet<String>,
 }
 
 impl NativeBody {
@@ -339,9 +353,29 @@ pub fn set_run_prop(r: &mut CharacterRun, prop: &StyleProp) -> bool {
             PropValue::ColorRef(c) => r.fill_color = Some(c.clone()),
             _ => return false,
         },
+        // The applied language (doc ADR 614): left out. The old pour's
+        // engine refused it as a style property, so no paragraph ever took
+        // it; setting it on the run would give the native open a hyphenation
+        // the old one never had. `put_char` says so.
+        "characterLanguage" => return text_of(v).is_some(),
         _ => return false,
     }
     true
+}
+
+/// The property left out for want of a model field (see `set_run_prop`).
+const LANGUAGE: &str = "characterLanguage";
+
+/// [`set_run_prop`], noting a property it leaves out.
+fn put_char(
+    r: &mut CharacterRun,
+    prop: &StyleProp,
+    skipped: &mut std::collections::BTreeSet<String>,
+) -> bool {
+    if prop.path == LANGUAGE {
+        skipped.insert(format!("{LANGUAGE} on text"));
+    }
+    set_run_prop(r, prop)
 }
 
 /// The paragraph properties slice 1 builds, read back off the model in the
@@ -480,8 +514,6 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
         Some("hyperlinked field")
     } else if r.field.is_some() && r.text.is_empty() {
         Some("field without a result")
-    } else if r.note.as_ref().is_some_and(|n| n.endnote) {
-        Some("endnote")
     } else if r.note.is_some() && r.field.is_some() {
         Some("note reference in a field")
     } else if r.field.is_some()
@@ -500,13 +532,7 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
 }
 
 fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
-    if p.images.iter().any(|i| i.fx.is_some()) {
-        Some("picture look")
-    } else if p.text_boxes.iter().any(|b| b.fx.is_some()) {
-        Some("text box look")
-    } else {
-        p.runs.iter().find_map(run_deferral)
-    }
+    p.runs.iter().find_map(run_deferral)
 }
 
 /// A float's anchored-object settings (`anchoredFloat` in the host model).
@@ -576,6 +602,12 @@ struct Minted {
     /// The stories of inline text boxes, made beside the body's.
     extra: Vec<(String, Vec<Paragraph>)>,
     links: Vec<NativeLink>,
+    /// The endnotes the paragraphs reference, in reference order.
+    endnotes: Vec<NativeEndnote>,
+    /// What the looks of pictures and text boxes need of the document.
+    looks: LookNeeds,
+    /// Properties the model has no field for, left out.
+    skipped: std::collections::BTreeSet<String>,
 }
 
 /// A hyperlink the body makes: its text source on a run, its URL
@@ -641,9 +673,10 @@ fn build_parts(
     if p.mark_change.is_some() || p.props_change.is_some() {
         return Err("tracked paragraph change on a paragraph a break splits".into());
     }
-    if whole.paragraph_style.as_deref().is_some_and(is_synthesized) {
-        return Err("a break in a paragraph that keeps its invented style".into());
-    }
+    // A paragraph that keeps the style the lowering made for it (it cannot
+    // carry that style's character properties itself) is split into parts
+    // that keep their breaks' styles the same way: the old pour's.
+    let keeps = whole.paragraph_style.as_deref().is_some_and(is_synthesized);
     let first_chars: Vec<&StyleProp> = split_style(styles, p.para_style_id.as_deref())?
         .props
         .into_iter()
@@ -654,12 +687,14 @@ fn build_parts(
         .iter()
         .map(|r| r.text.chars().count() as u32)
         .sum();
-    // The cuts, each a new paragraph before the character at `at`.
+    // The cuts, each a new paragraph before the character at `at`; a break at
+    // the very end (and one in an empty paragraph) leaves an empty paragraph
+    // after it, as the pour makes.
     let mut cuts: Vec<(u32, &docx_lower::ir::LoweredSegment)> = p
         .segments
         .iter()
-        .filter(|s| s.at > 0 && s.at < total)
-        .map(|s| (s.at, s))
+        .filter(|s| s.at > 0 || total == 0)
+        .map(|s| (s.at.min(total), s))
         .collect();
     cuts.sort_by_key(|c| c.0);
     cuts.dedup_by_key(|c| c.0);
@@ -674,6 +709,20 @@ fn build_parts(
             at += n;
         }
     }
+    // Where the endnote references stand, by the character of their markers.
+    let ref_at: Vec<u32> = {
+        let mut out = Vec::new();
+        let mut at = 0u32;
+        for r in &whole.runs {
+            for ch in r.text.chars() {
+                if ch == ENDNOTE_REFERENCE_MARKER {
+                    out.push(at);
+                }
+                at += 1;
+            }
+        }
+        out
+    };
     let bounds: Vec<u32> = std::iter::once(0)
         .chain(cuts.iter().map(|c| c.0))
         .chain(std::iter::once(total))
@@ -688,7 +737,23 @@ fn build_parts(
                 anchored_frames: Vec::new(),
                 anchored_frame_offsets: Vec::new(),
                 footnotes: Vec::new(),
+                endnote_references: Vec::new(),
                 ..whole.clone()
+            }
+        } else if keeps {
+            // The break's own style, with its invented parents.
+            let id = cuts[k - 1].1.para_style_id.clone();
+            let mut at = id.as_deref();
+            while let Some(i) = at {
+                if !is_synthesized(i) {
+                    break;
+                }
+                minted.keep.insert(i.to_owned());
+                at = styles.get(i).and_then(|s| s.based_on.as_deref());
+            }
+            Paragraph {
+                paragraph_style: id,
+                ..Paragraph::default()
             }
         } else {
             let seg = split_style(styles, cuts[k - 1].1.para_style_id.as_deref())?;
@@ -745,6 +810,11 @@ fn build_parts(
                 let mut f = f.clone();
                 f.anchor = Some(a - from);
                 part.footnotes.push(f);
+            }
+        }
+        for (rf, at) in whole.endnote_references.iter().zip(&ref_at) {
+            if *at >= from && *at < to {
+                part.endnote_references.push(rf.clone());
             }
         }
         parts.push(part);
@@ -845,12 +915,12 @@ fn build_whole(
             minted.links.push(link);
         }
         for prop in &para_chars {
-            if !set_run_prop(&mut run, prop) {
+            if !put_char(&mut run, prop, &mut minted.skipped) {
                 return Err(format!("no model field for {}", prop.path));
             }
         }
         for prop in &run_direct.props {
-            if !set_run_prop(&mut run, prop) {
+            if !put_char(&mut run, prop, &mut minted.skipped) {
                 return Err(format!("no model field for {}", prop.path));
             }
         }
@@ -867,7 +937,7 @@ fn build_whole(
                 ..CharacterRun::default()
             };
             for prop in &before.props {
-                if !set_run_prop(&mut b, prop) {
+                if !put_char(&mut b, prop, &mut minted.skipped) {
                     return Err(format!("no model field for {}", prop.path));
                 }
             }
@@ -881,8 +951,15 @@ fn build_whole(
             // character in its own default run (the engine writes it into
             // the unstyled text), and the note on the paragraph at the
             // marker's character, its text the marker, the separator and the
-            // note's text (`insertFootnote`).
+            // note's text (`insertFootnote`). An endnote (slice 7) is the
+            // same marker run and an `EndnoteReference` on the paragraph; its
+            // text is a range of the endnote story (`endnote`).
             Some(note) => {
+                let marker = if note.endnote {
+                    ENDNOTE_REFERENCE_MARKER
+                } else {
+                    FOOTNOTE_REFERENCE_MARKER
+                };
                 let text = std::mem::take(&mut run.text);
                 let mut piece = String::new();
                 let flush = |piece: &mut String, para: &mut Paragraph| {
@@ -893,7 +970,7 @@ fn build_whole(
                     }
                 };
                 for ch in text.chars() {
-                    if ch != FOOTNOTE_REFERENCE_MARKER {
+                    if ch != marker {
                         piece.push(ch);
                         continue;
                     }
@@ -910,9 +987,24 @@ fn build_whole(
                     let body = doc
                         .notes
                         .iter()
-                        .find(|n| !n.endnote && n.id == note.id)
+                        .find(|n| n.endnote == note.endnote && n.id == note.id)
                         .map(|n| n.text.as_str())
                         .unwrap_or_default();
+                    if note.endnote {
+                        let n = minted.endnotes.len();
+                        let id = format!("docx_en{n}");
+                        let range_id = format!("docx_enr{n}");
+                        para.endnote_references.push(EndnoteReference {
+                            self_id: id.clone(),
+                            text_range: Some(range_id.clone()),
+                        });
+                        minted.endnotes.push(NativeEndnote {
+                            id,
+                            range_id,
+                            text: body.to_string(),
+                        });
+                        continue;
+                    }
                     para.footnotes.push(Footnote {
                         self_id: Some(format!("docx_fn{}", minted.notes)),
                         anchor: Some(at),
@@ -968,7 +1060,7 @@ fn build_whole(
         para.anchored_frame_offsets
             .resize(para.anchored_frames.len(), 0);
         para.anchored_frame_offsets.push(img.at.min(chars));
-        para.anchored_frames.push(AnchoredFrame {
+        let mut frame = AnchoredFrame {
             frame_kind: AnchoredFrameKind::Rectangle,
             self_id: Some(format!("docx_img{}", minted.frames)),
             bounds: Some(Bounds {
@@ -983,7 +1075,13 @@ fn build_whole(
             setting: img.anchor.as_ref().map(anchored_setting),
             layout: img.layout.as_ref().map(anchored_layout).unwrap_or_default(),
             ..AnchoredFrame::default()
-        });
+        };
+        // Doc ADR 619 — the picture's look on its frame (fill, outline,
+        // opacity, effects).
+        if let Some(fx) = &img.fx {
+            paint_frame(&mut frame, fx, &mut minted.looks)?;
+        }
+        para.anchored_frames.push(frame);
         minted.frames += 1;
     }
     // Engine ADR 1050, doc ADR 614 — a text box anchored in the paragraph: an
@@ -997,7 +1095,7 @@ fn build_whole(
         para.anchored_frame_offsets
             .resize(para.anchored_frames.len(), 0);
         para.anchored_frame_offsets.push(tb.at.min(chars));
-        para.anchored_frames.push(AnchoredFrame {
+        let mut frame = AnchoredFrame {
             frame_kind: AnchoredFrameKind::TextFrame,
             self_id: Some(format!("docx_box{}", minted.boxes)),
             bounds: Some(Bounds {
@@ -1010,7 +1108,12 @@ fn build_whole(
             setting: tb.anchor.as_ref().map(anchored_setting),
             layout,
             ..AnchoredFrame::default()
-        });
+        };
+        // The box's look (fill, outline, opacity, effects).
+        if let Some(fx) = &tb.fx {
+            paint_frame(&mut frame, fx, &mut minted.looks)?;
+        }
+        para.anchored_frames.push(frame);
         minted.boxes += 1;
     }
     Ok(para)
@@ -1149,6 +1252,11 @@ fn build_table(
                 let para = build_paragraph(doc, styles, p, minted)?;
                 if para.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
                     return Err("line feed in a table cell".into());
+                }
+                // The engine keeps the endnotes' order by the references of
+                // the story's own paragraphs, not of its cells.
+                if !para.endnote_references.is_empty() {
+                    return Err("endnote in a table cell".into());
                 }
                 cell.paragraphs.push(para);
             }
@@ -1319,6 +1427,9 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
         part_errors,
         extra: minted.extra,
         keep_styles: minted.keep,
+        endnotes: minted.endnotes,
+        looks: minted.looks,
+        skipped: minted.skipped,
     }
 }
 
@@ -1337,6 +1448,12 @@ pub struct NativeStories {
     pub extra: Vec<(String, Vec<Paragraph>)>,
     /// The styles the lowering invented that paragraphs keep.
     pub keep_styles: std::collections::BTreeSet<String>,
+    /// The endnotes the paragraphs reference, in reference order.
+    pub endnotes: Vec<NativeEndnote>,
+    /// What the looks of pictures and text boxes need of the document.
+    pub looks: LookNeeds,
+    /// The properties left out for want of a model field.
+    pub skipped: Vec<String>,
 }
 
 /// The body's native stories, one per skeleton story and in its order, when
@@ -1357,6 +1474,9 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     let parts = body.parts;
     let extra = body.extra;
     let keep_styles = body.keep_styles;
+    let endnotes = body.endnotes;
+    let looks = body.looks;
+    let skipped: Vec<String> = body.skipped.into_iter().collect();
     let mut paras = Vec::with_capacity(body.blocks.len());
     // The index of each block's first native paragraph (a split block makes
     // several).
@@ -1490,5 +1610,8 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
         parts,
         extra,
         keep_styles,
+        endnotes,
+        looks,
+        skipped,
     })
 }

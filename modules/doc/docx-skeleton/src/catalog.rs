@@ -269,12 +269,22 @@ fn theme_of(t: &dml_native::theme::ThemeWire) -> Result<Theme, CatalogError> {
     })
 }
 
+/// The style property the model has no field for: a character style has no
+/// language (`CharacterStyleDef`), and the engine's `setStyleProperty` refuses
+/// it on both kinds of style, which the old pour reported and went on. It is
+/// left out the same way and reported by [`apply_catalog`].
+const UNMODELLED: &str = "characterLanguage";
+
 /// Apply the theme, swatches, colour groups and styles of `ir` to `document`.
+/// Returns what it left out for want of a model field, one line each
+/// (`characterLanguage on ParagraphStyle/docx-Default`): the old pour's engine
+/// refused those too, and said so.
 pub fn apply_catalog(
     document: &mut Document,
     ir: &LoweredDoc,
     keep: &std::collections::BTreeSet<String>,
-) -> Result<(), CatalogError> {
+) -> Result<Vec<String>, CatalogError> {
+    let mut skipped = Vec::new();
     // Engine ADR 1056 — the theme first, so the swatches that follow its
     // slots find it.
     let themed = ir.theme.is_some();
@@ -346,6 +356,10 @@ pub fn apply_catalog(
                     ..ParagraphStyleDef::default()
                 };
                 for p in &style.props {
+                    if p.path == UNMODELLED {
+                        skipped.push(format!("{} on {}", p.path, style.id));
+                        continue;
+                    }
                     if !paragraph_style_prop(&mut def, p) {
                         return Err(format!("{}: no field for {}", style.id, p.path));
                     }
@@ -363,6 +377,10 @@ pub fn apply_catalog(
                     ..CharacterStyleDef::default()
                 };
                 for p in &style.props {
+                    if p.path == UNMODELLED {
+                        skipped.push(format!("{} on {}", p.path, style.id));
+                        continue;
+                    }
                     if !character_style_prop(&mut def, p) {
                         return Err(format!("{}: no field for {}", style.id, p.path));
                     }
@@ -374,5 +392,5 @@ pub fn apply_catalog(
             }
         }
     }
-    Ok(())
+    Ok(skipped)
 }

@@ -39,6 +39,9 @@ mod wasm {
         session: Option<DocSession>,
         /// Refusal ledger of the last `save_edited*` (see `last_save_skips`).
         last_skips: std::cell::RefCell<Vec<String>>,
+        /// What the last prefilled skeleton left out for want of a model
+        /// field (see `prefilled_notes`).
+        prefilled_notes: std::cell::RefCell<Vec<String>>,
     }
 
     #[wasm_bindgen]
@@ -48,6 +51,7 @@ mod wasm {
             DocEngine {
                 session: None,
                 last_skips: std::cell::RefCell::new(Vec::new()),
+                prefilled_notes: std::cell::RefCell::new(Vec::new()),
             }
         }
 
@@ -131,10 +135,22 @@ mod wasm {
                 .session
                 .as_ref()
                 .ok_or_else(|| JsValue::from_str("no document loaded"))?;
-            session
+            let skeleton = session
                 .skeleton_prefilled(name)
-                .map(|s| s.map(|s| s.paged).unwrap_or_default())
-                .map_err(|e| JsValue::from_str(&e))
+                .map_err(|e| JsValue::from_str(&e))?;
+            *self.prefilled_notes.borrow_mut() = skeleton
+                .as_ref()
+                .map(|s| s.notes.clone())
+                .unwrap_or_default();
+            Ok(skeleton.map(|s| s.paged).unwrap_or_default())
+        }
+
+        /// What the last `skeleton_paged_prefilled` left out for want of a
+        /// field in the document model (a language, say), as a JSON array
+        /// of lines: the old pour's engine refused those and the open
+        /// reported it (ADR-007), so the native open reports them too.
+        pub fn prefilled_notes(&self) -> String {
+            serde_json::to_string(&*self.prefilled_notes.borrow()).unwrap_or_else(|_| "[]".into())
         }
 
         /// The story ids of the skeleton, in story order, as JSON (sections

@@ -1,6 +1,6 @@
 # ADR 625 — Doc builds the engine's model in Rust; the plugin-local IR retires slice by slice
 
-- **Status:** Accepted 2026-11-02. Slices 1 to 5 implemented, with 4 in part; the prefilled open is ON (2026-11-02); 4b, 6 and 7 and the removal of the IR remain; the rest is a plan.
+- **Status:** Accepted 2026-11-02. Slices 1 to 7 implemented, looks, endnotes and breaks included; the prefilled open is ON (2026-11-02); 4b, 6 and 7 and the removal of the IR remain; the rest is a plan.
 - **Scope:** `docx-skeleton` (`body`), later `docx-lower`, `docx-export`, `docx-js`,
   `packages/doc-host-model`.
 - **Builds on:** ADR 600 (lowering onto the native model), 602 and 613 (save-back is a
@@ -244,6 +244,41 @@ same path would be overridden by them. For those two the paragraph keeps the sty
 for it (the old pour's way), and the catalogue includes that style and its invented parents: the only
 case in which a prefilled document holds a `docx-auto-p` style. A break in such a paragraph stays
 deferred.
+
+### Fallbacks closed: looks, endnotes, a language, breaks in a kept style
+
+All by hand ports; `paged-mutate` stays out of the doc wasm (the editor's `dist/` budget).
+
+- **Picture and text box looks** (`docx-skeleton` `look`): `nativeFxOps` of the lowering kit
+  (extensions ADR 347) written onto the `AnchoredFrame` fields in the same order as the engine's
+  anchored arms (engine ADR 1045): fill or gradient swatch, outline, opacity, drop and inner
+  shadow, glow, soft edge, gradient feather, then the effect stack through the model's own
+  `set_stack` (the blur, colour overlay and reflection entries are ported from
+  `EffectEntrySpec::to_model`; any other kind defers). Presets are `paged_model::effect_stack::defaults`.
+  Colours are `Color/docx-RRGGBB`; a picture in a cell has none minted, so the skeleton makes it;
+  gradients are the content-addressed `Gradient/docx-…` swatches the pour made.
+- **Endnotes** (`docx-skeleton` `endnote`): buildable without `paged-mutate`; `CreateEndnoteStory`
+  and `InsertEndnote` only edit plain model data. A reference is the marker run and an
+  `EndnoteReference`; the story is a page appended after the last page (on its master and margins),
+  an endnote text frame over its margin box, and the title paragraph holding the ranges in
+  reference order. The options are the engine's defaults, as in the pour (set afterwards). An
+  endnote in a table cell still defers (the engine orders them by the story's own paragraphs).
+- **A style property with no model field**: only `characterLanguage` is emitted by the lowering
+  without a field (`CharacterStyleDef` has none, and the engine's `setStyleProperty` refused it on both
+  style kinds, so the old pour reported a warning and went on, while the catalogue refused the whole
+  document, which includes any file with `w:lang` in its defaults). It is now left out the same way
+  and reported through `prefilled_notes` as the same warning. Not applying it on runs keeps the
+  native open equal to the old pour (setting the run's language would change hyphenation).
+- **Breaks**: a paragraph that keeps its invented style is split into parts that keep their breaks'
+  invented styles (with their parents in the catalogue). A break at a paragraph's very end that
+  cannot be carried (a table follows, the section ends) or in an empty paragraph leaves the empty
+  paragraph after it, as the pour does (the first native version dropped it).
+
+Evidence: `tests/body_native.rs`; `native-body.spec.ts` now also compares each anchored frame's
+look and the endnote elements of the exported IDML, old pour against native, on every fixture, and
+requires `picture-effects`, `objects-text-boxes`, `objects-languages`, `endnote-body` and
+`break-kept-body` to open natively. What still defers: comments in a field, hyperlinked or reviewed
+fields, content controls, an endnote in a cell, a table poured as text.
 
 ### Amendment: what removing the IR and `mutations.ts` takes (design, not built)
 

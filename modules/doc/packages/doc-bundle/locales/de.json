@@ -8,6 +8,7 @@
   "doc.bundle.kindDocument": "Word-Dokument",
   "doc.bundle.kindMergeField": "Seriendruckfeld",
   "doc.bundle.kindRun": "Word-Textabschnitt",
+  "doc.bundle.noModelField": "Das Dokumentmodell hat dafür kein Feld.",
   "doc.bundle.propertiesTitle": "Word-Eigenschaften",
   "doc.bundle.sectionBlock": "Block",
   "doc.bundle.sectionDocument": "Dokument",

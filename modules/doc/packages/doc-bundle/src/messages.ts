@@ -95,6 +95,7 @@ export const DOC = defineMessages("doc.bundle", {
   cannotChangeColumns:
     "This editor version cannot change columns mid-page: each Word section that does opens a new page instead.",
   cannotApply: "This engine cannot apply {what}: {reason}",
+  noModelField: "The document model has no field for it.",
 });
 
 /** The menu item this bundle adds: the path stays English (it is the

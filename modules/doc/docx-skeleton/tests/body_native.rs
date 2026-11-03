@@ -346,7 +346,8 @@ fn compare(label: &str, doc: &LoweredDoc) -> (usize, usize) {
                     .segments
                     .iter()
                     .map(|s| s.at)
-                    .filter(|a| *a > 0 && *a < want.chars().count() as u32)
+                    .filter(|a| *a > 0 || want.is_empty())
+                    .map(|a| a.min(want.chars().count() as u32))
                     .collect();
                 assert_eq!(parts.len(), 1 + cuts.len(), "{at}: one paragraph per break");
                 // The break's own rule starts the part.
@@ -908,4 +909,142 @@ fn a_comment_on_a_table_cell_text_belongs_to_the_story() {
         .filter(|r| !r.comments.is_empty())
         .collect();
     assert_eq!(cell_runs.len(), 1, "a run in a cell carries the comment");
+}
+
+#[test]
+fn the_bundles_endnote_fixture_builds_the_endnote_story() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/endnote-body.docx");
+    let model = docx_import::import_docx(bytes).expect("import");
+    let ir = docx_lower::lower(&model);
+    let body = native_body(&ir);
+    let why: Vec<_> = body
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Deferred { reason } => Some(reason.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(why.is_empty(), "deferred: {why:?}");
+    assert_eq!(body.endnotes.len(), 2);
+    let sk = docx_skeleton::skeleton_prefilled(&model, &ir, "e.docx", Default::default())
+        .expect("builds")
+        .expect("native");
+    let doc = open_paged(&sk.paged);
+    let story = doc
+        .stories
+        .iter()
+        .find(|s| s.story.is_endnote_story)
+        .expect("an endnote story");
+    let para = &story.story.paragraphs[0];
+    assert_eq!(para.endnote_ranges.len(), 2);
+    let text: String = para.runs.iter().map(|r| r.text.as_str()).collect();
+    assert!(text.starts_with("Endnotes\n"), "{text:?}");
+    assert!(text.contains("First endnote.") && text.contains("Second endnote."));
+    assert!(text.find("First").unwrap() < text.find("Second").unwrap());
+    let refs: usize = doc
+        .stories
+        .iter()
+        .filter(|s| !s.story.is_endnote_story)
+        .flat_map(|s| &s.story.paragraphs)
+        .map(|p| p.endnote_references.len())
+        .sum();
+    assert_eq!(refs, 2);
+    assert!(doc
+        .spreads
+        .last()
+        .is_some_and(|s| s.spread.endnote_frames.len() == 1));
+}
+
+fn open_paged(paged: &[u8]) -> paged_scene::Document {
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(paged)).expect("zip");
+    let mut pgm = Vec::new();
+    zip.by_name(paged_store::DOCUMENT_PGM_PATH)
+        .expect("model part")
+        .read_to_end(&mut pgm)
+        .unwrap();
+    paged_store::from_bytes(&pgm).expect("decodes")
+}
+
+#[test]
+fn picture_and_text_box_looks_are_painted_on_their_frames() {
+    for (label, bytes) in [
+        ("picture-effects", docx_conformance::picture_effects_docx()),
+        ("text-boxes", docx_conformance::objects_text_boxes_docx()),
+    ] {
+        let model = docx_import::import_docx(&bytes).expect("import");
+        let ir = docx_lower::lower(&model);
+        let body = native_body(&ir);
+        let why: Vec<_> = body
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                NativeBlock::Deferred { reason } => Some(reason.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(why.is_empty(), "{label}: deferred {why:?}");
+        let frames: Vec<_> = body
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                NativeBlock::Paragraph(p) => Some(p.anchored_frames.iter()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        let looked = frames
+            .iter()
+            .filter(|f| {
+                f.drop_shadow.is_some()
+                    || f.effects.is_some()
+                    || f.opacity.is_some()
+                    || f.stroke_color.is_some()
+                    || f.fill_color.is_some()
+            })
+            .count();
+        let want = ir
+            .story
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                LoweredBlock::Paragraph(p) => Some(p),
+                _ => None,
+            })
+            .map(|p| {
+                p.images.iter().filter(|i| i.fx.is_some()).count()
+                    + p.text_boxes.iter().filter(|t| t.fx.is_some()).count()
+            })
+            .sum::<usize>();
+        assert!(
+            looked >= want && want > 0 || label != "picture-effects",
+            "{label}"
+        );
+        // The swatches the looks name exist once the skeleton is built.
+        let sk = docx_skeleton::skeleton_prefilled(&model, &ir, "l.docx", Default::default())
+            .expect("builds")
+            .expect("native");
+        let doc = open_paged(&sk.paged);
+        for f in frames {
+            for c in [&f.fill_color, &f.stroke_color].into_iter().flatten() {
+                if c.starts_with("Color/docx-") {
+                    assert!(doc.palette.colors.contains_key(c), "{label}: {c}");
+                }
+                if c.starts_with("Gradient/docx-") {
+                    assert!(doc.palette.gradients.contains_key(c), "{label}: {c}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_language_does_not_refuse_the_catalogue() {
+    let model = docx_import::import_docx(&docx_conformance::objects_languages_docx()).unwrap();
+    let ir = docx_lower::lower(&model);
+    let sk = docx_skeleton::skeleton_prefilled(&model, &ir, "g.docx", Default::default())
+        .expect("builds")
+        .expect("native despite characterLanguage");
+    assert!(sk.notes.iter().any(|n| n.starts_with("characterLanguage")));
 }

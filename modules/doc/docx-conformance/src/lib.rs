@@ -27,6 +27,7 @@ use std::io::Write;
 use zip::write::SimpleFileOptions;
 
 mod first_fit;
+mod native;
 mod objects;
 mod reach;
 mod structure;
@@ -34,6 +35,7 @@ pub use first_fit::{
     first_fit_cases, first_fit_cases_json, first_fit_docx, FirstFitCase, CHAR_PT,
     FIRST_FIT_FULL_MEASURE_PT,
 };
+pub use native::{break_kept_body_docx, endnote_body_docx};
 pub use objects::{
     float_cases, objects_floats_docx, objects_languages_docx, objects_nested_tables_docx,
     objects_table_look_docx, objects_text_boxes_docx, FLOAT_PAGE_PARAGRAPHS, FLOAT_SIZE_PT,

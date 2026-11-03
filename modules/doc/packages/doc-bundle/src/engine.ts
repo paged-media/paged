@@ -50,6 +50,7 @@ interface WasmDocEngine {
   save_object_edits(editsJson: string): Uint8Array;
   save_edited_from_content(contentJson: string): Uint8Array;
   last_save_skips(): string;
+  prefilled_notes(): string;
   style_tokens(): string;
   skeleton_paged(name: string): Uint8Array;
   skeleton_paged_prefilled(name: string): Uint8Array;
@@ -133,6 +134,13 @@ export class DocEngine {
   skeletonPagedPrefilled(name: string): Uint8Array | null {
     const bytes = this.inner.skeleton_paged_prefilled(name);
     return bytes.length > 0 ? bytes : null;
+  }
+
+  /** What the last {@link skeletonPagedPrefilled} left out for want of a
+   *  field in the document model (a language, say), one line each: the
+   *  old pour reported what the engine refused, so the native open does. */
+  prefilledNotes(): string[] {
+    return JSON.parse(this.inner.prefilled_notes()) as string[];
   }
 
   /** The skeleton's section story ids, in section order (the pour targets). */
