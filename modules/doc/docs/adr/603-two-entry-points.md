@@ -108,3 +108,11 @@ describes the code before that change.
 model. Neither gets a frame surface; both are in the `wordDocument` context (Insert by entering
 the frame, Open by the document context the importer holds), with the same control bar,
 shortcuts and status bar.
+
+## Amendment: placement by a Rust batch
+
+Placement (the second entry point) builds its batch in Rust where it can: `DocEngine.placeBatch`
+(`docx-skeleton::place`, doc ADR 625 amendment) returns the same operations the pour sent, from the
+model the open builds, and `place.ts` submits them as the one batch. What the builder does not yet
+take (see 625 for the slices built) is placed by the pour as before; the entry point, the binding
+label and the source part are unchanged.

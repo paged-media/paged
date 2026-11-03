@@ -181,6 +181,16 @@ const FIXTURES = [
   "structure.docx",
 ];
 
+// Slice 2: tables (cell text and styles, spans, row heights, borders and
+// fill, nested tables). A cell holds no model range for direct formatting,
+// so the styles the lowering invented for cell text stay in the document.
+const TABLE_FIXTURES = [
+  "table-body.docx",
+  "price-table.docx",
+  "objects-table-look.docx",
+  "objects-nested-tables.docx",
+];
+
 describe.skipIf(!docxPresent)(
   "doc headless — placement batch (ADR 625)",
   () => {
@@ -189,7 +199,8 @@ describe.skipIf(!docxPresent)(
       for (const h of opened.splice(0)) h.dispose();
     });
 
-    for (const name of FIXTURES) {
+    for (const name of [...FIXTURES, ...TABLE_FIXTURES]) {
+      const tabled = TABLE_FIXTURES.includes(name);
       it(`${name}: the Rust batch places what the pour places`, async () => {
         const old = await place(name, false);
         const now = await place(name, true);
@@ -208,7 +219,13 @@ describe.skipIf(!docxPresent)(
           old.paras.map((p) => p.rects),
         );
         // The native placement holds no style the lowering invented.
-        expect(now.styles.filter((s) => s.includes("docx-auto"))).toEqual([]);
+        const auto = (x: Placed) =>
+          x.styles.filter((s) => s.includes("docx-auto"));
+        if (tabled) {
+          expect(auto(old)).toEqual(expect.arrayContaining(auto(now)));
+        } else {
+          expect(auto(now)).toEqual([]);
+        }
         expect(now.stories).toBe(old.stories);
       }, 120_000);
     }

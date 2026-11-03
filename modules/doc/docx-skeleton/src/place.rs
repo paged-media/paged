@@ -39,7 +39,10 @@
 
 use std::collections::HashSet;
 
-use docx_lower::ir::{LoweredBlock, LoweredDoc, LoweredParagraph, LoweredStyle, StyleCollection};
+use docx_lower::ir::{
+    LoweredBlock, LoweredCell, LoweredDoc, LoweredParagraph, LoweredStyle, LoweredTable,
+    StyleCollection,
+};
 use paged_model::Paragraph;
 use serde_json::{json, Value};
 
@@ -177,6 +180,256 @@ pub fn style_ops(doc: &LoweredDoc, keep: &HashSet<String>) -> Vec<Value> {
     ops
 }
 
+/// Whether a table is one this builder takes: every paragraph of every cell
+/// is plain, and no cell holds a picture (a later slice).
+fn plain_table(t: &LoweredTable) -> Result<(), String> {
+    if !t.flow.is_empty() {
+        return Err("table poured as text".into());
+    }
+    for c in &t.cells {
+        for p in &c.paragraphs {
+            plain(p).map_err(|why| format!("in a table cell: {why}"))?;
+        }
+        for n in &c.nested {
+            plain_table(&n.table)?;
+        }
+    }
+    Ok(())
+}
+
+/// The styles a table's paragraphs name: those the lowering invented are
+/// kept (a cell has no model range to carry direct formatting, so the cell
+/// text takes it from them, as the pour does).
+fn table_styles(t: &LoweredTable, out: &mut HashSet<String>) {
+    out.extend(t.para_style_id.iter().cloned());
+    for c in &t.cells {
+        for p in &c.paragraphs {
+            out.extend(p.para_style_id.iter().cloned());
+            out.extend(p.runs.iter().filter_map(|r| r.char_style_id.clone()));
+        }
+        for n in &c.nested {
+            table_styles(&n.table, out);
+        }
+    }
+}
+
+fn cell_text(c: &LoweredCell) -> String {
+    c.paragraphs
+        .iter()
+        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn cell_addr(table: &str, c: &LoweredCell) -> Value {
+    json!({ "tableId": table, "row": c.row, "col": c.col })
+}
+
+fn cell_style(
+    story: &str,
+    start: usize,
+    end: usize,
+    style: &str,
+    scope: &str,
+    cell: &Value,
+) -> Value {
+    json!({
+        "op": "applyStyle",
+        "args": { "storyId": story, "start": start, "end": end, "style": style,
+                  "scope": scope, "cell": cell }
+    })
+}
+
+fn length(v: f32) -> Value {
+    json!({ "type": "length", "value": v })
+}
+
+/// The `insertTable` operation (the pour's `buildTableInsert`).
+fn insert_table(t: &LoweredTable, story: &str) -> Value {
+    let l = t.layout.clone().unwrap_or_default();
+    let width = match (l.width_pt, l.width_pct) {
+        (Some(w), _) => json!({ "unit": "points", "value": w }),
+        (None, Some(p)) => json!({ "unit": "percent", "value": p }),
+        _ => Value::Null,
+    };
+    let cell_widths: Vec<Value> = l
+        .cell_widths_pt
+        .iter()
+        .enumerate()
+        .filter_map(|(i, w)| {
+            let (w, c) = (w.as_ref()?, t.cells.get(i)?);
+            Some(json!({ "row": c.row, "col": c.col, "width": { "unit": "points", "value": w } }))
+        })
+        .collect();
+    let cant_split: Vec<usize> = l
+        .cant_split
+        .iter()
+        .enumerate()
+        .filter_map(|(r, c)| c.then_some(r))
+        .collect();
+    json!({
+        "op": "insertTable",
+        "args": {
+            "storyId": story, "rows": t.rows, "cols": t.cols,
+            "headerRows": t.header_rows, "footerRows": 0,
+            "columnWidths": t.column_widths_pt, "rowHeights": t.row_heights_pt,
+            "word": {
+                "indent": l.indent_pt.unwrap_or(0.0), "autofit": !l.fixed, "width": width,
+                "cellWidths": cell_widths, "cantSplitRows": cant_split,
+            },
+        }
+    })
+}
+
+/// A table's cells (the pour's `buildTableCells`): text per cell with its
+/// styles, geometry, borders and fill, spans, exact row heights and the
+/// tables nested in a cell.
+fn table_cells(t: &LoweredTable, story: &str, table: &str, tag: &str, out: &mut Vec<Value>) {
+    for (n, c) in t.cells.iter().enumerate() {
+        let text = cell_text(c);
+        let addr = cell_addr(table, c);
+        let styled_empty = c.paragraphs.iter().any(|p| p.para_style_id.is_some());
+        if text.is_empty() && styled_empty {
+            out.push(json!({
+                "op": "insertText",
+                "args": { "storyId": story, "offset": 0, "text": "", "cell": addr }
+            }));
+        }
+        if !text.is_empty() {
+            out.push(json!({
+                "op": "insertText",
+                "args": { "storyId": story, "offset": 0, "text": text, "cell": addr }
+            }));
+            let mut at = 0usize;
+            for p in &c.paragraphs {
+                let from = at;
+                for r in &p.runs {
+                    let start = at;
+                    at += r.text.chars().count();
+                    if let (Some(s), true) = (&r.char_style_id, at > start) {
+                        out.push(cell_style(story, start, at, s, "character", &addr));
+                    }
+                }
+                if let (Some(s), true) = (&p.para_style_id, at > from) {
+                    out.push(cell_style(story, from, at, s, "paragraph", &addr));
+                }
+            }
+        }
+        let element = json!({
+            "kind": "tableCell",
+            "id": { "story_id": story, "table_id": table, "row": c.row, "col": c.col }
+        });
+        let prop = |path: &str, value: Value| {
+            json!({ "op": "setElementProperty",
+                    "args": { "elementId": element, "path": path, "value": value } })
+        };
+        if let Some(ins) = c.insets_pt {
+            for (path, pt) in [
+                "cellInsetTop",
+                "cellInsetLeft",
+                "cellInsetBottom",
+                "cellInsetRight",
+            ]
+            .iter()
+            .zip(ins)
+            {
+                out.push(prop(path, length(pt)));
+            }
+        }
+        if let Some(v) = &c.v_align {
+            out.push(prop(
+                "cellVerticalJustification",
+                json!({ "type": "text", "value": v }),
+            ));
+        }
+        if let Some(look) = &c.look {
+            for (side, e) in [
+                ("Top", &look.top),
+                ("Left", &look.left),
+                ("Bottom", &look.bottom),
+                ("Right", &look.right),
+            ] {
+                out.push(prop(
+                    &format!("cell{side}EdgeStrokeWeight"),
+                    length(e.weight_pt),
+                ));
+                out.push(prop(
+                    &format!("cell{side}EdgeStrokeColor"),
+                    json!({ "type": "colorRef", "value": e.color }),
+                ));
+            }
+            if let Some(f) = &look.fill {
+                out.push(prop(
+                    "cellFillColor",
+                    json!({ "type": "colorRef", "value": f }),
+                ));
+            }
+        }
+        for (k, nested) in c.nested.iter().enumerate() {
+            let handle = format!("{tag}n{n}_{k}");
+            let mut insert = insert_table(&nested.table, story);
+            insert["args"]["cell"] = addr.clone();
+            insert["args"]["paragraph"] = json!(nested.paragraph);
+            out.push(insert);
+            out.push(json!({ "op": "bindCreated", "args": { "handle": handle } }));
+            table_cells(&nested.table, story, &format!("$h:{handle}"), &handle, out);
+        }
+        if c.row_span > 1 || c.col_span > 1 {
+            out.push(json!({
+                "op": "setCellSpan",
+                "args": { "storyId": story, "tableId": table, "row": c.row, "col": c.col,
+                          "rowSpan": c.row_span, "columnSpan": c.col_span }
+            }));
+        }
+    }
+    if let Some(l) = &t.layout {
+        for (row, exact) in l.exact_rows.iter().enumerate() {
+            if *exact {
+                out.push(json!({
+                    "op": "setRowHeight",
+                    "args": { "storyId": story, "tableId": table, "row": row,
+                              "height": t.row_heights_pt.get(row), "autoGrow": false }
+                }));
+            }
+        }
+    }
+}
+
+/// The carets that style a table's blank cell lines, in the cell's own
+/// offsets (the pour's `buildTableCellCarets`).
+fn table_carets(t: &LoweredTable, story: &str, table: &str, out: &mut Vec<Value>) {
+    for c in &t.cells {
+        let styled_empty = c.paragraphs.iter().any(|p| p.para_style_id.is_some());
+        if cell_text(c).is_empty() && !styled_empty {
+            continue;
+        }
+        let addr = cell_addr(table, c);
+        let mut last: Vec<(usize, &String)> = Vec::new();
+        let mut at = 0usize;
+        for p in &c.paragraphs {
+            let from = at;
+            for r in &p.runs {
+                at += r.text.chars().count();
+            }
+            if let (Some(s), true) = (&p.para_style_id, at == from) {
+                match last.iter_mut().find(|(o, _)| *o == from) {
+                    Some(e) => e.1 = s,
+                    None => last.push((from, s)),
+                }
+            }
+        }
+        for (o, s) in last {
+            out.push(cell_style(story, o, o, s, "paragraph", &addr));
+        }
+    }
+}
+
+/// One run of consecutive Word paragraphs the story takes as text.
+struct Step<'a> {
+    paras: Vec<&'a Paragraph>,
+    lowered: Vec<&'a LoweredParagraph>,
+}
+
 /// The placement of `doc` into the story `story`, or why it is not one this
 /// builder takes (the bundle then places it by the TypeScript pour).
 pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> {
@@ -187,80 +440,177 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
     if !body.links.is_empty() || !body.extra.is_empty() {
         return Err("hyperlinks or text boxes".into());
     }
-    let mut paras: Vec<&Paragraph> = Vec::new();
+    let mut keep: HashSet<String> = body.keep_styles.iter().cloned().collect();
+    // The blocks in order: a text step per run of paragraphs, a table between.
+    enum Piece<'a> {
+        Text(Step<'a>),
+        Table(&'a LoweredTable),
+    }
+    let mut pieces: Vec<Piece> = Vec::new();
     for (i, (lowered, built)) in doc.story.blocks.iter().zip(&body.blocks).enumerate() {
-        let LoweredBlock::Paragraph(p) = lowered else {
-            return Err("table".into());
-        };
-        plain(p).map_err(|why| format!("block {i}: {why}"))?;
-        match built {
-            NativeBlock::Paragraph(para) => paras.push(para),
-            NativeBlock::Deferred { reason } => return Err(format!("block {i}: {reason}")),
-            _ => return Err(format!("block {i}: not a plain paragraph")),
+        match (lowered, built) {
+            (LoweredBlock::Paragraph(p), NativeBlock::Paragraph(para)) => {
+                plain(p).map_err(|why| format!("block {i}: {why}"))?;
+                match pieces.last_mut() {
+                    Some(Piece::Text(s)) => {
+                        s.paras.push(para);
+                        s.lowered.push(p);
+                    }
+                    _ => pieces.push(Piece::Text(Step {
+                        paras: vec![para],
+                        lowered: vec![p],
+                    })),
+                }
+            }
+            (LoweredBlock::Table(t), NativeBlock::Table(_)) => {
+                plain_table(t).map_err(|why| format!("block {i}: {why}"))?;
+                table_styles(t, &mut keep);
+                pieces.push(Piece::Table(t));
+            }
+            (_, NativeBlock::Deferred { reason }) => {
+                return Err(format!("block {i}: {reason}"));
+            }
+            _ => return Err(format!("block {i}: not a plain paragraph or table")),
         }
     }
-    let mut text = String::new();
-    let mut para_ops = Vec::new();
-    let mut char_ops = Vec::new();
-    let mut prop_ops = Vec::new();
-    let mut carets = Vec::new();
+    // The invented styles a kept one is based on.
+    let by_id: std::collections::HashMap<&str, &LoweredStyle> =
+        doc.styles.iter().map(|s| (s.id.as_str(), s)).collect();
+    let mut closure: Vec<String> = keep.iter().cloned().collect();
+    while let Some(id) = closure.pop() {
+        if let Some(parent) = by_id.get(id.as_str()).and_then(|s| s.based_on.clone()) {
+            if is_synthesized(&parent) && keep.insert(parent.clone()) {
+                closure.push(parent);
+            }
+        }
+    }
+
+    let mut body_ops: Vec<Value> = Vec::new();
+    let mut carets: Vec<Value> = Vec::new();
+    let mut cell_carets: Vec<Value> = Vec::new();
+    // `at`: the contiguous character offsets (style ranges); `text_at`: the
+    // `insertText` space (bytes and the paragraph breaks); `last`: the index
+    // of the story's last paragraph, -1 while the story is fresh.
     let mut at = 0usize;
-    for (i, para) in paras.iter().enumerate() {
-        if i > 0 {
-            // The paragraph break: it separates the text but does not
-            // advance the contiguous offsets (the engine consumes it on the
-            // split).
-            text.push('\n');
-        }
-        let start = at;
-        let mut runs: Vec<(usize, usize, &paged_model::CharacterRun)> = Vec::new();
-        for r in para.runs.iter().filter(|r| !r.text.is_empty()) {
-            let n = r.text.chars().count();
-            text.push_str(&r.text);
-            runs.push((at, at + n, r));
-            at += n;
-        }
-        let paragraph_props = read_paragraph_props(para);
-        if runs.is_empty() {
-            // A blank line has no range to hold direct formatting.
-            if !paragraph_props.is_empty() {
-                return Err(format!(
-                    "block {i}: direct formatting on an empty paragraph"
-                ));
+    let mut text_at = 0usize;
+    let mut last: isize = -1;
+    let mut ends_in_table = false;
+    let mut ends_in_empty = false;
+    let mut tables = 0usize;
+    for piece in &pieces {
+        match piece {
+            Piece::Text(step) => {
+                let lead = ends_in_table;
+                let para_base = (last + 1) as usize;
+                let mut text = String::new();
+                if lead {
+                    text.push('\n');
+                }
+                let mut para_ops = Vec::new();
+                let mut char_ops = Vec::new();
+                let mut prop_ops = Vec::new();
+                for (i, para) in step.paras.iter().enumerate() {
+                    if i > 0 {
+                        text.push('\n');
+                    }
+                    let start = at;
+                    let mut runs: Vec<(usize, usize, &paged_model::CharacterRun)> = Vec::new();
+                    for r in para.runs.iter().filter(|r| !r.text.is_empty()) {
+                        let n = r.text.chars().count();
+                        text.push_str(&r.text);
+                        runs.push((at, at + n, r));
+                        at += n;
+                    }
+                    let paragraph_props = read_paragraph_props(para);
+                    if runs.is_empty() {
+                        // A blank line has no range to hold direct formatting.
+                        if !paragraph_props.is_empty() {
+                            return Err(format!(
+                                "paragraph {i}: direct formatting on an empty paragraph"
+                            ));
+                        }
+                        if let Some(s) = &para.paragraph_style {
+                            carets.push(apply_style(
+                                story,
+                                start,
+                                start,
+                                s,
+                                "paragraph",
+                                Some(para_base + i),
+                            ));
+                        }
+                        continue;
+                    }
+                    if let Some(s) = &para.paragraph_style {
+                        para_ops.push(apply_style(story, start, at, s, "paragraph", None));
+                    }
+                    for (path, value) in &paragraph_props {
+                        prop_ops.push(set(story, start, at, path, value));
+                    }
+                    for (s, e, r) in runs {
+                        if let Some(c) = &r.character_style {
+                            char_ops.push(apply_style(story, s, e, c, "character", None));
+                        }
+                        for (path, value) in &read_run_props(r) {
+                            prop_ops.push(set(story, s, e, path, value));
+                        }
+                    }
+                }
+                if !text.is_empty() {
+                    body_ops.push(json!({
+                        "op": "insertText",
+                        "args": { "storyId": story, "offset": text_at, "text": text, "cell": null }
+                    }));
+                }
+                text_at += text.len();
+                body_ops.extend(para_ops);
+                body_ops.extend(char_ops);
+                body_ops.extend(prop_ops);
+                last = para_base as isize + step.paras.len() as isize - 1;
+                ends_in_table = false;
+                ends_in_empty = step
+                    .lowered
+                    .last()
+                    .is_some_and(|p| p.runs.iter().all(|r| r.text.is_empty()));
             }
-            if let Some(s) = &para.paragraph_style {
-                carets.push(apply_style(story, start, start, s, "paragraph", Some(i)));
-            }
-            continue;
-        }
-        if let Some(s) = &para.paragraph_style {
-            para_ops.push(apply_style(story, start, at, s, "paragraph", None));
-        }
-        for (path, value) in &paragraph_props {
-            prop_ops.push(set(story, start, at, path, value));
-        }
-        for (s, e, r) in runs {
-            if let Some(c) = &r.character_style {
-                char_ops.push(apply_style(story, s, e, c, "character", None));
-            }
-            for (path, value) in &read_run_props(r) {
-                prop_ops.push(set(story, s, e, path, value));
+            Piece::Table(t) => {
+                let fresh = last < 0;
+                if !fresh && ends_in_empty {
+                    body_ops.push(json!({
+                        "op": "insertText",
+                        "args": { "storyId": story, "offset": text_at, "text": "\n", "cell": null }
+                    }));
+                }
+                last += 1;
+                ends_in_table = true;
+                ends_in_empty = false;
+                let handle = format!("docTable{tables}");
+                tables += 1;
+                body_ops.push(insert_table(t, story));
+                body_ops.push(json!({ "op": "bindCreated", "args": { "handle": handle } }));
+                let id = format!("$h:{handle}");
+                table_cells(t, story, &id, &handle, &mut body_ops);
+                table_carets(t, story, &id, &mut cell_carets);
+                if let Some(s) = &t.para_style_id {
+                    body_ops.push(apply_style(
+                        story,
+                        at,
+                        at,
+                        s,
+                        "paragraph",
+                        Some(last as usize),
+                    ));
+                }
+                if !fresh {
+                    text_at += 1;
+                }
             }
         }
     }
-    let mut body_ops = Vec::new();
-    if !text.is_empty() {
-        body_ops.push(json!({
-            "op": "insertText",
-            "args": { "storyId": story, "offset": 0, "text": text, "cell": null }
-        }));
-    }
-    body_ops.extend(para_ops);
-    body_ops.extend(char_ops);
-    body_ops.extend(prop_ops);
     body_ops.extend(carets);
+    body_ops.extend(cell_carets);
     Ok(PlaceBatch {
-        style_ops: style_ops(doc, &body.keep_styles.iter().cloned().collect()),
+        style_ops: style_ops(doc, &keep),
         body_ops,
     })
 }

@@ -286,6 +286,21 @@ then delete the pour and its tests, about a week with the CI cycle this reposito
 batch builder for placement, about a week; (2b) the door, about two weeks across engine, contract and
 bundle; (3) several weeks and out of scope here. Deleting `mutations.ts` before (2) breaks Insert.
 
+### Amendment: placement by a Rust batch, slice 1 built
+
+Option (a) above, without a plugin-API change and without the mutation engine in the doc wasm:
+`docx-skeleton::place::place_batch` builds the placement from the same `native_body` the
+standalone open uses, as JSON of operations the mutation door accepts today (`insertText`,
+`applyStyle`, `setElementProperty` over the paragraph's or run's range, the `create*Style` /
+`setStyleProperty` catalogue). `DocEngine.placeBatch` returns it, `place.ts` submits it as the one
+batch (one undo step) in place of the pour, and the document then holds the Word styles, none of
+the invented `docx-auto-*`. A document with anything the builder does not yet take (tables,
+pictures, fields, lists, hyperlinks, notes, comments, breaks, floating objects) is refused with a
+reason before anything is applied, and `NATIVE_PLACE` / the refusal falls back to the TypeScript
+pour. `test/headless/place-batch.spec.ts` places the same fixtures both ways into an empty document
+on the real engine and compares text, page count and every paragraph's geometry, checks that no
+`docx-auto` style exists, and that one undo leaves the placed story empty.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map
