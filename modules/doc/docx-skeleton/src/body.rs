@@ -50,7 +50,7 @@ use paged_model::{
     TextWrap, TextWrapMode, TextWrapSide, WordField, WordTableLayout,
 };
 use paged_model::{Change, ChangeKind, Comment, FormatChange, ParaPropsChange};
-use paged_model::{Footnote, StoryDestination, FOOTNOTE_REFERENCE_MARKER};
+use paged_model::{Footnote, StartParagraph, StoryDestination, FOOTNOTE_REFERENCE_MARKER};
 
 /// The id prefix of the styles the lowering synthesizes for direct
 /// formatting (`docx-lower` `synthesize`).
@@ -236,6 +236,12 @@ pub fn set_paragraph_prop(p: &mut Paragraph, prop: &StyleProp) -> bool {
                 .map(|t| p.numbering_format = (!t.is_empty()).then(|| t.to_owned()))
                 .is_some();
         }
+        "paragraphStartParagraph" => {
+            return text_of(v)
+                .and_then(StartParagraph::from_idml)
+                .map(|x| p.start_paragraph = Some(x))
+                .is_some();
+        }
         "paragraphKeepWithNext" => {
             return len_of(v)
                 .map(|f| p.keep_with_next = Some(count(f)))
@@ -372,6 +378,12 @@ pub fn read_paragraph_props(p: &Paragraph) -> BTreeMap<String, PropValue> {
     }
     if let Some(t) = &p.numbering_format {
         put("paragraphNumberingFormat", PropValue::Text(t.clone()));
+    }
+    if let Some(sp) = p.start_paragraph {
+        put(
+            "paragraphStartParagraph",
+            PropValue::Text(sp.as_idml().into()),
+        );
     }
     let bools = [
         ("paragraphKeepLinesTogether", p.keep_lines_together),

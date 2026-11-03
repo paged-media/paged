@@ -52,6 +52,7 @@ fn is_para_path(k: &str) -> bool {
             | "paragraphSpaceBefore"
             | "paragraphSpaceAfter"
             | "paragraphAutoLeading"
+            | "paragraphStartParagraph"
             | "paragraphListType"
             | "paragraphBulletCharacter"
             | "paragraphNumberingFormat"
