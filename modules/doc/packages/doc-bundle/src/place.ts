@@ -79,7 +79,10 @@ export interface PlaceBatchSource {
 
 /** The placement switches; `native` is off to place by the TypeScript pour
  *  alone (the old-versus-new tests). */
-export const NATIVE_PLACE = { enabled: true };
+export const NATIVE_PLACE: { enabled: boolean; lastError: string } = {
+  enabled: true,
+  lastError: "",
+};
 
 export async function placeEmbedded(
   host: BundleHost,
@@ -306,7 +309,10 @@ async function placeInOneBatch(
     },
   ];
   const outcome = await host.document.mutate({ op: "batch", args: { ops } });
-  if (!outcome.applied) return null;
+  if (!outcome.applied) {
+    NATIVE_PLACE.lastError = JSON.stringify(outcome.error);
+    return null;
+  }
   const minted = outcome.minted?.find((m) => m.handle === "docFrame");
   const frameId = minted?.element ?? null;
   if (!frameId) {

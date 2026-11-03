@@ -49,6 +49,7 @@ interface Placed {
   native: boolean;
   offered: boolean;
   refusal: string;
+  applyError: string;
   paras: Array<{ text: string; style: string | null; rects: number[][] }>;
   pages: number;
   styles: string[];
@@ -75,6 +76,7 @@ async function place(name: string, native: boolean): Promise<Placed> {
   let isNative = false;
   let appliedNative = false;
   let refusal = "";
+  NATIVE_PLACE.lastError = "";
   let placed;
   try {
     engine.loadDocx(bytes);
@@ -158,19 +160,23 @@ async function place(name: string, native: boolean): Promise<Placed> {
     off = b.end + 1;
   }
   // One undo step takes the whole placement back.
-  const beforeUndo = JSON.stringify(await script("paged.stories()"));
+  const probe = async () => {
+    const g = await send({
+      kind: "requestSelectionGeometry",
+      payload: { selection: { storyId, start: 0, end: 1 } },
+    });
+    return (g.payload?.rects ?? []).length;
+  };
+  expect(await probe()).toBeGreaterThan(0);
   await h.host.document.undo();
-  const afterUndo = JSON.stringify(await script("paged.stories()"));
-  console.warn(`undo ${name}: ${beforeUndo} -> ${afterUndo}`);
-  console.warn(
-    `undo ${name}: pages ${JSON.stringify(await script("paged.pages()")).slice(0, 300)}`,
-  );
+  expect(await probe()).toBe(0);
   const undone = { stories: await storyCount() };
   return {
     h,
     native: isNative && appliedNative,
     offered: isNative,
     refusal,
+    applyError: NATIVE_PLACE.lastError,
     paras,
     pages: pageIds.length,
     styles,
@@ -232,7 +238,7 @@ describe.skipIf(!docxPresent)(
           console.warn(`placement batch ${name}: ${now.refusal || "taken"}`);
         } else {
           expect(now.refusal).toBe("");
-          expect(now.native).toBe(true);
+          expect([now.native, now.applyError]).toEqual([true, ""]);
         }
         expect(now.paras.map((p) => p.text)).toEqual(
           old.paras.map((p) => p.text),
