@@ -52,7 +52,7 @@ import type { ElementId, PropertyPath, Value } from "@paged-media/client";
 import { useCanvasClient } from "../state/canvas-client-context";
 import { useSelection } from "../state/selection-context";
 import { useContentSelection } from "../state/content-selection-context";
-import { useDataRevision, useDataService } from "../state/data-door";
+import { useDataService } from "../state/data-door";
 import {
   resolveSelectionProperty,
   useBindingProviderHost,
@@ -255,7 +255,7 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
     return () => {
       cancelled = true;
     };
-  }, [model, addressesKey, req.path, tick, dataService, dataRevision]);
+  }, [model, addressesKey, req.path, tick]);
 
   // ------------------------------------- ADR 023 provider claim
   const wire = model?.wireOf?.(req.path) ?? null;
@@ -287,7 +287,6 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
 
   // ---------------------------------------------------------- bound
   const dataService = useDataService();
-  const dataRevision = useDataRevision();
   const [bound, setBound] = useState(false);
   useEffect(() => {
     const list = JSON.parse(addressesKey) as string[];
@@ -302,7 +301,7 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
     return () => {
       cancelled = true;
     };
-  }, [model, addressesKey, req.path, tick]);
+  }, [model, addressesKey, req.path, tick, dataService]);
 
   // --------------------------------------------------------- commit
   const [error, setError] = useState<string | null>(null);
