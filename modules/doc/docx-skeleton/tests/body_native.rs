@@ -661,3 +661,77 @@ fn a_footnote_reference_is_a_marker_run_and_a_note_on_the_paragraph() {
         "one note per footnote reference of a built paragraph"
     );
 }
+
+#[test]
+fn tracked_changes_and_comments_are_the_runs_own_and_the_stories() {
+    for (label, bytes) in [
+        ("tracked", docx_conformance::tracked_changes_docx()),
+        ("review", docx_conformance::review_docx()),
+    ] {
+        let ir = lowered(&bytes);
+        let body = native_body(&ir);
+        let why: Vec<_> = body
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                NativeBlock::Deferred { reason } => Some(reason.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(why.is_empty(), "{label}: deferred {why:?}");
+        let (mut want_changes, mut got_changes) = (0, 0);
+        let (mut want_marks, mut got_marks) = (0, 0);
+        for (b, old) in body.blocks.iter().zip(&ir.story.blocks) {
+            let (NativeBlock::Paragraph(np), LoweredBlock::Paragraph(p)) = (b, old) else {
+                continue;
+            };
+            want_changes += p
+                .runs
+                .iter()
+                .filter(|r| !r.text.is_empty() && (r.change.is_some() || r.format_change.is_some()))
+                .count();
+            got_changes += np
+                .runs
+                .iter()
+                .filter(|r| r.revision.is_some() || r.format_change.is_some())
+                .count();
+            want_marks +=
+                usize::from(p.mark_change.is_some()) + usize::from(p.props_change.is_some());
+            got_marks +=
+                usize::from(np.mark_revision.is_some()) + usize::from(np.props_change.is_some());
+        }
+        assert_eq!(want_changes, got_changes, "{label}: run changes");
+        assert_eq!(want_marks, got_marks, "{label}: paragraph changes");
+        let stories = docx_skeleton::body::native_stories(&ir).expect("whole");
+        let threads: usize = stories.comments.iter().map(Vec::len).sum();
+        assert!(threads <= ir.comments.len());
+        if label == "review" {
+            assert!(
+                !ir.comments.is_empty() && threads > 0,
+                "review has comments"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_bundles_review_fixture_is_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/review-body.docx");
+    let ir = lowered(bytes);
+    let body = native_body(&ir);
+    let why: Vec<_> = body
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Deferred { reason } => Some(reason.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(why.is_empty(), "deferred: {why:?}");
+    let stories = docx_skeleton::body::native_stories(&ir).expect("whole");
+    assert_eq!(stories.comments.iter().map(Vec::len).sum::<usize>(), 1);
+    let runs: Vec<_> = stories.stories[0].iter().flat_map(|p| &p.runs).collect();
+    assert!(runs.iter().any(|r| r.revision.is_some()));
+    assert!(runs.iter().any(|r| r.format_change.is_some()));
+    assert!(runs.iter().any(|r| !r.comments.is_empty()));
+}

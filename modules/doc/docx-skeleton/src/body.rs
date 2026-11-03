@@ -49,6 +49,7 @@ use paged_model::{
     CharacterRun, Justification, Paragraph, Table, TableCell, TableColumn, TableRow, TableWidth,
     TextWrap, TextWrapMode, TextWrapSide, WordField, WordTableLayout,
 };
+use paged_model::{Change, ChangeKind, Comment, FormatChange, ParaPropsChange};
 use paged_model::{Footnote, FOOTNOTE_REFERENCE_MARKER};
 
 /// The id prefix of the styles the lowering synthesizes for direct
@@ -458,10 +459,14 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
         Some("endnote")
     } else if r.note.is_some() && r.field.is_some() {
         Some("note reference in a field")
-    } else if r.change.is_some() || r.format_change.is_some() {
-        Some("tracked change")
-    } else if !r.comments.is_empty() {
-        Some("comment")
+    } else if r.field.is_some()
+        && (r.change.is_some() || r.format_change.is_some() || !r.comments.is_empty())
+    {
+        Some("reviewed field")
+    } else if r.note.is_some()
+        && (r.change.is_some() || r.format_change.is_some() || !r.comments.is_empty())
+    {
+        Some("reviewed note reference")
     } else if r.control.is_some() {
         Some("content control")
     } else {
@@ -476,8 +481,6 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
         Some("page or column break inside the paragraph")
     } else if !p.bookmarks.is_empty() {
         Some("bookmark")
-    } else if p.mark_change.is_some() || p.props_change.is_some() {
-        Some("tracked change")
     } else if !p.text_boxes.is_empty() {
         Some("text box")
     } else {
@@ -521,6 +524,21 @@ fn anchored_layout(l: &docx_lower::ir::LoweredFloatLayout) -> AnchoredLayout {
         allow_overlap: l.no_overlap.then_some(false),
         inset_spacing: None,
         vertical_justification: None,
+    }
+}
+
+/// A tracked change as the engine records it (`recordChange`).
+fn change_of(c: &docx_lower::ir::LoweredChange) -> Change {
+    Change {
+        id: c.id.clone(),
+        kind: match c.kind.as_str() {
+            "delete" | "deleteMark" => ChangeKind::Delete,
+            "format" => ChangeKind::Format,
+            "paraProps" => ChangeKind::ParaProps,
+            _ => ChangeKind::Insert,
+        },
+        author: c.author.clone(),
+        date: c.date.clone(),
     }
 }
 
@@ -628,6 +646,28 @@ fn build_paragraph(
                 return Err(format!("no model field for {}", prop.path));
             }
         }
+        // Doc ADR 613 — the run's review state.
+        run.revision = r.change.as_ref().map(change_of);
+        run.comments = r.comments.clone();
+        if let Some(f) = &r.format_change {
+            // The look before the change: the style it names and what that
+            // style's direct formatting was (a style token the lowering
+            // invented stands for the properties it carries).
+            let before = split_style(styles, f.before_char_style_id.as_deref())?;
+            let mut b = CharacterRun {
+                character_style: before.base.map(str::to_owned),
+                ..CharacterRun::default()
+            };
+            for prop in &before.props {
+                if !set_run_prop(&mut b, prop) {
+                    return Err(format!("no model field for {}", prop.path));
+                }
+            }
+            run.format_change = Some(FormatChange {
+                change: change_of(&f.change),
+                before: Box::new(b),
+            });
+        }
         match &r.note {
             // Doc ADR 611 — a footnote reference: the engine's marker
             // character in its own default run (the engine writes it into
@@ -682,6 +722,26 @@ fn build_paragraph(
             }
             None => para.runs.push(run),
         }
+    }
+    // Doc ADR 613 — the paragraph mark's change and the paragraph's property
+    // change (its look before: the style it names and that style's direct
+    // formatting).
+    para.mark_revision = p.mark_change.as_ref().map(change_of);
+    if let Some(pc) = &p.props_change {
+        let before = split_style(styles, pc.before_para_style_id.as_deref())?;
+        let mut b = Paragraph {
+            paragraph_style: before.base.map(str::to_owned),
+            ..Paragraph::default()
+        };
+        for prop in &before.props {
+            if is_char_path(&prop.path) || !set_paragraph_prop(&mut b, prop) {
+                return Err(format!("no model field for {}", prop.path));
+            }
+        }
+        para.props_change = Some(ParaPropsChange {
+            change: change_of(&pc.change),
+            before: Box::new(b),
+        });
     }
     // Doc ADR 624 — Word's drop cap: the engine's paragraph drop cap, set on
     // the paragraph itself (the engine refuses these on a style).
@@ -852,6 +912,10 @@ fn build_table(
         if !(text_empty && !styled_empty) {
             for p in &lc.paragraphs {
                 let para = build_paragraph(doc, styles, p, minted)?;
+                if para.runs.iter().any(|r| !r.comments.is_empty()) {
+                    // The old pour does not place a comment in a cell.
+                    return Err("comment in a table cell".into());
+                }
                 if para.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
                     return Err("line feed in a table cell".into());
                 }
@@ -931,6 +995,8 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
 pub struct NativeStories {
     pub stories: Vec<Vec<Paragraph>>,
     pub links: Vec<NativeLink>,
+    /// Each story's comment threads, parallel to `stories`.
+    pub comments: Vec<Vec<Comment>>,
 }
 
 /// The body's native stories, one per skeleton story and in its order, when
@@ -942,7 +1008,7 @@ pub struct NativeStories {
 /// that joins the story before it adds its blocks to that story.
 pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     // What the body carries outside its blocks and the old path places.
-    if !doc.comments.is_empty() || !doc.tocs.is_empty() || doc.track_changes {
+    if !doc.tocs.is_empty() {
         return None;
     }
     let body = native_body(doc);
@@ -978,8 +1044,46 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
         let slice = paras.get(start..end.min(paras.len()))?;
         out.push(slice.to_vec());
     }
+    // Doc ADR 613 — each thread whose range is in a story belongs to it:
+    // the first comment over the runs that name it, its replies after it.
+    let comments = out
+        .iter()
+        .map(|story| {
+            let mut ids = std::collections::BTreeSet::new();
+            for p in story {
+                for r in &p.runs {
+                    ids.extend(r.comments.iter().cloned());
+                }
+            }
+            let comment = |c: &docx_lower::ir::LoweredComment| Comment {
+                id: c.id.clone(),
+                parent: c.parent_id.clone(),
+                author: c.author.clone(),
+                initials: c.initials.clone(),
+                date: c.date.clone(),
+                text: c.text.replace("\r\n", "\n").replace('\r', "\n"),
+                resolved: c.resolved,
+                ..Comment::default()
+            };
+            let mut list = Vec::new();
+            for root in doc.comments.iter().filter(|c| c.parent_id.is_none()) {
+                if !ids.contains(&root.id) {
+                    continue;
+                }
+                list.push(comment(root));
+                list.extend(
+                    doc.comments
+                        .iter()
+                        .filter(|c| c.parent_id.as_deref() == Some(root.id.as_str()))
+                        .map(comment),
+                );
+            }
+            list
+        })
+        .collect();
     Some(NativeStories {
         stories: out,
         links,
+        comments,
     })
 }

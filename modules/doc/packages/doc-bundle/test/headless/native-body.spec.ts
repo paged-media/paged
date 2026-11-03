@@ -251,6 +251,7 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
       "list-body.docx",
       "hyperlink-body.docx",
       "drop-cap.docx",
+      "review-body.docx",
     ]) {
       expect(prefilledNames).toContain(name);
     }

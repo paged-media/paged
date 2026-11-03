@@ -224,6 +224,7 @@ pub fn skeleton_prefilled(
         return Ok(None);
     };
     let stories = native.stories;
+    let comments = native.comments;
     let pages = skeleton_pages_with(doc, options);
     if stories.len() != pages.len() {
         return Ok(None);
@@ -255,7 +256,7 @@ pub fn skeleton_prefilled(
             destination: Some(l.destination_id.clone()),
         });
     }
-    for (page, paragraphs) in pages.iter().zip(stories) {
+    for (k, (page, paragraphs)) in pages.iter().zip(stories).enumerate() {
         if paragraphs.is_empty() {
             continue;
         }
@@ -267,6 +268,7 @@ pub fn skeleton_prefilled(
             return Ok(None);
         };
         parsed.story.paragraphs = paragraphs;
+        parsed.story.comments = comments[k].clone();
     }
     let (w, h) = pages
         .first()

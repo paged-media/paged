@@ -183,6 +183,16 @@ writes it into the unstyled text) and a `Footnote` on the paragraph at the marke
 text the marker, the document's separator (the default tab: the options are set after the pour) and
 the note's text. Endnotes (they need the endnote story and range definitions) stay deferred.
 
+### Slice 6: comments and tracked changes
+
+A tracked change is the run's `revision` (insert, delete), its `format_change` (the change and the
+run's look before it, built from the style token the lowering names and that style's direct
+formatting, not a snapshot of the run now) or the paragraph's `mark_revision` / `props_change`. A
+comment is the id on the runs it covers and a `Comment` on the story that holds them (a root whose
+range is in the story, its replies after it); the document's change tracking is still switched on by
+the bundle once the document stands. Reviewed fields and note references, and a comment on a table
+cell's text (the old pour places none), stay deferred.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map
