@@ -11165,6 +11165,7 @@ impl CanvasModel {
                 name,
                 kind: kind.to_string(),
                 total_area_coverage_pct: swatch_total_area_coverage(color),
+                space: Some(color.space.as_attr().to_ascii_lowercase()),
             });
         }
         // Engine ADR 1041 — pattern swatches list with the colours, kind
@@ -11176,6 +11177,7 @@ impl CanvasModel {
                 name: p.name.clone().unwrap_or_else(|| self_id.clone()),
                 kind: "pattern".to_string(),
                 total_area_coverage_pct: None,
+                space: None,
             });
         }
         out
@@ -11206,6 +11208,7 @@ impl CanvasModel {
                 name: style.name.clone().unwrap_or_else(|| self_id.clone()),
                 based_on: style.based_on.clone(),
                 next_style: style.next_style.clone(),
+                font_ref: style.font_ref.map(|r| r.as_str().to_string()),
             })
             .collect()
     }
@@ -11221,6 +11224,7 @@ impl CanvasModel {
                 self_id: self_id.clone(),
                 name: style.name.clone().unwrap_or_else(|| self_id.clone()),
                 based_on: style.based_on.clone(),
+                font_ref: style.font_ref.map(|r| r.as_str().to_string()),
             })
             .collect()
     }
@@ -12305,6 +12309,15 @@ impl CanvasModel {
         &self.import_notes
     }
 
+    /// Engine ADR 1057 — the `importNotes` collection: one row `{ message }`
+    /// per [`Self::import_notes`] line.
+    pub fn import_note_rows(&self) -> Vec<serde_json::Value> {
+        self.import_notes
+            .iter()
+            .map(|m| serde_json::json!({ "message": m }))
+            .collect()
+    }
+
     /// Engine ADR 1057 — the `themePresets` collection: one row per preset
     /// (`{ id, theme }`), the same in every document.
     pub fn theme_preset_rows(&self) -> Vec<serde_json::Value> {
@@ -13189,6 +13202,7 @@ impl CanvasModel {
             Comments => json(self.comments()),
             Theme => json(self.theme_rows()),
             ThemePresets => json(self.theme_preset_rows()),
+            ImportNotes => json(self.import_note_rows()),
             Endnotes => json(self.endnotes()),
             Inks => json(self.inks()),
             Sections => json(self.sections()),

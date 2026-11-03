@@ -164,7 +164,10 @@ function endnoteElements(idml: Uint8Array): string[] {
     if (self && !ids.has(self)) ids.set(self, `#${ids.size}`);
   }
   return found.map((el) =>
-    el.replace(/="([^"]*)"/g, (_m, v: string) => `="${ids.get(v) ?? v}"`),
+    el
+      // The story's id is the engine's mint on one side and ours on the other.
+      .replace(/\bParentStory="[^"]*"/, 'ParentStory="story"')
+      .replace(/="([^"]*)"/g, (_m, v: string) => `="${ids.get(v) ?? v}"`),
   );
 }
 
@@ -341,7 +344,8 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
       expect(native.endnotes).toEqual(old.endnotes);
       // Where nothing keeps one, no paragraph names a style the lowering
       // invented for direct formatting.
-      if (MUST_OPEN.includes(name)) {
+      // (A picture's line keeps the style made for its pitch, ADR 625.)
+      if (MUST_OPEN.includes(name) && name !== "picture-effects.docx") {
         expect(native.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
           false,
         );

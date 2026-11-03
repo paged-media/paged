@@ -51,6 +51,7 @@ pub mod endnote;
 pub mod items;
 pub mod look;
 pub mod native;
+pub mod place;
 
 use docx_core::{DocxDocument, Section};
 use docx_lower::sections::{LowerOptions, StoryColumns};

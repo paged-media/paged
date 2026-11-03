@@ -135,19 +135,20 @@ pub fn indexed_color(idx: u32) -> Option<&'static str> {
 
 /// Best-effort theme-colour fallback for a package WITHOUT a readable theme
 /// part (the real palette is read by [`ColorContext`] from the workbook's
-/// `/theme` relationship). Maps the six slots of the Office default theme;
-/// slots beyond these resolve to `None` so the document default colour wins
-/// rather than guessing.
-pub fn theme_color(idx: u32) -> Option<&'static str> {
-    Some(match idx {
-        0 => "#FFFFFF", // dk1 / lt1 ordering varies; 0/1 are the text/bg pair
-        1 => "#000000",
-        2 => "#E7E6E6", // lt2 (light background 2)
-        3 => "#44546A", // dk2 (dark text 2)
-        4 => "#4472C4", // accent1 (the Office default blue)
-        5 => "#ED7D31", // accent2 (orange)
-        _ => return None,
-    })
+/// `/theme` relationship). Maps the six first slots of the Office default
+/// theme (`lt1`, `dk1`, `lt2`, `dk2`, `accent1`, `accent2`: the
+/// SpreadsheetML index order of [`sheet_format::resolve::INDEX_SLOTS`]) from
+/// its one owner, [`paged_ooxml::drawingml::theme::OFFICE`]; slots beyond
+/// these resolve to `None` so the document default colour wins rather than
+/// guessing.
+pub fn theme_color(idx: u32) -> Option<String> {
+    use paged_ooxml::drawingml::theme::{OFFICE, SLOTS};
+    if idx > 5 {
+        return None;
+    }
+    let name = sheet_format::resolve::INDEX_SLOTS.get(idx as usize)?;
+    let at = SLOTS.iter().position(|s| s == name)?;
+    Some(format!("#{:06X}", OFFICE[at]))
 }
 
 /// One cell's resolved visual style — the lowering's flat
@@ -509,7 +510,7 @@ impl ColorContext {
             let t = a.theme.as_deref().and_then(|v| v.parse::<u32>().ok())?;
             match self.theme.as_ref().and_then(|p| p.color(t)) {
                 Some(c) => c.to_string(),
-                None => theme_color(t)?.to_string(),
+                None => theme_color(t)?,
             }
         };
         match a.tint.as_deref().and_then(|v| v.parse::<f64>().ok()) {
@@ -673,8 +674,17 @@ mod tests {
         assert_eq!(indexed_color(2), Some("#FF0000")); // red
         assert_eq!(indexed_color(5), Some("#FFFF00")); // yellow
         assert_eq!(indexed_color(64), None); // system foreground — no fixed RGB
-        assert_eq!(theme_color(1), Some("#000000"));
+        assert_eq!(theme_color(1).as_deref(), Some("#000000"));
         assert_eq!(theme_color(99), None); // beyond the mapped slots
+                                           // The six-slot fallback is the Office default theme's, bit for bit
+                                           // what the table it replaced held (ADR 1056, single owner).
+        let table = [
+            "#FFFFFF", "#000000", "#E7E6E6", "#44546A", "#4472C4", "#ED7D31",
+        ];
+        for (i, want) in table.iter().enumerate() {
+            assert_eq!(theme_color(i as u32).as_deref(), Some(*want), "slot {i}");
+        }
+        assert_eq!(theme_color(6), None);
     }
 
     #[test]

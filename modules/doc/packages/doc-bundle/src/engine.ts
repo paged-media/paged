@@ -29,6 +29,7 @@
 // the artifact exists the dynamic import REJECTS — boot surfaces that honestly.
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
+import type { Mutation } from "@paged-media/plugin-api";
 import { parseLoweredDoc } from "@paged-media/doc-host-model";
 import {
   wasmBindgenModule,
@@ -54,6 +55,7 @@ interface WasmDocEngine {
   style_tokens(): string;
   skeleton_paged(name: string): Uint8Array;
   skeleton_paged_prefilled(name: string): Uint8Array;
+  place_batch(story: string): string;
   skeleton_stories(): string;
   set_mid_page_columns(on: boolean): void;
   uses_mid_page_columns(): boolean;
@@ -79,6 +81,12 @@ interface DocWasmModule extends WasmBindgenGlue {
 }
 
 /** A stable camelCase facade the rest of the bundle codes against. */
+/** A placement built in Rust: operations of the engine's existing wire. */
+export interface PlaceBatch {
+  styleOps: Mutation[];
+  bodyOps: Mutation[];
+}
+
 export class DocEngine {
   private constructor(private readonly inner: WasmDocEngine) {}
 
@@ -141,6 +149,17 @@ export class DocEngine {
    *  old pour reported what the engine refused, so the native open does. */
   prefilledNotes(): string[] {
     return JSON.parse(this.inner.prefilled_notes()) as string[];
+  }
+
+  /** Doc ADR 625 amendment — the embedded placement as a batch of the
+   *  engine's existing operations, built in Rust from the native builder's
+   *  model: the style catalogue and the story's content (addressed at
+   *  `story`, a batch handle on the frame just made). `{ reason }` when the
+   *  document holds something the batch builder does not take yet: place it
+   *  by the TypeScript pour. */
+  placeBatch(story: string): PlaceBatch | { reason: string } {
+    return JSON.parse(this.inner.place_batch(story)) as
+      PlaceBatch | { reason: string };
   }
 
   /** The skeleton's section story ids, in section order (the pour targets). */

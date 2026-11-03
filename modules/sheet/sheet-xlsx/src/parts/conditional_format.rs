@@ -646,7 +646,7 @@ fn read_rgb(e: &quick_xml::events::BytesStart<'_>) -> Result<Option<String>, Xls
     }
     if let Some(theme) = attr(e, b"theme")? {
         if let Ok(t) = theme.trim().parse::<u32>() {
-            return Ok(theme_color(t).map(str::to_owned));
+            return Ok(theme_color(t));
         }
     }
     // `auto="1"` or an empty <color/> → no fixed colour.

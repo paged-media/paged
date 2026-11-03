@@ -127,6 +127,118 @@ describe("Theme panel", () => {
     expect(h.root.querySelector('[data-theme-slot="accent1"]')).not.toBeNull();
   });
 
+  test("a CMYK swatch can take a slot and stays CMYK when the slot recolours", async () => {
+    covers("panel:paged.theme");
+    const h = await mount();
+    await h.mutate({
+      op: "createSwatch",
+      args: {
+        spec: { name: "Print", space: "CMYK", value: [83.85, 26.15, 0, 49.02] },
+      },
+    } as never);
+    const pick = h.root.querySelector<HTMLSelectElement>(
+      '[data-pick-slot="accent1"]',
+    )!;
+    const print = [...pick.options].find((o) => o.textContent === "Print")!;
+    expect(print.disabled).toBe(false);
+    await h.choose(pick, print.value);
+    expect(h.root.querySelector('[data-theme-note="cmyk"]')).not.toBeNull();
+    await h.click(h.root.querySelector('[data-action="create-theme"]')!);
+    const rows = (await h.client.collection("theme")) as ThemeRow[];
+    expect(rows[0].colors[0]).toMatchObject({
+      slot: "accent1",
+      value: "156082",
+    });
+    await h.act(() =>
+      fireEvent.change(h.root.querySelector('[data-theme-slot="accent1"]')!, {
+        target: { value: "#ff0000" },
+      }),
+    );
+    const swatches = (await h.client.collection("swatches")) as {
+      selfId: string;
+      name: string;
+      space?: string;
+    }[];
+    const row = swatches.find((s) => s.name === "Print")!;
+    expect(row.space).toBe("cmyk");
+    const preview = await h.client.colorPreview(row.selfId);
+    expect(preview?.cmyk).toEqual([0, 100, 100, 0]);
+  });
+
+  test("a spot swatch cannot be chosen and the panel says why", async () => {
+    covers("panel:paged.theme");
+    const h = await mount();
+    await h.mutate({
+      op: "createSwatch",
+      args: {
+        spec: {
+          name: "Pantone",
+          space: "CMYK",
+          value: [0, 80, 90, 0],
+          model: "Spot",
+        },
+      },
+    } as never);
+    const pick = h.root.querySelector<HTMLSelectElement>(
+      '[data-pick-slot="accent1"]',
+    )!;
+    const spot = [...pick.options].find((o) =>
+      o.textContent?.startsWith("Pantone"),
+    )!;
+    expect(spot.disabled).toBe(true);
+    expect(h.root.querySelector('[data-theme-note="spot"]')).not.toBeNull();
+    expect(h.root.querySelector('[data-theme-note="cmyk"]')).toBeNull();
+  });
+
+  test("a style follows the theme's headings font and stops again", async () => {
+    covers("panel:paged.theme");
+    const h = await mount();
+    await h.mutate({
+      op: "createParagraphStyle",
+      args: { name: "Heading" },
+    } as never);
+    await h.choose(
+      h.root.querySelector('[data-action="preset"]') as HTMLElement,
+      "office-2013",
+    );
+    await h.click(h.root.querySelector('[data-action="apply-preset"]')!);
+    const select = h.root.querySelector<HTMLSelectElement>(
+      '[data-style-kind="paragraph"] [data-style-font]',
+    )!;
+    const id = select.getAttribute("data-style-font")!;
+    const from = h.mark();
+    await h.choose(select, "major");
+    expect(h.mutations(from)).toEqual([
+      {
+        op: "setStyleThemeFont",
+        args: { collection: "paragraph", styleId: id, which: "major" },
+      },
+    ] as never);
+    let styles = (await h.client.collection("paragraphStyles")) as {
+      selfId: string;
+      fontRef?: string | null;
+    }[];
+    expect(styles.find((s) => s.selfId === id)?.fontRef).toBe("major");
+    expect(
+      h.root.querySelector<HTMLSelectElement>(`[data-style-font="${id}"]`)!
+        .value,
+    ).toBe("major");
+    await h.choose(
+      h.root.querySelector(`[data-style-font="${id}"]`) as HTMLElement,
+      "",
+    );
+    styles = (await h.client.collection("paragraphStyles")) as typeof styles;
+    expect(styles.find((s) => s.selfId === id)?.fontRef ?? null).toBeNull();
+  });
+
+  test("a document with no import notes shows none", async () => {
+    covers("panel:paged.theme");
+    const h = await mount();
+    expect(
+      h.root.querySelector('[data-theme-section="import-notes"]'),
+    ).toBeNull();
+  });
+
   test("a refusal is shown and changes nothing", async () => {
     covers("panel:paged.theme");
     const h = await mount();
