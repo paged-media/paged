@@ -312,6 +312,29 @@ fn compare(label: &str, doc: &LoweredDoc) -> (usize, usize) {
                     direct += 1;
                 }
             }
+            (LoweredBlock::Paragraph(p), NativeBlock::Split(parts)) => {
+                built += 1;
+                // The parts together say what the paragraph says, and a
+                // break makes one new paragraph each.
+                let said: String = parts
+                    .iter()
+                    .flat_map(|q| q.runs.iter().map(|r| r.text.as_str()))
+                    .collect();
+                let want: String = p.runs.iter().map(|r| r.text.as_str()).collect();
+                assert_eq!(said, want, "{at}: the parts' text");
+                let cuts: std::collections::BTreeSet<u32> = p
+                    .segments
+                    .iter()
+                    .map(|s| s.at)
+                    .filter(|a| *a > 0 && *a < want.chars().count() as u32)
+                    .collect();
+                assert_eq!(parts.len(), 1 + cuts.len(), "{at}: one paragraph per break");
+                // The break's own rule starts the part.
+                assert!(
+                    parts[1..].iter().all(|q| q.start_paragraph.is_some()),
+                    "{at}: a part after a break carries its break rule"
+                );
+            }
             (LoweredBlock::Table(t), NativeBlock::Table(host)) => {
                 built += 1;
                 direct += compare_table(doc, t, host, &at);
@@ -391,7 +414,7 @@ fn a_prefilled_skeleton_holds_the_body_as_model_paragraphs() {
         .iter()
         .filter_map(|b| match b {
             NativeBlock::Deferred { reason } => Some(reason.clone()),
-            NativeBlock::Paragraph(_) | NativeBlock::Table(_) => None,
+            NativeBlock::Paragraph(_) | NativeBlock::Table(_) | NativeBlock::Split(_) => None,
         })
         .collect();
     assert!(why.is_empty(), "deferred: {why:?}");
@@ -474,7 +497,7 @@ fn the_bundles_direct_format_fixture_is_built_whole() {
         .enumerate()
         .filter_map(|(i, b)| match b {
             NativeBlock::Deferred { reason } => Some(format!("block {i}: {reason}")),
-            NativeBlock::Paragraph(_) | NativeBlock::Table(_) => None,
+            NativeBlock::Paragraph(_) | NativeBlock::Table(_) | NativeBlock::Split(_) => None,
         })
         .collect();
     assert!(reasons.is_empty(), "deferred: {reasons:?}");

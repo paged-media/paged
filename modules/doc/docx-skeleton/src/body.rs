@@ -64,6 +64,8 @@ pub enum NativeBlock {
     Paragraph(Box<Paragraph>),
     /// A native table, in a paragraph of its own (doc ADR 625, slice 3).
     Table(Box<Paragraph>),
+    /// A paragraph a break inside it splits: its native paragraphs.
+    Split(Vec<Paragraph>),
     /// Left to the old path, with the reason (an honest, countable
     /// degradation: nothing is dropped).
     Deferred { reason: String },
@@ -479,8 +481,6 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
 fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
     if p.images.iter().any(|i| i.fx.is_some()) {
         Some("picture look")
-    } else if !p.segments.is_empty() {
-        Some("page or column break inside the paragraph")
     } else if !p.text_boxes.is_empty() {
         Some("text box")
     } else {
@@ -563,7 +563,144 @@ pub struct NativeLink {
     pub url: String,
 }
 
+/// A paragraph that no break splits (a table cell's).
 fn build_paragraph(
+    doc: &LoweredDoc,
+    styles: &HashMap<&str, &LoweredStyle>,
+    p: &LoweredParagraph,
+    minted: &mut Minted,
+) -> Result<Paragraph, String> {
+    if !p.segments.is_empty() {
+        return Err("break inside a table cell's paragraph".into());
+    }
+    build_whole(doc, styles, p, minted)
+}
+
+/// A body paragraph as the native paragraphs it pours as: one, or one per
+/// part a page or column break inside it makes (ADR 028/029; the parts after
+/// a break are paragraphs to the engine, not to Word).
+fn build_parts(
+    doc: &LoweredDoc,
+    styles: &HashMap<&str, &LoweredStyle>,
+    p: &LoweredParagraph,
+    minted: &mut Minted,
+) -> Result<Vec<Paragraph>, String> {
+    let whole = build_whole(doc, styles, p, minted)?;
+    if p.segments.is_empty() {
+        return Ok(vec![whole]);
+    }
+    if p.mark_change.is_some() || p.props_change.is_some() {
+        return Err("tracked paragraph change on a paragraph a break splits".into());
+    }
+    let first_chars: Vec<&StyleProp> = split_style(styles, p.para_style_id.as_deref())?
+        .props
+        .into_iter()
+        .filter(|x| is_char_path(&x.path))
+        .collect();
+    let total: u32 = whole
+        .runs
+        .iter()
+        .map(|r| r.text.chars().count() as u32)
+        .sum();
+    // The cuts, each a new paragraph before the character at `at`.
+    let mut cuts: Vec<(u32, &docx_lower::ir::LoweredSegment)> = p
+        .segments
+        .iter()
+        .filter(|s| s.at > 0 && s.at < total)
+        .map(|s| (s.at, s))
+        .collect();
+    cuts.sort_by_key(|c| c.0);
+    cuts.dedup_by_key(|c| c.0);
+    // Where a cut falls inside a field the run cannot be split.
+    {
+        let mut at = 0;
+        for r in &whole.runs {
+            let n = r.text.chars().count() as u32;
+            if r.field.is_some() && cuts.iter().any(|(c, _)| *c > at && *c < at + n) {
+                return Err("break inside a field".into());
+            }
+            at += n;
+        }
+    }
+    let bounds: Vec<u32> = std::iter::once(0)
+        .chain(cuts.iter().map(|c| c.0))
+        .chain(std::iter::once(total))
+        .collect();
+    let mut parts: Vec<Paragraph> = Vec::new();
+    for k in 0..bounds.len() - 1 {
+        let (from, to) = (bounds[k], bounds[k + 1]);
+        let last = k + 2 == bounds.len();
+        let mut part = if k == 0 {
+            Paragraph {
+                runs: Vec::new(),
+                anchored_frames: Vec::new(),
+                anchored_frame_offsets: Vec::new(),
+                footnotes: Vec::new(),
+                ..whole.clone()
+            }
+        } else {
+            let seg = split_style(styles, cuts[k - 1].1.para_style_id.as_deref())?;
+            let chars: Vec<&StyleProp> = seg
+                .props
+                .iter()
+                .copied()
+                .filter(|x| is_char_path(&x.path))
+                .collect();
+            if chars != first_chars {
+                return Err("a break's paragraph has other character properties".into());
+            }
+            let mut para = Paragraph {
+                paragraph_style: seg.base.map(str::to_owned),
+                ..Paragraph::default()
+            };
+            for prop in seg.props.iter().filter(|x| !is_char_path(&x.path)) {
+                if !set_paragraph_prop(&mut para, prop) {
+                    return Err(format!("no model field for {}", prop.path));
+                }
+            }
+            para
+        };
+        // The runs of [from, to).
+        let mut at = 0u32;
+        for r in &whole.runs {
+            let n = r.text.chars().count() as u32;
+            let (lo, hi) = (from.max(at), to.min(at + n));
+            if lo < hi {
+                let mut piece = r.clone();
+                piece.text = r
+                    .text
+                    .chars()
+                    .skip((lo - at) as usize)
+                    .take((hi - lo) as usize)
+                    .collect();
+                part.runs.push(piece);
+            }
+            at += n;
+        }
+        for (f, off) in whole
+            .anchored_frames
+            .iter()
+            .zip(&whole.anchored_frame_offsets)
+        {
+            if *off >= from && (*off < to || (last && *off == to)) {
+                part.anchored_frames.push(f.clone());
+                part.anchored_frame_offsets.push(off - from);
+            }
+        }
+        for f in &whole.footnotes {
+            let a = f.anchor.unwrap_or(0);
+            if a >= from && a < to {
+                let mut f = f.clone();
+                f.anchor = Some(a - from);
+                part.footnotes.push(f);
+            }
+        }
+        parts.push(part);
+    }
+    Ok(parts)
+}
+
+fn build_whole(
     doc: &LoweredDoc,
     styles: &HashMap<&str, &LoweredStyle>,
     p: &LoweredParagraph,
@@ -978,8 +1115,11 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
                 Ok(para) => NativeBlock::Table(Box::new(para)),
                 Err(reason) => NativeBlock::Deferred { reason },
             },
-            LoweredBlock::Paragraph(p) => match build_paragraph(doc, &styles, p, &mut minted) {
-                Ok(para) => NativeBlock::Paragraph(Box::new(para)),
+            LoweredBlock::Paragraph(p) => match build_parts(doc, &styles, p, &mut minted) {
+                Ok(mut parts) if parts.len() == 1 => {
+                    NativeBlock::Paragraph(Box::new(parts.remove(0)))
+                }
+                Ok(parts) => NativeBlock::Split(parts),
                 Err(reason) => NativeBlock::Deferred { reason },
             },
         })
@@ -1030,18 +1170,36 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     let links = body.links;
     let marks = body.marks;
     let mut paras = Vec::with_capacity(body.blocks.len());
+    // The index of each block's first native paragraph (a split block makes
+    // several).
+    let mut first = Vec::with_capacity(body.blocks.len() + 1);
     for b in body.blocks {
+        first.push(paras.len());
+        let mut add = |p: Paragraph| {
+            // The old pour reads a line feed as a paragraph break.
+            if p.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
+                return false;
+            }
+            paras.push(p);
+            true
+        };
         match b {
             NativeBlock::Paragraph(p) | NativeBlock::Table(p) => {
-                // The old pour reads a line feed as a paragraph break.
-                if p.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
+                if !add(*p) {
                     return None;
                 }
-                paras.push(*p);
+            }
+            NativeBlock::Split(parts) => {
+                for p in parts {
+                    if !add(p) {
+                        return None;
+                    }
+                }
             }
             NativeBlock::Deferred { .. } => return None,
         }
     }
+    first.push(paras.len());
     let sections: Vec<_> = if doc.sections.is_empty() {
         vec![&doc.section]
     } else {
@@ -1059,13 +1217,19 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     let mut named = std::collections::BTreeSet::new();
     let mut anchors = 0usize;
     for (k, &start) in starts.iter().enumerate() {
-        let end = starts.get(k + 1).copied().unwrap_or(paras.len());
-        let slice = paras.get(start..end.min(paras.len()))?;
+        let end_block = starts.get(k + 1).copied().unwrap_or(first.len() - 1);
+        let (lo, hi) = (
+            *first.get(start)?,
+            *first.get(end_block.min(first.len() - 1))?,
+        );
+        let slice = paras.get(lo..hi)?;
         out.push(slice.to_vec());
         // Doc ADR 612 — a bookmark stands at the start of the paragraph it
         // opens in; the engine keeps a name once.
         let mut story_marks = Vec::new();
-        for (j, names) in marks[start..end.min(marks.len())].iter().enumerate() {
+        let end = end_block.min(marks.len());
+        for (b, names) in marks[start..end].iter().enumerate() {
+            let j = first[start + b] - lo;
             for name in names {
                 if !named.insert(name.clone()) {
                     continue;

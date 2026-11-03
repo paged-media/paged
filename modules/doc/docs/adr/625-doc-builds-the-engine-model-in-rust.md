@@ -201,6 +201,14 @@ is kept once, as the engine keeps it. A table of contents is its cached entries,
 paragraphs with live `PAGEREF` fields: the pour never read `LoweredDoc::tocs`, so nothing is built
 for them.
 
+### Fallback closed: breaks inside a paragraph
+
+A page or column break inside a Word paragraph makes the parts after it paragraphs to the engine
+(ADR 028/029): `build_parts` returns one native paragraph per part, the runs, pictures and
+footnotes cut at the break's character, each later part in the style the lowering gives its break
+(the Word style plus the break's rule). A break inside a field, a tracked paragraph change on a split
+paragraph, and a part with other character properties than the first stay deferred.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map
