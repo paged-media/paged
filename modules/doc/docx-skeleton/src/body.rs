@@ -49,6 +49,7 @@ use paged_model::{
     CharacterRun, Justification, Paragraph, Table, TableCell, TableColumn, TableRow, TableWidth,
     TextWrap, TextWrapMode, TextWrapSide, WordField, WordTableLayout,
 };
+use paged_model::{Footnote, FOOTNOTE_REFERENCE_MARKER};
 
 /// The id prefix of the styles the lowering synthesizes for direct
 /// formatting (`docx-lower` `synthesize`).
@@ -453,8 +454,10 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
         Some("hyperlinked field")
     } else if r.field.is_some() && r.text.is_empty() {
         Some("field without a result")
-    } else if r.note.is_some() {
-        Some("note reference")
+    } else if r.note.as_ref().is_some_and(|n| n.endnote) {
+        Some("endnote")
+    } else if r.note.is_some() && r.field.is_some() {
+        Some("note reference in a field")
     } else if r.change.is_some() || r.format_change.is_some() {
         Some("tracked change")
     } else if !r.comments.is_empty() {
@@ -527,6 +530,7 @@ fn anchored_layout(l: &docx_lower::ir::LoweredFloatLayout) -> AnchoredLayout {
 struct Minted {
     tables: usize,
     frames: usize,
+    notes: usize,
     links: Vec<NativeLink>,
 }
 
@@ -624,7 +628,60 @@ fn build_paragraph(
                 return Err(format!("no model field for {}", prop.path));
             }
         }
-        para.runs.push(run);
+        match &r.note {
+            // Doc ADR 611 — a footnote reference: the engine's marker
+            // character in its own default run (the engine writes it into
+            // the unstyled text), and the note on the paragraph at the
+            // marker's character, its text the marker, the separator and the
+            // note's text (`insertFootnote`).
+            Some(note) => {
+                let text = std::mem::take(&mut run.text);
+                let mut piece = String::new();
+                let flush = |piece: &mut String, para: &mut Paragraph| {
+                    if !piece.is_empty() {
+                        let mut r = run.clone();
+                        r.text = std::mem::take(piece);
+                        para.runs.push(r);
+                    }
+                };
+                for ch in text.chars() {
+                    if ch != FOOTNOTE_REFERENCE_MARKER {
+                        piece.push(ch);
+                        continue;
+                    }
+                    flush(&mut piece, &mut para);
+                    let at: u32 = para
+                        .runs
+                        .iter()
+                        .map(|r| r.text.chars().count() as u32)
+                        .sum();
+                    para.runs.push(CharacterRun {
+                        text: ch.to_string(),
+                        ..CharacterRun::default()
+                    });
+                    let body = doc
+                        .notes
+                        .iter()
+                        .find(|n| !n.endnote && n.id == note.id)
+                        .map(|n| n.text.as_str())
+                        .unwrap_or_default();
+                    para.footnotes.push(Footnote {
+                        self_id: Some(format!("docx_fn{}", minted.notes)),
+                        anchor: Some(at),
+                        paragraphs: vec![Paragraph {
+                            runs: vec![CharacterRun {
+                                text: format!("{FOOTNOTE_REFERENCE_MARKER}\t{body}"),
+                                ..CharacterRun::default()
+                            }],
+                            ..Paragraph::default()
+                        }],
+                    });
+                    minted.notes += 1;
+                }
+                flush(&mut piece, &mut para);
+            }
+            None => para.runs.push(run),
+        }
     }
     // Doc ADR 624 — Word's drop cap: the engine's paragraph drop cap, set on
     // the paragraph itself (the engine refuses these on a style).

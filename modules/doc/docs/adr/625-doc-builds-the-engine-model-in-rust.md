@@ -176,6 +176,13 @@ text boxes stay deferred. The spec `native-body.spec.ts` now opens EVERY `.docx`
 both ways and compares them (text, pages, geometry, unedited export), and requires seven named
 fixtures to keep opening natively: the safety net of the default-on open.
 
+### Slice 7 (part): footnotes
+
+A footnote reference is the engine's marker character in a run of its own (unstyled, as the engine
+writes it into the unstyled text) and a `Footnote` on the paragraph at the marker's character, its
+text the marker, the document's separator (the default tab: the options are set after the pour) and
+the note's text. Endnotes (they need the endnote story and range definitions) stay deferred.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

@@ -630,3 +630,34 @@ fn a_prefilled_skeleton_holds_the_styles_without_the_invented_ones() {
         assert!(doc.palette.colors.contains_key(&sw.id), "{}", sw.id);
     }
 }
+
+#[test]
+fn a_footnote_reference_is_a_marker_run_and_a_note_on_the_paragraph() {
+    let ir = lowered(&docx_conformance::structure_docx());
+    let body = native_body(&ir);
+    let mut notes = 0;
+    let mut want = 0;
+    for (b, old) in body.blocks.iter().zip(&ir.story.blocks) {
+        let (NativeBlock::Paragraph(np), LoweredBlock::Paragraph(p)) = (b, old) else {
+            continue;
+        };
+        want += p
+            .runs
+            .iter()
+            .filter(|r| r.note.as_ref().is_some_and(|n| !n.endnote))
+            .count();
+        notes += np.footnotes.len();
+        for f in &np.footnotes {
+            let at = f.anchor.expect("anchored") as usize;
+            let text: Vec<char> = np.runs.iter().flat_map(|r| r.text.chars()).collect();
+            assert_eq!(text[at], paged_model::FOOTNOTE_REFERENCE_MARKER);
+            assert!(f.paragraphs[0].runs[0]
+                .text
+                .starts_with(paged_model::FOOTNOTE_REFERENCE_MARKER));
+        }
+    }
+    assert_eq!(
+        notes, want,
+        "one note per footnote reference of a built paragraph"
+    );
+}
