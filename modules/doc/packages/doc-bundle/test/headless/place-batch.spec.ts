@@ -178,9 +178,8 @@ async function place(name: string, native: boolean): Promise<Placed> {
   const beforeUndo = await probes();
   await h.host.document.undo();
   const afterUndo = await probes();
-  console.warn(
-    `undo ${name}\n${beforeUndo.join("\n")}\n--\n${afterUndo.join("\n")}`,
-  );
+  expect(beforeUndo[0]).toContain("textFrame:");
+  expect(afterUndo[0]).toBe("page:usp > * => []");
   const undone = { stories: await storyCount() };
   return {
     h,
@@ -213,6 +212,7 @@ const FIXTURES = [
 // Documents the builder may still refuse (the pour then places them, and
 // the result must be the same); the refusal is logged.
 const OPTIONAL_FIXTURES = [
+  "price-table.docx",
   "toc-body.docx",
   "merge-letter.docx",
   "review-body.docx",
@@ -225,7 +225,6 @@ const OPTIONAL_FIXTURES = [
 // so the styles the lowering invented for cell text stay in the document.
 const TABLE_FIXTURES = [
   "table-body.docx",
-  "price-table.docx",
   "objects-table-look.docx",
   "objects-nested-tables.docx",
 ];

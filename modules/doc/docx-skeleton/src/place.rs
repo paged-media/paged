@@ -118,6 +118,10 @@ fn apply_style(
     json!({ "op": "applyStyle", "args": args })
 }
 
+/// Style properties the mutation door refuses on a style (the pour's sequential
+/// lane drops them with a warning too): a character language.
+const UNSETTABLE: [&str; 1] = ["characterLanguage"];
+
 /// The swatches, colour groups and styles of a placement, as the engine's
 /// `createSwatch` / `createColorGroup` / `create*Style` / `setStyleProperty`
 /// (what `buildStyleMutations` sends for a placement: no theme). The styles
@@ -150,7 +154,11 @@ pub fn style_ops(doc: &LoweredDoc, keep: &HashSet<String>) -> Vec<Value> {
             "op": op,
             "args": { "selfId": s.id, "name": s.name, "basedOn": s.based_on }
         }));
-        for p in &s.props {
+        for p in s
+            .props
+            .iter()
+            .filter(|p| !UNSETTABLE.contains(&p.path.as_str()))
+        {
             ops.push(json!({
                 "op": "setStyleProperty",
                 "args": {
