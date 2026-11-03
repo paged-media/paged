@@ -139,3 +139,25 @@ export {
   trustedScript,
 } from "./trusted-types.ts";
 export { KAPPA } from "./geometry.ts";
+export {
+  ALIGNMENTS as TEXT_ALIGNMENTS,
+  INDENT_STEP_PT,
+  LINE_SPACINGS,
+  TEXT_SIZES,
+  TEXT_VERBS,
+  alignmentOf,
+  isBold,
+  isItalic,
+  leadingFor,
+  lineSpacingOf,
+  runTextVerb,
+  stepFontSize,
+  steppedIndent,
+  toggledFontStyle,
+  type Alignment as TextAlignment,
+  type Read as TextRead,
+  type TextDoor,
+  type TextVerb,
+  type TextVerbValue,
+  type TextVerbWrite,
+} from "./text-format.ts";

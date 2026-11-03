@@ -55,6 +55,12 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 
+import {
+  TEXT_VERBS,
+  runTextVerb,
+  type TextDoor,
+  type TextVerb,
+} from "@paged-media/helpers";
 import { LIST_PRESETS, type ListPresetId } from "./lists.js";
 import {
   HEADER_BAR_COMMANDS,
@@ -62,17 +68,7 @@ import {
   type WordStructure,
 } from "./structure.js";
 import { readShowHidden } from "./word-state.js";
-import {
-  ALIGNMENTS,
-  leadingFor,
-  stepFontSize,
-  steppedIndent,
-  styleNamed,
-  toggledFontStyle,
-  type Alignment,
-  type Read,
-  type StyleRow,
-} from "./format.js";
+import { styleNamed, type Read, type StyleRow } from "./format.js";
 
 /** The edit context every Word contribution is scoped to. */
 export const WORD_CONTEXT = "wordDocument";
@@ -328,24 +324,6 @@ async function applyNamedStyle(
   return host.text.applyStyle("paragraph", style.selfId);
 }
 
-async function align(host: BundleHost, a: Alignment): Promise<unknown> {
-  return host.text.format([
-    { path: "paragraphJustification", value: text(ALIGNMENTS[a]) },
-  ]);
-}
-
-async function lineSpacing(host: BundleHost, multiple: number) {
-  const size = await readOne<number>(host, "characterFontSize");
-  if (typeof size !== "number") return { applied: false };
-  return host.text.format([
-    {
-      path: "characterLeading",
-      value: length(leadingFor(size, multiple)),
-      extent: "paragraphs",
-    },
-  ]);
-}
-
 /** Tab / Shift+Tab in a list: the engine's `setListLevel` by a delta on
  *  every paragraph the selection touches (engine ADR 1018), one undo step;
  *  the level clamps to 1–9 there. */
@@ -518,79 +496,31 @@ async function applyListPreset(host: BundleHost, id: ListPresetId) {
   ]);
 }
 
+/** The shared verbs' door over `host.text`. */
+const doorOf = (host: BundleHost): TextDoor => ({
+  read: (path) => readOne<unknown>(host, path),
+  format: (writes) => host.text.format(writes as never),
+});
+
 /** Run a Word command against the selection. */
 export async function runWordCommand(
   host: BundleHost,
   name: WordCommandName,
   state: WordCommandState,
 ): Promise<unknown> {
+  // Bold, sizes, alignment, indents and line spacing are the shared text
+  // verbs of `@paged-media/helpers`; the Word skin names them.
+  if ((TEXT_VERBS as readonly string[]).includes(name))
+    return runTextVerb(doorOf(host), name as TextVerb);
   switch (name) {
-    case "bold":
-    case "italic": {
-      const now = await readOne<string>(host, "characterFontStyle");
-      return host.text.format([
-        {
-          path: "characterFontStyle",
-          value: text(
-            toggledFontStyle(now, name === "bold" ? "Bold" : "Italic"),
-          ),
-        },
-      ]);
-    }
-    case "underline":
-      return toggleBool(host, "characterUnderline");
-    case "strikethrough":
-      return toggleBool(host, "characterStrikethru");
-    case "subscript":
-      return toggleEnum(host, "characterPosition", "Subscript", "Normal");
-    case "superscript":
-      return toggleEnum(host, "characterPosition", "Superscript", "Normal");
-    case "allCaps":
-      return toggleEnum(host, "characterCase", "AllCaps", "Normal");
-    case "smallCaps":
-      return toggleEnum(host, "characterCase", "SmallCaps", "Normal");
     case "clearCharacter":
       return host.text.applyStyle("character", NO_CHARACTER_STYLE);
-    case "growFont":
-    case "shrinkFont": {
-      const size = await readOne<number>(host, "characterFontSize");
-      if (typeof size !== "number") return { applied: false };
-      return host.text.format([
-        {
-          path: "characterFontSize",
-          value: length(stepFontSize(size, name === "growFont" ? 1 : -1)),
-        },
-      ]);
-    }
-    case "alignLeft":
-      return align(host, "left");
-    case "alignCenter":
-      return align(host, "center");
-    case "alignRight":
-      return align(host, "right");
-    case "justify":
-      return align(host, "justify");
     case "spaceBefore": {
       const now = await readOne<number>(host, "paragraphSpaceBefore");
       return host.text.format([
         {
           path: "paragraphSpaceBefore",
           value: length(typeof now === "number" && now > 0 ? 0 : 12),
-        },
-      ]);
-    }
-    case "increaseIndent":
-    case "decreaseIndent": {
-      const now = await readOne<number>(host, "paragraphLeftIndent");
-      return host.text.format([
-        {
-          path: "paragraphLeftIndent",
-          value: length(
-            steppedIndent(
-              typeof now === "number" ? now : 0,
-              name === "increaseIndent" ? 1 : -1,
-            ),
-          ),
         },
       ]);
     }
@@ -623,12 +553,6 @@ export async function runWordCommand(
     case "pasteFormat":
       if (!state.copied || state.copied.length === 0) return { applied: false };
       return host.text.format(state.copied);
-    case "lineSpacing1":
-      return lineSpacing(host, 1);
-    case "lineSpacing15":
-      return lineSpacing(host, 1.5);
-    case "lineSpacing2":
-      return lineSpacing(host, 2);
     case "doubleUnderline": {
       const now = await readOne<string>(host, "characterUnderlineType");
       return host.text.format([
@@ -772,7 +696,7 @@ export async function runWordCommand(
     default:
       return runStructureCommand(
         host,
-        name,
+        name as Parameters<typeof runStructureCommand>[1],
         state.structure ?? (() => null),
         HEADER_BAR_COMMANDS.map((n) => WORD_COMMAND[n]),
       );

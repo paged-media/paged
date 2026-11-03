@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 901,
+    "command": 920,
     "keybinding": 167,
-    "menu": 645,
+    "menu": 664,
     "panel": 150,
     "tool": 126
   },
@@ -4371,6 +4371,101 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.text.alignCenter",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.alignLeft",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.alignRight",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.allCaps",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.bold",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.decreaseIndent",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.growFont",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.increaseIndent",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.italic",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.justify",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.lineSpacing1",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.lineSpacing15",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.lineSpacing2",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.shrinkFont",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.smallCaps",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.strikethrough",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.subscript",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.superscript",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.text.underline",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.tool.activate.*",
       "kind": "command",
       "owner": "editor"
@@ -8292,6 +8387,101 @@
     },
     {
       "id": "menu:Type/Character…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Align center",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Align left",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Align right",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/All caps",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Bold",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Decrease font size",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Decrease indent",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Increase font size",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Increase indent",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Italic",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Justify",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Line spacing 1",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Line spacing 1.5",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Line spacing 2",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Small caps",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Strikethrough",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Subscript",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Superscript",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Format/Underline",
       "kind": "menu",
       "owner": "editor"
     },

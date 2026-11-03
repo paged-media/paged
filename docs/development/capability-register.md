@@ -285,6 +285,19 @@ Status (draw items, one line each; updated as they land):
   Doc's Words status item, its `word-count.ts`, the store's `words` and two strings are gone
   (status items are not feature ids, so no deprecation entry). Not carried over: the Word status
   bar line itself; the count now sits in Info.
+- Doc text-format verbs: DONE 2026-11-03. The verbs' arithmetic and runner are one implementation
+  in `platform/shared/helpers` (`text-format.ts`: bold / italic toggles, underline, strikethrough,
+  sub / superscript, caps, size steps, the four alignments, indent steps, line spacing 1 / 1.5 / 2;
+  `runTextVerb` over a `TextDoor`). The host declares `paged.text.*` (`text-format-commands.ts`) with
+  Type > Format entries and palette rows, over the live content selection and the engine's
+  story-range reads and writes (a caret formats the word around it; one batch, one undo step);
+  slide text gets them in every context that has a text selection. Doc keeps the Word skin: its
+  scoped keys, control bar (`home-group.tsx`) and command ids are unchanged and run the same
+  `runTextVerb` through `host.text` (doc's own verb code and `format.ts` arithmetic are gone, its
+  recording-host spec passes unchanged). No doc id was removed, so no deprecation entry. Kept in
+  doc, not generic: the multilevel list presets (`lists.ts`: Word's `1. a. i.` / `1.1.1.`), styles,
+  highlight, borders. Not done: host key bindings for the verbs (no default Cmd+B yet, to avoid
+  shadowing the text input's own keys); slide's own format painter was not touched.
 
 ### Reach (gaps between modules)
 
