@@ -265,6 +265,11 @@ Status (draw items, one line each; updated as they land):
   shared in `platform/shared/helpers` (`sampled-style`). Draw's tool, its `shift+d` key and its
   feature id are gone (draw ADR 359 amended). Slide's format painter was not touched: it copies
   slide text and shape formatting, not this set.
+- Sheet format fallback: DONE 2026-11-03. The workbook panel's Format section no longer renders a
+  second copy of number format, font, fill, alignment, wrap and iterative calculation on a host
+  without the Sheet properties panel (`DuplicatedFormatRows`, its presets and 43 strings are gone).
+  Those rows live in the Sheet properties panel (character and paragraph text formatting of cells
+  there is the host's text provider); borders, merge, freeze and sizes stay in the section.
 
 ### Reach (gaps between modules)
 

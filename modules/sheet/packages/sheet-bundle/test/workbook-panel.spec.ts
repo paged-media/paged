@@ -184,11 +184,13 @@ describe("workbook panel layout", () => {
     ]);
   });
 
-  it("keeps the format rows and iterative calculation where the host has no Sheet properties", () => {
+  it("has no second copy of the format rows where the host has no Sheet properties", () => {
     const { tree } = mount([]);
     expect(byData(tree, "data-sheet-fmt-pointer")).toHaveLength(0);
-    expect(byData(tree, "data-sheet-fmt-bold")).toHaveLength(1);
-    expect(byData(tree, "data-sheet-iterative")).toHaveLength(1);
+    expect(byData(tree, "data-sheet-fmt-bold")).toHaveLength(0);
+    expect(byData(tree, "data-sheet-iterative")).toHaveLength(0);
+    // Borders / layout have no other home: they stay.
+    expect(byData(tree, "data-sheet-fmt-border", "outline")).toHaveLength(1);
   });
 
   it("asks for a second click before deleting a sheet, and the arm lapses", () => {
