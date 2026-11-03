@@ -246,7 +246,11 @@ fn a_paragraph_only_document_places_as_a_batch_equal_to_the_native_builder() {
 
 #[test]
 fn a_document_with_something_not_yet_in_the_batch_is_refused_with_the_reason() {
-    for (bytes, why) in [(docx_conformance::image_docx(), "picture")] {
+    for (bytes, why) in [
+        (docx_conformance::tracked_changes_docx(), "tracked"),
+        (docx_conformance::picture_effects_docx(), "picture look"),
+        (docx_conformance::objects_text_boxes_docx(), "text box"),
+    ] {
         let err = place_batch(&lowered(&bytes), STORY).expect_err("refused");
         assert!(err.contains(why), "{why}: {err}");
     }
@@ -268,6 +272,14 @@ fn a_table_places_as_insert_table_cells_and_spans() {
     assert!(at("insertTable") < at("bindCreated").map(|n| n + 1));
     assert!(k.iter().any(|x| x == "insertText"));
     assert_eq!(k.iter().filter(|x| *x == "insertTable").count(), 1);
+}
+
+#[test]
+fn pictures_place_as_anchored_frames() {
+    let k = kinds(&docx_conformance::image_docx());
+    assert!(k.iter().any(|x| x == "insertAnchoredFrame"));
+    let cropped = kinds(&docx_conformance::picture_crop_docx());
+    assert!(cropped.iter().any(|x| x == "batch"));
 }
 
 #[test]

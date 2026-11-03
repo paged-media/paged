@@ -61,8 +61,8 @@ pub struct PlaceBatch {
 
 /// Why the block is not one this builder takes yet, if it is not.
 fn plain(p: &LoweredParagraph) -> Result<(), &'static str> {
-    if !p.images.is_empty() {
-        Err("picture")
+    if p.images.iter().any(|i| i.fx.is_some()) {
+        Err("picture look")
     } else if !p.text_boxes.is_empty() {
         Err("text box")
     } else if !p.segments.is_empty() {
@@ -171,7 +171,9 @@ pub fn style_ops(doc: &LoweredDoc, keep: &HashSet<String>) -> Vec<Value> {
 /// cap) is the pour's.
 fn plain_cell(p: &LoweredParagraph) -> Result<(), &'static str> {
     plain(p)?;
-    if !p.bookmarks.is_empty() {
+    if !p.images.is_empty() {
+        Err("picture")
+    } else if !p.bookmarks.is_empty() {
         Err("bookmark")
     } else if p.list.is_some() {
         Err("list item")
@@ -432,6 +434,87 @@ fn table_carets(t: &LoweredTable, story: &str, table: &str, out: &mut Vec<Value>
     }
 }
 
+/// A float's anchored-object settings on the frame `handle` names.
+fn anchor_sets(a: &docx_lower::ir::LoweredAnchor, handle: &str) -> Vec<Value> {
+    let element = json!({ "kind": "rectangle", "id": format!("$h:{handle}") });
+    let text = |v: &str| json!({ "type": "text", "value": v });
+    [
+        ("anchoredPosition", text(&a.position)),
+        ("anchorPoint", text(&a.anchor_point)),
+        ("anchoredHorizontalReference", text(&a.horizontal_reference)),
+        ("anchoredHorizontalAlignment", text(&a.horizontal_alignment)),
+        ("anchoredVerticalReference", text(&a.vertical_reference)),
+        ("anchoredVerticalAlignment", text(&a.vertical_alignment)),
+        ("anchoredXOffset", length(a.x_offset_pt)),
+        ("anchoredYOffset", length(a.y_offset_pt)),
+    ]
+    .into_iter()
+    .map(|(path, value)| {
+        json!({ "op": "setElementProperty",
+                "args": { "elementId": element, "path": path, "value": value } })
+    })
+    .collect()
+}
+
+/// An anchored frame's wrap, z-order and overlap (`layoutSpec`).
+fn layout_spec(l: &docx_lower::ir::LoweredFloatLayout) -> Value {
+    let wrap = l.wrap.as_ref().map_or(Value::Null, |w| {
+        json!({ "mode": w.mode, "offsets": w.offsets_pt, "side": w.side, "polygon": w.polygon_pt })
+    });
+    json!({
+        "wrap": wrap,
+        "behindText": l.behind,
+        "allowOverlap": if l.no_overlap { json!(false) } else { Value::Null },
+        "insets": Value::Null,
+        "verticalJustification": Value::Null,
+    })
+}
+
+/// A picture as an anchored frame of its line: the frame, and in one batch
+/// with it the float's anchored-object settings and the crop's placement.
+fn picture_op(
+    img: &docx_lower::ir::LoweredImage,
+    story: &str,
+    offset: usize,
+    paragraph: usize,
+    k: usize,
+) -> Value {
+    let mut args = json!({
+        "storyId": story, "offset": offset, "width": img.width_pt, "height": img.height_pt,
+        "imageUri": img.uri, "paragraph": paragraph,
+    });
+    if let Some(l) = &img.layout {
+        args["layout"] = layout_spec(l);
+    }
+    let insert = json!({ "op": "insertAnchoredFrame", "args": args });
+    let crop = |handle: &str| {
+        img.crop.and_then(|c| c.placement).map(|t| {
+            json!({ "op": "setElementProperty", "args": {
+                "elementId": { "kind": "rectangle", "id": format!("$h:{handle}") },
+                "path": "imageContentTransform",
+                "value": { "type": "transform", "value": t } } })
+        })
+    };
+    let (handle, mut ops) = if let Some(a) = &img.anchor {
+        let h = format!("docFloat{k}");
+        let sets = anchor_sets(a, &h);
+        (h, sets)
+    } else if img.crop.is_some_and(|c| c.placement.is_some()) {
+        (format!("docxPicture{k}"), Vec::new())
+    } else {
+        return insert;
+    };
+    ops.splice(
+        0..0,
+        [
+            insert,
+            json!({ "op": "bindCreated", "args": { "handle": handle } }),
+        ],
+    );
+    ops.extend(crop(&handle));
+    json!({ "op": "batch", "args": { "ops": ops } })
+}
+
 /// The comments whose range is in the story: each thread's first comment
 /// over its range, its replies after it (the pour's `buildCommentMutations`).
 fn comment_ops(doc: &LoweredDoc, story: &str, ranges: &[(String, usize, usize)]) -> Vec<Value> {
@@ -550,6 +633,7 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
     let mut ends_in_table = false;
     let mut ends_in_empty = false;
     let mut tables = 0usize;
+    let mut pictures = 0usize;
     // Each comment's range over the poured text, in order of appearance.
     let mut comment_ranges: Vec<(String, usize, usize)> = Vec::new();
     for piece in &pieces {
@@ -568,6 +652,7 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                 let mut para_ops = Vec::new();
                 let mut char_ops = Vec::new();
                 let mut prop_ops = Vec::new();
+                let mut image_ops = Vec::new();
                 let mut link_ops = Vec::new();
                 let mut anchor_ops = Vec::new();
                 for (i, para) in step.paras.iter().enumerate() {
@@ -584,6 +669,16 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                                           "name": name }
                             }));
                         }
+                    }
+                    for img in &step.lowered[i].images {
+                        image_ops.push(picture_op(
+                            img,
+                            story,
+                            start + img.at as usize,
+                            para_base + i,
+                            pictures,
+                        ));
+                        pictures += 1;
                     }
                     let mut runs: Vec<(usize, usize, &paged_model::CharacterRun)> = Vec::new();
                     for r in para.runs.iter().filter(|r| !r.text.is_empty()) {
@@ -678,14 +773,14 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                 body_ops.extend(para_ops);
                 body_ops.extend(char_ops);
                 body_ops.extend(prop_ops);
+                body_ops.extend(image_ops);
                 body_ops.extend(link_ops);
                 body_ops.extend(anchor_ops);
                 last = para_base as isize + step.paras.len() as isize - 1;
                 ends_in_table = false;
-                ends_in_empty = step
-                    .lowered
-                    .last()
-                    .is_some_and(|p| p.runs.iter().all(|r| r.text.is_empty()));
+                ends_in_empty = step.lowered.last().is_some_and(|p| {
+                    p.images.is_empty() && p.runs.iter().all(|r| r.text.is_empty())
+                });
             }
             Piece::Table(t) => {
                 let fresh = last < 0;
