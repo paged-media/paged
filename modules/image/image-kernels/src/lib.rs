@@ -26,9 +26,6 @@
 //! WGSL body and (behind the `reference` feature, test-only) the
 //! scalar Rust twin from a single expression — one source of truth.
 
-#[macro_use]
-extern crate paged_kernels;
-
 pub mod abi;
 /// The compose family's scalar twins: the test-only reference and (feature
 /// `cpu`) the layer fold's CPU path (image ADR 480).

@@ -22,6 +22,10 @@
 
 pub mod adjust;
 pub mod arithmetic;
+pub mod band;
+pub mod boolean;
 pub mod cast;
 pub mod conv;
 pub mod linear;
+pub mod minmax;
+pub mod relational;
