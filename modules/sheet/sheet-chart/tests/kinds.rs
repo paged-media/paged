@@ -27,6 +27,7 @@
 
 use std::path::PathBuf;
 
+use sheet_chart::colors::OFFICE_THEME;
 use sheet_chart::model::*;
 use sheet_chart::{generate, sparkline, ChartGeometry, PlotData, Primitive};
 use sheet_core::{CellRef, RangeRef};
@@ -352,7 +353,8 @@ fn fixtures() -> Vec<(&'static str, ChartModel, PlotData)> {
         show_value: true,
         ..Default::default()
     });
-    refs.plot_area.fill = Some(color_scheme(3, 0.0).with_doc(doc_swatch("Color/Paper", 0xE7E6E6)));
+    refs.plot_area.fill =
+        Some(color_scheme(3, 0.0).with_doc(doc_swatch("Color/Paper", OFFICE_THEME[3])));
     v.push(("column-style-refs", refs, two()));
     v
 }

@@ -272,6 +272,13 @@ pub(super) fn apply_create_swatch(
         }
     };
     let entry = color_entry_from_spec(self_id.clone(), spec);
+    // A spot (or Lab, gray, mixed-ink) swatch never follows a theme slot
+    // (engine ADR 1057): refuse, with the reason, rather than drop the link.
+    if entry.theme_ref.is_some() {
+        if let Some(reason) = super::theme::follow_error(&entry) {
+            return Err(OperationError::InvalidDocumentMetadata { reason });
+        }
+    }
     colors.insert(self_id.clone(), entry);
     // Echo the resolved id back in the recorded op so a redo (or a
     // remote replay) reuses it verbatim.
@@ -313,6 +320,13 @@ pub(super) fn apply_edit_swatch(
     // A swatch that follows a theme slot (engine ADR 1056) keeps following
     // it: the reference is the theme's, not the spec's.
     updated.theme_ref = existing.theme_ref.clone();
+    if updated.theme_ref.is_some() {
+        if let Some(reason) = super::theme::follow_error(&updated) {
+            return Err(OperationError::InvalidDocumentMetadata {
+                reason: format!("{reason} (the swatch follows a theme slot now)"),
+            });
+        }
+    }
     colors.insert(swatch_id.to_string(), updated);
     Ok(AppliedOperation {
         op: Operation::EditSwatch {

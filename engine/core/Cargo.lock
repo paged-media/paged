@@ -4595,6 +4595,7 @@ dependencies = [
  "flo_curves 0.8.1",
  "idml-import",
  "kurbo 0.11.3",
+ "paged-color",
  "paged-compose",
  "paged-gen",
  "paged-geom",

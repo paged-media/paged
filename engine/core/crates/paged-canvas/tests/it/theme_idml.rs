@@ -151,3 +151,223 @@ fn a_document_without_a_theme_exports_no_theme_line__feat__core_theme() {
     let m = model();
     assert!(!m.idml_export_losses().iter().any(|l| l.contains("theme")));
 }
+
+/// `idml` with `from` replaced by `to` in every text part (an edit made
+/// outside paged), the entries stored as they were.
+fn edited_outside(idml: &[u8], from: &str, to: &str) -> Vec<u8> {
+    use std::io::{Read, Write};
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(idml)).expect("zip");
+    let mut out = Vec::new();
+    {
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(&mut out));
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for i in 0..zip.len() {
+            let mut f = zip.by_index(i).expect("entry");
+            let name = f.name().expect("name").to_string();
+            let mut data = Vec::new();
+            f.read_to_end(&mut data).expect("read");
+            if name.ends_with(".xml") && name != "designmap.xml" {
+                if let Ok(text) = String::from_utf8(data.clone()) {
+                    data = text.replace(from, to).into_bytes();
+                }
+            }
+            w.start_file(name, opts).expect("start");
+            w.write_all(&data).expect("write");
+        }
+        w.finish().expect("finish");
+    }
+    out
+}
+
+fn cmyk_swatch(id: &str, v: [f32; 4]) -> Mutation {
+    Mutation::CreateSwatch {
+        spec: SwatchSpec {
+            self_id: Some(id.into()),
+            name: Some(id.trim_start_matches("Color/").into()),
+            space: "CMYK".into(),
+            value: v.to_vec(),
+            model: None,
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+            pattern: None,
+            theme_ref: None,
+        },
+    }
+}
+
+#[test]
+fn a_cmyk_swatch_follows_a_slot_in_cmyk_and_keeps_its_link_through_idml__feat__core_theme() {
+    let mut m = model();
+    m.apply_mutation(&cmyk_swatch("Color/Print", [83.85, 26.15, 0.0, 49.02]))
+        .unwrap();
+    m.apply_mutation(&Mutation::CreateThemeFromSwatches {
+        name: "Print".into(),
+        slots: vec![ThemeSlotSwatchSpec {
+            slot: "accent1".into(),
+            swatch: "Color/Print".into(),
+        }],
+        relink: false,
+    })
+    .unwrap();
+    assert_eq!(
+        m.scene()
+            .theme
+            .as_ref()
+            .unwrap()
+            .color("accent1")
+            .unwrap()
+            .value,
+        "156082"
+    );
+    m.apply_mutation(&Mutation::SetThemeColor {
+        slot: "accent1".into(),
+        value: "FF0000".into(),
+    })
+    .unwrap();
+    let print = &m.scene().palette.colors["Color/Print"];
+    assert_eq!(print.space, paged_model::ColorSpace::Cmyk);
+    assert_eq!(print.value, vec![0.0, 100.0, 100.0, 0.0]);
+    // The collection says which space it is written in.
+    let rows = m.collection(CollectionName::Swatches);
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["selfId"] == "Color/Print")
+        .unwrap();
+    assert_eq!(row["space"], "cmyk");
+    // IDML: the swatch is a plain CMYK colour and the link comes back.
+    let idml = m.export_idml().expect("export");
+    let back = CanvasModel::load("doc", &idml, CanvasOptions::default()).expect("reload");
+    let c = &back.scene().palette.colors["Color/Print"];
+    assert_eq!(c.space, paged_model::ColorSpace::Cmyk);
+    assert_eq!(c.theme_ref.as_ref().unwrap().slot, "accent1");
+    assert!(back.import_notes().is_empty(), "{:?}", back.import_notes());
+    assert!(back
+        .collection(CollectionName::ImportNotes)
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn a_spot_swatch_never_follows_a_slot_and_the_refusal_says_why__feat__core_theme() {
+    let mut m = model();
+    m.apply_mutation(&Mutation::CreateSwatch {
+        spec: SwatchSpec {
+            self_id: Some("Color/Spot".into()),
+            name: Some("Spot".into()),
+            space: "CMYK".into(),
+            value: vec![0.0, 80.0, 90.0, 0.0],
+            model: Some("Spot".into()),
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+            pattern: None,
+            theme_ref: None,
+        },
+    })
+    .unwrap();
+    let err = m
+        .apply_mutation(&Mutation::CreateThemeFromSwatches {
+            name: "x".into(),
+            slots: vec![ThemeSlotSwatchSpec {
+                slot: "accent1".into(),
+                swatch: "Color/Spot".into(),
+            }],
+            relink: true,
+        })
+        .expect_err("refused");
+    assert!(format!("{err:?}").contains("spot"), "{err:?}");
+    assert!(m.scene().theme.is_none());
+}
+
+#[test]
+fn a_swatch_edited_outside_paged_is_reported_in_the_import_notes_collection__feat__core_theme() {
+    let mut m = model();
+    m.apply_mutation(&swatch("Color/Brand", [21.0, 96.0, 130.0]))
+        .unwrap();
+    m.apply_mutation(&Mutation::CreateThemeFromSwatches {
+        name: "Mine".into(),
+        slots: vec![ThemeSlotSwatchSpec {
+            slot: "accent1".into(),
+            swatch: "Color/Brand".into(),
+        }],
+        relink: false,
+    })
+    .unwrap();
+    let idml = m.export_idml().expect("export");
+    assert!(
+        String::from_utf8_lossy(&idml).contains("21 96 130"),
+        "the swatch is stored plain"
+    );
+    let edited = edited_outside(&idml, "21 96 130", "22 96 130");
+    let back = CanvasModel::load("doc", &edited, CanvasOptions::default()).expect("reload");
+    assert!(back.scene().palette.colors["Color/Brand"]
+        .theme_ref
+        .is_none());
+    let rows = back.collection(CollectionName::ImportNotes);
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert!(rows[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("edited outside paged"));
+    // A document made in the editor has none.
+    assert!(m
+        .collection(CollectionName::ImportNotes)
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn a_style_reports_the_theme_font_it_follows__feat__core_theme() {
+    let mut m = model();
+    m.apply_mutation(&Mutation::SetTheme {
+        theme: ThemeSpec {
+            name: "T".into(),
+            major: ThemeFontsSpec {
+                latin: Some("Georgia".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    })
+    .unwrap();
+    let rows = m.collection(CollectionName::ParagraphStyles);
+    let id = rows[0]["selfId"].as_str().unwrap().to_string();
+    assert!(rows[0]["fontRef"].is_null());
+    m.apply_mutation(&Mutation::SetStyleThemeFont {
+        collection: paged_mutate::StyleCollection::Paragraph,
+        style_id: id.clone(),
+        which: Some("major".into()),
+    })
+    .unwrap();
+    let rows = m.collection(CollectionName::ParagraphStyles);
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["selfId"] == id.as_str())
+        .unwrap();
+    assert_eq!(row["fontRef"], "major");
+    m.apply_mutation(&Mutation::SetStyleThemeFont {
+        collection: paged_mutate::StyleCollection::Paragraph,
+        style_id: id.clone(),
+        which: None,
+    })
+    .unwrap();
+    let rows = m.collection(CollectionName::ParagraphStyles);
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["selfId"] == id.as_str())
+        .unwrap();
+    assert!(row["fontRef"].is_null());
+}

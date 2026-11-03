@@ -28,7 +28,7 @@
 //! (or style face) still has the value recorded is restored; one that
 //! changed outside paged is dropped and reported.
 
-use paged_model::{ColorSpace, Theme, ThemeFontRef, ThemeRef};
+use paged_model::{ColorModel, ColorSpace, Theme, ThemeFontRef, ThemeRef};
 use paged_scene::Document;
 use serde::{Deserialize, Serialize};
 
@@ -95,6 +95,25 @@ fn hex(v: &[f32]) -> Option<String> {
     Some(format!("{:02X}{:02X}{:02X}", b(v[0]), b(v[1]), b(v[2])))
 }
 
+/// A following swatch's value as the label records it, with its space: six
+/// hex digits for RGB, the four CMYK percentages to two decimals
+/// (`"0.00,50.00,100.00,0.00"`) for CMYK. `None` for a swatch that cannot
+/// follow a slot (spot, Lab, gray: ADR 1057).
+fn link_value(c: &paged_model::ColorEntry) -> Option<(String, &'static str)> {
+    match (c.model, c.space) {
+        (ColorModel::Process, ColorSpace::Rgb) => hex(&c.value).map(|v| (v, "RGB")),
+        (ColorModel::Process, ColorSpace::Cmyk) if c.value.len() >= 4 => Some((
+            c.value[..4]
+                .iter()
+                .map(|v| format!("{v:.2}"))
+                .collect::<Vec<_>>()
+                .join(","),
+            "CMYK",
+        )),
+        _ => None,
+    }
+}
+
 /// Write `doc`'s theme into [`THEME_LABEL`] (the IDML export runs this on its
 /// copy). Returns the lines for the export's loss report; empty without a
 /// theme, which leaves the document untouched.
@@ -122,17 +141,12 @@ pub fn flatten_theme_for_interchange(doc: &mut Document) -> Vec<String> {
         let Some(r) = &c.theme_ref else {
             continue;
         };
-        let value = if c.space == ColorSpace::Rgb {
-            hex(&c.value)
-        } else {
-            None
-        };
-        match value {
-            Some(value) => links.push(Link {
+        match link_value(c) {
+            Some((value, space)) => links.push(Link {
                 swatch: c.name.clone().unwrap_or_else(|| c.self_id.clone()),
                 reference: ref_text(r),
                 value,
-                space: "RGB".into(),
+                space: space.into(),
             }),
             None => unlinked += 1,
         }
@@ -180,8 +194,8 @@ pub fn flatten_theme_for_interchange(doc: &mut Document) -> Vec<String> {
     ));
     if unlinked > 0 {
         lines.push(format!(
-            "{unlinked} swatch(es) follow a theme slot but are not plain RGB; IDML cannot keep \
-             that link"
+            "{unlinked} swatch(es) follow a theme slot but are not process RGB or CMYK \
+             swatches; IDML cannot keep that link"
         ));
     }
     lines.sort();
@@ -234,7 +248,7 @@ pub fn restore_theme_from_labels(doc: &mut Document) -> Vec<String> {
             ));
             continue;
         };
-        let same = c.space == ColorSpace::Rgb && hex(&c.value).as_deref() == Some(&l.value);
+        let same = link_value(c).is_some_and(|(v, sp)| v == l.value && sp == l.space);
         match (same, parse_ref(&l.reference)) {
             (true, Some(r)) => c.theme_ref = Some(r),
             _ => notes.push(format!(
@@ -412,6 +426,57 @@ mod tests {
         gone.designmap.labels = written.designmap.labels.clone();
         let notes = restore_theme_from_labels(&mut gone);
         assert!(notes.iter().any(|n| n.contains("is gone")));
+    }
+
+    #[test]
+    fn a_cmyk_follower_is_written_to_the_label_and_restored_or_detached_by_its_numbers() {
+        let mut written = doc();
+        let mut cmyk = written.palette.colors["Color/Brand"].clone();
+        cmyk.self_id = "Color/Print".into();
+        cmyk.name = Some("Print".into());
+        cmyk.space = ColorSpace::Cmyk;
+        cmyk.value = vec![83.85, 26.15, 0.0, 49.02];
+        written.palette.colors.insert("Color/Print".into(), cmyk);
+        // A spot follower cannot be kept, and is reported.
+        let mut spot = written.palette.colors["Color/Print"].clone();
+        spot.self_id = "Color/Pantone".into();
+        spot.name = Some("Pantone".into());
+        spot.model = ColorModel::Spot;
+        written.palette.colors.insert("Color/Pantone".into(), spot);
+        let lines = flatten_theme_for_interchange(&mut written);
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("2 swatch(es) and 1 style(s)")),
+            "{lines:?}"
+        );
+        assert!(lines
+            .iter()
+            .any(|l| l.contains("1 swatch(es) follow a theme slot but are not")));
+        let reopen = |value: Vec<f32>| {
+            let mut back = Document::default();
+            back.designmap.labels = written.designmap.labels.clone();
+            back.palette = written.palette.clone();
+            for c in back.palette.colors.values_mut() {
+                c.theme_ref = None;
+            }
+            back.palette.colors.get_mut("Color/Print").unwrap().value = value;
+            let notes = restore_theme_from_labels(&mut back);
+            (back, notes)
+        };
+        let (back, notes) = reopen(vec![83.85, 26.15, 0.0, 49.02]);
+        assert!(notes.is_empty(), "{notes:?}");
+        assert!(back.palette.colors["Color/Print"].theme_ref.is_some());
+        assert!(back.palette.colors["Color/Pantone"].theme_ref.is_none());
+        // InDesign changed a number: the link is detached and reported.
+        let (back, notes) = reopen(vec![84.0, 26.15, 0.0, 49.02]);
+        assert!(back.palette.colors["Color/Print"].theme_ref.is_none());
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("\"Print\" was edited outside paged")),
+            "{notes:?}"
+        );
     }
 
     #[test]

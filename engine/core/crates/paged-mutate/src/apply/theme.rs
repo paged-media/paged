@@ -110,6 +110,11 @@ fn follow_fonts(doc: &mut Document) {
 
 /// The swatches that follow a theme slot take their colour under the
 /// document's theme (a slot the theme lacks leaves its swatch as it is).
+/// A swatch stays in its own space (engine ADR 1057): an RGB follower takes
+/// the slot's sRGB bytes, a CMYK process follower the CMYK percentages
+/// [`cmyk_of`] derives from them. Nothing else follows (see [`follow_error`]);
+/// a reference found on such a swatch (a document written by another tool)
+/// is left alone.
 fn recolour(doc: &mut Document) {
     let Some(theme) = &doc.theme else {
         return;
@@ -118,7 +123,68 @@ fn recolour(doc: &mut Document) {
         let Some(rgb) = c.theme_ref.as_ref().and_then(|r| theme.resolve(r)) else {
             continue;
         };
-        c.value = rgb.iter().map(|b| *b as f32).collect();
+        match (c.space, c.model) {
+            (ColorSpace::Rgb, _) => c.value = rgb.iter().map(|b| *b as f32).collect(),
+            (ColorSpace::Cmyk, ColorModel::Process) => c.value = cmyk_of(rgb),
+            _ => {}
+        }
+    }
+}
+
+/// The CMYK percentages (0..=100, two decimals) of a slot's sRGB bytes: the
+/// inverse of the engine's profile-free conversion, so a document with no
+/// CMYK profile shows the follower exactly as the slot, and the numbers are
+/// the same on every host and every replay of the operation (ADR 1057). With
+/// a CMYK profile configured the renderer sends these numbers through the
+/// CMS like any CMYK swatch.
+fn cmyk_of(rgb: [u8; 3]) -> Vec<f32> {
+    let [c, m, y, k] = paged_color::math::srgb_to_naive_cmyk([
+        rgb[0] as f32 / 255.0,
+        rgb[1] as f32 / 255.0,
+        rgb[2] as f32 / 255.0,
+    ]);
+    [c, m, y, k]
+        .iter()
+        .map(|v| (v * 10_000.0).round() / 100.0)
+        .collect()
+}
+
+/// A slot's sRGB bytes as the CMYK swatch `value` shows them: the engine's
+/// profile-free conversion, rounded to the byte.
+fn cmyk_to_rgb(value: &[f32]) -> Option<[u8; 3]> {
+    if value.len() < 4 {
+        return None;
+    }
+    let [r, g, b] = paged_color::math::naive_cmyk_to_srgb(
+        value[0] / 100.0,
+        value[1] / 100.0,
+        value[2] / 100.0,
+        value[3] / 100.0,
+    );
+    let byte = |v: f32| (v * 255.0).round().clamp(0.0, 255.0) as u8;
+    Some([byte(r), byte(g), byte(b)])
+}
+
+/// Why a swatch cannot follow a theme slot, in words for the user, or
+/// `None` when it can (a process swatch in RGB or CMYK). Spot, mixed ink,
+/// Lab, gray and pattern-like swatches never follow: a spot ink IS its
+/// colour (a plate), and the others have no inverse the engine could keep
+/// exact (engine ADR 1057).
+pub(crate) fn follow_error(c: &paged_model::ColorEntry) -> Option<String> {
+    let label = c.name.as_deref().unwrap_or(&c.self_id);
+    match (c.model, c.space) {
+        (ColorModel::Spot, _) => Some(format!(
+            "swatch {label:?} is a spot colour; a spot swatch never follows a theme slot \
+             (its ink is the colour). Use a process swatch"
+        )),
+        (ColorModel::MixedInk, _) => Some(format!(
+            "swatch {label:?} is a mixed ink; only process RGB and CMYK swatches follow a theme slot"
+        )),
+        (ColorModel::Process, ColorSpace::Rgb) if c.value.len() >= 3 => None,
+        (ColorModel::Process, ColorSpace::Cmyk) if c.value.len() >= 4 => None,
+        _ => Some(format!(
+            "swatch {label:?} is not a process RGB or CMYK colour; only those follow a theme slot"
+        )),
     }
 }
 
@@ -367,10 +433,15 @@ const TINT_LADDER: [&[(&str, i32)]; 6] = [
     &[("lumMod", 50_000)],
 ];
 
-/// The sRGB bytes of a plain RGB process swatch; `None` for any other.
-fn plain_rgb(c: &paged_model::ColorEntry) -> Option<[u8; 3]> {
-    if c.space != ColorSpace::Rgb || c.model != ColorModel::Process || c.value.len() < 3 {
+/// The sRGB bytes of a swatch that can follow a slot: a process RGB swatch's
+/// own, a process CMYK swatch's through the profile-free conversion
+/// ([`cmyk_to_rgb`]); `None` for any other (see [`follow_error`]).
+fn process_rgb(c: &paged_model::ColorEntry) -> Option<[u8; 3]> {
+    if follow_error(c).is_some() {
         return None;
+    }
+    if c.space == ColorSpace::Cmyk {
+        return cmyk_to_rgb(&c.value);
     }
     let b = |v: f32| v.round().clamp(0.0, 255.0) as u8;
     Some([b(c.value[0]), b(c.value[1]), b(c.value[2])])
@@ -406,12 +477,8 @@ pub(super) fn apply_create_from_swatches(
             .find(|(id, c)| **id == s.swatch || c.name.as_deref() == Some(s.swatch.as_str()))
             .map(|(id, _)| id.clone())
             .ok_or_else(|| refuse(format!("no swatch {:?}", s.swatch)))?;
-        let rgb = plain_rgb(&doc.palette.colors[&id]).ok_or_else(|| {
-            refuse(format!(
-                "swatch {:?} is not a plain RGB process colour (convert it first)",
-                s.swatch
-            ))
-        })?;
+        let rgb = process_rgb(&doc.palette.colors[&id])
+            .ok_or_else(|| refuse(follow_error(&doc.palette.colors[&id]).unwrap_or_default()))?;
         colors.push(ThemeColor {
             slot: s.slot.clone(),
             value: format!("{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]),
@@ -445,7 +512,7 @@ pub(super) fn apply_create_from_swatches(
             if c.theme_ref.is_some() || assigned.iter().any(|(a, _)| a == id) {
                 continue;
             }
-            let Some(rgb) = plain_rgb(c) else {
+            let Some(rgb) = process_rgb(c) else {
                 continue;
             };
             'slots: for t in &theme.colors {
@@ -880,8 +947,9 @@ mod tests {
     }
 
     #[test]
-    fn a_theme_from_swatches_refuses_cmyk_spot_unknown_and_empty_input() {
+    fn a_theme_from_swatches_refuses_spot_malformed_unknown_and_empty_input() {
         let mut doc = Document::default();
+        // A CMYK swatch with three values is malformed, not followable.
         rgb_swatch(&mut doc, "Cmyk", [0.0, 0.0, 0.0]);
         doc.palette.colors.get_mut("Cmyk").unwrap().space = ColorSpace::Cmyk;
         rgb_swatch(&mut doc, "Spot", [0.0, 0.0, 0.0]);
@@ -894,10 +962,153 @@ mod tests {
         };
         assert!(apply_create_from_swatches(&mut doc, "", &[], true).is_err());
         assert!(apply_create_from_swatches(&mut doc, "", &one("accent1", "Cmyk"), true).is_err());
-        assert!(apply_create_from_swatches(&mut doc, "", &one("accent1", "Spot"), true).is_err());
+        let spot = apply_create_from_swatches(&mut doc, "", &one("accent1", "Spot"), true)
+            .err()
+            .expect("a spot swatch never follows a slot")
+            .to_string();
+        assert!(spot.contains("spot"), "{spot}");
         assert!(apply_create_from_swatches(&mut doc, "", &one("accent9", "Cmyk"), true).is_err());
         assert!(apply_create_from_swatches(&mut doc, "", &one("accent1", "None"), true).is_err());
         assert!(doc.theme.is_none());
+    }
+
+    fn cmyk_swatch(doc: &mut Document, id: &str, v: [f32; 4]) {
+        rgb_swatch(doc, id, [0.0; 3]);
+        let c = doc.palette.colors.get_mut(id).unwrap();
+        c.space = ColorSpace::Cmyk;
+        c.value = v.to_vec();
+    }
+
+    #[test]
+    fn a_cmyk_swatch_takes_a_slot_stays_cmyk_when_the_slot_recolours_and_undoes_with_it() {
+        let mut doc = Document::default();
+        // The naive CMYK of 156082 (so the slot takes exactly that colour).
+        cmyk_swatch(&mut doc, "Brand", [83.85, 26.15, 0.0, 49.02]);
+        cmyk_swatch(&mut doc, "Ink", [0.0, 0.0, 0.0, 100.0]);
+        let slots = [
+            ThemeSlotSwatchSpec {
+                slot: "accent1".into(),
+                swatch: "Brand".into(),
+            },
+            ThemeSlotSwatchSpec {
+                slot: "dk1".into(),
+                swatch: "Ink".into(),
+            },
+        ];
+        let a = apply_create_from_swatches(&mut doc, "Mine", &slots, true).unwrap();
+        let t = doc.theme.as_ref().unwrap();
+        assert_eq!(t.color("accent1").unwrap().value, "156082");
+        assert_eq!(t.color("dk1").unwrap().value, "000000");
+        assert_eq!(
+            doc.palette.colors["Brand"].theme_ref.as_ref().unwrap().slot,
+            "accent1"
+        );
+        // The slot recolours: the follower stays CMYK, with the slot's colour.
+        let b = apply_set_color(&mut doc, "accent1", "FF0000").unwrap();
+        let brand = &doc.palette.colors["Brand"];
+        assert_eq!(brand.space, ColorSpace::Cmyk);
+        assert_eq!(brand.value, vec![0.0, 100.0, 100.0, 0.0]);
+        assert_eq!(cmyk_to_rgb(&brand.value), Some([255, 0, 0]));
+        // A CMYK follower of a tint resolves through the same chain.
+        apply_set_color(&mut doc, "accent1", "156082").unwrap();
+        assert_eq!(
+            cmyk_to_rgb(&doc.palette.colors["Brand"].value),
+            Some([21, 96, 130])
+        );
+        undo(&mut doc, b);
+        assert_eq!(doc.palette.colors["Brand"].space, ColorSpace::Cmyk);
+        undo(&mut doc, a);
+        assert!(doc.theme.is_none());
+        assert!(doc.palette.colors["Brand"].theme_ref.is_none());
+        assert_eq!(
+            doc.palette.colors["Brand"].value,
+            vec![83.85, 26.15, 0.0, 49.02]
+        );
+    }
+
+    #[test]
+    fn a_cmyk_swatch_that_is_an_exact_tint_of_a_slot_is_relinked_and_a_spot_never_is() {
+        let mut doc = Document::default();
+        rgb_swatch(&mut doc, "Brand", [21.0, 96.0, 130.0]);
+        let probe = Theme {
+            colors: vec![ThemeColor {
+                slot: "accent1".into(),
+                value: "156082".into(),
+                system: None,
+            }],
+            ..Theme::default()
+        };
+        let tint = probe
+            .resolve(&ThemeRef {
+                slot: "accent1".into(),
+                transforms: vec![("lumMod".into(), 60_000), ("lumOff".into(), 40_000)],
+            })
+            .unwrap();
+        let v = cmyk_of(tint);
+        cmyk_swatch(&mut doc, "Tint", [v[0], v[1], v[2], v[3]]);
+        cmyk_swatch(&mut doc, "Plain", [10.0, 20.0, 30.0, 40.0]);
+        // A spot swatch with the same numbers as the tint: never linked.
+        cmyk_swatch(&mut doc, "SpotTint", [v[0], v[1], v[2], v[3]]);
+        doc.palette.colors.get_mut("SpotTint").unwrap().model = ColorModel::Spot;
+        let slots = [ThemeSlotSwatchSpec {
+            slot: "accent1".into(),
+            swatch: "Brand".into(),
+        }];
+        apply_create_from_swatches(&mut doc, "Mine", &slots, true).unwrap();
+        let r = |id: &str| doc.palette.colors[id].theme_ref.clone();
+        assert_eq!(r("Tint").unwrap().transforms.len(), 2);
+        assert!(r("Plain").is_none());
+        assert!(r("SpotTint").is_none());
+        // The tint follows a recolour as CMYK.
+        apply_set_color(&mut doc, "accent1", "FF0000").unwrap();
+        let t = &doc.palette.colors["Tint"];
+        assert_eq!(t.space, ColorSpace::Cmyk);
+        assert_eq!(t.value.len(), 4);
+        assert_eq!(cmyk_to_rgb(&t.value), Some([255, 102, 102]));
+        // The spot swatch is untouched.
+        assert_eq!(
+            doc.palette.colors["SpotTint"].value,
+            vec![v[0], v[1], v[2], v[3]]
+        );
+    }
+
+    #[test]
+    fn a_spot_swatch_cannot_be_made_to_follow_a_slot_by_create_or_edit() {
+        use crate::apply::layer::{apply_create_swatch, apply_edit_swatch};
+        use crate::operation::{SwatchSpec, ThemeRefSpec};
+        let mut doc = doc_with_theme();
+        let spec = |model: &str, space: &str, value: Vec<f32>| SwatchSpec {
+            self_id: Some("Color/s".into()),
+            name: None,
+            space: space.into(),
+            value,
+            model: Some(model.into()),
+            alternate_space: None,
+            alternate_value: Vec::new(),
+            tint: None,
+            alpha: None,
+            pattern: None,
+            theme_ref: Some(ThemeRefSpec {
+                slot: "accent1".into(),
+                transforms: Vec::new(),
+            }),
+        };
+        let err = apply_create_swatch(&mut doc, &spec("Spot", "CMYK", vec![0.0, 0.0, 0.0, 100.0]))
+            .err()
+            .expect("refused")
+            .to_string();
+        assert!(err.contains("spot"), "{err}");
+        assert!(!doc.palette.colors.contains_key("Color/s"));
+        // A CMYK process follower is accepted; making it a spot is refused.
+        apply_create_swatch(
+            &mut doc,
+            &spec("Process", "CMYK", vec![0.0, 0.0, 0.0, 100.0]),
+        )
+        .unwrap();
+        let mut edit = spec("Spot", "CMYK", vec![0.0, 0.0, 0.0, 100.0]);
+        edit.theme_ref = None;
+        assert!(apply_edit_swatch(&mut doc, "Color/s", &edit).is_err());
+        assert_eq!(doc.palette.colors["Color/s"].model, ColorModel::Process);
     }
 
     #[test]

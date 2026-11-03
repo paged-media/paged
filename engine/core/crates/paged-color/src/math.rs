@@ -50,6 +50,21 @@ pub fn naive_cmyk_to_srgb(c: f32, m: f32, y: f32, k: f32) -> [f32; 3] {
     ]
 }
 
+/// The inverse of [`naive_cmyk_to_srgb`]: sRGB-encoded RGB (each 0..=1) as
+/// CMYK (each 0..=1) with the most black the colour allows
+/// (`k = 1 - max(r, g, b)`), so that `naive_cmyk_to_srgb(srgb_to_naive_cmyk(c))`
+/// is `c`. Engine ADR 1057: a CMYK swatch that follows a theme slot is derived
+/// from the slot's sRGB colour with this, which needs no profile and so gives
+/// the same numbers on every host and on every replay of an operation.
+pub fn srgb_to_naive_cmyk([r, g, b]: [f32; 3]) -> [f32; 4] {
+    let (r, g, b) = (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0));
+    let max = r.max(g).max(b);
+    if max <= 0.0 {
+        return [0.0, 0.0, 0.0, 1.0];
+    }
+    [1.0 - r / max, 1.0 - g / max, 1.0 - b / max, 1.0 - max]
+}
+
 /// HSB (hue, saturation, brightness, each 0..=1) as RGB.
 pub fn hsb_to_rgb(h: f64, s: f64, b: f64) -> [f64; 3] {
     let h = (h.clamp(0.0, 1.0) * 6.0) % 6.0;
@@ -107,5 +122,19 @@ mod tests {
         }
         assert_eq!(linear_to_srgb(-0.5), 0.0);
         assert!(linear_to_srgb(2.0) > 1.0, "scene-referred stays above 1");
+    }
+
+    #[test]
+    fn the_naive_cmyk_inverse_returns_every_srgb_byte() {
+        assert_eq!(srgb_to_naive_cmyk([0.0, 0.0, 0.0]), [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(srgb_to_naive_cmyk([1.0, 1.0, 1.0]), [0.0, 0.0, 0.0, 0.0]);
+        for (r, g, b) in [(21u8, 96, 130), (255, 0, 0), (10, 200, 77), (255, 192, 0)] {
+            let c = [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0];
+            let [cy, m, y, k] = srgb_to_naive_cmyk(c);
+            let back = naive_cmyk_to_srgb(cy, m, y, k);
+            for i in 0..3 {
+                assert!((back[i] - c[i]).abs() < 1e-6, "{c:?} -> {back:?}");
+            }
+        }
     }
 }

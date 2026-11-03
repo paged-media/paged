@@ -3039,7 +3039,7 @@
   "app.themePanel.presets": "Vorlagen",
   "app.themePanel.apply": "Anwenden",
   "app.themePanel.fromSwatches": "Design-Schema aus Farbfeldern erstellen",
-  "app.themePanel.fromSwatchesHint": "Wählen Sie für jeden Platz das Farbfeld, dessen Farbe er übernimmt. Nur einfache RGB-Farbfelder.",
+  "app.themePanel.fromSwatchesHint": "Wählen Sie für jeden Platz das Farbfeld, dessen Farbe er übernimmt. Prozessfarbfelder in RGB und CMYK.",
   "app.themePanel.none": "(keines)",
   "app.themePanel.relink": "Passende Abstufungen verknüpfen",
   "app.themePanel.proposeSwatches": "Erste Farbfelder verwenden",
@@ -3056,5 +3056,16 @@
   "app.themePanel.slotAccent5": "Akzent 5",
   "app.themePanel.slotAccent6": "Akzent 6",
   "app.themePanel.slotHlink": "Link",
-  "app.themePanel.slotFolHlink": "Besuchter Link"
+  "app.themePanel.slotFolHlink": "Besuchter Link",
+  "app.themePanel.spotNote": "Ein Volltonfarbfeld folgt nie einem Design-Schema-Platz (seine Druckfarbe ist die Farbe); Volltonfarbfelder lassen sich hier daher nicht wählen.",
+  "app.themePanel.cmykNote": "Ein CMYK-Farbfeld bleibt CMYK: Ändert sich sein Platz, folgen seine vier Werte der Farbe des Platzes.",
+  "app.themePanel.notFollowable": "{name} (kann keinem Platz folgen)",
+  "app.themePanel.styleFonts": "Schriften der Formate",
+  "app.themePanel.styleFontsHint": "Ein Format, das der Überschrift- oder Fließtextschrift des Design-Schemas folgt, übernimmt die neue Schrift, sobald sich die Schriften des Design-Schemas ändern.",
+  "app.themePanel.ownFace": "Eigene Schrift",
+  "app.themePanel.followMajor": "Überschriftenschrift",
+  "app.themePanel.followMinor": "Fließtextschrift",
+  "app.themePanel.paragraphStyles": "Absatzformate",
+  "app.themePanel.characterStyles": "Zeichenformate",
+  "app.themePanel.importNotes": "Beim Öffnen gemeldet"
 }
