@@ -87,3 +87,30 @@ A step is bit-exact or it does not land:
   is unchanged: `paged-kernels` is one of the leaves.
 - `image-kernels` shrinks by one family per step; the register's line count for the open row
   becomes the sum of the families that stay.
+
+## Amendment 2026-11-03 — step 3, the macro and the assembler
+
+`kernel_family!` (`family.rs`), the ABI assembler (`abi.rs`) and `reference_prelude.rs` moved
+by `git mv`; the text changed in three places only: the macro's `$crate::KernelDef`,
+`ParamsLayout` and `ParamField` paths name `$crate::def::…`; `abi.rs` reads `def::KernelDef` and
+`def::ABI_VERSION`; `reference_prelude` takes `Px` from `crate`. `GROUPS_PER_TILE` named
+`image_core::TILE`, which a leaf crate cannot, so it stayed: `image-kernels/src/abi.rs` is
+`pub use paged_kernels::abi::*;` plus that one constant.
+
+The macro's `cfg(feature = "reference" | "cpu")` is evaluated in the crate that expands it, and
+the twins it emits name `$crate::reference_prelude`. `paged-kernels` therefore has the same two
+features, and `image-kernels`' `reference` and `cpu` forward to them; image-ci's guard against
+the reference feature in the wasm tree now matches either crate. `image-kernels` brings the
+macro into scope with `#[macro_use] extern crate paged_kernels` and re-exports it as
+`image_kernels::kernel_family`.
+
+### Step 4, the point-op families moved so far
+
+`linear`, `arithmetic`, `cast` and `adjust` moved whole by `git mv`; the only text changes are
+`use crate::{…}` becoming `use crate::def::{…}` and, in `adjust`, the params re-export naming
+`crate::params`. `paged-kernels` takes bytemuck's `min_const_generics` (the 3D LUT block is a
+729-entry array, which the workspace dependency already enabled). `families/mod.rs` of
+`paged-kernels` lists them; the `image-kernels` files are one-line re-exports, so the registry
+rows, `ALL_FAMILIES`, the conformance paths and `cpu.rs` resolve unchanged. Not moved yet:
+`boolean`, `relational`, `minmax` and `band` (point operations too, with no engine caller),
+`adjust_ext`, `develop`, `compose`, `select`, `stylize`, `gallery` and `blurgal`.

@@ -18,6 +18,7 @@ default = []
 standalone = ["paged-ooxml/deflate"]
 
 [dependencies]
+paged-geom = { path = "../../../engine/core/crates/paged-geom" }
 paged-ooxml = { path = "../ooxml" }
 serde = { version = "1", features = ["derive"] }
 

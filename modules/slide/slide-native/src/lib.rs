@@ -1618,14 +1618,7 @@ impl Builder<'_> {
                 cy - sn * cx - cs * cy,
             ];
             let m = &it.transform;
-            let mul = [
-                m[0] * rot[0] + m[2] * rot[1],
-                m[1] * rot[0] + m[3] * rot[1],
-                m[0] * rot[2] + m[2] * rot[3],
-                m[1] * rot[2] + m[3] * rot[3],
-                m[0] * rot[4] + m[2] * rot[5] + m[4],
-                m[1] * rot[4] + m[3] * rot[5] + m[5],
-            ];
+            let mul = paged_geom::affine64::multiply(m, &rot);
             (rect_path(cx - hw, cy - hh, cx + hw, cy + hh), mul)
         } else {
             (rect_path(l, t, r, b), it.transform)
@@ -1939,14 +1932,7 @@ fn place_tile(
     ];
     let k = 1.0 / t.px_per_pt;
     let s = [k, 0.0, 0.0, k, t.origin[0], t.origin[1]];
-    let m = [
-        inv[0] * s[0] + inv[2] * s[1],
-        inv[1] * s[0] + inv[3] * s[1],
-        inv[0] * s[2] + inv[2] * s[3],
-        inv[1] * s[2] + inv[3] * s[3],
-        inv[0] * s[4] + inv[2] * s[5] + inv[4],
-        inv[1] * s[4] + inv[3] * s[5] + inv[5],
-    ];
+    let m = paged_geom::affine64::multiply(&inv, &s);
     poly.has_image_element = true;
     poly.image_link = Some(format!("file:pattern-{id}.png"));
     poly.image_item_transform = Some(matrix(&m));

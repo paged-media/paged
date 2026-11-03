@@ -1524,6 +1524,7 @@ dependencies = [
 name = "dml-geom"
 version = "0.0.0"
 dependencies = [
+ "paged-geom",
  "paged-ooxml",
  "serde",
 ]
@@ -1662,6 +1663,7 @@ name = "draw-dxf"
 version = "0.0.0"
 dependencies = [
  "dxf",
+ "paged-geom",
  "paged-svg",
  "serde",
  "serde_json",
@@ -5351,6 +5353,7 @@ dependencies = [
  "base64",
  "dml-geom",
  "dml-native",
+ "paged-geom",
  "paged-model",
  "paged-ooxml",
  "paged-scene",
@@ -6667,6 +6670,7 @@ dependencies = [
  "dml-geom",
  "dml-native",
  "flate2",
+ "paged-geom",
  "paged-model",
  "paged-ooxml",
  "paged-scene",
@@ -6692,6 +6696,7 @@ name = "slide-resolve"
 version = "0.0.0"
 dependencies = [
  "dml-geom",
+ "paged-geom",
  "paged-ooxml",
  "paged-test-resources",
  "pptx-core",

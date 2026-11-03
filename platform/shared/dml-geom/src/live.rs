@@ -39,38 +39,8 @@
 
 use crate::{guides_of, preset_evaluated, preset_geometry, AdjustHandle, Site, SubPath};
 
-/// `[a, b, c, d, tx, ty]`.
-pub type Affine = [f64; 6];
-
-pub const IDENTITY: Affine = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
-
-/// `m ∘ n`: `n` first, then `m`.
-pub fn mul(m: &Affine, n: &Affine) -> Affine {
-    [
-        m[0] * n[0] + m[2] * n[1],
-        m[1] * n[0] + m[3] * n[1],
-        m[0] * n[2] + m[2] * n[3],
-        m[1] * n[2] + m[3] * n[3],
-        m[0] * n[4] + m[2] * n[5] + m[4],
-        m[1] * n[4] + m[3] * n[5] + m[5],
-    ]
-}
-
-pub fn apply(m: &Affine, p: (f64, f64)) -> (f64, f64) {
-    (
-        m[0] * p.0 + m[2] * p.1 + m[4],
-        m[1] * p.0 + m[3] * p.1 + m[5],
-    )
-}
-
-pub fn invert(m: &Affine) -> Option<Affine> {
-    let det = m[0] * m[3] - m[1] * m[2];
-    if det.abs() < 1e-12 {
-        return None;
-    }
-    let (a, b, c, d) = (m[3] / det, -m[1] / det, -m[2] / det, m[0] / det);
-    Some([a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])])
-}
+/// `[a, b, c, d, tx, ty]`; `mul` is `m ∘ n`: `n` first, then `m`.
+pub use paged_geom::affine64::{apply, invert, multiply as mul, Affine64 as Affine, IDENTITY};
 
 /// One anchor as hosts hold it: the anchor, its incoming and outgoing
 /// control points.

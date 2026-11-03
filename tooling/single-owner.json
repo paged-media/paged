@@ -176,6 +176,26 @@
       "patterns": ["0xE7E6E6"],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
       "baseline": []
+    },
+    {
+      "name": "affine-product",
+      "description": "multiply 2x3 affines with paged_geom::affine (f32) or paged_geom::affine64 (f64); the pattern is the first term of the product, m[0] * n[0] + m[2] * n[1]",
+      "allowReason": "test oracles that compute the product independently of the code they check (idml-export and paged-canvas integration tests), and the renderer's text-on-path scale, which multiplies a rotation by a diagonal matrix and is not a general product",
+      "allow": [
+        "engine/core/crates/idml-export/tests/it/group_transform_saveback.rs",
+        "engine/core/crates/paged-canvas/tests/it/nested_group_transform.rs",
+        "engine/core/crates/paged-canvas/tests/it/rotated_scale_gesture.rs",
+        "engine/core/crates/paged-renderer/src/pipeline/text_path.rs"
+      ],
+      "owner": [
+        "engine/core/crates/paged-geom/src/affine.rs",
+        "engine/core/crates/paged-geom/src/affine64.rs"
+      ],
+      "patterns": [
+        "\\b\\w+\\[0\\] \\* \\w+\\[0\\] \\+ \\w+\\[2\\] \\* \\w+\\[1\\]"
+      ],
+      "extensions": [".rs"],
+      "baseline": []
     }
   ]
 }
