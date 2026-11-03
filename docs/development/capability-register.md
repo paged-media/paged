@@ -76,9 +76,16 @@ The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-ow
 Blend enums: one, `paged_blend::BlendMode` (the image twin's `Blend` is that type; `compose_twin::from_kernel_id`
 resolves `compose.<id>`). Allowed with a reason: the camelCase wire enum `SceneBlendMode` in `scene_layer.rs`,
 `web-render`'s two mirrors of it, and the ABR wrapper in `paged-psd` (it adds ABR-only texture modes). Kernel
-definitions: `paged-kernels` is ~1.1k lines, `image-kernels/families` ~22k (ADR 1013 has no
-file). Decoders bypassing `paged-raster`: renderer `image_decode.rs`, `paged-export-pdf/image.rs`
-(loses CMYK/ICC), `pdf-import` encoders, `web-bundle/png.ts`. `paged-psd-fx` is wired nowhere.
+definitions (engine ADR 1013): the model (`KernelDef` and its types) and the `conv` family are in
+`paged-kernels`; the other families (~20k lines in `image-kernels/families`) move one at a time, by the
+rule in the record (the engine can reach the kernel), each behind the registry gate and the conformance goldens. Decoders: `paged-export-pdf/image.rs` decodes an encoded-only image through
+`paged_raster::decode_rgba8_at_with` (a TIFF or PSD converts through its profile; PNG, WebP and the other
+`image` formats are byte-identical to before), and `web-bundle`'s PNG writer is `@paged-media/helpers`'
+`encodePng` with `storeBelow` (output byte-identical, pinned). Not routed, with reasons: the renderer's
+`image_decode.rs` keeps `jpeg-decoder` for the DCT-scaled decode of oversized JPEGs (`paged-raster` has no
+DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-raster` could not read (HDR);
+`pdf-import`'s `encode::png` writes through the `png` crate, whose bytes differ from `paged-raster`'s encoder
+for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere.
 Path coverage rasterizers ×3 in image-js.
 
 ### Geometry and vector

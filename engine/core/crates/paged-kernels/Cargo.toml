@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Kernel definitions shared by the engine and paged.image (PM-0014, ADR 1013's first step): the pixel type, the param blocks and the shipped CPU twins of the adjustment and convolution kernels. Leaf crate: depends on nothing in the workspace."
+description = "Kernel definitions shared by the engine and paged.image (PM-0014, engine ADR 1013): the pixel type, the kernel model, the param blocks, the shipped CPU twins of the adjustment and convolution kernels, and the convolution family's definitions. Leaf crate: depends on nothing in the workspace."
 
 [lints]
 workspace = true

@@ -21,13 +21,16 @@
 //! the pixel type, the param blocks and the shipped CPU twins of the
 //! adjustment and convolution kernels, which the engine's image filter
 //! stack (engine ADR 1037) evaluates. The kernel definitions themselves
-//! (`KernelDef`, the WGSL, the registry build) are still in
-//! `modules/image/image-kernels`, which re-exports everything here under
-//! its old paths; the rest of the crate moves into this one by `git mv`.
+//! (`def`, and the families in `families` that the engine can reach, engine
+//! ADR 1013) move here by `git mv`; the registry build and the families only
+//! paged.image runs are still in `modules/image/image-kernels`, which
+//! re-exports everything here under its old paths.
 //!
 //! Pure Rust, no I/O, wasm-safe; depends on nothing in the workspace.
 
 pub mod cpu;
+pub mod def;
+pub mod families;
 pub mod params;
 mod px;
 
