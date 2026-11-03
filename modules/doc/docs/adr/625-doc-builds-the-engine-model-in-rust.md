@@ -286,20 +286,45 @@ then delete the pour and its tests, about a week with the CI cycle this reposito
 batch builder for placement, about a week; (2b) the door, about two weeks across engine, contract and
 bundle; (3) several weeks and out of scope here. Deleting `mutations.ts` before (2) breaks Insert.
 
-### Amendment: placement by a Rust batch, slice 1 built
+### Amendment: placement by a Rust batch, slices 1 to 5 built
 
 Option (a) above, without a plugin-API change and without the mutation engine in the doc wasm:
 `docx-skeleton::place::place_batch` builds the placement from the same `native_body` the
-standalone open uses, as JSON of operations the mutation door accepts today (`insertText`,
-`applyStyle`, `setElementProperty` over the paragraph's or run's range, the `create*Style` /
-`setStyleProperty` catalogue). `DocEngine.placeBatch` returns it, `place.ts` submits it as the one
-batch (one undo step) in place of the pour, and the document then holds the Word styles, none of
-the invented `docx-auto-*`. A document with anything the builder does not yet take (tables,
-pictures, fields, lists, hyperlinks, notes, comments, breaks, floating objects) is refused with a
-reason before anything is applied, and `NATIVE_PLACE` / the refusal falls back to the TypeScript
-pour. `test/headless/place-batch.spec.ts` places the same fixtures both ways into an empty document
-on the real engine and compares text, page count and every paragraph's geometry, checks that no
-`docx-auto` style exists, and that one undo leaves the placed story empty.
+standalone open uses, as JSON of operations the mutation door accepts today. `DocEngine.placeBatch`
+returns it, `place.ts` submits it as the one batch (one undo step) in place of the pour. The
+document then holds the Word styles; the lowering's invented `docx-auto-*` styles remain only where
+the pour has no other way to carry direct formatting (table cells: the cell address of `applyStyle`
+takes a style, `setElementProperty` has no cell range).
+
+Built, slice by slice:
+
+1. **Paragraphs and styles.** `insertText`, `applyStyle` (paragraph, character, caret for blank
+   lines), `setElementProperty` over the paragraph's or run's range for direct formatting, the
+   `create*Style` / `setStyleProperty` catalogue.
+2. **Tables.** `insertTable` (grid, header rows, widths, row heights, Word's layout), per cell
+   `insertText` and cell-addressed `applyStyle`, insets, vertical alignment, borders and fill,
+   `setCellSpan`, exact row heights, nested tables, and the table paragraph's style. The story is
+   built in steps as the pour's (`buildStoryBlocks`): text, table, text, with the `insertText`
+   offset space (bytes and paragraph breaks) kept apart from the style ranges (contiguous
+   characters).
+3. **Pictures.** `insertAnchoredFrame` with the float's layout, anchored-object settings and the
+   crop's placement, as one nested batch with a handle. A picture look (DrawingML fill, outline,
+   effects) is still the pour's.
+4. **Fields, lists, hyperlinks, bookmarks, drop caps.** `insertField` (the result is not in the
+   inserted text), the list properties of the model, `insertHyperlink`, `insertTextAnchor`, the
+   drop cap properties.
+5. **Notes and comments.** An inserted document places no footnotes or endnotes (ADR 603: their
+   markers are stripped before the batch is built, as the pour's `withoutNotes` does); comments are
+   `insertComment` / `replyComment` over the range of the runs that carry them.
+
+A document with anything the builder does not take (tracked changes, content controls, breaks
+inside a paragraph, text boxes, a picture look, floating objects placed on the page, a picture or a
+comment in a table cell) is refused with the reason before anything is applied, and
+`NATIVE_PLACE` / the refusal falls back to the TypeScript pour for the whole document: nothing is
+half placed. `test/headless/place-batch.spec.ts` places the same fixtures both ways into an empty
+document on the real engine and compares text, page count and every paragraph's geometry, checks
+that the batch offered is the batch applied, that no `docx-auto` style exists where the builder
+needs none, and that one undo leaves the placed story empty.
 
 ### Save-back
 

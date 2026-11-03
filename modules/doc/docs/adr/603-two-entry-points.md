@@ -114,5 +114,5 @@ shortcuts and status bar.
 Placement (the second entry point) builds its batch in Rust where it can: `DocEngine.placeBatch`
 (`docx-skeleton::place`, doc ADR 625 amendment) returns the same operations the pour sent, from the
 model the open builds, and `place.ts` submits them as the one batch. What the builder does not yet
-take (see 625 for the slices built) is placed by the pour as before; the entry point, the binding
+take (see 625 for the slices built: paragraphs, tables, pictures, fields, lists, hyperlinks, bookmarks and comments) is placed by the pour as before; the entry point, the binding
 label and the source part are unchanged.
