@@ -167,6 +167,15 @@ defers (floating pictures, picture looks, text boxes, comments, tracked changes,
 tables of contents, nested tables, breaks inside a paragraph, exact-height rows, headers and
 footers are poured but do not block) opens by the old pour, whole.
 
+### Slice 4b (part): floating pictures
+
+A float is the inline picture's anchored frame with the anchored-object setting the host model sets
+(`anchoredFloat`: position, anchor point, references, alignments, offsets) and the layout it sends
+(`layoutSpec`: wrap mode, offsets, side, contour polygon, behind text, no overlap). Picture looks and
+text boxes stay deferred. The spec `native-body.spec.ts` now opens EVERY `.docx` fixture of the bundle
+both ways and compares them (text, pages, geometry, unedited export), and requires seven named
+fixtures to keep opening natively: the safety net of the default-on open.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

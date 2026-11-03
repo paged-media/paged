@@ -23,6 +23,7 @@
 // synthesized style on a paragraph, and export unedited as the source.
 
 import { afterEach, describe, expect, it } from "bun:test";
+import { readdirSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 
 import type { ExporterContribution } from "@paged-media/plugin-api";
@@ -197,22 +198,23 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     for (const h of opened.splice(0)) h.dispose();
   });
 
-  for (const name of [
-    "direct-format.docx",
-    "table-body.docx",
-    "picture-body.docx",
-  ]) {
-    laysOutAsTheOldPour(name);
-    exportsAsTheOldPour(name);
-  }
+  // The safety net of the prefilled open (ADR 625): EVERY .docx fixture of the
+  // bundle is opened by the old pour and by the native body; wherever the
+  // body is built natively, both must agree on text, pages and geometry and
+  // must export alike. A regression of the builder shows here, in CI.
+  const FIXTURES = readdirSync(new URL("../fixtures/", import.meta.url))
+    .filter((n) => n.endsWith(".docx"))
+    .sort();
+  const prefilledNames: string[] = [];
 
-  function laysOutAsTheOldPour(name: string) {
-    it(`${name} opens natively, as the old pour lays it out`, async () => {
+  for (const name of FIXTURES) {
+    it(`${name}: the native open agrees with the old pour`, async () => {
       const old = await open(name, false);
       const native = await open(name, true);
       opened.push(old.h, native.h);
       expect(old.prefilled).toBe(false);
-      expect(native.prefilled).toBe(true);
+      if (!native.prefilled) return;
+      prefilledNames.push(name);
       expect(native.pages).toBe(old.pages);
       expect(native.paras.map((p) => p.text)).toEqual(
         old.paras.map((p) => p.text),
@@ -224,22 +226,7 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
       expect(native.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
         false,
       );
-      expect(old.paras.some((p) => p.style?.includes("docx-auto"))).toBe(true);
-    }, 120_000);
-  }
-
-  it("a document the builder cannot take whole opens by the old pour", async () => {
-    const doc = await open("structure.docx", true);
-    opened.push(doc.h);
-    expect(doc.prefilled).toBe(false);
-    expect(doc.paras.length).toBeGreaterThan(0);
-  }, 120_000);
-
-  function exportsAsTheOldPour(name: string) {
-    it(`${name} opened natively exports unedited as the old pour does`, async () => {
-      const exported = async (native: boolean): Promise<string> => {
-        const o = await open(name, native);
-        opened.push(o.h);
+      const exported = async (o: Opened): Promise<string> => {
         const exporter = o.h
           .exportersContributed()
           .find(
@@ -251,9 +238,28 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
           inflatedPart(out!.bytes, "word/document.xml"),
         );
       };
-      const old = await exported(false);
-      const native = await exported(true);
-      expect(native).toEqual(old);
+      expect(await exported(native)).toEqual(await exported(old));
     }, 120_000);
   }
+
+  it("the fixtures that must open natively still do", () => {
+    for (const name of [
+      "direct-format.docx",
+      "table-body.docx",
+      "picture-body.docx",
+      "field-body.docx",
+      "list-body.docx",
+      "hyperlink-body.docx",
+      "drop-cap.docx",
+    ]) {
+      expect(prefilledNames).toContain(name);
+    }
+  });
+
+  it("a document the builder cannot take whole opens by the old pour", async () => {
+    const doc = await open("structure.docx", true);
+    opened.push(doc.h);
+    expect(doc.prefilled).toBe(false);
+    expect(doc.paras.length).toBeGreaterThan(0);
+  }, 120_000);
 });

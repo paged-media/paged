@@ -45,8 +45,9 @@ use docx_lower::ir::{
 };
 use paged_model::script::{CharacterDirection, FontHint};
 use paged_model::{
-    AnchoredFrame, AnchoredFrameKind, Bounds, CellWidth, CharacterRun, Justification, Paragraph,
-    Table, TableCell, TableColumn, TableRow, TableWidth, WordField, WordTableLayout,
+    AnchoredFrame, AnchoredFrameKind, AnchoredLayout, AnchoredObjectSetting, Bounds, CellWidth,
+    CharacterRun, Justification, Paragraph, Table, TableCell, TableColumn, TableRow, TableWidth,
+    TextWrap, TextWrapMode, TextWrapSide, WordField, WordTableLayout,
 };
 
 /// The id prefix of the styles the lowering synthesizes for direct
@@ -466,11 +467,8 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
 }
 
 fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
-    if p.images
-        .iter()
-        .any(|i| i.anchor.is_some() || i.fx.is_some() || i.layout.is_some())
-    {
-        Some("floating picture or picture look")
+    if p.images.iter().any(|i| i.fx.is_some()) {
+        Some("picture look")
     } else if !p.segments.is_empty() {
         Some("page or column break inside the paragraph")
     } else if !p.bookmarks.is_empty() {
@@ -481,6 +479,45 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
         Some("text box")
     } else {
         p.runs.iter().find_map(run_deferral)
+    }
+}
+
+/// A float's anchored-object settings (`anchoredFloat` in the host model).
+fn anchored_setting(a: &docx_lower::ir::LoweredAnchor) -> AnchoredObjectSetting {
+    AnchoredObjectSetting {
+        anchored_position: Some(a.position.clone()),
+        anchor_point: Some(a.anchor_point.clone()),
+        horizontal_reference_point: Some(a.horizontal_reference.clone()),
+        horizontal_alignment: Some(a.horizontal_alignment.clone()),
+        vertical_reference_point: Some(a.vertical_reference.clone()),
+        vertical_alignment: Some(a.vertical_alignment.clone()),
+        anchor_x_offset: a.x_offset_pt,
+        anchor_y_offset: a.y_offset_pt,
+        ..AnchoredObjectSetting::default()
+    }
+}
+
+/// A float's wrap, z-order and overlap (`layoutSpec` in the host model).
+fn anchored_layout(l: &docx_lower::ir::LoweredFloatLayout) -> AnchoredLayout {
+    AnchoredLayout {
+        text_wrap: l.wrap.as_ref().map(|w| TextWrap {
+            mode: TextWrapMode::from_idml(&w.mode),
+            offsets: w.offsets_pt,
+            invert: None,
+            contour_type: None,
+            include_inside_edges: None,
+            side: w.side.as_deref().and_then(TextWrapSide::from_idml),
+            apply_to_master_page_only: None,
+        }),
+        wrap_polygon: l
+            .wrap
+            .as_ref()
+            .map(|w| w.polygon_pt.iter().map(|(x, y)| [*x, *y]).collect())
+            .unwrap_or_default(),
+        behind_text: l.behind,
+        allow_overlap: l.no_overlap.then_some(false),
+        inset_spacing: None,
+        vertical_justification: None,
     }
 }
 
@@ -617,6 +654,9 @@ fn build_paragraph(
             }),
             image_link: Some(img.uri.clone()),
             image_item_transform: img.crop.and_then(|c| c.placement),
+            // Engine ADR 1050 — a float's place and wrap (doc ADR 614).
+            setting: img.anchor.as_ref().map(anchored_setting),
+            layout: img.layout.as_ref().map(anchored_layout).unwrap_or_default(),
             ..AnchoredFrame::default()
         });
         minted.frames += 1;
