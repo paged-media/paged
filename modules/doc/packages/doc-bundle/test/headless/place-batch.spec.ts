@@ -112,6 +112,7 @@ async function place(name: string, native: boolean): Promise<Placed> {
     if (ps.length === last) break;
     last = ps.length;
   }
+  let first: { start: number; end: number } | undefined;
   const paras: Placed["paras"] = [];
   const r = await send({
     kind: "requestStoryContent",
@@ -130,6 +131,7 @@ async function place(name: string, native: boolean): Promise<Placed> {
       })
     ).payload?.bounds as { start: number; end: number } | null;
     if (!b) break;
+    first ??= b;
     const g = await send({
       kind: "requestSelectionGeometry",
       payload: {
@@ -163,11 +165,17 @@ async function place(name: string, native: boolean): Promise<Placed> {
   const probe = async () => {
     const g = await send({
       kind: "requestSelectionGeometry",
-      payload: { selection: { storyId, start: 0, end: 1 } },
+      payload: {
+        selection: {
+          storyId,
+          start: first!.start,
+          end: Math.max(first!.end, first!.start),
+        },
+      },
     });
     return (g.payload?.rects ?? []).length;
   };
-  expect(await probe()).toBeGreaterThan(0);
+  expect(paras[0]!.rects.length).toBeGreaterThan(0);
   await h.host.document.undo();
   expect(await probe()).toBe(0);
   const undone = { stories: await storyCount() };
