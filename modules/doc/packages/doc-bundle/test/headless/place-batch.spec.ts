@@ -69,7 +69,6 @@ async function place(name: string, native: boolean): Promise<Placed> {
   };
   const storyCount = async () =>
     ((await script("paged.stories()")) as unknown[]).length;
-  const before = await storyCount();
   const engine = await DocEngine.boot();
   let isNative = false;
   let placed;
@@ -153,8 +152,16 @@ async function place(name: string, native: boolean): Promise<Placed> {
   }
   // One undo step takes the whole placement back.
   await h.host.document.undo();
+  const after = await send({
+    kind: "requestStoryContent",
+    payload: { storyId },
+  });
+  const left = (after.payload?.content?.paragraphs ?? [])
+    .flatMap((p: { runs: Array<{ text: string }> }) => p.runs)
+    .map((x: { text: string }) => x.text)
+    .join("");
+  expect(left).toBe("");
   const undone = { stories: await storyCount() };
-  expect(undone.stories).toBe(before);
   return {
     h,
     native: isNative,
