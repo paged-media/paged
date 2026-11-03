@@ -47,6 +47,8 @@ type Reply = { kind: string; payload?: any };
 interface Placed {
   h: HeadlessHost;
   native: boolean;
+  offered: boolean;
+  refusal: string;
   paras: Array<{ text: string; style: string | null; rects: number[][] }>;
   pages: number;
   styles: string[];
@@ -71,17 +73,22 @@ async function place(name: string, native: boolean): Promise<Placed> {
     ((await script("paged.stories()")) as unknown[]).length;
   const engine = await DocEngine.boot();
   let isNative = false;
+  let appliedNative = false;
+  let refusal = "";
   let placed;
   try {
     engine.loadDocx(bytes);
     const ir = engine.lowered();
-    isNative = !("reason" in engine.placeBatch("$h:docFrame"));
+    const offer = engine.placeBatch("$h:docFrame");
+    isNative = !("reason" in offer);
+    if ("reason" in offer) refusal = offer.reason;
     NATIVE_PLACE.enabled = native;
     placed = await placeEmbedded(h.host, ir, bytes, name, engine);
   } finally {
     NATIVE_PLACE.enabled = true;
     engine.dispose();
   }
+  appliedNative = placed!.native === true;
   const storyId = placed!.storyId!;
   const stories = await storyCount();
   const styles = (
@@ -164,7 +171,9 @@ async function place(name: string, native: boolean): Promise<Placed> {
   const undone = { stories: await storyCount() };
   return {
     h,
-    native: isNative,
+    native: isNative && appliedNative,
+    offered: isNative,
+    refusal,
     paras,
     pages: pageIds.length,
     styles,
@@ -205,12 +214,10 @@ describe.skipIf(!docxPresent)(
         const old = await place(name, false);
         const now = await place(name, true);
         opened.push(old.h, now.h);
-        if (!now.native) {
-          // A fixture the builder refuses today is placed by the pour: the
-          // result must still be the same.
-          expect(now.paras).toEqual(old.paras);
-          return;
-        }
+        // Every fixture listed is one the builder takes whole, and the batch
+        // it offers is the batch the engine applies.
+        expect(now.refusal).toBe("");
+        expect(now.native).toBe(true);
         expect(now.paras.map((p) => p.text)).toEqual(
           old.paras.map((p) => p.text),
         );

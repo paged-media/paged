@@ -68,6 +68,8 @@ async function resolveStoryId(
 export interface PlacedDoc {
   frameId: ElementId;
   storyId: string | null;
+  /** The Rust batch placed it (doc ADR 625 amendment), not the pour. */
+  native?: boolean;
 }
 
 /** The Rust batch builder (doc ADR 625 amendment): `DocEngine.placeBatch`. */
@@ -130,7 +132,7 @@ export async function placeEmbedded(
         fileName,
         built,
       );
-      if (native) return native;
+      if (native) return { ...native, native: true };
       host.log.warn("paged.doc: the engine refused the native batch");
     }
   }
