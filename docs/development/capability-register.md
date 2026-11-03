@@ -76,8 +76,8 @@ The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-ow
 Blend enums: one, `paged_blend::BlendMode` (the image twin's `Blend` is that type; `compose_twin::from_kernel_id`
 resolves `compose.<id>`). Allowed with a reason: the camelCase wire enum `SceneBlendMode` in `scene_layer.rs`,
 `web-render`'s two mirrors of it, and the ABR wrapper in `paged-psd` (it adds ABR-only texture modes). Kernel
-definitions (engine ADR 1013): the model (`KernelDef` and its types) and the `conv` family are in
-`paged-kernels`; the other families (~20k lines in `image-kernels/families`) move one at a time, by the
+definitions (engine ADR 1013): the model (`KernelDef` and its types), the `kernel_family!` macro, the ABI assembler (`abi`), the reference prelude and the `conv`, `linear`, `arithmetic`, `cast` and `adjust` families are in
+`paged-kernels` (`image-kernels` re-exports them; its `reference` / `cpu` features forward to `paged-kernels`); the other families (~19k lines in `image-kernels/families`) move one at a time, by the
 rule in the record (the engine can reach the kernel), each behind the registry gate and the conformance goldens. Decoders: `paged-export-pdf/image.rs` decodes an encoded-only image through
 `paged_raster::decode_rgba8_at_with` (a TIFF or PSD converts through its profile; PNG, WebP and the other
 `image` formats are byte-identical to before), and `web-bundle`'s PNG writer is `@paged-media/helpers`'
@@ -101,7 +101,7 @@ The TS sRGB curve is `srgbToLinear` / `linearToSrgb` there (four editor and draw
 The f64 samplers of `winding.rs`, `draw-trace`, `slide-anim` and `image-js` stay (allowed: those crates sit
 below or beside `paged-geom`). The IDML
 `[f32;6]` product and point map are `paged_geom::affine` (`paged-mutate`, `paged-canvas`, the
-renderer); the inverse (three singularity tests), and the `[f64;6]` copies (slide ×3, draw-dxf) → `paged-geom` (open). The `Affine` of
+renderer); the f64 affine (`[f64;6]`: slide-resolve, pptx-export's `geom`, `dml-geom::live`, `slide-native`, draw-dxf) is `paged_geom::affine64`, product, point map and the inverse (one singularity rule, `|det| < 1e-12`), bit-identical and tested against each old copy (single-owner rule `affine-product`). Open: the f32 inverse (three singularity tests differ) and `slide-native`'s pattern-tile inverse, which solves the translation in another arrangement (not bit-identical, so left). The `Affine` of
 `paged-svg` and `Transform` of `paged-compose` keep their types but their product and point map call
 `paged_geom::affine`.
 Draw's TS copies of width, brush,

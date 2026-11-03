@@ -20,4 +20,8 @@
 //! ADR 1013). `modules/image/image-kernels` re-exports each under its old
 //! `families::<name>` path and keeps the registry that points at them.
 
+pub mod adjust;
+pub mod arithmetic;
+pub mod cast;
 pub mod conv;
+pub mod linear;

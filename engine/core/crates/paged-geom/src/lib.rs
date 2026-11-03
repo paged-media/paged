@@ -36,6 +36,7 @@ pub const KAPPA: f64 = 0.552_284_749_830_793_4;
 pub const KAPPA_F32: f32 = KAPPA as f32;
 
 pub mod affine;
+pub mod affine64;
 pub mod bezier_conv;
 pub mod flatten;
 pub mod kurbo_kernel;

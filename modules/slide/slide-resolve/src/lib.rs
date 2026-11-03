@@ -60,27 +60,8 @@ use paged_ooxml::drawingml::resolved;
 // ─── transforms ─────────────────────────────────────────────────────
 
 /// `[a, b, c, d, tx, ty]`: x' = a·x + c·y + tx, y' = b·x + d·y + ty.
-pub type Affine = [f64; 6];
-
-const IDENTITY: Affine = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
-
-fn mul(m: &Affine, n: &Affine) -> Affine {
-    [
-        m[0] * n[0] + m[2] * n[1],
-        m[1] * n[0] + m[3] * n[1],
-        m[0] * n[2] + m[2] * n[3],
-        m[1] * n[2] + m[3] * n[3],
-        m[0] * n[4] + m[2] * n[5] + m[4],
-        m[1] * n[4] + m[3] * n[5] + m[5],
-    ]
-}
-
-fn apply(m: &Affine, p: (f64, f64)) -> (f64, f64) {
-    (
-        m[0] * p.0 + m[2] * p.1 + m[4],
-        m[1] * p.0 + m[3] * p.1 + m[5],
-    )
-}
+pub use paged_geom::affine64::Affine64 as Affine;
+use paged_geom::affine64::{apply, multiply as mul, IDENTITY};
 
 fn translate(x: f64, y: f64) -> Affine {
     [1.0, 0.0, 0.0, 1.0, x, y]

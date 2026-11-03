@@ -12,6 +12,7 @@ description = "paged.slide: PowerPoint's inheritance rules applied — theme, ma
 workspace = true
 
 [dependencies]
+paged-geom = { path = "../../../engine/core/crates/paged-geom" }
 # DrawingML colour arithmetic (HSL, linear-light tint and shade).
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 pptx-core.workspace = true

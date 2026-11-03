@@ -26,9 +26,10 @@
 //! WGSL body and (behind the `reference` feature, test-only) the
 //! scalar Rust twin from a single expression — one source of truth.
 
-pub mod abi;
 #[macro_use]
-pub mod family;
+extern crate paged_kernels;
+
+pub mod abi;
 /// The compose family's scalar twins: the test-only reference and (feature
 /// `cpu`) the layer fold's CPU path (image ADR 480).
 #[cfg(any(feature = "reference", feature = "cpu"))]
@@ -39,7 +40,8 @@ pub mod compose_twin;
 pub mod cpu;
 pub mod families;
 #[cfg(any(feature = "reference", feature = "cpu"))]
-pub mod reference_prelude;
+pub use paged_kernels::reference_prelude;
+pub use paged_kernels::{family, kernel_family};
 
 pub use paged_kernels::def::{
     KernelClass, KernelDef, ParamField, ParamsLayout, ReductionKind, Tolerance, ABI_VERSION,
