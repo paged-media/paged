@@ -270,6 +270,15 @@ Status (draw items, one line each; updated as they land):
   without the Sheet properties panel (`DuplicatedFormatRows`, its presets and 43 strings are gone).
   Those rows live in the Sheet properties panel (character and paragraph text formatting of cells
   there is the host's text provider); borders, merge, freeze and sizes stay in the section.
+- Image history list and colour inputs: DONE 2026-11-03. The Layers section's step list
+  (`data-image-history-list`) duplicated the host History panel, which already lists the image
+  context's history with the snapshots (`context-history.ts`); the list, its three strings and the
+  `onUndoTo` / `onRedoTo` props are gone (the Undo / Redo buttons and the memory readout stay).
+  The snapshot section stays: taking, renaming and deleting snapshots and the History brush source
+  have no host counterpart. All six remaining `type="color"` inputs (layer properties and stops,
+  layer styles, channels and new spot colour, filter dialog) go through `ColorInput`
+  (`panels/sections/color-input.tsx`): the host's `widgets.ColorPicker` when offered, the browser
+  input otherwise.
 
 ### Reach (gaps between modules)
 

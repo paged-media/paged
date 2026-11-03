@@ -25,6 +25,7 @@
 // next style to the panel, which sets it through the session — one undo
 // step per layer for a run of edits in the dialog.
 
+import { ColorInput } from "./color-input";
 import { useState } from "react";
 import { defineMessages, t } from "@paged-media/strings";
 import { color, font, space } from "@paged-media/panel-kit";
@@ -340,13 +341,12 @@ function ColourWell({
   return (
     <div style={{ ...row, gap: 4 }}>
       <label style={{ ...small, flex: 1 }}>{label}</label>
-      <input
-        type="color"
-        aria-label={label}
+      <ColorInput
+        ariaLabel={label}
         disabled={disabled}
         data-image-style-colour={field}
         value={hex(value)}
-        onChange={(e) => onChange(rgbOf(e.target.value))}
+        onChange={(picked) => onChange(rgbOf(picked))}
       />
     </div>
   );

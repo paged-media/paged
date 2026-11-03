@@ -8,6 +8,7 @@
 // Each piece is PURE (props in, elements out) so the DOM specs can drive
 // it; `MaskingSections` wires them to the session's masking controller.
 
+import { ColorInput } from "./color-input";
 import { useEffect, useRef, useState } from "react";
 
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
@@ -934,15 +935,12 @@ export function ChannelsListSection({
             />
           )}
           {c.kind === "spot" && c.colour && (
-            <input
-              type="color"
-              aria-label={t(M.spotColour)}
+            <ColorInput
+              ariaLabel={t(M.spotColour)}
               data-masking-spot-colour={c.id}
               value={hex(c.colour)}
               disabled={disabled}
-              onChange={(e) =>
-                onSpot(c.id, rgb(e.target.value), c.solidity ?? 0)
-              }
+              onChange={(picked) => onSpot(c.id, rgb(picked), c.solidity ?? 0)}
             />
           )}
           <span style={mono}>{Math.round(c.coverage * 100)}%</span>
@@ -1000,12 +998,11 @@ export function ChannelsListSection({
         </button>
       </div>
       <div style={row}>
-        <input
-          type="color"
-          aria-label={t(M.spotColour)}
+        <ColorInput
+          ariaLabel={t(M.spotColour)}
           data-masking-new-spot-colour
           value={ink}
-          onChange={(e) => setInk(e.target.value)}
+          onChange={setInk}
         />
         <label>
           {t(M.solidity)}{" "}

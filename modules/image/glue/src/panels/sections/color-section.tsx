@@ -4,6 +4,7 @@
 // input; Alt-click with a paint tool samples the image into the
 // foreground.
 
+import { ColorInput } from "./color-input";
 import { GRADIENT_KINDS, type GradientKind, type Rgba01 } from "../../engine";
 import {
   fromHex,
@@ -101,12 +102,11 @@ export function ColorSection({
         />
       </span>
     ) : (
-      <input
+      <ColorInput
         id={`pg-image-${which}`}
-        type="color"
         {...colorAttr(which)}
         value={toHex(value)}
-        onChange={(e) => pick(which)(e.target.value)}
+        onChange={pick(which)}
       />
     );
   return (

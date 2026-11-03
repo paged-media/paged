@@ -66,6 +66,7 @@ import {
 } from "./vector-contrib";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
+import { setHostColorPicker } from "./panels/sections/color-input";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
 import { makeCropGesture } from "./crop-tool";
 import {
@@ -467,6 +468,7 @@ export function activate(host: BundleHost): BundleHandle {
     host.log.debug("task bar: the host has no overlay layer", err);
   }
 
+  setHostColorPicker(session.colorPicker());
   contributePanel(host, {
     id: PANEL_ID,
     title: t(CMD.image),

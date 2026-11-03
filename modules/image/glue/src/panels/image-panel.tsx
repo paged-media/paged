@@ -1479,9 +1479,6 @@ const LAYERS = defineMessages("image.layers", {
   undoStep: "Undo {label}",
   redo: "Redo",
   redoStep: "Redo {label}",
-  stepBack: "Step back to just after “{label}”",
-  here: "▸ here",
-  stepForward: "Step forward through “{label}”",
   history:
     "History: {depth} undo / {redoDepth} redo, {bytes} of {maxBytes} and " +
     "{steps} steps.",
@@ -1529,8 +1526,6 @@ export function LayersSection({
   onAddMask,
   onEditTarget,
   onBake,
-  onUndoTo,
-  onRedoTo,
   onUndo,
   onRedo,
   filter,
@@ -1576,10 +1571,6 @@ export function LayersSection({
   onAddMask?: (index: number, revealAll: boolean) => void;
   /** Paint the layer's pixels or its mask. */
   onEditTarget?: (index: number, target: EditTarget) => void;
-  /** Walk BACK `n` journal steps (n undos — the journal is a stack). */
-  onUndoTo: (n: number) => void;
-  /** Walk FORWARD `n` journal steps. */
-  onRedoTo: (n: number) => void;
   onBake: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -1966,59 +1957,8 @@ export function LayersSection({
             : t(LAYERS.redo)}
         </button>
       </div>
-      {/* HISTORY — the list, not just the counter. The catalog records
-          this as a PANEL gap and not an engine gap, and it was right:
-          the journal has carried labels, scopes and a dropped count all
-          along, and the only thing missing was somewhere to show them.
-          Steps are listed oldest-first with the current position marked;
-          clicking one walks the journal to it. */}
-      {history &&
-      (history.undoSteps.length > 0 || history.redoSteps.length > 0) ? (
-        <div data-image-history-list>
-          {history.undoSteps.map((label, i) => (
-            <button
-              key={`u${i}-${label}`}
-              type="button"
-              data-image-history-step={i}
-              disabled={disabled}
-              title={t(LAYERS.stepBack, { label })}
-              // Walking back N steps is N undos — the journal is a stack,
-              // not a random-access log, and pretending otherwise would
-              // mean holding every intermediate state.
-              onClick={() => onUndoTo(history.undoSteps.length - 1 - i)}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                opacity: 1,
-              }}
-            >
-              {label}
-            </button>
-          ))}
-          <div style={{ ...note, fontWeight: 600 }} data-image-history-here>
-            {t(LAYERS.here)}
-          </div>
-          {history.redoSteps.map((label, i) => (
-            <button
-              key={`r${i}-${label}`}
-              type="button"
-              data-image-history-redo-step={i}
-              disabled={disabled}
-              title={t(LAYERS.stepForward, { label })}
-              onClick={() => onRedoTo(i + 1)}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                opacity: 0.55,
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {/* The step list lives in the host's History panel (the context's
+          history, context-history.ts, snapshots included). */}
       {history ? (
         <div style={note} data-image-history-readout>
           {t(LAYERS.history, {
@@ -3711,8 +3651,6 @@ export function makeImagePanel(session: ImageSession) {
           editTarget={s.layers.editTarget}
           onAddMask={(i, reveal) => void session.addLayerMask(i, reveal)}
           onEditTarget={(i, target) => session.setEditTarget(i, target)}
-          onUndoTo={(n) => void session.undoSteps(n)}
-          onRedoTo={(n) => void session.redoSteps(n)}
           onBake={() => void session.bakeAdjustToLayer()}
           onUndo={() => void session.undo()}
           onRedo={() => void session.redo()}

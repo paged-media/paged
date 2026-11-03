@@ -8,6 +8,7 @@
 // Every component is PURE (props in, elements out); the panel wires them
 // to the session, where each action is one undo step.
 
+import { ColorInput } from "./color-input";
 import { useState } from "react";
 import { defineMessages, t } from "@paged-media/strings";
 import { About, color, font, space } from "@paged-media/panel-kit";
@@ -796,15 +797,14 @@ function ColorWell({
   return (
     <div style={{ ...row, gap: 4 }}>
       <label style={{ ...small, flex: 1 }}>{label}</label>
-      <input
-        type="color"
-        aria-label={label}
+      <ColorInput
+        ariaLabel={label}
         data-image-prop-color={at}
         disabled={disabled}
         value={hex(values[at] ?? 0, values[at + 1] ?? 0, values[at + 2] ?? 0)}
-        onChange={(e) => {
+        onChange={(picked) => {
           const next = values.slice();
-          const [r, g, b] = rgbOf(e.target.value);
+          const [r, g, b] = rgbOf(picked);
           next[at] = r;
           next[at + 1] = g;
           next[at + 2] = b;
@@ -975,14 +975,13 @@ function StopsEditor({
             }}
             style={numberStyle}
           />
-          <input
-            type="color"
-            aria-label={t(M.filterColour)}
+          <ColorInput
+            ariaLabel={t(M.filterColour)}
             value={hex(...s.rgb)}
             disabled={disabled}
-            onChange={(e) => {
+            onChange={(picked) => {
               const next = stops.slice();
-              next[k] = { ...s, rgb: rgbOf(e.target.value) };
+              next[k] = { ...s, rgb: rgbOf(picked) };
               write(next);
             }}
           />
