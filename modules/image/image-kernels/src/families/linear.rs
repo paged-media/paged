@@ -16,40 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Linear family (T0): `linear` (a·x + b) and `invert` (1 − x).
-//! `math.linear` is the phase-0 codegen proof — the first kernel
-//! through the full dual-emission + gpu↔ref parity gate.
-//!
-//! Provenance: elementary pointwise algebra; libvips-equivalent
-//! behavior verified through the differential oracle harness (M0
-//! fan-out), not by reference reading.
+//! Linear family (T0): the definitions live in
+//! `paged-kernels` (engine ADR 1013); this path stays for the registry's
+//! `rust_path` rows and every caller.
 
-use crate::{KernelClass, KernelDef, Tolerance};
-
-kernel_family! {
-    /// out = a * gain + bias (per channel, alpha included).
-    static MATH_LINEAR, params MathLinearParams, ref math_linear {
-        id: "math.linear",
-        class: KernelClass::Point,
-        inputs: 1,
-        params: { gain: f32, bias: f32 },
-        eval: |a, b, p| a * splat4(p.gain) + splat4(p.bias),
-        mip_exact: true,
-        tolerance: Tolerance::ChannelEpsF16(2),
-    }
-}
-
-kernel_family! {
-    /// out = 1 - a (photometric negate in linear working space).
-    static MATH_INVERT, params MathInvertParams, ref math_invert {
-        id: "math.invert",
-        class: KernelClass::Point,
-        inputs: 1,
-        params: {},
-        eval: |a, b, p| splat4(1.0) - a,
-        mip_exact: true,
-        tolerance: Tolerance::ChannelEpsF16(1),
-    }
-}
-
-pub static FAMILY: &[&KernelDef] = &[&MATH_LINEAR, &MATH_INVERT];
+pub use paged_kernels::families::linear::*;

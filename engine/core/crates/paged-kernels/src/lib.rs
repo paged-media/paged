@@ -34,9 +34,10 @@
 pub mod abi;
 pub mod cpu;
 pub mod def;
-pub mod families;
+// Before `families`: textual macro scope runs in declaration order.
 #[macro_use]
 pub mod family;
+pub mod families;
 pub mod params;
 mod px;
 /// The Rust half of the kernel DSL: the scalar twins' prelude. Test-only
