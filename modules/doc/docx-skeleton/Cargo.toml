@@ -15,6 +15,8 @@ workspace = true
 docx-core.workspace = true
 docx-lower.workspace = true
 paged-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true
 dml-native = { path = "../../../platform/shared/dml-native" }

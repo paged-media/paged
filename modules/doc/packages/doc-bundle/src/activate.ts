@@ -199,7 +199,7 @@ function activateDoc(
           storyId: opened.storyIds[0] ?? null,
         });
       } else {
-        const placed = await placeEmbedded(host, ir, bytes, name);
+        const placed = await placeEmbedded(host, ir, bytes, name, engine);
         last = {
           fileName: name,
           frameId: placed?.frameId ?? null,

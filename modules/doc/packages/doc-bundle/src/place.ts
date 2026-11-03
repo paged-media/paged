@@ -25,6 +25,7 @@
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
 import { buildStory, buildStyleMutations } from "@paged-media/doc-host-model";
+import type { PlaceBatch } from "./engine.js";
 import { embeddedItemOps } from "./page-items.js";
 import { applyStyleOps, pourBatchOps, pourSteps } from "./pour.js";
 import type {
@@ -40,6 +41,10 @@ export const DIAGNOSTICS_KEY = "media.paged.doc";
 
 /** The plugin metadata namespace (the `x-paged:<id>` binding envelope). */
 export const BINDING_KEY = "x-paged:media.paged.doc";
+
+/** The batch handle of the frame the placement makes: the pour's story
+ *  positions take the story it minted. */
+const FRAME = "$h:docFrame";
 
 /** A frame's story id resolved via the hitTest read door. */
 async function resolveStoryId(
@@ -63,13 +68,31 @@ async function resolveStoryId(
 export interface PlacedDoc {
   frameId: ElementId;
   storyId: string | null;
+  /** The Rust batch placed it (doc ADR 625 amendment), not the pour. */
+  native?: boolean;
 }
+
+/** The Rust batch builder (doc ADR 625 amendment): `DocEngine.placeBatch`. */
+export interface PlaceBatchSource {
+  placeBatch(story: string): PlaceBatch | { reason: string };
+}
+
+/** The placement switches; `native` is off to place by the TypeScript pour
+ *  alone (the old-versus-new tests). */
+export const NATIVE_PLACE: { enabled: boolean; lastError: string } = {
+  enabled: true,
+  lastError: "",
+};
 
 export async function placeEmbedded(
   host: BundleHost,
   ir: LoweredDoc,
   source: Uint8Array,
   fileName?: string,
+  /** The engine holding the document: when it builds the placement as a
+   *  batch (doc ADR 625 amendment) that batch is submitted, else the pour
+   *  below. */
+  engine?: PlaceBatchSource,
 ): Promise<PlacedDoc | null> {
   // The pages collection carries `selfId`, NOT `id` — reading `.id` yielded
   // undefined on every real host, so placement always bailed with "no page to
@@ -95,6 +118,27 @@ export async function placeEmbedded(
     s.pageWidthPt - s.marginRightPt,
   ];
 
+  // The Rust batch first (doc ADR 625 amendment): the same single batch,
+  // built from the model the standalone open builds. An engine that
+  // refuses it applies nothing, so the pour below is tried next.
+  if (engine && NATIVE_PLACE.enabled) {
+    const built = engine.placeBatch(FRAME);
+    if ("reason" in built) {
+      host.log.info(`paged.doc: placed by the pour (${built.reason})`);
+    } else {
+      const native = await placeInOneBatch(
+        host,
+        ir,
+        source,
+        pageId,
+        bounds,
+        fileName,
+        built,
+      );
+      if (native) return { ...native, native: true };
+      host.log.warn("paged.doc: the engine refused the native batch");
+    }
+  }
   const placed = await placeInOneBatch(
     host,
     ir,
@@ -228,8 +272,9 @@ async function placeInOneBatch(
   pageId: PageId,
   bounds: [number, number, number, number],
   fileName: string | undefined,
+  /** The placement built in Rust; without it the TypeScript pour builds it. */
+  built?: PlaceBatch,
 ): Promise<PlacedDoc | null> {
-  const FRAME = "$h:docFrame";
   const frameRef = { kind: "textFrame", id: FRAME } as unknown as ElementId;
   const partPath = `${placementFolder()}/source.docx`;
   const label = {
@@ -246,8 +291,11 @@ async function placeInOneBatch(
     { op: "insertTextFrame", args: { pageId, bounds } },
     { op: "bindCreated", args: { handle: "docFrame" } },
     ...frameColumnOps(frameRef, ir.section),
-    ...(await newStyleOps(host, buildStyleMutations(ir))),
-    ...pourBatchOps(buildStory(ir, FRAME)),
+    ...(await newStyleOps(
+      host,
+      built ? built.styleOps : buildStyleMutations(ir),
+    )),
+    ...(built ? built.bodyOps : pourBatchOps(buildStory(ir, FRAME))),
     // Doc ADR 614: the first page's floats and text boxes.
     ...embeddedItemOps(ir, pageId, pourBatchOps),
     {
@@ -261,7 +309,10 @@ async function placeInOneBatch(
     },
   ];
   const outcome = await host.document.mutate({ op: "batch", args: { ops } });
-  if (!outcome.applied) return null;
+  if (!outcome.applied) {
+    NATIVE_PLACE.lastError = JSON.stringify(outcome.error);
+    return null;
+  }
   const minted = outcome.minted?.find((m) => m.handle === "docFrame");
   const frameId = minted?.element ?? null;
   if (!frameId) {
