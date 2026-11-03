@@ -39,7 +39,7 @@
 //! have no shipped twin.
 
 use half::f16;
-use image_kernels::compose_twin::{composite, composite_normal_gamma, Blend};
+use image_kernels::compose_twin::{composite, composite_normal_gamma, from_kernel_id, Blend};
 use image_kernels::families::band::{
     band_blend_if, band_broadcast_alpha, band_fade_neutral, band_set_alpha,
     BandBroadcastAlphaParams, BandSetAlphaParams,
@@ -114,14 +114,14 @@ pub(super) fn supported(steps: &[Step]) -> Result<(), IngestError> {
                 blend, gamma: None, ..
             }
             | Step::ClipClose { blend, .. }
-                if Blend::from_kernel_id(blend.id).is_none() =>
+                if from_kernel_id(blend.id).is_none() =>
             {
                 "a blend mode without a CPU twin"
             }
             Step::Close {
                 blend: Some((def, _)),
                 ..
-            } if Blend::from_kernel_id(def.id).is_none() => "a blend mode without a CPU twin",
+            } if from_kernel_id(def.id).is_none() => "a blend mode without a CPU twin",
             _ => continue,
         };
         return Err(IngestError::Unsupported(format!(
@@ -194,7 +194,7 @@ fn compose(
     opacity: f32,
     mask: Option<&Mask>,
 ) -> Tex {
-    let blend = Blend::from_kernel_id(def.id).unwrap_or(Blend::Normal);
+    let blend = from_kernel_id(def.id).unwrap_or(Blend::Normal);
     a.iter()
         .zip(b)
         .enumerate()

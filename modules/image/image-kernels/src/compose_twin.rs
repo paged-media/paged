@@ -79,49 +79,19 @@ fn unpremul_rgb(p: Px) -> [f32; 3] {
     }
 }
 
-/// Lift a per-channel separable blend over the rgb triple.
-fn blend_separable(f: fn(f32, f32) -> f32, cb: [f32; 3], cs: [f32; 3]) -> [f32; 3] {
-    [f(cb[0], cs[0]), f(cb[1], cs[1]), f(cb[2], cs[2])]
-}
-
 // ---------------------------------------------------------------------
-// The blend dispatch — a kernel is identified by id (compose.*) and by
-// the PSD `BlendMode` fourcc (the flatten unit joins on `psd_key`).
+// The blend dispatch — a kernel is identified by id (compose.<id>) and by
+// the PSD `BlendMode` fourcc (`Blend::psd_key`, the flatten unit joins on
+// it). The operator is the engine's enum (engine ADR 1034).
 // ---------------------------------------------------------------------
 
-/// One compose operator: its kernel id, its PSD blend-mode fourcc key,
-/// and the blend `B(Cb, Cs)` it applies (separable or non-separable).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Blend {
-    Normal,
-    Multiply,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
-    LinearBurn,
-    LinearDodge,
-    DarkerColor,
-    LighterColor,
-    VividLight,
-    LinearLight,
-    PinLight,
-    HardMix,
-    Subtract,
-    Divide,
-}
+/// One compose operator: `paged_blend::BlendMode`, whose `id()` names the
+/// kernel (`compose.<id>`), whose `psd_key()` is the PSD blend-mode fourcc
+/// and whose `blend()` is `B(Cb, Cs)`.
+pub use paged_blend::BlendMode as Blend;
 
-/// Every operator, in [`Blend`]'s order.
+/// Every operator with a `compose.*` kernel, in the engine's declaration
+/// order (Dissolve needs a pixel position and has its own kernel).
 pub const ALL: [Blend; 26] = [
     Blend::Normal,
     Blend::Multiply,
@@ -151,162 +121,10 @@ pub const ALL: [Blend; 26] = [
     Blend::Divide,
 ];
 
-impl Blend {
-    /// The compose.* kernel id (dispatch / registry key).
-    pub fn kernel_id(self) -> &'static str {
-        match self {
-            Blend::Normal => "compose.normal",
-            Blend::Multiply => "compose.multiply",
-            Blend::Screen => "compose.screen",
-            Blend::Overlay => "compose.overlay",
-            Blend::Darken => "compose.darken",
-            Blend::Lighten => "compose.lighten",
-            Blend::ColorDodge => "compose.color_dodge",
-            Blend::ColorBurn => "compose.color_burn",
-            Blend::HardLight => "compose.hard_light",
-            Blend::SoftLight => "compose.soft_light",
-            Blend::Difference => "compose.difference",
-            Blend::Exclusion => "compose.exclusion",
-            Blend::Hue => "compose.hue",
-            Blend::Saturation => "compose.saturation",
-            Blend::Color => "compose.color",
-            Blend::Luminosity => "compose.luminosity",
-            Blend::LinearBurn => "compose.linear_burn",
-            Blend::LinearDodge => "compose.linear_dodge",
-            Blend::DarkerColor => "compose.darker_color",
-            Blend::LighterColor => "compose.lighter_color",
-            Blend::VividLight => "compose.vivid_light",
-            Blend::LinearLight => "compose.linear_light",
-            Blend::PinLight => "compose.pin_light",
-            Blend::HardMix => "compose.hard_mix",
-            Blend::Subtract => "compose.subtract",
-            Blend::Divide => "compose.divide",
-        }
-    }
-
-    /// The operator a `compose.*` kernel id names (the reverse of
-    /// [`Blend::kernel_id`]); `None` for any other id.
-    pub fn from_kernel_id(id: &str) -> Option<Blend> {
-        ALL.iter().copied().find(|b| b.kernel_id() == id)
-    }
-
-    /// The PSD layer-record `BlendMode` four-character key (Adobe PSD
-    /// spec, "Blend mode key"). Separable keys are space-padded to four
-    /// chars (`"mul "`, `"div "`, `"dark"`, `"lite"`, `"hue "`, `"sat "`,
-    /// `"lum "`); the rest are exact four-char codes. The PSD flatten
-    /// unit reads this key from each layer and looks up the operator via
-    /// [`Blend::from_psd_key`].
-    pub fn psd_key(self) -> &'static str {
-        match self {
-            Blend::Normal => "norm",
-            Blend::Multiply => "mul ",
-            Blend::Screen => "scrn",
-            Blend::Overlay => "over",
-            Blend::Darken => "dark",
-            Blend::Lighten => "lite",
-            Blend::ColorDodge => "div ",
-            Blend::ColorBurn => "idiv",
-            Blend::HardLight => "hLit",
-            Blend::SoftLight => "sLit",
-            Blend::Difference => "diff",
-            Blend::Exclusion => "smud",
-            Blend::Hue => "hue ",
-            Blend::Saturation => "sat ",
-            Blend::Color => "colr",
-            Blend::Luminosity => "lum ",
-            Blend::LinearBurn => "lbrn",
-            Blend::LinearDodge => "lddg",
-            Blend::DarkerColor => "dkCl",
-            Blend::LighterColor => "lgCl",
-            Blend::VividLight => "vLit",
-            Blend::LinearLight => "lLit",
-            Blend::PinLight => "pLit",
-            Blend::HardMix => "hMix",
-            Blend::Subtract => "fsub",
-            Blend::Divide => "fdiv",
-        }
-    }
-
-    /// Reverse of [`Blend::psd_key`] — resolve a PSD blend-mode fourcc to
-    /// its operator (used by the PSD flatten oracle). Unknown keys → None
-    /// (the preservation path keeps the layer's bytes; flatten falls back
-    /// to `Normal` at the call site).
-    pub fn from_psd_key(key: &str) -> Option<Blend> {
-        Some(match key {
-            "norm" => Blend::Normal,
-            "mul " => Blend::Multiply,
-            "scrn" => Blend::Screen,
-            "over" => Blend::Overlay,
-            "dark" => Blend::Darken,
-            "lite" => Blend::Lighten,
-            "div " => Blend::ColorDodge,
-            "idiv" => Blend::ColorBurn,
-            "hLit" => Blend::HardLight,
-            "sLit" => Blend::SoftLight,
-            "diff" => Blend::Difference,
-            "smud" => Blend::Exclusion,
-            "hue " => Blend::Hue,
-            "sat " => Blend::Saturation,
-            "colr" => Blend::Color,
-            "lum " => Blend::Luminosity,
-            "lbrn" => Blend::LinearBurn,
-            "lddg" => Blend::LinearDodge,
-            "dkCl" => Blend::DarkerColor,
-            "lgCl" => Blend::LighterColor,
-            "vLit" => Blend::VividLight,
-            "lLit" => Blend::LinearLight,
-            "pLit" => Blend::PinLight,
-            "hMix" => Blend::HardMix,
-            "fsub" => Blend::Subtract,
-            "fdiv" => Blend::Divide,
-            _ => return None,
-        })
-    }
-
-    /// Whether this blend is non-separable (operates on the rgb triple).
-    pub fn is_non_separable(self) -> bool {
-        matches!(
-            self,
-            Blend::Hue
-                | Blend::Saturation
-                | Blend::Color
-                | Blend::Luminosity
-                | Blend::DarkerColor
-                | Blend::LighterColor
-        )
-    }
-
-    /// Apply `B(Cb, Cs)` for unpremultiplied rgb triples.
-    pub fn blend(self, cb: [f32; 3], cs: [f32; 3]) -> [f32; 3] {
-        match self {
-            Blend::Normal => blend_separable(b_normal, cb, cs),
-            Blend::Multiply => blend_separable(b_multiply, cb, cs),
-            Blend::Screen => blend_separable(b_screen, cb, cs),
-            Blend::Overlay => blend_separable(b_overlay, cb, cs),
-            Blend::Darken => blend_separable(b_darken, cb, cs),
-            Blend::Lighten => blend_separable(b_lighten, cb, cs),
-            Blend::ColorDodge => blend_separable(b_color_dodge, cb, cs),
-            Blend::ColorBurn => blend_separable(b_color_burn, cb, cs),
-            Blend::HardLight => blend_separable(b_hard_light, cb, cs),
-            Blend::SoftLight => blend_separable(b_soft_light, cb, cs),
-            Blend::Difference => blend_separable(b_difference, cb, cs),
-            Blend::Exclusion => blend_separable(b_exclusion, cb, cs),
-            Blend::Hue => b_hue(cb, cs),
-            Blend::Saturation => b_saturation(cb, cs),
-            Blend::Color => b_color(cb, cs),
-            Blend::Luminosity => b_luminosity(cb, cs),
-            Blend::LinearBurn => blend_separable(b_linear_burn, cb, cs),
-            Blend::LinearDodge => blend_separable(b_linear_dodge, cb, cs),
-            Blend::DarkerColor => b_darker_color(cb, cs),
-            Blend::LighterColor => b_lighter_color(cb, cs),
-            Blend::VividLight => blend_separable(b_vivid_light, cb, cs),
-            Blend::LinearLight => blend_separable(b_linear_light, cb, cs),
-            Blend::PinLight => blend_separable(b_pin_light, cb, cs),
-            Blend::HardMix => blend_separable(b_hard_mix, cb, cs),
-            Blend::Subtract => blend_separable(b_subtract, cb, cs),
-            Blend::Divide => blend_separable(b_divide, cb, cs),
-        }
-    }
+/// The operator a `compose.*` kernel id names; `None` for any other id.
+pub fn from_kernel_id(id: &str) -> Option<Blend> {
+    let name = id.strip_prefix("compose.")?;
+    ALL.iter().copied().find(|b| b.id() == name)
 }
 
 /// Composite premultiplied source `b` over premultiplied backdrop `a`

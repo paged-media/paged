@@ -24,6 +24,8 @@
 
 import { describe, expect, it } from "bun:test";
 
+import { KAPPA } from "@paged-media/helpers";
+
 import {
   brushDistance,
   brushWeight,
@@ -59,7 +61,7 @@ const SQUARE: AnchorTable = {
 };
 
 /** A closed circle of radius 100 at (200, 200), four arcs. */
-const K = 0.5522847498307936 * 100;
+const K = KAPPA * 100;
 const CIRCLE: AnchorTable = {
   anchors: [
     { anchor: [200, 100], left: [200 - K, 100], right: [200 + K, 100] },

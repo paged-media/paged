@@ -96,7 +96,7 @@ export function valueToSwatchSpec(v: MixerValue, name?: string): SwatchSpec {
 // (`@paged-media/helpers`): one implementation for the editor and the
 // built-ins. `hexToRgb` also reads the `#rgb` shorthand.
 export { cmykToRgb, hexToRgb, rgbToCmyk, rgbToHex } from "@paged-media/helpers";
-import { rgbToCmyk as naiveCmyk } from "@paged-media/helpers";
+import { rgbToCmyk as naiveCmyk, srgbToLinear } from "@paged-media/helpers";
 
 /** The channels of an RGB colour in `space` (see `rgbToLab`): what the
  *  mixer's CMYK / Lab / K fields show for a colour authored in RGB.
@@ -170,7 +170,7 @@ export function luminance(rgb: number[]): number {
 
 const linear = (v: number): number => {
   const c = Math.min(255, Math.max(0, v)) / 255;
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return srgbToLinear(c);
 };
 
 /** sRGB (0..255) → CIE Lab (D50): L 0..100, a/b about −128..127. */
