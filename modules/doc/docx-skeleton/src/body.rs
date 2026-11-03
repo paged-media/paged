@@ -1147,10 +1147,6 @@ fn build_table(
         if !(text_empty && !styled_empty) {
             for p in &lc.paragraphs {
                 let para = build_paragraph(doc, styles, p, minted)?;
-                if para.runs.iter().any(|r| !r.comments.is_empty()) {
-                    // The old pour does not place a comment in a cell.
-                    return Err("comment in a table cell".into());
-                }
                 if para.runs.iter().any(|r| r.text.contains(['\n', '\r'])) {
                     return Err("line feed in a table cell".into());
                 }
@@ -1443,12 +1439,23 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     let comments = out
         .iter()
         .map(|story| {
-            let mut ids = std::collections::BTreeSet::new();
-            for p in story {
-                for r in &p.runs {
-                    ids.extend(r.comments.iter().cloned());
+            // Comment ids on the runs of the story, those of table cells
+            // included (the engine anchors a comment in a cell: `insertComment`
+            // with a cell address).
+            fn collect(ps: &[Paragraph], ids: &mut std::collections::BTreeSet<String>) {
+                for p in ps {
+                    for r in &p.runs {
+                        ids.extend(r.comments.iter().cloned());
+                    }
+                    if let Some(t) = &p.table {
+                        for c in &t.cells {
+                            collect(&c.paragraphs, ids);
+                        }
+                    }
                 }
             }
+            let mut ids = std::collections::BTreeSet::new();
+            collect(story, &mut ids);
             let comment = |c: &docx_lower::ir::LoweredComment| Comment {
                 id: c.id.clone(),
                 parent: c.parent_id.clone(),

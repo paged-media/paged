@@ -891,3 +891,21 @@ fn text_boxes_get_their_stories() {
         }
     }
 }
+
+#[test]
+fn a_comment_on_a_table_cell_text_belongs_to_the_story() {
+    let ir = lowered(include_bytes!(
+        "../../packages/doc-bundle/test/fixtures/cell-comment.docx"
+    ));
+    let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
+    assert_eq!(stories.comments.iter().map(Vec::len).sum::<usize>(), 1);
+    let cell_runs: Vec<_> = stories.stories[0]
+        .iter()
+        .filter_map(|p| p.table.as_ref())
+        .flat_map(|t| &t.cells)
+        .flat_map(|c| &c.paragraphs)
+        .flat_map(|p| &p.runs)
+        .filter(|r| !r.comments.is_empty())
+        .collect();
+    assert_eq!(cell_runs.len(), 1, "a run in a cell carries the comment");
+}

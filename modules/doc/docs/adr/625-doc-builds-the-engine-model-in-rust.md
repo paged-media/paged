@@ -190,8 +190,10 @@ run's look before it, built from the style token the lowering names and that sty
 formatting, not a snapshot of the run now) or the paragraph's `mark_revision` / `props_change`. A
 comment is the id on the runs it covers and a `Comment` on the story that holds them (a root whose
 range is in the story, its replies after it); the document's change tracking is still switched on by
-the bundle once the document stands. Reviewed fields and note references, and a comment on a table
-cell's text (the old pour places none), stay deferred.
+the bundle once the document stands. Reviewed fields and note references stay deferred. A comment on a table
+cell's text is built too: the engine anchors a comment in a cell (`insertComment` with a cell address)
+and the thread belongs to the story; the old pour placed none, so this is the one construct where the
+native open keeps more than the old pour did.
 
 ### Slice 7 (part): bookmarks and tables of contents
 
