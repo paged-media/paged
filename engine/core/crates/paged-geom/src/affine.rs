@@ -211,7 +211,8 @@ mod tests {
             [f32::MAX, 0.0, 0.0, f32::MAX, 1.0, 1.0],
             [1.0, 2.0, 2.0, 4.0, 0.0, 0.0],
         ]);
-        let tests: [(&str, fn(f32) -> bool); 3] = [
+        type Test = (&'static str, fn(f32) -> bool);
+        let tests: [Test; 3] = [
             ("1e-9", |d| d.abs() < 1e-9),
             ("1e-12", |d| d.abs() < 1e-12),
             ("zero or non-finite", |d| d == 0.0 || !d.is_finite()),
