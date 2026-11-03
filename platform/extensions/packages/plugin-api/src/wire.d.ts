@@ -3130,6 +3130,11 @@ export interface CharacterStyleSummary {
     selfId: string;
     name: string;
     basedOn: string | null;
+    /**
+     * Engine ADR 1057 — the theme font set the style follows, `\"major\"`
+     * or `\"minor\"`; `None` when its face is its own.
+     */
+    fontRef?: string | null;
 }
 
 /**
@@ -3164,6 +3169,12 @@ export interface ParagraphStyleSummary {
      * renderer never acts on it. No protocol bump on its own.
      */
     nextStyle?: string | null;
+    /**
+     * Engine ADR 1057 — the theme font set the style follows, `\"major\"`
+     * (headings) or `\"minor\"` (body); `None` when its face is its own.
+     * Additive read-only field (set by `setStyleThemeFont`).
+     */
+    fontRef?: string | null;
 }
 
 /**
@@ -3255,6 +3266,14 @@ export interface SwatchSummary {
      * read-only field; no protocol bump on its own.
      */
     totalAreaCoveragePct?: number | null;
+    /**
+     * Engine ADR 1057 — the colour space the swatch is written in
+     * (`\"rgb\"`, `\"cmyk\"`, `\"lab\"`, `\"gray\"`, `\"unknown\"`; absent on a pattern
+     * swatch). With `kind` it tells a host whether the swatch can follow a
+     * theme slot (process RGB and CMYK can, a spot swatch never does).
+     * Additive read-only field.
+     */
+    space?: string | null;
 }
 
 /**
@@ -3272,7 +3291,7 @@ export interface SwatchSummary {
  * `serde_json::Value::Array` for unimplemented entries, surfacing
  * a runtime warning rather than a panic.
  */
-export type CollectionName = "swatches" | "gradients" | "colorGroups" | "paragraphStyles" | "characterStyles" | "objectStyles" | "cellStyles" | "tableStyles" | "layers" | "spreads" | "pages" | "masterPages" | "links" | "articles" | "hyperlinks" | "bookmarks" | "crossReferences" | "conditions" | "conditionSets" | "fonts" | "indexTopics" | "footnotes" | "endnotes" | "notes" | "xmlTags" | "templateFields" | "templateFindings" | "xmlElements" | "trackedChanges" | "comments" | "theme" | "themePresets" | "inks" | "sections" | "stories" | "numberingLists" | "inkCoverage" | "symbols";
+export type CollectionName = "swatches" | "gradients" | "colorGroups" | "paragraphStyles" | "characterStyles" | "objectStyles" | "cellStyles" | "tableStyles" | "layers" | "spreads" | "pages" | "masterPages" | "links" | "articles" | "hyperlinks" | "bookmarks" | "crossReferences" | "conditions" | "conditionSets" | "fonts" | "indexTopics" | "footnotes" | "endnotes" | "notes" | "xmlTags" | "templateFields" | "templateFindings" | "xmlElements" | "trackedChanges" | "comments" | "theme" | "themePresets" | "importNotes" | "inks" | "sections" | "stories" | "numberingLists" | "inkCoverage" | "symbols";
 
 /**
  * SDK Phase 5 (D1) — singleton document-level state. Per

@@ -126,7 +126,7 @@ theme-coloured swatches follow a slot (engine ADR 1056, slice 4). `pptx-import` 
 reader (it reads through its own element tree and keeps colours unresolved, with the format scheme for
 slide's resolver) and `slide-resolve` its key/variant logic. The format scheme is not modelled (ADR 1056,
 Amendment 1).
-Themes in IDML (engine ADR 1057, designed): plain swatches for InDesign, the theme in the document label `x-paged:core.theme`, \"create theme from swatches\", font references on styles, presets owned by `paged_model::theme::presets`.
+Themes in IDML (engine ADR 1057, built): plain swatches for InDesign, the theme in the document label `x-paged:core.theme`, \"create theme from swatches\", font references on styles, presets owned by `paged_model::theme::presets`.
 Writable XML tree ×4. Minimal `.xlsx` writer ×3 (`slide-sheet`, `sheet-js` csv, ods). ODF layer
 shared between `docx-odt` and `ods.rs`. docProps are read by nobody.
 

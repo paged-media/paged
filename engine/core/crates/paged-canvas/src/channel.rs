@@ -3304,6 +3304,11 @@ pub enum CollectionName {
     Theme,
     /// Engine ADR 1057 — the theme presets, read-only rows (id and theme).
     ThemePresets,
+    /// Engine ADR 1057 — what opening the document dropped or could not
+    /// restore (a swatch or font edited outside paged, a theme label that
+    /// could not be read): one row `{ message }` per note, empty for a clean
+    /// open and for a document made in the editor.
+    ImportNotes,
     /// Concept 2 — the Ink Manager's ink list (one row per spot
     /// swatch, carrying its output-time settings).
     Inks,
@@ -3376,6 +3381,7 @@ impl CollectionName {
             Self::Comments => "comments",
             Self::Theme => "theme",
             Self::ThemePresets => "themePresets",
+            Self::ImportNotes => "importNotes",
             Self::Endnotes => "endnotes",
             Self::Inks => "inks",
             Self::Sections => "sections",
@@ -3422,6 +3428,7 @@ impl CollectionName {
             "comments" => Self::Comments,
             "theme" => Self::Theme,
             "themePresets" => Self::ThemePresets,
+            "importNotes" => Self::ImportNotes,
             "endnotes" => Self::Endnotes,
             "inks" => Self::Inks,
             "sections" => Self::Sections,
@@ -3570,6 +3577,13 @@ pub struct SwatchSummary {
     /// read-only field; no protocol bump on its own.
     #[serde(default)]
     pub total_area_coverage_pct: Option<f32>,
+    /// Engine ADR 1057 — the colour space the swatch is written in
+    /// (`"rgb"`, `"cmyk"`, `"lab"`, `"gray"`, `"unknown"`; absent on a pattern
+    /// swatch). With `kind` it tells a host whether the swatch can follow a
+    /// theme slot (process RGB and CMYK can, a spot swatch never does).
+    /// Additive read-only field.
+    #[serde(default)]
+    pub space: Option<String>,
 }
 
 /// §21 advanced prepress — one ink plate's coverage on one page.
@@ -3688,6 +3702,11 @@ pub struct ParagraphStyleSummary {
     /// renderer never acts on it. No protocol bump on its own.
     #[serde(default)]
     pub next_style: Option<String>,
+    /// Engine ADR 1057 — the theme font set the style follows, `"major"`
+    /// (headings) or `"minor"` (body); `None` when its face is its own.
+    /// Additive read-only field (set by `setStyleThemeFont`).
+    #[serde(default)]
+    pub font_ref: Option<String>,
 }
 
 /// SDK Phase 3 — one character style's summary. Same shape as
@@ -3700,6 +3719,10 @@ pub struct CharacterStyleSummary {
     pub self_id: String,
     pub name: String,
     pub based_on: Option<String>,
+    /// Engine ADR 1057 — the theme font set the style follows, `"major"`
+    /// or `"minor"`; `None` when its face is its own.
+    #[serde(default)]
+    pub font_ref: Option<String>,
 }
 
 /// SDK Phase 5 (v1 sweep) — one spread summary. Backs

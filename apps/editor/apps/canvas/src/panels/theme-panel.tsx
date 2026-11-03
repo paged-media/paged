@@ -23,7 +23,12 @@
 // undo step, and the swatches that follow a slot recolour in the same step), a
 // preset or a stored theme applies through `setTheme`, and a document with no
 // theme (every IDML from InDesign) can make one from its swatches
-// (`createThemeFromSwatches`). The panel uses engine operations only.
+// (`createThemeFromSwatches`): process RGB and CMYK swatches only, a CMYK one
+// stays CMYK when its slot recolours, a spot swatch never follows a slot and
+// the panel says so. A paragraph or character style follows the theme's
+// headings or body font through `setStyleThemeFont`. What opening the file
+// dropped (a swatch or a face edited outside paged) is listed from the
+// `importNotes` collection. The panel uses engine operations only.
 
 import { useState } from "react";
 
@@ -42,8 +47,22 @@ const M = defineMessages("app.themePanel", {
   apply: "Apply",
   fromSwatches: "Create theme from swatches",
   fromSwatchesHint:
-    "Name the swatch each slot takes its colour from. Plain RGB swatches only.",
+    "Name the swatch each slot takes its colour from. Process RGB and CMYK swatches.",
   none: "(none)",
+  spotNote:
+    "A spot swatch never follows a theme slot (its ink is its colour), so spot swatches cannot be chosen here.",
+  cmykNote:
+    "A CMYK swatch stays CMYK: when its slot changes, its four values follow the slot's colour.",
+  notFollowable: "{name} (cannot follow a slot)",
+  styleFonts: "Style fonts",
+  styleFontsHint:
+    "A style set to the theme's headings or body font takes the new face whenever the theme's fonts change.",
+  ownFace: "Own face",
+  followMajor: "Headings font",
+  followMinor: "Body font",
+  paragraphStyles: "Paragraph styles",
+  characterStyles: "Character styles",
+  importNotes: "Opened with notes",
   relink: "Link matching tints",
   proposeSwatches: "Use the first swatches",
   create: "Create theme",
@@ -97,6 +116,24 @@ interface PresetRow {
   id: string;
   theme: ThemeRow;
 }
+/** A style row of the `paragraphStyles` / `characterStyles` collections. */
+interface StyleRow {
+  selfId: string;
+  name: string;
+  fontRef?: string | null;
+}
+interface NoteRow {
+  message: string;
+}
+
+/**
+ * Whether a swatch can take or follow a theme slot (engine ADR 1057):
+ * process RGB and CMYK only. Spot, mixed-ink, Lab, gray and pattern swatches
+ * never follow.
+ */
+export function canFollowSlot(s: SwatchSummary): boolean {
+  return s.kind === "process" && (s.space === "rgb" || s.space === "cmyk");
+}
 
 /** A theme row as the `setTheme` / `setThemeFonts` wire shape. */
 function fontsSpec(f: ThemeFontsRow) {
@@ -134,6 +171,9 @@ export function ThemePanel() {
   const theme = useCollection<ThemeRow>("theme");
   const presets = useCollection<PresetRow>("themePresets");
   const swatches = useCollection<SwatchSummary>("swatches");
+  const paragraphStyles = useCollection<StyleRow>("paragraphStyles");
+  const characterStyles = useCollection<StyleRow>("characterStyles");
+  const notes = useCollection<NoteRow>("importNotes");
   const [error, setError] = useState<string | null>(null);
   const [preset, setPreset] = useState("");
   const [relink, setRelink] = useState(true);
@@ -174,8 +214,18 @@ export function ThemePanel() {
       args: { name, slots, relink },
     });
   };
+  const followStyle = (
+    collection: "paragraph" | "character",
+    styleId: string,
+    which: string,
+  ) => {
+    run({
+      op: "setStyleThemeFont",
+      args: { collection, styleId, which: which === "" ? null : which },
+    });
+  };
   const propose = () => {
-    const usable = (swatches ?? []).filter((s) => s.kind === "process");
+    const usable = (swatches ?? []).filter(canFollowSlot);
     const next: Record<string, string> = {};
     THEME_SLOT_LABELS.forEach(([slot], i) => {
       const s = usable[i];
@@ -183,6 +233,13 @@ export function ThemePanel() {
     });
     setPicks(next);
   };
+
+  const hasSpot = (swatches ?? []).some(
+    (s) => s.kind !== "pattern" && !canFollowSlot(s),
+  );
+  const picksCmyk = Object.values(picks).some(
+    (id) => (swatches ?? []).find((s) => s.selfId === id)?.space === "cmyk",
+  );
 
   const presetPicker = (
     <div className="flex items-center gap-2" data-theme-section="presets">
@@ -270,6 +327,56 @@ export function ThemePanel() {
               </label>
             ))}
           </div>
+          <div data-theme-section="style-fonts" className="flex flex-col gap-1">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {strings.t(M.styleFonts)}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {strings.t(M.styleFontsHint)}
+            </div>
+            {(
+              [
+                ["paragraph", M.paragraphStyles, paragraphStyles],
+                ["character", M.characterStyles, characterStyles],
+              ] as const
+            ).map(([kind, label, rows]) =>
+              (rows ?? []).length === 0 ? null : (
+                <div key={kind} className="flex flex-col gap-1">
+                  <div className="text-[11px] font-medium">
+                    {strings.t(label)}
+                  </div>
+                  <ul className="flex flex-col gap-1 text-xs">
+                    {(rows ?? []).map((r) => (
+                      <li
+                        key={r.selfId}
+                        className="flex items-center gap-2"
+                        data-style-kind={kind}
+                      >
+                        <span className="flex-1 truncate">{r.name}</span>
+                        <select
+                          className="border border-input rounded px-1 py-0.5"
+                          data-style-font={r.selfId}
+                          aria-label={r.name}
+                          value={r.fontRef ?? ""}
+                          onChange={(e) =>
+                            followStyle(kind, r.selfId, e.target.value)
+                          }
+                        >
+                          <option value="">{strings.t(M.ownFace)}</option>
+                          <option value="major">
+                            {strings.t(M.followMajor)}
+                          </option>
+                          <option value="minor">
+                            {strings.t(M.followMinor)}
+                          </option>
+                        </select>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+            )}
+          </div>
         </>
       ) : (
         <div data-theme-section="from-swatches" className="flex flex-col gap-2">
@@ -280,6 +387,24 @@ export function ThemePanel() {
           <div className="text-[11px] text-muted-foreground">
             {strings.t(M.fromSwatchesHint)}
           </div>
+          {hasSpot && (
+            <div
+              className="text-[11px] text-muted-foreground"
+              role="note"
+              data-theme-note="spot"
+            >
+              {strings.t(M.spotNote)}
+            </div>
+          )}
+          {picksCmyk && (
+            <div
+              className="text-[11px] text-muted-foreground"
+              role="note"
+              data-theme-note="cmyk"
+            >
+              {strings.t(M.cmykNote)}
+            </div>
+          )}
           <input
             type="text"
             className="text-xs border border-input rounded px-1 py-0.5"
@@ -303,10 +428,16 @@ export function ThemePanel() {
                 >
                   <option value="">{strings.t(M.none)}</option>
                   {(swatches ?? [])
-                    .filter((s) => s.kind === "process")
+                    .filter((s) => s.kind !== "pattern")
                     .map((s) => (
-                      <option key={s.selfId} value={s.selfId}>
-                        {s.name}
+                      <option
+                        key={s.selfId}
+                        value={s.selfId}
+                        disabled={!canFollowSlot(s)}
+                      >
+                        {canFollowSlot(s)
+                          ? s.name
+                          : strings.t(M.notFollowable, { name: s.name })}
                       </option>
                     ))}
                 </select>
@@ -340,6 +471,20 @@ export function ThemePanel() {
               {strings.t(M.create)}
             </button>
           </div>
+        </div>
+      )}
+      {notes && notes.length > 0 && (
+        <div data-theme-section="import-notes" className="flex flex-col gap-1">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {strings.t(M.importNotes)}
+          </div>
+          <ul className="list-disc pl-4 text-xs flex flex-col gap-1">
+            {notes.map((n, i) => (
+              <li key={i} data-import-note="">
+                {n.message}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {error && (

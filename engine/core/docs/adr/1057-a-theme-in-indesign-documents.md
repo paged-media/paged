@@ -1,6 +1,6 @@
 # ADR 1057 — A theme in InDesign documents: native source of truth, plain swatches in IDML, the theme in a document label
 
-- **Status:** Accepted 2026-11-02; **stage 2 built** (the model, the operations, the label in `paged-mutate`'s `theme_interchange`, the `themePresets` collection). Open: the Theme panel (stage 3), the InDesign label-size measurement, CMYK slot swatches. Extends
+- **Status:** Accepted 2026-11-02; **stage 2 built** (the model, the operations, the label in `paged-mutate`'s `theme_interchange`, the `themePresets` collection). The Theme panel (stage 3) is built, with CMYK followers, style font references and the import notes; the InDesign label size is measured (Amendment below). Extends
   [ADR 1056](1056-one-theme-model-for-every-module.md) to the IDML / publish half, where the
   format has no theme. Part of the capability layering of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Themes").
@@ -54,9 +54,9 @@ without a theme gets one, how styles follow the font scheme, and what the defaul
   `lost in translation to IDML` channel of ADR 1055, `theme_losses` beside `comment_losses`):
   "theme `<name>` written as plain swatches; the link of N swatches and M styles lives in the
   document label `x-paged:core.theme`, which only paged reads". Also reported: the format scheme
-  (not modelled), a `source` over the size limit (dropped from the label), a spot swatch that
-  cannot follow a slot, and a label that would exceed the limit measured on InDesign (stage 2
-  measures it on the installed application and records the figure here).
+  (not modelled), a `source` over the size limit (dropped from the label), a swatch that
+  cannot follow a slot, and a label that would exceed the limit measured on InDesign (see
+  Amendment 1: none was found).
 - **Import.** `idml-import` reads the label after the swatches and styles, sets `Document.theme`,
   restores each `theme_ref` whose swatch still has the recorded value, and each font reference
   whose style still has the recorded face. A label of another `v`, or unparseable, is ignored with
@@ -73,12 +73,27 @@ the chain `lumMod` / `lumOff` at the standard 20, 40, 60, 80 and `lumMod 50 / 75
 Office "Lighter" and "Darker" names) resolves to the same sRGB value, compared exactly after the
 engine's rounding. Nothing is guessed beyond that: a swatch that matches no slot stays literal.
 
-- **Colour space (built: RGB swatches only).** A theme slot is sRGB. A swatch that follows one stays in its space: the
-  slot's colour is converted through the one CMS (ADR 1032) when the theme changes. A **spot
-  swatch never follows** a slot. A CMYK swatch chosen for a slot gives the slot its converted sRGB
-  value; the host says so before applying. Stage 2 builds the RGB half: a CMYK or spot swatch named for a slot is refused, and a CMYK
-  swatch is not relinked. (Slice 3's recolour writes a following swatch's value as three RGB
-  bytes whatever its space; a CMYK follower is therefore not written to the label and is reported.)
+- **Colour space (built, amended 2026-11-03).** A theme slot is sRGB. Which swatches follow:
+  - **Process RGB** and **process CMYK** swatches follow a slot and stay in their space. When the
+    slot changes, an RGB follower takes the slot's bytes; a CMYK follower takes four percentages
+    derived from them.
+  - **Spot, mixed-ink, Lab, gray and pattern swatches never follow.** A spot ink IS its colour (a
+    plate), the others have no exact inverse. Nothing is dropped silently: `createThemeFromSwatches`,
+    `createSwatch` with a `themeRef` and an `editSwatch` that would turn a follower into one of
+    these are refused with a message that says why, and the Theme panel disables such swatches in
+    its picker and says so in words.
+  - **Deviation from the first design ("converted through the one CMS").** The conversion is
+    profile-free: `paged_color::math::srgb_to_naive_cmyk` (the inverse of `naive_cmyk_to_srgb`,
+    the conversion the engine uses wherever no CMYK profile is configured), rounded to two
+    decimals. Reason: an operation must give the same numbers on every host and on every replay,
+    undo and remote apply, and the CMS needs a profile the operation layer does not hold. With no
+    CMYK profile the follower renders exactly as its slot; with one, the renderer sends the numbers
+    through the CMS like any CMYK swatch, so the printed colour may differ from the slot's sRGB
+    within the gamut. A CMYK swatch given to a slot gives the slot its naive sRGB value
+    (the panel says so); a CMYK swatch is relinked when that value equals a tint of a slot.
+  - The label records a CMYK link as `"space": "CMYK"` and `"value": "c,m,y,k"` (percent, two
+    decimals); the import check (e) compares space and value, so a number changed in InDesign
+    detaches the link and is reported.
 - **Which swatches.** The host proposes slots from a swatch group (darkest to `dk1`, lightest to
   `lt1`, the rest by chroma to `accent1..6`); the user edits the assignment. The engine takes the
   explicit list and never proposes.
@@ -166,3 +181,18 @@ beyond `v`.
 label writer / reader, `theme_losses`, round-trip tests; sheet-chart's palette follow-up.
 3. Host: the one Theme panel (core, every module context except slide): slots and fonts, apply a
 theme or preset, create from swatches, relink; one undo step each.
+
+## Amendment 1 (2026-11-03): host surface, CMYK followers, the label size
+
+- **Host.** The Theme panel lists swatches with their space (`SwatchSummary.space`), sets a style's
+  font reference through `setStyleThemeFont` (`fontRef` on the paragraph and character style
+  rows), and shows what opening a file dropped from the `importNotes` collection (rows
+  `{ message }`, the lines of `CanvasModel::import_notes()`). Additive wire change, contract canary.
+- **CMYK followers and spot swatches:** decided under (b), "Colour space".
+- **Label size, measured.** `tools/indesign-export/label-size-probe.sh` (windowless, never
+  interactive) sets one document label on a new document in Adobe InDesign 20.0.1.32 (2025) and
+  reads it back; the recording is `label-size-probe.json`. A label of 1 KiB to 16 Mi characters
+  (quotes, angle brackets, an ampersand and non-ASCII included) is kept in memory, and through an
+  IDML export and reopen at 64 Ki, 256 Ki, 1 Mi, 4 Mi and 16 Mi characters. **No limit was found
+  up to 16 Mi characters**, three orders of magnitude above the theme label (the `source` part is
+  dropped over 64 KiB). The size guard stays at 64 KiB for `source`; no further limit is needed.
