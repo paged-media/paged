@@ -809,3 +809,31 @@ fn the_bundles_breaks_fixture_is_built_whole() {
     assert_eq!(splits, 2);
     assert!(docx_skeleton::body::native_stories(&ir).is_some(), "whole");
 }
+
+#[test]
+fn headers_and_footers_fill_the_masters_stories() {
+    let ir = lowered(&docx_conformance::structure_docx());
+    let body = native_body(&ir);
+    assert!(body.part_errors.is_empty(), "{:?}", body.part_errors);
+    let frames: Vec<_> = ir
+        .masters
+        .iter()
+        .flat_map(|m| [m.header.as_ref(), m.footer.as_ref()])
+        .flatten()
+        .collect();
+    assert!(!frames.is_empty(), "the fixture has headers or footers");
+    assert_eq!(body.parts.len(), frames.len());
+    for (f, (story, paras)) in frames.iter().zip(&body.parts) {
+        assert_eq!(&f.story_id, story);
+        let said: String = paras
+            .iter()
+            .flat_map(|p| p.runs.iter().map(|r| r.text.as_str()))
+            .collect();
+        let want: String = ir.header_footer_parts[f.part]
+            .paragraphs
+            .iter()
+            .flat_map(|p| p.runs.iter().map(|r| r.text.as_str()))
+            .collect();
+        assert_eq!(said, want);
+    }
+}

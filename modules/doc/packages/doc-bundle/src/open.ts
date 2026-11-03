@@ -272,7 +272,7 @@ export async function finishStandalone(
       }),
     );
   }
-  await pourHeadersFooters(host, ir);
+  if (!bodyPrefilled) await pourHeadersFooters(host, ir);
   await pourPageItems(host, ir);
   await setFootnoteOptions(host, ir);
   // Doc ADR 613 — a document Word tracked changes in keeps tracking them:

@@ -226,6 +226,7 @@ pub fn skeleton_prefilled(
     let stories = native.stories;
     let comments = native.comments;
     let destinations = native.destinations;
+    let parts = native.parts;
     let pages = skeleton_pages_with(doc, options);
     if stories.len() != pages.len() {
         return Ok(None);
@@ -241,6 +242,16 @@ pub fn skeleton_prefilled(
     // operations, so a refused property sends the document to the old path.
     if catalog::apply_catalog(&mut document, lowered).is_err() {
         return Ok(None);
+    }
+    // Doc ADR 611 — each master frame's story holds its part.
+    for (story, paragraphs) in parts {
+        if paragraphs.is_empty() {
+            continue;
+        }
+        let Some(parsed) = document.stories.iter_mut().find(|s| s.self_id == story) else {
+            return Ok(None);
+        };
+        parsed.story.paragraphs = paragraphs;
     }
     for l in &native.links {
         document

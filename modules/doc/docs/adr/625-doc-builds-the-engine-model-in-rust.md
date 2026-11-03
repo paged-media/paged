@@ -215,6 +215,16 @@ A table nested in a cell takes the cell's empty paragraph that stands for it (el
 at its index), as `insertTable` with a cell address does; a row Word holds at an exact height is
 the row's height with `auto_grow` off (`setRowHeight`).
 
+### Slice 7 (part): headers and footers
+
+The story of every master header and footer frame (`LoweredMaster`, ADR 611) is filled in the
+prefilled skeleton with the part's paragraphs, built as body paragraphs; the bundle then skips
+`pourHeadersFooters`. A bookmark, a note or a comment in a header or footer (the old pour places none
+of them as a note or comment) sends the document to the old pour. With no header, footer or body
+paragraph left to the old pour, the only thing that still names the lowering's invented styles is a
+page item (a float or text box placed on the page), so the catalogue omits them unless the document
+has page items.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

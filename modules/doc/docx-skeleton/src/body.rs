@@ -79,6 +79,11 @@ pub struct NativeBody {
     pub links: Vec<NativeLink>,
     /// The Word bookmarks that start in each block's paragraph, by name.
     pub marks: Vec<Vec<String>>,
+    /// The paragraphs of each master header and footer frame's story (doc
+    /// ADR 611), by story id.
+    pub parts: Vec<(String, Vec<Paragraph>)>,
+    /// Why a header or footer could not be built, if one could not.
+    pub part_errors: Vec<String>,
 }
 
 impl NativeBody {
@@ -1179,10 +1184,48 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
             LoweredBlock::Table(_) => Vec::new(),
         })
         .collect();
+    // Doc ADR 611 — the header and footer of every master, built as body
+    // paragraphs (the old pour strips note references and places no comment
+    // or bookmark there).
+    let mut parts = Vec::new();
+    let mut part_errors = Vec::new();
+    for m in &doc.masters {
+        for f in [&m.header, &m.footer].into_iter().flatten() {
+            let Some(part) = doc.header_footer_parts.get(f.part) else {
+                part_errors.push(format!("master {} names no part", m.id));
+                continue;
+            };
+            let mut paras = Vec::new();
+            for lp in &part.paragraphs {
+                let bad = if !lp.bookmarks.is_empty() {
+                    Some("bookmark in a header or footer")
+                } else if lp
+                    .runs
+                    .iter()
+                    .any(|r| r.note.is_some() || !r.comments.is_empty())
+                {
+                    Some("note or comment in a header or footer")
+                } else {
+                    None
+                };
+                if let Some(why) = bad {
+                    part_errors.push(why.into());
+                    continue;
+                }
+                match build_parts(doc, &styles, lp, &mut minted) {
+                    Ok(v) => paras.extend(v),
+                    Err(e) => part_errors.push(e),
+                }
+            }
+            parts.push((f.story_id.clone(), paras));
+        }
+    }
     NativeBody {
         blocks,
         links: minted.links,
         marks,
+        parts,
+        part_errors,
     }
 }
 
@@ -1195,6 +1238,8 @@ pub struct NativeStories {
     pub comments: Vec<Vec<Comment>>,
     /// Each story's bookmarks (text anchors), parallel to `stories`.
     pub destinations: Vec<Vec<StoryDestination>>,
+    /// The master header and footer stories' paragraphs, by story id.
+    pub parts: Vec<(String, Vec<Paragraph>)>,
 }
 
 /// The body's native stories, one per skeleton story and in its order, when
@@ -1207,8 +1252,12 @@ pub struct NativeStories {
 pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     // What the body carries outside its blocks and the old path places.
     let body = native_body(doc);
+    if !body.part_errors.is_empty() {
+        return None;
+    }
     let links = body.links;
     let marks = body.marks;
+    let parts = body.parts;
     let mut paras = Vec::with_capacity(body.blocks.len());
     // The index of each block's first native paragraph (a split block makes
     // several).
@@ -1328,5 +1377,6 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
         links,
         comments,
         destinations,
+        parts,
     })
 }
