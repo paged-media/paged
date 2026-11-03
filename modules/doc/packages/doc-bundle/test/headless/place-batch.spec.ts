@@ -188,6 +188,21 @@ const FIXTURES = [
   "direct-format.docx",
   "template-letter.docx",
   "structure.docx",
+  // Slice 3: hyperlinks, fields, lists, drop caps, bookmarks.
+  "hyperlink-body.docx",
+  "field-body.docx",
+  "list-body.docx",
+  "drop-cap.docx",
+];
+
+// Documents the builder may still refuse (the pour then places them, and
+// the result must be the same); the refusal is logged.
+const OPTIONAL_FIXTURES = [
+  "toc-body.docx",
+  "merge-letter.docx",
+  "review-body.docx",
+  "cell-comment.docx",
+  "breaks-body.docx",
 ];
 
 // Slice 2: tables (cell text and styles, spans, row heights, borders and
@@ -208,7 +223,7 @@ describe.skipIf(!docxPresent)(
       for (const h of opened.splice(0)) h.dispose();
     });
 
-    for (const name of [...FIXTURES, ...TABLE_FIXTURES]) {
+    for (const name of [...FIXTURES, ...TABLE_FIXTURES, ...OPTIONAL_FIXTURES]) {
       const tabled = TABLE_FIXTURES.includes(name);
       it(`${name}: the Rust batch places what the pour places`, async () => {
         const old = await place(name, false);
@@ -216,8 +231,12 @@ describe.skipIf(!docxPresent)(
         opened.push(old.h, now.h);
         // Every fixture listed is one the builder takes whole, and the batch
         // it offers is the batch the engine applies.
-        expect(now.refusal).toBe("");
-        expect(now.native).toBe(true);
+        if (OPTIONAL_FIXTURES.includes(name)) {
+          console.warn(`placement batch ${name}: ${now.refusal || "taken"}`);
+        } else {
+          expect(now.refusal).toBe("");
+          expect(now.native).toBe(true);
+        }
         expect(now.paras.map((p) => p.text)).toEqual(
           old.paras.map((p) => p.text),
         );
@@ -228,7 +247,7 @@ describe.skipIf(!docxPresent)(
         // The native placement holds no style the lowering invented.
         const auto = (x: Placed) =>
           x.styles.filter((s) => s.includes("docx-auto"));
-        if (tabled) {
+        if (tabled || !now.native) {
           expect(auto(old)).toEqual(expect.arrayContaining(auto(now)));
         } else {
           expect(auto(now)).toEqual([]);

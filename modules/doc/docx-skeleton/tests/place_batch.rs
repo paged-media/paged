@@ -148,6 +148,15 @@ fn wire(m: BTreeMap<String, PropValue>) -> BTreeMap<String, Value> {
 /// The placement of one document, checked against the native builder.
 fn check(label: &str, doc: &LoweredDoc) -> Result<usize, String> {
     let batch = place_batch(doc, STORY)?;
+    // The replay below knows text and ranges alone.
+    if let Some(o) = batch.body_ops.iter().find(|o| {
+        !matches!(
+            o["op"].as_str(),
+            Some("insertText" | "applyStyle" | "setElementProperty")
+        )
+    }) {
+        return Err(format!("replays only text and ranges: {}", o["op"]));
+    }
     let body = native_body(doc);
     let (paras, para_looks, char_looks) = replay(&batch.body_ops);
     assert_eq!(paras.len(), body.blocks.len(), "{label}: paragraph count");
@@ -237,13 +246,38 @@ fn a_paragraph_only_document_places_as_a_batch_equal_to_the_native_builder() {
 
 #[test]
 fn a_document_with_something_not_yet_in_the_batch_is_refused_with_the_reason() {
-    for (bytes, why) in [
-        (docx_conformance::table_docx(), "table"),
-        (docx_conformance::image_docx(), "picture"),
-        (docx_conformance::hyperlink_docx(), "hyperlink"),
-        (docx_conformance::list_docx(), "list"),
-    ] {
+    for (bytes, why) in [(docx_conformance::image_docx(), "picture")] {
         let err = place_batch(&lowered(&bytes), STORY).expect_err("refused");
         assert!(err.contains(why), "{why}: {err}");
     }
+}
+
+fn kinds(doc: &[u8]) -> Vec<String> {
+    let batch = place_batch(&lowered(doc), STORY).expect("placed");
+    batch
+        .body_ops
+        .iter()
+        .map(|o| o["op"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn a_table_places_as_insert_table_cells_and_spans() {
+    let k = kinds(&docx_conformance::table_docx());
+    let at = |op: &str| k.iter().position(|x| x == op);
+    assert!(at("insertTable") < at("bindCreated").map(|n| n + 1));
+    assert!(k.iter().any(|x| x == "insertText"));
+    assert_eq!(k.iter().filter(|x| *x == "insertTable").count(), 1);
+}
+
+#[test]
+fn a_hyperlink_and_a_list_place_as_operations() {
+    assert!(kinds(&docx_conformance::hyperlink_docx())
+        .iter()
+        .any(|x| x == "insertHyperlink"));
+    let list = place_batch(&lowered(&docx_conformance::list_docx()), STORY).expect("placed");
+    assert!(list
+        .body_ops
+        .iter()
+        .any(|o| o["args"]["path"] == "paragraphListType"));
 }

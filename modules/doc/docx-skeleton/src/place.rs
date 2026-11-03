@@ -67,30 +67,16 @@ fn plain(p: &LoweredParagraph) -> Result<(), &'static str> {
         Err("text box")
     } else if !p.segments.is_empty() {
         Err("break inside a paragraph")
-    } else if !p.bookmarks.is_empty() {
-        Err("bookmark")
-    } else if p.list.is_some() {
-        Err("list item")
     } else if p.mark_change.is_some() || p.props_change.is_some() {
         Err("tracked paragraph change")
-    } else if p.drop_cap.is_some() {
-        Err("drop cap")
     } else {
         for r in &p.runs {
-            if r.hyperlink_url.is_some() {
-                return Err("hyperlink");
-            }
-            if r.field.is_some() {
-                return Err("field");
-            }
+            // Notes are not placed (the stripped document has none left).
             if r.note.is_some() {
                 return Err("note");
             }
             if r.change.is_some() || r.format_change.is_some() {
                 return Err("tracked change");
-            }
-            if !r.comments.is_empty() {
-                return Err("comment");
             }
             if r.control.is_some() {
                 return Err("content control");
@@ -180,6 +166,28 @@ pub fn style_ops(doc: &LoweredDoc, keep: &HashSet<String>) -> Vec<Value> {
     ops
 }
 
+/// A cell's paragraphs are text and styles alone: what the cell pour has no
+/// address for (a bookmark, a link, a field, a comment, a list item, a drop
+/// cap) is the pour's.
+fn plain_cell(p: &LoweredParagraph) -> Result<(), &'static str> {
+    plain(p)?;
+    if !p.bookmarks.is_empty() {
+        Err("bookmark")
+    } else if p.list.is_some() {
+        Err("list item")
+    } else if p.drop_cap.is_some() {
+        Err("drop cap")
+    } else if p
+        .runs
+        .iter()
+        .any(|r| r.hyperlink_url.is_some() || r.field.is_some() || !r.comments.is_empty())
+    {
+        Err("link, field or comment")
+    } else {
+        Ok(())
+    }
+}
+
 /// Whether a table is one this builder takes: every paragraph of every cell
 /// is plain, and no cell holds a picture (a later slice).
 fn plain_table(t: &LoweredTable) -> Result<(), String> {
@@ -188,7 +196,7 @@ fn plain_table(t: &LoweredTable) -> Result<(), String> {
     }
     for c in &t.cells {
         for p in &c.paragraphs {
-            plain(p).map_err(|why| format!("in a table cell: {why}"))?;
+            plain_cell(p).map_err(|why| format!("in a table cell: {why}"))?;
         }
         for n in &c.nested {
             plain_table(&n.table)?;
@@ -424,6 +432,51 @@ fn table_carets(t: &LoweredTable, story: &str, table: &str, out: &mut Vec<Value>
     }
 }
 
+/// The comments whose range is in the story: each thread's first comment
+/// over its range, its replies after it (the pour's `buildCommentMutations`).
+fn comment_ops(doc: &LoweredDoc, story: &str, ranges: &[(String, usize, usize)]) -> Vec<Value> {
+    let spec = |c: &docx_lower::ir::LoweredComment| {
+        let mut m = json!({ "id": c.id, "text": c.text });
+        for (k, v) in [
+            ("author", &c.author),
+            ("initials", &c.initials),
+            ("date", &c.date),
+        ] {
+            if let Some(v) = v {
+                m[k] = json!(v);
+            }
+        }
+        if c.resolved {
+            m["resolved"] = json!(true);
+        }
+        m
+    };
+    let mut ops = Vec::new();
+    for root in doc.comments.iter().filter(|c| c.parent_id.is_none()) {
+        let Some((_, start, end)) = ranges.iter().find(|(id, _, _)| *id == root.id) else {
+            continue;
+        };
+        if end <= start {
+            continue;
+        }
+        ops.push(json!({
+            "op": "insertComment",
+            "args": { "storyId": story, "start": start, "end": end, "comment": spec(root) }
+        }));
+        for reply in doc
+            .comments
+            .iter()
+            .filter(|c| c.parent_id.as_deref() == Some(root.id.as_str()))
+        {
+            ops.push(json!({
+                "op": "replyComment",
+                "args": { "parentId": root.id, "comment": spec(reply) }
+            }));
+        }
+    }
+    ops
+}
+
 /// One run of consecutive Word paragraphs the story takes as text.
 struct Step<'a> {
     paras: Vec<&'a Paragraph>,
@@ -437,8 +490,8 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
         return Err("floating objects placed on the page".into());
     }
     let body = native_body(doc);
-    if !body.links.is_empty() || !body.extra.is_empty() {
-        return Err("hyperlinks or text boxes".into());
+    if !body.extra.is_empty() {
+        return Err("text boxes".into());
     }
     let mut keep: HashSet<String> = body.keep_styles.iter().cloned().collect();
     // The blocks in order: a text step per run of paragraphs, a table between.
@@ -497,6 +550,8 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
     let mut ends_in_table = false;
     let mut ends_in_empty = false;
     let mut tables = 0usize;
+    // Each comment's range over the poured text, in order of appearance.
+    let mut comment_ranges: Vec<(String, usize, usize)> = Vec::new();
     for piece in &pieces {
         match piece {
             Piece::Text(step) => {
@@ -506,18 +561,59 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                 if lead {
                     text.push('\n');
                 }
+                // Bytes of the finished pour beyond `text`: a field's result
+                // is written by `insertField`, not by the text.
+                let mut extra = 0usize;
+                let mut field_ops = Vec::new();
                 let mut para_ops = Vec::new();
                 let mut char_ops = Vec::new();
                 let mut prop_ops = Vec::new();
+                let mut link_ops = Vec::new();
+                let mut anchor_ops = Vec::new();
                 for (i, para) in step.paras.iter().enumerate() {
                     if i > 0 {
                         text.push('\n');
                     }
                     let start = at;
+                    for name in &step.lowered[i].bookmarks {
+                        if name != "_GoBack" {
+                            anchor_ops.push(json!({
+                                "op": "insertTextAnchor",
+                                "args": { "storyId": story, "offset": start,
+                                          "contentOffset": text_at + text.len() + extra,
+                                          "name": name }
+                            }));
+                        }
+                    }
                     let mut runs: Vec<(usize, usize, &paged_model::CharacterRun)> = Vec::new();
                     for r in para.runs.iter().filter(|r| !r.text.is_empty()) {
                         let n = r.text.chars().count();
-                        text.push_str(&r.text);
+                        if let Some(f) = &r.field {
+                            field_ops.push(json!({
+                                "op": "insertField",
+                                "args": { "storyId": story, "offset": at,
+                                          "contentOffset": text_at + text.len() + extra,
+                                          "field": { "word": { "code": f.code, "result": r.text } } }
+                            }));
+                            extra += r.text.len();
+                        } else {
+                            text.push_str(&r.text);
+                        }
+                        if let Some(src) = &r.hyperlink_source {
+                            if let Some(l) = body.links.iter().find(|l| &l.source_id == src) {
+                                link_ops.push(json!({
+                                    "op": "insertHyperlink",
+                                    "args": { "storyId": story, "start": at, "end": at + n,
+                                              "url": l.url }
+                                }));
+                            }
+                        }
+                        for id in &r.comments {
+                            match comment_ranges.iter_mut().find(|(c, _, _)| c == id) {
+                                Some(c) => c.2 = at + n,
+                                None => comment_ranges.push((id.clone(), at, at + n)),
+                            }
+                        }
                         runs.push((at, at + n, r));
                         at += n;
                     }
@@ -547,6 +643,21 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                     for (path, value) in &paragraph_props {
                         prop_ops.push(set(story, start, at, path, value));
                     }
+                    // Word's drop cap, on the paragraph's first character.
+                    if step.lowered[i].drop_cap.is_some() {
+                        for (path, n) in [
+                            ("paragraphDropCapCharacters", para.drop_cap_characters),
+                            ("paragraphDropCapLines", para.drop_cap_lines),
+                        ] {
+                            prop_ops.push(set(
+                                story,
+                                start,
+                                at.max(start + 1),
+                                path,
+                                &length(n as f32),
+                            ));
+                        }
+                    }
                     for (s, e, r) in runs {
                         if let Some(c) = &r.character_style {
                             char_ops.push(apply_style(story, s, e, c, "character", None));
@@ -562,10 +673,13 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
                         "args": { "storyId": story, "offset": text_at, "text": text, "cell": null }
                     }));
                 }
-                text_at += text.len();
+                text_at += text.len() + extra;
+                body_ops.extend(field_ops);
                 body_ops.extend(para_ops);
                 body_ops.extend(char_ops);
                 body_ops.extend(prop_ops);
+                body_ops.extend(link_ops);
+                body_ops.extend(anchor_ops);
                 last = para_base as isize + step.paras.len() as isize - 1;
                 ends_in_table = false;
                 ends_in_empty = step
@@ -609,6 +723,7 @@ pub fn place_batch(doc: &LoweredDoc, story: &str) -> Result<PlaceBatch, String> 
     }
     body_ops.extend(carets);
     body_ops.extend(cell_carets);
+    body_ops.extend(comment_ops(doc, story, &comment_ranges));
     Ok(PlaceBatch {
         style_ops: style_ops(doc, &keep),
         body_ops,

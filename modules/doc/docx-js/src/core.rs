@@ -158,7 +158,15 @@ impl DocSession {
     /// bundle then places it by the TypeScript pour). The body operations
     /// address the story `story` (a batch handle on the frame just made).
     pub fn place_batch_json(&self, story: &str) -> String {
-        let value = match docx_skeleton::place::place_batch(&self.lowered(), story) {
+        // Notes are not placed in an inserted document (doc ADR 603): their
+        // markers and references are left out, as the pour leaves them.
+        let mut ir = docx_export::notes::strip_lowered(self.lowered());
+        for block in ir.story.blocks.iter_mut() {
+            if let docx_lower::ir::LoweredBlock::Paragraph(p) = block {
+                p.runs.iter_mut().for_each(|r| r.note = None);
+            }
+        }
+        let value = match docx_skeleton::place::place_batch(&ir, story) {
             Ok(b) => serde_json::json!({ "styleOps": b.style_ops, "bodyOps": b.body_ops }),
             Err(reason) => serde_json::json!({ "reason": reason }),
         };
