@@ -151,6 +151,20 @@ impl DocSession {
         docx_skeleton::skeleton_prefilled(self.model(), &self.lowered(), name, self.options)
     }
 
+    /// Doc ADR 625 amendment — the embedded placement of the document as a
+    /// batch of the engine's existing operations, as JSON:
+    /// `{"styleOps":[..],"bodyOps":[..]}`, or `{"reason":".."}` when the
+    /// document holds something the batch builder does not take yet (the
+    /// bundle then places it by the TypeScript pour). The body operations
+    /// address the story `story` (a batch handle on the frame just made).
+    pub fn place_batch_json(&self, story: &str) -> String {
+        let value = match docx_skeleton::place::place_batch(&self.lowered(), story) {
+            Ok(b) => serde_json::json!({ "styleOps": b.style_ops, "bodyOps": b.body_ops }),
+            Err(reason) => serde_json::json!({ "reason": reason }),
+        };
+        value.to_string()
+    }
+
     /// Number of top-level body blocks.
     pub fn block_count(&self) -> usize {
         self.model.body.len()

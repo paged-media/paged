@@ -1654,6 +1654,8 @@ dependencies = [
  "paged-model",
  "paged-scene",
  "paged-store",
+ "serde",
+ "serde_json",
  "zip 9.0.5",
 ]
 

@@ -49,6 +49,7 @@ pub mod body;
 pub mod catalog;
 pub mod items;
 pub mod native;
+pub mod place;
 
 use docx_core::{DocxDocument, Section};
 use docx_lower::sections::{LowerOptions, StoryColumns};
