@@ -438,5 +438,11 @@ opt-level = "z"
 [profile.wasm-doc.package.paged-scene]
 opt-level = "z"
 
+# The native body builder (doc ADR 625) runs once per open, like the model
+# crates it builds: size-first codegen keeps the doc wasm under its manifest
+# ceiling.
+[profile.wasm-doc.package.docx-skeleton]
+opt-level = "z"
+
 [profile.wasm-doc.package.paged-store]
 opt-level = "z"

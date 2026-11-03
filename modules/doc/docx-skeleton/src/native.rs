@@ -349,7 +349,7 @@ fn styles() -> StyleSheet {
 /// the text frame on the margin box. The frame's first baseline is
 /// `LeadingOffset` with zero insets: Word fits a line only when its whole
 /// line box fits, which is what that expresses.
-fn spread(p: &SkeletonPage) -> ParsedSpread {
+pub(crate) fn spread(p: &SkeletonPage) -> ParsedSpread {
     let m = &p.margins;
     let mut page = Page::new(
         p.page_id.clone(),

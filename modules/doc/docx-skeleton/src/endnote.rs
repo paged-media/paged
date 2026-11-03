@@ -31,11 +31,11 @@
 //! options (title, separator) are the engine's defaults, as in the old pour,
 //! which set the document's note options after the pour.
 
-use paged_model::{
-    Bounds, CharacterRun, EndnoteRangeDef, FrameRef, Page, Paragraph, Spread, Story, TextFrame,
-    ENDNOTE_NUMBER_MARKER,
-};
-use paged_scene::{Document, ParsedSpread, ParsedStory};
+use paged_model::{CharacterRun, EndnoteRangeDef, ENDNOTE_NUMBER_MARKER};
+use paged_scene::Document;
+
+use crate::native::empty_story;
+use crate::{Margins, SkeletonPage};
 
 /// The byte-order mark InDesign opens and closes an endnote's range with.
 const BOM: char = '\u{FEFF}';
@@ -93,61 +93,62 @@ pub fn add_endnote_story(document: &mut Document, notes: &[NativeEndnote]) -> Re
         .and_then(|id| document.spreads[host].spread.page_margins.get(id))
         .cloned()
         .unwrap_or_default();
-    let mut page = Page::new(ENDNOTE_PAGE, last.bounds);
-    page.applied_master = last.applied_master.clone();
-    let bounds = page.bounds;
-    let mut spread = Spread {
-        self_id: Some(ENDNOTE_SPREAD.into()),
-        item_transform: Some([1.0, 0.0, 0.0, 1.0, 0.0, max_bottom + SPREAD_STACK_GAP_PT]),
-        pages: vec![page],
-        ..Spread::default()
-    };
-    spread
-        .page_margins
-        .insert(ENDNOTE_PAGE.into(), margins.clone());
-    // The frame: the new page's margin box, in spread coordinates.
-    let mut frame = TextFrame::new(
-        ENDNOTE_FRAME,
-        Some(ENDNOTE_STORY.into()),
-        Bounds {
-            top: bounds.top + margins.top,
-            left: bounds.left + margins.left,
-            bottom: bounds.bottom - margins.bottom,
-            right: bounds.right - margins.right,
+    // The spread is the skeleton's own (`native::spread`, a page, its margin
+    // box and a text frame), set back to what the engine's page and frame
+    // operations make: no transforms, no fill, outline, object style or
+    // first-baseline rule, one column.
+    let width = last.bounds.right - last.bounds.left;
+    let height = last.bounds.bottom - last.bounds.top;
+    let mut parsed = crate::native::spread(&SkeletonPage {
+        story_id: ENDNOTE_STORY.into(),
+        page_id: ENDNOTE_PAGE.into(),
+        spread_id: ENDNOTE_SPREAD.into(),
+        frame_id: ENDNOTE_FRAME.into(),
+        width,
+        height,
+        margins: Margins {
+            top: margins.top,
+            bottom: margins.bottom,
+            left: margins.left,
+            right: margins.right,
+            column_count: 1,
+            column_gutter: 0.0,
         },
-    );
-    frame.item_transform = None;
-    spread.text_frames.push(frame);
-    spread.frames_in_order.push(FrameRef::TextFrame(0));
+        master: last.applied_master.clone(),
+        page_number_start: None,
+        page_number_format: None,
+    });
+    let spread = &mut parsed.spread;
+    spread.item_transform = Some([1.0, 0.0, 0.0, 1.0, 0.0, max_bottom + SPREAD_STACK_GAP_PT]);
+    spread.page_margins.insert(ENDNOTE_PAGE.into(), margins);
     spread.endnote_frames.push(ENDNOTE_FRAME.into());
-    document.spreads.insert(
-        host + 1,
-        ParsedSpread {
-            src: format!("Spreads/Spread_{ENDNOTE_SPREAD}.xml"),
-            spread,
-        },
-    );
+    let page = &mut spread.pages[0];
+    page.item_transform = None;
+    page.master_page_transform = None;
+    page.show_master_items = None;
+    let frame = &mut spread.text_frames[0];
+    frame.item_transform = None;
+    frame.fill_color = None;
+    frame.stroke_color = None;
+    frame.stroke_weight = None;
+    frame.next_text_frame = None;
+    frame.first_baseline_offset = None;
+    frame.inset_spacing = None;
+    frame.applied_object_style = None;
+    frame.anchors.clear();
+    document.spreads.insert(host + 1, parsed);
     // The story: the title, then the ranges, each after a break from the one
-    // before (`InsertEndnote` appends to the title's paragraph).
-    let options = document
-        .designmap
-        .endnote_options
-        .clone()
-        .unwrap_or_default();
-    let separator = options
-        .separator_text
-        .clone()
-        .unwrap_or_else(|| "\t".to_string());
-    let mut text = options
-        .title
-        .clone()
-        .unwrap_or_else(|| "Endnotes".to_string());
+    // before (`InsertEndnote` appends to the title's paragraph). The note
+    // options are the engine's defaults here: the skeleton sets none, and the
+    // pour sets the document's after it (title "Endnotes", a tab for the
+    // separator, no title style).
+    let mut text = String::from("Endnotes");
     let mut ranges = Vec::with_capacity(notes.len());
     for n in notes {
         text.push('\n');
         text.push(BOM);
         text.push(ENDNOTE_NUMBER_MARKER);
-        text.push_str(&separator);
+        text.push('\t');
         text.push_str(&n.text);
         text.push(BOM);
         ranges.push(EndnoteRangeDef {
@@ -155,23 +156,13 @@ pub fn add_endnote_story(document: &mut Document, notes: &[NativeEndnote]) -> Re
             source: Some(n.id.clone()),
         });
     }
-    document.stories.push(ParsedStory {
-        // Minted post-parse: the writer emits a fresh part for it.
-        src: String::new(),
-        self_id: ENDNOTE_STORY.into(),
-        story: Story {
-            paragraphs: vec![Paragraph {
-                paragraph_style: options.title_style.clone(),
-                runs: vec![CharacterRun {
-                    text,
-                    ..CharacterRun::default()
-                }],
-                endnote_ranges: ranges,
-                ..Paragraph::default()
-            }],
-            is_endnote_story: true,
-            ..Story::default()
-        },
-    });
+    let mut story = empty_story(String::new(), ENDNOTE_STORY.into());
+    story.story.is_endnote_story = true;
+    let title = &mut story.story.paragraphs[0];
+    title.paragraph_style = None;
+    title.runs.push(CharacterRun::default());
+    title.runs[0].text = text;
+    title.endnote_ranges = ranges;
+    document.stories.push(story);
     Ok(())
 }

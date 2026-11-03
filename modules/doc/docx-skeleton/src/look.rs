@@ -36,8 +36,8 @@ use std::collections::BTreeSet;
 
 use dml_native::native::{NativeEffect, NativeFx, NativeGradient};
 use paged_model::effect_stack::{
-    defaults, ColorOverlayParams, Effect, EffectBearing, EffectEntry, EffectTarget,
-    GaussianBlurParams, IndesignEffect, ReflectionParams,
+    defaults, ColorOverlayParams, Effect, EffectEntry, GaussianBlurParams, IndesignEffect,
+    ReflectionParams,
 };
 use paged_model::{
     AnchoredFrame, ColorEntry, ColorModel, ColorSpace, GradientEntry, GradientFeatherParams,
@@ -178,19 +178,19 @@ fn nonempty(s: &str) -> Option<String> {
     (!s.is_empty()).then(|| s.to_string())
 }
 
-fn finite(name: &str, v: Option<f32>) -> Result<Option<f32>, String> {
+fn finite(v: Option<f32>) -> Result<Option<f32>, String> {
     match v {
-        Some(x) if !x.is_finite() => Err(format!("`{name}` must be a finite number")),
+        Some(x) if !x.is_finite() => Err("an effect parameter is not a finite number".into()),
         _ => Ok(v),
     }
 }
 
-fn pct(name: &str, v: Option<f32>) -> Result<Option<f32>, String> {
-    Ok(finite(name, v)?.map(|x| x.clamp(0.0, 100.0)))
+fn pct(v: Option<f32>) -> Result<Option<f32>, String> {
+    Ok(finite(v)?.map(|x| x.clamp(0.0, 100.0)))
 }
 
-fn length(name: &str, v: Option<f32>) -> Result<Option<f32>, String> {
-    Ok(finite(name, v)?.map(|x| x.max(0.0)))
+fn length(v: Option<f32>) -> Result<Option<f32>, String> {
+    Ok(finite(v)?.map(|x| x.max(0.0)))
 }
 
 /// An InDesign effect by the name the stack serialises.
@@ -210,7 +210,7 @@ fn stack_entry(e: &NativeEffect, needs: &mut LookNeeds) -> Result<EffectEntry, S
             "gaussianBlur" => {
                 let d = GaussianBlurParams::default();
                 Effect::GaussianBlur(GaussianBlurParams {
-                    radius_pt: length("radiusPt", e.radius_pt)?.unwrap_or(d.radius_pt),
+                    radius_pt: length(e.radius_pt)?.unwrap_or(d.radius_pt),
                 })
             }
             "colorOverlay" => Effect::ColorOverlay(ColorOverlayParams {
@@ -223,16 +223,14 @@ fn stack_entry(e: &NativeEffect, needs: &mut LookNeeds) -> Result<EffectEntry, S
             "reflection" => {
                 let d = ReflectionParams::default();
                 Effect::Reflection(ReflectionParams {
-                    distance_pt: length("distancePt", e.distance_pt)?.unwrap_or(d.distance_pt),
-                    size_pct: pct("sizePct", e.size_pct)?.unwrap_or(d.size_pct),
-                    start_opacity_pct: pct("startOpacityPct", e.start_opacity_pct)?
-                        .unwrap_or(d.start_opacity_pct),
-                    end_opacity_pct: pct("endOpacityPct", e.end_opacity_pct)?
-                        .unwrap_or(d.end_opacity_pct),
-                    blur_pt: length("blurPt", e.blur_pt)?.unwrap_or(d.blur_pt),
+                    distance_pt: length(e.distance_pt)?.unwrap_or(d.distance_pt),
+                    size_pct: pct(e.size_pct)?.unwrap_or(d.size_pct),
+                    start_opacity_pct: pct(e.start_opacity_pct)?.unwrap_or(d.start_opacity_pct),
+                    end_opacity_pct: pct(e.end_opacity_pct)?.unwrap_or(d.end_opacity_pct),
+                    blur_pt: length(e.blur_pt)?.unwrap_or(d.blur_pt),
                 })
             }
-            other => return Err(format!("effect `{other}` has no native form here")),
+            _ => return Err("an effect with no native form here".into()),
         },
     };
     let stack_only = effect.indesign().is_none();
@@ -244,7 +242,7 @@ fn stack_entry(e: &NativeEffect, needs: &mut LookNeeds) -> Result<EffectEntry, S
             None
         },
         opacity_pct: if stack_only {
-            pct("opacityPct", e.opacity_pct)?
+            pct(e.opacity_pct)?
         } else {
             None
         },
@@ -365,19 +363,27 @@ pub fn paint_frame(
             ..Default::default()
         });
     }
-    // The stack last: its InDesign entries take the parameters written above.
+    // The stack last. The model's `set_stack` is not called (it links the
+    // whole slot-moving machinery into the doc wasm): the mapper states a
+    // stack only when it holds an effect InDesign has none of, so the stack
+    // is never the canonical one `set_stack` would fold away, and each
+    // InDesign entry's parameters are the slots written above.
     if !fx.effect_stack.is_empty() {
-        let stack = fx
-            .effect_stack
-            .iter()
-            .map(|e| stack_entry(e, needs))
-            .collect::<Result<Vec<_>, _>>()?;
-        let before = f.effect_state(EffectTarget::Object);
-        if let Err(e) = f.effect_slots_mut(EffectTarget::Object).set_stack(stack) {
-            f.restore_effect_state(EffectTarget::Object, before);
-            return Err(e.to_string());
+        let mut seen = std::collections::HashSet::new();
+        let mut stack = Vec::with_capacity(fx.effect_stack.len());
+        for e in &fx.effect_stack {
+            let entry = stack_entry(e, needs)?;
+            if let Some(k) = entry.effect.indesign() {
+                if !seen.insert(k) {
+                    return Err("an InDesign effect twice in the stack".into());
+                }
+            }
+            stack.push(entry);
         }
-        f.tidy_targets();
+        if !stack.iter().any(|e| e.effect.indesign().is_none()) {
+            return Err("a stack of InDesign effects alone".into());
+        }
+        f.effect_stack = stack;
     }
     Ok(())
 }
