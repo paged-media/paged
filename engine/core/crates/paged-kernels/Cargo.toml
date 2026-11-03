@@ -20,4 +20,4 @@ reference = []
 cpu = []
 
 [dependencies]
-bytemuck = { version = "1", features = ["derive"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
