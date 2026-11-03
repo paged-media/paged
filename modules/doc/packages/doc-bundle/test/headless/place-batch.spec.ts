@@ -190,7 +190,7 @@ async function place(name: string, native: boolean): Promise<Placed> {
         payload: { storyId, offset: 0 },
       })
     ).payload?.bounds ?? null;
-  if (name === "direct-format.docx" && native) {
+  if (name === "direct-format.docx") {
     const pg = await send({
       kind: "requestPage",
       payload: { pageId: pageIds[0], lod: "live" },
