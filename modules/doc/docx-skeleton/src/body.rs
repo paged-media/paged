@@ -50,7 +50,7 @@ use paged_model::{
     TextWrap, TextWrapMode, TextWrapSide, WordField, WordTableLayout,
 };
 use paged_model::{Change, ChangeKind, Comment, FormatChange, ParaPropsChange};
-use paged_model::{Footnote, FOOTNOTE_REFERENCE_MARKER};
+use paged_model::{Footnote, StoryDestination, FOOTNOTE_REFERENCE_MARKER};
 
 /// The id prefix of the styles the lowering synthesizes for direct
 /// formatting (`docx-lower` `synthesize`).
@@ -75,6 +75,8 @@ pub struct NativeBody {
     pub blocks: Vec<NativeBlock>,
     /// The hyperlinks the blocks' runs name.
     pub links: Vec<NativeLink>,
+    /// The Word bookmarks that start in each block's paragraph, by name.
+    pub marks: Vec<Vec<String>>,
 }
 
 impl NativeBody {
@@ -479,8 +481,6 @@ fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
         Some("picture look")
     } else if !p.segments.is_empty() {
         Some("page or column break inside the paragraph")
-    } else if !p.bookmarks.is_empty() {
-        Some("bookmark")
     } else if !p.text_boxes.is_empty() {
         Some("text box")
     } else {
@@ -984,9 +984,25 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
             },
         })
         .collect();
+    // Word's hidden bookmark for the last edit place is not a destination.
+    let marks = doc
+        .story
+        .blocks
+        .iter()
+        .map(|b| match b {
+            LoweredBlock::Paragraph(p) => p
+                .bookmarks
+                .iter()
+                .filter(|n| n.as_str() != "_GoBack")
+                .cloned()
+                .collect(),
+            LoweredBlock::Table(_) => Vec::new(),
+        })
+        .collect();
     NativeBody {
         blocks,
         links: minted.links,
+        marks,
     }
 }
 
@@ -997,6 +1013,8 @@ pub struct NativeStories {
     pub links: Vec<NativeLink>,
     /// Each story's comment threads, parallel to `stories`.
     pub comments: Vec<Vec<Comment>>,
+    /// Each story's bookmarks (text anchors), parallel to `stories`.
+    pub destinations: Vec<Vec<StoryDestination>>,
 }
 
 /// The body's native stories, one per skeleton story and in its order, when
@@ -1008,11 +1026,9 @@ pub struct NativeStories {
 /// that joins the story before it adds its blocks to that story.
 pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     // What the body carries outside its blocks and the old path places.
-    if !doc.tocs.is_empty() {
-        return None;
-    }
     let body = native_body(doc);
     let links = body.links;
+    let marks = body.marks;
     let mut paras = Vec::with_capacity(body.blocks.len());
     for b in body.blocks {
         match b {
@@ -1039,10 +1055,32 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
         }
     }
     let mut out = Vec::with_capacity(starts.len());
+    let mut destinations = Vec::with_capacity(starts.len());
+    let mut named = std::collections::BTreeSet::new();
+    let mut anchors = 0usize;
     for (k, &start) in starts.iter().enumerate() {
         let end = starts.get(k + 1).copied().unwrap_or(paras.len());
         let slice = paras.get(start..end.min(paras.len()))?;
         out.push(slice.to_vec());
+        // Doc ADR 612 — a bookmark stands at the start of the paragraph it
+        // opens in; the engine keeps a name once.
+        let mut story_marks = Vec::new();
+        for (j, names) in marks[start..end.min(marks.len())].iter().enumerate() {
+            for name in names {
+                if !named.insert(name.clone()) {
+                    continue;
+                }
+                story_marks.push(StoryDestination {
+                    self_id: format!("docx_bm{anchors}"),
+                    name: Some(name.clone()),
+                    paragraph: j as u32,
+                    offset: 0,
+                    paragraph_destination: false,
+                });
+                anchors += 1;
+            }
+        }
+        destinations.push(story_marks);
     }
     // Doc ADR 613 — each thread whose range is in a story belongs to it:
     // the first comment over the runs that name it, its replies after it.
@@ -1085,5 +1123,6 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
         stories: out,
         links,
         comments,
+        destinations,
     })
 }

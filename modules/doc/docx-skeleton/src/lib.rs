@@ -225,6 +225,7 @@ pub fn skeleton_prefilled(
     };
     let stories = native.stories;
     let comments = native.comments;
+    let destinations = native.destinations;
     let pages = skeleton_pages_with(doc, options);
     if stories.len() != pages.len() {
         return Ok(None);
@@ -269,6 +270,7 @@ pub fn skeleton_prefilled(
         };
         parsed.story.paragraphs = paragraphs;
         parsed.story.comments = comments[k].clone();
+        parsed.story.destinations = destinations[k].clone();
     }
     let (w, h) = pages
         .first()

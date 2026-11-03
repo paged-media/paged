@@ -193,6 +193,14 @@ range is in the story, its replies after it); the document's change tracking is 
 the bundle once the document stands. Reviewed fields and note references, and a comment on a table
 cell's text (the old pour places none), stay deferred.
 
+### Slice 7 (part): bookmarks and tables of contents
+
+A Word bookmark is a `StoryDestination` (text anchor) of the story, at the start of the paragraph it
+opens in (the paragraph's index in the story, offset 0); Word's hidden `_GoBack` is none and a name
+is kept once, as the engine keeps it. A table of contents is its cached entries, which are ordinary
+paragraphs with live `PAGEREF` fields: the pour never read `LoweredDoc::tocs`, so nothing is built
+for them.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

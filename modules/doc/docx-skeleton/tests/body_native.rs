@@ -735,3 +735,32 @@ fn the_bundles_review_fixture_is_built_whole() {
     assert!(runs.iter().any(|r| r.format_change.is_some()));
     assert!(runs.iter().any(|r| !r.comments.is_empty()));
 }
+
+#[test]
+fn bookmarks_and_a_table_of_contents_are_built_whole() {
+    let bytes = include_bytes!("../../packages/doc-bundle/test/fixtures/toc-body.docx");
+    let ir = lowered(bytes);
+    let body = native_body(&ir);
+    let why: Vec<_> = body
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Deferred { reason } => Some(reason.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(why.is_empty(), "deferred: {why:?}");
+    let stories = docx_skeleton::body::native_stories(&ir).expect("whole");
+    let names: Vec<_> = stories.destinations[0]
+        .iter()
+        .filter_map(|d| d.name.as_deref())
+        .collect();
+    assert!(
+        names.contains(&"_Toc1") && names.contains(&"_Toc2"),
+        "{names:?}"
+    );
+    // Each anchor stands in a paragraph of the story.
+    for d in &stories.destinations[0] {
+        assert!((d.paragraph as usize) < stories.stories[0].len());
+    }
+}
