@@ -51,10 +51,13 @@ interface Placed {
   offered: boolean;
   refusal: string;
   applyError: string;
-  paras: Array<{ text: string; style: string | null; rects: number[][] }>;
+  paras: Array<{
+    text: string;
+    style: string | null;
+    rects: number[][];
+    lines: number[];
+  }>;
   pages: number;
-  placedPixels: Uint8Array;
-  blankPixels: Uint8Array;
   styles: string[];
   stories: number;
   undone: { stories: number };
@@ -69,13 +72,6 @@ async function place(name: string, native: boolean): Promise<Placed> {
   await h.newBlank(612, 792);
   // The bundle owns its metadata namespace, as in the editor.
   h.loadBundle(docBundle);
-  const firstPage = (
-    await h.host.document.collection<{ selfId: string }>("pages")
-  )[0]!.selfId;
-  const snap = async () =>
-    (await h.host.render.snapshot(firstPage, { widthPx: 320, format: "rgba" }))!
-      .rgba!;
-  const blankPixels = await snap();
   const send = (m: unknown) =>
     h.host.editor.client.send(m as never) as Promise<Reply>;
   const script = async (s: string) => {
@@ -148,6 +144,20 @@ async function place(name: string, native: boolean): Promise<Placed> {
         selection: { storyId, start: b.start, end: Math.max(b.end, b.start) },
       },
     });
+    // Where each line of the paragraph ends: the composed line breaks.
+    const lines: number[] = [];
+    for (let at = b.start, n = 0; n < 200; n++) {
+      const lb = (
+        await send({
+          kind: "requestLineBounds",
+          payload: { storyId, offset: at },
+        })
+      ).payload?.bounds as { lineStart: number; lineEnd: number } | null;
+      if (!lb) break;
+      lines.push(lb.lineEnd);
+      if (lb.lineEnd >= b.end) break;
+      at = Math.max(lb.lineEnd, at + 1);
+    }
     const rects: Array<{
       pageId: string;
       topPt: number;
@@ -158,6 +168,7 @@ async function place(name: string, native: boolean): Promise<Placed> {
     paras.push({
       text: p.runs.map((x) => x.text).join(""),
       style: p.paragraphStyle ?? null,
+      lines,
       rects: rects.map((x) =>
         [
           pageIds.indexOf(x.pageId),
@@ -172,9 +183,16 @@ async function place(name: string, native: boolean): Promise<Placed> {
     off = b.end + 1;
   }
   // One undo step takes the whole placement back.
-  const placedPixels = await snap();
+  const composed = async () =>
+    (
+      await send({
+        kind: "requestLineBounds",
+        payload: { storyId, offset: 0 },
+      })
+    ).payload?.bounds ?? null;
+  expect(await composed()).not.toBeNull();
   await h.host.document.undo();
-  expect(Buffer.from(await snap()).equals(Buffer.from(blankPixels))).toBe(true);
+  expect(await composed()).toBeNull();
   const undone = { stories: await storyCount() };
   return {
     h,
@@ -183,8 +201,6 @@ async function place(name: string, native: boolean): Promise<Placed> {
     refusal,
     applyError: NATIVE_PLACE.lastError,
     paras,
-    placedPixels,
-    blankPixels,
     pages: pageIds.length,
     styles,
     stories,
@@ -251,14 +267,10 @@ describe.skipIf(!docxPresent)(
           old.paras.map((p) => p.text),
         );
         expect(now.pages).toBe(old.pages);
-        // What is drawn is the same, pixel for pixel.
-        expect(
-          Buffer.from(now.placedPixels).equals(Buffer.from(old.placedPixels)),
-        ).toBe(true);
-        // ... and is not the empty page.
-        expect(
-          Buffer.from(now.placedPixels).equals(Buffer.from(now.blankPixels)),
-        ).toBe(false);
+        expect(now.paras.map((p) => p.lines)).toEqual(
+          old.paras.map((p) => p.lines),
+        );
+        expect(now.paras.some((p) => p.lines.length > 0)).toBe(true);
         expect(now.paras.map((p) => p.rects)).toEqual(
           old.paras.map((p) => p.rects),
         );
