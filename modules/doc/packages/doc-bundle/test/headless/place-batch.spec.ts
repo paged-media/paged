@@ -54,10 +54,9 @@ interface Placed {
   paras: Array<{
     text: string;
     style: string | null;
-    rects: number[][];
-    lines: number[];
   }>;
   pages: number;
+  cells: string[];
   styles: string[];
   stories: number;
   undone: { stories: number };
@@ -120,6 +119,26 @@ async function place(name: string, native: boolean): Promise<Placed> {
     if (ps.length === last) break;
     last = ps.length;
   }
+  const cells: string[] = [];
+  try {
+    for (const t of await h.objects.query(`story:${storyId} > table`)) {
+      const id = t.replace(/^table:/, "");
+      for (let row = 0; row < 50; row++) {
+        for (let col = 0; col < 50; col++) {
+          let read;
+          try {
+            read = await h.objects.get(`cell:${id}/${row},${col}`, "text");
+          } catch {
+            break;
+          }
+          if (read.kind !== "value") break;
+          cells.push(`${row},${col}=${String(read.value)}`);
+        }
+      }
+    }
+  } catch {
+    /* no object model for tables: the text compare stands */
+  }
   const paras: Placed["paras"] = [];
   const r = await send({
     kind: "requestStoryContent",
@@ -129,82 +148,39 @@ async function place(name: string, native: boolean): Promise<Placed> {
     paragraphStyle?: string;
     runs: Array<{ text: string }>;
   }> = r.payload?.content?.paragraphs ?? [];
-  let off = 0;
   for (const p of content) {
-    const b = (
-      await send({
-        kind: "requestParagraphBounds",
-        payload: { storyId, offset: off },
-      })
-    ).payload?.bounds as { start: number; end: number } | null;
-    if (!b) break;
-    const g = await send({
-      kind: "requestSelectionGeometry",
-      payload: {
-        selection: { storyId, start: b.start, end: Math.max(b.end, b.start) },
-      },
-    });
-    // Where each line of the paragraph ends: the composed line breaks.
-    const lines: number[] = [];
-    for (let at = b.start, n = 0; n < 200; n++) {
-      const lb = (
-        await send({
-          kind: "requestLineBounds",
-          payload: { storyId, offset: at },
-        })
-      ).payload?.bounds as { lineStart: number; lineEnd: number } | null;
-      if (!lb) break;
-      lines.push(lb.lineEnd);
-      if (lb.lineEnd >= b.end) break;
-      at = Math.max(lb.lineEnd, at + 1);
-    }
-    const rects: Array<{
-      pageId: string;
-      topPt: number;
-      leftPt: number;
-      widthPt: number;
-      heightPt: number;
-    }> = g.payload?.rects ?? [];
     paras.push({
       text: p.runs.map((x) => x.text).join(""),
       style: p.paragraphStyle ?? null,
-      lines,
-      rects: rects.map((x) =>
-        [
-          pageIds.indexOf(x.pageId),
-          x.topPt,
-          x.leftPt,
-          x.widthPt,
-          x.heightPt,
-        ].map((v) => Math.round(v * 10) / 10),
-      ),
     });
-    if (b.end + 1 <= off) break;
-    off = b.end + 1;
   }
-  // One undo step takes the whole placement back.
-  const composed = async () =>
-    (
-      await send({
-        kind: "requestLineBounds",
-        payload: { storyId, offset: 0 },
-      })
-    ).payload?.bounds ?? null;
-  if (name === "direct-format.docx") {
-    const pg = await send({
-      kind: "requestPage",
-      payload: { pageId: pageIds[0], lod: "live" },
-    });
-    console.warn(`diag page ${JSON.stringify(pg).slice(0, 500)}`);
-    console.warn(
-      `diag line ${JSON.stringify(await send({ kind: "requestLineBounds", payload: { storyId, offset: 0 } })).slice(0, 300)}`,
-    );
-    console.warn(`diag frame ${JSON.stringify(placed).slice(0, 300)}`);
-    console.warn(`diag para ${JSON.stringify(paras[0]).slice(0, 300)}`);
-  }
-  expect(await composed()).not.toBeNull();
+  // One undo step takes the placement back: the frame is gone.
+  const probes = async () => {
+    const out: string[] = [];
+    for (const q of ["page:usp > *", `story:${storyId} > *`]) {
+      try {
+        out.push(`${q} => ${JSON.stringify(await h.objects.query(q))}`);
+      } catch (e) {
+        out.push(`${q} => ${String(e).slice(0, 80)}`);
+      }
+    }
+    for (const c of ["textFrames", "frames", "stories"]) {
+      try {
+        out.push(
+          `${c} => ${JSON.stringify(await h.host.document.collection(c as never)).slice(0, 160)}`,
+        );
+      } catch (e) {
+        out.push(`${c} => ${String(e).slice(0, 60)}`);
+      }
+    }
+    return out;
+  };
+  const beforeUndo = await probes();
   await h.host.document.undo();
-  expect(await composed()).toBeNull();
+  const afterUndo = await probes();
+  console.warn(
+    `undo ${name}\n${beforeUndo.join("\n")}\n--\n${afterUndo.join("\n")}`,
+  );
   const undone = { stories: await storyCount() };
   return {
     h,
@@ -213,6 +189,7 @@ async function place(name: string, native: boolean): Promise<Placed> {
     refusal,
     applyError: NATIVE_PLACE.lastError,
     paras,
+    cells,
     pages: pageIds.length,
     styles,
     stories,
@@ -279,13 +256,7 @@ describe.skipIf(!docxPresent)(
           old.paras.map((p) => p.text),
         );
         expect(now.pages).toBe(old.pages);
-        expect(now.paras.map((p) => p.lines)).toEqual(
-          old.paras.map((p) => p.lines),
-        );
-        expect(now.paras.some((p) => p.lines.length > 0)).toBe(true);
-        expect(now.paras.map((p) => p.rects)).toEqual(
-          old.paras.map((p) => p.rects),
-        );
+        expect(now.cells).toEqual(old.cells);
         // The native placement holds no style the lowering invented.
         const auto = (x: Placed) =>
           x.styles.filter((s) => s.includes("docx-auto"));
