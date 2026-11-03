@@ -105,6 +105,16 @@ mod wasm {
                 .ok_or_else(|| JsValue::from_str("no document loaded"))
         }
 
+        /// Doc ADR 625 amendment — the embedded placement as a batch of the
+        /// engine's existing operations (JSON: `styleOps` and `bodyOps`, or
+        /// the `reason` it is not one the batch builder takes yet).
+        pub fn place_batch(&self, story: &str) -> Result<String, JsValue> {
+            self.session
+                .as_ref()
+                .map(|s| s.place_batch_json(story))
+                .ok_or_else(|| JsValue::from_str("no document loaded"))
+        }
+
         /// Number of top-level body blocks in the loaded document.
         pub fn block_count(&self) -> usize {
             self.session.as_ref().map(|s| s.block_count()).unwrap_or(0)
