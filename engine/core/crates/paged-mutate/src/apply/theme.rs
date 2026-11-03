@@ -963,8 +963,7 @@ mod tests {
         assert!(apply_create_from_swatches(&mut doc, "", &[], true).is_err());
         assert!(apply_create_from_swatches(&mut doc, "", &one("accent1", "Cmyk"), true).is_err());
         let spot = apply_create_from_swatches(&mut doc, "", &one("accent1", "Spot"), true)
-            .err()
-            .expect("a spot swatch never follows a slot")
+            .expect_err("a spot swatch never follows a slot")
             .to_string();
         assert!(spot.contains("spot"), "{spot}");
         assert!(apply_create_from_swatches(&mut doc, "", &one("accent9", "Cmyk"), true).is_err());
@@ -1094,8 +1093,7 @@ mod tests {
             }),
         };
         let err = apply_create_swatch(&mut doc, &spec("Spot", "CMYK", vec![0.0, 0.0, 0.0, 100.0]))
-            .err()
-            .expect("refused")
+            .expect_err("refused")
             .to_string();
         assert!(err.contains("spot"), "{err}");
         assert!(!doc.palette.colors.contains_key("Color/s"));
