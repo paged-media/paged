@@ -76,8 +76,8 @@ The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-ow
 Blend enums: one, `paged_blend::BlendMode` (the image twin's `Blend` is that type; `compose_twin::from_kernel_id`
 resolves `compose.<id>`). Allowed with a reason: the camelCase wire enum `SceneBlendMode` in `scene_layer.rs`,
 `web-render`'s two mirrors of it, and the ABR wrapper in `paged-psd` (it adds ABR-only texture modes). Kernel
-definitions (engine ADR 1013): the model (`KernelDef` and its types) and the `conv` family are in
-`paged-kernels`; the other families (~20k lines in `image-kernels/families`) move one at a time, by the
+definitions (engine ADR 1013): the model (`KernelDef` and its types), the `kernel_family!` macro, the ABI assembler (`abi`), the reference prelude and the `conv` family are in
+`paged-kernels` (`image-kernels` re-exports them; its `reference` / `cpu` features forward to `paged-kernels`); the other families (~20k lines in `image-kernels/families`) move one at a time, by the
 rule in the record (the engine can reach the kernel), each behind the registry gate and the conformance goldens. Decoders: `paged-export-pdf/image.rs` decodes an encoded-only image through
 `paged_raster::decode_rgba8_at_with` (a TIFF or PSD converts through its profile; PNG, WebP and the other
 `image` formats are byte-identical to before), and `web-bundle`'s PNG writer is `@paged-media/helpers`'

@@ -25,8 +25,8 @@
 //! thing in both languages. f32, no fast-math, fixed evaluation order:
 //! bit-stable across platforms by construction (spec §6.3).
 
-/// The pixel lives in `paged-kernels` (engine ADR 1013's first step).
-pub use paged_kernels::Px;
+/// The pixel type of the kernel twins.
+pub use crate::Px;
 
 /// WGSL `splat4` (see `abi::WGSL_PRELUDE`).
 pub fn splat4(x: f32) -> Px {

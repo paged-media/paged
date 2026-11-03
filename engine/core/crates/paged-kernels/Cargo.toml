@@ -10,5 +10,14 @@ description = "Kernel definitions shared by the engine and paged.image (PM-0014,
 [lints]
 workspace = true
 
+[features]
+default = []
+# The scalar reference twins `kernel_family!` emits (test-only golden source,
+# image spec 6.3). Enabled solely through image-conformance, via image-kernels.
+reference = []
+# The shipped CPU twins' prelude (image ADR 465). image-js turns it on, via
+# image-kernels.
+cpu = []
+
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }

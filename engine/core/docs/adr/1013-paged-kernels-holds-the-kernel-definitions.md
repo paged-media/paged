@@ -87,3 +87,19 @@ A step is bit-exact or it does not land:
   is unchanged: `paged-kernels` is one of the leaves.
 - `image-kernels` shrinks by one family per step; the register's line count for the open row
   becomes the sum of the families that stay.
+
+## Amendment 2026-11-03 — step 3, the macro and the assembler
+
+`kernel_family!` (`family.rs`), the ABI assembler (`abi.rs`) and `reference_prelude.rs` moved
+by `git mv`; the text changed in three places only: the macro's `$crate::KernelDef`,
+`ParamsLayout` and `ParamField` paths name `$crate::def::…`; `abi.rs` reads `def::KernelDef` and
+`def::ABI_VERSION`; `reference_prelude` takes `Px` from `crate`. `GROUPS_PER_TILE` named
+`image_core::TILE`, which a leaf crate cannot, so it stayed: `image-kernels/src/abi.rs` is
+`pub use paged_kernels::abi::*;` plus that one constant.
+
+The macro's `cfg(feature = "reference" | "cpu")` is evaluated in the crate that expands it, and
+the twins it emits name `$crate::reference_prelude`. `paged-kernels` therefore has the same two
+features, and `image-kernels`' `reference` and `cpu` forward to them; image-ci's guard against
+the reference feature in the wasm tree now matches either crate. `image-kernels` brings the
+macro into scope with `#[macro_use] extern crate paged_kernels` and re-exports it as
+`image_kernels::kernel_family`.
