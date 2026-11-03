@@ -176,6 +176,11 @@ pub enum XmlError {
     /// A character or entity reference could not be resolved.
     #[error(transparent)]
     Escape(#[from] quick_xml::escape::EscapeError),
+
+    /// Well-formed text that is not the element tree asked for (no root
+    /// element, an end tag with no start).
+    #[error("{0}")]
+    Structure(String),
 }
 
 impl From<quick_xml::events::attributes::AttrError> for XmlError {
