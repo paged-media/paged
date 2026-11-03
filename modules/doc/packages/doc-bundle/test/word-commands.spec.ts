@@ -17,7 +17,7 @@
  */
 
 // Doc ADR 608 — Word's formatting verbs as values (format.ts), the word
-// count (word-count.ts) and every Word command's write (commands.ts), over
+// count (now the host Info panel's) and every Word command's write (commands.ts), over
 // a recording host.text: what each command reads and what it writes.
 
 import { describe, expect, it } from "bun:test";
@@ -51,7 +51,6 @@ import {
   styleNamed,
   toggledFontStyle,
 } from "../src/word/format";
-import { countWords, rangeText, storyWords } from "../src/word/word-count";
 
 describe("Word's formatting verbs (format.ts)", () => {
   it("Bold and Italic toggle a font style, keeping the other", () => {
@@ -108,26 +107,6 @@ describe("Word's formatting verbs (format.ts)", () => {
       "ParagraphStyle/docx-Heading1",
     );
     expect(styleNamed(styles, "Heading 2")).toBeNull();
-  });
-});
-
-describe("word count (word-count.ts)", () => {
-  it("counts word-like segments, not punctuation", () => {
-    expect(countWords("")).toBe(0);
-    expect(countWords("Hello, world — it's 2026!")).toBe(4);
-    expect(countWords("  ")).toBe(0);
-  });
-  it("counts stories and content ranges", () => {
-    const story = {
-      paragraphs: [
-        { runs: [{ text: "Grüße an " }, { text: "alle" }] },
-        { runs: [{ text: "zwei Wörter" }] },
-      ],
-    };
-    expect(storyWords([story])).toBe(5);
-    // "Grüße" is 7 bytes; the paragraph break is one.
-    expect(rangeText(story, 0, 7)).toBe("Grüße");
-    expect(rangeText(story, 0, 16)).toBe("Grüße an alle\n");
   });
 });
 

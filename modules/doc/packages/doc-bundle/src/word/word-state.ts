@@ -18,19 +18,17 @@
 
 // The Word chrome's live state (doc ADR 608): what the Home group shows for
 // the selection (its effective format), the document's styles, fonts and
-// swatches, and what the status items read (page X of Y, the word counts).
+// swatches, and what the status items read (page X of Y; the word counts are the host Info panel's).
 // One store per activation; `refresh*` re-reads from the host and the
 // components subscribe (`useLive(store, subscribeOf)`).
 
 import type { BundleHost, PropertyPath } from "@paged-media/plugin-api";
 
 import type { Read, StyleRow } from "./format.js";
-import {
-  rangeText,
-  countWords,
-  storyWords,
-  type StoryText,
-} from "./word-count.js";
+/** A story as the engine reports it (`host.document.storyContent`). */
+export interface StoryText {
+  paragraphs: ReadonlyArray<{ runs: ReadonlyArray<{ text: string }> }>;
+}
 
 /** The paths the Home group shows. */
 export const SHOWN_PATHS = [
@@ -72,7 +70,6 @@ export interface WordSnapshot {
   fonts: string[];
   swatches: Array<{ selfId: string; name: string }>;
   page: { index: number; count: number } | null;
-  words: { total: number; selected: number | null } | null;
 }
 
 export interface WordStore {
@@ -81,7 +78,6 @@ export interface WordStore {
   refreshFormat(): Promise<void>;
   refreshDocument(): Promise<void>;
   refreshPage(): Promise<void>;
-  refreshWords(): Promise<void>;
   /** Read whether the document shows hidden text. */
   refreshShowHidden(): Promise<void>;
   /** Ask the style box for the focus. */
@@ -98,18 +94,12 @@ const EMPTY: WordSnapshot = {
   fonts: [],
   swatches: [],
   page: null,
-  words: null,
 };
 
 /**
- * The store over `host`. `docStories` names the stories that are the Word
- * document (its sections) for the word count; an empty answer counts the
- * story the selection is in.
+ * The store over `host`.
  */
-export function createWordStore(
-  host: BundleHost,
-  docStories: () => Promise<string[]>,
-): WordStore {
+export function createWordStore(host: BundleHost): WordStore {
   let snap: WordSnapshot = EMPTY;
   const listeners = new Set<() => void>();
   const set = (patch: Partial<WordSnapshot>) => {
@@ -117,7 +107,7 @@ export function createWordStore(
     for (const fn of [...listeners]) fn();
   };
   // Answers arrive out of order; only the newest request of each kind lands.
-  const latest = { format: 0, words: 0 };
+  const latest = { format: 0 };
 
   const story = async (id: string): Promise<StoryText | null> => {
     try {
@@ -203,23 +193,6 @@ export function createWordStore(
     },
     requestStyleBoxFocus() {
       set({ focusStyleBox: snap.focusStyleBox + 1 });
-    },
-    async refreshWords() {
-      if (!host.supports("document.readStory@1")) return;
-      const ask = ++latest.words;
-      const sel = host.text.selection();
-      const ids = await docStories();
-      const all = ids.length > 0 ? ids : sel ? [sel.storyId] : [];
-      const stories = (await Promise.all(all.map(story))).filter(
-        (s): s is StoryText => s !== null,
-      );
-      let selected: number | null = null;
-      if (sel && sel.start !== sel.end) {
-        const s = await story(sel.storyId);
-        if (s) selected = countWords(rangeText(s, sel.start, sel.end));
-      }
-      if (ask !== latest.words) return;
-      set({ words: { total: storyWords(stories), selected } });
     },
   };
 }

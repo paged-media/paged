@@ -28,7 +28,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 
 import type { WordCommandName } from "../../src/word/commands";
 import { makeHomeGroup } from "../../src/word/home-group";
-import { makePageStatus, makeWordsStatus } from "../../src/word/status-items";
+import { makePageStatus } from "../../src/word/status-items";
 import type { WordSnapshot, WordStore } from "../../src/word/word-state";
 
 afterEach(() => cleanup());
@@ -44,7 +44,6 @@ function store(snap: Partial<WordSnapshot>): WordStore {
     fonts: [],
     swatches: [],
     page: null,
-    words: null,
     ...snap,
   };
   return {
@@ -53,7 +52,6 @@ function store(snap: Partial<WordSnapshot>): WordStore {
     refreshFormat: async () => {},
     refreshDocument: async () => {},
     refreshPage: async () => {},
-    refreshWords: async () => {},
     refreshShowHidden: async () => {},
     requestStyleBoxFocus: () => {},
   };
@@ -247,24 +245,18 @@ describe("the Home group's wave-1 additions (doc ADR 608 amendment 1)", () => {
 });
 
 describe("the Word status items", () => {
-  it("read page X of Y and the words, the selection's of the document's", () => {
+  it("read page X of Y", () => {
     const s = store({
       page: { index: 1, count: 3 },
-      words: { total: 120, selected: 4 },
     });
     const Page = makePageStatus(s);
-    const Words = makeWordsStatus(s);
     const { container } = render(
       <>
         <Page editContext="wordDocument" />
-        <Words editContext="wordDocument" />
       </>,
     );
     expect(
       container.querySelector('[data-word-status="page"]')!.textContent,
     ).toBe("Page 2 of 3");
-    expect(
-      container.querySelector('[data-word-status="words"]')!.textContent,
-    ).toBe("4 of 120 words");
   });
 });

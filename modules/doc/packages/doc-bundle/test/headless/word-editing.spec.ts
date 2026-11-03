@@ -102,7 +102,6 @@ describe.skipIf(!docxPresent)(
       ]);
       expect(h.statusItemsContributed().map((s) => s.id)).toEqual([
         "media.paged.doc.status.page",
-        "media.paged.doc.status.words",
         "media.paged.doc.status.zoom",
         // Doc ADR 613 — the review chrome's Track Changes state.
         "media.paged.doc.status.trackChanges",
@@ -297,18 +296,6 @@ describe.skipIf(!docxPresent)(
       const kind = { storyId: STORY, start: 72, end: 76 };
       await run("pasteFormat", kind);
       expect(await read("characterFontStyle")).toBe("Bold");
-    });
-
-    it("counts the document's words and the selection's over the story text", async () => {
-      const { countWords, rangeText, storyWords } =
-        await import("../../src/word/word-count");
-      const content = (await h.host.document.storyContent(STORY))!;
-      // Quarterly letter · Dear Name · Thank you for your order ·
-      // Apples · Pears · Plums · Kind regards
-      expect(storyWords([content])).toBe(14);
-      // "Dear «Name»," — the guillemets are two bytes each.
-      expect(rangeText(content, 17, 31)).toBe("Dear «Name»,");
-      expect(countWords(rangeText(content, 17, 31))).toBe(2);
     });
   },
 );

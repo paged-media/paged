@@ -279,6 +279,12 @@ Status (draw items, one line each; updated as they land):
   layer styles, channels and new spot colour, filter dialog) go through `ColorInput`
   (`panels/sections/color-input.tsx`): the host's `widgets.ColorPicker` when offered, the browser
   input otherwise.
+- Doc word count: DONE 2026-11-03. The host Info panel has a Text section (Words, Characters;
+  `info-panel.tsx`, arithmetic in `info-readouts.ts`): the document's totals over every story the
+  engine reports, and the words of a selected range as "n of total". It serves any module's text.
+  Doc's Words status item, its `word-count.ts`, the store's `words` and two strings are gone
+  (status items are not feature ids, so no deprecation entry). Not carried over: the Word status
+  bar line itself; the count now sits in Info.
 
 ### Reach (gaps between modules)
 

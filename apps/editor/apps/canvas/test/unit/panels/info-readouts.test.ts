@@ -26,6 +26,9 @@ import type { ElementGeometryItem, WorkerToMain } from "@paged-media/client";
 
 import {
   angleOf,
+  countWords,
+  rangeText,
+  storyTotals,
   rgbHex,
   samplePixel,
   selectionReadout,
@@ -160,5 +163,25 @@ describe("page sampler", () => {
     expect(await s.raster("p1" as never)).toBeNull();
     const t = createPageSampler(fake().client as never, async () => null);
     expect(await t.raster("p1" as never)).toBeNull();
+  });
+});
+
+describe("text statistics", () => {
+  test("counts word-like segments, not punctuation", () => {
+    expect(countWords("")).toBe(0);
+    expect(countWords("Hello, world — it's 2026!")).toBe(4);
+    expect(countWords("  ")).toBe(0);
+  });
+  test("counts stories and content ranges", () => {
+    const story = {
+      paragraphs: [
+        { runs: [{ text: "Grüße an " }, { text: "alle" }] },
+        { runs: [{ text: "zwei Wörter" }] },
+      ],
+    };
+    expect(storyTotals([story])).toEqual({ words: 5, characters: 24 });
+    // "Grüße" is 7 bytes; the paragraph break is one.
+    expect(rangeText(story, 0, 7)).toBe("Grüße");
+    expect(rangeText(story, 0, 16)).toBe("Grüße an alle\n");
   });
 });
