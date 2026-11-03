@@ -301,12 +301,13 @@ fn a_swatch_edited_outside_paged_is_reported_in_the_import_notes_collection__fea
     })
     .unwrap();
     let idml = m.export_idml().expect("export");
-    assert!(
-        String::from_utf8_lossy(&idml).contains("21 96 130"),
-        "the swatch is stored plain"
-    );
     let edited = edited_outside(&idml, "21 96 130", "22 96 130");
     let back = CanvasModel::load("doc", &edited, CanvasOptions::default()).expect("reload");
+    assert_eq!(
+        back.scene().palette.colors["Color/Brand"].value,
+        vec![22.0, 96.0, 130.0],
+        "the edit reached the swatch"
+    );
     assert!(back.scene().palette.colors["Color/Brand"]
         .theme_ref
         .is_none());

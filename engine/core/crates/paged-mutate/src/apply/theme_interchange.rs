@@ -457,6 +457,7 @@ mod tests {
             let mut back = Document::default();
             back.designmap.labels = written.designmap.labels.clone();
             back.palette = written.palette.clone();
+            back.styles = written.styles.clone();
             for c in back.palette.colors.values_mut() {
                 c.theme_ref = None;
             }
