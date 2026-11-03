@@ -180,3 +180,63 @@ export function srgbToLab(
   };
   return [r1(116 * fy - 16), r1(500 * (fx - fy)), r1(200 * (fy - fz))];
 }
+
+// ---- Text statistics (the Info panel's Text section) ----------------------
+
+const WORDS: Intl.Segmenter | null =
+  typeof Intl !== "undefined" && "Segmenter" in Intl
+    ? new Intl.Segmenter(undefined, { granularity: "word" })
+    : null;
+
+/** The words in `text`: what `Intl.Segmenter` calls word-like (letters or
+ *  digits), so punctuation and spaces never count and CJK text counts as the
+ *  segmenter splits it. */
+export function countWords(text: string): number {
+  if (text === "") return 0;
+  if (WORDS) {
+    let n = 0;
+    for (const s of WORDS.segment(text)) if (s.isWordLike) n++;
+    return n;
+  }
+  return (text.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? []).length;
+}
+
+/** A story as the engine reports it (`requestStoryContent`). */
+export interface StoryText {
+  paragraphs: ReadonlyArray<{ runs: ReadonlyArray<{ text: string }> }>;
+}
+
+/** The story's paragraph texts. */
+export const paragraphsOf = (story: StoryText): string[] =>
+  story.paragraphs.map((p) => p.runs.map((r) => r.text).join(""));
+
+/** Words and characters of whole stories (characters without paragraph
+ *  breaks, spaces included). */
+export function storyTotals(stories: readonly StoryText[]): {
+  words: number;
+  characters: number;
+} {
+  let words = 0;
+  let characters = 0;
+  for (const s of stories)
+    for (const p of paragraphsOf(s)) {
+      words += countWords(p);
+      characters += [...p].length;
+    }
+  return { words, characters };
+}
+
+const utf8 = new TextEncoder();
+const utf8Decoder = new TextDecoder();
+
+/** The text a content range of a story covers: UTF-8 byte offsets with one
+ *  "\n" between paragraphs (the caret's convention). */
+export function rangeText(
+  story: StoryText,
+  start: number,
+  end: number,
+): string {
+  if (end <= start) return "";
+  const bytes = utf8.encode(paragraphsOf(story).join("\n"));
+  return utf8Decoder.decode(bytes.subarray(start, Math.min(end, bytes.length)));
+}

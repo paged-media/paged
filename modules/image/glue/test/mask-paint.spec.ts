@@ -158,8 +158,6 @@ describe("the panel's Pixels/Mask toggle", () => {
     onGroupOpacity: noop,
     onGroupPassThrough: noop,
     onMaskClear: noop,
-    onUndoTo: noop,
-    onRedoTo: noop,
     onBake: noop,
     onUndo: noop,
     onRedo: noop,

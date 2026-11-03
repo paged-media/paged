@@ -265,6 +265,39 @@ Status (draw items, one line each; updated as they land):
   shared in `platform/shared/helpers` (`sampled-style`). Draw's tool, its `shift+d` key and its
   feature id are gone (draw ADR 359 amended). Slide's format painter was not touched: it copies
   slide text and shape formatting, not this set.
+- Sheet format fallback: DONE 2026-11-03. The workbook panel's Format section no longer renders a
+  second copy of number format, font, fill, alignment, wrap and iterative calculation on a host
+  without the Sheet properties panel (`DuplicatedFormatRows`, its presets and 43 strings are gone).
+  Those rows live in the Sheet properties panel (character and paragraph text formatting of cells
+  there is the host's text provider); borders, merge, freeze and sizes stay in the section.
+- Image history list and colour inputs: DONE 2026-11-03. The Layers section's step list
+  (`data-image-history-list`) duplicated the host History panel, which already lists the image
+  context's history with the snapshots (`context-history.ts`); the list, its three strings and the
+  `onUndoTo` / `onRedoTo` props are gone (the Undo / Redo buttons and the memory readout stay).
+  The snapshot section stays: taking, renaming and deleting snapshots and the History brush source
+  have no host counterpart. All six remaining `type="color"` inputs (layer properties and stops,
+  layer styles, channels and new spot colour, filter dialog) go through `ColorInput`
+  (`panels/sections/color-input.tsx`): the host's `widgets.ColorPicker` when offered, the browser
+  input otherwise.
+- Doc word count: DONE 2026-11-03. The host Info panel has a Text section (Words, Characters;
+  `info-panel.tsx`, arithmetic in `info-readouts.ts`): the document's totals over every story the
+  engine reports, and the words of a selected range as "n of total". It serves any module's text.
+  Doc's Words status item, its `word-count.ts`, the store's `words` and two strings are gone
+  (status items are not feature ids, so no deprecation entry). Not carried over: the Word status
+  bar line itself; the count now sits in Info.
+- Doc text-format verbs: DONE 2026-11-03. The verbs' arithmetic and runner are one implementation
+  in `platform/shared/helpers` (`text-format.ts`: bold / italic toggles, underline, strikethrough,
+  sub / superscript, caps, size steps, the four alignments, indent steps, line spacing 1 / 1.5 / 2;
+  `runTextVerb` over a `TextDoor`). The host declares `paged.text.*` (`text-format-commands.ts`) with
+  Type > Format entries and palette rows, over the live content selection and the engine's
+  story-range reads and writes (a caret formats the word around it; one batch, one undo step);
+  slide text gets them in every context that has a text selection. Doc keeps the Word skin: its
+  scoped keys, control bar (`home-group.tsx`) and command ids are unchanged and run the same
+  `runTextVerb` through `host.text` (doc's own verb code and `format.ts` arithmetic are gone, its
+  recording-host spec passes unchanged). No doc id was removed, so no deprecation entry. Kept in
+  doc, not generic: the multilevel list presets (`lists.ts`: Word's `1. a. i.` / `1.1.1.`), styles,
+  highlight, borders. Not done: host key bindings for the verbs (no default Cmd+B yet, to avoid
+  shadowing the text input's own keys); slide's own format painter was not touched.
 
 ### Reach (gaps between modules)
 

@@ -37,11 +37,7 @@ import {
   type WordCommandState,
 } from "./commands.js";
 import { makeHomeGroup } from "./home-group.js";
-import {
-  makePageStatus,
-  makeWordsStatus,
-  makeZoomStatus,
-} from "./status-items.js";
+import { makePageStatus, makeZoomStatus } from "./status-items.js";
 import { makeControlPanel } from "../panels/control-panel.js";
 import { makeReferencesPanel } from "../panels/references-panel.js";
 import {
@@ -181,7 +177,7 @@ export function contributeWord(
   deps: WordDeps,
 ): WordContribution {
   const disposers: Array<() => void> = [];
-  const store = createWordStore(host, deps.docStories);
+  const store = createWordStore(host);
   const state: WordCommandState = {
     copied: null,
     highlight: null,
@@ -295,7 +291,6 @@ export function contributeWord(
 
   const items = [
     { id: "page", align: "start" as const, render: makePageStatus(store) },
-    { id: "words", align: "start" as const, render: makeWordsStatus(store) },
     { id: "zoom", align: "end" as const, render: makeZoomStatus(host) },
   ];
   for (const [order, item] of items.entries()) {
@@ -369,21 +364,11 @@ export function contributeWord(
   disposers.push(() => review.dispose());
 
   // Keep the store current: the selection's format on every selection
-  // change, the styles and counts on every document change (the counts a
-  // beat later, so a burst of typing reads the story once).
-  let wordsTimer: ReturnType<typeof setTimeout> | null = null;
-  const refreshWordsSoon = () => {
-    if (wordsTimer) clearTimeout(wordsTimer);
-    wordsTimer = setTimeout(() => {
-      wordsTimer = null;
-      void store.refreshWords();
-    }, 250);
-  };
+  // change, the styles on every document change.
   if (host.supports("text.selection@1")) {
     disposers.push(
       host.text.onDidChangeSelection(() => {
         void store.refreshFormat();
-        refreshWordsSoon();
       }).dispose,
     );
   }
@@ -393,7 +378,6 @@ export function contributeWord(
       void store.refreshDocument();
       void store.refreshPage();
       void store.refreshShowHidden();
-      refreshWordsSoon();
     }).dispose,
   );
   if (host.supports("viewport.pages@1")) {
@@ -415,7 +399,6 @@ export function contributeWord(
     if (on) {
       void store.refreshDocument();
       void store.refreshPage();
-      void store.refreshWords();
       void store.refreshShowHidden();
       void review.store.refresh();
     }
@@ -452,7 +435,6 @@ export function contributeWord(
       return true;
     },
     dispose() {
-      if (wordsTimer) clearTimeout(wordsTimer);
       for (const d of disposers) d();
     },
   };

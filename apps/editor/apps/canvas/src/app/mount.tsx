@@ -319,6 +319,11 @@ import {
   CORNER_MENU_ITEMS,
 } from "../corner-commands";
 import {
+  TEXT_FORMAT_DIAGNOSTIC_SOURCE,
+  TEXT_FORMAT_MENU_ITEMS,
+  buildTextFormatCommands,
+} from "../text-format-commands";
+import {
   buildPathfinderCommands,
   PATHFINDER_DIAGNOSTIC_SOURCE,
   PATHFINDER_MENU_ITEMS,
@@ -1524,6 +1529,21 @@ function CanvasAppIntegration() {
         ]),
       () => problemsSink.clear(CORNER_DIAGNOSTIC_SOURCE),
     );
+    // `paged.text.*` — the text-format verbs (bold, sizes, alignment, indents,
+    // line spacing) on the live text selection.
+    const textFormatCommands = buildTextFormatCommands(
+      {
+        client,
+        getSelection: () =>
+          pagedRef.current?.contentSelection.contentSelectionRef.current ??
+          null,
+      },
+      (message) =>
+        problemsSink.publish(TEXT_FORMAT_DIAGNOSTIC_SOURCE, "text", [
+          { severity: "error", message, source: "text" },
+        ]),
+      () => problemsSink.clear(TEXT_FORMAT_DIAGNOSTIC_SOURCE),
+    );
     // `paged.appearance.*` — the Appearance panel's stack operations.
     const appearanceCommands = buildAppearanceCommands(
       { client, getSelection: objectDeps.getSelection },
@@ -1694,6 +1714,7 @@ function CanvasAppIntegration() {
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,
+      ...textFormatCommands,
       ...appearanceCommands,
       ...strokeDashCommands,
       ...insertCommands,
@@ -1724,6 +1745,7 @@ function CanvasAppIntegration() {
       ...OBJECT_MENU_ITEMS,
       ...PATHFINDER_MENU_ITEMS,
       ...CORNER_MENU_ITEMS,
+      ...TEXT_FORMAT_MENU_ITEMS,
       ...APPEARANCE_MENU_ITEMS,
       ...STROKE_DASH_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,

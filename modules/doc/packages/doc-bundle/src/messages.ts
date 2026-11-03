@@ -191,8 +191,6 @@ export const WORD = defineMessages("doc.word", {
   pasteFormat: "Paste formatting",
   mixed: "— mixed —",
   page: "Page {page} of {pages}",
-  words: "{count, plural, one {# word} other {# words}}",
-  wordsOf: "{selected} of {total, plural, one {# word} other {# words}}",
   zoom: "{percent} %",
   noStyle: "The document has no “{name}” style.",
   doubleUnderline: "Double underline",

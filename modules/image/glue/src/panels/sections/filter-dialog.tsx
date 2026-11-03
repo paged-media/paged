@@ -6,6 +6,7 @@
 // before/after toggle; OK keeps the filter as ONE undo step, Cancel puts
 // the image back.
 
+import { ColorInput } from "./color-input";
 import type { FilterDef, FilterValue, ParamSpec } from "../../filters";
 import type { FilterDialogState } from "../../session";
 import { GalleryWorkspace } from "./filter-gallery-workspace";
@@ -264,13 +265,12 @@ function Param({
       return (
         <div style={row}>
           {label}
-          <input
+          <ColorInput
             id={id}
-            type="color"
             data-filter-param={p.key}
             value={toHex(c)}
             disabled={disabled}
-            onChange={(e) => onChange(fromHex(e.target.value))}
+            onChange={(picked) => onChange(fromHex(picked))}
           />
         </div>
       );

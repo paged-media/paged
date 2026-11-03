@@ -31,30 +31,12 @@
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
 import { useState, type CSSProperties, type ReactElement } from "react";
 
-import type { CellStylePatch, EdgeStyle } from "../engine";
+import type { EdgeStyle } from "../engine";
 import type { BorderKind, SessionResult, WorkbookSession } from "../session";
 import { font, space } from "@paged-media/panel-kit";
 import { useStrings } from "@paged-media/strings";
 
 import { FORMAT, NAMES, TOKENS } from "../messages";
-
-/** Number-format presets — format CODES offered as a starting point (the
- *  engine renders them; "Custom" takes any code). `label` is a message key. */
-export const NUMBER_FORMAT_PRESETS: { label: string; code: string }[] = [
-  { label: FORMAT.presetGeneral, code: "General" },
-  { label: FORMAT.presetInteger, code: "0" },
-  { label: FORMAT.presetDecimal, code: "0.00" },
-  { label: FORMAT.presetThousands, code: "#,##0" },
-  { label: FORMAT.presetThousands2, code: "#,##0.00" },
-  { label: FORMAT.presetPercent, code: "0%" },
-  { label: FORMAT.presetPercent2, code: "0.00%" },
-  { label: FORMAT.presetScientific, code: "0.00E+00" },
-  { label: FORMAT.presetDateIso, code: "yyyy-mm-dd" },
-  { label: FORMAT.presetDateShort, code: "d-mmm-yy" },
-  { label: FORMAT.presetTime, code: "h:mm" },
-  { label: FORMAT.presetEuro, code: "#,##0.00 [$€-407]" },
-  { label: FORMAT.presetText, code: "@" },
-];
 
 const BORDER_STYLES = [
   "thin",
@@ -65,8 +47,6 @@ const BORDER_STYLES = [
   "double",
   "hair",
 ];
-const H_ALIGNS = ["general", "left", "center", "right", "justify"];
-const V_ALIGNS = ["bottom", "center", "top"];
 
 /** "center" → "Center": an engine enum value as a sentence-case label. */
 export const labelOf = (value: string): string =>
@@ -126,8 +106,6 @@ export function FormatSection(props: {
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
 
-  const apply = (patch: CellStylePatch, done: string) =>
-    report(session.setStyle(patch), done);
   const edge: EdgeStyle = { style: borderStyle, color: borderColor };
   const borders = (kind: BorderKind, done: string) =>
     report(session.setBorders(kind, edge), done);
@@ -164,7 +142,7 @@ export function FormatSection(props: {
         </div>
       )}
 
-      {openProperties ? (
+      {openProperties && (
         <p
           data-sheet-fmt-pointer
           style={{ ...st.body, margin: `${space[1]} 0 0` }}
@@ -180,13 +158,6 @@ export function FormatSection(props: {
           </button>
           .
         </p>
-      ) : (
-        <DuplicatedFormatRows
-          session={session}
-          styles={st}
-          apply={apply}
-          report={report}
-        />
       )}
 
       {/* Borders. */}
@@ -349,255 +320,6 @@ export function FormatSection(props: {
         </div>
       )}
     </div>
-  );
-}
-
-/** Number format, font, fill, alignment / wrap and iterative calculation:
- *  the rows the Sheet properties panel also carries. Rendered only on a
- *  host without that panel (see the file header). */
-function DuplicatedFormatRows(props: {
-  session: WorkbookSession;
-  styles: FormatSectionStyles;
-  apply: (patch: CellStylePatch, done: string) => void;
-  report: (r: SessionResult, done: string) => void;
-}): ReactElement {
-  const { session, styles: st, apply, report } = props;
-  const { t } = useStrings();
-  const live = useLive(session, onDidChangeOf);
-  const cur = live.styleAtTarget();
-  const [preset, setPreset] = useState("0.00");
-  const [custom, setCustom] = useState("");
-  const [fontName, setFontName] = useState("");
-  const [fontSize, setFontSize] = useState("");
-  const [fontColor, setFontColor] = useState("#000000");
-  const [fill, setFill] = useState("#FFFF00");
-  return (
-    <>
-      {/* Number format: a preset or a custom code. */}
-      <div style={st.row}>
-        <select
-          data-sheet-fmt-numfmt
-          value={preset}
-          aria-label={t(FORMAT.numberFormat)}
-          onChange={(e) => setPreset(e.target.value)}
-          style={st.input}
-        >
-          {NUMBER_FORMAT_PRESETS.map((p) => (
-            <option key={p.code} value={p.code}>
-              {t(p.label)}
-            </option>
-          ))}
-        </select>
-        <input
-          data-sheet-fmt-numfmt-custom
-          type="text"
-          value={custom}
-          placeholder={t(FORMAT.customCode)}
-          aria-label={t(FORMAT.customCodeAria)}
-          onChange={(e) => setCustom(e.target.value)}
-          style={{ ...st.input, width: 110 }}
-        />
-        <button
-          type="button"
-          data-sheet-fmt-numfmt-apply
-          style={st.button}
-          onClick={() =>
-            apply(
-              { numFmt: custom.trim() || preset },
-              t(FORMAT.numberFormatApplied),
-            )
-          }
-        >
-          {t(FORMAT.numberFormat)}
-        </button>
-      </div>
-
-      {/* Font. */}
-      <div style={st.row}>
-        <button
-          type="button"
-          data-sheet-fmt-bold
-          style={{ ...st.button, fontWeight: 700 }}
-          aria-pressed={!!cur?.bold}
-          aria-label={t(FORMAT.boldLabel)}
-          title={t(FORMAT.boldLabel)}
-          onClick={() => apply({ bold: !cur?.bold }, t(FORMAT.boldToggled))}
-        >
-          B
-        </button>
-        <button
-          type="button"
-          data-sheet-fmt-italic
-          style={{ ...st.button, fontStyle: "italic" }}
-          aria-pressed={!!cur?.italic}
-          aria-label={t(FORMAT.italicLabel)}
-          title={t(FORMAT.italicLabel)}
-          onClick={() =>
-            apply({ italic: !cur?.italic }, t(FORMAT.italicToggled))
-          }
-        >
-          I
-        </button>
-        <button
-          type="button"
-          data-sheet-fmt-underline
-          style={{ ...st.button, textDecoration: "underline" }}
-          aria-pressed={!!cur?.underline}
-          aria-label={t(FORMAT.underlineLabel)}
-          title={t(FORMAT.underlineLabel)}
-          onClick={() =>
-            apply({ underline: !cur?.underline }, t(FORMAT.underlineToggled))
-          }
-        >
-          U
-        </button>
-        <input
-          data-sheet-fmt-font-name
-          type="text"
-          value={fontName}
-          placeholder={cur?.fontName ?? t(FORMAT.font)}
-          aria-label={t(FORMAT.fontName)}
-          onChange={(e) => setFontName(e.target.value)}
-          style={{ ...st.input, width: 90 }}
-        />
-        <input
-          data-sheet-fmt-font-size
-          type="number"
-          min={1}
-          max={409}
-          value={fontSize}
-          placeholder={cur?.fontSize ? String(cur.fontSize) : "pt"}
-          aria-label={t(FORMAT.fontSize)}
-          onChange={(e) => setFontSize(e.target.value)}
-          style={{ ...st.input, width: 48 }}
-        />
-        <input
-          data-sheet-fmt-font-color
-          type="color"
-          value={fontColor}
-          onChange={(e) => setFontColor(e.target.value)}
-          title={t(FORMAT.textColour)}
-        />
-        <button
-          type="button"
-          data-sheet-fmt-font-apply
-          style={st.button}
-          onClick={() =>
-            apply(
-              {
-                ...(fontName.trim() ? { fontName: fontName.trim() } : {}),
-                ...(fontSize.trim() ? { fontSize: Number(fontSize) } : {}),
-                fontColor,
-              },
-              t(FORMAT.fontApplied),
-            )
-          }
-        >
-          {t(FORMAT.font)}
-        </button>
-      </div>
-
-      {/* Fill. */}
-      <div style={st.row}>
-        <input
-          data-sheet-fmt-fill
-          type="color"
-          value={fill}
-          onChange={(e) => setFill(e.target.value)}
-          title={t(FORMAT.fillColour)}
-        />
-        <button
-          type="button"
-          data-sheet-fmt-fill-apply
-          style={st.button}
-          onClick={() => apply({ fill }, t(FORMAT.fillApplied))}
-        >
-          {t(FORMAT.fill)}
-        </button>
-        <button
-          type="button"
-          data-sheet-fmt-fill-clear
-          style={st.button}
-          onClick={() => apply({ fill: "" }, t(FORMAT.fillCleared))}
-        >
-          {t(FORMAT.noFill)}
-        </button>
-      </div>
-
-      {/* Alignment + wrap. */}
-      <div style={st.row}>
-        <select
-          data-sheet-fmt-halign
-          value={cur?.hAlign ?? "general"}
-          aria-label={t(FORMAT.hAlign)}
-          onChange={(e) =>
-            apply({ hAlign: e.target.value }, t(FORMAT.alignApplied))
-          }
-          style={st.input}
-        >
-          {H_ALIGNS.map((a) => (
-            <option key={a} value={a}>
-              {tokenLabel(t, a)}
-            </option>
-          ))}
-        </select>
-        <select
-          data-sheet-fmt-valign
-          value={cur?.vAlign ?? "bottom"}
-          aria-label={t(FORMAT.vAlign)}
-          onChange={(e) =>
-            apply({ vAlign: e.target.value }, t(FORMAT.vAlignApplied))
-          }
-          style={st.input}
-        >
-          {V_ALIGNS.map((a) => (
-            <option key={a} value={a}>
-              {tokenLabel(t, a)}
-            </option>
-          ))}
-        </select>
-        <label
-          style={{ ...st.body, display: "flex", alignItems: "center", gap: 4 }}
-        >
-          <input
-            data-sheet-fmt-wrap
-            type="checkbox"
-            checked={!!cur?.wrap}
-            onChange={(e) =>
-              apply(
-                { wrap: e.target.checked },
-                e.target.checked ? t(FORMAT.wrapOn) : t(FORMAT.wrapOff),
-              )
-            }
-          />
-          {t(FORMAT.wrap)}
-        </label>
-      </div>
-
-      {/* Iterative calculation (a workbook setting; Sheet properties ▸ Workbook). */}
-      <label
-        style={{
-          ...st.body,
-          display: "flex",
-          gap: 6,
-          alignItems: "center",
-          marginTop: space[1],
-        }}
-      >
-        <input
-          data-sheet-iterative
-          type="checkbox"
-          checked={live.calcSettings()?.iterative ?? false}
-          onChange={(e) =>
-            report(
-              session.setIterative(e.target.checked),
-              e.target.checked ? t(FORMAT.iterativeOn) : t(FORMAT.iterativeOff),
-            )
-          }
-        />
-        {t(FORMAT.iterative)}
-      </label>
-    </>
   );
 }
 

@@ -516,15 +516,6 @@ describe.skipIf(!built)(
         tree = create(createElement(Panel));
       });
       act(() => session.setGridSelection(0, 0, 1, 2));
-      act(() => byData(tree, "data-sheet-fmt-bold")[0].props.onClick());
-      expect(session.state().engine!.getStyle!(0, 0, 1).bold).toBe(true);
-      act(() =>
-        byData(tree, "data-sheet-fmt-numfmt")[0].props.onChange({
-          target: { value: "0%" },
-        }),
-      );
-      act(() => byData(tree, "data-sheet-fmt-numfmt-apply")[0].props.onClick());
-      expect(session.state().engine!.getStyle!(0, 0, 0).numFmt).toBe("0%");
       act(() =>
         byData(tree, "data-sheet-fmt-border", "outline")[0].props.onClick(),
       );

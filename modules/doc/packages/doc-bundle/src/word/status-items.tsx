@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Word's status bar (doc ADR 608, editor ADR 298): page X of Y, the word
-// count (the selection's of the document's while text is selected) and the
-// zoom. Language and Track Changes join in waves 3 and 4.
+// Word's status bar (doc ADR 608, editor ADR 298): page X of Y and the
+// zoom (the word count is the host Info panel's). Language and Track Changes join in waves 3 and 4.
 
 import type { BundleHost, StatusItemProps } from "@paged-media/plugin-api";
 import { subscribeOf, useLive } from "@paged-media/react-live";
@@ -40,29 +39,6 @@ export function makePageStatus(store: WordStore) {
     );
   }
   return PageStatus;
-}
-
-export function makeWordsStatus(store: WordStore) {
-  function WordsStatus(_props: StatusItemProps) {
-    const strings = useStrings();
-    const words = useLive(store, subscribeOf).get().words;
-    if (!words) return null;
-    return (
-      <span
-        data-word-status="words"
-        data-words-total={words.total}
-        data-words-selected={words.selected ?? undefined}
-      >
-        {words.selected === null
-          ? strings.t(WORD.words, { count: words.total })
-          : strings.t(WORD.wordsOf, {
-              selected: words.selected,
-              total: words.total,
-            })}
-      </span>
-    );
-  }
-  return WordsStatus;
 }
 
 /** How often the zoom readout looks at the camera: the viewport door has

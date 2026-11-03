@@ -140,8 +140,6 @@
   "doc.word.superscript": "Hochgestellt",
   "doc.word.textColor": "Schriftfarbe",
   "doc.word.underline": "Unterstrichen",
-  "doc.word.words": "{count, plural, one {# Wort} other {# Wörter}}",
-  "doc.word.wordsOf": "{selected} von {total, plural, one {# Wort} other {# Wörtern}}",
   "doc.word.zoom": "{percent} %",
   "menu.Insert Word document…": "Word-Dokument einfügen…",
   "doc.files.odtImporter": "OpenDocument-Text (.odt)",

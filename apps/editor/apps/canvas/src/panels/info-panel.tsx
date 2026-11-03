@@ -43,6 +43,7 @@ import {
   CANVAS_POINTER,
   useCanvasClient,
   useCollection,
+  useContentSelection,
   useDocument,
   useDocumentMeta,
   useProvidedReadouts,
@@ -54,10 +55,14 @@ import { DOCUMENT_UNITS, formatLength, useDocumentUnit } from "@paged-media/ui";
 import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
 
 import {
+  countWords,
+  rangeText,
   rgbHex,
   samplePixel,
   selectionReadout,
   srgbToLab,
+  storyTotals,
+  type StoryText,
 } from "./info-readouts";
 import { createPageSampler, type PageSampler } from "./info-sampler";
 
@@ -76,6 +81,10 @@ const M = defineMessages("app.infoPanel", {
   selection: "Selection",
   colour: "Colour under cursor",
   noSelection: "Nothing selected",
+  text: "Text",
+  words: "Words",
+  characters: "Characters",
+  selectedOfTotal: "{selected} of {total}",
   offCanvas: "Move the pointer over a page",
   items: "Items",
   angle: "Angle",
@@ -161,6 +170,72 @@ const fmtAngle = (deg: number) => {
   return `${Object.is(n, -0) ? 0 : n}°`;
 };
 
+/** A story's text as the engine reports it, or null when it cannot be read. */
+async function readStory(
+  client: ReturnType<typeof useCanvasClient>,
+  id: string,
+): Promise<StoryText | null> {
+  try {
+    const reply = await client.send({
+      kind: "requestStoryContent",
+      payload: { storyId: id },
+    });
+    return reply.kind === "storyContentResult"
+      ? (reply.payload.content ?? null)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The document's words and characters, and the selected text's words: read
+ *  from the stories the engine reports, a beat after the last change so a
+ *  burst of typing reads each story once. `null` while the document has no
+ *  story with text. */
+function useTextStats(): {
+  words: number;
+  characters: number;
+  selectedWords: number | null;
+} | null {
+  const client = useCanvasClient();
+  const stories = useCollection<{ selfId?: string }>("stories");
+  const { contentSelection } = useContentSelection();
+  const [stats, setStats] = useState<ReturnType<typeof useTextStats>>(null);
+  const storyId = contentSelection?.storyId ?? null;
+  const start = contentSelection?.start ?? 0;
+  const end = contentSelection?.end ?? start;
+  const inCell = !!contentSelection?.cell;
+  useEffect(() => {
+    if (!stories || stories.length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        const ids = stories.flatMap((s) => (s.selfId ? [s.selfId] : []));
+        const all = (
+          await Promise.all(ids.map((id) => readStory(client, id)))
+        ).filter((c): c is StoryText => c !== null);
+        let selectedWords: number | null = null;
+        if (storyId && !inCell && end > start) {
+          const own = await readStory(client, storyId);
+          if (own) selectedWords = countWords(rangeText(own, start, end));
+        }
+        if (cancelled) return;
+        const totals = storyTotals(all);
+        setStats(
+          totals.characters === 0 && totals.words === 0
+            ? null
+            : { ...totals, selectedWords },
+        );
+      })();
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [client, stories, storyId, start, end, inCell]);
+  return stories && stories.length > 0 ? stats : null;
+}
+
 export function InfoPanel() {
   const strings = useStrings();
   const meta = useDocumentMeta();
@@ -169,6 +244,7 @@ export function InfoPanel() {
   const client = useCanvasClient();
   const { placedGeometry } = useSelection();
   const provided = useProvidedReadouts("info");
+  const text = useTextStats();
   // The unit lengths are shown in (ADR 245), once there is a document.
   const unit = useDocumentUnit();
   const unitName = DOCUMENT_UNITS.find(([u]) => u === unit)?.[1] ?? unit;
@@ -309,6 +385,27 @@ export function InfoPanel() {
           <Note id="no-selection" text={strings.t(M.noSelection)} />
         )}
       </Section>
+      {text && (
+        <Section id="text" title={strings.t(M.text)}>
+          <Row
+            row="Words"
+            label={strings.t(M.words)}
+            value={
+              text.selectedWords === null
+                ? String(text.words)
+                : strings.t(M.selectedOfTotal, {
+                    selected: text.selectedWords,
+                    total: text.words,
+                  })
+            }
+          />
+          <Row
+            row="Characters"
+            label={strings.t(M.characters)}
+            value={String(text.characters)}
+          />
+        </Section>
+      )}
       <Section id="colour" title={strings.t(M.colour)}>
         {rgb && hex && lab ? (
           <>
