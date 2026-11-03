@@ -27,6 +27,9 @@ pub type Rgb = [u8; 3];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Deck {
+    /// The imported document properties (`Presentation::properties`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<(String, String)>,
     pub width: f64,
     pub height: f64,
     /// Named theme colours (`accent1` …) of the first master's theme, in

@@ -112,6 +112,12 @@ use std::collections::BTreeMap;
 pub struct XlsxDocument {
     /// The parsed workbook model.
     pub model: SheetModel,
+    /// The package's document properties (`docProps/core.xml`, `app.xml`:
+    /// title, author, dates, producing application) as `(name, text)` in file
+    /// order (`paged_ooxml::docprops`). Read only: both parts stay opaque and
+    /// are written back as they were. The sheet has no engine document to
+    /// carry them; a host reads them here.
+    pub properties: Vec<(String, String)>,
     /// Raw formula text per cell `(sheet, row, col)` — sheet-xlsx does NOT
     /// parse formulas (dep rule: xlsx -> core only). The consumer (sheet-js)
     /// parses these into model `FormulaId`s on load and writes printed text
@@ -775,8 +781,13 @@ impl XlsxDocument {
         }
 
         let loaded_calc = model.calc;
+        let properties = paged_ooxml::docprops::read(
+            container.part("docProps/core.xml").map(|p| p.bytes()),
+            container.part("docProps/app.xml").map(|p| p.bytes()),
+        );
         Ok(XlsxDocument {
             model,
+            properties,
             formula_texts,
             visual_styles: visual_styles.with_rich(rich_cells),
             dxfs,

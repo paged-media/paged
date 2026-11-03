@@ -1611,6 +1611,7 @@ dependencies = [
  "docx-lower",
  "flate2",
  "paged-model",
+ "paged-ooxml",
  "paged-scene",
  "paged-store",
  "serde",

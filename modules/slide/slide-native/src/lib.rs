@@ -2359,7 +2359,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         master_spreads: master_srcs,
         dom_version: Some(DOM_VERSION.into()),
         document_name: Some(name.to_string()),
-        labels: vec![(
+        labels: std::iter::once((
             SLIDE_LABEL_KEY.to_string(),
             deck_label_with_theme(
                 name,
@@ -2369,7 +2369,12 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
                 &deck.custom_shows,
                 deck.theme.as_ref(),
             ),
-        )],
+        ))
+        .chain(
+            paged_ooxml::docprops::label_value(&deck.properties)
+                .map(|v| (paged_ooxml::docprops::LABEL_KEY.to_string(), v)),
+        )
+        .collect(),
         document_preference: DocumentPreference {
             page_width: Some(n(deck.width)),
             page_height: Some(n(deck.height)),

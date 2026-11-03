@@ -70,6 +70,7 @@ compile_error!(
 
 pub mod colour;
 pub mod content_types;
+pub mod docprops;
 #[cfg(feature = "dom")]
 pub mod dom;
 pub mod drawingml;

@@ -463,7 +463,10 @@ pub fn import_docx_with_package(
         )
     };
 
+    let properties =
+        paged_ooxml::docprops::read(pkg.part("docProps/core.xml"), pkg.part("docProps/app.xml"));
     let doc = DocxDocument {
+        properties,
         notes,
         headers_footers,
         even_and_odd_headers,

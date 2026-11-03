@@ -90,6 +90,7 @@ impl From<paged_ooxml::XmlError> for XlsxError {
             paged_ooxml::XmlError::Syntax(e) => XlsxError::Xml(e),
             paged_ooxml::XmlError::Encoding(e) => XlsxError::Encoding(e),
             paged_ooxml::XmlError::Escape(e) => XlsxError::Escape(e),
+            paged_ooxml::XmlError::Structure(m) => XlsxError::Structure(m),
         }
     }
 }
