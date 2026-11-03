@@ -321,6 +321,10 @@ Status (draw items, one line each; updated as they land):
   `media.paged.data.bindProperty` (it opens paged.data's Bindings panel prefilled) in `object-field.tsx`
   and its typed args in `registries/command.ts`; with no data door nothing can bind, so it is dead
   weight to delete next, with the `BindNotice` command text.
+- Path and shape tools in every context: DONE 2026-11-03. `CONTEXT_SHARED_TOOL_IDS` lists Pen, Direct
+  Selection, Line, Rectangle, Ellipse and Polygon besides Free Transform; solo profiles keep the same list.
+  The unit spec (`host-panels-every-context.test.ts`) and the parked e2e (`tests/host-panels-every-context.spec.ts`)
+  are updated; the e2e was not run (suite parked).
 
 ### Reach (gaps between modules)
 
@@ -338,7 +342,7 @@ Status (draw items, one line each; updated as they land):
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
   font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
   right: PowerPoint does not hyphenate.
-- **all:** path tools in every context (`CONTEXT_SHARED_TOOL_IDS` is Free Transform only);
+- **all:** path tools in every context (DONE 2026-11-03: `CONTEXT_SHARED_TOOL_IDS` adds Pen, Direct Selection, Line, Rectangle, Ellipse, Polygon; editor ADR 311 amended);
   image filters as `actions@1` steps on any picture; barcode insert; ML service and door.
 
 ### Small helpers
