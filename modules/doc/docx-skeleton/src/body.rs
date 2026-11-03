@@ -84,6 +84,8 @@ pub struct NativeBody {
     pub parts: Vec<(String, Vec<Paragraph>)>,
     /// Why a header or footer could not be built, if one could not.
     pub part_errors: Vec<String>,
+    /// The stories of the text boxes anchored in the body's paragraphs.
+    pub extra: Vec<(String, Vec<Paragraph>)>,
 }
 
 impl NativeBody {
@@ -498,8 +500,8 @@ fn run_deferral(r: &LoweredRun) -> Option<&'static str> {
 fn paragraph_deferral(p: &LoweredParagraph) -> Option<&'static str> {
     if p.images.iter().any(|i| i.fx.is_some()) {
         Some("picture look")
-    } else if !p.text_boxes.is_empty() {
-        Some("text box")
+    } else if p.text_boxes.iter().any(|b| b.fx.is_some()) {
+        Some("text box look")
     } else {
         p.runs.iter().find_map(run_deferral)
     }
@@ -566,6 +568,9 @@ struct Minted {
     tables: usize,
     frames: usize,
     notes: usize,
+    boxes: usize,
+    /// The stories of inline text boxes, made beside the body's.
+    extra: Vec<(String, Vec<Paragraph>)>,
     links: Vec<NativeLink>,
 }
 
@@ -578,6 +583,29 @@ pub struct NativeLink {
     pub destination_id: String,
     pub hyperlink_id: String,
     pub url: String,
+}
+
+/// The paragraphs of a text box's story: as body paragraphs, with no
+/// bookmark, comment or note (the old pour places none there).
+fn box_paragraphs(
+    doc: &LoweredDoc,
+    styles: &HashMap<&str, &LoweredStyle>,
+    from: &[LoweredParagraph],
+    minted: &mut Minted,
+) -> Result<Vec<Paragraph>, String> {
+    let mut out = Vec::new();
+    for bp in from {
+        if !bp.bookmarks.is_empty()
+            || bp
+                .runs
+                .iter()
+                .any(|r| r.note.is_some() || !r.comments.is_empty())
+        {
+            return Err("bookmark, note or comment in a text box".into());
+        }
+        out.extend(build_parts(doc, styles, bp, minted)?);
+    }
+    Ok(out)
 }
 
 /// A paragraph that no break splits (a table cell's).
@@ -932,6 +960,33 @@ fn build_whole(
         });
         minted.frames += 1;
     }
+    // Engine ADR 1050, doc ADR 614 — a text box anchored in the paragraph: an
+    // anchored text frame with a story of its own.
+    for tb in &p.text_boxes {
+        let paragraphs = box_paragraphs(doc, styles, &tb.paragraphs, minted)?;
+        let story = format!("docx_tb{}", minted.boxes);
+        minted.extra.push((story.clone(), paragraphs));
+        let mut layout = anchored_layout(&tb.layout);
+        layout.inset_spacing = Some(tb.insets_pt);
+        para.anchored_frame_offsets
+            .resize(para.anchored_frames.len(), 0);
+        para.anchored_frame_offsets.push(tb.at.min(chars));
+        para.anchored_frames.push(AnchoredFrame {
+            frame_kind: AnchoredFrameKind::TextFrame,
+            self_id: Some(format!("docx_box{}", minted.boxes)),
+            bounds: Some(Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: tb.height_pt,
+                right: tb.width_pt,
+            }),
+            parent_story: Some(story),
+            setting: tb.anchor.as_ref().map(anchored_setting),
+            layout,
+            ..AnchoredFrame::default()
+        });
+        minted.boxes += 1;
+    }
     Ok(para)
 }
 
@@ -1220,12 +1275,27 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
             parts.push((f.story_id.clone(), paras));
         }
     }
+    // Doc ADR 614 — the stories of the text boxes placed as page items.
+    for item in &doc.page_items {
+        if let docx_lower::ir::LoweredItemKind::TextBox {
+            story_id,
+            paragraphs,
+            ..
+        } = &item.item
+        {
+            match box_paragraphs(doc, &styles, paragraphs, &mut minted) {
+                Ok(paras) => parts.push((story_id.clone(), paras)),
+                Err(e) => part_errors.push(e),
+            }
+        }
+    }
     NativeBody {
         blocks,
         links: minted.links,
         marks,
         parts,
         part_errors,
+        extra: minted.extra,
     }
 }
 
@@ -1240,6 +1310,8 @@ pub struct NativeStories {
     pub destinations: Vec<Vec<StoryDestination>>,
     /// The master header and footer stories' paragraphs, by story id.
     pub parts: Vec<(String, Vec<Paragraph>)>,
+    /// The stories of the text boxes anchored in the body, to add.
+    pub extra: Vec<(String, Vec<Paragraph>)>,
 }
 
 /// The body's native stories, one per skeleton story and in its order, when
@@ -1258,6 +1330,7 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     let links = body.links;
     let marks = body.marks;
     let parts = body.parts;
+    let extra = body.extra;
     let mut paras = Vec::with_capacity(body.blocks.len());
     // The index of each block's first native paragraph (a split block makes
     // several).
@@ -1378,5 +1451,6 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
         comments,
         destinations,
         parts,
+        extra,
     })
 }

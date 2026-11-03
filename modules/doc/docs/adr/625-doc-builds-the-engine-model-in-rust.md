@@ -225,6 +225,15 @@ paragraph left to the old pour, the only thing that still names the lowering's i
 page item (a float or text box placed on the page), so the catalogue omits them unless the document
 has page items.
 
+### Slice 4b (part): text boxes
+
+A text box anchored in a paragraph is an anchored text frame (insets, wrap, the anchored-object
+setting) whose story, `docx_tb<n>`, is added to the document with the box's paragraphs; a text box
+placed as a page item (ADR 614; the skeleton already wrote its frame) has its story filled like a
+master's. The bundle skips `pourPageItems` for a prefilled skeleton, so nothing the old pour still
+places names the invented styles and the catalogue always leaves them out. A box with a look (fill,
+outline, effects) or holding a bookmark, note or comment stays deferred.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

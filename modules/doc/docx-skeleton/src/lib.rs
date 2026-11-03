@@ -227,6 +227,7 @@ pub fn skeleton_prefilled(
     let comments = native.comments;
     let destinations = native.destinations;
     let parts = native.parts;
+    let extra = native.extra;
     let pages = skeleton_pages_with(doc, options);
     if stories.len() != pages.len() {
         return Ok(None);
@@ -252,6 +253,17 @@ pub fn skeleton_prefilled(
             return Ok(None);
         };
         parsed.story.paragraphs = paragraphs;
+    }
+    for (id, paragraphs) in extra {
+        document.stories.push(paged_scene::ParsedStory {
+            // Minted post-parse: the writer emits a fresh part for it.
+            src: String::new(),
+            self_id: id,
+            story: paged_model::Story {
+                paragraphs,
+                ..paged_model::Story::default()
+            },
+        });
     }
     for l in &native.links {
         document

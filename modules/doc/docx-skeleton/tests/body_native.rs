@@ -190,7 +190,21 @@ fn compare_paragraph(
         "{at}: drop cap"
     );
     // Inline pictures: anchored frames at their offsets, crop as placement.
-    assert_eq!(p.images.len(), np.anchored_frames.len(), "{at}: pictures");
+    assert_eq!(
+        p.images.len() + p.text_boxes.len(),
+        np.anchored_frames.len(),
+        "{at}: pictures and text boxes"
+    );
+    for (k, tb) in p.text_boxes.iter().enumerate() {
+        let f = &np.anchored_frames[p.images.len() + k];
+        assert_eq!(f.frame_kind, paged_model::AnchoredFrameKind::TextFrame);
+        assert!(f.parent_story.is_some(), "{at}: a text box has its story");
+        assert_eq!(
+            f.layout.inset_spacing,
+            Some(tb.insets_pt),
+            "{at}: box insets"
+        );
+    }
     for (k, (img, f)) in p.images.iter().zip(&np.anchored_frames).enumerate() {
         let b = f.bounds.expect("a picture frame has bounds");
         assert_eq!(
@@ -362,6 +376,7 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
         ("table", docx_conformance::table_docx()),
+        ("text boxes", docx_conformance::objects_text_boxes_docx()),
         (
             "nested tables",
             docx_conformance::objects_nested_tables_docx(),
@@ -835,5 +850,34 @@ fn headers_and_footers_fill_the_masters_stories() {
             .flat_map(|p| p.runs.iter().map(|r| r.text.as_str()))
             .collect();
         assert_eq!(said, want);
+    }
+}
+
+#[test]
+fn text_boxes_get_their_stories() {
+    let ir = lowered(&docx_conformance::objects_text_boxes_docx());
+    let body = native_body(&ir);
+    assert!(body.part_errors.is_empty(), "{:?}", body.part_errors);
+    let page_boxes = ir
+        .page_items
+        .iter()
+        .filter(|i| matches!(i.item, docx_lower::ir::LoweredItemKind::TextBox { .. }))
+        .count();
+    let inline_boxes: usize = ir
+        .story
+        .blocks
+        .iter()
+        .map(|b| match b {
+            LoweredBlock::Paragraph(p) => p.text_boxes.len(),
+            _ => 0,
+        })
+        .sum();
+    assert!(page_boxes + inline_boxes > 0, "the fixture has text boxes");
+    assert_eq!(body.extra.len(), inline_boxes);
+    // A page item's box story is among the parts, by its id.
+    for i in &ir.page_items {
+        if let docx_lower::ir::LoweredItemKind::TextBox { story_id, .. } = &i.item {
+            assert!(body.parts.iter().any(|(s, _)| s == story_id));
+        }
     }
 }

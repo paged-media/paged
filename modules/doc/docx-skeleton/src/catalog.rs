@@ -314,13 +314,12 @@ pub fn apply_catalog(document: &mut Document, ir: &LoweredDoc) -> Result<(), Cat
             },
         );
     }
-    // The styles the lowering invented for direct formatting are only needed
-    // by what the old path still pours (page items):
-    // a body built whole names none of them.
-    let invented_needed = !ir.page_items.is_empty();
+    // The styles the lowering invented for direct formatting are named by
+    // nothing a prefilled skeleton holds: the body, the headers and footers
+    // and the text boxes are built with their properties.
     let mut known: BTreeMap<&str, ()> = BTreeMap::new();
     for style in &ir.styles {
-        if !invented_needed && crate::body::is_synthesized(&style.id) {
+        if crate::body::is_synthesized(&style.id) {
             continue;
         }
         if known.insert(style.id.as_str(), ()).is_some() {
