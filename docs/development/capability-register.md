@@ -101,7 +101,7 @@ The TS sRGB curve is `srgbToLinear` / `linearToSrgb` there (four editor and draw
 The f64 samplers of `winding.rs`, `draw-trace`, `slide-anim` and `image-js` stay (allowed: those crates sit
 below or beside `paged-geom`). The IDML
 `[f32;6]` product and point map are `paged_geom::affine` (`paged-mutate`, `paged-canvas`, the
-renderer); the inverse (three singularity tests), and the `[f64;6]` copies (slide ×3, draw-dxf) → `paged-geom` (open). The `Affine` of
+renderer); the f64 affine (`[f64;6]`: slide-resolve, pptx-export's `geom`, `dml-geom::live`, `slide-native`, draw-dxf) is `paged_geom::affine64`, product, point map and the inverse (one singularity rule, `|det| < 1e-12`), bit-identical and tested against each old copy (single-owner rule `affine-product`). Open: the f32 inverse (three singularity tests differ) and `slide-native`'s pattern-tile inverse, which solves the translation in another arrangement (not bit-identical, so left). The `Affine` of
 `paged-svg` and `Transform` of `paged-compose` keep their types but their product and point map call
 `paged_geom::affine`.
 Draw's TS copies of width, brush,
