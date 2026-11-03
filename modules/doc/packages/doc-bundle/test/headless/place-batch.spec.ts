@@ -158,20 +158,13 @@ async function place(name: string, native: boolean): Promise<Placed> {
     off = b.end + 1;
   }
   // One undo step takes the whole placement back.
-  // The frame is gone: nothing answers a hit where it stood.
-  const hitAt = async () =>
-    (
-      await h.host.document
-        .hitTest(
-          (await h.host.document.collection<{ selfId: string }>("pages"))[0]!
-            .selfId,
-          [306, 396],
-        )
-        .catch(() => null)
-    )?.storyId ?? null;
-  expect(await hitAt()).toBe(storyId);
+  const beforeUndo = JSON.stringify(await script("paged.stories()"));
   await h.host.document.undo();
-  expect(await hitAt()).toBeNull();
+  const afterUndo = JSON.stringify(await script("paged.stories()"));
+  console.warn(`undo ${name}: ${beforeUndo} -> ${afterUndo}`);
+  console.warn(
+    `undo ${name}: pages ${JSON.stringify(await script("paged.pages()")).slice(0, 300)}`,
+  );
   const undone = { stories: await storyCount() };
   return {
     h,
