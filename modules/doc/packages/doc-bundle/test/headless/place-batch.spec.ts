@@ -52,6 +52,8 @@ interface Placed {
   applyError: string;
   paras: Array<{ text: string; style: string | null; rects: number[][] }>;
   pages: number;
+  placedPixels: Uint8Array;
+  blankPixels: Uint8Array;
   styles: string[];
   stories: number;
   undone: { stories: number };
@@ -64,6 +66,13 @@ async function place(name: string, native: boolean): Promise<Placed> {
     console: silent,
   });
   await h.newBlank(612, 792);
+  const firstPage = (
+    await h.host.document.collection<{ selfId: string }>("pages")
+  )[0]!.selfId;
+  const snap = async () =>
+    (await h.host.render.snapshot(firstPage, { widthPx: 320, format: "rgba" }))!
+      .rgba!;
+  const blankPixels = await snap();
   const send = (m: unknown) =>
     h.host.editor.client.send(m as never) as Promise<Reply>;
   const script = async (s: string) => {
@@ -112,7 +121,6 @@ async function place(name: string, native: boolean): Promise<Placed> {
     if (ps.length === last) break;
     last = ps.length;
   }
-  let first: { start: number; end: number } | undefined;
   const paras: Placed["paras"] = [];
   const r = await send({
     kind: "requestStoryContent",
@@ -131,17 +139,12 @@ async function place(name: string, native: boolean): Promise<Placed> {
       })
     ).payload?.bounds as { start: number; end: number } | null;
     if (!b) break;
-    first ??= b;
     const g = await send({
       kind: "requestSelectionGeometry",
       payload: {
         selection: { storyId, start: b.start, end: Math.max(b.end, b.start) },
       },
     });
-    if (paras.length === 0)
-      console.warn(
-        `geom ${name}: ${JSON.stringify(b)} ${JSON.stringify(g).slice(0, 400)} pages=${pageIds.length}`,
-      );
     const rects: Array<{
       pageId: string;
       topPt: number;
@@ -166,22 +169,9 @@ async function place(name: string, native: boolean): Promise<Placed> {
     off = b.end + 1;
   }
   // One undo step takes the whole placement back.
-  const probe = async () => {
-    const g = await send({
-      kind: "requestSelectionGeometry",
-      payload: {
-        selection: {
-          storyId,
-          start: first!.start,
-          end: Math.max(first!.end, first!.start),
-        },
-      },
-    });
-    return (g.payload?.rects ?? []).length;
-  };
-  expect(paras[0]!.rects.length).toBeGreaterThan(0);
+  const placedPixels = await snap();
   await h.host.document.undo();
-  expect(await probe()).toBe(0);
+  expect(Buffer.from(await snap()).equals(Buffer.from(blankPixels))).toBe(true);
   const undone = { stories: await storyCount() };
   return {
     h,
@@ -190,6 +180,8 @@ async function place(name: string, native: boolean): Promise<Placed> {
     refusal,
     applyError: NATIVE_PLACE.lastError,
     paras,
+    placedPixels,
+    blankPixels,
     pages: pageIds.length,
     styles,
     stories,
@@ -256,6 +248,14 @@ describe.skipIf(!docxPresent)(
           old.paras.map((p) => p.text),
         );
         expect(now.pages).toBe(old.pages);
+        // What is drawn is the same, pixel for pixel.
+        expect(
+          Buffer.from(now.placedPixels).equals(Buffer.from(old.placedPixels)),
+        ).toBe(true);
+        // ... and is not the empty page.
+        expect(
+          Buffer.from(now.placedPixels).equals(Buffer.from(now.blankPixels)),
+        ).toBe(false);
         expect(now.paras.map((p) => p.rects)).toEqual(
           old.paras.map((p) => p.rects),
         );
