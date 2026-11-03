@@ -30,7 +30,13 @@ export {
   sha256Hex,
   sha256HexPrefix,
 } from "./hash.ts";
-export { decodePng, encodePng, type RgbaImage } from "./png.ts";
+export {
+  decodePng,
+  encodePng,
+  zlibStored,
+  type EncodePngOptions,
+  type RgbaImage,
+} from "./png.ts";
 export {
   base64ToBytes,
   bytesToBase64,
