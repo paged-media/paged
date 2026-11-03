@@ -362,6 +362,10 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
         ("breaks", docx_conformance::breaks_docx()),
         ("pagination", docx_conformance::pagination_docx()),
         ("table", docx_conformance::table_docx()),
+        (
+            "nested tables",
+            docx_conformance::objects_nested_tables_docx(),
+        ),
         ("floats", docx_conformance::objects_floats_docx()),
         ("drop cap", docx_conformance::drop_cap_docx()),
         ("hyperlink", docx_conformance::hyperlink_docx()),
@@ -386,17 +390,7 @@ fn direct_formatting_resolves_the_same_without_synthesized_styles() {
 }
 
 #[test]
-fn what_slice_1_does_not_build_is_deferred_not_dropped() {
-    let deferred = |bytes: &[u8], why: &str| {
-        native_body(&lowered(bytes))
-            .blocks
-            .iter()
-            .any(|b| matches!(b, NativeBlock::Deferred { reason } if reason == why))
-    };
-    assert!(deferred(
-        &docx_conformance::objects_nested_tables_docx(),
-        "nested table"
-    ));
+fn a_hyperlink_run_makes_a_link() {
     let body = native_body(&lowered(&docx_conformance::hyperlink_docx()));
     assert!(!body.links.is_empty(), "the hyperlink run makes a link");
     assert!(body.built() > 0);
@@ -456,15 +450,19 @@ fn a_prefilled_skeleton_holds_the_body_as_model_paragraphs() {
 }
 
 #[test]
-fn a_body_with_a_nested_table_is_not_prefilled() {
+fn a_nested_table_stands_in_its_cells_paragraph() {
     let model =
         docx_import::import_docx(&docx_conformance::objects_nested_tables_docx()).expect("import");
     let ir = docx_lower::lower(&model);
-    assert!(
-        docx_skeleton::skeleton_prefilled(&model, &ir, "t.docx", Default::default())
-            .expect("builds")
-            .is_none()
-    );
+    let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
+    let nested: usize = stories.stories[0]
+        .iter()
+        .filter_map(|p| p.table.as_ref())
+        .flat_map(|t| &t.cells)
+        .flat_map(|c| &c.paragraphs)
+        .filter(|p| p.table.is_some())
+        .count();
+    assert!(nested >= 1, "a cell holds a table");
 }
 
 #[test]

@@ -966,6 +966,14 @@ fn new_table_cell(col: u32, row: u32) -> TableCell {
     cell
 }
 
+/// A paragraph holding nothing: no characters, picture, note or table.
+fn is_empty_paragraph(p: &Paragraph) -> bool {
+    p.table.is_none()
+        && p.anchored_frames.is_empty()
+        && p.footnotes.is_empty()
+        && p.runs.iter().all(|r| r.text.is_empty())
+}
+
 /// A Word table as the model's table in a paragraph of its own (doc ADR 625,
 /// slice 3), as `insertTable` and the cell pour of the bundle make it.
 fn build_table(
@@ -976,11 +984,6 @@ fn build_table(
 ) -> Result<Paragraph, String> {
     if !t.flow.is_empty() {
         return Err("table poured as text".into());
-    }
-    if let Some(l) = &t.layout {
-        if l.exact_rows.iter().any(|e| *e) {
-            return Err("table with rows held at an exact height".into());
-        }
     }
     // The table's own paragraph: its style aligns the table.
     let direct = split_style(styles, t.para_style_id.as_deref())?;
@@ -1018,9 +1021,6 @@ fn build_table(
         }
     }
     for lc in &t.cells {
-        if !lc.nested.is_empty() {
-            return Err("nested table".into());
-        }
         if lc.row >= rows || lc.col >= cols {
             return Err("table cell outside the grid".into());
         }
@@ -1071,6 +1071,26 @@ fn build_table(
                 cell.paragraphs.push(para);
             }
         }
+        // Engine ADR 1050 — a table nested in the cell takes the cell's empty
+        // paragraph that stands for it, else a fresh paragraph there.
+        for n in &lc.nested {
+            let mut inner = build_table(doc, styles, &n.table, minted)?;
+            let table = inner.table.take().expect("a built table");
+            let i = n.paragraph as usize;
+            match cell.paragraphs.get_mut(i).filter(|p| is_empty_paragraph(p)) {
+                Some(p) => p.table = Some(table),
+                None => {
+                    let at = i.min(cell.paragraphs.len());
+                    cell.paragraphs.insert(
+                        at,
+                        Paragraph {
+                            table: Some(table),
+                            ..Paragraph::default()
+                        },
+                    );
+                }
+            }
+        }
         cell.row_span = lc.row_span.max(1);
         cell.column_span = lc.col_span.max(1);
     }
@@ -1096,6 +1116,14 @@ fn build_table(
             .map(|r| TableRow {
                 name: Some(r.to_string()),
                 single_row_height: t.row_heights_pt.get(r as usize).copied(),
+                // Engine ADR 1025 — a row Word holds at an exact height does
+                // not grow from it.
+                auto_grow: layout
+                    .exact_rows
+                    .get(r as usize)
+                    .copied()
+                    .unwrap_or(false)
+                    .then_some(false),
                 ..TableRow::default()
             })
             .collect(),

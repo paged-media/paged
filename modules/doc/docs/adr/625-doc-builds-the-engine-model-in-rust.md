@@ -209,6 +209,12 @@ footnotes cut at the break's character, each later part in the style the lowerin
 (the Word style plus the break's rule). A break inside a field, a tracked paragraph change on a split
 paragraph, and a part with other character properties than the first stay deferred.
 
+### Fallbacks closed: nested tables and exact-height rows
+
+A table nested in a cell takes the cell's empty paragraph that stands for it (else a fresh paragraph
+at its index), as `insertTable` with a cell address does; a row Word holds at an exact height is
+the row's height with `auto_grow` off (`setRowHeight`).
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map
