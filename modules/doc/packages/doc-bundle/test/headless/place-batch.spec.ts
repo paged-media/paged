@@ -138,6 +138,10 @@ async function place(name: string, native: boolean): Promise<Placed> {
         selection: { storyId, start: b.start, end: Math.max(b.end, b.start) },
       },
     });
+    if (paras.length === 0)
+      console.warn(
+        `geom ${name}: ${JSON.stringify(b)} ${JSON.stringify(g).slice(0, 400)} pages=${pageIds.length}`,
+      );
     const rects: Array<{
       pageId: string;
       topPt: number;
