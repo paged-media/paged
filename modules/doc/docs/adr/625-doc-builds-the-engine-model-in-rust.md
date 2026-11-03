@@ -234,6 +234,15 @@ master's. The bundle skips `pourPageItems` for a prefilled skeleton, so nothing 
 places names the invented styles and the catalogue always leaves them out. A box with a look (fill,
 outline, effects) or holding a bookmark, note or comment stays deferred.
 
+### Fallback closed: paragraphs that cannot carry their character properties
+
+A paragraph style's character properties (the line pitch of a picture's line, a size) are the runs'
+own in the model. A paragraph with no text has no run, and a run whose Word character style sets the
+same path would be overridden by them. For those two the paragraph keeps the style the lowering made
+for it (the old pour's way), and the catalogue includes that style and its invented parents: the only
+case in which a prefilled document holds a `docx-auto-p` style. A break in such a paragraph stays
+deferred.
+
 ### Save-back
 
 Save-back keeps ADR 602's contract (a byte splice of the edited paragraphs): the ordinal map

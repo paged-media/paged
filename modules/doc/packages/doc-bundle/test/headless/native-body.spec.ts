@@ -206,6 +206,18 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     .filter((n) => n.endsWith(".docx"))
     .sort();
   const prefilledNames: string[] = [];
+  const MUST_OPEN: string[] = [
+    "direct-format.docx",
+    "table-body.docx",
+    "picture-body.docx",
+    "field-body.docx",
+    "list-body.docx",
+    "hyperlink-body.docx",
+    "drop-cap.docx",
+    "review-body.docx",
+    "toc-body.docx",
+    "breaks-body.docx",
+  ];
 
   for (const name of FIXTURES) {
     it(`${name}: the native open agrees with the old pour`, async () => {
@@ -222,10 +234,13 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
       expect(native.paras.map((p) => p.rects)).toEqual(
         old.paras.map((p) => p.rects),
       );
-      // No paragraph names a style the lowering invented for direct formatting.
-      expect(native.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
-        false,
-      );
+      // Where nothing keeps one, no paragraph names a style the lowering
+      // invented for direct formatting.
+      if (MUST_OPEN.includes(name)) {
+        expect(native.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
+          false,
+        );
+      }
       const exported = async (o: Opened): Promise<string> => {
         const exporter = o.h
           .exportersContributed()
@@ -243,18 +258,7 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
   }
 
   it("the fixtures that must open natively still do", () => {
-    for (const name of [
-      "direct-format.docx",
-      "table-body.docx",
-      "picture-body.docx",
-      "field-body.docx",
-      "list-body.docx",
-      "hyperlink-body.docx",
-      "drop-cap.docx",
-      "review-body.docx",
-      "toc-body.docx",
-      "breaks-body.docx",
-    ]) {
+    for (const name of MUST_OPEN) {
       expect(prefilledNames).toContain(name);
     }
   });

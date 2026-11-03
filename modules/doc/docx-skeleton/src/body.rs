@@ -86,6 +86,8 @@ pub struct NativeBody {
     pub part_errors: Vec<String>,
     /// The stories of the text boxes anchored in the body's paragraphs.
     pub extra: Vec<(String, Vec<Paragraph>)>,
+    /// The styles the lowering invented that paragraphs keep.
+    pub keep_styles: std::collections::BTreeSet<String>,
 }
 
 impl NativeBody {
@@ -569,6 +571,8 @@ struct Minted {
     frames: usize,
     notes: usize,
     boxes: usize,
+    /// The invented styles paragraphs keep (see `build_whole`).
+    keep: std::collections::BTreeSet<String>,
     /// The stories of inline text boxes, made beside the body's.
     extra: Vec<(String, Vec<Paragraph>)>,
     links: Vec<NativeLink>,
@@ -636,6 +640,9 @@ fn build_parts(
     }
     if p.mark_change.is_some() || p.props_change.is_some() {
         return Err("tracked paragraph change on a paragraph a break splits".into());
+    }
+    if whole.paragraph_style.as_deref().is_some_and(is_synthesized) {
+        return Err("a break in a paragraph that keeps its invented style".into());
     }
     let first_chars: Vec<&StyleProp> = split_style(styles, p.para_style_id.as_deref())?
         .props
@@ -764,26 +771,45 @@ fn build_whole(
     // character style; as a run's own they would sit above it. A run's own
     // synthesized properties are laid over them, as the old cascade does, so
     // only a Word character style that sets one of the same paths changes
-    // the result: that paragraph is left to the old path.
-    let mut para_chars = Vec::new();
-    for prop in &direct.props {
-        if is_char_path(&prop.path) {
-            para_chars.push(prop);
-        } else if !set_paragraph_prop(&mut para, prop) {
-            return Err(format!("no model field for {}", prop.path));
+    // the result. And a paragraph with no text has no run to carry them. For
+    // those two the paragraph keeps the style the lowering made for it, as
+    // the old pour did, and that style is in the catalogue.
+    let chars: Vec<&StyleProp> = direct
+        .props
+        .iter()
+        .copied()
+        .filter(|x| is_char_path(&x.path))
+        .collect();
+    let overlaps = !chars.is_empty()
+        && p.runs.iter().any(|r| {
+            split_style(styles, r.char_style_id.as_deref())
+                .ok()
+                .and_then(|d| d.base)
+                .is_some_and(|base| {
+                    let theirs = resolve_style(doc, base);
+                    chars.iter().any(|c| theirs.contains_key(&c.path))
+                })
+        });
+    let all_empty = p.runs.iter().all(|r| r.text.is_empty());
+    let mut para_chars: Vec<&StyleProp> = Vec::new();
+    if !chars.is_empty() && (all_empty || overlaps) {
+        para.paragraph_style = p.para_style_id.clone();
+        let mut at = p.para_style_id.as_deref();
+        while let Some(id) = at {
+            if !is_synthesized(id) {
+                break;
+            }
+            minted.keep.insert(id.to_owned());
+            at = styles.get(id).and_then(|s| s.based_on.as_deref());
         }
-    }
-    for r in &p.runs {
-        let Some(base) = split_style(styles, r.char_style_id.as_deref())?.base else {
-            continue;
-        };
-        let theirs = resolve_style(doc, base);
-        if para_chars.iter().any(|c| theirs.contains_key(&c.path)) {
-            return Err("paragraph character properties under a character style".into());
+    } else {
+        for prop in &direct.props {
+            if is_char_path(&prop.path) {
+                para_chars.push(prop);
+            } else if !set_paragraph_prop(&mut para, prop) {
+                return Err(format!("no model field for {}", prop.path));
+            }
         }
-    }
-    if !para_chars.is_empty() && p.runs.iter().all(|r| r.text.is_empty()) {
-        return Err("paragraph character properties on an empty paragraph".into());
     }
     // The field the previous run belongs to (its runs are one engine field,
     // with their joined text as its result, in its first run's look).
@@ -1296,6 +1322,7 @@ pub fn native_body(doc: &LoweredDoc) -> NativeBody {
         parts,
         part_errors,
         extra: minted.extra,
+        keep_styles: minted.keep,
     }
 }
 
@@ -1312,6 +1339,8 @@ pub struct NativeStories {
     pub parts: Vec<(String, Vec<Paragraph>)>,
     /// The stories of the text boxes anchored in the body, to add.
     pub extra: Vec<(String, Vec<Paragraph>)>,
+    /// The styles the lowering invented that paragraphs keep.
+    pub keep_styles: std::collections::BTreeSet<String>,
 }
 
 /// The body's native stories, one per skeleton story and in its order, when
@@ -1331,6 +1360,7 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
     let marks = body.marks;
     let parts = body.parts;
     let extra = body.extra;
+    let keep_styles = body.keep_styles;
     let mut paras = Vec::with_capacity(body.blocks.len());
     // The index of each block's first native paragraph (a split block makes
     // several).
@@ -1452,5 +1482,6 @@ pub fn native_stories(doc: &LoweredDoc) -> Option<NativeStories> {
         destinations,
         parts,
         extra,
+        keep_styles,
     })
 }

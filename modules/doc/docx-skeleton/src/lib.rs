@@ -241,7 +241,7 @@ pub fn skeleton_prefilled(
     items::add_page_items(&mut document, &items);
     // The theme, swatches and styles the paragraphs name: the engine's own
     // operations, so a refused property sends the document to the old path.
-    if catalog::apply_catalog(&mut document, lowered).is_err() {
+    if catalog::apply_catalog(&mut document, lowered, &native.keep_styles).is_err() {
         return Ok(None);
     }
     // Doc ADR 611 — each master frame's story holds its part.

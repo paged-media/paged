@@ -270,7 +270,11 @@ fn theme_of(t: &dml_native::theme::ThemeWire) -> Result<Theme, CatalogError> {
 }
 
 /// Apply the theme, swatches, colour groups and styles of `ir` to `document`.
-pub fn apply_catalog(document: &mut Document, ir: &LoweredDoc) -> Result<(), CatalogError> {
+pub fn apply_catalog(
+    document: &mut Document,
+    ir: &LoweredDoc,
+    keep: &std::collections::BTreeSet<String>,
+) -> Result<(), CatalogError> {
     // Engine ADR 1056 — the theme first, so the swatches that follow its
     // slots find it.
     let themed = ir.theme.is_some();
@@ -315,11 +319,11 @@ pub fn apply_catalog(document: &mut Document, ir: &LoweredDoc) -> Result<(), Cat
         );
     }
     // The styles the lowering invented for direct formatting are named by
-    // nothing a prefilled skeleton holds: the body, the headers and footers
-    // and the text boxes are built with their properties.
+    // nothing a prefilled skeleton holds, except the paragraphs that cannot
+    // carry their character properties themselves (`keep`).
     let mut known: BTreeMap<&str, ()> = BTreeMap::new();
     for style in &ir.styles {
-        if crate::body::is_synthesized(&style.id) {
+        if crate::body::is_synthesized(&style.id) && !keep.contains(&style.id) {
             continue;
         }
         if known.insert(style.id.as_str(), ()).is_some() {

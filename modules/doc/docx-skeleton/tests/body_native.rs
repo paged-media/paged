@@ -105,10 +105,15 @@ fn compare_paragraph(
     np: &paged_model::Paragraph,
     at: &str,
 ) -> bool {
-    assert!(
-        !np.paragraph_style.as_deref().is_some_and(is_synthesized),
-        "{at}: names a synthesized paragraph style"
-    );
+    // A paragraph that cannot carry its character properties keeps the
+    // style the lowering made for it, and says so (it is then the same
+    // token the IR names).
+    if np.paragraph_style.as_deref().is_some_and(is_synthesized) {
+        assert_eq!(
+            np.paragraph_style, p.para_style_id,
+            "{at}: a kept style is the IR's own"
+        );
+    }
     let old_para = p
         .para_style_id
         .as_deref()
