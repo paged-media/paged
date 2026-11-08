@@ -154,7 +154,8 @@ comparison. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml:
 adjusts) for doc, slide and sheet; `paged_warp::textshape` is the one set of preset guides; the frame's `text_warp` is bent by the
 renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. Open: a measured match, write-back, handles.
 ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
-provider); a matting job in `apps/ml-host` and Tier-A matting models are open.
+provider); `apps/ml-host` runs a user-installed matting runner (`matting` job, Amendment 2), which `mlHostProvider` serves as
+`ml.matting@1` while the host's health lists it. Tier-A matting models are open.
 Oracle scripts live in `tooling/oracle/` (one place for the InDesign,
 Illustrator, Photoshop, Word and PowerPoint runners; windowless only).
 

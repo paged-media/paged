@@ -100,16 +100,16 @@ camelCase. Requests whose `Host` is not loopback get `403 forbidden_host` (DNS
 rebinding); an `Origin` that is neither loopback nor allowed gets
 `403 forbidden_origin`. Bodies are capped at 64 MiB (`413 too_large`).
 
-| Route                          | What                                                                                                                                                                                                                  |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/ml/health`           | `ok`, `version`, `api: 1`, `runtime {binary, found}`, `model {id, configured, licenceAcknowledged}`, `ready`, `capabilities` (`["generate","edit"]` when ready), `queue {running, queued}`                            |
-| `GET /api/ml/config`           | The stored config                                                                                                                                                                                                     |
-| `PUT /api/ml/config`           | Store and persist a config; `409 licence_not_acknowledged`, `400 missing_file`, `400 bad_request`                                                                                                                     |
-| `POST /api/ml/jobs`            | `generate {prompt, negativePrompt?, width, height, steps?=20, seed?=-1, cfgScale?=2.5}` or `edit {prompt, image, mask?, references?(≤10), steps?, seed?, strength?=0.75}` (base64 PNGs) → `202 {id, state: "queued"}` |
-| `GET /api/ml/jobs/{id}`        | `{id, kind, state, progress {step, total}, error?}`; `404 no_job`                                                                                                                                                     |
-| `GET /api/ml/jobs/{id}/events` | Server-sent events: `state`, `progress`, then `done` / `failed` / `cancelled` with the job JSON, then the stream closes                                                                                               |
-| `GET /api/ml/jobs/{id}/result` | `image/png` when done; `409 not_done`                                                                                                                                                                                 |
-| `DELETE /api/ml/jobs/{id}`     | Cancel: kills the running process or drops a queued job; a finished job is unchanged                                                                                                                                  |
+| Route                          | What                                                                                                                                                                                                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/ml/health`           | `ok`, `version`, `api: 1`, `runtime {binary, found}`, `model {id, configured, licenceAcknowledged}`, `ready`, `matting {id, configured, licenceAcknowledged, ready}`, `capabilities` (`generate` and `edit` when ready, `matting` when the matting runner is), `queue {running, queued}` |
+| `GET /api/ml/config`           | The stored config                                                                                                                                                                                                                                                                        |
+| `PUT /api/ml/config`           | Store and persist a config; `409 licence_not_acknowledged`, `400 missing_file`, `400 bad_request`                                                                                                                                                                                        |
+| `POST /api/ml/jobs`            | `generate {prompt, negativePrompt?, width, height, steps?=20, seed?=-1, cfgScale?=2.5}`, `edit {prompt, image, mask?, references?(≤10), steps?, seed?, strength?=0.75}` or `matting {image}` (base64 PNGs) → `202 {id, state: "queued"}`                                                 |
+| `GET /api/ml/jobs/{id}`        | `{id, kind, state, progress {step, total}, error?}`; `404 no_job`                                                                                                                                                                                                                        |
+| `GET /api/ml/jobs/{id}/events` | Server-sent events: `state`, `progress`, then `done` / `failed` / `cancelled` with the job JSON, then the stream closes                                                                                                                                                                  |
+| `GET /api/ml/jobs/{id}/result` | `image/png` when done; `409 not_done`                                                                                                                                                                                                                                                    |
+| `DELETE /api/ml/jobs/{id}`     | Cancel: kills the running process or drops a queued job; a finished job is unchanged                                                                                                                                                                                                     |
 
 `POST /api/ml/jobs` answers `503 not_ready` (saying what is missing) until the
 runtime is found and an acknowledged model is configured, and `400 bad_request`
@@ -132,6 +132,29 @@ The invocation per job:
 Progress comes from sd's progress-bar lines (`|====>   | 3/20 - 1.2s/it`); exit 0
 with `out.png` written is `done`, anything else `failed` with sd's last output
 lines in `error`.
+
+## A matting runner (`ml.matting@1`)
+
+Remove background (`media.paged.image/remove-background`) can use a matting model you installed,
+run by a program you installed: the host runs it like sd, one job at a time, and never fetches
+either. Name it in the config (merged with the rest of it):
+
+```json
+"matting": {
+  "id": "my-matting-model",
+  "licenceId": "<its licence>",
+  "licenceAcknowledged": true,
+  "binary": "/abs/path/to/your/matting-cli",
+  "model": "/abs/path/to/the/model/file",
+  "args": ["--model", "{model}", "{input}", "{output}"]
+}
+```
+
+`{input}` is the picture (PNG), `{output}` the PNG the program writes: a cut-out with alpha, or a
+greyscale matte (white = foreground). `args` defaults to `{input} {output}`. The licence gate and
+the file checks are the generative model's. While the runner is ready, `health.capabilities` lists
+`matting`, and the editor's `supports("ml.matting@1")` follows. A failed run reports the program's
+last output lines as the job's `error`.
 
 ## Development
 

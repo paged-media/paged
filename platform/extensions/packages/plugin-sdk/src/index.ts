@@ -101,6 +101,7 @@ export {
   createMlHostClient,
   mlHostProvider,
   maskToImage,
+  imageToMatte,
   toBase64,
   MlHostError,
   ML_HOST_DEFAULT_URL,

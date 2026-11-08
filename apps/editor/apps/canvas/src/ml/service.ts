@@ -452,6 +452,11 @@ export class MlService {
           textEncoder: paths.textEncoder.trim(),
           vae: paths.vae.trim(),
         },
+        // The host stores the whole configuration: a matting runner the
+        // user set up there stays (extensions ADR 1100, amendment 2).
+        ...(this.hostConfig?.matting
+          ? { matting: this.hostConfig.matting }
+          : {}),
       });
     } catch (err) {
       this.hostError = (err as Error).message;

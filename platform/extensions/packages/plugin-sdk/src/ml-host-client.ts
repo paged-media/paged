@@ -52,7 +52,16 @@ export interface MlHostHealth {
     licenceAcknowledged: boolean;
   };
   ready: boolean;
-  capabilities: Array<"generate" | "edit">;
+  /** The matting runner (ADR 1100 amendment 2); absent on an older host. */
+  matting?: {
+    id: string | null;
+    configured: boolean;
+    licenceAcknowledged: boolean;
+    ready: boolean;
+  };
+  /** What the host answers now: `generate` and `edit` while `ready`,
+   *  `matting` while its runner is. */
+  capabilities: Array<"generate" | "edit" | "matting">;
   queue: { running: number; queued: number };
 }
 
@@ -69,6 +78,16 @@ export interface MlHostConfig {
     textEncoderFlag?: string;
   };
   extraArgs?: string[];
+  /** A matting runner the user installed: `<binary> <args>` with
+   *  `{input}`, `{output}` and `{model}` filled in. */
+  matting?: {
+    id: string;
+    licenceId?: string;
+    licenceAcknowledged: boolean;
+    binary: string;
+    model?: string;
+    args?: string[];
+  };
 }
 
 export type MlHostJobState =
@@ -77,7 +96,7 @@ export type MlHostJobState =
 /** `GET /api/ml/jobs/{id}`. */
 export interface MlHostJob {
   id: string;
-  kind: "generate" | "edit";
+  kind: "generate" | "edit" | "matting";
   state: MlHostJobState;
   progress: { step: number; total: number };
   error?: string;
@@ -104,6 +123,10 @@ export type MlHostJobRequest =
       steps?: number;
       seed?: number;
       strength?: number;
+    }
+  | {
+      kind: "matting";
+      image: string;
     };
 
 /** An answer the host refused: its `error` code and message. */
@@ -306,9 +329,33 @@ export interface MlHostProviderOptions {
   onStatus?: () => void;
 }
 
-/** A Tier-B provider over the host: `generate` and `edit`, healthy while
- *  the last health check said ready. Call `refresh()` to check again (the
- *  editor polls; paged-node checks once). */
+/** The matte of a matting runner's answer: its alpha where it wrote any
+ *  transparency (a cut-out), else its grey (a matte). */
+export function imageToMatte(image: MlImage): MlMask {
+  const n = image.width * image.height;
+  const data = new Uint8Array(n);
+  let cutOut = false;
+  for (let i = 0; i < n; i++) {
+    if (image.data[i * 4 + 3]! < 255) {
+      cutOut = true;
+      break;
+    }
+  }
+  for (let i = 0; i < n; i++) data[i] = image.data[i * 4 + (cutOut ? 3 : 0)]!;
+  return { width: image.width, height: image.height, data };
+}
+
+/** The capabilities a provider over the host can answer. */
+const HOST_CAPABILITIES: readonly MlCapability[] = [
+  "generate",
+  "edit",
+  "matting",
+];
+
+/** A Tier-B provider over the host: the capabilities its last health check
+ *  listed (`generate` and `edit` while a model is ready, `matting` while a
+ *  matting runner is), healthy while it listed any. Call `refresh()` to
+ *  check again (the editor polls; paged-node checks once). */
 export interface MlHostProvider extends MlProvider {
   refresh(): Promise<MlHostHealth | null>;
   readonly lastHealth: MlHostHealth | null;
@@ -323,12 +370,17 @@ export function mlHostProvider(options: MlHostProviderOptions): MlHostProvider {
     id: options.id ?? "paged.ml-host",
     title: options.title ?? "Local image model",
     tier: "B",
-    capabilities: ["generate", "edit"],
+    get capabilities(): MlCapability[] {
+      const listed = health?.capabilities ?? [];
+      return HOST_CAPABILITIES.filter((c) =>
+        (listed as readonly string[]).includes(c),
+      );
+    },
     get lastHealth() {
       return health;
     },
     status() {
-      if (health?.ready)
+      if (health && (health.ready || health.capabilities.length > 0))
         return {
           healthy: true,
           ...(health.model.id ? { model: health.model.id } : {}),
@@ -337,7 +389,9 @@ export function mlHostProvider(options: MlHostProviderOptions): MlHostProvider {
       return { healthy: false, detail };
     },
     async refresh() {
-      const before = JSON.stringify(provider.status());
+      const seen = () =>
+        JSON.stringify([provider.status(), provider.capabilities]);
+      const before = seen();
       try {
         health = await client.health();
         detail = health.ready
@@ -351,7 +405,7 @@ export function mlHostProvider(options: MlHostProviderOptions): MlHostProvider {
         health = null;
         detail = `local image model not running (${(err as Error).message})`;
       }
-      if (JSON.stringify(provider.status()) !== before) options.onStatus?.();
+      if (seen() !== before) options.onStatus?.();
       return health;
     },
     async run<C extends MlCapability>(
@@ -386,6 +440,9 @@ export function mlHostProvider(options: MlHostProviderOptions): MlHostProvider {
           ...(r.steps !== undefined ? { steps: r.steps } : {}),
           ...(r.strength !== undefined ? { strength: r.strength } : {}),
         };
+      } else if (capability === "matting") {
+        const r = request as MlRequests["matting"];
+        job = { kind: "matting", image: await png(r.image) };
       } else {
         throw new Error(
           `ml.${capability}@1: the local image model does not answer it`,
@@ -396,6 +453,8 @@ export function mlHostProvider(options: MlHostProviderOptions): MlHostProvider {
         ...(run.onProgress ? { onProgress: run.onProgress } : {}),
       });
       const image = await codec.decode(bytes);
+      if (capability === "matting")
+        return { alpha: imageToMatte(image) } as unknown as MlProviderAnswer<C>;
       return { image } as unknown as MlProviderAnswer<C>;
     },
   };
