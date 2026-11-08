@@ -660,7 +660,7 @@ describe("the text-format chords (paged.text.*)", () => {
       TEXT_FORMAT_KEYBINDINGS.filter((k) => host.has(k.key)).map((k) => k.key),
     ).toEqual(["cmd+u", "ctrl+u"]);
     // paged.slide's chords stay free.
-    const slide = new Set(SLIDE_KEYBINDINGS.map(([key]) => key));
+    const slide = new Set<string>(SLIDE_KEYBINDINGS.map(([key]) => key));
     expect(
       TEXT_FORMAT_KEYBINDINGS.filter((k) => slide.has(k.key)).map((k) => k.key),
     ).toEqual([]);

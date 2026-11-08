@@ -15,6 +15,7 @@
  *
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
 
 // Object ▸ Insert barcode… (paged.insert.barcode): the dialog collects the
 // data and the symbology and runs the command; the command encodes through the
