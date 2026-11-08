@@ -157,12 +157,16 @@ fn a_chart_lowers_to_an_anchored_group_of_its_pieces__feat__doc_charts() {
         assert!(b[0] >= 0.0 && b[1] >= 0.0);
         assert!(b[0] + b[2] <= bar.width_pt + 0.01 && b[1] + b[3] <= bar.height_pt + 0.01);
     }
-    // The pie: three wedges of three colours.
+    // The pie: three wedges (contours with arcs) of three colours.
     let wedges: std::collections::BTreeSet<_> = drawn[1]
         .pieces
         .iter()
         .filter_map(|p| match p {
-            LoweredChartPiece::Shape { anchors, fx, .. } if anchors.len() > 4 => {
+            LoweredChartPiece::Shape { anchors, fx, .. }
+                if anchors
+                    .iter()
+                    .any(|a| (a[2], a[3]) != (a[0], a[1]) || (a[4], a[5]) != (a[0], a[1])) =>
+            {
                 fx.as_ref().and_then(|f| f.fill.clone())
             }
             _ => None,
