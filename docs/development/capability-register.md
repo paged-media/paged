@@ -105,8 +105,16 @@ renderer); the f64 affine (`[f64;6]`: slide-resolve, pptx-export's `geom`, `dml-
 `paged-svg` and `Transform` of `paged-compose` keep their types but their product and point map call
 `paged_geom::affine`.
 Draw's TS copies of width, brush,
-along-path, envelope and `appearance-bake.ts` → `paged-vector-fx`. `dml-native` still maps
-pattern fill to a two-colour mix, drops gradient alpha and loses `clrChange`: adopt paint v2.
+along-path, envelope and `appearance-bake.ts` → `paged-vector-fx`. `dml-native` adopts paint v2 where the
+module's items are the engine's own (paged.slide, `Mapper::alpha_stops` / `pattern_swatches`): a gradient
+whose stops differ in alpha keeps it as the swatch's opacity stops (ADR 1007; no gradient feather rides
+on the item, and a gradient stroke fades too), and an opaque `a:pattFill` as a stroke's pattern swatch
+(ADR 1041; the 8 x 8 pt cell as vector items). Open: the doc and sheet lane (`NativeFx` onto the wire,
+TypeScript lowerings) still carries the feather and the two-colour mix until its lowerings take opacity
+stops and pattern swatches; slide's pattern fill stays a picture of PowerPoint-measured tiles (an engine
+pattern would need the slide-grid phase through `pattern_transform` per frame and would move the
+goldens); a translucent pattern has no swatch (a tile item paints a colour without alpha). `a:clrChange`
+stays a recorded loss: the filter stack (`RasterOp`) has no colour-replace op.
 `a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3 → `dml-chart`.
 The host `tools` package still imports `@paged-media/draw/geometry` and `/machines`.
 

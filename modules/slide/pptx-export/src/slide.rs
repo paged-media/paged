@@ -1648,7 +1648,7 @@ impl<'a> Writer<'a, '_> {
                     .map(|s| dml_native::Stop {
                         pos: s.location_pct as f64,
                         rgb: self.colors.rgb(&s.stop_color).unwrap_or([0, 0, 0]),
-                        alpha: 1.0,
+                        alpha: s.opacity_pct.map_or(1.0, |o| f64::from(o) / 100.0),
                     })
                     .collect(),
             )

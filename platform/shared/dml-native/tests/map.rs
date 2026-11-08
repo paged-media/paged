@@ -117,6 +117,67 @@ fn alpha_stops_fade_the_item_through_a_gradient_feather__feat__plugin_slide_dml_
 }
 
 #[test]
+fn alpha_stops_ride_the_swatch_as_opacity_stops_when_the_mapper_keeps_them__feat__plugin_slide_dml_native_mapper(
+) {
+    let mut m = Mapper::default().alpha_stops();
+    let p = paint_of(
+        r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="FF0000"><a:alpha val="20000"/></a:srgbClr></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>"#,
+    );
+    let id = m.paint(&p);
+    let g = m.palette.gradient_entries();
+    let e = g.iter().find(|g| g.self_id == id).unwrap();
+    assert_eq!(
+        e.stops.iter().map(|s| s.opacity_pct).collect::<Vec<_>>(),
+        [Some(100.0), Some(20.0)]
+    );
+    // No feather: the fill itself fades.
+    let t = m.transparency(1.0, &Effects::default(), Some(&p));
+    assert!(t.effects.is_none() && t.opacity.is_none());
+    // One alpha throughout is the item's opacity, as before: no opacity stops.
+    let flat = paint_of(
+        r#"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr></a:gs><a:gs pos="100000"><a:srgbClr val="00FF00"><a:alpha val="50000"/></a:srgbClr></a:gs></a:gsLst></a:gradFill>"#,
+    );
+    let id = m.paint(&flat);
+    let g = m.palette.gradient_entries();
+    let e = g.iter().find(|g| g.self_id == id).unwrap();
+    assert!(e.stops.iter().all(|s| s.opacity_pct.is_none()));
+}
+
+#[test]
+fn an_opaque_pattern_is_a_pattern_swatch_of_its_cell_when_the_mapper_keeps_them__feat__plugin_slide_dml_native_mapper(
+) {
+    let pp = PatternPaint {
+        preset: "horz".into(),
+        fg: [255, 0, 0],
+        fg_alpha: 1.0,
+        bg: [0, 0, 255],
+        bg_alpha: 1.0,
+    };
+    let mut m = Mapper::default().pattern_swatches();
+    let id = m.paint(&Paint::Pattern(pp.clone()));
+    assert_eq!(id, "Pattern/p1");
+    // The same pattern is the same swatch.
+    assert_eq!(m.paint(&Paint::Pattern(pp.clone())), id);
+    assert!(m.losses().is_empty());
+    let e = &m.palette.pattern_entries()[0];
+    assert_eq!((e.width, e.height), (8.0, 8.0));
+    // The background square, then the cell's one foreground run: `horz` is
+    // its top row.
+    assert_eq!(e.items.len(), 2);
+    assert_eq!(e.items[1].anchors[2].anchor, (8.0, 1.0));
+    // A translucent pattern, and a mapper without pattern swatches, keep
+    // the mix of the two colours.
+    let mut m = Mapper::default().pattern_swatches();
+    let t = PatternPaint {
+        bg_alpha: 0.5,
+        ..pp.clone()
+    };
+    assert!(m.paint(&Paint::Pattern(t)).starts_with("Color/"));
+    let mut m = Mapper::default();
+    assert!(m.paint(&Paint::Pattern(pp)).starts_with("Color/"));
+}
+
+#[test]
 fn a_pattern_is_the_mix_of_its_colours_and_reported__feat__plugin_slide_dml_native_mapper() {
     let mut m = Mapper::default();
     let p = paint_of(
