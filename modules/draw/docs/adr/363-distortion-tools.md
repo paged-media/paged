@@ -58,7 +58,7 @@ needs an engine construct: every one of them ends in new path geometry.
 
 ## Consequences
 
-- Illustrator is the oracle for the grid: `scripts/illustrator/probes/perspective-grid.jsx`
+- Illustrator is the oracle for the grid: `tooling/oracle/illustrator/probes/perspective-grid.jsx`
   records shapes drawn on each plane of its default grid, and the replay proves each plane is
   one homography with the two-point structure our construction spans. The Liquify tools and
   Puppet Warp have no scriptable Illustrator equivalent; their kernels are pinned by unit specs.

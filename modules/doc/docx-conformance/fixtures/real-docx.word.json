@@ -1,5 +1,5 @@
 {
- "source": "Microsoft Word 16 (macOS), real_docx_docx() saved as PDF by scripts/word-real-docx-probe.sh; word boxes in pt from the page top-left (pdftotext -bbox)",
+ "source": "Microsoft Word 16 (macOS), real_docx_docx() saved as PDF by tooling/oracle/office/word/word-real-docx-probe.sh; word boxes in pt from the page top-left (pdftotext -bbox)",
  "words": [
   {"t": "T01", "x0": 36.02, "y0": 36.41, "x1": 56.69, "y1": 49.79},
   {"t": "An", "x0": 72.05, "y0": 36.41, "x1": 86.73, "y1": 49.79},

@@ -96,7 +96,7 @@ cannot express that today. Verified on core `main` (2026-10-01):
 
 ## 2026-10-01 addendum: what InDesign does, measured, and the first implementation
 
-**Asked InDesign** (`tools/indesign-export/reflow-probe.sh` on the paged-gen
+**Asked InDesign** (`tooling/oracle/indesign/reflow-probe.sh` on the paged-gen
 `reflow` fixture: two pages, one threaded frame each, 33 lines a frame, 80
 one-line paragraphs). Smart Text Reflow is an **idle task**: it never runs
 while a script runs and never on open, so the probe edits in one script and

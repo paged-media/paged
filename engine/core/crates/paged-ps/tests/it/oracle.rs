@@ -17,7 +17,7 @@
  */
 
 //! paged-ps against Illustrator: the EPS programs of
-//! `modules/draw/scripts/illustrator/probes/eps-import.jsx`, recorded in
+//! `modules/draw/tooling/oracle/illustrator/probes/eps-import.jsx`, recorded in
 //! `tests/fixtures/eps-import.illustrator.json` (Illustrator placed and
 //! embedded each one, which interprets its PostScript), run through the
 //! interpreter here. Every painted path the interpreter draws matches a

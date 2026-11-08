@@ -1,6 +1,6 @@
 # Feature fixtures
 
-Each deck here was **written by PowerPoint**: `scripts/fixtures/<name>.applescript` builds it
+Each deck here was **written by PowerPoint**: `tooling/oracle/office/powerpoint/fixtures/<name>.applescript` builds it
 through PowerPoint's scripting dictionary and saves it (ADR 705). Recorded with it:
 
 | File | What |
@@ -8,9 +8,9 @@ through PowerPoint's scripting dictionary and saves it (ADR 705). Recorded with 
 | `<name>.pptx` | the deck PowerPoint saved |
 | `<name>.ppt.pdf` | PowerPoint's PDF of it |
 | `<name>.ppt.json` | every top-level shape's position, size, rotation, type, autofit mode and effective first-run size |
-| `<name>.baselines.json` | (where recorded) each text box's first baseline below its top inset and its line pitch, read from the PDF by `scripts/ppt-baseline-probe.py`; positions carry the PDF's 0.96 pt quantum |
-| `<name>.frames.json` | (where recorded) each chart or SmartArt frame's box, the filled rectangles PowerPoint drew in it and its text colours, by `scripts/ppt-chart-probe.py` |
-| `<name>.tables.json` | (where recorded) every table cell's colour on PowerPoint's page and its text's weight and colour, and every border segment, by `scripts/ppt-table-probe.py` |
+| `<name>.baselines.json` | (where recorded) each text box's first baseline below its top inset and its line pitch, read from the PDF by `tooling/oracle/office/powerpoint/ppt-baseline-probe.py`; positions carry the PDF's 0.96 pt quantum |
+| `<name>.frames.json` | (where recorded) each chart or SmartArt frame's box, the filled rectangles PowerPoint drew in it and its text colours, by `tooling/oracle/office/powerpoint/ppt-chart-probe.py` |
+| `<name>.tables.json` | (where recorded) every table cell's colour on PowerPoint's page and its text's weight and colour, and every border segment, by `tooling/oracle/office/powerpoint/ppt-table-probe.py` |
 | `<name>.provenance.json` | PowerPoint version, date, the authoring script, the fonts that reached the PDF |
 | `fonts.faces.json` | what the source fonts of the `fonts` fixtures say, per face: a hash of each glyph's outline and program, the advance widths, a hash of every other table (recorded from the original TrueType files by `pptx-fonts/tests/fixtures.rs`) |
 
@@ -29,23 +29,23 @@ through PowerPoint's scripting dictionary and saves it (ADR 705). Recorded with 
 | `fonts-full` | the same text without Caveat, every face embedded whole |
 | `effects` | one rectangle per DrawingML paint or effect the shared mapper lowers (ADR 722): outer, inner and preset shadow, glow, soft edge, reflection; an alpha-stop and a radial gradient, a pattern, preset and custom dashes (seeded by `effects.seed.py`, re-saved by PowerPoint) |
 | `effect-stack` | the DrawingML effects that ride the engine's effect stack (engine ADR 1008) and how PowerPoint fills a path: a blur, a multiply colour overlay, a gradient overlay (which PowerPoint does not draw), a reflection; two nested squares in one `a:custGeom` path turning the same way (a hole: even-odd, engine ADR 1006) and against each other (seeded by `effect-stack.seed.py`, re-saved by PowerPoint) |
-| `patterns` | every preset pattern of `a:pattFill` (54), black on white, one rectangle each named after its preset (slides 1 and 2); red on yellow, half-transparent colours, a rotated rectangle, an ellipse, a pattern under text and a theme colour (slide 3). Seeded by `patterns.seed.py`, re-saved by PowerPoint; `scripts/ppt-pattern-probe.py` reads each preset's 8 × 8 cell from the PDF (slide ADR 723) |
+| `patterns` | every preset pattern of `a:pattFill` (54), black on white, one rectangle each named after its preset (slides 1 and 2); red on yellow, half-transparent colours, a rotated rectangle, an ellipse, a pattern under text and a theme colour (slide 3). Seeded by `patterns.seed.py`, re-saved by PowerPoint; `tooling/oracle/office/powerpoint/ppt-pattern-probe.py` reads each preset's 8 × 8 cell from the PDF (slide ADR 723) |
 | `bevels` | the twelve top bevel presets of `a:sp3d` on blue rectangles in PowerPoint's flat scene, a wider and a deeper bevel, a top and bottom bevel, a bevel seen through a perspective camera (slide 1); outer shadows with PowerPoint's perspective presets, glow and soft edge at two sizes, an inner shadow (slide 2). Seeded by `bevels.seed.py`, re-saved by PowerPoint (slide ADR 723) |
 | `comments` | `placeholders` with review comments (seeded by `comments.seed.py`, re-saved by PowerPoint): slide 1 a positioned comment with a reply, slide 2 a resolved comment anchored to its title, slide 3 a legacy comment PowerPoint converted to a modern one. Recorded without PDF or geometry (the slides are `placeholders`') |
 | `charts` | five slides, one chart each, seeded by `charts.seed.py` (chart parts and openpyxl workbooks laid out as PowerPoint lays out a chart's sheet) and re-saved by PowerPoint: a clustered column, a line, a pie and a scatter chart with embedded workbooks, and a column chart without one (only its cached values). Live charts, ADR 715 |
 | `connectors` | two identical slides: a rounded rectangle with its adjust value, a rectangular callout with its tip moved, a can, a flipped right triangle, three boxes and three connectors glued to them (elbow, straight, curved); on slide 2 PowerPoint moved "Box B" (re-routing its connectors) and resized the rounded rectangle to 4 × 1 in (`connectors.post.applescript`) |
 
-Re-record (a Mac with PowerPoint): `bash scripts/ppt-author-fixtures.sh [name ...]`; then, for
-`baselines`, `python3 scripts/ppt-baseline-probe.py baselines.pptx baselines.ppt.pdf > baselines.baselines.json`
+Re-record (a Mac with PowerPoint): `bash tooling/oracle/office/powerpoint/ppt-author-fixtures.sh [name ...]`; then, for
+`baselines`, `python3 tooling/oracle/office/powerpoint/ppt-baseline-probe.py baselines.pptx baselines.ppt.pdf > baselines.baselines.json`
 (needs pdfplumber).
 
 PowerPoint's dictionary cannot create a table, set a table style, create SmartArt, glue a connector or set adjust values, so `connectors`, `tables`,
 `tablestyles` and `smartart` are seeded: `<name>.seed.py` writes the tables into the blank deck PowerPoint made,
 and PowerPoint opens and re-saves it (`resave.applescript`), so the recorded deck and PDF are
-PowerPoint's. For the table fixtures, also run `python3 scripts/ppt-table-probe.py <name>.pptx <name>.ppt.pdf >
+PowerPoint's. For the table fixtures, also run `python3 tooling/oracle/office/powerpoint/ppt-table-probe.py <name>.pptx <name>.ppt.pdf >
 <name>.tables.json`.
 
-For `smartart`, `python3 scripts/ppt-chart-probe.py smartart.pptx smartart.ppt.pdf >
+For `smartart`, `python3 tooling/oracle/office/powerpoint/ppt-chart-probe.py smartart.pptx smartart.ppt.pdf >
 smartart.frames.json`.
 
 `fonts` and `fonts-full` are seeded too: `fonts.seed.py` turns on "embed fonts in the file"

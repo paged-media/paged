@@ -25,7 +25,7 @@ var PAGED_IB_STAGE = "$STAGE";
 var PAGED_IB_ONLY = "${PAGED_IB_ONLY:-}";
 \$.evalFile(File("$DIR/record.jsx"));
 JSX
-# `do script` by its raw event code (core tools/indesign-export/run-export.sh).
+# `do script` by its raw event code (core tooling/oracle/indesign/run-export.sh).
 osascript <<OSA
 with timeout of 600 seconds
     tell application "$APP"

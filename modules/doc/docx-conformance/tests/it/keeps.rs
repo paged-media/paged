@@ -17,7 +17,7 @@
  */
 
 //! Widow control and keepLines (`keeps_docx()`, ADR 029 decision 3) against
-//! Word's answer (`fixtures/keeps.word.json`, `scripts/word-keeps-probe.sh`).
+//! Word's answer (`fixtures/keeps.word.json`, `tooling/oracle/office/word/word-keeps-probe.sh`).
 
 #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature
 

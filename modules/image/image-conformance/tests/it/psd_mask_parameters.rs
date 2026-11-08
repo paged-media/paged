@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN MASK PARAMETERS, replayed in CI.
-//! `scripts/photoshop/probes/mask-parameters.jsx` had Photoshop set a
+//! `tooling/oracle/photoshop/probes/mask-parameters.jsx` had Photoshop set a
 //! density and a feather on user masks and vector masks. Photoshop applies
 //! them live, outside every stored mask channel, so only its merged
 //! composite shows them; the import applies them in `plate_mask`

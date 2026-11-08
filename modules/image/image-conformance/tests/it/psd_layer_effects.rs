@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN LAYER EFFECTS, replayed in CI.
-//! `scripts/photoshop/probes/layer-effects.jsx` had Photoshop draw small
+//! `tooling/oracle/photoshop/probes/layer-effects.jsx` had Photoshop draw small
 //! documents with a Color Overlay (each mode the corpus uses, masked, on
 //! a clip base, under layer opacity, on soft edges) or a Stroke (off and
 //! on) and save each as a PSD with REAL merged data.

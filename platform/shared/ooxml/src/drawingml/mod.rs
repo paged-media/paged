@@ -30,6 +30,8 @@
 //!   and `a:ln`;
 //! - [`effect`], `a:effectLst` (or an `a:effectDag`'s direct effects);
 //! - [`theme`], the `a:theme` colour scheme and font scheme, read once;
+//! - [`textwarp`], `a:bodyPr/a:prstTxWarp` (WordArt), the 41 presets and their
+//!   adjusts (engine ADR 1091);
 //! - [`resolved`], the NEUTRAL resolved IR (points, degrees, fractions,
 //!   sRGB bytes) the modules lower from, and the resolution into it;
 //! - [`write`], the resolved IR back as DrawingML, for the save paths.
@@ -44,6 +46,7 @@ pub mod effect;
 pub mod paint;
 pub mod pattern;
 pub mod resolved;
+pub mod textwarp;
 pub mod theme;
 pub mod write;
 

@@ -19,7 +19,7 @@
 //! Generate Index (ADR 168) on `index`: the story on page 4 prints its
 //! stale index until the op writes what InDesign 20.0.1 writes on Generate
 //! Index, recorded by `index-probe` in
-//! `tools/indesign-export/index-probe.json`. The probe host runs InDesign
+//! `tooling/oracle/indesign/index-probe.json`. The probe host runs InDesign
 //! in German: its style names and the reference word are mapped back to
 //! the language-neutral `$ID/` names and the English word the engine
 //! writes.
@@ -78,7 +78,7 @@ fn index_story(m: &CanvasModel) -> Vec<Para> {
 /// InDesign's record, its German names mapped back.
 fn indesign() -> Vec<Para> {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tools/indesign-export/index-probe.json");
+        .join("../../../../tooling/oracle/indesign/index-probe.json");
     let json: serde_json::Value =
         serde_json::from_slice(&std::fs::read(path).expect("probe record")).expect("json");
     let paragraph_style = |name: &str| {

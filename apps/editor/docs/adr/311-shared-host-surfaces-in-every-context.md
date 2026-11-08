@@ -49,5 +49,10 @@ page item were not, or only by accident:
   still the one entered. A unit test holds the applicability and the profiles.
 - A module that wants a tool of its own in place of Free Transform inside its context (the
   image's layer transform) keeps it; the shared tool transforms the placement beside it.
+- **Amendment 2026-11-03: path and shape tools are shared too.** `CONTEXT_SHARED_TOOL_IDS` now also
+  lists the Pen, Direct Selection and the Line, Rectangle, Ellipse and Polygon tools, so doc, sheet,
+  slide and web get them (and every solo profile keeps them: `SHARED_HOST_TOOLS` is the same list).
+  They draw and edit paths and shapes on the page beside the context's content; the context's own
+  pointer is bypassed while one is in hand, exactly as for Free Transform.
 - A further shared tool joins `CONTEXT_SHARED_TOOL_IDS`; a further shared panel joins
   `SHARED_HOST_PANELS` (ADR 309's three can move there when both land).

@@ -18,7 +18,7 @@
 
 //! Transform and warp on pixels against Photoshop (WP5.6, image ADR 483),
 //! replayed from `fixtures/photoshop/transform-warps`
-//! (`scripts/photoshop/probes/transform-warps.jsx`): the `colour-sweep`
+//! (`tooling/oracle/photoshop/probes/transform-warps.jsx`): the `colour-sweep`
 //! stimulus as a layer, warped in each of the fifteen styles at +50 % bend
 //! and content-aware scaled to 75 % width by Photoshop 27.10, flattened on
 //! white. (Distort and Perspective are not scriptable — Photoshop's

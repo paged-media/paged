@@ -1065,7 +1065,7 @@ fn qualify_parent(kind: &str, parent: String) -> String {
 /// The ruby and kenten settings a `<CharacterStyleRange>` or
 /// `<CharacterStyle>` carries beyond their flag, kind, text and kenten
 /// size, as InDesign 20.0.1 spells them (core
-/// `tools/indesign-export/ruby-kenten-probe`): `RubyFontSize`,
+/// `tooling/oracle/indesign/ruby-kenten-probe`): `RubyFontSize`,
 /// `RubyXScale` / `RubyYScale`, `RubyXOffset` / `RubyYOffset`,
 /// `RubyPosition`, `RubyAlignment`, `KentenXScale` / `KentenYScale`,
 /// `KentenPlacement`, `KentenPosition`, `KentenAlignment`,

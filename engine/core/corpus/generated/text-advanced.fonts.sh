@@ -3,7 +3,7 @@
 # The IDML's [No paragraph style] declares AppliedFont="Open Sans" and
 # the reference PDF now renders it: re-exported 2026-09-06 on a host
 # that HAS Open Sans installed (`PAGED_EXPORT_ONLY=text-advanced bash
-# tools/indesign-export/run-export.sh`), so both sides set the face the
+# tooling/oracle/indesign/run-export.sh`), so both sides set the face the
 # fixture asks for.
 #
 # The file it replaces was exported on a host WITHOUT Open Sans, so

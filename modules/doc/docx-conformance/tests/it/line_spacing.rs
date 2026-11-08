@@ -18,7 +18,7 @@
 
 //! ADR 029 — Word line spacing lowers to the leading WORD lays.
 //! `line_spacing_docx()` is the document Word laid out
-//! (`scripts/word-line-spacing-probe.sh`); its per-case line count and
+//! (`tooling/oracle/office/word/word-line-spacing-probe.sh`); its per-case line count and
 //! baseline pitch are `fixtures/line-spacing.word.json`. Each case's lowered
 //! `characterLeading` must equal Word's pitch within ±0.1 pt.
 

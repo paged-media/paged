@@ -13,7 +13,7 @@
   - `paged-canvas`: lowered to `ReplaceStoryParagraphs`.
   - `paged-script`: `paged.updateCrossReferences`.
   - `paged-gen`: the `xref` sample.
-  - `tools/indesign-export`: `xref-probe`, `xref-update-probe`.
+  - `tooling/oracle/indesign`: `xref-probe`, `xref-update-probe`.
   - plugin-publish `idml-import`: formats, sources and destinations read in InDesign's spelling.
 
 ## Context
@@ -30,7 +30,7 @@ A cross-reference source tagged its runs like a hyperlink source, and nothing mo
 `xref-probe` builds references in each default format in InDesign's DOM. `xref-update-probe` opens
 the `xref` sample, whose sources are stale (the text names "Old Heading", the page variable
 stores 9). It records each source before and after Update Cross-References. Its record is
-`tools/indesign-export/xref-update-probe.json`.
+`tooling/oracle/indesign/xref-update-probe.json`.
 
 **A format is a list of building blocks,** stored in the document in its own words. InDesign
 writes its default formats in the UI's language (`„…“ auf Seite` in a German install).

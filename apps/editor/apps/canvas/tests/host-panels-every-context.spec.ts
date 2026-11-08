@@ -201,7 +201,7 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
   });
 
   for (const ctx of CONTEXTS) {
-    test(`HPX-${ctx.module} — Gradient, Picture adjustments, Free Transform and History ${
+    test(`HPX-${ctx.module} — Gradient, Picture adjustments, Free Transform, the path and shape tools and History ${
       ctx.type ? `inside ${ctx.type}` : "in a publish (IDML) document"
     } @feat:editor-shell.shared-panels-every-context @level:happy`, async ({
       page,
@@ -211,6 +211,9 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
         "panel:paged.picture-adjustments",
         "panel:paged.history",
         "tool:paged.tool.freeTransform",
+        "tool:paged.tool.pen",
+        "tool:paged.tool.directSelect",
+        "tool:paged.tool.rectangle",
         "menu:Edit/History",
         "menu:Object/Effects/Picture adjustments…",
         "menu:Window/Styles/Gradients",
@@ -283,6 +286,19 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
       expect(Math.abs(moved[1] - start[1] - 40)).toBeLessThan(2);
       expect(Math.abs(moved[0] - start[0] - 30)).toBeLessThan(2);
       await stillHere();
+
+      // PEN, DIRECT SELECTION AND THE SHAPE TOOLS — shared the same way:
+      // each one is on the rail inside the context, and picking it stays.
+      for (const tool of [
+        "paged.tool.pen",
+        "paged.tool.directSelect",
+        "paged.tool.rectangle",
+      ]) {
+        const item = page.locator(`[data-tool="${tool}"]`).first();
+        await expect(item, tool).toBeVisible();
+        await item.click();
+        await stillHere();
+      }
 
       // HISTORY — Edit ▸ History lists the document's steps; a click on
       // the one before the last goes back one step.

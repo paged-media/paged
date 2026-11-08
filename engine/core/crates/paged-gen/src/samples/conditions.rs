@@ -25,7 +25,7 @@
 //! the case's `AppliedConditions` — so the label and the full stop
 //! always print and a hidden case reads `NN label: .`. See [`cases`].
 //!
-//! # What InDesign answered (20.0.1, `tools/indesign-export/conditions-probe.sh`)
+//! # What InDesign answered (20.0.1, `tooling/oracle/indesign/conditions-probe.sh`)
 //!
 //! * **InDesign does not hide text on open.** A `Visible="false"` flag
 //!   is read (the probe reports the condition hidden) but text written

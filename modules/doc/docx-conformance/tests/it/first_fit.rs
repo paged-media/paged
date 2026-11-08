@@ -17,7 +17,7 @@
  */
 
 //! ADR 617 / engine ADR 1016 — Word's answer to the first-fit probe
-//! (`fixtures/first-fit.word.json`, `scripts/word-first-fit-probe.sh`), held
+//! (`fixtures/first-fit.word.json`, `tooling/oracle/office/word/word-first-fit-probe.sh`), held
 //! against what the lowering hands the engine for `first_fit_docx()`.
 //!
 //! The engine composes each case and compares its lines with Word's in two

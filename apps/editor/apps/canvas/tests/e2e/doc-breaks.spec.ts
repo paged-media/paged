@@ -21,7 +21,7 @@
 //
 // The fixture is plugin-doc's docx_conformance::breaks_docx(), whose page
 // map Word itself reported (plugin-doc docx-conformance/fixtures/
-// breaks.word.json, via scripts/word-breaks-probe.sh): 14 pages of a
+// breaks.word.json, via tooling/oracle/office/word/word-breaks-probe.sh): 14 pages of a
 // ten-line body, with w:pageBreakBefore (mid-page, and on a paragraph that
 // already opens a page), a paragraph holding only a page break, a paragraph
 // ENDING in one, a page break and a column break INSIDE a paragraph, a

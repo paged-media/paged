@@ -1,6 +1,6 @@
 // Word's drop caps (doc ADR 624) on the real engine, held against what Word
 // laid for `docx_conformance::drop_cap_docx()` (docx-conformance/fixtures/
-// drop-cap.word.json, scripts/word-drop-cap-probe.sh): the cap's lines carve
+// drop-cap.word.json, tooling/oracle/office/word/word-drop-cap-probe.sh): the cap's lines carve
 // the paragraph's first lines, the lines after them run flush, and the 2-line
 // cap indents the lines beside it as Word does (Calibri 11 pt, the face Word
 // used; where the machine has no Calibri only the carve is checked).

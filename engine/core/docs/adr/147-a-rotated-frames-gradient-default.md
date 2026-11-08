@@ -3,7 +3,7 @@
 - **Status:** Accepted 2026-10-14.
 - **Scope:** `paged-renderer` (`module::fill_paint::rotated_linear_default`, used by
   `place_linear_at_start` for a linear fill with no `GradientFillStart`),
-  `tools/indesign-export/gradient-defaults-probe.*`. No model, wire or protocol change.
+  `tooling/oracle/indesign/gradient-defaults-probe.*`. No model, wire or protocol change.
 
 ## Context
 
@@ -19,7 +19,7 @@ converters, and an editor that clears a start.
 
 ## The question to InDesign
 
-`tools/indesign-export/gradient-defaults-probe.sh` turns the 18 rectangles of a copy of
+`tooling/oracle/indesign/gradient-defaults-probe.sh` turns the 18 rectangles of a copy of
 `gradient-geometry` into 80 × 60 pt frames rotated 0°, 15° … 255°, each with
 `GradientFillAngle="0"` and no start or length, opens it in InDesign 20.0.1 and reads back the
 start and length InDesign writes into its own IDML (`gradient-defaults-probe.json`). A second

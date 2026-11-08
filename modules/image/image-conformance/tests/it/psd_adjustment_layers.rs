@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN ADJUSTMENT LAYERS, replayed in CI.
-//! `scripts/photoshop/probes/adjustment-layers.jsx` had Photoshop put
+//! `tooling/oracle/photoshop/probes/adjustment-layers.jsx` had Photoshop put
 //! one or two adjustment layers over the colour-sweep stimulus (reduced
 //! to 8 bits) and save each document as a PSD with REAL merged data.
 //!

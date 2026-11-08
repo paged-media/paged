@@ -23,7 +23,7 @@
 // that SVG, pasted as content from elsewhere, lands the same geometry and
 // paint as native page items, centred on the view, selected, as ONE undo
 // step; Illustrator's Edit ▸ Copy (recorded by the Illustrator oracle,
-// modules/draw/scripts/illustrator/run-clipboard-probe.sh) pastes in place
+// modules/draw/tooling/oracle/illustrator/run-clipboard-probe.sh) pastes in place
 // as the paths Illustrator drew; what an import approximates is reported.
 
 import { afterEach, describe, expect, test } from "bun:test";

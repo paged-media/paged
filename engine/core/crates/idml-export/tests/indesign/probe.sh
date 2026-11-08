@@ -21,7 +21,7 @@ run_jsx () {
     shim="$(mktemp -t paged-om-probe).jsx"
     printf 'var PAGED_OUT_DIR = "%s";\n$.evalFile(File("%s"));\n' "$OUT" "$1" > "$shim"
     # `do script` by its raw event code (compiles without InDesign's
-    # dynamic terminology; see core tools/indesign-export/run-export.sh).
+    # dynamic terminology; see core tooling/oracle/indesign/run-export.sh).
     osascript <<OSA
 with timeout of 300 seconds
     tell application "$APP"

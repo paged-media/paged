@@ -41,7 +41,7 @@ engine's store, a migration for documents whose symbols are draw's v0 library (d
 - **9-slice is the engine's mapping, checked against Illustrator.** `nineSlicePoint` is the
   renderer's formula (corners keep their size, edges stretch along their axis, the centre in
   both, the matrix's scale read off its column lengths); the Illustrator oracle
-  (`scripts/illustrator/probes/nine-slice.jsx`, six cases) expands sliced instances and every
+  (`tooling/oracle/illustrator/probes/nine-slice.jsx`, six cases) expands sliced instances and every
   anchor agrees within 0.05 pt, the shrink case included. The guides are the SYMBOL's
   (`redefineSymbol { nineSlice }`), as in Illustrator: the 9-Slice Guides tool draws the
   selected instance's symbol's guides where the engine cuts and a drag writes them, one undo

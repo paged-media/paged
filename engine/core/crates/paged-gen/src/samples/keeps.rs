@@ -32,7 +32,7 @@
 //! - Paragraphs are NUMBERED so a misplaced break is obvious in a diff.
 //!
 //! The pages pair each rule with a no-keep control. InDesign exports the
-//! reference (`tools/indesign-export`): it is the oracle for the open
+//! reference (`tooling/oracle/indesign`): it is the oracle for the open
 //! questions, notably whether keep-with-next moves a multi-line paragraph
 //! WHOLE or only its last line, and how first/last-line keeps resolve.
 

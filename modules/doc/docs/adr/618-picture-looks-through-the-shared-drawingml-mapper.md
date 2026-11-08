@@ -9,7 +9,7 @@
   `packages/doc-host-model/src/lowered.ts` (`NativeFx`), `platform/shared/ooxml`
   (`tree::subtrees`, `drawingml::ShapeProperties`), `platform/shared/dml-native`
   (`native`), `docx-conformance` (`picture_effects_docx`, `tests/it/picture_effects.rs`),
-  `scripts/word-picture-effects-probe.sh`. Plan WP10.3 and Phase 11 C10/C11.
+  `tooling/oracle/office/word/word-picture-effects-probe.sh`. Plan WP10.3 and Phase 11 C10/C11.
 
 ## Context
 
@@ -89,7 +89,7 @@ that reason.
   diagnostics, the IR JSON, byte-identical save-back.
 - `platform/shared/dml-native/tests/native.rs`, `platform/shared/ooxml/src/tree.rs`
   (`subtrees_picks_deep_elements_in_document_order`).
-- `scripts/word-picture-effects-probe.sh`: the Word case of this record (ADR 604). It has
+- `tooling/oracle/office/word/word-picture-effects-probe.sh`: the Word case of this record (ADR 604). It has
   Word open the fixture and the edited save (a repair prompt leaves no PDF) and save the
   fixture again as `.docx`, and prints the `a:blip` and `pic:spPr` Word writes per picture
   as `docx-conformance/fixtures/picture-effects.word.json`. Not recorded yet: the first run

@@ -177,7 +177,7 @@ crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
   `diff.sh` + `fidelity-thresholds.json`.
 - `corpus/fonts/` — license-clear TTFs. `corpus/seeds/` — golden snapshot.
   `corpus/generated-fixtures/`, `corpus/calibration/` — more fixtures.
-- `tools/indesign-export/` — drives InDesign to export the reference PDFs
+- `tooling/oracle/indesign/` — drives InDesign to export the reference PDFs
   the fidelity harness consumes (Python/ExtendScript; outside the Cargo
   workspace, so core is polyglot — CI must not assume everything is Cargo).
 - `spikes/` — Vello eval, composer calibration, WASM size.

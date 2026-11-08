@@ -421,13 +421,13 @@ mod tests {
     }
 
     /// Every frame of the recorded probe
-    /// (`tools/indesign-export/gradient-defaults-probe.sh`, ADR 147): an
+    /// (`tooling/oracle/indesign/gradient-defaults-probe.sh`, ADR 147): an
     /// 80 × 60 rectangle turned 0°, 15° … 255° with no gradient start, and
     /// the start and length InDesign 20.0.1 wrote back for it.
     #[test]
     fn a_rotated_frame_starts_its_gradient_where_indesign_does() {
         let probe: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../../tools/indesign-export/gradient-defaults-probe.json"
+            "../../../../../../tooling/oracle/indesign/gradient-defaults-probe.json"
         ))
         .expect("probe recording parses");
         let frames = probe["frames"].as_array().expect("frames");

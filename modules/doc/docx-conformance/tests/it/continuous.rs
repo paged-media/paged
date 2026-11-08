@@ -18,7 +18,7 @@
 
 //! thoughts ADR 029 — `continuous` (and `nextColumn`) sections as Word lays
 //! them out. `continuous_docx()` is the document Word paginated;
-//! `fixtures/continuous.word.json` is its answer (`scripts/word-continuous-probe.sh`).
+//! `fixtures/continuous.word.json` is its answer (`tooling/oracle/office/word/word-continuous-probe.sh`).
 //!
 //! What is pinned here:
 //! - the import carries every section's kind, page, margins and columns;

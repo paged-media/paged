@@ -280,7 +280,7 @@ fn symbols_soft_hyphens_and_ptabs_keep_their_elements_in_an_edit__feat__plugin_d
 #[test]
 fn an_edited_save_re_imports_to_the_edited_text__feat__plugin_doc_save_back() {
     let (saved, _) = edited_save();
-    // `scripts/word-run-specials-probe.sh` has Word open this very file.
+    // `tooling/oracle/office/word/word-run-specials-probe.sh` has Word open this very file.
     if let Ok(path) = std::env::var("RUN_SPECIALS_EDITED_OUT") {
         std::fs::write(path, &saved).expect("write the edited save");
     }
@@ -292,7 +292,7 @@ fn an_edited_save_re_imports_to_the_edited_text__feat__plugin_doc_save_back() {
 }
 
 /// Word's answer for the edited save (`fixtures/run-specials.word.json`, via
-/// `scripts/word-run-specials-probe.sh`): Word opened it without a repair
+/// `tooling/oracle/office/word/word-run-specials-probe.sh`): Word opened it without a repair
 /// prompt, and every piece of text after a tab starts at the next tab stop
 /// (72 pt / 144 pt from the 36 pt margin), new tabs included — the tabs are
 /// tabs to Word, not text. (A literal tab inside `<w:t>`, X01, is one too.)

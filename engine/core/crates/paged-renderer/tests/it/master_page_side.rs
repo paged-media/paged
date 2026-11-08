@@ -31,7 +31,7 @@
 //! page, at the same page position; each body page must show its side's
 //! colour there. A single-sided document's page sits ON the spine and has
 //! no side: it takes the master page by index, the left one (InDesign
-//! 20.0.1, tools/indesign-export/master-items-probe).
+//! 20.0.1, tooling/oracle/indesign/master-items-probe).
 
 use std::io::Write;
 

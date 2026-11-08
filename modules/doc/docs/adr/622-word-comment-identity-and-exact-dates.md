@@ -54,4 +54,4 @@ scripting surface, so paged writes `w:date` and `dateUtc` to the same UTC time f
 ## Evidence
 
 - `docx-conformance/tests/it/review.rs::a_first_comment_makes_the_comment_parts__feat__plugin_doc_save_back`.
-- Word's reading of the saved files: `scripts/word-review-probe.sh`, `fixtures/review.word.json`.
+- Word's reading of the saved files: `tooling/oracle/office/word/word-review-probe.sh`, `fixtures/review.word.json`.

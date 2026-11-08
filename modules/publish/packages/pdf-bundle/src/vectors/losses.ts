@@ -21,6 +21,7 @@
 // often it happened. Codes are the mapper's (`vectors::ir::Loss`); a code
 // this table does not know is still reported, by its code.
 
+import type { LossEntry } from "@paged-media/plugin-api";
 import { defineMessages, t } from "@paged-media/strings";
 
 import type { LossIr, PdfInfo } from "./ir";
@@ -148,13 +149,9 @@ const KEYS: Record<string, string> = {
   "image.undecodable": M.imageUndecodable,
 };
 
-/** One worded loss. */
-export interface LossLine {
-  /** The mapper's code, or `"colours"`, `"aiPrivate"`, `"outlinedFonts"`. */
-  code: string;
-  count: number;
-  message: string;
-}
+/** One worded loss: the shared `LossEntry` (`code` is the mapper's code, or
+ *  `"colours"`, `"aiPrivate"`, `"outlinedFonts"`). */
+export type LossLine = LossEntry;
 
 /** The report of one placement: the mapper's losses worded, then the two
  *  facts every placement shares (colours arrive as RGB; an Illustrator

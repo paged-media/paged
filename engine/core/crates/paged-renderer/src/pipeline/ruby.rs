@@ -17,7 +17,7 @@
  */
 
 //! Ruby and emphasis marks (kenten), set as InDesign 20.0.1 sets them by
-//! default. Asked of InDesign through `tools/indesign-export/ruby-kenten-
+//! default. Asked of InDesign through `tooling/oracle/indesign/ruby-kenten-
 //! probe` (Kozuka Mincho, Open Sans and Courier New at 30 pt, read from
 //! its PDF):
 //!
@@ -80,7 +80,7 @@ pub(super) struct RubyGroup {
 
 /// How ruby narrower than its base spreads over it (`RubyAlignment`).
 /// InDesign 20.0.1, かんじ (45 pt) over 60 and 120 pt of base
-/// (`tools/indesign-export/ruby-kenten-probe`):
+/// (`tooling/oracle/indesign/ruby-kenten-probe`):
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RubyAlignment {
     /// `RubyJIS`, the default: one share of the spare room before the
@@ -853,7 +853,7 @@ fn sesame(p: &mut PathData, scale: f32, reverse: bool) {
 
 /// One character's emphasis mark and where it goes (`KentenKind` and the
 /// other `Kenten*` settings). InDesign 20.0.1
-/// (`tools/indesign-export/ruby-kenten-probe`): `KentenFontSize` and the
+/// (`tooling/oracle/indesign/ruby-kenten-probe`): `KentenFontSize` and the
 /// scales keep a mark centred on its character (`AlignKentenLeft` puts
 /// its em box on the character's left edge); a vertical scale grows it
 /// up from its baseline; `KentenPlacement` moves it up, above or below

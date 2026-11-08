@@ -238,7 +238,7 @@ fn pictures_with_a_look_save_back_byte_identical__feat__plugin_doc_native_effect
     let edits = docx_export::diff(&base, &edited, &bindings);
     assert_eq!(edits.runs.len(), 1);
     let (saved, _) = session.save_edited(&edits).unwrap();
-    // `scripts/word-picture-effects-probe.sh` has Word open this very file.
+    // `tooling/oracle/office/word/word-picture-effects-probe.sh` has Word open this very file.
     if let Ok(path) = std::env::var("PICTURE_EFFECTS_EDITED_OUT") {
         std::fs::write(path, &saved).expect("write the edited save");
     }

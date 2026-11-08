@@ -63,7 +63,7 @@ stack (engine ADR 1008). Three things did not:
   unchanged shadow keeps its XML, so export loses nothing.
 - **A pattern is a picture of its tiles until pattern paint lands.** The cells are not
   invented. The `patterns` fixture holds all 54 preset patterns, and
-  `scripts/ppt-pattern-probe.py` reads each one's 8 × 8 cell out of PowerPoint's own PDF
+  `tooling/oracle/office/powerpoint/ppt-pattern-probe.py` reads each one's 8 × 8 cell out of PowerPoint's own PDF
   (PowerPoint writes a tiling pattern whose 64 × 64 image is scaled to 8 pt).
   `paged_ooxml::drawingml::pattern::CELLS` holds them. The same PDF shows the geometry:
   - one point per cell bit, on an 8 pt grid anchored at the slide's top-left;

@@ -21,7 +21,7 @@
 //! with its VML fallback, legacy VML, in a header), a nested table, table
 //! borders, shading, alignment, indent and row rules, and paragraphs in
 //! three languages with hyphenation on. Word's answers come from
-//! `scripts/word-objects-probe.sh` (`fixtures/*.word.json`).
+//! `tooling/oracle/office/word/word-objects-probe.sh` (`fixtures/*.word.json`).
 
 use crate::{zip_parts, ROOT_RELS, TINY_PNG};
 

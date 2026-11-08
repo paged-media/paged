@@ -30,7 +30,7 @@
 //!
 //! Page 4 holds a story with a stale index, which prints as it is (the
 //! gate's reference). What InDesign writes on Generate Index is recorded
-//! by `tools/indesign-export/index-probe.sh` against this file.
+//! by `tooling/oracle/indesign/index-probe.sh` against this file.
 
 use crate::builders::{
     designmap::{write_designmap, DesignMap},

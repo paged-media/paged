@@ -19,7 +19,7 @@
 // THE INDESIGN ROUND TRIP (roadmap M1.2) — replayed. For every Tier-A row
 // draw ships, `author.ts` builds a document through draw's real surfaces on
 // the real headless engine and exports it as IDML; Adobe InDesign 20.0.1
-// opened that file and said what it sees (`scripts/indesign/
+// opened that file and said what it sees (`tooling/oracle/indesign/roundtrip/
 // run-roundtrip.sh`, recordings committed beside the IDML). This spec
 // re-authors the SAME document and compares what OUR model holds — read
 // back through the engine — with InDesign's answer: kind, every anchor and
@@ -34,7 +34,7 @@
 // STALENESS is checked, not trusted: the committed IDML must be what the
 // engine exports today (modulo draw's clock-seeded swatch ids), and the
 // recording must name that IDML's sha256 and the current reader's. When
-// either moves, re-generate and re-record (scripts/indesign/README.md).
+// either moves, re-generate and re-record (tooling/oracle/indesign/roundtrip/README.md).
 //
 // CI never drives InDesign: everything here reads committed files.
 
@@ -77,7 +77,7 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const READER = resolve(
   HERE,
-  "../../../../scripts/indesign/lib/read-document.jsx",
+  "../../../../../../tooling/oracle/indesign/roundtrip/lib/read-document.jsx",
 );
 
 /** Every unset value compared as an InDesign default, over all cases. */
@@ -104,7 +104,7 @@ describe("InDesign round trip — the lane itself", () => {
       expect(rec.produced_by.app, c.id).toBe("Adobe InDesign");
       expect(rec.produced_by.version, c.id).toMatch(/^20\./);
       expect(rec.produced_by.script, c.id).toBe(
-        "scripts/indesign/lib/read-document.jsx",
+        "tooling/oracle/indesign/roundtrip/lib/read-document.jsx",
       );
       expect(
         rec.produced_by.script_sha256,

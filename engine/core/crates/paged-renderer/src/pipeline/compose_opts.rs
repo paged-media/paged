@@ -22,7 +22,7 @@
 /// InDesign sets it as a horizontal scale — advances and outlines, ragged
 /// text too — multiplied with a run's own `HorizontalScale`, and letter
 /// and word spacing then take their percentages of the scaled space
-/// (InDesign 20.0.1, tools/indesign-export/spelling-and-spacing-probe:
+/// (InDesign 20.0.1, tooling/oracle/indesign/spelling-and-spacing-probe:
 /// at 105 % every glyph of a 20 pt Open Sans line advances 1.050 times its
 /// width, 0.840 times on a run already at 80 %). Callers fold it into each
 /// run's `horizontal_scale_pct`; the Min..Max band stays a breaker budget

@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/mask-parameters.jsx",
+    "script": "tooling/oracle/photoshop/probes/mask-parameters.jsx",
     "script_sha256": "cd488d8678764566fc6d95dd6c0c168dc58a813504373f094614f7121de403f9",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-05T11:57:43.399Z",
     "host_os": "macOS 26.4"
   },

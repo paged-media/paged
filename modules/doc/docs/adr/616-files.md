@@ -95,7 +95,7 @@ save-back (ADR 602) only splices into the file that was opened.
   macros through an edit, RTF (named `.rtf` and `.doc`), `.doc` refusal, OpenDocument behind
   its flag, native to `.docx` read back.
 - Word 16 (macOS) opens the packages written for the RTF, OpenDocument, template and native
-  fixtures and saves them as PDF with their text (`scripts/word-pagination-probe.sh`).
+  fixtures and saves them as PDF with their text (`tooling/oracle/office/word/word-pagination-probe.sh`).
 - Bundle: `packages/doc-bundle/test/headless/files.spec.ts` (7) on the real engine; fixtures
   `template-letter.dotx`, `macro-letter.docm`, `memo.rtf`, `minutes.odt`, `legacy.doc`.
 

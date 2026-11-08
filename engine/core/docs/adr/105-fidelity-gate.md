@@ -73,7 +73,7 @@ reference rasterisers (`crates/paged-fidelity/src/lib.rs:21`); the gate uses `pd
 ## Consequences
 
 The reference is poppler's raster of InDesign's PDF, not InDesign's own screen or print
-raster. A new or corrected reference needs InDesign (`tools/indesign-export/README.md:10-14`).
+raster. A new or corrected reference needs InDesign (`tooling/oracle/indesign/README.md:10-14`).
 
 The workflow does not give its runners a CMYK profile: it sets no `PAGED_CMYK_PROFILE`,
 and its comment says the references were exported in Coated FOGRA39 and "no runner has

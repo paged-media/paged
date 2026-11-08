@@ -27,7 +27,7 @@
 //!   `write_illustrator_oracle_inputs` from `oracle_cases` in
 //!   `tests/it/mesh_fill.rs`) reads back as the meshes it was written from,
 //!   and so do Illustrator 30.1's own PDFs of the same artwork (recorded by
-//!   `modules/draw/scripts/illustrator/probes/mesh-render.jsx`): native
+//!   `modules/draw/tooling/oracle/illustrator/probes/mesh-render.jsx`): native
 //!   mesh → PDF → import → native mesh.
 //! - **One construct per test**, each on a PDF the test writes: Coons and
 //!   tensor patches, shared edges, free-form and lattice triangle meshes,

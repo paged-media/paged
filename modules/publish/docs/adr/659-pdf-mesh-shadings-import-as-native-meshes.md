@@ -74,7 +74,7 @@ tile one, else one one-patch grid per patch.
   255 — with no loss line. The test keeps the source meshes as that crate's `oracle_cases`
   defines them.
 - **Illustrator's own PDFs.** Illustrator 30.1 opened those PDFs and saved its own (recorded
-  2026-10-29 by `modules/draw/scripts/illustrator/probes/mesh-render.jsx`): its shadings — in
+  2026-10-29 by `modules/draw/tooling/oracle/illustrator/probes/mesh-render.jsx`): its shadings — in
   its own coordinate system, under its own clip — read back as the same meshes within 0.01 pt.
   Illustrator's scripting cannot create a mesh (engine ADR 1048), so these re-saved meshes are
   the real-world Illustrator-written fixtures; no new probe was recorded.

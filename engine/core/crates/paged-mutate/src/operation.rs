@@ -7998,7 +7998,7 @@ mod transform_decompose_tests {
 
     /// The flip InDesign names (`absoluteFlip`) for the matrices its own
     /// Flip Vertical / Flip Horizontal made of items turned 0°, 30° and
-    /// 120° (`tools/indesign-export/flip-probe.json`).
+    /// 120° (`tooling/oracle/indesign/flip-probe.json`).
     #[test]
     fn a_reflection_names_the_flip_indesign_names() {
         let (c, s) = (0.866_025_4_f32, 0.5_f32);

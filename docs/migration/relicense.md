@@ -16,7 +16,7 @@ above the MPL one, the MPL block was removed instead, so every file has exactly 
 
 | Component | Rewritten | Duplicate removed | Notes |
 |---|---:|---:|---|
-| `engine/core` | 812 | — | 689 `.rs`, 54 `.sh`, 51 `.jsx` (the InDesign ExtendScript probes in `tools/indesign-export`), 11 `.ts`, 5 `.py`, 2 `.wgsl`. Two `.py` files had lost the `@license` line; they got the full notice. Two `paged-gpu` tests carried a one-line SPDX MPL notice; they got the standard block. |
+| `engine/core` | 812 | — | 689 `.rs`, 54 `.sh`, 51 `.jsx` (the InDesign ExtendScript probes in `tooling/oracle/indesign`), 11 `.ts`, 5 `.py`, 2 `.wgsl`. Two `.py` files had lost the `@license` line; they got the full notice. Two `paged-gpu` tests carried a one-line SPDX MPL notice; they got the standard block. |
 | `modules/image` | 20 | 214 | 233 `.rs`, 1 `.ts`. The WGSL that `image-kernels` generates said `// MPL-2.0 OR LicenseRef-PMEL` (56 places in `abi.rs` and `families/*.rs`; the string occurs 91 times in the wasm); it says AGPL-3.0-only now. |
 | `modules/sheet` | — | 199 | including the three fuzz targets |
 | `platform/extensions` | 156 | — | 154 `.ts`, 2 `.tsx`; plus the banner `sync-wire.mjs` writes over the vendored `wire.d.ts` (template and copy together) |
