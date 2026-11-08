@@ -55,8 +55,6 @@
 
 use std::cell::Cell;
 use std::cell::RefCell;
-#[cfg(target_arch = "wasm32")]
-use std::rc::Rc;
 
 use boa_engine::{
     builtins::promise::PromiseState,
