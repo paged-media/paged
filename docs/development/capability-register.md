@@ -173,7 +173,7 @@ data each have their own lowering. Sheet and data each have their own lowering.
 
 Doc's charts (doc ADR 628) are read by `dml-chart` into slide's chart model and drawn from their cached values by
 `slide-chart` (one layout for PowerPoint and Word), as anchored groups; the sheet engine is not linked (doc edits no chart
-data yet). The doc wasm's ceiling went to 9 MiB for charts and SmartArt (doc ADR 627 amendment). Slide's chart data editing carries a
+data yet). The doc wasm's ceiling went to 9 MiB for charts and SmartArt (doc ADR 627 amendment); it links `dml-geom` (doc ADR 629). Slide's chart data editing carries a
 second compiled sheet engine. `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` are folded (W9, engine ADR 1059): `paged-action`'s `js::sandbox_context` is the one Boa sandbox (paged-script uses it too), the script surface and the batch runner are modules of `paged-data-session`, and `paged data batch` replaces the `paged-data-batch` binary. PDF read: the two hayro devices (placed PDF, pdf-import) stay two (different targets) and share `paged-pdf-page` for page box geometry and blend modes (engine ADR 1058, W9); blank IDML / OCF zip writers ×5.
 
@@ -388,12 +388,12 @@ Status (draw items, one line each; updated as they land):
 
 ### Reach (gaps between modules)
 
-- **doc:** recolour, chart data editing, SmartArt, OpenType features, equations. Charts: DONE from the cached values
-  (doc ADR 628, `slide-chart`'s layout, anchored groups; chart data editing through the sheet engine is open). Shapes: PARTLY DONE (doc ADR 627:
-  non-text `wps:wsp` as anchored Rectangle frames drawn along their outline, 14 hand-ported presets and
-  literal custom geometry, `wps:style` completing the look; the other presets are told. `dml-geom` is not
-  linked because its 526 KB of preset XML does not fit the doc wasm's ceiling; line ends and a shape's own
-  text wrap are open). Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to
+- **doc:** recolour, chart data editing, SmartArt editing, OpenType features, equations. Charts: DONE from the cached values
+  (doc ADR 628, `slide-chart`'s layout, anchored groups; chart data editing through the sheet engine is open). SmartArt:
+  DONE as drawn (doc ADR 629: the `dsp:drawing` Word saved, as an anchored group of shapes and text frames; editing the
+  diagram is open). Shapes: PARTLY DONE (doc ADR 627: non-text `wps:wsp` as anchored Rectangle frames drawn along their
+  outline, every Annex D preset through `dml-geom` since doc ADR 629 and literal custom geometry, `wps:style` completing
+  the look; a shape's own text wrap is open). Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to
   their `fsType` licence and given to the document-font door, as slide does; the shared part is
   `paged_ooxml::fonts`). Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
   against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following

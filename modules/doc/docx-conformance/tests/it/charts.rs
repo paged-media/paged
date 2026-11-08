@@ -28,7 +28,7 @@ use docx_conformance::{
 use docx_core::{Block, ChartDrawing, DocxDocument};
 use docx_export::{EditSet, RunEdit};
 use docx_js::DocSession;
-use docx_lower::ir::{LoweredBlock, LoweredChart, LoweredChartPiece};
+use docx_lower::ir::{LoweredBlock, LoweredGroup, LoweredPiece};
 use paged_ooxml::OpcPackage;
 
 fn charts(doc: &DocxDocument) -> Vec<&ChartDrawing> {
@@ -42,7 +42,7 @@ fn charts(doc: &DocxDocument) -> Vec<&ChartDrawing> {
         .collect()
 }
 
-fn lowered_charts(ir: &docx_lower::ir::LoweredDoc) -> Vec<&LoweredChart> {
+fn lowered_charts(ir: &docx_lower::ir::LoweredDoc) -> Vec<&LoweredGroup> {
     ir.story
         .blocks
         .iter()
@@ -55,17 +55,17 @@ fn lowered_charts(ir: &docx_lower::ir::LoweredDoc) -> Vec<&LoweredChart> {
 }
 
 /// The text of a chart's labels, in z-order.
-fn labels(c: &LoweredChart) -> Vec<String> {
+fn labels(c: &LoweredGroup) -> Vec<String> {
     c.pieces
         .iter()
         .filter_map(|p| match p {
-            LoweredChartPiece::Label { paragraphs, .. } => Some(
+            LoweredPiece::Label { paragraphs, .. } => Some(
                 paragraphs
                     .iter()
                     .flat_map(|p| p.runs.iter().map(|r| r.text.as_str()))
                     .collect::<String>(),
             ),
-            LoweredChartPiece::Shape { .. } => None,
+            LoweredPiece::Shape { .. } => None,
         })
         .collect()
 }
@@ -137,7 +137,7 @@ fn a_chart_lowers_to_an_anchored_group_of_its_pieces__feat__doc_charts() {
         .pieces
         .iter()
         .filter_map(|p| match p {
-            LoweredChartPiece::Shape {
+            LoweredPiece::Shape {
                 bounds,
                 anchors,
                 open,
@@ -162,7 +162,7 @@ fn a_chart_lowers_to_an_anchored_group_of_its_pieces__feat__doc_charts() {
         .pieces
         .iter()
         .filter_map(|p| match p {
-            LoweredChartPiece::Shape { anchors, fx, .. }
+            LoweredPiece::Shape { anchors, fx, .. }
                 if anchors
                     .iter()
                     .any(|a| (a[2], a[3]) != (a[0], a[1]) || (a[4], a[5]) != (a[0], a[1])) =>

@@ -69,6 +69,8 @@ fn plain(p: &LoweredParagraph) -> Result<(), &'static str> {
         Err("shape")
     } else if !p.charts.is_empty() {
         Err("chart")
+    } else if !p.diagrams.is_empty() {
+        Err("SmartArt diagram")
     } else if !p.segments.is_empty() {
         Err("break inside a paragraph")
     } else if p.mark_change.is_some() || p.props_change.is_some() {

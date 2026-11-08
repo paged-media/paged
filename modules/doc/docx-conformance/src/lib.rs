@@ -33,6 +33,7 @@ mod native;
 mod objects;
 mod reach;
 mod shapes;
+mod smartart;
 mod structure;
 pub use charts::{
     bar_chart_xml, charts_docx, pie_chart_xml, CHART_CATEGORIES, CHART_PARTS, CHART_SERIES,
@@ -54,6 +55,7 @@ pub use reach::{
     CELL_CROP_CASES, CROP_CASES, CROP_PNG_H, CROP_PNG_W, DROP_CAP_FILLER,
 };
 pub use shapes::{shapes_docx, SHAPE_CASES};
+pub use smartart::{smartart_docx, smartart_drawing_xml, SMARTART_PARTS, SMARTART_TEXTS};
 pub use structure::{structure_docx, STRUCTURE_NOTES};
 
 /// Zip a set of `(name, bytes)` parts into an OPC package, in the given order.

@@ -1,7 +1,8 @@
 # ADR 627 — Word's shapes without text are anchored frames drawn along their outline
 
 - **Status:** Accepted 2026-11-08. Presets listed below and literal-point custom geometry; the rest told.
-  Amended 2026-11-08: the doc wasm's ceiling is 9 MiB (see the amendment).
+  Amended 2026-11-08: the doc wasm's ceiling is 9 MiB (see the amendment); the presets are
+  evaluated by `dml-geom` since ADR 629, which removed the hand port.
 - **Scope:** `docx-core` (`Shape`, `ShapeGeometry`), `docx-import` (`objects::drawing_shape`),
   `docx-lower` (`shape_geom`, `LoweredShape`), `docx-skeleton` (`body`), the engine's
   `AnchoredFrame` outline (engine ADR 1050, amendment 2026-11-08).
@@ -50,7 +51,8 @@ drawing that is not a picture and not shown. The capability register asked for t
 
 ## Not done
 
-- Line ends (arrow heads) are not drawn; the lowering says how many shapes have them.
+- Line ends (arrow heads) are not drawn; the lowering says how many shapes have them (drawn since
+  ADR 629).
 - A shape's text wrap is its box (a triangle wraps text as its bounding box); rotation turns the
   outline, not the wrap.
 - IDML export writes the frame's box; moving or resizing a shape on the canvas moves its box and

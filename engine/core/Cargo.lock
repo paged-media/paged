@@ -1554,6 +1554,7 @@ name = "docx-lower"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "dml-geom",
  "dml-native",
  "docx-core",
  "paged-ooxml",

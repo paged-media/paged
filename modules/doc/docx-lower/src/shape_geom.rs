@@ -20,13 +20,12 @@
 //! path anchors the engine draws (`[x, y, left x, left y, right x, right y]`
 //! in points, `(0, 0)` at the box's top left).
 //!
-//! Hand-written for the presets Word's gallery offers most (the rectangle
-//! family, the ellipse, triangles, the diamond, the parallelogram, the
-//! trapezoid, the hexagon, the octagon, block arrows, the line), after the
-//! guides of ECMA-376 Annex D, and for an authored `a:custGeom` whose points
-//! are literal numbers. The 187-preset evaluator of `dml-geom` is not linked:
-//! its definitions are half a megabyte of XML, which the doc wasm's size
-//! ceiling cannot hold. A preset not listed here is told, never guessed.
+//! A preset is evaluated by `dml-geom` from ECMA-376 Annex D's definitions
+//! (all 187, with their `a:avLst` guides; doc ADR 629, which replaced the
+//! hand port of fourteen that ADR 627 made while the definitions did not fit
+//! the doc wasm). An authored `a:custGeom` whose points are literal numbers
+//! is scaled from each path's own space. A name that is not a preset is
+//! told, never guessed.
 
 use docx_core::{CustomPath, PathCommand, Shape, ShapeGeometry};
 
@@ -38,9 +37,6 @@ pub struct Outline {
     pub starts: Vec<usize>,
     pub open: Vec<bool>,
 }
-
-/// The control-point distance of a quarter circle, over its radius.
-const KAPPA: f32 = 0.552_284_8;
 
 /// A pen that draws contours as anchors with handles.
 #[derive(Default)]
@@ -108,143 +104,10 @@ impl Pen {
         }
     }
 
-    fn polygon(&mut self, points: &[(f32, f32)]) {
-        for (i, (x, y)) in points.iter().enumerate() {
-            if i == 0 {
-                self.move_to(*x, *y);
-            } else {
-                self.line_to(*x, *y);
-            }
-        }
-        self.close();
-    }
-
     fn done(mut self) -> Outline {
         self.finish(true);
         self.out
     }
-}
-
-/// The guide `name` of a preset, or `default`.
-fn adj(shape: &[(String, i64)], name: &str, default: f32) -> f32 {
-    shape
-        .iter()
-        .find(|(n, _)| n == name)
-        .map_or(default, |(_, v)| *v as f32)
-}
-
-/// A preset's outline in a `w` x `h` pt box, or `None` for a preset this
-/// module does not draw.
-fn preset(name: &str, g: &[(String, i64)], w: f32, h: f32) -> Option<Outline> {
-    let ss = w.min(h);
-    let mut pen = Pen::default();
-    match name {
-        "rect" | "flowChartProcess" | "flowChartPredefinedProcess" | "textBox" => {
-            pen.polygon(&[(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)])
-        }
-        "roundRect" | "flowChartAlternateProcess" => {
-            let a = if name == "roundRect" {
-                adj(g, "adj", 16667.0)
-            } else {
-                16667.0
-            };
-            let r = (ss * a.clamp(0.0, 50000.0) / 100_000.0).max(0.0);
-            let k = KAPPA * r;
-            pen.move_to(r, 0.0);
-            pen.line_to(w - r, 0.0);
-            pen.cubic_to((w - r + k, 0.0), (w, r - k), (w, r));
-            pen.line_to(w, h - r);
-            pen.cubic_to((w, h - r + k), (w - r + k, h), (w - r, h));
-            pen.line_to(r, h);
-            pen.cubic_to((r - k, h), (0.0, h - r + k), (0.0, h - r));
-            pen.line_to(0.0, r);
-            pen.cubic_to((0.0, r - k), (r - k, 0.0), (r, 0.0));
-            pen.close();
-        }
-        "ellipse" | "flowChartConnector" => {
-            let (kx, ky) = (KAPPA * w / 2.0, KAPPA * h / 2.0);
-            let (cx, cy) = (w / 2.0, h / 2.0);
-            pen.move_to(0.0, cy);
-            pen.cubic_to((0.0, cy - ky), (cx - kx, 0.0), (cx, 0.0));
-            pen.cubic_to((cx + kx, 0.0), (w, cy - ky), (w, cy));
-            pen.cubic_to((w, cy + ky), (cx + kx, h), (cx, h));
-            pen.cubic_to((cx - kx, h), (0.0, cy + ky), (0.0, cy));
-            pen.close();
-        }
-        "triangle" => {
-            let x = w * adj(g, "adj", 50000.0).clamp(0.0, 100_000.0) / 100_000.0;
-            pen.polygon(&[(0.0, h), (x, 0.0), (w, h)]);
-        }
-        "rtTriangle" => pen.polygon(&[(0.0, h), (0.0, 0.0), (w, h)]),
-        "diamond" | "flowChartDecision" => {
-            pen.polygon(&[(0.0, h / 2.0), (w / 2.0, 0.0), (w, h / 2.0), (w / 2.0, h)])
-        }
-        "parallelogram" => {
-            let max = 100_000.0 * w / ss.max(1e-3);
-            let x2 = ss * adj(g, "adj", 25000.0).clamp(0.0, max) / 100_000.0;
-            pen.polygon(&[(0.0, h), (x2, 0.0), (w, 0.0), (w - x2, h)]);
-        }
-        "trapezoid" => {
-            let max = 50_000.0 * w / ss.max(1e-3);
-            let x2 = ss * adj(g, "adj", 25000.0).clamp(0.0, max) / 100_000.0;
-            pen.polygon(&[(0.0, h), (x2, 0.0), (w - x2, 0.0), (w, h)]);
-        }
-        "hexagon" => {
-            let max = 50_000.0 * w / ss.max(1e-3);
-            let x1 = ss * adj(g, "adj", 25000.0).clamp(0.0, max) / 100_000.0;
-            pen.polygon(&[
-                (0.0, h / 2.0),
-                (x1, 0.0),
-                (w - x1, 0.0),
-                (w, h / 2.0),
-                (w - x1, h),
-                (x1, h),
-            ]);
-        }
-        "octagon" => {
-            let x1 = ss * adj(g, "adj", 29289.0).clamp(0.0, 50000.0) / 100_000.0;
-            pen.polygon(&[
-                (0.0, x1),
-                (x1, 0.0),
-                (w - x1, 0.0),
-                (w, x1),
-                (w, h - x1),
-                (w - x1, h),
-                (x1, h),
-                (0.0, h - x1),
-            ]);
-        }
-        "rightArrow" | "leftArrow" => {
-            let a1 = adj(g, "adj1", 50000.0).clamp(0.0, 100_000.0);
-            let max2 = 100_000.0 * w / ss.max(1e-3);
-            let a2 = adj(g, "adj2", 50000.0).clamp(0.0, max2);
-            let head = ss * a2 / 100_000.0;
-            let x1 = w - head;
-            let half = h * a1 / 200_000.0;
-            let (y1, y2) = (h / 2.0 - half, h / 2.0 + half);
-            let right = [
-                (0.0, y1),
-                (x1, y1),
-                (x1, 0.0),
-                (w, h / 2.0),
-                (x1, h),
-                (x1, y2),
-                (0.0, y2),
-            ];
-            if name == "rightArrow" {
-                pen.polygon(&right);
-            } else {
-                let left: Vec<_> = right.iter().rev().map(|(x, y)| (w - x, *y)).collect();
-                pen.polygon(&left);
-            }
-        }
-        "line" | "straightConnector1" => {
-            pen.move_to(0.0, 0.0);
-            pen.line_to(w, h);
-        }
-        _ => return None,
-    }
-    Some(pen.done())
 }
 
 /// An authored geometry's outline: each path's points scaled from its own
@@ -311,6 +174,178 @@ fn transform(out: &mut Outline, shape: &Shape, w: f32, h: f32) {
     }
 }
 
+/// A preset's outline in a `w` x `h` pt box through `dml-geom`'s evaluator
+/// of Annex D's definitions; a contour that is not filled (a detail line) is
+/// left open. `None` for a name that is not a preset.
+fn preset(name: &str, adjust: &[(String, i64)], w: f32, h: f32) -> Option<Outline> {
+    let adjust: Vec<(String, String)> = adjust
+        .iter()
+        .map(|(n, v)| (n.clone(), format!("val {v}")))
+        .collect();
+    let o = dml_geom::preset(name, &adjust, w as f64, h as f64)?;
+    let mut out = Outline::default();
+    for sp in &o.subpaths {
+        if sp.points.is_empty() {
+            continue;
+        }
+        out.starts.push(out.anchors.len());
+        out.open.push(!(sp.closed && sp.filled));
+        for p in &sp.points {
+            out.anchors.push([
+                p.anchor.0 as f32,
+                p.anchor.1 as f32,
+                p.left.0 as f32,
+                p.left.1 as f32,
+                p.right.0 as f32,
+                p.right.1 as f32,
+            ]);
+        }
+    }
+    Some(out)
+}
+
+/// One line end (arrow head) of a shape's open outline, in the shape's box:
+/// filled in the line's colour, or stroked with the line (`open`, Office's
+/// `arrow`).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Head {
+    pub anchors: Vec<[f32; 6]>,
+    pub open: bool,
+}
+
+/// The control-point distance of a quarter ellipse, over its radius.
+const KAPPA: f32 = 0.552_284_8;
+
+/// Office's arrow head sizes (`sm`, `med`, `lg`) as multiples of the line
+/// width.
+fn factor(size: Option<&str>) -> f32 {
+    match size {
+        Some("sm") => 2.0,
+        Some("lg") => 5.0,
+        _ => 3.0,
+    }
+}
+
+/// The line ends of the first open contour of `o` (a line, a connector, an
+/// arc): `a:headEnd` at its start, `a:tailEnd` at its end, sized by the
+/// line's width `width_pt`, each pointing along the line. Closed outlines
+/// take none, as in Office. The kinds it does not draw are returned by name.
+pub fn heads(
+    o: &Outline,
+    head: Option<&paged_ooxml::drawingml::LineEnd>,
+    tail: Option<&paged_ooxml::drawingml::LineEnd>,
+    width_pt: f32,
+) -> (Vec<Head>, Vec<String>) {
+    let (mut out, mut undrawn) = (Vec::new(), Vec::new());
+    let Some(c) = o.open.iter().position(|open| *open) else {
+        return (out, undrawn);
+    };
+    let start = o.starts[c];
+    let end = o.starts.get(c + 1).copied().unwrap_or(o.anchors.len());
+    if end < start + 2 {
+        return (out, undrawn);
+    }
+    let pt = |a: &[f32; 6]| (a[0], a[1]);
+    let first = &o.anchors[start];
+    let last = &o.anchors[end - 1];
+    // The direction the line arrives in at each end: from the handle when
+    // the end is curved, else from the neighbouring anchor.
+    let from = |tip: (f32, f32), handle: (f32, f32), next: (f32, f32)| {
+        let toward = if (handle.0 - tip.0).hypot(handle.1 - tip.1) > 1e-3 {
+            handle
+        } else {
+            next
+        };
+        let (dx, dy) = (tip.0 - toward.0, tip.1 - toward.1);
+        let n = dx.hypot(dy).max(1e-6);
+        (dx / n, dy / n)
+    };
+    let ends = [
+        (
+            head,
+            pt(first),
+            from(pt(first), (first[4], first[5]), pt(&o.anchors[start + 1])),
+        ),
+        (
+            tail,
+            pt(last),
+            from(pt(last), (last[2], last[3]), pt(&o.anchors[end - 2])),
+        ),
+    ];
+    let lw = width_pt.max(0.75);
+    for (end, tip, (dx, dy)) in ends {
+        let Some(e) = end else { continue };
+        let (len, wid) = (lw * factor(e.len.as_deref()), lw * factor(e.w.as_deref()));
+        // Along the line (back from the tip) and across it.
+        let at =
+            |back: f32, side: f32| (tip.0 - dx * back - dy * side, tip.1 - dy * back + dx * side);
+        let corner = |p: (f32, f32)| [p.0, p.1, p.0, p.1, p.0, p.1];
+        let (anchors, open): (Vec<[f32; 6]>, bool) = match e.kind.as_str() {
+            "none" | "" => continue,
+            "triangle" => (
+                [at(0.0, 0.0), at(len, wid / 2.0), at(len, -wid / 2.0)]
+                    .map(corner)
+                    .to_vec(),
+                false,
+            ),
+            "stealth" => (
+                [
+                    at(0.0, 0.0),
+                    at(len, wid / 2.0),
+                    at(len * 0.6, 0.0),
+                    at(len, -wid / 2.0),
+                ]
+                .map(corner)
+                .to_vec(),
+                false,
+            ),
+            "arrow" => (
+                [at(len, wid / 2.0), at(0.0, 0.0), at(len, -wid / 2.0)]
+                    .map(corner)
+                    .to_vec(),
+                true,
+            ),
+            "diamond" => (
+                [
+                    at(-len / 2.0, 0.0),
+                    at(0.0, wid / 2.0),
+                    at(len / 2.0, 0.0),
+                    at(0.0, -wid / 2.0),
+                ]
+                .map(corner)
+                .to_vec(),
+                false,
+            ),
+            "oval" => {
+                // An ellipse about the end point, its axes along and across
+                // the line.
+                let (a, b) = (len / 2.0, wid / 2.0);
+                let pts = [(-a, 0.0), (0.0, b), (a, 0.0), (0.0, -b)];
+                let tangents = [(0.0, b), (a, 0.0), (0.0, -b), (-a, 0.0)];
+                let anchors = pts
+                    .iter()
+                    .zip(tangents)
+                    .map(|(&(u, v), (tu, tv))| {
+                        let p = at(u, v);
+                        let l = at(u - KAPPA * tu, v - KAPPA * tv);
+                        let r = at(u + KAPPA * tu, v + KAPPA * tv);
+                        [p.0, p.1, l.0, l.1, r.0, r.1]
+                    })
+                    .collect();
+                (anchors, false)
+            }
+            other => {
+                if !undrawn.iter().any(|u| u == other) {
+                    undrawn.push(other.to_string());
+                }
+                continue;
+            }
+        };
+        out.push(Head { anchors, open });
+    }
+    (out, undrawn)
+}
+
 /// The outline of `shape` in a `w` x `h` pt box, or why it is not drawn.
 pub fn outline(shape: &Shape, w: f32, h: f32) -> Result<Outline, String> {
     let mut out = match &shape.geometry {
@@ -355,22 +390,37 @@ mod tests {
     #[test]
     fn a_rounded_rectangle_rounds_by_the_short_side() {
         let o = outline(&shape("roundRect", &[("adj", 50000)]), 100.0, 40.0).unwrap();
-        // adj 50 % of the short side: a stadium; the first anchor is where
-        // the top edge begins, `r` in.
-        assert!((o.anchors[0][0] - 20.0).abs() < 1e-3 && o.anchors[0][1] == 0.0);
-        assert_eq!(o.anchors.len(), 8);
-        // The curve leaves the top edge's end toward the right edge.
-        let a = o.anchors[1];
-        assert!((a[4] - (80.0 + KAPPA * 20.0)).abs() < 1e-3 && a[5] == 0.0);
+        // adj 50 % of the short side: a stadium; the top edge runs from
+        // `r` in to `r` from the right.
+        let top: Vec<f32> = pos(&o)
+            .iter()
+            .filter(|(_, y)| y.abs() < 1e-3)
+            .map(|(x, _)| *x)
+            .collect();
+        assert!(top.iter().any(|x| (x - 20.0).abs() < 1e-3), "{top:?}");
+        assert!(top.iter().any(|x| (x - 80.0).abs() < 1e-3), "{top:?}");
+        assert_eq!(o.open, vec![false]);
     }
 
     #[test]
-    fn an_ellipse_is_four_anchors_on_the_box() {
+    fn an_ellipse_passes_through_the_box_s_edge_midpoints() {
         let o = outline(&shape("ellipse", &[]), 80.0, 40.0).unwrap();
-        assert_eq!(
-            pos(&o),
-            vec![(0.0, 20.0), (40.0, 0.0), (80.0, 20.0), (40.0, 40.0)]
-        );
+        let p = pos(&o);
+        for want in [(0.0, 20.0), (40.0, 0.0), (80.0, 20.0), (40.0, 40.0)] {
+            assert!(
+                p.iter()
+                    .any(|q| (q.0 - want.0).abs() < 1e-3 && (q.1 - want.1).abs() < 1e-3),
+                "{want:?} in {p:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_annex_d_preset_is_drawn() {
+        let o = outline(&shape("cloudCallout", &[]), 100.0, 60.0).unwrap();
+        assert!(o.anchors.len() > 10);
+        let o = outline(&shape("chevron", &[]), 100.0, 60.0).unwrap();
+        assert_eq!(o.anchors.len(), 6);
     }
 
     #[test]
@@ -392,9 +442,38 @@ mod tests {
     }
 
     #[test]
-    fn a_preset_it_does_not_draw_is_named() {
-        let e = outline(&shape("cloudCallout", &[]), 10.0, 10.0).unwrap_err();
-        assert!(e.contains("cloudCallout"));
+    fn a_line_takes_a_triangle_at_its_end_and_an_open_arrow_at_its_start() {
+        let o = outline(&shape("line", &[]), 100.0, 0.0).unwrap();
+        let end = |kind: &str| paged_ooxml::drawingml::LineEnd {
+            kind: kind.into(),
+            w: None,
+            len: None,
+        };
+        let (h, undrawn) = heads(&o, Some(&end("arrow")), Some(&end("triangle")), 2.0);
+        assert!(undrawn.is_empty());
+        assert_eq!(h.len(), 2);
+        // The open arrow at (0, 0) points left: its wings 6 pt to the right.
+        assert!(h[0].open);
+        assert_eq!(
+            pos(&Outline {
+                anchors: h[0].anchors.clone(),
+                ..Default::default()
+            }),
+            vec![(6.0, -3.0), (0.0, 0.0), (6.0, 3.0)]
+        );
+        // The triangle's tip is the line's end, its base 6 pt back.
+        assert!(!h[1].open);
+        assert_eq!(h[1].anchors[0][0], 100.0);
+        assert!((h[1].anchors[1][0] - 94.0).abs() < 1e-4);
+        // A closed outline takes none.
+        let rect = outline(&shape("rect", &[]), 10.0, 10.0).unwrap();
+        assert!(heads(&rect, Some(&end("triangle")), None, 1.0).0.is_empty());
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_preset_is_told() {
+        let e = outline(&shape("notAPreset", &[]), 10.0, 10.0).unwrap_err();
+        assert!(e.contains("notAPreset"));
     }
 
     #[test]

@@ -545,7 +545,11 @@ pub struct LoweredParagraph {
     /// Charts anchored in this paragraph (doc ADR 628): anchored groups of
     /// the chart's pieces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub charts: Vec<crate::ir_objects::LoweredChart>,
+    pub charts: Vec<crate::ir_objects::LoweredGroup>,
+    /// SmartArt diagrams anchored in this paragraph (doc ADR 629): anchored
+    /// groups of the shapes Word last laid the diagram out with.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagrams: Vec<crate::ir_objects::LoweredGroup>,
     /// Doc ADR 624 — the paragraph's Word drop cap, set on its first native
     /// paragraph as the engine's paragraph drop cap. A paragraph property of
     /// its own, not a style's: the engine refuses the drop cap paths on a

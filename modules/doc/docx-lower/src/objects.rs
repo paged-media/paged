@@ -799,6 +799,10 @@ pub(crate) struct W4 {
     /// cells (not placed).
     pub charts: usize,
     pub unplaced_charts: usize,
+    /// SmartArt diagrams drawn as anchored groups (doc ADR 629), and
+    /// diagrams in table cells (not placed).
+    pub diagrams: usize,
+    pub unplaced_diagrams: usize,
     /// Nested tables shown as their paragraphs.
     pub nested_tables: usize,
     /// Rows Word holds at an exact height, and tables with an indent or a
@@ -982,9 +986,48 @@ impl crate::Lowering {
         let (anchor, layout, at) =
             self.anchored_place(sh.float.as_ref(), sh.width_emu, sh.height_emu, at);
         self.w4.anchored_shapes += 1;
-        if sh.line_ends {
-            self.w4.shape_line_ends += 1;
-        }
+        // Doc ADR 629 — the line ends, in the line's colour.
+        let line = sh.look.as_ref().and_then(|l| l.shape.line.as_ref());
+        let heads = match line {
+            Some(line) if line.head.is_some() || line.tail.is_some() => {
+                let width = line.width.map_or(0.75, emu_to_pt);
+                let (heads, undrawn) = crate::shape_geom::heads(
+                    &outline,
+                    line.head.as_ref(),
+                    line.tail.as_ref(),
+                    width,
+                );
+                if !undrawn.is_empty() {
+                    self.w4.shape_line_ends += 1;
+                }
+                let bare = paged_ooxml::drawingml::Line {
+                    head: None,
+                    tail: None,
+                    ..line.clone()
+                };
+                heads
+                    .into_iter()
+                    .map(|hd| {
+                        let sp = paged_ooxml::drawingml::ShapeProperties {
+                            fill: if hd.open { None } else { line.fill.clone() },
+                            line: hd.open.then(|| bare.clone()),
+                            ..Default::default()
+                        };
+                        let mut mapper = dml_native::native::Lowering::new(self.dml_slots.to_vec());
+                        let fx = mapper.shape(&sp, w as f64, h as f64);
+                        for c in fx.colors() {
+                            self.swatch_for(c.trim_start_matches('#'));
+                        }
+                        crate::ir::LoweredHead {
+                            anchors: hd.anchors,
+                            open: hd.open,
+                            fx: (!fx.is_empty()).then_some(fx),
+                        }
+                    })
+                    .collect()
+            }
+            _ => Vec::new(),
+        };
         let fx = sh.look.as_ref().and_then(|look| {
             let mut mapper = dml_native::native::Lowering::new(self.dml_slots.to_vec());
             let fx = mapper.picture(&look.blip, &look.shape, w as f64, h as f64);
@@ -1005,6 +1048,7 @@ impl crate::Lowering {
             starts: outline.starts,
             open: outline.open,
             fx,
+            heads,
         })
     }
 
@@ -1357,7 +1401,7 @@ impl crate::Lowering {
         if w.shape_line_ends > 0 {
             out.push(Diagnostic::info(
                 format!(
-                    "{} shape(s) have line ends (arrow heads) that are not drawn",
+                    "{} shape(s) have line ends (arrow heads) of a kind that is not drawn",
                     w.shape_line_ends
                 ),
                 3,
@@ -1369,6 +1413,26 @@ impl crate::Lowering {
                     "{} chart(s) drawn from their cached values as anchored groups; the chart \
                      parts round-trip unchanged",
                     w.charts
+                ),
+                2,
+            ));
+        }
+        if w.diagrams > 0 {
+            out.push(Diagnostic::info(
+                format!(
+                    "{} SmartArt diagram(s) drawn from the layout Word saved as anchored groups; \
+                     the diagram parts round-trip unchanged",
+                    w.diagrams
+                ),
+                2,
+            ));
+        }
+        if w.unplaced_diagrams > 0 {
+            out.push(Diagnostic::warning(
+                format!(
+                    "{} SmartArt diagram(s) in table cells are NOT shown; they are kept in the \
+                     .docx and round-trip on save",
+                    w.unplaced_diagrams
                 ),
                 2,
             ));

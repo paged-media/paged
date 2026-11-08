@@ -42,9 +42,9 @@ pub use controls::{ContentControl, ContentControlKind, ListItem};
 pub mod symbols;
 pub mod theme;
 pub use objects::{
-    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, HeightRule, Language, NestedTable,
-    PathCommand, PreferredWidth, Shape, ShapeGeometry, TableLook, TableStyleProps, TextBox,
-    WidthKind,
+    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, DiagramDrawing, DiagramParagraph,
+    DiagramRun, DiagramShape, DiagramText, HeightRule, Language, NestedTable, PathCommand,
+    PreferredWidth, Shape, ShapeGeometry, TableLook, TableStyleProps, TextBox, WidthKind,
 };
 pub use review::{
     ChangeKind, Comment, FormatChange, ParaPropsChange, ParagraphReview, Revision, RunChange,
@@ -523,6 +523,10 @@ pub struct Run {
     /// 628.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub charts: Vec<ChartDrawing>,
+    /// SmartArt diagrams drawn by this run (`w:drawing` holding a
+    /// `dgm:relIds`), doc ADR 629.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagrams: Vec<DiagramDrawing>,
     /// The inline content control (`w:sdt`) this run is content of, doc ADR
     /// 614. Every run of the control carries it.
     #[serde(default, skip_serializing_if = "Option::is_none")]

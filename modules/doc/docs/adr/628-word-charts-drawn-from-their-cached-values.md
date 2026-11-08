@@ -57,8 +57,9 @@ The ceiling of `docx_js_bg.wasm` (the manifest's `maxBytes`) goes from 8,388,608
 9,437,184 B (9 MiB), on the owner's decision of 2026-11-08 to raise it for charts and SmartArt
 instead of shipping a second wasm. Measured on this change (release, `wasm-doc`, wasm-opt), on the
 author's machine: 8,529,596 B, against 8,377,028 B there before it; the chart reader, the layout,
-the label formatter (`sheet-format`) and the lowering cost about 150 KB. CI's measurement is
-recorded below. The editor's `dist/` budget (PM-0013, 73 MiB) is not raised by this change.
+the label formatter (`sheet-format`) and the lowering cost about 150 KB. CI's `doc / rust` build
+of this change measured 8,533,653 B. The editor's `dist/` budget (PM-0013, 73 MiB) is not raised
+by this change.
 
 ## Evidence
 

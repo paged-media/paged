@@ -31,7 +31,7 @@ use paged_ooxml::drawingml::{resolved::Paint, Fill, ShapeProperties};
 use slide_chart::outline::contour;
 use slide_chart::{Align, Prim};
 
-use crate::ir::{LoweredChart, LoweredChartPiece};
+use crate::ir::{LoweredGroup, LoweredPiece};
 use crate::{emu_to_pt, sections};
 
 /// Width of a label's text frame per character, as a share of its size: wide
@@ -40,7 +40,7 @@ const LABEL_ADVANCE: f32 = 0.62;
 
 impl crate::Lowering {
     /// A chart as an anchored group of its paragraph, placed as a shape is.
-    pub(crate) fn lower_chart(&mut self, c: &ChartDrawing, at: u32) -> LoweredChart {
+    pub(crate) fn lower_chart(&mut self, c: &ChartDrawing, at: u32) -> LoweredGroup {
         let w = emu_to_pt(c.width_emu);
         let h = emu_to_pt(c.height_emu);
         let (anchor, layout, at) =
@@ -63,7 +63,7 @@ impl crate::Lowering {
             pieces.extend(piece);
         }
         self.w4.charts += 1;
-        LoweredChart {
+        LoweredGroup {
             at,
             width_pt: w,
             height_pt: h,
@@ -80,7 +80,7 @@ impl crate::Lowering {
         prim: &Prim,
         fill: &Option<Fill>,
         line: &Option<paged_ooxml::drawingml::Line>,
-    ) -> Option<LoweredChartPiece> {
+    ) -> Option<LoweredPiece> {
         let c = contour(prim)?;
         let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
         for p in &c.points {
@@ -116,7 +116,7 @@ impl crate::Lowering {
                 [a.0, a.1, l.0, l.1, r.0, r.1]
             })
             .collect();
-        Some(LoweredChartPiece::Shape {
+        Some(LoweredPiece::Shape {
             bounds: [x0 as f32, y0 as f32, bw as f32, bh as f32],
             anchors,
             starts: vec![0],
@@ -136,7 +136,7 @@ impl crate::Lowering {
         align: Align,
         text: &str,
         props: &pptx_core::RunProps,
-    ) -> Option<LoweredChartPiece> {
+    ) -> Option<LoweredPiece> {
         if text.trim().is_empty() {
             return None;
         }
@@ -147,20 +147,50 @@ impl crate::Lowering {
             Align::Center => (x - width / 2.0, Justification::Center),
             Align::Right => (x - width, Justification::Right),
         };
+        let run = self.drawing_run(
+            size,
+            props.bold,
+            props.italic,
+            props.fill.as_ref(),
+            props.latin.as_deref(),
+        );
+        let paragraph = drawing_paragraph(justification, 240, vec![(text.to_string(), run)]);
+        let lowered = self.lower_drawing_paragraphs(&[paragraph], width);
+        // Two lines high: a line that does not fit its frame is not set.
+        Some(LoweredPiece::Label {
+            bounds: [left, cy - 0.6 * size, width, 2.0 * size],
+            paragraphs: lowered,
+            insets: [0.0; 4],
+            valign: None,
+        })
+    }
+
+    /// A drawing's run formatting (a chart label's, a diagram shape's text)
+    /// as Word's direct formatting: the size in points, the weight, the
+    /// colour resolved against the theme, the font (the theme's minor or
+    /// major face for `+mn-lt` / `+mj-lt` and when none is named).
+    pub(crate) fn drawing_run(
+        &mut self,
+        size: f32,
+        bold: Option<bool>,
+        italic: Option<bool>,
+        fill: Option<&Fill>,
+        latin: Option<&str>,
+    ) -> RunProps {
         let mut run = RunProps {
             size_half_pts: Some((size * 2.0).round().max(1.0) as u32),
-            bold: props.bold,
-            italic: props.italic,
+            bold,
+            italic,
             ..Default::default()
         };
-        if let Some(fill) = &props.fill {
+        if let Some(fill) = fill {
             let mut mapper = dml_native::native::Lowering::new(self.dml_slots.clone());
             if let Paint::Solid { rgb, .. } = mapper.resolve_paint(fill) {
                 let hex = dml_native::native::hex(rgb);
                 run.color = Some(hex.trim_start_matches('#').to_string());
             }
         }
-        match props.latin.as_deref() {
+        match latin {
             Some("+mn-lt") | None => {
                 run.font = self.word_theme.as_ref().and_then(|t| t.minor.latin.clone());
                 run.font_theme = run.font.as_ref().map(|_| "minorHAnsi".to_string());
@@ -171,27 +201,16 @@ impl crate::Lowering {
             }
             Some(face) => run.font = Some(face.to_string()),
         }
-        let paragraph = Paragraph {
-            props: ParaProps {
-                justification: Some(justification),
-                left_indent: Some(0),
-                right_indent: Some(0),
-                first_line_indent: Some(0),
-                space_before: Some(0),
-                space_after: Some(0),
-                line_spacing: Some(LineSpacing {
-                    value: 240,
-                    rule: LineRule::Auto,
-                }),
-                ..Default::default()
-            },
-            runs: vec![Run {
-                props: run,
-                text: text.to_string(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
+        run
+    }
+
+    /// A drawing's paragraphs lowered as a text box's are, in a frame
+    /// `width` pt wide.
+    pub(crate) fn lower_drawing_paragraphs(
+        &mut self,
+        paragraphs: &[Paragraph],
+        width: f32,
+    ) -> Vec<crate::ir::LoweredParagraph> {
         let saved = (
             self.text_width,
             self.section_indent,
@@ -199,13 +218,16 @@ impl crate::Lowering {
             self.in_cell,
             self.spacing_override,
         );
-        self.text_width = Some(width);
+        self.text_width = Some(width.max(1.0));
         self.section_indent = (0.0, 0.0);
         self.section_columns = sections::SectionColumns::Frame;
-        self.spacing_override = (None, false);
-        let lowered = self
-            .lower_body_paragraph(&paragraph, 0, None, Some(false))
-            .0;
+        let out = paragraphs
+            .iter()
+            .map(|p| {
+                self.spacing_override = (None, false);
+                self.lower_body_paragraph(p, 0, None, Some(false)).0
+            })
+            .collect();
         (
             self.text_width,
             self.section_indent,
@@ -213,10 +235,39 @@ impl crate::Lowering {
             self.in_cell,
             self.spacing_override,
         ) = saved;
-        // Two lines high: a line that does not fit its frame is not set.
-        Some(LoweredChartPiece::Label {
-            bounds: [left, cy - 0.6 * size, width, 2.0 * size],
-            paragraphs: vec![lowered],
-        })
+        out
+    }
+}
+
+/// A drawing's paragraph: aligned, no indents or spacing, its lines at
+/// `line` 240ths of single spacing, its runs' text and formatting.
+pub(crate) fn drawing_paragraph(
+    justification: Justification,
+    line: i32,
+    runs: Vec<(String, RunProps)>,
+) -> Paragraph {
+    Paragraph {
+        props: ParaProps {
+            justification: Some(justification),
+            left_indent: Some(0),
+            right_indent: Some(0),
+            first_line_indent: Some(0),
+            space_before: Some(0),
+            space_after: Some(0),
+            line_spacing: Some(LineSpacing {
+                value: line,
+                rule: LineRule::Auto,
+            }),
+            ..Default::default()
+        },
+        runs: runs
+            .into_iter()
+            .map(|(text, props)| Run {
+                props,
+                text,
+                ..Default::default()
+            })
+            .collect(),
+        ..Default::default()
     }
 }

@@ -24,8 +24,8 @@
 //! in.
 
 use docx_core::{
-    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, Float, FloatPosition, FloatWrap,
-    HeightRule, Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape,
+    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, DiagramDrawing, Float, FloatPosition,
+    FloatWrap, HeightRule, Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape,
     ShapeGeometry, TableLook, TableStyleProps, TextBox, Theme, WidthKind,
 };
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_office_word as w10;
@@ -68,6 +68,9 @@ pub(crate) struct PartObjects {
     /// Every chart's relationship id (`c:chart r:id`) by the same id (doc
     /// ADR 628).
     charts: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
+    /// Every SmartArt diagram's data relationship id (`dgm:relIds r:dm`) by
+    /// the same id (doc ADR 629).
+    diagrams: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
     next_ordinal: u32,
 }
 
@@ -90,6 +93,7 @@ impl PartObjects {
             looks: read.looks,
             shapes: read.shapes,
             charts: read.charts,
+            diagrams: read.diagrams,
             next_ordinal: 0,
         }
     }
@@ -111,6 +115,7 @@ fn shape_looks(part: &[u8]) -> PartRead {
         looks: out,
         shapes,
         charts,
+        diagrams,
     } = &mut read;
     let Ok(drawings) = tree::subtrees(part, |uri, local| {
         uri == NS_WP && (local == "inline" || local == "anchor")
@@ -133,6 +138,13 @@ fn shape_looks(part: &[u8]) -> PartRead {
             .and_then(|c| c.attr_ns(Ns::R, "id"))
         {
             charts.entry(id).or_default().push_back(rid.to_string());
+            continue;
+        }
+        if let Some(rid) = data
+            .and_then(|g| g.children.iter().find(|c| c.local == "relIds"))
+            .and_then(|c| c.attr_ns(Ns::R, "dm"))
+        {
+            diagrams.entry(id).or_default().push_back(rid.to_string());
             continue;
         }
         let Some(wsp) = data.and_then(|g| g.children.iter().find(|c| c.local == "wsp")) else {
@@ -174,6 +186,7 @@ struct PartRead {
     looks: std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>>,
     shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
     charts: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
+    diagrams: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
 }
 
 /// Line widths of the theme's line styles `a:lnRef idx` 1, 2 and 3 (Office's
@@ -185,7 +198,7 @@ const LINE_STYLE_WIDTHS: [i64; 3] = [6350, 12700, 19050];
 /// `a:lnRef` carry the colour, `lnRef` also names the theme's line style. The
 /// theme's gradient fill styles (`idx` 2 and 3) are drawn as the solid colour
 /// of the reference.
-fn complete_from_style(
+pub(crate) fn complete_from_style(
     mut props: paged_ooxml::drawingml::ShapeProperties,
     wsp: &paged_ooxml::tree::El,
 ) -> paged_ooxml::drawingml::ShapeProperties {
@@ -217,7 +230,7 @@ fn complete_from_style(
 
 /// A shape's outline: the preset's name and guides, or a custom geometry whose
 /// points are literal numbers.
-fn read_geometry(sp_pr: &paged_ooxml::tree::El) -> ShapeGeometry {
+pub(crate) fn read_geometry(sp_pr: &paged_ooxml::tree::El) -> ShapeGeometry {
     if let Some(p) = sp_pr.children.iter().find(|c| c.local == "prstGeom") {
         let adjust = p
             .children
@@ -517,21 +530,7 @@ pub(crate) fn drawing_shape(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Shape> 
 /// through the shared DrawingML chart reader, or `None` when the drawing is
 /// not one or its part cannot be read (doc ADR 628).
 pub(crate) fn drawing_chart(d: &wml::Drawing, ctx: &ImportCtx) -> Option<ChartDrawing> {
-    use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_wordprocessing_drawing as wp;
-    let (width_emu, height_emu, float, doc_pr) = match d.drawing_choice.as_ref()? {
-        wml::DrawingChoice::Inline(i) => {
-            (i.extent.cx, i.extent.cy, None, Some(i.doc_properties.id))
-        }
-        wml::DrawingChoice::Anchor(a) => {
-            let a: &wp::Anchor = a;
-            (
-                a.extent.cx,
-                a.extent.cy,
-                Some(map_float(a)),
-                a.doc_properties.as_ref().map(|p| p.id),
-            )
-        }
-    };
+    let (width_emu, height_emu, float, doc_pr) = drawing_frame(d)?;
     let rid = ctx
         .objects
         .borrow_mut()
@@ -545,6 +544,46 @@ pub(crate) fn drawing_chart(d: &wml::Drawing, ctx: &ImportCtx) -> Option<ChartDr
         float,
         part,
         chart: Box::new(chart),
+    })
+}
+
+/// A SmartArt diagram drawn by a `w:drawing` (`dgm:relIds`), read from the
+/// drawing Word saved of its layout, or `None` when the drawing is not one or
+/// the diagram has no drawing (doc ADR 629).
+pub(crate) fn drawing_diagram(d: &wml::Drawing, ctx: &ImportCtx) -> Option<DiagramDrawing> {
+    let (width_emu, height_emu, float, doc_pr) = drawing_frame(d)?;
+    let dm = ctx
+        .objects
+        .borrow_mut()
+        .diagrams
+        .get_mut(&doc_pr?)
+        .and_then(|q| q.pop_front())?;
+    let (part, shapes) = crate::diagram::read(&ctx.images, &dm)?;
+    Some(DiagramDrawing {
+        width_emu,
+        height_emu,
+        float,
+        part,
+        shapes,
+    })
+}
+
+/// A drawing's extent, float and `wp:docPr/@id`.
+fn drawing_frame(d: &wml::Drawing) -> Option<(i64, i64, Option<Float>, Option<u32>)> {
+    use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_wordprocessing_drawing as wp;
+    Some(match d.drawing_choice.as_ref()? {
+        wml::DrawingChoice::Inline(i) => {
+            (i.extent.cx, i.extent.cy, None, Some(i.doc_properties.id))
+        }
+        wml::DrawingChoice::Anchor(a) => {
+            let a: &wp::Anchor = a;
+            (
+                a.extent.cx,
+                a.extent.cy,
+                Some(map_float(a)),
+                a.doc_properties.as_ref().map(|p| p.id),
+            )
+        }
     })
 }
 
@@ -960,6 +999,7 @@ pub(crate) fn alternate_content(
     text_boxes: &mut Vec<TextBox>,
     shapes: &mut Vec<Shape>,
     charts: &mut Vec<ChartDrawing>,
+    diagrams: &mut Vec<DiagramDrawing>,
     other_drawings: &mut u32,
 ) {
     use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_markup_compatibility_2006::AlternateContentChoice as B;
@@ -995,7 +1035,10 @@ pub(crate) fn alternate_content(
                             Some(sh) => shapes.push(sh),
                             None => match drawing_chart(&d, ctx) {
                                 Some(c) => charts.push(c),
-                                None => *other_drawings += 1,
+                                None => match drawing_diagram(&d, ctx) {
+                                    Some(g) => diagrams.push(g),
+                                    None => *other_drawings += 1,
+                                },
                             },
                         },
                     },

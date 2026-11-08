@@ -76,6 +76,7 @@ fn main() {
         "picture-crop-cell" => docx_conformance::picture_crop_cell_docx(),
         "shapes" => docx_conformance::shapes_docx(),
         "charts" => docx_conformance::charts_docx(),
+        "smartart" => docx_conformance::smartart_docx(),
         "embedded-fonts" => {
             // The font is read from the path in PAGED_FIXTURE_FONT (an OFL
             // face from the engine's corpus).

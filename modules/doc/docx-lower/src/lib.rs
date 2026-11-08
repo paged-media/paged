@@ -41,6 +41,7 @@ use docx_core::{
 };
 
 mod chart;
+mod diagram;
 pub mod ir;
 mod ir_objects;
 pub mod line_height;
@@ -2125,7 +2126,8 @@ impl Lowering {
         let mut pushed_below = false;
         let mut text_boxes: Vec<crate::ir::LoweredTextBox> = Vec::new();
         let mut shapes: Vec<crate::ir::LoweredShape> = Vec::new();
-        let mut charts: Vec<crate::ir::LoweredChart> = Vec::new();
+        let mut charts: Vec<crate::ir::LoweredGroup> = Vec::new();
+        let mut diagrams: Vec<crate::ir::LoweredGroup> = Vec::new();
         for (ri, r) in p.runs.iter().enumerate() {
             for (ii, img) in r.images.iter().enumerate() {
                 // A float placed as a page item (doc ADR 614) is not in
@@ -2198,6 +2200,14 @@ impl Lowering {
                 // Doc ADR 628: an anchored group of the chart's pieces.
                 charts.push(self.lower_chart(c, anchor_at(before, total)));
             }
+            for d in &r.diagrams {
+                if self.in_cell {
+                    self.w4.unplaced_diagrams += 1;
+                    continue;
+                }
+                // Doc ADR 629: an anchored group of the diagram's shapes.
+                diagrams.push(self.lower_diagram(d, anchor_at(before, total)));
+            }
             before += r.text.chars().count() as u32;
         }
         let others: u32 = p.runs.iter().map(|r| r.other_drawings).sum();
@@ -2246,6 +2256,7 @@ impl Lowering {
                 text_boxes,
                 shapes,
                 charts,
+                diagrams,
                 drop_cap,
             },
             tail,

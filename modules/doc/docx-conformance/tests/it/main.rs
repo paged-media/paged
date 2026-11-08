@@ -40,6 +40,7 @@ mod run_specials;
 mod save_back;
 mod sections;
 mod shapes;
+mod smartart;
 mod structure;
 mod structure_saveback;
 mod symbols;

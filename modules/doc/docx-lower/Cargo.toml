@@ -26,3 +26,5 @@ base64 = { workspace = true }
 # values (PowerPoint's, which is Office's), and its chart model.
 slide-chart.workspace = true
 pptx-core.workspace = true
+# DrawingML preset geometry (Annex D's 187 presets, doc ADR 629).
+dml-geom = { path = "../../../platform/shared/dml-geom" }
