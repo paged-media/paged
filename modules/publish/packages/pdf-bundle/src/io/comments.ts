@@ -28,7 +28,7 @@
 // (which has no item to belong to in a freshly imported page) is placed as a
 // point at its top-left, said in the log.
 
-import type { BundleHost } from "@paged-media/plugin-api";
+import type { BundleHost, LossEntry } from "@paged-media/plugin-api";
 
 import type { PdfMapper } from "../engine-loader";
 
@@ -61,13 +61,8 @@ export interface PdfThread {
   source: [string, { format: string; data: string }][];
 }
 
-export interface PdfLoss {
-  kind: string;
-  count: number;
-  /** 0-based. */
-  pages: number[];
-  reason: string;
-}
+/** One loss line: the shared `LossEntry` (`code` is the annotation type). */
+export type PdfLoss = LossEntry & { pages: number[] };
 
 export interface PdfCommentsReport {
   threads: PdfThread[];
@@ -82,7 +77,7 @@ export interface Mutation {
 /** The text of a loss line, as `paged comments` prints it. */
 export function lossLine(l: PdfLoss): string {
   const pages = l.pages.map((p) => p + 1).join(", ");
-  return `${l.count} x ${l.kind} (page ${pages}): ${l.reason}`;
+  return `${l.count} x ${l.code} (page ${pages}): ${l.message}`;
 }
 
 /** A name's initials ("Ann Author" -> "AA"). */

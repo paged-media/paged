@@ -218,6 +218,8 @@ export type {
   ProviderSchema,
   ProviderField,
   ProviderRecordSet,
+  LossEntry,
+  LossReport,
   DataSurface,
   DataService,
   DataServiceHandle,

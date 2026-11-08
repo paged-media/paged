@@ -62,6 +62,6 @@ fn a_pdfs_annotations_come_back_as_report_json() {
         serde_json::json!({"kind": "point", "at": [20.0, 30.0]})
     );
     assert_eq!(t["comments"][0]["text"], "Hi");
-    assert_eq!(v["losses"][0]["kind"], "Link");
+    assert_eq!(v["losses"][0]["code"], "Link");
     assert!(pdf_import::pdf_comments(b"nope").is_err());
 }
