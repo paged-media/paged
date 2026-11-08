@@ -33,7 +33,7 @@ A crate depends only on crates to its right in the same row or in a row below
 binaries       paged-run   paged-cli   paged-gen   paged-fidelity
 wasm surfaces  paged-canvas-wasm   paged-introspect-wasm   paged-sdk
 editing        paged-script   paged-canvas   paged-introspect
-output         paged-composition-render   paged-export-pdf   paged-renderer   paged-gpu   paged-compose
+output         paged-export-pdf   paged-renderer   paged-gpu   paged-compose
 text, colour   paged-text   paged-color
 vocabulary     paged-wire   paged-mutate
 model          paged-store   paged-scene   paged-composition   paged-flow   paged-model
@@ -63,8 +63,8 @@ on wgpu 30), which share one mapping from the display list (`vello_map.rs`)
 ([ADR 100](adr/100-two-rasterisers-one-trait.md), [ADR 189](adr/189-one-rendering-model.md)). `paged-renderer` is the
 pipeline: `pipeline::build_document`, the asset resolver, diagnostics, and the
 `paged-inspect` binary. `paged-export-pdf` writes PDF from the display list
-([ADR 119](adr/119-pdf-export-backend.md)). `paged-composition-render` renders a
-`Composition` through a caller-supplied region renderer; no other crate depends on it.
+([ADR 119](adr/119-pdf-export-backend.md)). The former `paged-composition-render` (a
+`Composition` through a caller-supplied region renderer) had no consumer and was deleted (gap closing, 2026-11).
 
 **Vocabulary.** `paged-mutate` defines `Operation`, the invertible primitive (87 variants),
 its `apply`, the inverses, id minting and the path geometry (`kurbo`, `flo_curves`;

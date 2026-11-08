@@ -4,7 +4,6 @@ members = [
     "crates/paged-model",
     "crates/paged-flow",
     "crates/paged-composition",
-    "crates/paged-composition-render",
     "crates/paged-scene",
     "crates/paged-text",
     "crates/paged-color",
