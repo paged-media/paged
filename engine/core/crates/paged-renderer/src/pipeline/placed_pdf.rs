@@ -26,8 +26,6 @@
 //! stays vector on the canvas, on both rasterizers and in the PDF export.
 
 use hayro_interpret::font::GlyphRun;
-use hayro_interpret::hayro_syntax::object::dict::keys::{ART_BOX, BLEED_BOX, TRIM_BOX};
-use hayro_interpret::hayro_syntax::object::Rect as PdfRect;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::{
@@ -99,54 +97,22 @@ pub(crate) fn page_size(bytes: &[u8], view: PdfView) -> Option<(f32, f32)> {
 }
 
 /// The transform from the page's PDF space to the viewed box's top-left
-/// origin (y down), and the box's size. The crop box is hayro's own
-/// mapping, rotation included; another box is that mapping with the box's
-/// corners as its extent (a page rotates by quarter turns, so the box
-/// stays axis-aligned), cropped to the media box as PDF 32000 §14.11.2
-/// asks. A box with no area falls back to the crop box. The flag says the
-/// box is not the crop box, so what lies outside it is cropped away.
+/// origin (y down), and the box's size: `paged_pdf_page::geometry` (engine
+/// ADR 1003 for the boxes, ADR 1058 for the shared reader), also what
+/// paged.publish's place-as-vectors uses. The flag says the box is not the
+/// crop box, so what lies outside it is cropped away.
 fn geometry(page: &Page<'_>, crop: PdfCropBox) -> (Affine, f32, f32, bool) {
-    let base = Affine::new(page.initial_transform(true).as_coeffs());
-    let (w, h) = page.render_dimensions();
-    let raw = page.raw();
-    let crop_box = page.intersected_crop_box();
-    let chosen = match crop {
-        PdfCropBox::Crop => return (base, w, h, false),
-        PdfCropBox::Media => page.media_box(),
-        PdfCropBox::Trim => raw.get::<PdfRect>(TRIM_BOX).unwrap_or(crop_box),
-        PdfCropBox::Bleed => raw.get::<PdfRect>(BLEED_BOX).unwrap_or(crop_box),
-        PdfCropBox::Art => raw.get::<PdfRect>(ART_BOX).unwrap_or(crop_box),
-    };
-    let b = chosen.intersect(page.media_box());
-    if b.width() < 1e-3 || b.height() < 1e-3 {
-        return (base, w, h, false);
-    }
-    let same = |a: f64, c: f64| (a - c).abs() < 1e-3;
-    if same(b.x0, crop_box.x0)
-        && same(b.y0, crop_box.y0)
-        && same(b.x1, crop_box.x1)
-        && same(b.y1, crop_box.y1)
-    {
-        return (base, w, h, false);
-    }
-    let corners = [(b.x0, b.y0), (b.x1, b.y0), (b.x0, b.y1), (b.x1, b.y1)]
-        .map(|(x, y)| base * kurbo13::Point::new(x, y));
-    let min_x = corners.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-    let min_y = corners.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-    let max_x = corners
-        .iter()
-        .map(|p| p.x)
-        .fold(f64::NEG_INFINITY, f64::max);
-    let max_y = corners
-        .iter()
-        .map(|p| p.y)
-        .fold(f64::NEG_INFINITY, f64::max);
-    (
-        Affine::translate((-min_x, -min_y)) * base,
-        (max_x - min_x) as f32,
-        (max_y - min_y) as f32,
-        true,
-    )
+    let g = paged_pdf_page::geometry(
+        page,
+        match crop {
+            PdfCropBox::Crop => paged_pdf_page::PageBox::Crop,
+            PdfCropBox::Media => paged_pdf_page::PageBox::Media,
+            PdfCropBox::Trim => paged_pdf_page::PageBox::Trim,
+            PdfCropBox::Bleed => paged_pdf_page::PageBox::Bleed,
+            PdfCropBox::Art => paged_pdf_page::PageBox::Art,
+        },
+    );
+    (g.initial, g.width, g.height, g.boxed)
 }
 
 /// Interpret the viewed page of `bytes` into `list`, under `transform`
@@ -300,23 +266,24 @@ fn paint(p: &PdfPaint<'_>) -> Paint {
 }
 
 fn blend(b: PdfBlend) -> BlendMode {
-    match b {
-        PdfBlend::Multiply => BlendMode::Multiply,
-        PdfBlend::Screen => BlendMode::Screen,
-        PdfBlend::Overlay => BlendMode::Overlay,
-        PdfBlend::Darken => BlendMode::Darken,
-        PdfBlend::Lighten => BlendMode::Lighten,
-        PdfBlend::ColorDodge => BlendMode::ColorDodge,
-        PdfBlend::ColorBurn => BlendMode::ColorBurn,
-        PdfBlend::HardLight => BlendMode::HardLight,
-        PdfBlend::SoftLight => BlendMode::SoftLight,
-        PdfBlend::Difference => BlendMode::Difference,
-        PdfBlend::Exclusion => BlendMode::Exclusion,
-        PdfBlend::Hue => BlendMode::Hue,
-        PdfBlend::Saturation => BlendMode::Saturation,
-        PdfBlend::Color => BlendMode::Color,
-        PdfBlend::Luminosity => BlendMode::Luminosity,
-        _ => BlendMode::Normal,
+    use paged_pdf_page::Blend;
+    match Blend::from_hayro(b) {
+        Blend::Normal => BlendMode::Normal,
+        Blend::Multiply => BlendMode::Multiply,
+        Blend::Screen => BlendMode::Screen,
+        Blend::Overlay => BlendMode::Overlay,
+        Blend::Darken => BlendMode::Darken,
+        Blend::Lighten => BlendMode::Lighten,
+        Blend::ColorDodge => BlendMode::ColorDodge,
+        Blend::ColorBurn => BlendMode::ColorBurn,
+        Blend::HardLight => BlendMode::HardLight,
+        Blend::SoftLight => BlendMode::SoftLight,
+        Blend::Difference => BlendMode::Difference,
+        Blend::Exclusion => BlendMode::Exclusion,
+        Blend::Hue => BlendMode::Hue,
+        Blend::Saturation => BlendMode::Saturation,
+        Blend::Color => BlendMode::Color,
+        Blend::Luminosity => BlendMode::Luminosity,
     }
 }
 

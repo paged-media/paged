@@ -43,8 +43,6 @@ mod encode;
 mod paint;
 mod tidy;
 
-use hayro_interpret::hayro_syntax::object::dict::keys::{ART_BOX, BLEED_BOX, TRIM_BOX};
-use hayro_interpret::hayro_syntax::object::Rect as PdfRect;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::{interpret_page, Context, InterpreterCache, InterpreterSettings};
@@ -229,53 +227,20 @@ pub fn read_page(
 }
 
 /// The transform from the page's PDF space to the chosen box's top-left
-/// origin (y down), and the box's size. The engine's placed-PDF geometry
-/// (`paged-renderer`'s `pipeline/placed_pdf.rs`, engine ADR 1003), kept in
-/// step with it so a converted frame lands where it was drawn: the crop
-/// box is hayro's own mapping, rotation included; another box is that
-/// mapping with the box's corners as its extent, cropped to the media
-/// box. The flag says the box is not the crop box, so what lies outside
-/// it is cropped away.
+/// origin (y down), and the box's size: `paged_pdf_page::geometry`, the same
+/// code the engine's placed PDF uses (engine ADR 1058), so a converted frame
+/// lands where it was drawn. The flag says the box is not the crop box, so
+/// what lies outside it is cropped away.
 fn geometry(page: &Page<'_>, chosen: PageBox) -> (Affine, f32, f32, bool) {
-    let base = Affine::new(page.initial_transform(true).as_coeffs());
-    let (w, h) = page.render_dimensions();
-    let raw = page.raw();
-    let crop_box = page.intersected_crop_box();
-    let b = match chosen {
-        PageBox::Crop => return (base, w, h, false),
-        PageBox::Media => page.media_box(),
-        PageBox::Trim => raw.get::<PdfRect>(TRIM_BOX).unwrap_or(crop_box),
-        PageBox::Bleed => raw.get::<PdfRect>(BLEED_BOX).unwrap_or(crop_box),
-        PageBox::Art => raw.get::<PdfRect>(ART_BOX).unwrap_or(crop_box),
-    }
-    .intersect(page.media_box());
-    if b.width() < 1e-3 || b.height() < 1e-3 {
-        return (base, w, h, false);
-    }
-    let same = |a: f64, c: f64| (a - c).abs() < 1e-3;
-    if same(b.x0, crop_box.x0)
-        && same(b.y0, crop_box.y0)
-        && same(b.x1, crop_box.x1)
-        && same(b.y1, crop_box.y1)
-    {
-        return (base, w, h, false);
-    }
-    let corners = [(b.x0, b.y0), (b.x1, b.y0), (b.x0, b.y1), (b.x1, b.y1)]
-        .map(|(x, y)| base * kurbo::Point::new(x, y));
-    let min_x = corners.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-    let min_y = corners.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-    let max_x = corners
-        .iter()
-        .map(|p| p.x)
-        .fold(f64::NEG_INFINITY, f64::max);
-    let max_y = corners
-        .iter()
-        .map(|p| p.y)
-        .fold(f64::NEG_INFINITY, f64::max);
-    (
-        Affine::translate((-min_x, -min_y)) * base,
-        (max_x - min_x) as f32,
-        (max_y - min_y) as f32,
-        true,
-    )
+    let g = paged_pdf_page::geometry(
+        page,
+        match chosen {
+            PageBox::Crop => paged_pdf_page::PageBox::Crop,
+            PageBox::Media => paged_pdf_page::PageBox::Media,
+            PageBox::Trim => paged_pdf_page::PageBox::Trim,
+            PageBox::Bleed => paged_pdf_page::PageBox::Bleed,
+            PageBox::Art => paged_pdf_page::PageBox::Art,
+        },
+    );
+    (g.initial, g.width, g.height, g.boxed)
 }

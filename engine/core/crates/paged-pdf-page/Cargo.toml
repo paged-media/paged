@@ -1,0 +1,18 @@
+[package]
+name = "paged-pdf-page"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The one PDF page reader the engine's placed PDF and paged.publish's place-as-vectors share (ADR 1058): hayro's page geometry per PDF box, rotation included, and the PDF blend modes as one enum. Pure: no model, no display list."
+
+[lints]
+workspace = true
+
+[dependencies]
+# The interpreter both consumers use, at the workspace's version. No features:
+# the renderer turns hayro's embedded fonts on for native, the bundle leaves
+# them out (comes from PDFium), and a feature set here would unify them.
+hayro-interpret = { workspace = true }
+kurbo = { workspace = true }

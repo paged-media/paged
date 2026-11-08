@@ -4605,6 +4605,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-pdf-page"
+version = "0.0.0"
+dependencies = [
+ "hayro-interpret",
+ "kurbo 0.13.1",
+]
+
+[[package]]
 name = "paged-perf"
 version = "0.0.0"
 dependencies = [
@@ -4713,6 +4721,7 @@ dependencies = [
  "paged-kernels",
  "paged-model",
  "paged-mutate",
+ "paged-pdf-page",
  "paged-pixel",
  "paged-ps",
  "paged-psd",
@@ -5031,6 +5040,7 @@ dependencies = [
  "kurbo 0.13.1",
  "paged-model",
  "paged-pdf-annots",
+ "paged-pdf-page",
  "paged-scene",
  "paged-store",
  "png",
