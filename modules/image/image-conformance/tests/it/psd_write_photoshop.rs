@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP READS WHAT PAGED WRITES (image ADR 478). The layered PSD
-//! save writes each case below; `scripts/photoshop/probes/psd-readback.jsx`
+//! save writes each case below; `tooling/oracle/photoshop/probes/psd-readback.jsx`
 //! had Photoshop 27.10 OPEN those files and report every layer — its kind,
 //! opacity, blend, the adjustment's parameters, the style's effects — the
 //! document's mode, depth and format, and a PNG of its own render.
@@ -36,8 +36,8 @@
 //! ```text
 //! PAGED_PSD_READBACK_OUT=<stage>/psd-readback cargo nextest run -p image-conformance \
 //!   --run-ignored only write_psd_readback_inputs
-//! PAGED_PROBE_STAGE=<stage> bash scripts/photoshop/run-probe.sh \
-//!   scripts/photoshop/probes/psd-readback.jsx
+//! PAGED_PROBE_STAGE=<stage> bash tooling/oracle/photoshop/run-probe.sh \
+//!   tooling/oracle/photoshop/probes/psd-readback.jsx
 //! ```
 
 use std::path::PathBuf;

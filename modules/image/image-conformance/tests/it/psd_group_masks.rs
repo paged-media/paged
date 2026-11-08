@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN GROUP MASKS, replayed in CI.
-//! `scripts/photoshop/probes/group-masks.jsx` had Photoshop mask groups —
+//! `tooling/oracle/photoshop/probes/group-masks.jsx` had Photoshop mask groups —
 //! pass-through, isolated at 100 % and 60 %, switched off, combined with a
 //! member's own mask, nested — and save each document as a PSD with REAL
 //! merged data.

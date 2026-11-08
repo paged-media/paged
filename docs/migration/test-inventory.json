@@ -3887,7 +3887,7 @@
    {
     "file": "engine/core/crates/paged-canvas/tests/indesign_lane.rs",
     "name": "write_lane_inputs",
-    "reason": "writes the lane's inputs for tools/indesign-export/lane.sh"
+    "reason": "writes the lane's inputs for tooling/oracle/indesign/lane.sh"
    },
    {
     "file": "engine/core/crates/paged-canvas/tests/tagged_pdf.rs",

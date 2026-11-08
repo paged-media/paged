@@ -19,7 +19,7 @@
 //! Word's first-fit composer (`SingleLineOptions::word`, engine ADR 1016)
 //! against Word's own line breaks: `fixtures/first-fit.word.json` is what
 //! Microsoft Word 16 set for the doc module's `first_fit_docx()` probe
-//! (`modules/doc/scripts/word-first-fit-probe.sh`), every line with its
+//! (`tooling/oracle/office/word/word-first-fit-probe.sh`), every line with its
 //! words.
 //!
 //! Word set the probe in Courier New 10 pt, every glyph 1229/2048 em

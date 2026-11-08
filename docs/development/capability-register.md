@@ -138,6 +138,17 @@ Themes in IDML (engine ADR 1057, built): plain swatches for InDesign, the theme 
 Writable XML tree: the one writable tree (`XNode`) now lives in `paged_ooxml::tree` (W5; `sheet-xlsx` re-exports it). The other three are not copies of it: `docx-odt`'s `El` is a read-only ODF tree with mixed text, `pptx-export`'s `El` and `docx-export/splice.rs` are byte locators that tolerate malformed text (`paged_ooxml::splice` reports it), so they stay. Minimal `.xlsx` writer: DONE (W5), one `sheet_xlsx::minimal` (package, A1 addressing, inline-string cell) used by `slide-sheet`, `sheet-js` csv and ods. ODF layer
 shared between `docx-odt` and `ods.rs`. docProps: DONE (W5, `paged_ooxml::docprops`, PM-0018): read once, kept as document properties (`DocxDocument`, `Presentation`/`Deck`, `XlsxDocument::properties`) and carried into the engine document as the label `x-paged:core.docprops` for doc and slide; sheet has no engine document, a host reads `XlsxDocument::properties`. The parts themselves are untouched on save.
 
+Equations (engine ADR 1090, slice 1 built, W10): `paged-math` is the neutral math tree and its TeX-rule layout
+(fractions, scripts, radicals, n-ary operators, delimiters, matrices, accents) onto glyph runs, rules and strokes
+through a `MathMetrics` seam; `paged_ooxml::omml` is the one OMML reader for doc and slide (`m:oMath`,
+`m:oMathPara`, transitional and strict). Open: the model type and wire, the renderer's metrics and paint, doc and
+slide import, the Word-oracle comparison. Text envelope (engine ADR 1091, slice 1 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
+adjusts) for doc, slide and sheet; the guides (`paged-warp`), the frame's model and the render pass are open.
+ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
+provider); a matting job in `apps/ml-host` and Tier-A matting models are open.
+Oracle scripts live in `tooling/oracle/` (one place for the InDesign,
+Illustrator, Photoshop, Word and PowerPoint runners; windowless only).
+
 ### Lowering
 
 `docx-lower` keeps a plugin-local IR and lowers through TS host commands; the target is Rust
@@ -156,7 +167,9 @@ data each have their own lowering. Sheet and data each have their own lowering.
 
 ### Charts, data, scripting, PDF
 
-Doc has no charts (reuse `dml-chart` and the sheet engine). Slide's chart data editing carries a
+Doc has no charts (reuse `dml-chart` and the sheet engine). Not started, blocked on the doc wasm's size: after
+embedded fonts and shapes (doc ADRs 626, 627) it is 8,377,028 B of the manifest's 8,388,608 B, so a chart reader and
+drawing, or the SmartArt drawing part (`dsp`) reader, need a second wasm artifact (`wasm[]` takes several) or a raised ceiling. Slide's chart data editing carries a
 second compiled sheet engine. `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` overlap `paged-script` and `paged-cli`. PDF read has two
 hayro devices (placed PDF, pdf-import); blank IDML / OCF zip writers ×5.
@@ -346,8 +359,13 @@ Status (draw items, one line each; updated as they land):
 
 ### Reach (gaps between modules)
 
-- **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, OpenType features,
-  embedded fonts, equations. Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
+- **doc:** recolour, charts, SmartArt, OpenType features, equations. Shapes: PARTLY DONE (doc ADR 627:
+  non-text `wps:wsp` as anchored Rectangle frames drawn along their outline, 14 hand-ported presets and
+  literal custom geometry, `wps:style` completing the look; the other presets are told. `dml-geom` is not
+  linked because its 526 KB of preset XML does not fit the doc wasm's ceiling; line ends and a shape's own
+  text wrap are open). Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to
+  their `fsType` licence and given to the document-font door, as slide does; the shared part is
+  `paged_ooxml::fonts`). Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
   against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following
   paragraph is not wrapped beside a cap taller than its own (known differences, in the note). Picture crop (`srcRect`) is done (doc ADR 623): the lowering sets
   the picture's placement on its anchored frame (`imageContentTransform`, engine ADR 1045's

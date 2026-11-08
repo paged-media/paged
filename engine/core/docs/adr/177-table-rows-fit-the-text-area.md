@@ -4,7 +4,7 @@
 - **Scope:**
   - `paged-renderer`: the row fit in the table emitter (`pipeline/tables.rs`).
   - `paged-gen`: the `table-fit` sample, with InDesign's PDF as its reference.
-  - `tools/indesign-export/table-fit-probe`.
+  - `tooling/oracle/indesign/table-fit-probe`.
 
 ## Context
 

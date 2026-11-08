@@ -16,7 +16,7 @@ pasted into Illustrator, Figma or Inkscape brought nothing, and a copy made ther
 text frame full of SVG code — when Illustrator's clipboard reached the editor at all.
 
 What Illustrator puts on the macOS pasteboard, asked of Illustrator 30.1 by the oracle
-(`modules/draw/scripts/illustrator/run-clipboard-probe.sh`, recorded in
+(`modules/draw/tooling/oracle/illustrator/run-clipboard-probe.sh`, recorded in
 `apps/canvas/test/fixtures/clipboard/clipboard-copy.pasteboard.json`), for two filled paths:
 `com.adobe.illustrator.aicb` (EPS), `public.svg-image`, `com.adobe.pdf`,
 `com.adobe.illustrator.svg` / `.svgm`, `public.utf8-plain-text` (the same SVG source),

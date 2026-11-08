@@ -93,6 +93,93 @@ pub struct TextBox {
     pub held: bool,
 }
 
+/// A DrawingML shape that holds no text (`wps:wsp` without `wps:txbx`: a
+/// rectangle, an ellipse, a line, a freeform), doc ADR 627. A shape with text
+/// is a [`TextBox`] and is drawn as its box.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Shape {
+    /// The shape's extent (`wp:extent`), before any rotation.
+    pub width_emu: i64,
+    pub height_emu: i64,
+    /// Where the shape floats; `None` for a shape set inline (`wp:inline`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub float: Option<Float>,
+    /// `a:prstGeom` or `a:custGeom`.
+    pub geometry: ShapeGeometry,
+    /// `a:xfrm/@rot`, in 60 000ths of a degree, clockwise.
+    #[serde(default, skip_serializing_if = "is_zero_i32")]
+    pub rotation: i32,
+    /// `a:xfrm/@flipH` and `@flipV`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub flip_h: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub flip_v: bool,
+    /// The shape's look (`wps:spPr` fill, outline and effects, completed
+    /// from the `wps:style` references it leaves to the theme); `None` for a
+    /// shape that paints nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<Box<PictureLook>>,
+    /// `a:ln` has a `headEnd` or `tailEnd` (arrow heads): not drawn.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub line_ends: bool,
+}
+
+fn is_zero_i32(n: &i32) -> bool {
+    *n == 0
+}
+
+/// A shape's outline as DrawingML writes it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ShapeGeometry {
+    /// `a:prstGeom`: the preset's name (`rect`, `ellipse`, `triangle`, …)
+    /// and its `a:avLst` guides (`adj`, `adj1`, … with their `val NNN`).
+    Preset {
+        name: String,
+        adjust: Vec<(String, i64)>,
+    },
+    /// `a:custGeom`'s paths whose points are literal numbers; a path with a
+    /// guide reference or an arc is not carried ([`ShapeGeometry::Unsupported`]).
+    Custom(Vec<CustomPath>),
+    /// A custom geometry this reader does not take (a guide formula, an
+    /// `a:arcTo`): the shape is not drawn, and the lowering says so.
+    Unsupported,
+}
+
+impl Default for ShapeGeometry {
+    fn default() -> Self {
+        ShapeGeometry::Preset {
+            name: "rect".into(),
+            adjust: Vec::new(),
+        }
+    }
+}
+
+/// One `a:path` of a custom geometry, in its own `w` x `h` coordinate space.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CustomPath {
+    pub w: i64,
+    pub h: i64,
+    /// `fill="none"`: only stroked.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_fill: bool,
+    /// `stroke="0"`: only filled.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_stroke: bool,
+    pub commands: Vec<PathCommand>,
+}
+
+/// One command of a [`CustomPath`].
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum PathCommand {
+    Move(i64, i64),
+    Line(i64, i64),
+    /// `a:quadBezTo`: control point, end point.
+    Quad([i64; 4]),
+    /// `a:cubicBezTo`: two control points, end point.
+    Cubic([i64; 6]),
+    Close,
+}
+
 /// One border edge (`w:top`, `w:insideH`, … in `w:tblBorders` /
 /// `w:tcBorders`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

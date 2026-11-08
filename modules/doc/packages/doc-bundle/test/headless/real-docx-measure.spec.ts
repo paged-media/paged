@@ -20,7 +20,7 @@
 // docx.md) on the headless host: the REAL engine and docx-js, the bundle's
 // standalone open, then per paragraph of every story the pages its lines
 // land on and one rect per line — the same JSON the editor-driven
-// scripts/real-docx/measure.spec.ts writes, so scripts/real-docx/compare.py
+// tooling/oracle/office/word/real-docx/measure.spec.ts writes, so tooling/oracle/office/word/real-docx/compare.py
 // reads either. NOT a CI suite: the documents are a private corpus and the
 // fonts this machine's; it runs only when REAL_DOCX names files.
 //

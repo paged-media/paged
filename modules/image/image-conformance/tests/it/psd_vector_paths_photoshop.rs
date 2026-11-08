@@ -17,7 +17,7 @@
  */
 
 //! VECTORS INSIDE THE IMAGE against Photoshop (image ADR 476), replayed
-//! in CI from `scripts/photoshop/probes/vector-paths.jsx`'s recording:
+//! in CI from `tooling/oracle/photoshop/probes/vector-paths.jsx`'s recording:
 //!
 //! * **paths** — Photoshop's saved paths and work path (image resources
 //!   2000+ and 1025) read by `vectors::paths_from_psd` agree with what its

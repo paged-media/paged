@@ -5,7 +5,7 @@
 - **Scope:** `packages/draw-geometry/src/envelope.ts`; in `packages/draw-bundle/src`
   `commands/{envelope,appearance,appearance-native,appearance-migrate,appearance-bake,graphic-styles,graphic-styles-native,select-same}.ts`,
   `handlers/envelope-mesh.ts`, `panels/graphic-styles-panel.tsx`, `menu.ts`, `tools.ts`, the typed
-  twins; the probe `scripts/illustrator/probes/envelope.jsx`. Engine (additive under protocol 78,
+  twins; the probe `tooling/oracle/illustrator/probes/envelope.jsx`. Engine (additive under protocol 78,
   no bump): the `envelope` effect kind (`paged-model::vector_effect::EnvelopeParams`,
   `paged-vector-fx::envelope`, `EffectEntrySpec.rows` / `columns` / `mesh`, its row in
   `effect_kinds.rs`), amending engine ADR 1042. Editor: the host Appearance panel lists every fill
@@ -76,7 +76,7 @@ too.
 
 ## Illustrator
 
-`scripts/illustrator/probes/envelope.jsx` (Illustrator 30.1, recorded 2026-10-31) runs Make
+`tooling/oracle/illustrator/probes/envelope.jsx` (Illustrator 30.1, recorded 2026-10-31) runs Make
 Envelope + Expand Envelope; `test/oracle/envelope.spec.ts` replays it:
 
 | case | agreement |

@@ -109,7 +109,7 @@ above a module crate or five above a module test directory):
 `sheet/sheet-conformance/tests/{real_xlsx_corpus.rs:125, xlsx_recalc_corpus.rs:209}`,
 `sheet/sheet-js/benches/session.rs:71`, `slide/pptx-import/tests/corpus.rs:35`,
 `slide/pptx-export/tests/roundtrip.rs:35`, `slide/slide-resolve/tests/{oracle_charts.rs:63, oracle_geometry.rs:147}`,
-`slide/scripts/ppt-record-corpus.sh:14`, `publish/crates/idml-export/{tests/support/corpus.rs:54, examples/corpus_sweep.rs:222}` (four up),
+`slide/tooling/oracle/office/powerpoint/ppt-record-corpus.sh:14`, `publish/crates/idml-export/{tests/support/corpus.rs:54, examples/corpus_sweep.rs:222}` (four up),
 `draw/packages/draw-bundle/test/real-vector-corpus.spec.ts:81`, `web/packages/web-model/test/real-html-corpus.spec.ts:63`.
 The `../corpus/...` paths in `modules/sheet` point at the module's own committed
 `modules/sheet/corpus/` and are correct.

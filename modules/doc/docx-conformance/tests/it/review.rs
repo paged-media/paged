@@ -99,7 +99,7 @@ fn read_back(base: &LoweredDoc) -> StoryContentIn {
 }
 
 /// With `REVIEW_PROBE_OUT` set, keep a saved package for the Word probe
-/// (`scripts/word-review-probe.sh` opens each in Word).
+/// (`tooling/oracle/office/word/word-review-probe.sh` opens each in Word).
 fn probe_out(name: &str, bytes: &[u8]) {
     if let Ok(dir) = std::env::var("REVIEW_PROBE_OUT") {
         std::fs::create_dir_all(&dir).unwrap();

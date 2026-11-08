@@ -13,7 +13,7 @@ before any code: Word cannot run headless in CI, so references would come from P
 Word exports, authored once, and from a headless LibreOffice as a continuous proxy
 (`docs/concept.md:434-437`, section 9). The first probe script states the stance: Word is
 the oracle for opening a `.docx` the way InDesign is for IDML
-(`scripts/word-pagination-probe.sh:4-5`).
+(`tooling/oracle/office/word/word-pagination-probe.sh:4-5`).
 
 ## Decision
 
@@ -29,7 +29,7 @@ documents recorded in `docs/reference/acceptance-real-docx.md`
   memory, "so the conformance suite carries no binary blobs"
   (`docx-conformance/src/lib.rs:20`).
 - A probe script per topic (12 files `scripts/word-<topic>-probe.sh`) writes the fixture to
-  disk, calls `scripts/word-pagination-probe.sh`, which has Microsoft Word open it and save
+  disk, calls `tooling/oracle/office/word/word-pagination-probe.sh`, which has Microsoft Word open it and save
   it as PDF through `osascript`, and reads positions out of the PDF with `pdftotext`.
 - The output, with a note of how it was produced, is committed as
   `docx-conformance/fixtures/<topic>.word.json`, 13 files: page sizes and the lines on each
@@ -45,13 +45,13 @@ documents recorded in `docs/reference/acceptance-real-docx.md`
 Real documents are checked separately and outside CI. Two ignored test lanes
 (`PAGED_DOC_CORPUS`, `PAGED_DOCX_CORPUS`; both lanes now read the corpus under `PAGED_CORPUS_DIR`) run the importer over real Word files that are not
 in this repository; "What it asserts is deliberately structural, not fidelity"
-(`docx-conformance/tests/it/real_word_corpus.rs:39`). `scripts/real-docx-acceptance.sh`
+(`docx-conformance/tests/it/real_word_corpus.rs:39`). `tooling/oracle/office/word/real-docx-acceptance.sh`
 compares the editor's pagination of real documents with Word's PDF.
 
 ## Evidence
 
-- `scripts/word-pagination-probe.sh:2-12`, `:27-39` — the stance, and the Word automation
-- `scripts/word-breaks-probe.sh:2-20` — one probe: build, ask Word, read the PDF
+- `tooling/oracle/office/word/word-pagination-probe.sh:2-12`, `:27-39` — the stance, and the Word automation
+- `tooling/oracle/office/word/word-breaks-probe.sh:2-20` — one probe: build, ask Word, read the PDF
 - `docx-conformance/fixtures/pagination.word.json:1-12`,
   `docx-conformance/fixtures/breaks.word.json:1-5` — an answer file and its provenance
 - `docx-conformance/tests/it/breaks.rs:19-45` — a test that reads its answer file
@@ -61,7 +61,7 @@ compares the editor's pagination of real documents with Word's PDF.
 - `docx-conformance/fixtures/run-specials.word.json:2`,
   `docx-conformance/fixtures/symbols.word.json:2` — Word reopening an edited save
 - `docx-conformance/tests/it/real_word_corpus.rs:31-43`, `:133`,
-  `docx-conformance/tests/it/poi_corpus.rs:184`, `scripts/real-docx-acceptance.sh:1-14` — the
+  `docx-conformance/tests/it/poi_corpus.rs:184`, `tooling/oracle/office/word/real-docx-acceptance.sh:1-14` — the
   lanes outside CI
 
 ## Alternatives considered

@@ -20,7 +20,7 @@
 //!
 //! InDesign does not run one dash array around a path. Asked of InDesign
 //! 20.0.1 (`stroke-styles`, read from its PDF by
-//! `tools/indesign-export/pdf-strokes.py`; ADR 148), it treats every
+//! `tooling/oracle/indesign/pdf-strokes.py`; ADR 148), it treats every
 //! anchor as a corner and every segment between two anchors as a side:
 //!
 //! * each side holds a whole number of periods, `n` = the side's length

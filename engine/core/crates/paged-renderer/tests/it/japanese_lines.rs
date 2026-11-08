@@ -17,7 +17,7 @@
  */
 
 //! Japanese lines as InDesign 20.0.1 composes them
-//! (`tools/indesign-export/vertical-text-probe`, its horizontal controls):
+//! (`tooling/oracle/indesign/vertical-text-probe`, its horizontal controls):
 //! a paragraph breaks between any two Japanese characters whatever its
 //! hyphenation, a kinsoku set only taking positions away, and `Nothing`
 //! (InDesign's default) none; under a Japanese composer a `LeadingOffset`

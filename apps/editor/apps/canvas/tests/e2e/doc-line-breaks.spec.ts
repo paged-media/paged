@@ -21,7 +21,7 @@
 //
 // The fixture is plugin-doc's docx_conformance::line_breaks_docx(), whose
 // line map Word itself reported (plugin-doc docx-conformance/fixtures/
-// line-breaks.word.json, via scripts/word-line-breaks-probe.sh): a plain
+// line-breaks.word.json, via tooling/oracle/office/word/word-line-breaks-probe.sh): a plain
 // <w:br/> mid-paragraph, two in a row, one at the paragraph's end, a
 // textWrapping break in a run of its own, a <w:cr/>, a blank line on a
 // 12 pt pitch and two on a 24 pt pitch; then, on page 2, two consecutive

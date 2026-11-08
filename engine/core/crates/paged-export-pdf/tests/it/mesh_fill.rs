@@ -427,7 +427,7 @@ const WHITE: [i32; 3] = [255, 255, 255];
 //
 // `write_illustrator_oracle_inputs` (ignored; run it before recording)
 // exports the cases below as PDFs into `tests/fixtures/mesh-oracle/`.
-// `modules/draw/scripts/illustrator/probes/mesh-render.jsx` opens each in
+// `modules/draw/tooling/oracle/illustrator/probes/mesh-render.jsx` opens each in
 // Illustrator, exports its rendering (PNG, 72 dpi) and Illustrator's own
 // PDF of it, and records what Illustrator made of the shading; the
 // replay below holds the engine's raster of the same mesh to Illustrator's

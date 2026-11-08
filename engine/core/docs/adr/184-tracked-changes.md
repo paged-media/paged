@@ -7,7 +7,7 @@
   - `paged-canvas`: text edits carry deletions; the `trackedChanges` collection.
   - `paged-mutate` / wire, protocol 74: `acceptTrackedChange`, `rejectTrackedChange`.
   - plugin-publish: the importer and writer half.
-  - `tools/indesign-export/track-changes-probe`.
+  - `tooling/oracle/indesign/track-changes-probe`.
 
 ## Context
 

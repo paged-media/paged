@@ -52,7 +52,7 @@ byte-identical.
   right-to-left paragraph, a Latin / Japanese paragraph with an East Asian face and hint, two
   Latin right-to-left paragraphs aligned left and right): the lowered paths, a script edit
   written back as Word's run properties, zero-edit saves byte-identical.
-- Word's answer (`fixtures/w4b-scripts.word.json`, `scripts/word-objects-probe.sh <out>
+- Word's answer (`fixtures/w4b-scripts.word.json`, `tooling/oracle/office/word/word-objects-probe.sh <out>
   w4b-scripts`, Word 16 for Mac, 2026-10-31): alignment and indents in a `w:bidi` paragraph
   are logical. `w:jc="left"` sets the line against the right margin, a left indent of 1 in
   holds it 72 pt off the right margin, `w:jc="right"` sets it against the left margin, and

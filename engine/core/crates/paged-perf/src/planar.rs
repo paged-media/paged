@@ -18,7 +18,7 @@
 
 //! The planar-arrangement workload (engine ADR 1019): many overlapping
 //! rectangles and circles, generated exactly as the Illustrator probe
-//! `modules/draw/scripts/illustrator/probes/divide-many.jsx` generates
+//! `modules/draw/tooling/oracle/illustrator/probes/divide-many.jsx` generates
 //! them — the same Park–Miller sequence, the same 1/4 pt rounding, the
 //! cases drawn one after the other (20, then 50, then 100 shapes) — so
 //! `divide(100)` is the input Illustrator divided into 1057 pieces.

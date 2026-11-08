@@ -20,7 +20,7 @@
 //! lays them out.
 //!
 //! Asked of InDesign 20.0.1 (`stroke-styles` rows 6–9, read from its PDF
-//! by `tools/indesign-export/pdf-strokes.py`; ADR 150). Unlike dashes
+//! by `tooling/oracle/indesign/pdf-strokes.py`; ADR 150). Unlike dashes
 //! (ADR 148), which fit each side on its own, marks run along the whole
 //! contour, corners and all:
 //!

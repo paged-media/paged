@@ -14,7 +14,7 @@ vertical flip written by `FrameFlipV` (`[1 0 0 −1 …]`) read back as flip H t
 editor's Flip V switch snapped off the moment it was turned on (PN-202).
 
 InDesign has no stored flip either. Asked through its DOM
-(`tools/indesign-export/flip-probe.json`, InDesign 20.0.1), it folds every reflection into the
+(`tooling/oracle/indesign/flip-probe.json`, InDesign 20.0.1), it folds every reflection into the
 vertical scale (`absoluteVerticalScale` −100), reads the rotation off the first axis, and names
 the flip by that turn: `absoluteFlip` is vertical when the turn is at most 90° and horizontal when
 it is more. Flip Vertical on an unturned item reads 0°, vertical; Flip Horizontal reads 180°,

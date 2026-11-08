@@ -504,7 +504,7 @@ fn grouping_again_after_deleting_an_item_below_a_group_is_accepted() {
 
 // ---- C-84 — a group goes with its last member ----------------------
 //
-// Asked of InDesign (tools/indesign-export/object-integrity-probe.json,
+// Asked of InDesign (tooling/oracle/indesign/object-integrity-probe.json,
 // 5a–5c): removing members keeps the group down to a group of one, and
 // removing its LAST member removes the group. The engine kept an EMPTY
 // group instead, and `batch(remove a, remove b, dissolve g)` then

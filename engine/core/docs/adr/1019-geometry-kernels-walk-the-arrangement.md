@@ -141,7 +141,7 @@ here: fixing it means a new fork revision, and the arrangement no longer reaches
 
 ## Evidence
 
-- **Illustrator 30.1, new probes** (`modules/draw/scripts/illustrator/probes/`):
+- **Illustrator 30.1, new probes** (`modules/draw/tooling/oracle/illustrator/probes/`):
   `offset-compound.jsx` (14 cases: rings in all three joins both ways, a vanishing hole, an
   island, a merging pair, open L and S paths) and `divide-many.jsx` (Divide over 20, 50 and 100
   generated rectangles and circles: 30, 199 and 1057 pieces, of which 1 and 9 are

@@ -37,7 +37,7 @@ pin and one test-corpus path (`diff -r` against the cargo git checkouts).
 The coverage tool goes to `crates/`, not `tools/`: every engine workspace member
 is under `crates/` (or `spikes/`), the engine's binaries (`paged-cli`,
 `paged-perf`, `paged-gen`) are crates there, and `engine/core/tools/` holds only
-the InDesign probe scripts (`tools/indesign-export`), no Cargo package.
+the InDesign probe scripts (`tooling/oracle/indesign`), no Cargo package.
 `git log --follow` reaches the files' pre-move history.
 
 ## Manifests

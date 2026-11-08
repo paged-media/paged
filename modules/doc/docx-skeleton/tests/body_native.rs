@@ -1048,3 +1048,46 @@ fn a_language_does_not_refuse_the_catalogue() {
         .expect("native despite characterLanguage");
     assert!(sk.notes.iter().any(|n| n.starts_with("characterLanguage")));
 }
+
+/// Doc ADR 627 — a shape without text is an anchored Rectangle frame whose
+/// path is the shape's outline, with the shape's look; the whole body stays
+/// native.
+#[test]
+fn shapes_are_anchored_frames_along_their_outline() {
+    let ir = lowered(&docx_conformance::shapes_docx());
+    let drawn: usize = ir
+        .story
+        .blocks
+        .iter()
+        .map(|b| match b {
+            LoweredBlock::Paragraph(p) => p.shapes.len(),
+            _ => 0,
+        })
+        .sum();
+    assert_eq!(drawn, 6);
+    let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
+    let frames: Vec<_> = stories.stories[0]
+        .iter()
+        .flat_map(|p| p.anchored_frames.iter())
+        .filter(|f| {
+            f.self_id
+                .as_deref()
+                .is_some_and(|i| i.starts_with("docx_shape"))
+        })
+        .collect();
+    assert_eq!(frames.len(), 6);
+    for f in &frames {
+        assert!(!f.anchors.is_empty(), "{:?}", f.self_id);
+        assert_eq!(f.subpath_starts.len(), f.subpath_open.len());
+    }
+    // The triangle's three anchors, closed, filled blue.
+    assert_eq!(frames[2].anchors.len(), 3);
+    assert_eq!(frames[2].subpath_open, vec![false]);
+    assert!(frames[2].fill_color.is_some());
+    // The line is open and strokes.
+    assert_eq!(frames[3].subpath_open, vec![true]);
+    assert!(frames[3].stroke_color.is_some() && frames[3].stroke_weight == Some(3.0));
+    // The ellipse floats beside its text with a wrap.
+    assert!(frames[1].setting.is_some());
+    assert!(frames[1].layout.text_wrap.is_some());
+}

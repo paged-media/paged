@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/vector-masks.jsx",
+    "script": "tooling/oracle/photoshop/probes/vector-masks.jsx",
     "script_sha256": "15fc1c7f0f1b289e845f8b6cf355957feb0f793aea618b93906b073b73f13ffa",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-05T10:25:44.988Z",
     "host_os": "macOS 26.4"
   },

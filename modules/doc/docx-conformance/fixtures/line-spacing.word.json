@@ -1,6 +1,6 @@
 {
   "fixture": "docx_conformance::line_spacing_docx()",
-  "produced_by": "scripts/word-line-spacing-probe.sh (Microsoft Word 16, PDF export, macOS)",
+  "produced_by": "tooling/oracle/office/word/word-line-spacing-probe.sh (Microsoft Word 16, PDF export, macOS)",
   "measured": "2026-10-01",
   "method": "page 1 of each section: lines Word placed on a 648 pt US-Letter body, and the mean baseline pitch over them (pdftotext -bbox)",
   "note": "Inter (L36) is not loadable by Word here: it substituted Calibri (the PDF embeds no Inter), so L36 measures Word's fallback, not Inter; L37 and L38 (2026-10-02) are read by hand off the same PDF: Word sets their text in the symbol faces' own glyphs, which the probe's label match cannot read",

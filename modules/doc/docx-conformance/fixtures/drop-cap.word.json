@@ -1,6 +1,6 @@
 {
  "fixture": "docx_conformance::drop_cap_docx()",
- "produced_by": "scripts/word-drop-cap-probe.sh (Microsoft Word 16, PDF export, macOS)",
+ "produced_by": "tooling/oracle/office/word/word-drop-cap-probe.sh (Microsoft Word 16, PDF export, macOS)",
  "measured": "2026-11-02",
  "method": "page 1 (US Letter, 72 pt margins): line x and top from pdftotext -bbox; the cap's ink box from a 300 dpi raster. Calibri 11 pt; the fixture's styles omit pPrDefault, and Word lays its own defaults (8 pt after, 1.158 line: pitch 15.52 pt)",
  "caps": [

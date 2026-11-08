@@ -29,6 +29,7 @@ import type {
 import { t } from "@paged-media/strings";
 
 import { DocEngine, type OpenReport } from "./engine.js";
+import { giveEngineFonts } from "./fonts.js";
 import {
   nativeDocx,
   ODT_EXTENSIONS,
@@ -131,6 +132,8 @@ function activateDoc(
   // Doc ADR 608 — the Word chrome (control bar, shortcuts, status items),
   // contributed once the wordDocument context is registered below.
   let word: WordContribution | null = null;
+  /** An ingest is opening its own document (which gets its fonts there). */
+  let ingesting = false;
 
   // Load bytes -> engine -> lowering -> embedded placement.
   // `open` is File ▸ Open / drop (the importer): the Word document BECOMES
@@ -145,6 +148,7 @@ function activateDoc(
   ): Promise<{ frame: ElementId; story: string | null } | null> {
     const originalName = name;
     const engine = await DocEngine.boot();
+    ingesting = true;
     try {
       // Doc ADR 616 — the bytes decide the format: a template opens as a
       // new untitled document, RTF and OpenDocument become a .docx, a .doc
@@ -220,6 +224,13 @@ function activateDoc(
           );
         }
       }
+      // Doc ADR 626 — the faces the file embeds, once the document is open
+      // (a face belongs to the document open when it is given).
+      try {
+        await giveEngineFonts(host, engine.embeddedFonts());
+      } catch (err) {
+        host.log.warn(`paged.doc: embedded fonts: ${String(err)}`);
+      }
       // ADR 293's rule for a template opened as a document: say so. A
       // Word template opens as a new document; the panel names where it
       // came from and that saving writes a new .docx.
@@ -239,6 +250,7 @@ function activateDoc(
         ? { frame: last.frameId, story: last.storyIds[0] ?? null }
         : null;
     } finally {
+      ingesting = false;
       engine.dispose();
     }
   }
@@ -508,6 +520,38 @@ function activateDoc(
       host.shell.openPanel(PANEL_ID);
     }
   }
+
+  // Doc ADR 626 — a Word document opened another way (File ▸ Open of a saved
+  // document, or already open when the bundle activates) gets its embedded
+  // fonts from the source .docx it keeps.
+  async function reloadEmbeddedFonts(): Promise<void> {
+    if (ingesting) return;
+    const done = new Set<string>();
+    for (const state of await discoverDocs(host)) {
+      if (done.has(state.data.part)) continue;
+      done.add(state.data.part);
+      const bytes = await readDocBytes(host, state);
+      if (!bytes) continue;
+      const engine = await DocEngine.boot();
+      try {
+        engine.loadDocx(bytes);
+        await giveEngineFonts(host, engine.embeddedFonts());
+      } finally {
+        engine.dispose();
+      }
+    }
+  }
+  const reloadFonts = () => {
+    reloadEmbeddedFonts().catch((err: unknown) =>
+      host.log.warn(
+        `paged.doc: embedded fonts of the open document: ${String(err)}`,
+      ),
+    );
+  };
+  if (host.supports("document.onDidOpen@1")) {
+    disposers.push(host.document.onDidOpen(reloadFonts).dispose);
+  }
+  reloadFonts();
 
   disposers.push(
     host.contribute.panel({

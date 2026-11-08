@@ -89,7 +89,7 @@ PDF and AI as vectors (paged.pdf, publish ADR 658) and draws placed EPS from its
   `.ai`). `importSvgFile` refuses a file over 32 MB before it reaches the door; the door taking
   bytes and refusing an oversize file itself is an engine follow-up.
 - Lottie export (P3) is not built: a single-frame Lottie from the export's SVG is a follow-up.
-- The Illustrator oracle (`scripts/illustrator/probes/interchange-open.jsx`, recorded with
+- The Illustrator oracle (`tooling/oracle/illustrator/probes/interchange-open.jsx`, recorded with
   Illustrator 30.1, replayed by `crates/draw-dxf/tests/illustrator_oracle.rs`): Illustrator
   opens the SVG the exporter writes and reads all four test paths exactly (bounds within
   0.05 pt, paints exact); paged.draw reads the DXF Illustrator exports exactly (geometry,

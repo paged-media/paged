@@ -98,7 +98,7 @@ when it lands.
 
 ## Oracle
 
-`modules/image/scripts/photoshop/probes/codecs-open.jsx`, recorded with Photoshop 27.10 on
+`modules/image/tooling/oracle/photoshop/probes/codecs-open.jsx`, recorded with Photoshop 27.10 on
 2026-10-28 into `crates/paged-raster/tests/fixtures/photoshop/`, opens what paged-raster writes
 (the inputs come from `cargo run -p paged-raster --example oracle_files`). Replayed by
 `tests/it/oracle.rs`, which first regenerates every input and checks it is the recorded copy:

@@ -8022,7 +8022,7 @@ fn emit_paragraph_lines(
     // stops are frame-relative, so it needs every line's start x — the
     // same shifts applied after layout below. A flush-right or centred
     // line then moves only its text after the last tab (InDesign 20.0.1,
-    // `tools/indesign-export/footnote-paragraphs-probe`, `bodyright` and
+    // `tooling/oracle/indesign/footnote-paragraphs-probe`, `bodyright` and
     // `bodycenter`; `paged_text`'s `shift_ragged`).
     if styled_runs_ref.iter().any(|r| r.text.contains('\t')) {
         let to_64 = |pt: f32| (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
@@ -8169,7 +8169,7 @@ fn emit_paragraph_lines(
     // Kenten and ruby print only under InDesign's Japanese composers
     // (`HL Composer J` / `HL Single J`): InDesign 20.0.1 set neither under
     // the Paragraph or World-Ready Composer, same font and text
-    // (tools/indesign-export/cjk-composer-probe). A ruby wider than its
+    // (tooling/oracle/indesign/cjk-composer-probe). A ruby wider than its
     // base spaces the base out before the lines break.
     let japanese = resolved_paragraph
         .composer

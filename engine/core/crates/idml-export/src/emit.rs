@@ -1667,7 +1667,7 @@ pub(crate) fn assign_instance_ids(part: Vec<u8>, story_id: &str) -> Vec<u8> {
 /// `layer` is the `ItemLayer` new guides bind to, when known.
 /// The `ShowMasterItems` a spread carries. InDesign reads it on
 /// `<Spread>` / `<MasterSpread>` only and ignores it on `<Page>` (core
-/// tools/indesign-export/master-items-probe); the model keeps it per page,
+/// tooling/oracle/indesign/master-items-probe); the model keeps it per page,
 /// so a spread hides its master items when any of its pages does.
 fn spread_show_master_items(spread: &Spread) -> bool {
     !spread

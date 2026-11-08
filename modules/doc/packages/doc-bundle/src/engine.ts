@@ -51,6 +51,8 @@ interface WasmDocEngine {
   save_object_edits(editsJson: string): Uint8Array;
   save_edited_from_content(contentJson: string): Uint8Array;
   last_save_skips(): string;
+  embedded_fonts(): string;
+  embedded_font_data(): Uint8Array;
   prefilled_notes(): string;
   style_tokens(): string;
   skeleton_paged(name: string): Uint8Array;
@@ -73,6 +75,38 @@ export interface OpenReport {
   /** The name the document saves under. */
   saveName: string;
   diagnostics: string[];
+}
+
+/** A face the document embeds (docx-js `FaceReport`): a style of one of its
+ *  typefaces, and whether the document may use it (`editable`) or why not. */
+export interface EmbeddedFaceReport {
+  family: string;
+  /** `Regular`, `Bold`, `Italic` or `Bold Italic` (a run's FontStyle). */
+  style: string;
+  part: string;
+  use:
+    | "editable"
+    | "previewAndPrint"
+    | "restricted"
+    | "bitmapOnly"
+    | "sitesOnly"
+    | "unreadable"
+    | "missing";
+  /** OS/2 fsType (the embedding permissions), when the part was read. */
+  fsType: number | null;
+  /** The face holds only the glyphs the document uses. */
+  subset: boolean;
+  /** Where the face sits in {@link DocFonts.data} (length 0: not used). */
+  offset: number;
+  length: number;
+}
+
+/** A document's embedded faces, decoded (doc ADR 626). */
+export interface DocFonts {
+  faces: EmbeddedFaceReport[];
+  /** One line per face that is not used, naming it and why. */
+  diagnostics: string[];
+  data: Uint8Array;
 }
 
 /** The `--target web` glue module shape. */
@@ -119,6 +153,22 @@ export class DocEngine {
    *  is {@link lastSaveSkips}. */
   nativeDocx(input: unknown): Uint8Array {
     return this.inner.native_docx(JSON.stringify(input));
+  }
+
+  /** Doc ADR 626 — the faces the loaded document embeds (Word's obfuscated
+   *  `.odttf` parts), decoded, with what each licence allows. */
+  embeddedFonts(): DocFonts {
+    const { faces, diagnostics } = JSON.parse(this.inner.embedded_fonts()) as {
+      faces: EmbeddedFaceReport[];
+      diagnostics: string[];
+    };
+    return {
+      faces,
+      diagnostics,
+      data: faces.some((f) => f.length > 0)
+        ? this.inner.embedded_font_data()
+        : new Uint8Array(),
+    };
   }
 
   /** The Tier-0 lowering (the host-model input). */

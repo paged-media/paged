@@ -16,7 +16,7 @@
   (`comments.rs`; the tracked inline walk), `docx-lower` (`LoweredChange`,
   `LoweredFormatChange`, `LoweredPropsChange`, `LoweredComment`, `LoweredDoc::track_changes`),
   `doc-host-model` (the review step of the pour), `docx-export` (`review.rs`; the overlay's
-  review fields), `docx-js` (`save_edited_structure`), `scripts/word-review-probe.sh`,
+  review fields), `docx-js` (`save_edited_structure`), `tooling/oracle/office/word/word-review-probe.sh`,
   `docx-conformance/fixtures/review.word.json`.
 
 ## Context
@@ -111,7 +111,7 @@ durable id). A part, its relationship and its content type are made when missing
   refused paragraph. Every saved package is well-formed and re-imports with the expected markup.
 - `docx-conformance/tests/it/w0_losses.rs` — the W0 tests restated: tracked runs keep their
   sources; an edit beside a tracked run still lands on its own `<w:r>`.
-- `scripts/word-review-probe.sh`, `docx-conformance/fixtures/review.word.json` — Microsoft Word
+- `tooling/oracle/office/word/word-review-probe.sh`, `docx-conformance/fixtures/review.word.json` — Microsoft Word
   16.114 opens every package the review tests save (accept, reject, format accepted and
   rejected, changes recorded in paged, a tracked split and join, a reply with a resolved
   thread, a removed thread, a first comment that makes the comment parts) without a prompt,

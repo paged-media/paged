@@ -19,7 +19,7 @@
 //! ADR 029 — a Word document lowered the ADR's way (one story per
 //! section, the section's margin box as its frame, a grow rule) paginates
 //! like WORD. The expected pages are Word's own, from its PDF export of
-//! plugin-doc's `pagination_docx()` (`scripts/word-pagination-probe.sh`,
+//! plugin-doc's `pagination_docx()` (`tooling/oracle/office/word/word-pagination-probe.sh`,
 //! 2026-10-01); `paged_gen::samples::docx_pagination` mirrors that document.
 
 use std::path::PathBuf;

@@ -22,7 +22,7 @@ Three operations on page items did something InDesign does not, and each reporte
   inverse failed.
 
 These are behaviour rules rather than rendering, so no exported PDF can answer them. InDesign was
-asked by script instead. `tools/indesign-export/object-integrity-probe.jsx` runs each case on a
+asked by script instead. `tooling/oracle/indesign/object-integrity-probe.jsx` runs each case on a
 scratch document, and its answers are committed beside it in `object-integrity-probe.json`
 (InDesign 2025, 20.0.1).
 

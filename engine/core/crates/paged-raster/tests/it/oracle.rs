@@ -18,7 +18,7 @@
 
 //! The Photoshop oracle of WP9.4 (ADR 1038), replayed: Photoshop 27.10
 //! opened the files `paged-raster` writes and reads
-//! (`modules/image/scripts/photoshop/probes/codecs-open.jsx`, recorded
+//! (`modules/image/tooling/oracle/photoshop/probes/codecs-open.jsx`, recorded
 //! into `tests/fixtures/photoshop/`).
 //!
 //! - Each recorded input is regenerated (`oracle_files`) and must be the

@@ -7,7 +7,7 @@
     - the footnote flow (`pipeline/footnotes.rs`: `EmittedFootnote.resume_at`,
       `ComposedFootnote::resume_point`).
   - `paged-gen`: the `footnote-split-narrow` variant.
-  - `tools/indesign-export/footnote-reflow-probe`.
+  - `tooling/oracle/indesign/footnote-reflow-probe`.
 
 ## Context
 

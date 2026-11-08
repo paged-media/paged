@@ -95,6 +95,20 @@ impl DocSession {
         &self.source
     }
 
+    /// Doc ADR 626 — the faces the document embeds, decoded, with what each
+    /// licence allows. Reads the retained package; nothing is written.
+    pub fn embedded_fonts(&self) -> crate::fonts::FontsOut {
+        crate::fonts::face_reports(docx_import::fonts::embedded_faces(
+            &self.package,
+            &self.main_part,
+        ))
+    }
+
+    /// [`Self::embedded_fonts`] as JSON (`{ faces, diagnostics }`).
+    pub fn embedded_fonts_json(&self) -> String {
+        serde_json::to_string(&self.embedded_fonts()).unwrap_or_else(|_| "null".to_string())
+    }
+
     /// The Tier-0 lowering (the IR the host-model turns into mutations).
     pub fn lowered(&self) -> LoweredDoc {
         lower_with(&self.model, self.options)

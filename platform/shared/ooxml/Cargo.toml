@@ -33,6 +33,8 @@ serde = ["dep:serde"]
 [dependencies]
 # The colour arithmetic (engine ADR 1056): one owner, re-exported as `colour`.
 paged-colour-math = { path = "../../../engine/core/crates/paged-colour-math" }
+# The neutral math tree the OMML reader builds (engine ADR 1090).
+paged-math = { path = "../../../engine/core/crates/paged-math" }
 # Held at 0.12 for the app's wasm budget (docs/migration/rust-majors.md).
 ooxmlsdk = { version = "0.12", features = ["mce"], optional = true }
 zip = { version = "9.0.4", default-features = false }

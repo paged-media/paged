@@ -14,7 +14,7 @@ zone do under the Paragraph Composer.
 
 ## Decision
 
-**A line may overrun its measure by a sliver** (`tools/indesign-export/fit-tolerance-probe.*`: a
+**A line may overrun its measure by a sliver** (`tooling/oracle/indesign/fit-tolerance-probe.*`: a
 one-line paragraph, "justified, spaces never shrink" in Open Sans, in a frame its natural width
 minus *d* wide, with *d* bisected to where the last word leaves the line, at 6 to 48 pt).
 

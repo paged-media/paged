@@ -19,7 +19,7 @@
 // The ROUND-TRIP lane's InDesign half: what a recorded answer looks like
 // and how to load one. A recording is Adobe InDesign's reading of one IDML
 // file this lane exported, made once on a maintainer's Mac by
-// `scripts/indesign/run-roundtrip.sh` and committed beside the IDML as
+// `tooling/oracle/indesign/roundtrip/run-roundtrip.sh` and committed beside the IDML as
 // `test/fixtures/roundtrip/<case>.indesign.json`. CI never drives InDesign.
 //
 // Everything is in POINTS, page-local, origin top-left, Y DOWN — the
@@ -179,8 +179,8 @@ export function loadRecording(id: string): InDesignRecording {
   const path = recordingPath(id);
   if (!existsSync(path)) {
     throw new Error(
-      `${path} is missing — record it with scripts/indesign/run-roundtrip.sh ` +
-        `${idmlPath(id)} <that path> (see scripts/indesign/README.md)`,
+      `${path} is missing — record it with tooling/oracle/indesign/roundtrip/run-roundtrip.sh ` +
+        `${idmlPath(id)} <that path> (see tooling/oracle/indesign/roundtrip/README.md)`,
     );
   }
   const parsed = JSON.parse(readFileSync(path, "utf8")) as InDesignRecording;

@@ -19,7 +19,7 @@
 //! C-77 — a locked page item is not moved, reshaped, restacked or
 //! removed; its attributes still change, and unlocking it is an ordinary
 //! property write. The rule is InDesign's, asked of it by script
-//! (`tools/indesign-export/object-integrity-probe.json`, cases 1–4).
+//! (`tooling/oracle/indesign/object-integrity-probe.json`, cases 1–4).
 //! `elementLocked` used to be paint-neutral bookkeeping nothing read:
 //! `moveFrame` and `deleteFrame` applied to a locked frame.
 

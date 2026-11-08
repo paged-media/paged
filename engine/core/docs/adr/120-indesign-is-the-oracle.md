@@ -1,7 +1,7 @@
 # ADR 120 — InDesign is the oracle: a generator authors, InDesign answers, a diff gates
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `9f933f1`.
-- **Scope:** `crates/paged-gen`, `tools/indesign-export`, `corpus/generated`, and the measurement
+- **Scope:** `crates/paged-gen`, `tooling/oracle/indesign`, `corpus/generated`, and the measurement
   notes in `crates/paged-text`, `crates/paged-compose` and `crates/paged-renderer`
 
 ## Context
@@ -31,7 +31,7 @@ InDesign's own output is the reference for the engine's behaviour. It is obtaine
   Its package writer is byte-deterministic (fixed timestamp, stable entry order) and a hash test
   checks that. The library depends on `zip` and `quick-xml`, not on the engine's model or
   importer; the importer is a dev-dependency. Generated `.idml` files are not committed.
-- **InDesign answers.** `tools/indesign-export/run-export.sh` drives a local InDesign through
+- **InDesign answers.** `tooling/oracle/indesign/run-export.sh` drives a local InDesign through
   `export-pdfs.jsx`: open each IDML, export a PDF with the High Quality Print preset, write
   `<stem>.export.meta.json` (InDesign version, preset, time). Both files are committed. Where an
   export of the unedited file cannot show the behaviour, a probe script has InDesign act and report
@@ -46,11 +46,11 @@ InDesign's own output is the reference for the engine's behaviour. It is obtaine
 - `crates/paged-gen/src/samples.rs:93-153`, `:242-249` — the sample list; its length pinned at 62
 - `crates/paged-gen/src/package.rs:29-37`, `crates/paged-gen/tests/it/snapshot.rs:45-50`,
   `crates/paged-gen/Cargo.toml:13-22` — determinism, its test, and the dependencies
-- `tools/indesign-export/export-pdfs.jsx:117-142`, `corpus/generated/.gitignore:1-4` — the export
+- `tooling/oracle/indesign/export-pdfs.jsx:117-142`, `corpus/generated/.gitignore:1-4` — the export
   loop and its metadata record; IDMLs ignored, PDFs committed
 - `corpus/generated/diff.sh:6-16` — the five steps of the gate
-- `tools/indesign-export/reflow-probe.jsx:1-14`,
-  `tools/indesign-export/inline-objects-probe.jsx:19-25` — the two probes;
+- `tooling/oracle/indesign/reflow-probe.jsx:1-14`,
+  `tooling/oracle/indesign/inline-objects-probe.jsx:19-25` — the two probes;
   `crates/paged-renderer/tests/it/reflow_pipeline.rs:19-28`,
   `crates/paged-renderer/tests/it/inline_objects_pipeline.rs:19-22` — tests that pin their answers
 - `crates/paged-text/src/single_line.rs:22-25`, `crates/paged-renderer/src/pipeline/keeps.rs:28-29`
@@ -66,19 +66,19 @@ the gate and say they do not replace it ("This is not the InDesign fidelity gate
 
 The gate runs wherever the Rust toolchain, poppler and python3 are installed
 (`corpus/generated/diff.sh:59-60`). Adding or re-measuring a reference needs InDesign, and the
-shell drivers are macOS-only (`tools/indesign-export/run-export.sh:23`). All 61 committed
+shell drivers are macOS-only (`tooling/oracle/indesign/run-export.sh:23`). All 61 committed
 references record InDesign 20.0.1.32; the rule is to re-export one fixture at a time and to pin
-the version (`tools/indesign-export/README.md:56-67`). A reference also depends on the exporting machine's
+the version (`tooling/oracle/indesign/README.md:56-67`). A reference also depends on the exporting machine's
 fonts (`CLAUDE.md:132-136`) and on a colour profile that may not be redistributed
 (`.github/workflows/fidelity.yml:98-101`; [ADR 121](121-public-repo-builds-alone.md)).
 
 Coverage is not complete. The sample `docx-pagination` has no reference PDF and no entry in
 `corpus/generated/fidelity-thresholds.json`; a fixture gates only its first `max_pages_with_pdf`
 pages (lines 10-12 of that file). The effect measurements name probes
-(`crates/paged-compose/src/mask.rs:1017`) that are not in `tools/indesign-export/`, which holds
+(`crates/paged-compose/src/mask.rs:1017`) that are not in `tooling/oracle/indesign/`, which holds
 the export driver and two probes, so they cannot be repeated from this repository.
 `README.md:199-200` and `CONTRIBUTING.md:58-59` call the InDesign export harness internal and
-private; it is `tools/indesign-export/`. `README.md:73` and `CLAUDE.md:120` call it
+private; it is `tooling/oracle/indesign/`. `README.md:73` and `CLAUDE.md:120` call it
 "Python/ExtendScript"; it is bash and ExtendScript. Comments citing "thoughts ADR 026" and
 "thoughts ADR 028" mean the two records linked below.
 

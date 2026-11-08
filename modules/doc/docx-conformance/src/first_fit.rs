@@ -17,7 +17,7 @@
  */
 
 //! Word's line breaking and a picture's line, asked of Word (engine ADR 1016,
-//! doc ADR 617). `scripts/word-first-fit-probe.sh` has Word export
+//! doc ADR 617). `tooling/oracle/office/word/word-first-fit-probe.sh` has Word export
 //! [`first_fit_docx`] as PDF; `fixtures/first-fit.word.json` records every
 //! line Word set: its words and where they stand.
 //!
