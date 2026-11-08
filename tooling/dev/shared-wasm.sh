@@ -24,7 +24,7 @@
 # list      the stored builds, newest first.
 #
 # "Engine sources" are what the wasm is built from: engine/core (without its
-# docs, Markdown, web/ and spikes/), platform/shared/fmt (a path dependency),
+# docs, Markdown, web/ and spikes/), engine/core/crates/paged-fmt (a path dependency),
 # and the root .cargo/config.toml, compared with `git diff` (committed and
 # uncommitted changes) plus untracked files.
 #
@@ -51,7 +51,7 @@ GENERATED=(
 )
 SOURCES=(
   "$CORE" ":(exclude)$CORE/docs" ":(exclude)$CORE/**/*.md" ":(exclude)$CORE/web"
-  ":(exclude)$CORE/spikes" "platform/shared/fmt" ".cargo/config.toml"
+  ":(exclude)$CORE/spikes" "engine/core/crates/paged-fmt" ".cargo/config.toml"
 )
 
 die() {

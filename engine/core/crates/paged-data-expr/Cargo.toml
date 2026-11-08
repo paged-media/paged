@@ -17,8 +17,8 @@ workspace = true
 
 [dependencies]
 paged-data-core = { path = "../paged-data-core" }
-# Digit grouping and the weekday (platform/shared/fmt).
-paged-fmt = { path = "../../../../platform/shared/fmt" }
+# Digit grouping and the weekday (engine/core/crates/paged-fmt).
+paged-fmt = { path = "../paged-fmt" }
 smallvec = { version = "1", features = ["serde"] }
 compact_str = { version = "0.10", features = ["serde"] }
 thiserror = "2"

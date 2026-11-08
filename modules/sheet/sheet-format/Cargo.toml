@@ -19,8 +19,8 @@ paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-fl
 # luminance steps that compute it: dml-native's theme module.
 dml-native = { path = "../../../platform/shared/dml-native" }
 sheet-core = { path = "../sheet-core" }
-# The calendar, the locale table and digit grouping (platform/shared/fmt).
-paged-fmt = { path = "../../../platform/shared/fmt" }
+# The calendar, the locale table and digit grouping (engine/core/crates/paged-fmt).
+paged-fmt = { path = "../../../engine/core/crates/paged-fmt" }
 compact_str.workspace = true
 ryu.workspace = true
 rustc-hash.workspace = true
