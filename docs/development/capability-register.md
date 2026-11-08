@@ -115,7 +115,7 @@ stops and pattern swatches; slide's pattern fill stays a picture of PowerPoint-m
 pattern would need the slide-grid phase through `pattern_transform` per frame and would move the
 goldens); a translucent pattern has no swatch (a tile item paints a colour without alpha). `a:clrChange`
 stays a recorded loss: the filter stack (`RasterOp`) has no colour-replace op.
-`a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3 → `dml-chart`.
+`a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3: examined, left open, they are not copies of one another: `slide-resolve/chart.rs` builds clockwise-from-12-o'clock `SubPath`s with arcs split at 90° by `ceil(|sweep|/90)`, `sheet-chart` emits a `Primitive::Wedge` that its renderer draws, and the engine's `pie_anchors` is f32, counter-clockwise from 3 o'clock with a `ceil(sweep/(pi/2) - 1e-9)` split; a shared primitive would move anchors in the last bits and the slide goldens with them. Chart label width ×2: also left open, `sheet-chart` counts characters at one advance (`ADVANCE_EM`), `slide-chart` weighs digits, separators and letters apart, so they measure differently on purpose (neither goes through `paged-text`). Default Office palette: `pptx-import` and `slide-resolve` keep their theme readers (not re-examined in this pass).
 The host `tools` package still imports `@paged-media/draw/geometry` and `/machines`.
 
 ### Text and fonts
