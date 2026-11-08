@@ -76,6 +76,7 @@ pub mod dom;
 pub mod drawingml;
 pub mod error;
 pub mod media;
+pub mod omml;
 pub mod opc;
 pub mod rels;
 pub mod splice;
