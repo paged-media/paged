@@ -169,7 +169,7 @@ tooling/dev/shared-wasm.sh list
 `README.txt` saying how the build was made (release or dev). `use` without a
 commit picks the stored build whose engine sources equal the worktree's
 (`engine/core` without docs, Markdown, `web/` and `spikes/`, plus
-`platform/shared/fmt` and `.cargo/config.toml`, committed or not), and refuses
+`engine/core/crates/paged-fmt` and `.cargo/config.toml`, committed or not), and refuses
 when none does: then the worktree has engine changes and must build.
 
 ## Blaze for the edit loop (optional)

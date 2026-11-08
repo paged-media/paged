@@ -246,8 +246,8 @@ the addendum's composition part.
   only from tests, so an ordinary export does not contain it.
 - `crates/paged-renderer/tests/it/c1_no_idml.rs:19-29` — the test this ADR asks for under "The C1
   seam gets enforced in code + CI": a hand-built region chain and a non-IDML content engine
-  rendered to pixels with no `Document` involved. `crates/paged-composition-render/src/lib.rs:25-28`
-  is its reusable form for a composition.
+  rendered to pixels with no `Document` involved. The reusable form for a composition
+  (`paged-composition-render`) was deleted unused.
 
 [`../reference/composition-format.md`](../reference/composition-format.md) is the format
 document for the composition part.

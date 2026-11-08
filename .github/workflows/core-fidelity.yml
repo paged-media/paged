@@ -26,8 +26,8 @@ on:
   pull_request:
     paths:
       - "engine/core/crates/**"
-      # The shared formatting crate (platform/shared/fmt), compiled into the engine.
-      - "platform/shared/fmt/**"
+      # The shared formatting crate (engine/core/crates/paged-fmt), compiled into the engine.
+      - "engine/core/crates/paged-fmt/**"
       - "engine/core/corpus/**"
       - "engine/core/scripts/pack-fidelity.py"
       - "engine/core/scripts/test_pack_fidelity.py"

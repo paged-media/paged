@@ -939,7 +939,7 @@
   },
   {
     "package": "pptx-fonts",
-    "dir": "modules/slide/pptx-fonts",
+    "dir": "engine/core/crates/pptx-fonts",
     "merged": [],
     "kept": {},
     "helpers": {},

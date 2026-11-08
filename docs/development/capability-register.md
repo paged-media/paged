@@ -85,7 +85,9 @@ rule in the record, each behind the registry gate and the conformance goldens. D
 `image_decode.rs` keeps `jpeg-decoder` for the DCT-scaled decode of oversized JPEGs (`paged-raster` has no
 DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-raster` could not read (HDR);
 `pdf-import`'s `encode::png` writes through the `png` crate, whose bytes differ from `paged-raster`'s encoder
-for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere.
+for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere: engine ADR 1044 states why (placing a whole PSD draws its merged
+composite, which already holds the styles; the consumer is a "PSD layer as a page item" flow that does not exist yet).
+`paged-composition-render` had no consumer and was deleted.
 Path coverage rasterizers ×3 in image-js.
 
 ### Geometry and vector
@@ -112,8 +114,10 @@ The host `tools` package still imports `@paged-media/draw/geometry` and `/machin
 
 ### Text and fonts
 
-`image-js` has its own harfrust, skrifa and ab_glyph beside `paged-text`. `pptx-fonts` and
-`paged-fmt` belong at L2 (`paged-fmt` is used by engine crates from `platform/shared`).
+`image-js` keeps its own harfrust + skrifa shaping and outlines beside `paged-text`: raster type
+does not take `paged-text` (it would pull the model and composer into the image wasm, and its
+1/64 pt advance rounding is not pixel-identical); the fontations stack is pinned once in the
+engine workspace (engine ADR 1058). `pptx-fonts` and `paged-fmt` now live at L2 (`engine/core/crates/pptx-fonts`, `engine/core/crates/paged-fmt`).
 Chart label width ×2 → `dml-chart`. Number and date formats: `paged-numfmt` out of `sheet-format`.
 
 ### Office / OOXML / ODF
