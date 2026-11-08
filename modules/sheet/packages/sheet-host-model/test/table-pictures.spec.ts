@@ -110,9 +110,7 @@ describe("a picture's DrawingML look [sheet.chart.native-effects]", () => {
         color: "#000000",
       },
     },
-    losses: [
-      "picture effect a:grayscl is not carried (no image adjustments yet)",
-    ],
+    losses: ["picture effect a:tint is not carried"],
   };
   const withPics = { ...content, pictures: [styled, { ...styled, row: 1 }] };
 
@@ -152,5 +150,46 @@ describe("a picture's DrawingML look [sheet.chart.native-effects]", () => {
       ),
     ).toBe(false);
     expect(tablePictureLosses(withPics)).toHaveLength(1);
+  });
+});
+
+describe("a picture's crop and corrections [sheet.chart.native-effects]", () => {
+  it("sets the crop's placement and the filter stack on the frame, after the image", () => {
+    const adjustments = [
+      {
+        op: "blackWhite",
+        reds: 0.3,
+        yellows: 0.3,
+        greens: 0.59,
+        cyans: 0.3,
+        blues: 0.11,
+        magentas: 0.3,
+      },
+      { op: "brightnessContrast", brightness: 0.2, contrast: 0.9 },
+    ] as LoweredPicture["adjustments"];
+    const placement: LoweredPicture["placement"] = [2, 0, 0, 1, -50, 0];
+    const ops = tablePictureOps(
+      { ...content, pictures: [{ ...pic, adjustments, placement }] },
+      [40, 60],
+      "p1" as never,
+      [0, 0],
+    ) as { op: string; args: Record<string, unknown> }[];
+    expect(ops.map((o) => o.op)).toEqual([
+      "insertFrame",
+      "bindCreated",
+      "placeImage",
+      "setElementProperty",
+      "setElementProperty",
+    ]);
+    expect(ops[3]!.args).toEqual({
+      elementId: { kind: "rectangle", id: "$h:pic0" },
+      path: "imageContentTransform",
+      value: { type: "transform", value: placement },
+    });
+    expect(ops[4]!.args).toEqual({
+      elementId: { kind: "rectangle", id: "$h:pic0" },
+      path: "frameImageAdjustments",
+      value: { type: "imageAdjustments", value: adjustments },
+    });
   });
 });

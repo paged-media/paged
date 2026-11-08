@@ -41,6 +41,8 @@
  *  `"general"` is Excel's default (numbers right, text left), resolved
  *  in Rust; the lowered text is already the formatted value, so the
  *  translator treats alignment as an opaque tag it forwards. */
+import type { RasterOp } from "@paged-media/plugin-api";
+
 import type { NativeFx } from "./chart";
 
 export type Align = "general" | "left" | "center" | "right";
@@ -333,6 +335,15 @@ export interface LoweredPicture {
   /** A drawing picture's opacity and effects, as the shared DrawingML
    *  mapper lowered them (sheet ADR 527). */
   fx?: NativeFx;
+  /** The picture corrections the engine's filter stack holds (`a:lum`,
+   *  `a:duotone`, `a:grayscl`, `a:biLevel`, `a:hsl`, `a:blur`, …; sheet ADR
+   *  529): set on the frame as `frameImageAdjustments`, so they apply in
+   *  every output and stay editable in the picture panel. */
+  adjustments?: RasterOp[];
+  /** A cropped picture's (`a:srcRect`) placement in its frame: the engine's
+   *  inner image transform `[a, b, c, d, e, f]` in the frame's own box,
+   *  set as `imageContentTransform` (sheet ADR 529). */
+  placement?: [number, number, number, number, number, number];
   /** What the page cannot hold of its look, one line per kind. */
   losses?: string[];
 }

@@ -122,6 +122,14 @@ pub struct PictureInfo {
     /// mapper lowers them (sheet ADR 527).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fx: Option<sheet_chart::native::NativeFx>,
+    /// The filter stack its picture corrections become (`a:lum`,
+    /// `a:duotone`, `a:grayscl`, …; engine ADR 1037, sheet ADR 529).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub adjustments: Vec<sheet_chart::native::RasterOp>,
+    /// The crop's placement of the image in its frame (`a:srcRect`): the
+    /// engine's inner image transform in the frame's own box.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placement: Option<[f64; 6]>,
     /// What the page cannot hold of its look, one line per kind.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub losses: Vec<String>,
@@ -175,6 +183,12 @@ pub struct PagePicture {
     /// Opacity and effects (sheet ADR 527).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fx: Option<sheet_chart::native::NativeFx>,
+    /// The picture corrections as the frame's filter stack (sheet ADR 529).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub adjustments: Vec<sheet_chart::native::RasterOp>,
+    /// The crop's placement of the image in its frame (sheet ADR 529).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placement: Option<[f64; 6]>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub losses: Vec<String>,
 }
@@ -550,20 +564,25 @@ impl SheetSession {
                         (x0, y0, w, h, row, col, true)
                     }
                 };
-                let (fx, losses) = match p.dml.as_deref() {
-                    Some(d) => sheet_chart::native::picture_fx(
+                let (look, placement) = match p.dml.as_deref() {
+                    Some(d) => sheet_chart::native::picture_placed(
                         &self
                             .doc
                             .chart_theme
                             .unwrap_or(sheet_chart::colors::OFFICE_THEME),
                         &d.blip,
                         &d.effects,
+                        self.doc.media_bytes(&p.media).as_deref(),
+                        w,
+                        h,
                     ),
-                    None => (None, Vec::new()),
+                    None => Default::default(),
                 };
                 PictureInfo {
-                    fx,
-                    losses,
+                    fx: look.fx,
+                    adjustments: look.adjustments,
+                    losses: look.losses,
+                    placement,
                     id: p.id,
                     sheet,
                     name: p.name,
@@ -618,6 +637,8 @@ impl SheetSession {
                     h_pt: p.h,
                     in_cell: p.in_cell,
                     fx: p.fx,
+                    adjustments: p.adjustments,
+                    placement: p.placement,
                     losses: p.losses,
                 })
             })

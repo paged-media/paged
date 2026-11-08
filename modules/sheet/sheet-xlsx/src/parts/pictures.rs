@@ -77,7 +77,8 @@ pub struct SheetPicture {
     /// A drawing picture's `a:blip` and its shape's `a:effectLst`, as
     /// authored (sheet ADR 527): the page lowers them through the shared
     /// DrawingML mapper. `None` for an image in a cell, or a picture with
-    /// neither an alpha, a picture effect nor an effect list.
+    /// neither an alpha, a crop (`a:srcRect`), a picture effect nor an
+    /// effect list.
     pub dml: Option<Box<PictureDml>>,
 }
 
@@ -103,7 +104,10 @@ fn picture_dml(pic: &paged_ooxml::tree::El) -> Option<Box<PictureDml>> {
         .find(|c| c.local == "spPr")
         .map(|sp| paged_ooxml::drawingml::effects_in(sp, &rels))
         .unwrap_or_default();
-    let plain = blip.alpha.is_none() && blip.effects.is_empty() && effects.is_empty();
+    let plain = blip.alpha.is_none()
+        && blip.src_rect.is_none()
+        && blip.effects.is_empty()
+        && effects.is_empty();
     (!plain).then(|| Box::new(PictureDml { blip, effects }))
 }
 

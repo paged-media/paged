@@ -79,11 +79,12 @@ pub mod theme;
 use paged_model::effect_stack::{
     ColorOverlayParams, Effect, EffectEntry, GaussianBlurParams, IndesignEffect, ReflectionParams,
 };
+pub use paged_model::RasterOp;
 use paged_model::{
     ArrowheadType, BevelEmbossParams, ColorEntry, ColorModel, ColorSpace, DropShadowSetting,
     FeatherParams, FillRule, FrameEffects, GradientEntry, GradientFeatherParams,
     GradientFeatherStop, GradientKind, GradientStopRef, InnerShadowParams, OuterGlowParams,
-    PathAnchor, RasterOp,
+    PathAnchor,
 };
 pub use paged_ooxml::drawingml::resolved::{
     radial_reach, BevelSide, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint,
