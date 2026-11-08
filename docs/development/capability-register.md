@@ -174,7 +174,7 @@ data each have their own lowering. Sheet and data each have their own lowering.
 Doc's charts (doc ADR 628) are read by `dml-chart` into slide's chart model and drawn from their cached values by
 `slide-chart` (one layout for PowerPoint and Word), as anchored groups; the sheet engine is not linked (doc edits no chart
 data yet). The doc wasm's ceiling went to 9 MiB for charts and SmartArt (doc ADR 627 amendment); it links `dml-geom` (doc ADR 629). Slide's chart data editing carries a
-second compiled sheet engine. `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
+second compiled sheet engine (blocked on a host door: slide ADR 724). `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` are folded (W9, engine ADR 1059): `paged-action`'s `js::sandbox_context` is the one Boa sandbox (paged-script uses it too), the script surface and the batch runner are modules of `paged-data-session`, and `paged data batch` replaces the `paged-data-batch` binary. PDF read: the two hayro devices (placed PDF, pdf-import) stay two (different targets) and share `paged-pdf-page` for page box geometry and blend modes (engine ADR 1058, W9); blank IDML / OCF zip writers ×5.
 
 ### Host tools and panels (TS)
@@ -403,8 +403,18 @@ Status (draw items, one line each; updated as they land):
   pictures. A crop changed in the editor is written back as the picture's `a:srcRect` (inverse of the
   placement; unchanged crops stay byte-identical; a picture of unknown size, a metafile, is
   reported), in the body and in table cells; pictures in nested tables and in headers are not.
-- **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.
-- **slide:** autofit (stored `fontScale` is applied as fixed values). Done and checked against PowerPoint:
+- **sheet:** done (W7, sheet ADR 529 to 531): pictures keep their crop (`a:srcRect` as the frame's
+  image placement) and picture corrections (`a:lum`, `a:duotone`, `a:grayscl`, `a:biLevel`, `a:hsl`,
+  `a:blur` as the engine's filter stack, engine ADR 1037); `xdr:sp` / `xdr:cxnSp` shapes are read, their
+  preset and custom outlines evaluated by `dml-geom` and their paint mapped by `dml-native`, and drawn
+  as native paths over the placed table; a picture's or shape's `a:hlinkClick` is the engine's item
+  hyperlink (`insertItemHyperlink`; cell links stay sheet's). Open, reported as losses: the text of a
+  shape or text box, arrowheads, shapes in groups, the in-frame grid (draws pictures raw and no
+  shapes), a rotated `xdr:pic`.
+- **slide:** autofit (stored `fontScale` / `lnSpcReduction` are applied as fixed values, which is what
+  PowerPoint draws on open; the engine has no shrink-to-fit, only frame growth: slide ADR 724). Chart
+  data editing still carries its second compiled sheet engine (`slide-sheet`); sharing sheet's needs a
+  host door that does not exist (PM-0002, slide ADR 724). Done and checked against PowerPoint:
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
   font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
   right: PowerPoint does not hyphenate.

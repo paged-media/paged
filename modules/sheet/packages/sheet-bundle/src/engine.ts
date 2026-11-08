@@ -225,6 +225,10 @@ export interface PictureInfo {
   /** The picture's top-left inside that cell (pt). */
   dx: number;
   dy: number;
+  /** The picture corrections as the frame's filter stack (sheet ADR 529). */
+  adjustments?: import("@paged-media/plugin-api").RasterOp[];
+  /** A crop's placement of the image in its frame (sheet ADR 529). */
+  placement?: [number, number, number, number, number, number];
 }
 
 /** One frame's content box for pagination (the host chain link's content

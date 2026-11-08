@@ -74,6 +74,7 @@ mod ink_coverage;
 mod insert_frame_undo;
 mod insert_shape_bridge;
 mod inspector_wire;
+mod item_hyperlink_in_batch;
 mod late_fonts;
 mod layers_wire;
 mod layout_cache;

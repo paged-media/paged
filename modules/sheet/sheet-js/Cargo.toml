@@ -26,6 +26,8 @@ sheet-xlsx = { path = "../sheet-xlsx", default-features = false }
 # The workbook theme on the wire (`setTheme`'s argument, engine ADR 1056).
 dml-native = { path = "../../../platform/shared/dml-native" }
 paged-ooxml = { path = "../../../platform/shared/ooxml" }
+# A drawing shape's outline (the 187 presets and custom geometry, sheet ADR 530).
+dml-geom = { path = "../../../platform/shared/dml-geom" }
 sheet-lower = { path = "../sheet-lower" }
 sheet-grid = { path = "../sheet-grid" }
 # The M2 charts track (spec §8.4): sheet-js resolves a parsed chart's series
