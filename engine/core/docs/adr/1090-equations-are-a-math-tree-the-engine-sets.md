@@ -169,7 +169,8 @@ text-less `docx_core::Run` with `math`; the lowering puts it on the paragraph
 (`LoweredParagraph.equations`, `at` = the characters before it) and the native builder
 (`docx-skeleton` `body.rs`) onto the model paragraph; a paragraph that is only display equations
 is centred (Word's `centerGroup` default). The pour path (a deferred block) has no door for an
-equation. **Unchanged parts stay byte-identical:** the reader never writes, the equation's run
+equation. The doc wasm grew past its 8 MiB manifest budget by 25 KB (8.02 MiB, measured by
+`doc / bun test`); the manifest's `maxBytes` is 9 MiB now. **Unchanged parts stay byte-identical:** the reader never writes, the equation's run
 has no `w:r` and is no run of the lowering, so the save-back's run bindings are unchanged; a
 test edits the run beside an inline equation and holds the equations' markup and the paragraphs
 after it to their bytes.
