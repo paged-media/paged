@@ -59,6 +59,8 @@ export interface CommentPin {
  *  bundle host. */
 export interface CommentAnchorLookup {
   resolve(item: string, address: string): { rect?: number[] } | null;
+  /** The address selected in `item` now (a sheet's active cell). */
+  selected?(item: string): string | null;
   onDidChange(listener: () => void): { dispose(): void };
 }
 
@@ -78,6 +80,18 @@ export function setCommentAnchorLookup(next: CommentAnchorLookup | null) {
     }) ?? null;
   lookupVersion += 1;
   for (const l of [...lookupListeners]) l();
+}
+
+/** The address the owning module has selected in `item` (a sheet frame's
+ *  active cell, `Sheet1!B3`), for the Comments panel's "New comment"; null
+ *  when no module has one. Read at the moment of the click: a module's cell
+ *  selection moves without a document change. */
+export function selectedCommentAddress(item: string): string | null {
+  try {
+    return lookup?.selected?.(item) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 const subscribeLookup = (l: () => void) => {

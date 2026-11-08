@@ -57,6 +57,7 @@ export {
   COMMENTS_PANEL,
   initialsOf as pinInitialsOf,
   pinsOf,
+  selectedCommentAddress,
   setCommentAnchorLookup,
   type CommentAnchorLookup,
   type CommentPin,

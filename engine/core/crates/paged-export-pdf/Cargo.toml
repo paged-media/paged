@@ -25,6 +25,9 @@ paged-color = { path = "../paged-color" }
 # tree through paged-renderer).
 paged-raster = { path = "../paged-raster" }
 paged-model = { path = "../paged-model" }
+# Engine ADR 1055 — a comment's kept annotation, read back to be written back
+# (and, in the tests, the exported annotations read back).
+paged-pdf-annots = { path = "../paged-pdf-annots" }
 pdf-writer = "0.15"
 subsetter = "0.2"
 xmp-writer = "0.3"
@@ -57,8 +60,6 @@ paged-test-resources.workspace = true
 paged-renderer = { path = "../paged-renderer", features = ["cpu"] }
 anyhow = { workspace = true }
 lopdf = "0.45"
-# Engine ADR 1055 — the round trip reads the exported annotations back.
-paged-pdf-annots = { path = "../paged-pdf-annots" }
 serde_json = "1"
 paged-scene = { path = "../paged-scene" }
 paged-gen = { path = "../paged-gen" }

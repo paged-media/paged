@@ -82,10 +82,10 @@ use vello_cpu::{
     RenderMode, RenderSettings, Resources, TargetInit,
 };
 
-use crate::blur::{gaussian_blur_mask, gaussian_blur_premul, gaussian_kernel};
 use crate::ink_planes::{self, CmykPlanes, Coverage};
 use crate::vello_map::{self, PaintBrush, StrokeGeometry};
 use crate::{PathRasterizer, RasterOptions};
+use paged_kernels::blur::{gaussian_kernel, gaussian_separable, Edge};
 
 /// `PathRasterizer` backed by `vello_cpu`. No GPU required.
 #[derive(Debug, Default, Clone, Copy)]
@@ -1734,7 +1734,14 @@ impl Raster<'_> {
         let mut pixmap = std::mem::replace(&mut group.px, Pixmap::new(1, 1));
         if blur_sigma_px > 0.5 {
             let kernel = gaussian_kernel(blur_sigma_px);
-            gaussian_blur_premul(pixmap.data_as_u8_slice_mut(), gw, gh, &kernel);
+            gaussian_separable::<4>(
+                pixmap.data_as_u8_slice_mut(),
+                gw,
+                gh,
+                Some(&kernel),
+                Some(&kernel),
+                Edge::Clamp,
+            );
         }
         if let Some(fx) = pixel_fx {
             paged_compose::layer_fx::apply_premul(
@@ -1983,7 +1990,14 @@ impl Raster<'_> {
         // Blur premultiplied RGBA: blurring straight alpha would brighten
         // the edges into a halo.
         let kernel = gaussian_kernel(sigma_px);
-        gaussian_blur_premul(stamp.data_as_u8_slice_mut(), w, h, &kernel);
+        gaussian_separable::<4>(
+            stamp.data_as_u8_slice_mut(),
+            w,
+            h,
+            Some(&kernel),
+            Some(&kernel),
+            Edge::Clamp,
+        );
         shape_shadow_alpha(stamp.data_as_u8_slice_mut(), w, spread, noise, scale);
         let (s, res, _) = self.split();
         s.draw_image(
@@ -2537,7 +2551,8 @@ fn plain_feather_mask(mut mask: Vec<u8>, w: u32, h: u32, params: &Feather, scale
         FeatherCornerType::Diffusion => params.width.max(0.0) * scale,
     };
     if sigma_px > 0.5 {
-        gaussian_blur_mask(&mut mask, w, h, &gaussian_kernel(sigma_px));
+        let kernel = gaussian_kernel(sigma_px);
+        gaussian_separable::<1>(&mut mask, w, h, Some(&kernel), Some(&kernel), Edge::Clamp);
     }
     apply_choke(&mut mask, params.choke);
     if matches!(params.corner_type, FeatherCornerType::Diffusion) && params.noise > 0.0 {
@@ -2608,7 +2623,8 @@ fn directional_feather_mask(
         FeatherCornerType::Diffusion => max_w * 0.5 * scale,
     };
     if sigma_px > 0.5 {
-        gaussian_blur_mask(&mut mask, w, h, &gaussian_kernel(sigma_px));
+        let kernel = gaussian_kernel(sigma_px);
+        gaussian_separable::<1>(&mut mask, w, h, Some(&kernel), Some(&kernel), Edge::Clamp);
     }
     apply_choke(&mut mask, params.choke);
     if matches!(params.corner_type, FeatherCornerType::Diffusion) && params.noise > 0.0 {
@@ -2805,7 +2821,7 @@ pub fn rasterize_layer(
     let sigma_px = sigma_pt * scale;
     if sigma_px > 0.5 {
         let kernel = gaussian_kernel(sigma_px);
-        gaussian_blur_premul(&mut rgba, w, h, &kernel);
+        gaussian_separable::<4>(&mut rgba, w, h, Some(&kernel), Some(&kernel), Edge::Clamp);
     }
     paged_compose::layer_fx::apply_premul(&mut rgba, w, h, (x0, y0), scale, effect);
     Some(LayerRaster {

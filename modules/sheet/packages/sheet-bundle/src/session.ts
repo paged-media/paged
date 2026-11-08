@@ -147,6 +147,7 @@ import type {
 import { readKnownSwatchIds } from "./swatch-mints";
 import {
   anchorGeometry,
+  cellAddress,
   createSheetComments,
   type AnchorGeometry,
 } from "./comments-model";
@@ -500,6 +501,10 @@ export interface WorkbookSession extends DataToolsApi {
    *  sheet, or the cell is not in the window the frame shows (hidden,
    *  scrolled out, or past the content box). */
   commentAnchor(address: string, item: string): AnchorGeometry | null;
+  /** The active cell's address (`Sheet1!B3`) when the sheet frame `item`
+   *  shows the active sheet, for the host's "New comment"
+   *  (`contribute.commentAnchor`'s `selected`); null otherwise. */
+  selectedAddress(item: string): string | null;
   /** Start a comment thread on the active cell through the comments door
    *  ("New comment"); the workbook takes it at once. A cell that has a
    *  thread takes the text as a reply. */
@@ -7675,6 +7680,16 @@ export function createWorkbookSession(
         content: info.content,
         box: info.chain ? info.chain.boxes[0] : info.boxPt,
       });
+    },
+
+    selectedAddress(item) {
+      const info = loweredTables.get(item);
+      const at = activeOf();
+      const engine = state.engine;
+      if (!info || !at || !engine || info.sheet !== state.activeSheet)
+        return null;
+      const sheet = engine.listSheets().find((x) => x.id === info.sheet);
+      return sheet ? cellAddress(sheet.name, at.row, at.col) : null;
     },
 
     async startCellComment(text) {

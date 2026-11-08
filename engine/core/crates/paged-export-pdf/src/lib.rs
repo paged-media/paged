@@ -34,6 +34,7 @@
 //! same bytes (golden-file discipline).
 
 pub mod color;
+mod comments;
 pub mod effects;
 pub mod gstate;
 pub mod image;
@@ -162,6 +163,9 @@ pub struct ExportOptions {
     pub comments: Vec<PdfComment>,
 }
 
+/// The `format` of a comment's source that [`PdfComment::kept`] takes.
+pub use paged_pdf_annots::SOURCE_FORMAT as KEPT_ANNOT_FORMAT;
+
 /// One comment thread for the PDF (engine ADR 1055): a sticky note on a page
 /// with its replies, as Acrobat's Comment tool makes one.
 #[derive(Debug, Clone, PartialEq)]
@@ -183,6 +187,10 @@ pub struct PdfComment {
     /// written instead of `Completed` when given.
     pub review_state: Option<String>,
     pub replies: Vec<PdfReply>,
+    /// The annotation the comment was read from (its `pdf-annot` source, engine
+    /// ADR 1055): written back instead of a new note while the comment still
+    /// says what it says.
+    pub kept: Option<String>,
 }
 
 /// A reply in a [`PdfComment`] thread.
@@ -192,6 +200,8 @@ pub struct PdfReply {
     pub author: String,
     pub date: Option<String>,
     pub text: String,
+    /// As [`PdfComment::kept`].
+    pub kept: Option<String>,
 }
 
 /// One PDF bookmark: an outline item going to a page, as InDesign 20.0.1

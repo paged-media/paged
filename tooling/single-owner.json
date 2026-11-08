@@ -207,6 +207,14 @@
       "patterns": ["-\\w+ \\* inv_det"],
       "extensions": [".rs"],
       "baseline": []
+    },
+    {
+      "name": "polygon-coverage-scan",
+      "description": "fill polygons into 8-bit coverage with paged_kernels::coverage::polygons; the pattern is its sub-scanline position",
+      "owner": ["engine/core/crates/paged-kernels/src/coverage.rs"],
+      "patterns": ["\\(sub as f32 \\* 2\\.0 \\+ 1\\.0\\) / 8\\.0"],
+      "extensions": [".rs"],
+      "baseline": []
     }
   ]
 }

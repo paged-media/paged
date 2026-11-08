@@ -39,7 +39,8 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
   region and cell anchors; people; tasks, reactions, review state; source blobs; derived
   orphaning; the host Comments panel and canvas pins; slide comments on engine threads; PDF
   comment annotations out (`paged export --comments`) and in (`paged comments`, `paged-pdf-annots`; the PDF
-  bundle imports them into the opened document, 2026-11-02). Oracles: PowerPoint opens the exported slide comments and
+  bundle imports them into the opened document, 2026-11-02), and an unedited imported annotation written back from
+  its kept dictionary on the thread's page and point (engine ADR 1055 amendment, 2026-11-08). Oracles: PowerPoint opens the exported slide comments and
   re-saves them with every comment, reply and the resolved state intact; Word's review round trip is recorded in
   `modules/doc/docx-conformance/fixtures/review.word.json`. Excel threaded comments are read and written in
   `sheet-xlsx` (sheet ADR 528) and projected into the engine threads as cell anchors; Excel opens and keeps what
@@ -88,7 +89,19 @@ DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-ras
 for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere: engine ADR 1044 states why (placing a whole PSD draws its merged
 composite, which already holds the styles; the consumer is a "PSD layer as a page item" flow that does not exist yet).
 `paged-composition-render` had no consumer and was deleted.
-Path coverage rasterizers ×3 in image-js.
+CPU blurs (engine ADR 1013, amendment "Blur"): `paged_kernels::blur` owns the `u8` Gaussians and the box pass with an
+explicit `Edge` and `Round`; the effects lane's RGBA and mask Gaussians, the SVG filter's Gaussian and box pass, the
+compose masks' box passes and image-gpu's selection feather moved onto it, bit-exact against the old bodies. Allowed,
+with reasons in the record: the f32 image-pipeline twin `cpu::gaussian_weights` (already here; other weights),
+image-js Refine Edge's f32 `gaussian`, `psd_vector_mask`'s f32 box feather, the `style::blur` reference twin, and the GPU
+blurs (Vello's layer blur, the `conv` and `style` WGSL).
+Polygon coverage (engine ADR 1013, amendment "Coverage"): `paged_kernels::coverage::polygons` owns the analytic
+four-sub-scanline scan; the lasso (`image-gpu` `SelectionCoverage::rasterize_polygon`) and the region filter's
+`rasterize_polygons` call it (one body, bit-exact against the old one), and `masking.rs`' point-sampled
+`rasterize_nonzero` (dead outside its own test) is deleted. Allowed, with reasons in the record: `psd_vector_mask`'s
+17 × 15-sample scan with the component booleans (fitted to Photoshop's vector masks), the compose masks' binary
+one-sample fill (the InDesign effects' masks and PDF stamps), raster type's `ab_glyph_rasterizer` (signed-area
+accumulation; its goldens are its own), and vello_cpu for page paths.
 
 ### Geometry and vector
 
