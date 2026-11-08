@@ -609,9 +609,11 @@ describe("[plugin-platform.ml-service] the local host's matting runner", () => {
     const h = host(ALL, backend);
     await provider.refresh();
     expect(h.supports("ml.matting@1")).toBe(false);
+    const seen = changed;
     matting = true;
     await provider.refresh();
-    expect(changed).toBe(1);
+    // The capability arriving is a change of its own.
+    expect(changed).toBe(seen + 1);
     expect(h.supports("ml.matting@1")).toBe(true);
     // Matting alone: generation is still not served.
     expect(h.supports("ml.generate@1")).toBe(false);
