@@ -696,24 +696,17 @@ fn theme(el: &El, ctx: &Ctx) -> Theme {
                 .collect()
         })
         .unwrap_or_default();
-    let fonts = elements.and_then(|e| e.child(Ns::A, "fontScheme"));
-    let font_set = |name: &str| {
-        fonts
-            .and_then(|f| f.child(Ns::A, name))
-            .map(|f| {
-                let face = |n: &str| {
-                    f.child(Ns::A, n)
-                        .and_then(|e| e.attr("typeface"))
-                        .filter(|t| !t.is_empty())
-                        .map(str::to_string)
-                };
-                FontSet {
-                    latin: face("latin"),
-                    east_asian: face("ea"),
-                    complex: face("cs"),
-                }
-            })
-            .unwrap_or_default()
+    // The font scheme is the shared reader's (`paged_ooxml::drawingml::theme`):
+    // the same typeface rules (an empty face is none), minus the per-script
+    // faces this model does not carry. The colours stay read here: they are
+    // kept unresolved (base and transforms), which the shared reader's resolved
+    // `Rgba` slots are not, and a slot the scheme names outside the twelve is
+    // kept too.
+    let shared = paged_ooxml::drawingml::theme::Theme::from_el(el).unwrap_or_default();
+    let font_set = |f: paged_ooxml::drawingml::theme::FontSet| FontSet {
+        latin: f.latin,
+        east_asian: f.east_asian,
+        complex: f.complex,
     };
     let fmt = elements.and_then(|e| e.child(Ns::A, "fmtScheme"));
     let list = |name: &str| fmt.and_then(|f| f.child(Ns::A, name));
@@ -721,8 +714,8 @@ fn theme(el: &El, ctx: &Ctx) -> Theme {
         part: ctx.part.clone(),
         name: el.attr("name").map(str::to_string),
         colors,
-        major_font: font_set("majorFont"),
-        minor_font: font_set("minorFont"),
+        major_font: font_set(shared.major_font),
+        minor_font: font_set(shared.minor_font),
         fill_styles: list("fillStyleLst")
             .map(|l| {
                 l.children

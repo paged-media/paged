@@ -117,7 +117,7 @@ stops and pattern swatches; slide's pattern fill stays a picture of PowerPoint-m
 pattern would need the slide-grid phase through `pattern_transform` per frame and would move the
 goldens); a translucent pattern has no swatch (a tile item paints a colour without alpha). `a:clrChange`
 stays a recorded loss: the filter stack (`RasterOp`) has no colour-replace op.
-`a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3: examined, left open, they are not copies of one another: `slide-resolve/chart.rs` builds clockwise-from-12-o'clock `SubPath`s with arcs split at 90° by `ceil(|sweep|/90)`, `sheet-chart` emits a `Primitive::Wedge` that its renderer draws, and the engine's `pie_anchors` is f32, counter-clockwise from 3 o'clock with a `ceil(sweep/(pi/2) - 1e-9)` split; a shared primitive would move anchors in the last bits and the slide goldens with them. Chart label width ×2: also left open, `sheet-chart` counts characters at one advance (`ADVANCE_EM`), `slide-chart` weighs digits, separators and letters apart, so they measure differently on purpose (neither goes through `paged-text`). Default Office palette: `pptx-import` and `slide-resolve` keep their theme readers (not re-examined in this pass).
+`a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3: examined, left open, they are not copies of one another: `slide-resolve/chart.rs` builds clockwise-from-12-o'clock `SubPath`s with arcs split at 90° by `ceil(|sweep|/90)`, `sheet-chart` emits a `Primitive::Wedge` that its renderer draws, and the engine's `pie_anchors` is f32, counter-clockwise from 3 o'clock with a `ceil(sweep/(pi/2) - 1e-9)` split; a shared primitive would move anchors in the last bits and the slide goldens with them. Chart label width ×2: also left open, `sheet-chart` counts characters at one advance (`ADVANCE_EM`), `slide-chart` weighs digits, separators and letters apart, so they measure differently on purpose (neither goes through `paged-text`). Default Office palette and theme readers: `pptx-import` and `slide-resolve` re-examined 2026-11-08 (see the OOXML foundation row): fonts and `SLOTS` shared, the colour reader kept for the unresolved `Color` the goldens rest on.
 The host `tools` package still imports `@paged-media/draw/geometry` and `/machines`.
 
 ### Text and fonts
@@ -134,9 +134,14 @@ Hand-written relationships remain in sheet links and chart_write; `sheet-xlsx` k
 `opc.rs` and `rels.rs`. Theme: one DrawingML reader (`paged-ooxml::drawingml::theme`) and one lowering
 onto the engine's `Document.theme` (`dml-native::theme`: the part, the wire form a module's IR carries,
 the swatch convention). Slide, doc and sheet use both; doc and sheet send `setTheme` on open and their
-theme-coloured swatches follow a slot (engine ADR 1056, slice 4). `pptx-import` keeps its own theme
-reader (it reads through its own element tree and keeps colours unresolved, with the format scheme for
-slide's resolver) and `slide-resolve` its key/variant logic. The format scheme is not modelled (ADR 1056,
+theme-coloured swatches follow a slot (engine ADR 1056, slice 4). `pptx-import` reads the font
+scheme through the shared reader and keeps its own colour reader (its model holds each slot as an
+unresolved `Color`, base and transforms, where the shared `Theme` holds resolved `Rgba` and drops a system
+colour without `lastClr`; moving it would change the model, the serialised form and the resolver's input, and
+the PowerPoint-verified slide goldens with them, so it stays, with the format scheme for slide's resolver and
+slots outside the twelve); `slide-resolve` has no XML reader of a theme (`ThemeIr::of` projects the model, and
+`rewrite_theme_xml` splices a part's text), takes `SLOTS` from the shared module, and keeps its key/variant
+logic. Decided 2026-11-08. The format scheme is not modelled (ADR 1056,
 Amendment 1).
 Themes in IDML (engine ADR 1057, built): plain swatches for InDesign, the theme in the document label `x-paged:core.theme`, \"create theme from swatches\", font references on styles, presets owned by `paged_model::theme::presets`.
 Writable XML tree: the one writable tree (`XNode`) now lives in `paged_ooxml::tree` (W5; `sheet-xlsx` re-exports it). The other three are not copies of it: `docx-odt`'s `El` is a read-only ODF tree with mixed text, `pptx-export`'s `El` and `docx-export/splice.rs` are byte locators that tolerate malformed text (`paged_ooxml::splice` reports it), so they stay. Minimal `.xlsx` writer: DONE (W5), one `sheet_xlsx::minimal` (package, A1 addressing, inline-string cell) used by `slide-sheet`, `sheet-js` csv and ods. ODF layer

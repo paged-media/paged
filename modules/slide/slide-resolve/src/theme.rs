@@ -34,10 +34,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::Rgb;
 
 /// The twelve theme colour slots, in scheme order.
-pub const SLOTS: [&str; 12] = [
-    "dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
-    "hlink", "folHlink",
-];
+pub use paged_ooxml::drawingml::theme::SLOTS;
 
 /// The slots PowerPoint's colour picker shows with tints (all but the
 /// hyperlink colours).
