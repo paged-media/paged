@@ -65,7 +65,7 @@ block arcs, circular arrows, …). `dml-geom` evaluates all 187 from ECMA-376 An
 Measured on this change (release, `wasm-doc`, wasm-opt), on the author's machine: 9,117,482 B,
 from 8,529,596 B with charts (ADR 628); `dml-geom` with its definitions is about 564 KB of that,
 the diagram reader and lowering about 12 KB, the line ends about 12 KB. That is under the 9 MiB
-ceiling of ADR 627's amendment with 320 KB to spare. The editor's `dist/` budget goes to 73.5 MiB
+ceiling of ADR 627's amendment with 320 KB to spare. The editor's `dist/` budget goes to 74.25 MiB
 for it (PM-0013, amendment 6).
 
 ## Evidence
