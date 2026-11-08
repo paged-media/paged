@@ -325,7 +325,9 @@ Status (draw items, one line each; updated as they land):
 ### Reach (gaps between modules)
 
 - **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, OpenType features,
-  embedded fonts, equations. Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
+  equations. Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to
+  their `fsType` licence and given to the document-font door, as slide does; the shared part is
+  `paged_ooxml::fonts`). Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
   against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following
   paragraph is not wrapped beside a cap taller than its own (known differences, in the note). Picture crop (`srcRect`) is done (doc ADR 623): the lowering sets
   the picture's placement on its anchored frame (`imageContentTransform`, engine ADR 1045's

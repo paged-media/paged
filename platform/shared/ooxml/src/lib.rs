@@ -75,6 +75,7 @@ pub mod docprops;
 pub mod dom;
 pub mod drawingml;
 pub mod error;
+pub mod fonts;
 pub mod media;
 pub mod opc;
 pub mod rels;

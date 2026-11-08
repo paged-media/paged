@@ -14,6 +14,7 @@ mod container_bytes;
 mod continuous;
 mod crop_saveback;
 mod drop_cap;
+mod embedded_fonts;
 mod feature_evidence;
 mod files;
 mod first_fit;

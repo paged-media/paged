@@ -46,6 +46,7 @@ use paged_ooxml::{parse_root, part_dir, rels, resolve_target, OoxmlError, OpcPac
 
 mod comments;
 mod controls;
+pub mod fonts;
 mod objects;
 mod theme;
 pub use comments::{comments_parts, CommentParts};
