@@ -98,7 +98,7 @@ pub(crate) fn page_size(bytes: &[u8], view: PdfView) -> Option<(f32, f32)> {
 
 /// The transform from the page's PDF space to the viewed box's top-left
 /// origin (y down), and the box's size: `paged_pdf_page::geometry` (engine
-/// ADR 1003 for the boxes, ADR 1058 for the shared reader), also what
+/// ADR 1003 for the boxes, ADR 1060 for the shared reader), also what
 /// paged.publish's place-as-vectors uses. The flag says the box is not the
 /// crop box, so what lies outside it is cropped away.
 fn geometry(page: &Page<'_>, crop: PdfCropBox) -> (Affine, f32, f32, bool) {

@@ -17,7 +17,7 @@
  */
 
 //! One PDF page reader for the two places the engine's hayro interpreter is
-//! driven (ADR 1058): a placed PDF drawn into the display list
+//! driven (ADR 1060): a placed PDF drawn into the display list
 //! (`paged-renderer`), and paged.publish's place-as-vectors (`pdf-import`).
 //!
 //! Each keeps its own `hayro_interpret::Device` (one writes display-list
