@@ -99,6 +99,7 @@ kurbo = "0.11.3"
 # embedded base-14 fonts and CMaps are native-only (below).
 hayro-interpret = { version = "0.8", default-features = false }
 kurbo13 = { package = "kurbo", version = "0.13" }
+paged-pdf-page = { workspace = true }
 serde = { workspace = true }
 serde_json = "1"
 tsify-next = { workspace = true }

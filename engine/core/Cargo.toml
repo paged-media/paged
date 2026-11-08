@@ -20,6 +20,7 @@ members = [
     "crates/paged-raster",
     "crates/paged-sniff",
     "crates/paged-pdf-annots",
+    "crates/paged-pdf-page",
     "crates/paged-svg",
     "crates/paged-ps",
     "crates/paged-blend",
@@ -81,8 +82,6 @@ members = [
     "../../modules/draw/crates/draw-dxf",
     "../../modules/draw/crates/trace-js",
     "../../modules/data/data-js",
-    "../../modules/data/data-cli",
-    "../../modules/data/data-script",
     "../../modules/data/data-conformance",
     "../../modules/image/image-kernels",
     "../../modules/image/image-gpu",
@@ -314,6 +313,7 @@ paged-model = { path = "crates/paged-model" }
 paged-scene = { path = "crates/paged-scene" }
 paged-store = { path = "crates/paged-store" }
 paged-pdf-annots = { path = "crates/paged-pdf-annots" }
+paged-pdf-page = { path = "crates/paged-pdf-page" }
 # The engine's SVG crate, for paged.draw's one walk over a usvg tree (engine ADR
 # 1031, plan item C9) and its paint reader: no default features, so neither the
 # mutation engine nor usvg's text shaper is linked. (The engine's own crates

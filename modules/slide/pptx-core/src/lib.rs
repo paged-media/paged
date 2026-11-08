@@ -420,19 +420,9 @@ pub struct Placeholder {
     pub size: Option<String>,
 }
 
-/// `a:xfrm` / `p:xfrm`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct Xfrm {
-    pub off: (Emu, Emu),
-    pub ext: (Emu, Emu),
-    /// 60 000ths of a degree, clockwise.
-    pub rot: i32,
-    pub flip_h: bool,
-    pub flip_v: bool,
-    /// Group transforms only: the child coordinate space.
-    pub ch_off: Option<(Emu, Emu)>,
-    pub ch_ext: Option<(Emu, Emu)>,
-}
+/// `a:xfrm` / `p:xfrm`: the shared one of `platform/shared/dml-geom`
+/// (`place`), which also writes it.
+pub use slide_geom::place::Xfrm;
 
 /// A shape, connector or (with geometry) any drawn outline.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

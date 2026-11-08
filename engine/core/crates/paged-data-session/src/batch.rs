@@ -16,10 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! # data-cli — headless batch generation (spec §10, the native route)
+//! # batch — headless batch generation (spec §10, the native route)
 //!
 //! A plain-Rust path for server/CI batch: drive the SAME engine the editor uses
-//! ([`data_js::core::DataSession`]), no browser, no napi toolchain. A [`Job`]
+//! ([`crate::core::DataSession`]), no browser, no napi toolchain. A [`Job`]
 //! carries the binding **recipe**, the **pre-materialized** query results, and
 //! the run parameters (which record-flow binding, the batch mode, the frame
 //! chain); [`run_job`] produces the per-document lowered IR.
@@ -31,15 +31,15 @@
 //! `PaginatedFlow` IR the core's headless export turns into documents (§10:
 //! "nothing bypasses the normal render/export pipeline").
 //!
-//! The `paged-data-batch` binary wraps [`run_job`] with stdin/file → stdout JSON.
+//! `paged data batch` wraps [`run_job`] with stdin/file → stdout JSON.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::core::{BatchRun, DataSession, DocumentPayload};
 use data_automation::BatchMode;
 use data_core::{BindingId, Locale, QueryId, RecordSet};
-use data_js::core::{BatchRun, DataSession, DocumentPayload};
 use data_lower::{FlowLayoutOpts, FrameCapacity};
 
 /// A headless batch job (spec §10).
@@ -104,8 +104,8 @@ pub fn run_job(job: Job) -> Result<JobOutput, String> {
     let mut binding = job.binding;
     let mut mode = job.mode;
     if let Some(src) = &job.script {
-        let spec = data_script::eval_spec(src)?;
-        data_script::apply_to_session(&mut session, &spec);
+        let spec = crate::script::eval_spec(src)?;
+        crate::script::apply_to_session(&mut session, &spec);
         if let Some(build) = spec.build {
             binding = Some(build.binding);
             mode = Some(build.mode);

@@ -493,24 +493,10 @@ fn rule_name(r: &FillRule) -> &'static str {
 
 /// A PDF blend mode in IDML's spelling; `None` for `Normal`.
 pub(super) fn blend_name(b: BlendMode) -> Option<&'static str> {
-    Some(match b {
-        BlendMode::Normal => return None,
-        BlendMode::Multiply => "Multiply",
-        BlendMode::Screen => "Screen",
-        BlendMode::Overlay => "Overlay",
-        BlendMode::Darken => "Darken",
-        BlendMode::Lighten => "Lighten",
-        BlendMode::ColorDodge => "ColorDodge",
-        BlendMode::ColorBurn => "ColorBurn",
-        BlendMode::HardLight => "HardLight",
-        BlendMode::SoftLight => "SoftLight",
-        BlendMode::Difference => "Difference",
-        BlendMode::Exclusion => "Exclusion",
-        BlendMode::Hue => "Hue",
-        BlendMode::Saturation => "Saturation",
-        BlendMode::Color => "Color",
-        BlendMode::Luminosity => "Luminosity",
-    })
+    match paged_pdf_page::blend(b) {
+        paged_blend::BlendMode::Normal => None,
+        m => Some(m.idml_name()),
+    }
 }
 
 fn p2(p: Point) -> [f32; 2] {

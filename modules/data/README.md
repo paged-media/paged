@@ -32,7 +32,7 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
   (`data-bind`); lowering to a pure content IR, including record flow and
   pagination (`data-lower`); barcodes (`data-barcode`); data sets and the
   variable library (`data-dataset`); batch plans (`data-automation`), the
-  headless CLI (`data-cli`) and the sandboxed script surface (`data-script`);
+  headless batch (`paged data batch`) and the sandboxed script surface (modules of `paged-data-session`);
   and the conformance suite with the coverage gate (`data-conformance`).
 - **TypeScript:** `data-host-model` (pure IR → `Mutation[]`) and the published
   bundle `@paged-media/data` (`packages/data-bundle`: manifest, `activate`,

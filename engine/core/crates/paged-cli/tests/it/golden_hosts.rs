@@ -926,3 +926,66 @@ fn data_apply() {
     .code(0)
     .golden("paged data apply", "record-1");
 }
+
+/// A small batch job: two regions, one record-flow binding, a two-frame chain.
+const BATCH_JOB: &str = r#"{
+  "today": 0,
+  "locale": "de",
+  "payload": {
+    "queries": [{ "id": "q1", "sql": "", "params": [], "shape": { "shape": "recordStream" } }],
+    "templates": [{
+      "id": "tmpl",
+      "fields": [{ "label": "", "expr": "name" }, { "label": "$", "expr": "CURRENCY(price)" }],
+      "lineHeightPt": 10.0
+    }],
+    "bindings": [{
+      "id": "rf", "kind": "recordFlow", "chain": "chain", "query": "q1", "template": "tmpl",
+      "options": { "groupBy": ["region"], "repeatHeader": true, "continuedMarker": true }
+    }]
+  },
+  "results": {
+    "q1": {
+      "schema": { "fields": [
+        { "name": "region", "ty": "text", "nullable": true },
+        { "name": "name", "ty": "text", "nullable": true },
+        { "name": "price", "ty": "float", "nullable": true }
+      ]},
+      "columns": [
+        [{ "t": "text", "v": "east" }, { "t": "text", "v": "west" }],
+        [{ "t": "text", "v": "Store E" }, { "t": "text", "v": "Store W" }],
+        [{ "t": "number", "v": 9.99 }, { "t": "number", "v": 19.99 }]
+      ],
+      "row_count": 2
+    }
+  },
+  "binding": "rf",
+  "mode": { "mode": "perGroup", "by": ["region"] },
+  "chain": [
+    { "frame": "f0", "page": "p0", "heightPt": 200.0 },
+    { "frame": "f1", "page": "p1", "heightPt": 200.0 }
+  ]
+}"#;
+
+#[test]
+fn data_batch() {
+    covers!("cli:paged data batch");
+    let fx = Fx::new("data-batch");
+    fx.help("paged data batch");
+    fx.run(&["data", "batch"])
+        .code(2)
+        .golden("paged data batch", "usage-no-job");
+    fx.run(&["data", "batch", "missing.json"])
+        .code(1)
+        .golden("paged data batch", "input-missing-file");
+    fx.write("bad.json", "{ not json");
+    fx.run(&["data", "batch", "bad.json"])
+        .code(1)
+        .golden("paged data batch", "input-invalid-job");
+    fx.write("job.json", BATCH_JOB);
+    fx.run(&["data", "batch", "job.json"])
+        .code(0)
+        .golden("paged data batch", "job-file");
+    fx.run_stdin(&["data", "batch", "-"], Some(BATCH_JOB.as_bytes()))
+        .code(0)
+        .golden("paged data batch", "job-stdin");
+}

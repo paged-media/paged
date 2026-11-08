@@ -1,0 +1,74 @@
+$ paged data batch -
+--- exit: 0
+--- stdout
+{
+  "documentCount": 2,
+  "runs": [
+    {
+      "flow": {
+        "frames": [
+          {
+            "blocks": [
+              {
+                "block": "groupHeader",
+                "continued": false,
+                "level": 0,
+                "text": "east"
+              },
+              {
+                "block": "record",
+                "cells": [
+                  "Store E",
+                  "$9,99 €"
+                ],
+                "height_pt": 20.0,
+                "record": 0
+              }
+            ],
+            "frame": "f0",
+            "page": "p0",
+            "usedPt": 36.0
+          }
+        ],
+        "overflow": false,
+        "placed": 1,
+        "total": 1
+      },
+      "label": "east"
+    },
+    {
+      "flow": {
+        "frames": [
+          {
+            "blocks": [
+              {
+                "block": "groupHeader",
+                "continued": false,
+                "level": 0,
+                "text": "west"
+              },
+              {
+                "block": "record",
+                "cells": [
+                  "Store W",
+                  "$19,99 €"
+                ],
+                "height_pt": 20.0,
+                "record": 1
+              }
+            ],
+            "frame": "f0",
+            "page": "p0",
+            "usedPt": 36.0
+          }
+        ],
+        "overflow": false,
+        "placed": 1,
+        "total": 1
+      },
+      "label": "west"
+    }
+  ]
+}
+--- stderr
+generated 2 document(s)

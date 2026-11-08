@@ -251,7 +251,7 @@ exports still link. An `asset:<id>` image value is placed from those parts, in t
   and a transform defined through the door runs at once, so its step shows its rows or its
   error before the queries are refreshed. A define or a remove is announced as a change of the
   transform's table.
-- **Headless batch.** `paged-data-batch`, built from source, reads a JSON job with
+- **Headless batch.** `paged data batch` (the engine CLI), reads a JSON job with
   materialised query results and prints the paginated flow of each output document. A
   script evaluated in Boa can supply the locale, the parameters and the build.
 

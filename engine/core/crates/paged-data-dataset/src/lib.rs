@@ -72,12 +72,13 @@ pub enum VarTrait {
     Visibility,
     /// Graph series data.
     ///
-    /// **Carried, never resolved.** paged.data has no chart surface and the
-    /// isolation contract (§2.1) forbids reaching into the plugin that does, so
-    /// a `graphdata` variable is READ, PRESERVED and RE-EMITTED by this codec
-    /// but has no binding to resolve against and is never applied to a document.
-    /// Closing it needs a cross-plugin chart-data contract through the core SDK
-    /// (RFI D-15) — not a dependency. Round-tripping it instead of dropping it
+    /// **Carried, never resolved.** The engine has no chart item a `graphdata`
+    /// variable could bind to (a chart is a DrawingML part inside the module
+    /// that owns it, and an Illustrator graph is a different object), and the
+    /// payload is Illustrator's undocumented grid, so a `graphdata` variable is
+    /// READ, PRESERVED and RE-EMITTED by this codec but has no binding to
+    /// resolve against and is never applied to a document. What closes it, and
+    /// why it is not a small step, is data ADR 565. Round-tripping it instead of dropping it
     /// is the honest half: an imported Illustrator library keeps its graph
     /// variables so re-export does not silently lose the author's work.
     GraphData,
