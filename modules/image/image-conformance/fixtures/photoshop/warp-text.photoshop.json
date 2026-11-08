@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/warp-text.jsx",
+    "script": "tooling/oracle/photoshop/probes/warp-text.jsx",
     "script_sha256": "1166c567024ee90a65e60e2fc33bf06998df9ca70b47c440bbbff0a80ab9e39a",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-27T09:07:02.522Z",
     "host_os": "macOS 26.4"
   },

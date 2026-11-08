@@ -7,7 +7,7 @@
   - `paged-mutate` / `paged-introspect` / `paged-canvas`: the `rowStartRow` and
     `rowKeepWithNext` property paths, written through any cell of the row.
   - `paged-gen`: the `table-start-row` sample, with InDesign's PDF as its reference.
-  - `tools/indesign-export/table-start-row-probe`.
+  - `tooling/oracle/indesign/table-start-row-probe`.
   - plugin-publish: `idml-import` reads `Row@StartRow`; `idml-export` writes it, and patches it
     back onto a source row whose model value changed.
 

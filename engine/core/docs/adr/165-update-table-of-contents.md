@@ -12,7 +12,7 @@
   - `paged-canvas`: the op is lowered over the current layout.
   - `paged-script`: `paged.updateTableOfContents`.
   - `paged-gen`: the `toc` sample.
-  - `tools/indesign-export`: `toc-probe`, `toc-update-probe`.
+  - `tooling/oracle/indesign`: `toc-probe`, `toc-update-probe`.
   - plugin-publish:
     - `idml-import` reads a TOC style entry in InDesign's spelling;
     - `idml-export` drops a source range whose run the model no longer has.
@@ -33,7 +33,7 @@ InDesign prints the text a TOC story holds until the user chooses Update Table o
 `toc-probe` builds a document in InDesign, with headings at three levels on three pages and a TOC
 style with a title and three entry rules. It then lets InDesign generate the table of contents.
 `toc-update-probe` runs Update Table of Contents on the `toc` sample, whose stored TOC is stale.
-Its record is `tools/indesign-export/toc-update-probe.json`.
+Its record is `tooling/oracle/indesign/toc-update-probe.json`.
 
 **The style, in `Resources/Styles.xml`:**
 - An entry's `Name` is the name of the paragraph style it collects. There is no `IncludeStyle`.

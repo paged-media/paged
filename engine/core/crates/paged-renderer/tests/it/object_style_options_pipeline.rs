@@ -19,7 +19,7 @@
 //! An item takes the text wrap and anchored-object options it leaves out
 //! from its object style (ADR 143), pinned against InDesign 20.0.1: the
 //! `object-style-options` fixture's lines and objects stand where
-//! InDesign's DOM puts them (`tools/indesign-export/object-style-options-probe.json`,
+//! InDesign's DOM puts them (`tooling/oracle/indesign/object-style-options-probe.json`,
 //! read back from the same IDML).
 
 use paged_compose::DisplayCommand;
@@ -34,7 +34,7 @@ fn open_sans() -> Vec<u8> {
 
 fn probe() -> serde_json::Value {
     serde_json::from_str(include_str!(
-        "../../../../tools/indesign-export/object-style-options-probe.json"
+        "../../../../../../tooling/oracle/indesign/object-style-options-probe.json"
     ))
     .expect("probe json")
 }

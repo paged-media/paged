@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/filters-render.jsx",
+    "script": "tooling/oracle/photoshop/probes/filters-render.jsx",
     "script_sha256": "282b7d0b1be41887a65e868db0ee86e2f9e200dfac9f7e76e9f4679d39f8160e",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-25T06:56:57.044Z",
     "host_os": "macOS 26.4"
   },

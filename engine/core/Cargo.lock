@@ -4523,6 +4523,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-math"
+version = "0.0.0"
+
+[[package]]
 name = "paged-mcp"
 version = "0.0.0"
 dependencies = [
@@ -4577,6 +4581,7 @@ dependencies = [
  "flate2",
  "ooxmlsdk",
  "paged-colour-math",
+ "paged-math",
  "quick-xml 0.41.0",
  "serde",
  "thiserror",

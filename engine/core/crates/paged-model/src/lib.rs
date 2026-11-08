@@ -4291,7 +4291,7 @@ fn srgb_to_linear(c: f32) -> f32 {
 /// styles footnote and chapter numbers take. Every value InDesign 20.0.1
 /// (Roman edition) offers, each formatted as it formats it — asked of
 /// InDesign through its DOM for 191 numbers
-/// (`tools/indesign-export/numbering-styles-probe.json`, ADR 157).
+/// (`tooling/oracle/indesign/numbering-styles-probe.json`, ADR 157).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NumberingStyle {
     Arabic,
@@ -5627,7 +5627,7 @@ impl Composer {
     /// Whether this is one of InDesign's Japanese composers. Only they set
     /// ruby and emphasis marks (kenten): InDesign 20.0.1 prints neither
     /// under the Paragraph or World-Ready Composer, the same font and
-    /// text otherwise (tools/indesign-export/cjk-composer-probe).
+    /// text otherwise (tooling/oracle/indesign/cjk-composer-probe).
     pub fn is_japanese(&self) -> bool {
         matches!(self, Self::JapaneseParagraph | Self::JapaneseSingleLine)
     }
@@ -5767,7 +5767,7 @@ pub struct ConditionDef {
 /// `<VisibilityPair Condition=… Visibility=…>` per condition; applying
 /// the set gives each listed condition its recorded visibility and
 /// leaves a condition the set does not list as it was (asked of
-/// InDesign 20.0.1, `tools/indesign-export/condition-sets-probe.json`).
+/// InDesign 20.0.1, `tooling/oracle/indesign/condition-sets-probe.json`).
 /// The renderer doesn't branch on a set: visibility resolution walks the
 /// individual conditions.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
@@ -8331,6 +8331,23 @@ pub struct AnchoredFrame {
     /// objects keep their earlier rendering); a Word float sets it.
     #[serde(default, skip_serializing_if = "AnchoredLayout::is_unset")]
     pub layout: AnchoredLayout,
+    /// Engine ADR 1050, amendment 2026-11-08 — the outline of an anchored
+    /// Rectangle that is not its box: path anchors in the frame's own box
+    /// (`(0, 0)` at its top left, so a shape's geometry travels with the
+    /// box the anchored pass places), drawn, filled and stroked by the
+    /// renderer as the free Rectangle's Q-11 path is. Word's DrawingML
+    /// shapes (a triangle, an ellipse, a line) are such frames. Empty
+    /// (the default) is the box, and writes no key, so the `.paged` bytes
+    /// and the state hash of every other anchored frame are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<PathAnchor>,
+    /// Subpath start offsets into `anchors`; see [`Rectangle::subpath_starts`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subpath_starts: Vec<usize>,
+    /// Parallel to `subpath_starts`: an open contour is stroked, not closed
+    /// and filled. See [`Rectangle::subpath_open`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subpath_open: Vec<bool>,
 }
 
 /// Engine ADR 1050 — how a custom-positioned anchored object stands
@@ -10531,7 +10548,7 @@ pub struct StoryDestination {
 
 /// thoughts ADR 026 — how a story's chain grows, mirroring InDesign 2025's
 /// Smart Text Reflow as measured with the `reflow` paged-gen fixture
-/// (`tools/indesign-export/reflow-probe.sh`):
+/// (`tooling/oracle/indesign/reflow-probe.sh`):
 ///
 /// - pages are added after the page of the chain's LAST frame (end of story);
 /// - a generated page copies that page's size and applied master;
@@ -11069,7 +11086,7 @@ mod numbering_style_tests {
     #[test]
     fn every_style_formats_as_indesign_labels_it() {
         let probe: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../tools/indesign-export/numbering-styles-probe.json"
+            "../../../../../tooling/oracle/indesign/numbering-styles-probe.json"
         ))
         .expect("probe json");
         let pages = probe["pages"].as_array().expect("pages");

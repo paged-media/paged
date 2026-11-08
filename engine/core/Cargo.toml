@@ -9,6 +9,7 @@ members = [
     "crates/paged-color",
     "crates/paged-pixel",
     "crates/paged-warp",
+    "crates/paged-math",
     "crates/paged-colour-math",
     "crates/paged-geom",
     "crates/paged-vector-fx",
@@ -256,6 +257,7 @@ paged-kernels = { path = "crates/paged-kernels" }
 paged-raster = { path = "crates/paged-raster" }
 paged-color = { path = "crates/paged-color" }
 paged-warp = { path = "crates/paged-warp" }
+paged-math = { path = "crates/paged-math" }
 paged-blend = { path = "crates/paged-blend" }
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 half = { version = "2", features = ["bytemuck"] }

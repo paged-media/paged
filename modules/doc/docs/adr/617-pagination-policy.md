@@ -3,7 +3,7 @@
 - **Status:** Accepted 2026-10-24.
 - **Scope:** `docx-lower` (`WORD_FIRST_FIT_COMPOSER`, the docDefaults base style, a picture
   paragraph's leading); `docx-conformance` (`first_fit_docx()`, `first_fit_cases()`);
-  `scripts/word-first-fit-probe.sh`; the headless measurement
+  `tooling/oracle/office/word/word-first-fit-probe.sh`; the headless measurement
   `packages/doc-bundle/test/headless/real-docx-measure.spec.ts`. Rests on engine
   [ADR 1016](../../../../engine/core/docs/adr/1016-word-first-fit-composer.md) and on
   [ADR 604](604-word-is-the-oracle.md).
@@ -40,12 +40,12 @@ its spacing is exact).
 3. **Word answers, the fixtures record.** The breaking rules are asked of Word with
    `first_fit_docx()`: Courier New 10 pt (every glyph 1229/2048 em), each measure a few tenths of
    a point either side of a word end, plus inline pictures under single, 1.5-line, at-least and
-   exact spacing. `scripts/word-first-fit-probe.sh` writes the answer as
+   exact spacing. `tooling/oracle/office/word/word-first-fit-probe.sh` writes the answer as
    `docx-conformance/fixtures/first-fit.word.json` and the engine's copy (committed 2026-10-25,
    see the amendment).
 4. **The measurement runs headless.** `real-docx-measure.spec.ts` opens a document through the
    bundle's standalone open on the real engine and docx-js and writes the same JSON as the
-   editor-driven `scripts/real-docx/measure.spec.ts`, so `compare.py` and `line_geometry.py`
+   editor-driven `tooling/oracle/office/word/real-docx/measure.spec.ts`, so `compare.py` and `line_geometry.py`
    read it. It needs no editor checkout and no browser.
 
 ## Evidence

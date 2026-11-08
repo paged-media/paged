@@ -18,7 +18,7 @@
 
 //! SmartArt against PowerPoint's own drawing (ADR 705): every block
 //! PowerPoint painted inside a diagram of the `smartart` fixture (recorded
-//! by `scripts/ppt-chart-probe.py`) is a shape of ours within 1 pt, and the
+//! by `tooling/oracle/office/powerpoint/ppt-chart-probe.py`) is a shape of ours within 1 pt, and the
 //! diagram's text is in the colours PowerPoint drew it in.
 
 use std::path::Path;

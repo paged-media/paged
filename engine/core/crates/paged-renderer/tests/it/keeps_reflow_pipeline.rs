@@ -18,7 +18,7 @@
 
 //! ADR 026 + 028 — Word's widow control on a GROWING chain, over
 //! the generated `keeps-reflow.idml`, against InDesign 2025's answer for
-//! the same file (`tools/indesign-export/reflow-probe.sh`,
+//! the same file (`tooling/oracle/indesign/reflow-probe.sh`,
 //! `PAGED_REFLOW_EDIT=thread`, 2026-10-02; `keeps-reflow.reflow.json`).
 //!
 //! Every paragraph keeps 2 / 2 lines at a break and the headings keep with

@@ -18,7 +18,7 @@
 
 //! `docx-pagination.idml` — the shape ADR 029 lowers a Word document
 //! to, built to match plugin-doc's `pagination_docx()` fixture, whose
-//! pagination WORD reported (`plugin-doc/scripts/word-pagination-probe.sh`,
+//! pagination WORD reported (`plugin-doc/tooling/oracle/office/word/word-pagination-probe.sh`,
 //! Word 16, 2026-10-01):
 //!
 //! | page | size | lines | paragraphs |

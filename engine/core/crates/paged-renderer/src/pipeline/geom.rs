@@ -253,7 +253,7 @@ pub(super) fn master_levels<'a>(
 /// falls back to the index, and so does a page ON the spine — a
 /// single-sided document's, centred on x = 0 — which belongs to neither
 /// side: InDesign 20.0.1 prints a two-page master's LEFT page on it
-/// (tools/indesign-export/master-items-probe, whose single-sided page
+/// (tooling/oracle/indesign/master-items-probe, whose single-sided page
 /// keeps the default facing master).
 pub(super) fn master_page_index(
     body: &[paged_model::Bounds],
@@ -995,7 +995,7 @@ pub(crate) fn wght_for_font_style(style: Option<&str>) -> f32 {
 /// one range (SpaceBefore 12, SpaceAfter 9, 12 pt Open Sans) 35.4 pt
 /// apart, the leading plus both, and an empty paragraph between them
 /// takes the same (InDesign 20.0.1,
-/// `tools/indesign-export/footnote-paragraphs-probe`, `bodyparas` and
+/// `tooling/oracle/indesign/footnote-paragraphs-probe`, `bodyparas` and
 /// `bodyempty`). `tab_list` and other paragraph metadata copy through
 /// unchanged.
 ///

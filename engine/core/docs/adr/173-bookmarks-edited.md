@@ -6,7 +6,7 @@
     the inverse-only `RestoreBookmarks`.
   - `paged-wire` / `paged-canvas`: the four mutations; `BookmarkSummary.parent`.
   - `paged-script`: `paged.createBookmark`, `deleteBookmark`, `renameBookmark`, `moveBookmark`.
-  - `tools/indesign-export/bookmarks-probe`.
+  - `tooling/oracle/indesign/bookmarks-probe`.
   - plugin-publish `idml-export`: the bookmark tree written whole once it changes; a page
     destination made for a bookmark in InDesign's spelling.
 

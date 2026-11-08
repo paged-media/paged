@@ -19,8 +19,8 @@
 //! The InDesign round-trip lane. The engine's own round trip proves nothing
 //! about InDesign: a spelling the writer and the reader share can be one
 //! InDesign ignores. So each scenario here is exported by the engine,
-//! opened in InDesign by `tools/indesign-export/lane.sh`, and InDesign's
-//! view of it (`paged.indesign-view/1`, `tools/indesign-export/lib/
+//! opened in InDesign by `tooling/oracle/indesign/lane.sh`, and InDesign's
+//! view of it (`paged.indesign-view/1`, `tooling/oracle/indesign/lib/
 //! oracle.jsx`) is recorded under `tests/fixtures/indesign-lane/<scenario>/`
 //! together with InDesign's own re-save of the document.
 //!
@@ -621,7 +621,7 @@ fn differences(field: &str, ours: &J, theirs: &J) -> Vec<String> {
 /// Writes each scenario's export for `lane.sh` (needs `PAGED_INDESIGN_LANE`;
 /// `PAGED_LANE_SCENARIOS` picks scenarios by name, comma-separated).
 #[test]
-#[ignore = "writes the lane's inputs for tools/indesign-export/lane.sh"]
+#[ignore = "writes the lane's inputs for tooling/oracle/indesign/lane.sh"]
 fn write_lane_inputs() {
     let dir = PathBuf::from(std::env::var("PAGED_INDESIGN_LANE").expect("PAGED_INDESIGN_LANE"));
     let wanted: Vec<String> = std::env::var("PAGED_LANE_SCENARIOS")
@@ -650,7 +650,7 @@ fn recordings_agree_with_indesign() {
         let dir = recordings().join(s.name);
         let Ok(view) = std::fs::read_to_string(dir.join("indesign-view.json")) else {
             failures.push(format!(
-                "{}: no recording (bash tools/indesign-export/lane.sh {})",
+                "{}: no recording (bash tooling/oracle/indesign/lane.sh {})",
                 s.name, s.name
             ));
             continue;
@@ -668,7 +668,7 @@ fn recordings_agree_with_indesign() {
         } else {
             eprintln!(
                 "indesign-lane: {} is STALE (the writer's output changed since the recording; \
-                 bash tools/indesign-export/lane.sh {})",
+                 bash tooling/oracle/indesign/lane.sh {})",
                 s.name, s.name
             );
             if require_fresh {

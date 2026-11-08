@@ -114,7 +114,7 @@ contours through (a known limit of the byte-preserving rewrite).
 - `crates/paged-mutate/src/vector_effect_spec.rs`: every vector kind,
   these two included, round-trips through the wire spec.
 - paged.draw's `test/oracle/brushes.spec.ts`: Illustrator 30.1's art
-  brush, recorded on three lengths (`scripts/illustrator/probes/
+  brush, recorded on three lengths (`tooling/oracle/illustrator/probes/
   brushes.jsx`), is a stretch of one artwork along the path, and the
   engine draws the recorded 303 and 420 pt results from the 200 pt one
   anchor for anchor to 0.01 pt (the band's width set to the artwork's

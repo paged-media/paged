@@ -1,5 +1,5 @@
 //! Dump a .docx's lowering as JSON (styles, blocks, diagnostics): the
-//! debugging companion of scripts/real-docx-acceptance.sh.
+//! debugging companion of tooling/oracle/office/word/real-docx-acceptance.sh.
 //!   cargo run -p docx-conformance --example dump-lowered -- <file.docx> > out.json
 fn main() {
     let path = std::env::args()

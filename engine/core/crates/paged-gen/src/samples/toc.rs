@@ -33,7 +33,7 @@
 //!
 //! InDesign prints the stored entries (its PDF is the gate's reference);
 //! what it writes on Update Table of Contents is recorded by
-//! `tools/indesign-export/toc-probe.sh` against this file.
+//! `tooling/oracle/indesign/toc-probe.sh` against this file.
 
 use crate::builders::{
     designmap::{write_designmap, DesignMap},

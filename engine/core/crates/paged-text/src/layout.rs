@@ -585,7 +585,7 @@ fn apply_alignment(
 ///
 /// With its tabs set at their stops (`tabs_set`), only the text after the
 /// line's last tab moves; what comes before stays where its tabs put it.
-/// InDesign 20.0.1 (`tools/indesign-export/footnote-paragraphs-probe`,
+/// InDesign 20.0.1 (`tooling/oracle/indesign/footnote-paragraphs-probe`,
 /// `right` and `center`: "1", a tab, then text): the number stays at the
 /// line's start and the text after the tab ends at the measure, or is
 /// centred between its stop and the measure's end.
@@ -958,7 +958,7 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
         // Two such runs also kern across their boundary as one run would:
         // InDesign 20.0.1 kerns す。 1.4 pt closer where each character
         // carries an emphasis mark of its own
-        // (tools/indesign-export/vertical-text-probe, `kenten-shapes`).
+        // (tooling/oracle/indesign/vertical-text-probe, `kenten-shapes`).
         if let Some(kern) = i
             .checked_sub(1)
             .and_then(|p| boundary_kern(&runs[p], r, options.vertical))
@@ -1027,7 +1027,7 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
         // space). Each advance is rounded against the run's exact pen:
         // rounded glyph by glyph, the spacing and the scale each gained up
         // to 1/128 pt a glyph, 0.5 pt over a 340 pt line
-        // (tools/indesign-export/footnote-paragraphs-probe, `spacing`).
+        // (tooling/oracle/indesign/footnote-paragraphs-probe, `spacing`).
         let hs_pct = r.horizontal_scale_pct;
         let factor = if (hs_pct - 100.0).abs() > 0.05 {
             hs_pct / 100.0

@@ -17,7 +17,7 @@
  */
 
 //! Ruby wider than its base, set as InDesign 20.0.1 sets it
-//! (`tools/indesign-export/ruby-parent-spacing-probe`, Kozuka Mincho at
+//! (`tooling/oracle/indesign/ruby-parent-spacing-probe`, Kozuka Mincho at
 //! 30 pt with 15 pt ruby, read from its PDF), and kana set at the
 //! proportional widths Metrics kerning gives them (`kana-spacing-probe`).
 //!

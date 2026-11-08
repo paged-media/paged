@@ -772,7 +772,7 @@ pub(super) fn em_box(face: &ttf_parser::Face) -> EmBox {
 /// The top of a CJK face's em box, ems above the baseline: one em above
 /// its `BASE` table's ideographic baseline (`ideo`), or, with no `BASE`,
 /// one em centred on its 永 (U+6C38). InDesign 20.0.1
-/// (`tools/indesign-export/cjk-first-baseline-probe`, Em Box Height first
+/// (`tooling/oracle/indesign/cjk-first-baseline-probe`, Em Box Height first
 /// baseline): Kozuka, Hiragino, Adobe Song and Noto Sans JP at 0.88,
 /// Apple SD Gothic Neo at 0.8; Songti SC 0.7985, AppleMyungjo 0.8452 and
 /// Arial Unicode MS 0.8865, each its 永's centre plus half an em. `None`
@@ -864,7 +864,7 @@ fn typo_ascent_descent(face: &ttf_parser::Face, upem: f32) -> (f32, f32) {
 /// A CJK face's ascent and descent as InDesign takes them (fractions of
 /// em), where its `hhea` says something else; `None` for any other face,
 /// whose `typo_ascent_descent` InDesign uses. Asked of InDesign 20.0.1
-/// (`tools/indesign-export/cjk-first-baseline-probe`: the first baseline
+/// (`tooling/oracle/indesign/cjk-first-baseline-probe`: the first baseline
 /// of a 30 pt frame, `Ascent` offset, and the ascent and descent it
 /// reports):
 ///

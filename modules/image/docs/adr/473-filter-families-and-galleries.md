@@ -61,7 +61,7 @@ dialog). Three questions decided how:
 
 ## Consequences
 
-- The Photoshop oracle replays every scriptable case (`scripts/photoshop/probes/filters-*.jsx`,
+- The Photoshop oracle replays every scriptable case (`tooling/oracle/photoshop/probes/filters-*.jsx`,
   `adjustments-ext.jsx`); random-seeded filters compare channel statistics, not pixels. Most
   rows are `convention`: the kernels are clean-room approximations of what each filter visibly
   does. HDR Toning, Lighting Effects, the Blur Gallery and the Filter Gallery are not scriptable

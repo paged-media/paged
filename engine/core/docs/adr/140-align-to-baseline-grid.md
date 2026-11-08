@@ -20,7 +20,7 @@ InDesign documents aligned to the grid, which moves every line of their body tex
 ## Decision
 
 The rule was asked of InDesign 20.0.1 through two fixtures and its DOM
-(`tools/indesign-export/baseline-grid-probe.*` writes every line's baseline to
+(`tooling/oracle/indesign/baseline-grid-probe.*` writes every line's baseline to
 `corpus/generated/<stem>.baselines.json`):
 
 - **A line of an aligned paragraph stands on the first grid line at or below where its leading put

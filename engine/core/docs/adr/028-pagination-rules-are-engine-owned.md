@@ -47,7 +47,7 @@ They can no longer be skipped.
    keeps the [027](027-incremental-flow-invalidation.md) early stop valid: comparing break
    positions *after* the rules is enough to know later frames are unchanged.
 5. **Use InDesign's rule.** For IDML semantics, use what InDesign does: author the case with
-   `paged-gen`, have `tools/indesign-export` answer, and gate on `diff.sh` (the method that settled `VerticalBalanceColumns`). For DOCX-only semantics, Word's export is the oracle, via
+   `paged-gen`, have `tooling/oracle/indesign` answer, and gate on `diff.sh` (the method that settled `VerticalBalanceColumns`). For DOCX-only semantics, Word's export is the oracle, via
    the Office automation lane.
 
 ## Consequences

@@ -17,7 +17,7 @@
  */
 
 // ORACLE — Illustrator's ART BRUSH against the engine's (engine ADR 1053,
-// draw ADR 366). The recording (`scripts/illustrator/probes/brushes.jsx`)
+// draw ADR 366). The recording (`tooling/oracle/illustrator/probes/brushes.jsx`)
 // applies Illustrator 30.1's default art brush to a 1 pt stroke along
 // straight lines 200, 303 and 420 pt long and expands it. What it says,
 // and what is asserted:

@@ -1,7 +1,7 @@
 {
  "oracle": "Microsoft PowerPoint 16.113.4",
  "recorded": "2026-10-14",
- "authored_by": "scripts/fixtures/fonts-full.applescript",
+ "authored_by": "tooling/oracle/office/powerpoint/fixtures/fonts-full.applescript",
  "slides": 1,
  "fonts_in_pdf": [
   "GloriaHallelujah",

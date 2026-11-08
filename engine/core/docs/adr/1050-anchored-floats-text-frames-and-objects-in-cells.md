@@ -94,3 +94,17 @@ and does not grow its row.
 none without a layout), non-overlapping floats stacked, a text box created and poured in one
 batch and undone with its story, a nested table made and filled through its own id, a picture in
 a cell growing its row.
+
+## Amendment 2026-11-08 — an anchored frame can have an outline
+
+Word's DrawingML shapes (a triangle, an ellipse, a line) float and wrap like a picture but are
+not their box. `AnchoredFrame` gains `anchors`, `subpath_starts` and `subpath_open` — the free
+Rectangle's own path fields (Q-11), in the frame's own box with `(0, 0)` at its top left — and the
+anchored pass, which already synthesises a Rectangle for the frame, moves them with the box onto
+the page. The renderer then draws, fills and strokes the frame along them as it does a free
+Rectangle drawn from its path; an open contour is stroked and not filled. Empty (the default) is
+the box and writes no key, so the `.paged` bytes and the state hash of every other anchored frame
+are unchanged. No operation sets them: the document modules build the model in Rust (doc ADR
+627). The text wrap of a shape is still its box, and an IDML export writes the frame's box.
+Evidence: `paged-renderer/tests/it/anchored_effects.rs`, a triangle that leaves the box's corners
+paper.

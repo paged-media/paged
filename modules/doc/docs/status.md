@@ -49,7 +49,7 @@ Evidence: `docx-conformance/tests/it/w4b.rs`, `docx-export/src/controls.rs`,
 `doc-host-model/test/controls.spec.ts`, `doc-bundle/test/content-controls.spec.ts`; the engine's
 `word_direction.rs` (renderer, IDML), `content_controls.rs` (canvas), `word_model.rs` (mutate).
 
-Word's answers (Word 16 for Mac, 2026-10-31; `scripts/word-objects-probe.sh <out> w4b-scripts
+Word's answers (Word 16 for Mac, 2026-10-31; `tooling/oracle/office/word/word-objects-probe.sh <out> w4b-scripts
 w4b-controls`, recorded as `fixtures/w4b-*.word.json`): in a `w:bidi` paragraph `w:jc` and
 `w:ind` are logical (`left` against the right margin, a left indent off the right margin,
 `right` against the left margin), as the lowering and the engine read them; every inline control
@@ -108,7 +108,7 @@ table's pictures in cells.
   deleted mark or a rejected inserted one joins it to the next. The comment parts are rewritten
   from the read-back threads (unchanged comments byte for byte) and made, with their
   relationships and content types, when missing. A zero-edit save stays byte-identical.
-- **Word opens what paged saves**: `scripts/word-review-probe.sh` →
+- **Word opens what paged saves**: `tooling/oracle/office/word/word-review-probe.sh` →
   `docx-conformance/fixtures/review.word.json`.
 - Tests: `docx-conformance/tests/it/review.rs` (read, zero-edit identity, accept/reject,
   format and property changes, recorded changes, split and join, reply/resolve/remove, a first
@@ -157,7 +157,7 @@ what the engine's wire already makes; no engine change.
 | Table look    | Every cell edge from `w:tcBorders` / `w:tblBorders` / the table style chain (the default table style too), fills from `w:shd`; `w:jc` centre / right through the table's paragraph's style; `hRule="auto"` ignores the height; `tblLayout`, `tblW`, `tcW`, `tblInd`, `cantSplit` and exact rows carried in `LoweredTable::layout`                                                                                                                                                                                                                                                                      |
 | Language      | `w:lang` per run, style and defaults; the Latin tag becomes `characterLanguage` in InDesign's names (en/de/fr/es/it/nl/pt hyphenate, others keep their name and are not hyphenated as English); `eastAsia` / `bidi` and `rFonts` `eastAsia` / `cs` read, not lowered                                                                                                                                                                                                                                                                                                                                   |
 
-Word's answers (`scripts/word-objects-probe.sh`, Word 16 for Mac, 2026-10-29):
+Word's answers (`tooling/oracle/office/word/word-objects-probe.sh`, Word 16 for Mac, 2026-10-29):
 `fixtures/objects-{floats,text-boxes,nested-tables,table-look,languages}.word.json`. Every
 page-item float stands at Word's picture box (±1.5 pt); the text boxes' first lines stand
 where Word draws them (FA at 288/144, FB at 432/108; TB1, the header box and the legacy box
@@ -203,7 +203,7 @@ editor ADR 301.
 | Save-back         | Header/footer edits spliced into their parts; note text edits, new and removed notes (with new parts, rels, content types); F9 results; new fields as complex fields; new bookmarks; zero-edit identity per part (ADR 610 amendment 1). A TOC made in paged is not written as a TOC field                                      |
 | Layout            | Page break (Cmd+Enter), section breaks (next/odd/even/continuous as break rules); Page setup (size, orientation, margins, columns) in the References panel                                                                                                                                                                     |
 
-Word's answer: `fixtures/structure.word.json` (`scripts/word-structure-probe.sh`, Word 16 for
+Word's answer: `fixtures/structure.word.json` (`tooling/oracle/office/word/word-structure-probe.sh`, Word 16 for
 Mac, 2026-10-28) — the masters print Word's header and footer on every page with PAGE / NUMPAGES
 at Word's numbers, each footnote on its reference's page. `headers.word.json` (both variants)
 matches the planned masters page by page.
@@ -272,7 +272,7 @@ bytes (`DocSession::open_file`) and turns each into the `.docx` the session work
 - Wasm: 6.98 MiB raw (+0.43 MiB).
 - Tests: `docx-rtf` (8), `docx-odt` (4), `docx-conformance/tests/it/files.rs` (8),
   `packages/doc-bundle/test/headless/files.spec.ts` (7).
-- Word open-check (Word 16, macOS, `scripts/word-pagination-probe.sh`, 2026-10-25): the
+- Word open-check (Word 16, macOS, `tooling/oracle/office/word/word-pagination-probe.sh`, 2026-10-25): the
   packages written for `memo.rtf`, `minutes.odt`, `template-letter.dotx` and a native
   document (heading, bold red run, bullet item) open in Word and save as PDF with their
   text (`Memo` …, `Minutes` …, `Quarterly letter` …, `Plan` / `Ship it now` / `• One`).
@@ -419,7 +419,7 @@ of 2026-10-24):
 - Measured headless on two real documents with Word's faces: paragraphs with Word's line count
   796 → 801 of 813 and 605 → 605 of 624; page starts unchanged at 2 % and 13.1 %
   (`docs/reference/acceptance-real-docx.md`, round 14). Line breaking is no longer the gap.
-- `first_fit_docx()` and `scripts/word-first-fit-probe.sh` ask Word the breaking and picture
+- `first_fit_docx()` and `tooling/oracle/office/word/word-first-fit-probe.sh` ask Word the breaking and picture
   questions; Word's answer is committed (`fixtures/first-fit.word.json`, 2026-10-25) and the
   engine matches it: every case's words per line (33 of 33, 27 before), a justified line
   compressed by up to one word space, breaks after en and em dashes, and a picture's line at
@@ -1181,9 +1181,9 @@ bytes), as is an edit to a run with any other child (a page break, a
 footnote reference, a drawing) BETWEEN its pieces of text, which would move
 behind the edited text. Word opened the edited save without repair and put
 every piece of text after a tab at its tab stop
-(`fixtures/run-specials.word.json`, `scripts/word-run-specials-probe.sh`).
+(`fixtures/run-specials.word.json`, `tooling/oracle/office/word/word-run-specials-probe.sh`).
 
-On open (`fixtures/symbols.word.json`, `scripts/word-symbols-probe.sh`):
+On open (`fixtures/symbols.word.json`, `tooling/oracle/office/word/word-symbols-probe.sh`):
 
 - **Optional hyphens.** Word breaks a long word at one and draws a hyphen
   there; elsewhere nothing shows. The engine's composer takes U+00AD as the

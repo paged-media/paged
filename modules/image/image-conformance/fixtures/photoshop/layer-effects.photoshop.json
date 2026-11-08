@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/layer-effects.jsx",
+    "script": "tooling/oracle/photoshop/probes/layer-effects.jsx",
     "script_sha256": "0207d114065a500e2ef4eec150f7f5799e13f1ed5ec8eef82799cc5bc7422da5",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-05T10:04:11.148Z",
     "host_os": "macOS 26.4"
   },

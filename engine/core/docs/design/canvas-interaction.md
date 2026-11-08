@@ -118,7 +118,7 @@ follows the same pattern when those node kinds graduate from
 | Scale about pivot              | `SetProperty{FrameTransform}` (or `FrameBounds` for "resize" semantics) |
 | Multi-select any of the above  | `Operation::Batch{ ops }` (one per node)                                |
 
-Scale's axes follow InDesign (`tools/indesign-export/scale-frame-probe.jsx`).
+Scale's axes follow InDesign (`tooling/oracle/indesign/scale-frame-probe.jsx`).
 One target, a frame or a group, scales along its own axes, so a rotated one
 stays a rectangle at its angle and a side handle changes only the dimension
 along its axis. Several targets scale as one unit along the page axes, even

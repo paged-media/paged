@@ -21,7 +21,7 @@
 //! A story with a [`paged_model::FlowGrowRule`] gets pages appended after
 //! the page of its chain's last frame, the way InDesign 2025's Smart Text
 //! Reflow adds them (measured with the `reflow` paged-gen fixture and
-//! `tools/indesign-export/reflow-probe.sh`):
+//! `tooling/oracle/indesign/reflow-probe.sh`):
 //!
 //! - a generated page copies the size and applied master of that page;
 //! - its frame is the page's MARGIN BOX (36 pt all round when the page

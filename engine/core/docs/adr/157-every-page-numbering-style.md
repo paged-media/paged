@@ -4,7 +4,7 @@
 - **Scope:**
   - `paged-model`: `NumberingStyle`'s eight new values, `as_idml`, and their formatting.
   - `paged-renderer`: chapter-number formats with leading zeros.
-  - `tools/indesign-export/numbering-styles-probe.*`.
+  - `tooling/oracle/indesign/numbering-styles-probe.*`.
   - plugin-publish `idml-export`: writes a section's style through `NumberingStyle::as_idml`.
   - No wire change: the section ops already take IDML style names.
 

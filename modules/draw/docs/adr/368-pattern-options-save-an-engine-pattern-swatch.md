@@ -5,7 +5,7 @@
   `patternSwatchIdFor`, `applySavePatternSwatch`, `SAVE_PATTERN_SWATCH_COMMAND_ID`,
   `PATTERN_PAINT_FEATURE`, `PatternField.swatch`, `PATTERN_SWATCH_NOTE`),
   `panels/pattern-panel.tsx`, `menu.ts`, `manifest.json`, `locales/de.json`;
-  `scripts/illustrator/probes/pattern-render.jsx`. Work package WP6.9 of the image/draw plan;
+  `tooling/oracle/illustrator/probes/pattern-render.jsx`. Work package WP6.9 of the image/draw plan;
   gap D-16. Rests on engine ADR 1041.
 
 ## Context
@@ -53,7 +53,7 @@ on an engine without it; the panel disables the two buttons with the same senten
 the conformance tests pin the new wording as they pinned the old.
 
 **The oracle.** Illustrator's scripting cannot make a pattern swatch from artwork, so
-`scripts/illustrator/probes/pattern-render.jsx` hands it the engine's PDF tiling patterns and
+`tooling/oracle/illustrator/probes/pattern-render.jsx` hands it the engine's PDF tiling patterns and
 records how it reads, draws and re-exports them (engine ADR 1041 replays it).
 
 ## Consequences

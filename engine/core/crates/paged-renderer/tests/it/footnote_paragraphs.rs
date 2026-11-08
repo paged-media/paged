@@ -20,7 +20,7 @@
 //! rules the same probe pinned in body text.
 //!
 //! Every expectation is InDesign 20.0.1's own layout of the sample
-//! `tools/indesign-export/footnote-paragraphs-probe.jsx` builds: per line,
+//! `tooling/oracle/indesign/footnote-paragraphs-probe.jsx` builds: per line,
 //! its baseline below the frame's top and the x of its first and last
 //! glyph on the page. Each test rebuilds one of the probe's frames (360 pt
 //! wide at x 57.638, top 40, 160 pt tall; body 12 pt and notes 10 pt Open

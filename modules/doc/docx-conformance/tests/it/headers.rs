@@ -18,7 +18,7 @@
 
 //! Every section's headers and footers (`headers_docx()`, thoughts ADR 033,
 //! RFI DOC-05), against Word's answer (`fixtures/headers.word.json`,
-//! `scripts/word-headers-probe.sh`): which header and footer each page
+//! `tooling/oracle/office/word/word-headers-probe.sh`): which header and footer each page
 //! shows, with Word's inheritance between sections.
 
 #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature

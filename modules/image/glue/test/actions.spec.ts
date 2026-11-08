@@ -220,7 +220,7 @@ describe.skipIf(!built)(
       };
     });
 
-    it("registers eight actions, and none without a registry", () => {
+    it("registers nine actions, and none without a registry", () => {
       const { runner, image } = hosts();
       expect(runner.actions.list().map((a) => a.id)).toEqual([
         IMAGE_ACTION_IDS.info,
@@ -231,6 +231,7 @@ describe.skipIf(!built)(
         IMAGE_ACTION_IDS.adjust,
         IMAGE_ACTION_IDS.greyscale,
         IMAGE_ACTION_IDS.sharpen,
+        IMAGE_ACTION_IDS.removeBackground,
       ]);
       expect(
         runner.actions.list("asset").find((a) => a.id === IMAGE_ACTION_IDS.info)

@@ -17,7 +17,7 @@
  */
 
 //! PowerPoint's first baseline and line pitch for percentage line spacing
-//! (fixture `baselines`, recorded by `scripts/ppt-baseline-probe.py`): every
+//! (fixture `baselines`, recorded by `tooling/oracle/office/powerpoint/ppt-baseline-probe.py`): every
 //! box whose first paragraph sets a percentage lands within the PDF's
 //! position quantum (0.96 pt) plus 1 % of the font size of PowerPoint's
 //! answer. The 1 % is the font's own residual the rule ignores: at 72 pt

@@ -65,6 +65,14 @@
 //   adjust     — adjust: { <adjustment-layer path>: value }
 //   greyscale  — (none)
 //   sharpen    — amount
+//   remove-background — (none) the host's ML service (`host.ml.matting`,
+//                else `host.ml.segment`, extensions ADR 1100) cuts the
+//                foreground out: the answer multiplies the picture's alpha.
+//                Output is a PNG (alpha needs one). Without a model it
+//                rejects "no model installed"; it never falls back to a
+//                guess. Reachable from any module: `host.actions.run(
+//                "media.paged.image/remove-background", asset)`, alone or
+//                chained (extensions ADR 344).
 
 import type {
   ActionAsset,
@@ -94,6 +102,7 @@ export const IMAGE_ACTION_IDS = {
   adjust: `${PREFIX}adjust`,
   greyscale: `${PREFIX}greyscale`,
   sharpen: `${PREFIX}sharpen`,
+  removeBackground: `${PREFIX}remove-background`,
 } as const;
 
 /** The output format: `keep` writes JPEG for a JPEG and PNG for anything
@@ -385,9 +394,58 @@ export function fitPlanFor(
   };
 }
 
+/** The part of the host the ML-backed action reaches. */
+export type ActionMlHost = Pick<BundleHost, "supports" | "ml">;
+
+/** A picture's alpha scaled by an ML mask of the same size (straight RGBA,
+ *  in place). The mask is the foreground: 255 keeps, 0 clears. */
+export function applyForegroundMask(
+  rgba: Uint8Array | Uint8ClampedArray,
+  mask: Uint8Array,
+): void {
+  for (let i = 0; i < mask.length; i++) {
+    const a = rgba[i * 4 + 3]!;
+    rgba[i * 4 + 3] = Math.round((a * mask[i]!) / 255);
+  }
+}
+
+/** Cut the foreground out with the host's ML service: matting first (soft
+ *  edges), else segmentation. Rejects when no model answers. */
+export async function removeBackgroundOf(
+  host: ActionMlHost,
+  r: { width: number; height: number; rgba: Uint8Array },
+  id: string = IMAGE_ACTION_IDS.removeBackground,
+): Promise<Raster["rgba"]> {
+  const image = {
+    width: r.width,
+    height: r.height,
+    data: new Uint8ClampedArray(r.rgba),
+  };
+  let mask: Uint8Array | null = null;
+  if (host.supports("ml.matting@1")) {
+    try {
+      mask = (await host.ml.matting({ image })).alpha.data;
+    } catch {
+      mask = null;
+    }
+  }
+  if (!mask && host.supports("ml.segment@1"))
+    mask = (await host.ml.segment({ image })).mask.data;
+  if (!mask)
+    throw new Error(
+      `${id}: no model installed (ml.matting@1 and ml.segment@1 are not served)`,
+    );
+  if (mask.length !== r.width * r.height)
+    throw new Error(`${id}: the model answered another size`);
+  const out = new Uint8Array(r.rgba);
+  applyForegroundMask(out, mask);
+  return out;
+}
+
 /** The action definitions over an engine boot (injected by tests). */
 export function imageActions(
   engine: () => Promise<ImageEngine>,
+  host?: ActionMlHost,
 ): ActionDefinition[] {
   const asset = (
     id: string,
@@ -512,6 +570,24 @@ export function imageActions(
         IMAGE_ACTION_IDS.sharpen,
       ),
     ),
+    // Registered only where the host can ask a model; the model's presence
+    // is checked at run time (it moves when one is installed).
+    ...(host
+      ? [
+          asset(
+            IMAGE_ACTION_IDS.removeBackground,
+            "Remove background",
+            { format: "png" },
+            async (e, a) => {
+              const r = decode(e, a);
+              return {
+                ...r,
+                rgba: await removeBackgroundOf(host, r),
+              };
+            },
+          ),
+        ]
+      : []),
   ];
 }
 
@@ -521,7 +597,7 @@ export function registerImageActions(
   engine: () => Promise<ImageEngine> = bootEngine,
 ): Disposable | null {
   if (!host.supports("actions@1")) return null;
-  const subs = imageActions(engine).map((a) => host.actions.register(a));
+  const subs = imageActions(engine, host).map((a) => host.actions.register(a));
   return {
     dispose() {
       for (const s of subs.splice(0)) s.dispose();

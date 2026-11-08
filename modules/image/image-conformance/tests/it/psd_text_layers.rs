@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN TEXT LAYERS, replayed in CI.
-//! `scripts/photoshop/probes/text-layers.jsx` had Photoshop set a line of
+//! `tooling/oracle/photoshop/probes/text-layers.jsx` had Photoshop set a line of
 //! type over white, dark and coloured backdrops, at 60 % opacity and in
 //! Multiply, and save each as a PSD with REAL merged data.
 //!

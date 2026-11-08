@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/psd-readback.jsx",
+    "script": "tooling/oracle/photoshop/probes/psd-readback.jsx",
     "script_sha256": "a6aea55267b258419fdcde5ca5b7d5e17ba60c90f14765141a4c8de235dadfb6",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-29T11:33:57.673Z",
     "host_os": "macOS 26.4"
   },

@@ -64,7 +64,7 @@ probed, not read off the spec".
 
 InDesign is not part of this repository's checks. No script here drives InDesign; the
 tooling that opens generated packages in InDesign lives in the engine repository
-(`core: tools/indesign-export/`). The experiment notes that
+(`core: tooling/oracle/indesign/`). The experiment notes that
 `crates/idml-export/src/navigation.rs:29` refers to are not in this repository either.
 What a contributor can read here is the result of each experiment, written as a comment
 or a commit message.

@@ -1,6 +1,6 @@
 {
  "fixture": "docx_conformance::continuous_docx() (sections: docx_conformance::CONTINUOUS_CASES)",
- "produced_by": "scripts/word-continuous-probe.sh (Microsoft Word 16, PDF export, macOS)",
+ "produced_by": "tooling/oracle/office/word/word-continuous-probe.sh (Microsoft Word 16, PDF export, macOS)",
  "measured": "2026-10-01",
  "method": "pdftotext -bbox: per page its size and, per line, the label (first word), x (left edge of the first word) and top (top of its bbox), in pt from the page's top-left. Base page 360 x 312 pt, 0.5 in margins, 12 pt exact lines: a line's top is margin_top + 12 n + ~2.03, a column-2 line's x is 36.02 + 126 + 36",
  "fonts_used_by_word": [

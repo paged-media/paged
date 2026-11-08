@@ -33,7 +33,7 @@ the chain cost nothing but the first, as measured on the shaped frames. A chain 
 grows has no such limit.
 
 **A line keeps its last word while it overruns its measure by a share of that word**
-(`tools/indesign-export/ragged-squeeze-probe.*`: Open Sans at 8, 12 and 18 pt, five last words from
+(`tooling/oracle/indesign/ragged-squeeze-probe.*`: Open Sans at 8, 12 and 18 pt, five last words from
 "m" to a 27-letter word, after one, three and seven words; the frame is bisected to where the last
 word leaves the line). The allowance is
 

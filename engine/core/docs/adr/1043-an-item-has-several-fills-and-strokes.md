@@ -116,7 +116,7 @@ appearance is plan WP6.3.
   writes no key and hashes alike.
 
 - `crates/paged-renderer/tests/it/appearance_illustrator.rs`: Illustrator 30.1's recording of
-  `modules/draw/scripts/illustrator/probes/appearance.jsx` (seven objects with two or three fills
+  `modules/draw/tooling/oracle/illustrator/probes/appearance.jsx` (seven objects with two or three fills
   and strokes, over a backdrop where they blend), each rebuilt as a native appearance and drawn on
   the CPU lane: every pixel away from an edge agrees with Illustrator's PNG (worst 0 levels). The
   recording also shows that Illustrator stacks a new fill or stroke above the targeted one and
