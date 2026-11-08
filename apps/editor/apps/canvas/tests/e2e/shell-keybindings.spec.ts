@@ -147,6 +147,46 @@ const HOST_KEYS = [
   "contextmenu→paged.edit.contextMenu",
 ] as const;
 
+/** The text-format chords (`TEXT_FORMAT_KEYBINDINGS`): guarded on a text
+ *  selection, so they are quiet in the one-context test below and run with a
+ *  caret. */
+const TEXT_KEYS = [
+  "cmd+b→paged.text.bold",
+  "ctrl+b→paged.text.bold",
+  "cmd+i→paged.text.italic",
+  "ctrl+i→paged.text.italic",
+  "cmd+u→paged.text.underline",
+  "ctrl+u→paged.text.underline",
+  "shift+cmd+/→paged.text.strikethrough",
+  "shift+ctrl+/→paged.text.strikethrough",
+  "shift+cmd+?→paged.text.strikethrough",
+  "shift+ctrl+?→paged.text.strikethrough",
+  "shift+cmd+k→paged.text.allCaps",
+  "shift+ctrl+k→paged.text.allCaps",
+  "shift+cmd+h→paged.text.smallCaps",
+  "shift+ctrl+h→paged.text.smallCaps",
+  "shift+cmd+=→paged.text.superscript",
+  "shift+ctrl+=→paged.text.superscript",
+  "alt+shift+cmd+=→paged.text.subscript",
+  "alt+shift+ctrl+=→paged.text.subscript",
+  "shift+cmd+l→paged.text.alignLeft",
+  "shift+ctrl+l→paged.text.alignLeft",
+  "shift+cmd+c→paged.text.alignCenter",
+  "shift+ctrl+c→paged.text.alignCenter",
+  "shift+cmd+r→paged.text.alignRight",
+  "shift+ctrl+r→paged.text.alignRight",
+  "shift+cmd+j→paged.text.justify",
+  "shift+ctrl+j→paged.text.justify",
+  "shift+cmd+.→paged.text.growFont",
+  "shift+ctrl+.→paged.text.growFont",
+  "shift+cmd+>→paged.text.growFont",
+  "shift+ctrl+>→paged.text.growFont",
+  "shift+cmd+,→paged.text.shrinkFont",
+  "shift+ctrl+,→paged.text.shrinkFont",
+  "shift+cmd+<→paged.text.shrinkFont",
+  "shift+ctrl+<→paged.text.shrinkFont",
+] as const;
+
 const split = (sig: string) => {
   const [key, command] = sig.split("→");
   return { key, command };
@@ -235,7 +275,9 @@ test.describe("host keybindings", () => {
     page,
   }) => {
     await openShell(page, { doc: true });
-    expect((await hostSignatures(page)).sort()).toEqual([...HOST_KEYS].sort());
+    expect((await hostSignatures(page)).sort()).toEqual(
+      [...HOST_KEYS, ...TEXT_KEYS].sort(),
+    );
   });
 
   test("each binding, pressed on the page, runs its command", async ({
@@ -337,6 +379,77 @@ test.describe("host keybindings", () => {
       const { key, command } = split(sig);
       // Tab is the chrome toggle on the canvas the user clicked into.
       if (key === "tab" || key === "shift+tab") await engageCanvas(page);
+      await pressCombo(page, key);
+      const got = await expect
+        .poll(() => recorder.take().then((c) => c.join(",")), {
+          timeout: 5_000,
+        })
+        .toBe(command)
+        .then(
+          () => null,
+          (e: Error) => e.message.split("\n")[0],
+        );
+      if (got) wrong.push(`${sig}: ${got}`);
+    }
+    await recorder.restore();
+    expect(wrong).toEqual([]);
+  });
+
+  test("with a caret in a story, the text chords run their verbs; with only a frame selected they do nothing", async ({
+    page,
+  }) => {
+    covers(
+      "keybinding:cmd+b→paged.text.bold",
+      "keybinding:ctrl+b→paged.text.bold",
+      "keybinding:cmd+i→paged.text.italic",
+      "keybinding:ctrl+i→paged.text.italic",
+      "keybinding:cmd+u→paged.text.underline",
+      "keybinding:ctrl+u→paged.text.underline",
+      "keybinding:shift+cmd+/→paged.text.strikethrough",
+      "keybinding:shift+ctrl+/→paged.text.strikethrough",
+      "keybinding:shift+cmd+?→paged.text.strikethrough",
+      "keybinding:shift+ctrl+?→paged.text.strikethrough",
+      "keybinding:shift+cmd+k→paged.text.allCaps",
+      "keybinding:shift+ctrl+k→paged.text.allCaps",
+      "keybinding:shift+cmd+h→paged.text.smallCaps",
+      "keybinding:shift+ctrl+h→paged.text.smallCaps",
+      "keybinding:shift+cmd+=→paged.text.superscript",
+      "keybinding:shift+ctrl+=→paged.text.superscript",
+      "keybinding:alt+shift+cmd+=→paged.text.subscript",
+      "keybinding:alt+shift+ctrl+=→paged.text.subscript",
+      "keybinding:shift+cmd+l→paged.text.alignLeft",
+      "keybinding:shift+ctrl+l→paged.text.alignLeft",
+      "keybinding:shift+cmd+c→paged.text.alignCenter",
+      "keybinding:shift+ctrl+c→paged.text.alignCenter",
+      "keybinding:shift+cmd+r→paged.text.alignRight",
+      "keybinding:shift+ctrl+r→paged.text.alignRight",
+      "keybinding:shift+cmd+j→paged.text.justify",
+      "keybinding:shift+ctrl+j→paged.text.justify",
+      "keybinding:shift+cmd+.→paged.text.growFont",
+      "keybinding:shift+ctrl+.→paged.text.growFont",
+      "keybinding:shift+cmd+>→paged.text.growFont",
+      "keybinding:shift+ctrl+>→paged.text.growFont",
+      "keybinding:shift+cmd+,→paged.text.shrinkFont",
+      "keybinding:shift+ctrl+,→paged.text.shrinkFont",
+      "keybinding:shift+cmd+<→paged.text.shrinkFont",
+      "keybinding:shift+ctrl+<→paged.text.shrinkFont",
+    );
+    await openShell(page, { doc: true });
+    const verbs = [...new Set(TEXT_KEYS.map((s) => split(s).command))];
+    await select(page, [SHELL.frame]);
+    await blurAll(page);
+    const quietRecorder = await recordCommands(page, verbs);
+    for (const sig of TEXT_KEYS) await pressCombo(page, split(sig).key);
+    expect(await quietRecorder.take()).toEqual([]);
+    await quietRecorder.restore();
+
+    await select(page, [SHELL.text]);
+    await setCaret(page, 3);
+    await blurAll(page);
+    const recorder = await recordCommands(page, verbs);
+    const wrong: string[] = [];
+    for (const sig of TEXT_KEYS) {
+      const { key, command } = split(sig);
       await pressCombo(page, key);
       const got = await expect
         .poll(() => recorder.take().then((c) => c.join(",")), {
