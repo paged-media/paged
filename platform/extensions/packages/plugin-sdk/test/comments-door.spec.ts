@@ -304,6 +304,24 @@ describe("contribute.commentAnchor — the anchor registry (extensions ADR 1101)
     expect(changes).toBe(2);
   });
 
+  it("the selected address comes from the first resolver that has one", () => {
+    const anchors = createCommentAnchorRegistry();
+    const { host } = setup(undefined, { commentAnchors: anchors });
+    // A resolver without `selected` answers nothing.
+    const plain = host.contribute.commentAnchor(sheetResolver);
+    expect(anchors.selected("u12")).toBeNull();
+    const d = host.contribute.commentAnchor({
+      ...sheetResolver,
+      id: "media.paged.sheet.active",
+      selected: (item: string) => (item === "u12" ? "Sheet1!B3" : null),
+    });
+    expect(anchors.selected("u12")).toBe("Sheet1!B3");
+    expect(anchors.selected("u99")).toBeNull();
+    d.dispose();
+    plain.dispose();
+    expect(anchors.selected("u12")).toBeNull();
+  });
+
   it("is a no-op without a backend, and ids must be namespaced", () => {
     const { host } = setup();
     expect(host.supports("contribute.commentAnchor@1")).toBe(false);

@@ -162,4 +162,8 @@ export interface CommentAnchorContribution {
   /** The geometry of `address` in `item`, or null when it is not an
    *  address of this module (the next resolver is asked). */
   resolve(address: string, item: string): CommentAnchorGeometry | null;
+  /** The address the user has selected in `item` now (sheet: the active
+   *  cell, `Sheet1!B3`), so the host's "New comment" can start a `cell`
+   *  thread on it; null when nothing of this module is selected there. */
+  selected?(item: string): string | null;
 }

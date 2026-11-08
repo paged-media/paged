@@ -223,11 +223,29 @@ export const pageCommentMutation = (
   },
 });
 
+/** A new comment thread on a cell (or range) of a sheet frame: the address
+ *  the sheet module resolves (`Sheet1!B3`, engine ADR 1055's `Cell` anchor). */
+export const cellCommentMutation = (
+  item: string,
+  address: string,
+  text: string,
+  reviewer: Reviewer,
+  now: () => string,
+) => ({
+  op: "insertCommentThread",
+  args: {
+    anchor: { kind: "cell", item, address },
+    comment: stamp(reviewer, text, now),
+  },
+});
+
 /** What a new comment would attach to, from the current selection: a
- *  non-empty text range wins, then a single selected item, then the active
+ *  non-empty text range wins, then a single selected item (at the cell its
+ *  module has selected in it, when `cellOf` names one), then the active
  *  page (a slide has nothing else to comment on). */
 export type NewTarget =
   | { kind: "text"; storyId: string; start: number; end: number }
+  | { kind: "cell"; item: string; address: string }
   | { kind: "item"; item: string }
   | { kind: "page"; page: string }
   | null;
@@ -236,6 +254,7 @@ export function newTargetOf(
   content: { storyId: string; start: number; end: number } | null,
   elements: readonly { kind?: string; id?: string }[],
   activePage: string | null = null,
+  cellOf: (item: string) => string | null = () => null,
 ): NewTarget {
   if (content && content.end > content.start) {
     return {
@@ -246,7 +265,12 @@ export function newTargetOf(
     };
   }
   const only = elements.length === 1 ? elements[0] : undefined;
-  if (only?.id) return { kind: "item", item: only.id };
+  if (only?.id) {
+    const address = cellOf(only.id);
+    return address
+      ? { kind: "cell", item: only.id, address }
+      : { kind: "item", item: only.id };
+  }
   if (elements.length === 0 && activePage)
     return { kind: "page", page: activePage };
   return null;

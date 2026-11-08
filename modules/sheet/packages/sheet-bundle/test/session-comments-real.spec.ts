@@ -220,5 +220,26 @@ describe.skipIf(!ENGINE_BUILT)(
       expect(session.commentAnchor("Other!A1", frame!)).toBeNull();
       expect(session.commentAnchor(`${name}!A1`, "no-such-frame")).toBeNull();
     });
+
+    it("names the active cell of the frame that shows the active sheet", async () => {
+      const session = createWorkbookSession(host);
+      s = session;
+      await session.import(
+        await authorWorkbook(3, 2, (r, c) => String(r * 2 + c + 1)),
+        "c.xlsx",
+      );
+      const engine = session.state().engine!;
+      const sheet = session.state().activeSheet!;
+      const name = engine.listSheets().find((x) => x.id === sheet)!.name;
+      session.setRange("A1:B3");
+      const frame = await session.lowerSelection();
+      await settle();
+
+      session.selectCell(1, 1);
+      expect(session.selectedAddress(frame!)).toBe(`${name}!B2`);
+      session.selectCell(2, 0);
+      expect(session.selectedAddress(frame!)).toBe(`${name}!A3`);
+      expect(session.selectedAddress("no-such-frame")).toBeNull();
+    });
   },
 );
