@@ -93,6 +93,7 @@ mod tables;
 mod text_frame;
 mod text_path;
 mod text_slots;
+mod text_warp;
 pub mod word_fields;
 
 pub use anchored::AnchoredImageEmit;

@@ -45,6 +45,7 @@ pub mod pattern;
 pub mod report;
 pub mod review;
 pub mod script;
+pub mod text_warp;
 pub mod theme;
 pub mod vector_effect;
 pub mod winding;
@@ -1875,6 +1876,11 @@ pub struct TextFrame {
     /// at every straight-line corner).
     #[serde(default)]
     pub corners: [CornerSpec; 4],
+    /// Engine ADR 1091 — WordArt: the preset shape the frame's text is
+    /// bent to after it is laid out. Skipped when unset, so a frame without
+    /// one keeps its bytes and state hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_warp: Option<text_warp::TextWarp>,
 }
 
 impl TextFrame {
@@ -1955,6 +1961,7 @@ impl TextFrame {
             corner_radius: None,
             corner_option: None,
             corners: Default::default(),
+            text_warp: None,
         }
     }
 }
@@ -8358,6 +8365,10 @@ pub struct AnchoredFrame {
     /// and filled. See [`Rectangle::subpath_open`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub subpath_open: Vec<bool>,
+    /// Engine ADR 1091 — an anchored text frame's WordArt warp (a Word text
+    /// box's `wps:bodyPr/a:prstTxWarp`); see [`TextFrame::text_warp`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_warp: Option<text_warp::TextWarp>,
 }
 
 /// Engine ADR 1050 — how a custom-positioned anchored object stands

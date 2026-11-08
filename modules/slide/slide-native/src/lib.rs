@@ -1666,6 +1666,11 @@ impl Builder<'_> {
             }
             let (il, it_, ir, ib) = tf.inset;
             f.inset_spacing = Some([n(it_), n(il), n(ib), n(ir)]);
+            // Engine ADR 1091 — WordArt bends the frame's text.
+            f.text_warp = tf.warp.as_ref().map(|w| paged_model::text_warp::TextWarp {
+                preset: w.preset.clone(),
+                adjusts: w.adjusts.clone(),
+            });
         }
         let paragraphs = self.paragraphs(&tf.paragraphs);
         self.story_of.insert(it.id.clone(), story.clone());

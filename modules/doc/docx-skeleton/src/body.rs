@@ -45,6 +45,7 @@ use docx_lower::ir::{
 };
 use paged_model::equation::Equation;
 use paged_model::script::{CharacterDirection, FontHint};
+use paged_model::text_warp::TextWarp;
 use paged_model::{
     AnchoredFrame, AnchoredFrameKind, AnchoredLayout, AnchoredObjectSetting, Bounds, CellWidth,
     CharacterRun, Justification, Paragraph, PathAnchor, Table, TableCell, TableColumn, TableRow,
@@ -1131,6 +1132,11 @@ fn build_whole(
             parent_story: Some(story),
             setting: tb.anchor.as_ref().map(anchored_setting),
             layout,
+            // Engine ADR 1091 — WordArt bends the box's text.
+            text_warp: tb.warp.as_ref().map(|w| TextWarp {
+                preset: w.preset.clone(),
+                adjusts: w.adjusts.clone(),
+            }),
             ..AnchoredFrame::default()
         };
         // The box's look (fill, outline, opacity, effects).

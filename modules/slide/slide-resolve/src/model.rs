@@ -269,6 +269,9 @@ pub struct TextFrame {
     /// 0 / 90 / 270: `vert` text rotation.
     pub rotation: f64,
     pub paragraphs: Vec<Para>,
+    /// WordArt (engine ADR 1091): the preset the text is bent to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warp: Option<pptx_core::TextWarp>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

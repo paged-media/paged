@@ -2864,6 +2864,7 @@ pub(super) fn build_document_inner(
             emitter.emit_paragraph(paragraph, &mut pages, &mut total_stats);
         }
         emitter.apply_vertical_justification(&mut pages);
+        emitter.apply_text_warp(&mut pages);
         emitter.apply_behind_text(&mut pages);
         emitter.apply_column_rules(&mut pages);
         emitter.apply_polygon_clip(&mut pages);
@@ -3708,6 +3709,7 @@ pub(super) fn build_document_inner(
                 .map(|&p| pages[p].list.commands.len())
                 .collect();
             emitter.apply_vertical_justification(&mut pages);
+            emitter.apply_text_warp(&mut pages);
             emitter.apply_behind_text(&mut pages);
             emitter.apply_column_rules(&mut pages);
             emitter.apply_polygon_clip(&mut pages);
@@ -5670,6 +5672,32 @@ impl<'a> StoryEmitter<'a> {
         let page = &pages[self.chain_pages[self.frame_idx]];
         super::baseline_grid::frame_grid(self.document, frame, page)
             .map_or(0.0, |grid| grid.snap_exact(baseline))
+    }
+
+    /// Engine ADR 1091 — bend each warped frame's text: its outlines are
+    /// mapped onto the preset's shape (`text_warp::warp_range`).
+    pub(super) fn apply_text_warp(&self, pages: &mut [BuiltPage]) {
+        for (i, frame) in self.chain.iter().enumerate() {
+            let Some(warp) = frame.text_warp.as_ref().filter(|w| w.is_active()) else {
+                continue;
+            };
+            let Some((start, end)) = self.frame_cmd_ranges[i] else {
+                continue;
+            };
+            let Some(page) = pages.get_mut(self.chain_pages[i]) else {
+                continue;
+            };
+            let (ox, oy) = page.spread_origin;
+            let insets = frame.inset_spacing.unwrap_or([0.0; 4]);
+            let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+            let area = paged_warp::textshape::Box2 {
+                x: f64::from(sx - ox + insets[1]),
+                y: f64::from(sy - oy + insets[0]),
+                w: f64::from(frame.bounds.width() - insets[1] - insets[3]),
+                h: f64::from(frame.bounds.height() - insets[0] - insets[2]),
+            };
+            super::text_warp::warp_range(&mut page.list, start..end, warp, area);
+        }
     }
 
     pub(super) fn apply_vertical_justification(&self, pages: &mut [BuiltPage]) {

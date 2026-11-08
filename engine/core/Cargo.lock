@@ -4711,6 +4711,7 @@ dependencies = [
  "paged-test-resources",
  "paged-text",
  "paged-vector-fx",
+ "paged-warp",
  "paged-wire",
  "serde",
  "serde_json",

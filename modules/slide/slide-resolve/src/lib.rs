@@ -513,7 +513,8 @@ fn merge_body(chain: &[&Sp]) -> BodyProps {
             rot,
             columns,
             column_spacing,
-            autofit
+            autofit,
+            warp
         );
         if s.insets.0.is_some() {
             b.insets.0 = s.insets.0;
@@ -639,6 +640,7 @@ fn text_frame(
         shrink,
         rotation,
         paragraphs: text::body(own, &tctx),
+        warp: body.warp.clone().filter(|w| w.preset != "textNoShape"),
     })
 }
 

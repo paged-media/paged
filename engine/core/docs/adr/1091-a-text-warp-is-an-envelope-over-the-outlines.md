@@ -1,10 +1,11 @@
 # ADR 1091 — A text warp is an envelope over the text's outlines
 
 - **Status:** Accepted 2026-11-08; **slice 1 built** (the shared reader of `prstTxWarp` with the 41
-  presets, their families and adjusts). Open, in this order: the preset guide curves, the engine
-  model and its mapping, render, doc and slide import, write-back. Part of the capability layering
-  of PM-0014 and PM-0017 ([capability register](../../../../docs/development/capability-register.md),
-  "Text envelope").
+  presets, their families and adjusts); **slice 2 built** (Amendment 1: the preset guides, the
+  model field, the render pass, doc and slide import). Open: a measured match of Word's and
+  PowerPoint's shapes, write-back of an edited warp, the adjust handles. Part of the capability
+  layering of PM-0014 and PM-0017
+  ([capability register](../../../../docs/development/capability-register.md), "Text envelope").
 - **Scope:** `paged-ooxml::drawingml::textwarp` (the reader); later `paged-warp` (preset guides →
   `Mesh`), `paged-vector-fx` (the envelope of [ADR 1042](1042-live-vector-effects-are-stack-entries.md),
   amendment 2026-10-31), `paged-model` / `paged-renderer` (a text frame's warp), `docx-*`, `slide-native`.
@@ -74,3 +75,44 @@ non-value formula not read as a number.
 3. **Import.** doc (`wps:bodyPr`), slide (`a:bodyPr`) and sheet shapes through the shared reader;
    export writes the element back from the model, or leaves the original bytes when untouched.
 4. **Editing.** The adjust handles (yellow diamonds) through the handle door.
+
+## Amendment 1 — guides, model, render and import (2026-11-08)
+
+**Guides.** `paged_warp::textshape::text_shape(preset, adjust, thickness)` gives the two guide
+curves of each of the 41 presets in the box's unit square: polylines (taper: stop, triangles,
+chevrons, fades, slants, cascades), arcs of the inscribed ellipse (arch, circle, ring, pour,
+button; a single-guide preset's band is the text's own height, `thickness`), one curve offset
+by the box (curve, can), sines (waves) and half-sine bulges (inflate, deflate; the two- and
+three-line presets as a deflate). `TextShape::map(rect, (u, v))` is the Coons patch between the
+guides with straight sides: the point `v` of the way along the segment joining the guides at
+`u`. Defaults are the schema's adjust defaults as this reader states them. The guides are
+evaluated as functions, not fitted to a bicubic mesh: an arc of up to 360 degrees is exact, which
+one envelope patch is not. The ADR's "the mesh is the Coons patch" holds in that form.
+
+**Model.** `TextFrame.text_warp` and `AnchoredFrame.text_warp`
+(`paged_model::text_warp::TextWarp { preset, adjusts }`, the preset's name and its plain-value
+adjusts), skipped when unset. Not on the wire: no mutation sets one yet.
+
+**Render.** `StoryEmitter::apply_text_warp` runs after vertical justification over each warped
+frame's command range: every filled or stroked path the frame's text drew (glyph outlines,
+underlines) is flattened in page space (0.05 pt), its straight pieces cut to 0.5 pt, and each
+point mapped. The source square is the text's ink box, the target the frame's text area (its box
+less its insets), so the text fills the shape, as WordArt does. A bent glyph is a path: its
+glyph-run record is dropped, and a PDF draws it as an outline. Not yet: rotated frames (the area
+is the frame's unrotated top-left box), stroke widths are not bent, a warp in a frame with
+threaded text bends each frame on its own.
+
+**Import.** doc: a `wps:wsp` text box's `wps:bodyPr` through the shared reader
+(`docx-import` `shape_looks`, keyed like the box's look by `wp:docPr/@id`), carried as
+`docx_core::WordArt` to `LoweredTextBox.warp` / `LoweredItemKind::TextBox.warp` and onto the
+anchored frame or the page item's text frame. slide: `a:bodyPr` (`pptx_core::BodyProps.warp`),
+inherited like the other body properties, onto the resolved `TextFrame` and the native frame.
+Neither writer touches the element: a part nobody edited keeps its bytes.
+
+**Verification.** `paged-warp` (`textshape` tests: plain is the box, an arch of 180 degrees is
+symmetric and highest in the middle, an arch down lowest, an inflate keeps its corners, adjusts
+move the guides, a circle closes, every preset name maps), the renderer (`text_warp` unit tests;
+`tests/it/text_warp_pipeline.rs`: `textPlain` stretches the ink onto the text area, an arch keeps
+the text inside the area's ellipse and above its centre), doc and slide readers (the warp and its
+adjusts are kept, `textNoShape` is none). **Not verified:** any match to Word's or PowerPoint's
+drawing of a preset; the forms are the guides' shapes, not measured ones.

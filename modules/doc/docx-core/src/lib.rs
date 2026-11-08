@@ -43,7 +43,7 @@ pub mod symbols;
 pub mod theme;
 pub use objects::{
     BorderEdge, Borders, CellLook, CustomPath, HeightRule, Language, NestedTable, PathCommand,
-    PreferredWidth, Shape, ShapeGeometry, TableLook, TableStyleProps, TextBox, WidthKind,
+    PreferredWidth, Shape, ShapeGeometry, TableLook, TableStyleProps, TextBox, WidthKind, WordArt,
 };
 pub use review::{
     ChangeKind, Comment, FormatChange, ParaPropsChange, ParagraphReview, Revision, RunChange,

@@ -150,8 +150,9 @@ inline object of its paragraph (`Paragraph.equations`); the renderer's one metri
 `paged-renderer` `pipeline/equations.rs` (math face, OpenType `MATH` constants, the math alphabet
 `paged_math::alphabet`); doc imports through the native builder, slide through `pptx-import` (the choice of an
 equation's alternate content) and `slide-native`. Open: equations in table cells, a wire door, the Word-oracle
-comparison. Text envelope (engine ADR 1091, slice 1 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
-adjusts) for doc, slide and sheet; the guides (`paged-warp`), the frame's model and the render pass are open.
+comparison. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
+adjusts) for doc, slide and sheet; `paged_warp::textshape` is the one set of preset guides; the frame's `text_warp` is bent by the
+renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. Open: a measured match, write-back, handles.
 ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
 provider); a matting job in `apps/ml-host` and Tier-A matting models are open.
 Oracle scripts live in `tooling/oracle/` (one place for the InDesign,

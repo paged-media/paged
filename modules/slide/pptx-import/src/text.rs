@@ -70,6 +70,15 @@ fn body_props(el: &El) -> BodyProps {
         columns: el.attr_u32("numCol"),
         column_spacing: el.attr_i64("spcCol"),
         autofit,
+        // Engine ADR 1091 — WordArt, read by the shared reader.
+        warp: paged_ooxml::drawingml::textwarp::read(el).map(|w| pptx_core::TextWarp {
+            preset: w.preset.name().to_string(),
+            adjusts: w
+                .adjusts
+                .iter()
+                .filter_map(|(n, _)| Some((n.clone(), w.adjust(n)?)))
+                .collect(),
+        }),
     }
 }
 
@@ -312,5 +321,18 @@ mod tests {
         assert!(equation(&p.children[1]).is_none());
         let plain = parsed(&format!(r#"<a:p {NS}><a:r><a:t>z</a:t></a:r></a:p>"#));
         assert!(!holds_equation(&plain));
+    }
+
+    #[test]
+    fn a_body_keeps_its_wordart_warp() {
+        let b = parsed(&format!(
+            r#"<a:bodyPr {NS}><a:prstTxWarp prst="textWave1"><a:avLst><a:gd name="adj1" fmla="val 20000"/></a:avLst></a:prstTxWarp></a:bodyPr>"#
+        ));
+        let w = body_props(&b).warp.expect("a warp");
+        assert_eq!(w.preset, "textWave1");
+        assert_eq!(w.adjusts, vec![("adj1".to_string(), 20_000)]);
+        assert!(body_props(&parsed(&format!("<a:bodyPr {NS}/>")))
+            .warp
+            .is_none());
     }
 }

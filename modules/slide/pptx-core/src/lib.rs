@@ -720,6 +720,18 @@ pub struct BodyProps {
     pub columns: Option<u32>,
     pub column_spacing: Option<Emu>,
     pub autofit: Option<Autofit>,
+    /// WordArt (engine ADR 1091): `a:prstTxWarp`, the preset's name and its
+    /// plain-value adjusts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warp: Option<TextWarp>,
+}
+
+/// A text warp as the body states it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextWarp {
+    pub preset: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adjusts: Vec<(String, i64)>,
 }
 
 /// `a:noAutofit` / `a:normAutofit` / `a:spAutoFit`.

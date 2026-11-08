@@ -115,6 +115,7 @@ mod text_frame_stroke_alignment;
 mod text_glyph_level;
 mod text_in_shape;
 mod text_on_path;
+mod text_warp_pipeline;
 mod text_z_order;
 mod transparency_targets;
 mod variables;

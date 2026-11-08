@@ -1774,6 +1774,8 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         corner_radius: None,
         corner_option: None,
         corners: Default::default(),
+        // Engine ADR 1091 — a Word text box's WordArt warp.
+        text_warp: af.text_warp.clone(),
     };
     // Sub-emitter borrows from the parent's `'a` so the document /
     // palette / font_table refs share lifetimes with the body pass.
@@ -1827,6 +1829,7 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         sub.emit_paragraph(paragraph, pages, &mut sub_stats);
     }
     sub.apply_vertical_justification(pages);
+    sub.apply_text_warp(pages);
     sub.apply_behind_text(pages);
     sub.apply_column_rules(pages);
     sub.apply_blend_groups(pages);
