@@ -4,7 +4,7 @@
   "counts": {
     "chrome": 4,
     "command": 921,
-    "keybinding": 167,
+    "keybinding": 201,
     "menu": 665,
     "panel": 151,
     "tool": 126
@@ -4706,6 +4706,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:alt+shift+cmd+=→paged.text.subscript",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:alt+shift+cmd+n→media.paged.slide.command.duplicateSlide",
       "kind": "keybinding",
       "owner": "media.paged.slide"
@@ -4717,6 +4722,11 @@
     },
     {
       "id": "keybinding:alt+shift+ctrl+0→paged.view.zoomFit",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:alt+shift+ctrl+=→paged.text.subscript",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -4881,6 +4891,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+b→paged.text.bold",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:cmd+c→media.paged.sheet.command.copySelection",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -4944,6 +4959,11 @@
       "id": "keybinding:cmd+i→media.paged.doc.command.word.italic",
       "kind": "keybinding",
       "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+i→paged.text.italic",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:cmd+j→media.paged.doc.command.word.justify",
@@ -5091,6 +5111,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+u→paged.text.underline",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:cmd+u→paged.view.smartGuides",
       "kind": "keybinding",
       "owner": "editor"
@@ -5186,6 +5211,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:ctrl+b→paged.text.bold",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:ctrl+c→media.paged.sheet.command.copySelection",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -5227,6 +5257,11 @@
     },
     {
       "id": "keybinding:ctrl+h→paged.edit.replace",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+i→paged.text.italic",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -5297,6 +5332,11 @@
     },
     {
       "id": "keybinding:ctrl+s→paged.file.savePaged",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+u→paged.text.underline",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -5411,7 +5451,72 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:shift+cmd+,→paged.text.shrinkFont",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+.→paged.text.growFont",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+/→paged.text.strikethrough",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:shift+cmd+1→paged.view.resetRotation",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+<→paged.text.shrinkFont",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+=→paged.text.superscript",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+>→paged.text.growFont",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+?→paged.text.strikethrough",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+c→paged.text.alignCenter",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+h→paged.text.smallCaps",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+j→paged.text.justify",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+k→paged.text.allCaps",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+l→paged.text.alignLeft",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+r→paged.text.alignRight",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -5421,7 +5526,72 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:shift+ctrl+,→paged.text.shrinkFont",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+.→paged.text.growFont",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+/→paged.text.strikethrough",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:shift+ctrl+1→paged.view.resetRotation",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+<→paged.text.shrinkFont",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+=→paged.text.superscript",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+>→paged.text.growFont",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+?→paged.text.strikethrough",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+c→paged.text.alignCenter",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+h→paged.text.smallCaps",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+j→paged.text.justify",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+k→paged.text.allCaps",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+l→paged.text.alignLeft",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+r→paged.text.alignRight",
       "kind": "keybinding",
       "owner": "editor"
     },
