@@ -113,7 +113,7 @@ fn alpha_stops_patterns_and_dashes_open_as_powerpoint_draws_them__feat__plugin_s
     assert!(a
         .effects
         .as_ref()
-        .map_or(true, |e| e.gradient_feather.is_none()));
+        .is_none_or(|e| e.gradient_feather.is_none()));
     let g = &doc.palette.gradients[a.fill_color.as_deref().expect("gradient fill")];
     assert_eq!(
         g.stops.iter().map(|s| s.opacity_pct).collect::<Vec<_>>(),
