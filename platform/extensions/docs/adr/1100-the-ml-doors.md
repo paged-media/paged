@@ -130,4 +130,4 @@ matting configuration when the user sets a generative model in Settings ▸ Mode
 the whole configuration). CI keeps the fake provider for the action; the host's own tests drive a
 fake runner (a shell script), the SDK's a fake host.
 
-plugin-sdk and plugin-api 0.74.3-canary.79.
+plugin-sdk and plugin-api 0.74.3-canary.80.
