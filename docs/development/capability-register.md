@@ -338,8 +338,11 @@ Status (draw items, one line each; updated as they land):
 
 ### Reach (gaps between modules)
 
-- **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, OpenType features,
-  equations. Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to
+- **doc:** recolour, charts, SmartArt, OpenType features, equations. Shapes: PARTLY DONE (doc ADR 627:
+  non-text `wps:wsp` as anchored Rectangle frames drawn along their outline, 14 hand-ported presets and
+  literal custom geometry, `wps:style` completing the look; the other presets are told. `dml-geom` is not
+  linked because its 526 KB of preset XML does not fit the doc wasm's ceiling; line ends and a shape's own
+  text wrap are open). Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to
   their `fsType` licence and given to the document-font door, as slide does; the shared part is
   `paged_ooxml::fonts`). Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
   against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following

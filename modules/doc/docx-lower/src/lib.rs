@@ -45,6 +45,7 @@ mod ir_objects;
 pub mod line_height;
 pub mod objects;
 pub mod sections;
+pub mod shape_geom;
 pub mod structure;
 
 pub use sections::LowerOptions;
@@ -2122,6 +2123,7 @@ impl Lowering {
         };
         let mut pushed_below = false;
         let mut text_boxes: Vec<crate::ir::LoweredTextBox> = Vec::new();
+        let mut shapes: Vec<crate::ir::LoweredShape> = Vec::new();
         for (ri, r) in p.runs.iter().enumerate() {
             for (ii, img) in r.images.iter().enumerate() {
                 // A float placed as a page item (doc ADR 614) is not in
@@ -2176,6 +2178,16 @@ impl Lowering {
                 // Engine ADR 1050: an anchored text frame of the paragraph.
                 text_boxes.push(self.lower_text_box(tb, anchor_at(before, total)));
             }
+            for sh in &r.shapes {
+                if self.in_cell {
+                    self.w4.unplaced_shapes += 1;
+                    continue;
+                }
+                // Doc ADR 627: an anchored frame drawn along the shape.
+                if let Some(ls) = self.lower_shape(sh, anchor_at(before, total)) {
+                    shapes.push(ls);
+                }
+            }
             before += r.text.chars().count() as u32;
         }
         let others: u32 = p.runs.iter().map(|r| r.other_drawings).sum();
@@ -2222,6 +2234,7 @@ impl Lowering {
                     }
                 }),
                 text_boxes,
+                shapes,
                 drop_cap,
             },
             tail,

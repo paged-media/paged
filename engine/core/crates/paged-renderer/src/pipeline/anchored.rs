@@ -1557,9 +1557,19 @@ fn synthetic_rectangle(
         nonprinting: false,
         visible: true,
         locked: false,
-        anchors: Vec::new(),
-        subpath_starts: Vec::new(),
-        subpath_open: Vec::new(),
+        // Engine ADR 1050, amendment 2026-11-08: an outline of the frame's
+        // own box, moved with the box onto the page.
+        anchors: af
+            .anchors
+            .iter()
+            .map(|a| paged_model::PathAnchor {
+                anchor: (a.anchor.0 + bounds.left, a.anchor.1 + bounds.top),
+                left: (a.left.0 + bounds.left, a.left.1 + bounds.top),
+                right: (a.right.0 + bounds.left, a.right.1 + bounds.top),
+            })
+            .collect(),
+        subpath_starts: af.subpath_starts.clone(),
+        subpath_open: af.subpath_open.clone(),
         fill_rule: paged_model::FillRule::NonZero,
         image_adjustments: Vec::new(),
         media: None,

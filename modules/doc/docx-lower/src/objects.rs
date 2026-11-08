@@ -788,6 +788,13 @@ pub(crate) struct W4 {
     pub anchored_boxes: usize,
     /// Text boxes in table cells, which are not placed.
     pub unplaced_boxes: usize,
+    /// Shapes without text drawn as anchored frames (doc ADR 627), shapes
+    /// in table cells (not placed), shapes whose outline is not drawn (the
+    /// reason, once each) and shapes whose line ends are not drawn.
+    pub anchored_shapes: usize,
+    pub unplaced_shapes: usize,
+    pub undrawn_shapes: Vec<String>,
+    pub shape_line_ends: usize,
     /// Nested tables shown as their paragraphs.
     pub nested_tables: usize,
     /// Rows Word holds at an exact height, and tables with an indent or a
@@ -908,6 +915,81 @@ impl crate::Lowering {
             paragraphs,
             fx,
         }
+    }
+
+    /// A shape without text as an anchored frame of its paragraph (doc ADR
+    /// 627): placed as a text box is (a float at Word's position with Word's
+    /// wrap, an inline shape a character of its line at `at`), its outline
+    /// the frame's path and its look the frame's. `None`, with the reason
+    /// told, for an outline this lowering does not draw.
+    pub(crate) fn lower_shape(
+        &mut self,
+        sh: &docx_core::Shape,
+        at: u32,
+    ) -> Option<crate::ir::LoweredShape> {
+        let w = emu_to_pt(sh.width_emu);
+        let h = emu_to_pt(sh.height_emu);
+        let outline = match crate::shape_geom::outline(sh, w, h) {
+            Ok(o) => o,
+            Err(reason) => {
+                if !self.w4.undrawn_shapes.contains(&reason) {
+                    self.w4.undrawn_shapes.push(reason);
+                }
+                return None;
+            }
+        };
+        let geo = self.w4.geo.unwrap_or(PageGeo {
+            width: 612.0,
+            height: 792.0,
+            top: 72.0,
+            bottom: 72.0,
+            left: 72.0,
+            right: 72.0,
+        });
+        let float = sh
+            .float
+            .as_ref()
+            .map(|f| lower_float(f, sh.width_emu, sh.height_emu));
+        let (anchor, layout, at) = match &float {
+            Some(f) => {
+                let (anchor, AnchorCase::Custom { .. }) = anchor_for(f, w, h, &geo);
+                let by_line = f
+                    .vertical
+                    .as_ref()
+                    .is_some_and(|v| v.relative_from == "line");
+                (
+                    Some(anchor),
+                    layout_for(f, w, h, &geo),
+                    if by_line { at } else { 0 },
+                )
+            }
+            None => (None, LoweredFloatLayout::default(), at),
+        };
+        self.w4.anchored_shapes += 1;
+        if sh.line_ends {
+            self.w4.shape_line_ends += 1;
+        }
+        let fx = sh.look.as_ref().and_then(|look| {
+            let mut mapper = dml_native::native::Lowering::new(self.dml_slots.to_vec());
+            let fx = mapper.picture(&look.blip, &look.shape, w as f64, h as f64);
+            (!fx.is_empty()).then_some(fx)
+        });
+        if let Some(fx) = &fx {
+            for c in fx.colors() {
+                self.swatch_for(c.trim_start_matches('#'));
+            }
+        }
+        Some(crate::ir::LoweredShape {
+            at,
+            width_pt: w,
+            height_pt: h,
+            anchor,
+            layout,
+            anchors: outline.anchors,
+            starts: outline.starts,
+            open: outline.open,
+            fx,
+        })
     }
 
     /// Place a floating picture as an anchored object of its paragraph
@@ -1228,6 +1310,41 @@ impl crate::Lowering {
                     w.anchored_boxes
                 ),
                 2,
+            ));
+        }
+        if w.anchored_shapes > 0 {
+            out.push(Diagnostic::info(
+                format!(
+                    "{} shape(s) without text placed as anchored frames drawn along their \
+                     outline; they follow their paragraph and round-trip unchanged",
+                    w.anchored_shapes
+                ),
+                2,
+            ));
+        }
+        for reason in &w.undrawn_shapes {
+            out.push(Diagnostic::warning(
+                format!("shape(s) with {reason} are NOT shown; they are kept in the .docx"),
+                2,
+            ));
+        }
+        if w.unplaced_shapes > 0 {
+            out.push(Diagnostic::warning(
+                format!(
+                    "{} shape(s) in table cells are NOT shown; they are kept in the .docx \
+                     and round-trip on save",
+                    w.unplaced_shapes
+                ),
+                2,
+            ));
+        }
+        if w.shape_line_ends > 0 {
+            out.push(Diagnostic::info(
+                format!(
+                    "{} shape(s) have line ends (arrow heads) that are not drawn",
+                    w.shape_line_ends
+                ),
+                3,
             ));
         }
         if w.unplaced_boxes > 0 {

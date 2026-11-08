@@ -38,6 +38,7 @@ mod review;
 mod run_specials;
 mod save_back;
 mod sections;
+mod shapes;
 mod structure;
 mod structure_saveback;
 mod symbols;

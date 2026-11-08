@@ -1056,7 +1056,11 @@ impl BodyWalk<'_, '_> {
 
 /// Whether a run puts anything on the page.
 fn run_has_content(r: &Run) -> bool {
-    !r.text.is_empty() || !r.images.is_empty() || r.other_drawings > 0 || r.note_ref.is_some()
+    !r.text.is_empty()
+        || !r.images.is_empty()
+        || !r.shapes.is_empty()
+        || r.other_drawings > 0
+        || r.note_ref.is_some()
 }
 
 fn map_paragraph(
@@ -2199,6 +2203,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
     let mut ptabs = Vec::new();
     let mut symbols = Vec::new();
     let mut text_boxes = Vec::new();
+    let mut shapes = Vec::new();
     for c in &r.run_choice {
         match c {
             wml::RunChoice::Text(t) => {
@@ -2284,7 +2289,10 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
                 Some(img) => images.push(img),
                 None => match objects::drawing_text_box(d, ctx) {
                     Some(tb) => text_boxes.push(tb),
-                    None => other_drawings += 1,
+                    None => match objects::drawing_shape(d, ctx) {
+                        Some(sh) => shapes.push(sh),
+                        None => other_drawings += 1,
+                    },
                 },
             },
             // A legacy VML picture (`w:pict`): a picture where Word gives it
@@ -2302,6 +2310,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
                 ctx,
                 &mut images,
                 &mut text_boxes,
+                &mut shapes,
                 &mut other_drawings,
             ),
             // A footnote/endnote reference mark — the run carries no text; the
@@ -2341,6 +2350,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
         format_change: None,
         comments: Vec::new(),
         text_boxes,
+        shapes,
         control: None,
     }
 }

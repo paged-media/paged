@@ -37,6 +37,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [624](624-word-drop-caps.md) | Word drop caps (the framed paragraph) fold into the following paragraph and lower to the engine's paragraph drop cap; the folded block is held on save-back | Accepted 2026-11-02 |
 | [625](625-doc-builds-the-engine-model-in-rust.md) | Doc builds the engine's model in Rust and retires the plugin-local IR slice by slice; slice 1 builds body paragraphs with direct formatting as the model's own fields, with no invented named styles | Accepted 2026-11-02; slice 1 implemented, not yet wired |
 | [626](626-word-embedded-fonts-reach-the-document.md) | A Word document's embedded fonts (obfuscated `.odttf` parts) are unlocked, held to their own licence and given to the document-font door; the font parts stay byte-identical on save | Accepted 2026-11-08 |
+| [627](627-word-shapes-are-anchored-frames-along-their-outline.md) | Word's shapes without text (presets, literal custom geometry) are anchored Rectangle frames drawn along their outline, with `wps:style` completing the look; the engine's anchored frame holds the outline | Accepted 2026-11-08 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
