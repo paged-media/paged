@@ -50,7 +50,7 @@ fn gauss_boxes(sigma: f32) -> [(usize, usize); 5] {
 
 /// A Gaussian of σ ≥ 2 px, approximated by five box blurs per axis, over
 /// a premultiplied RGBA8 buffer, transparent beyond it. Linear in σ,
-/// where the kernel above grows with it. A σ of 0 leaves that axis
+/// where the exact Gaussian's kernel grows with it. A σ of 0 leaves that axis
 /// alone.
 pub(crate) fn box_blur_premul(
     data: &mut [u8],
