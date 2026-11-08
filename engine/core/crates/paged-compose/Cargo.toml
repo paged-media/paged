@@ -12,6 +12,8 @@ workspace = true
 
 [dependencies]
 paged-blend = { path = "../paged-blend" }
+# The mask blurs' box pass (engine ADR 1013, amendment "Blur").
+paged-kernels = { path = "../paged-kernels" }
 paged-scene = { path = "../paged-scene" }
 paged-model = { path = "../paged-model" }
 paged-text = { path = "../paged-text" }

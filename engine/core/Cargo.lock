@@ -2777,6 +2777,7 @@ version = "0.0.0"
 dependencies = [
  "half",
  "image-kernels",
+ "paged-kernels",
  "paged-pixel",
  "paged-test-resources",
  "pollster",
@@ -4207,6 +4208,7 @@ dependencies = [
  "paged-blend",
  "paged-color",
  "paged-geom",
+ "paged-kernels",
  "paged-model",
  "paged-scene",
  "paged-text",
@@ -4464,6 +4466,7 @@ dependencies = [
  "paged-colour-math",
  "paged-compose",
  "paged-fidelity",
+ "paged-kernels",
  "paged-raster",
  "paged-svg",
  "paged-test-resources",

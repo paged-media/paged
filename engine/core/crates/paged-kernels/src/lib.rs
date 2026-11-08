@@ -32,6 +32,7 @@
 //! Pure Rust, no I/O, wasm-safe; depends on nothing in the workspace.
 
 pub mod abi;
+pub mod blur;
 pub mod cpu;
 pub mod def;
 // Before `families`: textual macro scope runs in declaration order.

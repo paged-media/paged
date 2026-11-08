@@ -567,11 +567,18 @@ fn gaussian(buf: &mut Buf, sx: f32, sy: f32) {
     let exact = |s: f32| {
         (0.05..BOX_SIGMA)
             .contains(&s)
-            .then(|| blur::gaussian_kernel(s))
+            .then(|| paged_kernels::blur::gaussian_kernel(s))
     };
     let (kx, ky) = (exact(sx), exact(sy));
     if kx.is_some() || ky.is_some() {
-        blur::gaussian_blur_premul_xy(buf.bytes_mut(), w, h, kx.as_deref(), ky.as_deref());
+        paged_kernels::blur::gaussian_separable::<4>(
+            buf.bytes_mut(),
+            w,
+            h,
+            kx.as_deref(),
+            ky.as_deref(),
+            paged_kernels::blur::Edge::Transparent,
+        );
     }
     let boxed = |s: f32| if s >= BOX_SIGMA { s } else { 0.0 };
     if sx >= BOX_SIGMA || sy >= BOX_SIGMA {

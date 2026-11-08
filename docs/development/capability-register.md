@@ -88,6 +88,12 @@ DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-ras
 for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere: engine ADR 1044 states why (placing a whole PSD draws its merged
 composite, which already holds the styles; the consumer is a "PSD layer as a page item" flow that does not exist yet).
 `paged-composition-render` had no consumer and was deleted.
+CPU blurs (engine ADR 1013, amendment "Blur"): `paged_kernels::blur` owns the `u8` Gaussians and the box pass with an
+explicit `Edge` and `Round`; the effects lane's RGBA and mask Gaussians, the SVG filter's Gaussian and box pass, the
+compose masks' box passes and image-gpu's selection feather moved onto it, bit-exact against the old bodies. Allowed,
+with reasons in the record: the f32 image-pipeline twin `cpu::gaussian_weights` (already here; other weights),
+image-js Refine Edge's f32 `gaussian`, `psd_vector_mask`'s f32 box feather, the `style::blur` reference twin, and the GPU
+blurs (Vello's layer blur, the `conv` and `style` WGSL).
 Path coverage rasterizers ×3 in image-js.
 
 ### Geometry and vector

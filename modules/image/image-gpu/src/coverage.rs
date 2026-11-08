@@ -371,49 +371,20 @@ impl SelectionCoverage {
     /// (a selection cannot extend past the canvas, so it fades toward
     /// the border rather than clamping). CPU by design — this blurs the
     /// MASK, not the image (mask prep; see the module note). `sigma <= 0`
-    /// is a no-op.
+    /// is a no-op. The row pass stays in f32, one rounding at the end
+    /// (`paged_kernels::blur::gaussian_separable_f32_mid`, engine ADR 1013).
     pub fn feather(&mut self, sigma: f32) {
         if sigma <= 0.0 || self.data.is_empty() {
             return;
         }
-        let radius = (sigma * 3.0).ceil() as i64;
-        let mut weights = Vec::with_capacity((2 * radius + 1) as usize);
-        let s2 = 2.0 * sigma * sigma;
-        for i in -radius..=radius {
-            weights.push((-((i * i) as f32) / s2).exp());
-        }
-        let norm: f32 = weights.iter().sum();
-        for w in &mut weights {
-            *w /= norm;
-        }
-
-        let (w, h) = (self.width as i64, self.height as i64);
-        // Horizontal pass into an f32 buffer, vertical pass back to u8.
-        let mut mid = vec![0.0f32; self.data.len()];
-        for y in 0..h {
-            for x in 0..w {
-                let mut acc = 0.0f32;
-                for (k, &wt) in weights.iter().enumerate() {
-                    let sx = x + (k as i64 - radius);
-                    if sx >= 0 && sx < w {
-                        acc += wt * self.data[(y * w + sx) as usize] as f32;
-                    }
-                }
-                mid[(y * w + x) as usize] = acc;
-            }
-        }
-        for y in 0..h {
-            for x in 0..w {
-                let mut acc = 0.0f32;
-                for (k, &wt) in weights.iter().enumerate() {
-                    let sy = y + (k as i64 - radius);
-                    if sy >= 0 && sy < h {
-                        acc += wt * mid[(sy * w + x) as usize];
-                    }
-                }
-                self.data[(y * w + x) as usize] = acc.clamp(0.0, 255.0).round() as u8;
-            }
-        }
+        let kernel = paged_kernels::blur::gaussian_kernel(sigma);
+        paged_kernels::blur::gaussian_separable_f32_mid::<1>(
+            &mut self.data,
+            self.width,
+            self.height,
+            &kernel,
+            paged_kernels::blur::Edge::Transparent,
+        );
     }
 
     // ── readouts + lowering ──────────────────────────────────────────
