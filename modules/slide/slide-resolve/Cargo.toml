@@ -19,6 +19,8 @@ pptx-core.workspace = true
 slide-geom.workspace = true
 slide-chart.workspace = true
 serde.workspace = true
+# The math tree of an equation (engine ADR 1090).
+paged-math = { workspace = true, features = ["serde"] }
 # The Design gallery's themes (themes/gallery.json).
 serde_json.workspace = true
 

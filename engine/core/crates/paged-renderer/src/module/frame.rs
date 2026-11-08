@@ -767,6 +767,7 @@ mod tests {
             visible: true,
             locked: false,
             corners: Default::default(),
+            text_warp: None,
         }
     }
 

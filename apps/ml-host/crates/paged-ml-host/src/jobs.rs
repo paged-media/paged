@@ -130,6 +130,23 @@ impl Shared {
         sd::resolve_binary(self.sd_override.as_deref(), config)
     }
 
+    /// The matting runner, when it is configured, acknowledged and its
+    /// binary an executable file; what is missing otherwise.
+    pub fn matting_readiness(&self, config: &Config) -> Result<(), String> {
+        match &config.matting {
+            None => Err("no matting runner is configured (matting)".into()),
+            Some(m) if !m.acknowledged() => Err(format!(
+                "the licence of matting model {:?} is not acknowledged",
+                m.id
+            )),
+            Some(m) if !sd::is_executable(&m.binary) => Err(format!(
+                "the matting runner at {} is not an executable file",
+                m.binary.display()
+            )),
+            Some(_) => Ok(()),
+        }
+    }
+
     /// `(binary, found)`, `ready` and what is missing when not.
     pub fn readiness(&self, config: &Config) -> (Option<PathBuf>, bool, Result<(), String>) {
         let binary = self.binary(config);
@@ -228,12 +245,21 @@ pub fn worker(shared: Arc<Shared>) {
                 continue;
             };
             let config = st.config.clone();
-            let program = shared.binary(&config);
             let Some(job) = st.jobs.get_mut(&id) else {
                 continue;
             };
             job.state = JobState::Running;
-            let args = sd::args(&config, &job.spec, &job.inputs, &job.output());
+            // A matting job runs the matting runner on its picture.
+            let (program, args) = match (job.spec.kind, &config.matting, &job.inputs.image) {
+                (sd::Kind::Matting, Some(m), Some(image)) => {
+                    (Some(m.binary.clone()), m.args_for(image, &job.output()))
+                }
+                (sd::Kind::Matting, ..) => (None, Vec::new()),
+                _ => (
+                    shared.binary(&config),
+                    sd::args(&config, &job.spec, &job.inputs, &job.output()),
+                ),
+            };
             let dir = job.dir.clone();
             let max_total = job.spec.steps.max(1);
             st.running = Some(id.clone());
@@ -243,7 +269,7 @@ pub fn worker(shared: Arc<Shared>) {
 
         let tail: Arc<Mutex<VecDeque<String>>> = Arc::default();
         let outcome = match program {
-            None => Outcome::SpawnFailed("no stable-diffusion.cpp binary is configured".into()),
+            None => Outcome::SpawnFailed("no runner is configured for the job".into()),
             Some(program) => run(&shared, &id, &program, &args, &dir, max_total, &tail),
         };
 
@@ -259,10 +285,14 @@ pub fn worker(shared: Arc<Shared>) {
                     Outcome::Exited(status) => {
                         job.state = JobState::Failed;
                         let lines = tail.lock().unwrap_or_else(|p| p.into_inner());
+                        let who = match job.spec.kind {
+                            sd::Kind::Matting => "the matting runner",
+                            _ => "sd",
+                        };
                         let mut msg = if status.success() {
-                            "sd exited without writing an image".to_string()
+                            format!("{who} exited without writing an image")
                         } else {
-                            format!("sd exited with {status}")
+                            format!("{who} exited with {status}")
                         };
                         if !lines.is_empty() {
                             msg.push_str(": ");

@@ -184,6 +184,7 @@ fn run(props: &RunProps, text: String, line_break: bool, ctx: &TextCtx) -> TextR
         theme,
         link: props.hyperlink.clone(),
         field: None,
+        math: None,
     }
 }
 
@@ -202,6 +203,10 @@ pub fn paragraph(p: &Paragraph, ctx: &TextCtx) -> Para {
             RunKind::Field { text, kind } => runs.push(TextRun {
                 field: kind.clone(),
                 ..run(&rp, text.clone(), false, ctx)
+            }),
+            RunKind::Math(m) => runs.push(TextRun {
+                math: Some(m.clone()),
+                ..run(&rp, String::new(), false, ctx)
             }),
         }
     }
@@ -301,6 +306,7 @@ pub fn plain(tb: &TextBody) -> String {
                     RunKind::Text(t) => t.as_str(),
                     RunKind::Break => "\n",
                     RunKind::Field { text, .. } => text.as_str(),
+                    RunKind::Math(_) => "",
                 })
                 .collect::<String>()
         })

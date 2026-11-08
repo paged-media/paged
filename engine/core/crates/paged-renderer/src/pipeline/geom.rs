@@ -1127,6 +1127,8 @@ fn continuation(paragraph: &paged_model::Paragraph) -> paged_model::Paragraph {
         toc: None,
         mark_revision: None,
         props_change: None,
+        // Engine ADR 1090 — set before the split, as in-line objects.
+        equations: Vec::new(),
         endnote_references: Vec::new(),
         endnote_ranges: Vec::new(),
         notes: Vec::new(),
@@ -1238,6 +1240,8 @@ pub(super) fn split_paragraph_into_segments(
         toc: paragraph.toc.clone(),
         mark_revision: None,
         props_change: None,
+        // Engine ADR 1090 — set before the split, as in-line objects.
+        equations: Vec::new(),
         endnote_references: Vec::new(),
         endnote_ranges: Vec::new(),
         notes: Vec::new(),
@@ -1526,6 +1530,8 @@ pub(super) fn split_paragraph_into_segments(
                 toc: None,
                 mark_revision: None,
                 props_change: None,
+                // Engine ADR 1090 — set before the split, as in-line objects.
+                equations: Vec::new(),
                 endnote_references: Vec::new(),
                 endnote_ranges: Vec::new(),
                 notes: Vec::new(),

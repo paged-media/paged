@@ -217,6 +217,15 @@ fn health(shared: &Shared) -> Response {
     let (binary, found, ready) = shared.readiness(&st.config);
     let ready = ready.is_ok();
     let model = st.config.model.as_ref();
+    let matting = st.config.matting.as_ref();
+    let matting_ready = shared.matting_readiness(&st.config).is_ok();
+    let mut capabilities: Vec<&str> = Vec::new();
+    if ready {
+        capabilities.extend(["generate", "edit"]);
+    }
+    if matting_ready {
+        capabilities.push("matting");
+    }
     Response::json(
         200,
         &json!({
@@ -233,7 +242,13 @@ fn health(shared: &Shared) -> Response {
                 "licenceAcknowledged": model.is_some_and(|m| m.acknowledged()),
             },
             "ready": ready,
-            "capabilities": if ready { json!(["generate", "edit"]) } else { json!([]) },
+            "matting": {
+                "id": matting.map(|m| m.id.clone()),
+                "configured": matting.is_some(),
+                "licenceAcknowledged": matting.is_some_and(|m| m.acknowledged()),
+                "ready": matting_ready,
+            },
+            "capabilities": capabilities,
             "queue": {
                 "running": usize::from(st.running.is_some()),
                 "queued": st.queue.len(),
@@ -334,8 +349,30 @@ fn parse_job(body: &Value) -> Result<Parsed, Invalid> {
     let kind = match body.get("kind").and_then(Value::as_str) {
         Some("generate") => Kind::Generate,
         Some("edit") => Kind::Edit,
-        _ => return Err("kind must be \"generate\" or \"edit\"".into()),
+        Some("matting") => Kind::Matting,
+        _ => return Err("kind must be \"generate\", \"edit\" or \"matting\"".into()),
     };
+    // A matting job is its picture alone.
+    if kind == Kind::Matting {
+        let image = decode_png("image", body.get("image").ok_or("image is required")?)?;
+        let (width, height) = sd::png_size(&image).unwrap_or((0, 0));
+        return Ok(Parsed {
+            spec: JobSpec {
+                kind,
+                prompt: String::new(),
+                negative_prompt: None,
+                width,
+                height,
+                steps: 1,
+                seed: 0,
+                cfg_scale: 0.0,
+                strength: 0.0,
+            },
+            image: Some(image),
+            mask: None,
+            references: Vec::new(),
+        });
+    }
     let prompt = body
         .get("prompt")
         .and_then(Value::as_str)
@@ -376,6 +413,7 @@ fn parse_job(body: &Value) -> Result<Parsed, Invalid> {
             check_dim("width", width.ok_or("width is required")?)?,
             check_dim("height", height.ok_or("height is required")?)?,
         ),
+        Kind::Matting => unreachable!("a matting job returned above"),
         Kind::Edit => {
             let img = decode_png("image", body.get("image").ok_or("image is required")?)?;
             let (iw, ih) = sd::png_size(&img).unwrap_or((0, 0));
@@ -446,16 +484,23 @@ fn write_inputs(dir: &std::path::Path, p: &Parsed) -> std::io::Result<Inputs> {
 }
 
 fn post_job(shared: &Shared, body: &[u8]) -> Response {
-    let id = {
-        let mut st = shared.lock();
-        if let (_, _, Err(missing)) = shared.readiness(&st.config) {
-            return Response::error(503, "not_ready", missing);
-        }
-        st.new_id()
-    };
     let body: Value = match serde_json::from_slice(body) {
         Ok(v) => v,
         Err(e) => return Response::error(400, "bad_request", format!("invalid JSON: {e}")),
+    };
+    // Each kind is ready on its own: generate and edit with sd and a model,
+    // matting with its runner.
+    let id = {
+        let mut st = shared.lock();
+        let ready = if body.get("kind").and_then(Value::as_str) == Some("matting") {
+            shared.matting_readiness(&st.config)
+        } else {
+            shared.readiness(&st.config).2
+        };
+        if let Err(missing) = ready {
+            return Response::error(503, "not_ready", missing);
+        }
+        st.new_id()
     };
     let parsed = match parse_job(&body) {
         Ok(p) => p,

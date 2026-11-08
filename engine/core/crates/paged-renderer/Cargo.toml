@@ -52,6 +52,10 @@ paged-scene = { path = "../paged-scene" }
 paged-store = { path = "../paged-store" }
 paged-flow = { path = "../paged-flow" }
 paged-text = { path = "../paged-text" }
+# Equations in text: the math tree's layout (engine ADR 1090).
+paged-math = { path = "../paged-math" }
+# Text warps: WordArt's preset shapes (engine ADR 1091).
+paged-warp = { path = "../paged-warp" }
 paged-color = { path = "../paged-color" }
 # Engine ADR 1037 — the image filter stack: the kernel twins, the curve
 # spline, the reduction to display size.

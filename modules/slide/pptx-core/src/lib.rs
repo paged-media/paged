@@ -39,6 +39,8 @@ pub mod chart;
 pub use paged_ooxml::media;
 pub mod transcode;
 
+/// The math tree of an equation (engine ADR 1090).
+pub use paged_math::Math;
 use serde::{Deserialize, Serialize};
 
 /// English Metric Units: 914 400 per inch, 12 700 per point.
@@ -718,6 +720,18 @@ pub struct BodyProps {
     pub columns: Option<u32>,
     pub column_spacing: Option<Emu>,
     pub autofit: Option<Autofit>,
+    /// WordArt (engine ADR 1091): `a:prstTxWarp`, the preset's name and its
+    /// plain-value adjusts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warp: Option<TextWarp>,
+}
+
+/// A text warp as the body states it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextWarp {
+    pub preset: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adjusts: Vec<(String, i64)>,
 }
 
 /// `a:noAutofit` / `a:normAutofit` / `a:spAutoFit`.
@@ -831,6 +845,9 @@ pub enum RunKind {
         kind: Option<String>,
         text: String,
     },
+    /// An equation (`a14:m` holding `m:oMathPara` / `m:oMath`), engine ADR
+    /// 1090: read by the shared OMML reader.
+    Math(Math),
 }
 
 /// `a:rPr` / `a:defRPr` / `a:endParaRPr` — every field optional.

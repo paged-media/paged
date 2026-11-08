@@ -21,4 +21,5 @@
 mod config;
 mod guards;
 mod jobs;
+mod matting;
 mod support;

@@ -85,6 +85,11 @@ struct ImportCtx<'a> {
     /// The text boxes' looks and ordinal of the part being mapped (doc ADR
     /// 614).
     objects: std::cell::RefCell<objects::PartObjects>,
+    /// The equations of the part being mapped, in document order (engine
+    /// ADR 1090): read once through the shared OMML reader over the part's
+    /// bytes, taken one by one as the walk meets each `m:oMath` /
+    /// `m:oMathPara`.
+    equations: std::cell::RefCell<std::collections::VecDeque<paged_math::Math>>,
 }
 
 /// Pictures' looks by `wp:docPr/@id`, each id's in document order (an id
@@ -116,6 +121,12 @@ impl ImportCtx<'_> {
     fn load_looks(&self, part: &[u8]) {
         *self.looks.borrow_mut() = picture_looks(part);
         *self.objects.borrow_mut() = objects::PartObjects::for_part(part);
+        *self.equations.borrow_mut() = part_equations(part);
+    }
+
+    /// The next equation of the part.
+    fn take_equation(&self) -> Option<paged_math::Math> {
+        self.equations.borrow_mut().pop_front()
     }
 
     /// The look, the crop and the ordinal of the next picture whose
@@ -439,6 +450,7 @@ pub fn import_docx_with_package(
             open_comments: std::cell::RefCell::new(Vec::new()),
             looks: std::cell::RefCell::new(picture_looks(doc_bytes)),
             objects: std::cell::RefCell::new(objects::PartObjects::for_part(doc_bytes)),
+            equations: std::cell::RefCell::new(part_equations(doc_bytes)),
             images: ImageResolver {
                 rels: doc_rels,
                 package: &pkg,
@@ -1264,6 +1276,9 @@ enum Inline<'a> {
     Bookmark(&'a str),
     /// `w:commentRangeStart` (true) / `w:commentRangeEnd` (false).
     CommentRange(&'a str, bool),
+    /// An equation (`m:oMath`, `m:oMathPara`), engine ADR 1090: its tree is
+    /// the part's next ([`ImportCtx::take_equation`]).
+    Math,
     Other,
 }
 
@@ -1334,6 +1349,7 @@ fn inline_of_deleted(c: &wml::DeletedRunChoice) -> Inline<'_> {
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
         _ => Inline::Other,
     }
 }
@@ -1350,6 +1366,7 @@ fn inline_of_move_from(c: &wml::MoveFromRunChoice) -> Inline<'_> {
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
         _ => Inline::Other,
     }
 }
@@ -1368,6 +1385,7 @@ fn inline_of_paragraph(c: &wml::ParagraphChoice) -> Inline<'_> {
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
         _ => Inline::Other,
     }
 }
@@ -1385,6 +1403,7 @@ fn inline_of_hyperlink(c: &wml::HyperlinkChoice) -> Inline<'_> {
         C::MoveFromRun(m) => moved_from(m),
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
         _ => Inline::Other,
     }
 }
@@ -1402,6 +1421,7 @@ fn inline_of_field(c: &wml::SimpleFieldChoice) -> Inline<'_> {
         C::MoveFromRun(m) => moved_from(m),
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
         _ => Inline::Other,
     }
 }
@@ -1420,6 +1440,7 @@ fn inline_of_content_control(c: &wml::SdtContentRunChoice) -> Inline<'_> {
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
         _ => Inline::Other,
     }
 }
@@ -1436,6 +1457,7 @@ fn inline_of_inserted(c: &wml::InsertedRunChoice) -> Inline<'_> {
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
         _ => Inline::Other,
     }
 }
@@ -1452,6 +1474,7 @@ fn inline_of_move_to(c: &wml::MoveToRunChoice) -> Inline<'_> {
         C::CommentRangeStart(c) => Inline::CommentRange(&c.id, true),
         C::CommentRangeEnd(c) => Inline::CommentRange(&c.id, false),
         C::BookmarkStart(b) => Inline::Bookmark(&b.name),
+        C::OfficeMath(_) | C::Paragraph(_) => Inline::Math,
         _ => Inline::Other,
     }
 }
@@ -1643,6 +1666,26 @@ impl<'a> ParaWalk<'_, 'a> {
                     self.items(children, inner_path, &stamp);
                 }
                 Inline::CommentRange(id, start) => self.ctx.comment_range(id, start),
+                // Engine ADR 1090 — an equation stands between the runs; a
+                // tracked deletion's is left out, as its text is.
+                Inline::Math => {
+                    let Some(math) = self.ctx.take_equation() else {
+                        continue;
+                    };
+                    let deleted = stamp
+                        .change
+                        .as_ref()
+                        .is_some_and(|c| matches!(c.kind, ChangeKind::Delete));
+                    if deleted {
+                        self.unshown += 1;
+                        continue;
+                    }
+                    self.runs.push(Run {
+                        hyperlink: stamp.hyperlink.clone(),
+                        math: Some(math),
+                        ..Run::default()
+                    });
+                }
                 Inline::Other => {}
             }
         }
@@ -2352,6 +2395,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
         text_boxes,
         shapes,
         control: None,
+        math: None,
     }
 }
 
@@ -2500,6 +2544,14 @@ fn map_drawing(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Image> {
         crop,
         drawing,
     })
+}
+
+/// Every equation of a part, in document order (engine ADR 1090), read by
+/// the shared OMML reader; none when the part does not parse.
+fn part_equations(part: &[u8]) -> std::collections::VecDeque<paged_math::Math> {
+    paged_ooxml::omml::in_part(part)
+        .map(Into::into)
+        .unwrap_or_default()
 }
 
 /// The WordprocessingML drawing namespace (`wp:`).

@@ -5,9 +5,15 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Equations (engine ADR 1090): the neutral math tree an OMML or MathML reader produces, and its layout (fractions, scripts, radicals, n-ary operators, delimiters, matrices, accents) onto positioned glyph runs, rules and strokes through a font-metrics seam. Leaf crate: depends on nothing; the text stack supplies the metrics."
+description = "Equations (engine ADR 1090): the neutral math tree an OMML or MathML reader produces, and its layout (fractions, scripts, radicals, n-ary operators, delimiters, matrices, accents) onto positioned glyph runs, rules and strokes through a font-metrics seam. Leaf crate: depends on nothing (serde behind a feature); the text stack supplies the metrics."
 
 [lints]
 workspace = true
 
+[features]
+# The tree's serde derives: the document model stores an equation
+# (engine ADR 1090), and the Word importer's semantic view carries one.
+serde = ["dep:serde"]
+
 [dependencies]
+serde = { workspace = true, optional = true }

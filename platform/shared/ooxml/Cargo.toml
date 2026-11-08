@@ -28,7 +28,7 @@ deflate-flate2 = ["zip/deflate-flate2", "dep:flate2"]
 testing = []
 # serde derives on the DrawingML paint IR (paged.slide serialises its deck
 # IR, which carries it).
-serde = ["dep:serde"]
+serde = ["dep:serde", "paged-math/serde"]
 
 [dependencies]
 # The colour arithmetic (engine ADR 1056): one owner, re-exported as `colour`.

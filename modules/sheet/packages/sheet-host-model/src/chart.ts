@@ -692,6 +692,15 @@ export function gradientMintOps(
     if (prim.fx?.gradient && prim.fill != null)
       gradients.push(prim.fx.gradient);
   }
+  return chartGradientMintOps(gradients, knownSwatchIds);
+}
+
+/** The createGradient ops for `gradients` (see {@link gradientMintOps});
+ *  the page shapes (sheet ADR 530) mint theirs the same way. */
+export function chartGradientMintOps(
+  gradients: readonly NativeGradient[],
+  knownSwatchIds?: KnownSwatchIds,
+): Mutation[] {
   return nativeGradientMintOps(gradients, {
     prefix: CHART_GRADIENT_PREFIX,
     color: chartColor,

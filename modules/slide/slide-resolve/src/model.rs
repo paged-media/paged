@@ -269,6 +269,9 @@ pub struct TextFrame {
     /// 0 / 90 / 270: `vert` text rotation.
     pub rotation: f64,
     pub paragraphs: Vec<Para>,
+    /// WordArt (engine ADR 1091): the preset the text is bent to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warp: Option<pptx_core::TextWarp>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -334,6 +337,9 @@ pub struct TextRun {
     /// `a:fld type` (`slidenum`, `datetime1`, …); `text` holds the value
     /// PowerPoint last computed.
     pub field: Option<String>,
+    /// An equation standing here (engine ADR 1090); `text` is empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub math: Option<paged_math::Math>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

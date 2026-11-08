@@ -667,6 +667,7 @@ export {
   type DataMarkerTone,
   commentPinsContribution,
   pinsOf,
+  selectedCommentAddress,
   setCommentAnchorLookup,
   type CommentAnchorLookup,
   type CommentPin,

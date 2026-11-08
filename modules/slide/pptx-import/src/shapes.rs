@@ -45,7 +45,12 @@ fn shape(el: &El, ctx: &Ctx) -> Option<Shape> {
         // The Choice needs a newer reader (p14 / a14 content); the Fallback is
         // the rendering PowerPoint itself writes for readers without it.
         let (choice, fallback) = alternate(el);
-        let pick = fallback.or(choice)?;
+        // An equation's shape (engine ADR 1090) is read from its choice: the
+        // fallback is a picture of the equation.
+        let pick = match choice {
+            Some(c) if crate::text::holds_equation(c) => Some(c),
+            _ => fallback.or(choice),
+        }?;
         return pick.children.iter().find_map(|c| shape(c, ctx));
     }
     if el.ns != Ns::P {

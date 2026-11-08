@@ -24,6 +24,7 @@
 //! and owns no font; `paged-ooxml` reads OMML into the tree, the engine's text
 //! stack supplies [`layout::MathMetrics`].
 
+pub mod alphabet;
 pub mod layout;
 pub mod model;
 

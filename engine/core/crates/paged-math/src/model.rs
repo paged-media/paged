@@ -28,6 +28,7 @@ pub type Row = Vec<Node>;
 
 /// One equation: an inline `m:oMath` or one line of a display `m:oMathPara`.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Math {
     /// Display style (own line, large operators) versus inline (text style).
     pub display: bool,
@@ -38,6 +39,7 @@ pub struct Math {
 /// [`Variant::Italic`] (Office Math's default); digits and operators are
 /// upright whatever the variant, which the font stack applies per character.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Variant {
     #[default]
     Italic,
@@ -53,6 +55,7 @@ pub enum Variant {
 
 /// A run of characters (`m:r`).
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Run {
     pub text: String,
     pub variant: Variant,
@@ -60,6 +63,7 @@ pub struct Run {
 
 /// How a fraction is drawn (`m:fPr/m:type`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FracKind {
     /// A stacked fraction with a bar.
     #[default]
@@ -74,6 +78,7 @@ pub enum FracKind {
 
 /// Where an n-ary operator or a limit puts its bounds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Limits {
     /// Above and below the operator.
     UnderOver,
@@ -83,6 +88,7 @@ pub enum Limits {
 
 /// A node of the tree.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Node {
     Run(Run),
     /// `m:f`.

@@ -124,3 +124,82 @@ and `paged-kernels` takes `naga` as a dev-dependency (the leaf guard reads norma
 family left in `image-kernels` uses `kernel_family!`, so its `#[macro_use] extern crate` is gone;
 the re-export `image_kernels::kernel_family` stays. The single-owner baseline for the WGSL
 sRGB literals follows `adjust_ext`, `develop` and `select` to their new paths.
+
+## Amendment 2026-11-08 — Blur
+
+The engine and paged.image carried eight CPU blurs. They differ in four ways: the element type
+(`u8` or f32), what a pass reads beyond the buffer (the nearest pixel, or transparent black),
+where the rounding falls (after each pass, once at the end, rounding or truncating a box mean),
+and how the kernel is normalised. None of them un- or re-premultiplies: a blur is linear, and
+every caller hands it premultiplied RGBA or a single-channel coverage. So the shared module
+takes an explicit edge and rounding, and no premultiply switch: a straight-alpha caller does not
+exist and would have to convert around the call.
+
+`paged_kernels::blur` holds the `u8` blurs: `gaussian_kernel`, `gaussian_separable::<C>`
+(rounded after each pass), `gaussian_separable_f32_mid::<C>` (the row pass kept in f32, rounded
+once), `box_pass::<C>` (an integer running sum), `Edge` (`Clamp`, `Transparent`) and `Round`
+(`Nearest`, `Truncate`). What moved onto it, each bit-exact:
+
+| Was                                              | Now                                                     |
+| ------------------------------------------------ | ------------------------------------------------------- |
+| `paged-gpu` `gaussian_blur_premul` (effects)     | `gaussian_separable::<4>`, `Edge::Clamp`                |
+| `paged-gpu` `gaussian_blur_mask` (effect masks)  | `gaussian_separable::<1>`, `Edge::Clamp`                |
+| `paged-gpu` `gaussian_blur_premul_xy` (SVG)      | `gaussian_separable::<4>`, `Edge::Transparent`          |
+| `paged-gpu` `box_pass` (SVG, σ ≥ 4)              | `box_pass::<4>`, `Edge::Transparent`, `Round::Nearest`  |
+| `paged-compose` `box_blur_h` / `box_blur_v`      | `box_pass::<1>`, `Edge::Clamp`, `Round::Truncate`       |
+| `image-gpu` `SelectionCoverage::feather`         | `gaussian_separable_f32_mid::<1>`, `Edge::Transparent`  |
+
+The box sizes stay with their callers, since they are each consumer's own approximation: five
+Kovesi boxes per axis for the SVG filter (`paged-gpu/src/blur.rs`), three boxes of one radius
+for InDesign's feather and shadow masks (`MaskRaster::blur`, which the PDF writer's alpha stamps
+share). The proof is `paged-kernels/src/blur_oracle_tests.rs`: the six replaced bodies, kept
+verbatim, against the new functions on fixed pseudo-random buffers of odd sizes (narrower than
+the kernel included), several σ and reaches, byte for byte. No golden was re-recorded.
+
+What stays, and why:
+
+- **`cpu::gaussian_weights` / `cpu::gaussian_axis`** are already here: the f32 twin of the
+  `conv.gaussian_h` / `_v` WGSL, radius capped at 24, exponent times `1 / 2σ²`. The renderer's
+  image filter stack and image-js's masked region filter use them. Their weights differ from
+  `gaussian_kernel`'s in the last bit, so the two kernels are not merged.
+- **image-js `refine.rs` `gaussian`** (Refine Edge's alpha): f32, clamped, the weights divided
+  out after the sum instead of normalised first. Moving it onto either kernel changes its output
+  in the last bits; it has no golden of its own to state such a change against.
+- **image-js `psd_vector_mask.rs` large-σ feather**: three box passes over an f32 running sum,
+  zero beyond the canvas, box widths solved in f64. The `u8` integer box differs; the small-σ
+  branch already goes through the selection feather above.
+- **image-kernels `style::blur`** is the CPU reference twin of the layer-style `style.blur_*`
+  WGSL (a per-tap weight from the params, divided by the weight sum, an `outside` value). It stays
+  with its family, by this record's rule.
+- **The GPU blurs**: Vello's layer blur in `paged-gpu/src/vello_rs.rs` (a sample grid of offset
+  layers), and the WGSL of `conv.gaussian_*` and `style.blur_*`. The GPU cannot call Rust; the
+  WGSL definitions are already single (`families::conv` here, `style` in image-kernels).
+
+## Amendment 2026-11-08 — Coverage
+
+paged.image filled polygons into 8-bit coverage three ways, and the engine two more:
+
+| Rasterizer                                         | Sampling                                    | Result here                     |
+| -------------------------------------------------- | ------------------------------------------- | ------------------------------- |
+| `image-gpu` `SelectionCoverage::rasterize_polygon` | 4 sub-scanlines, analytic x, even–odd       | `paged_kernels::coverage`       |
+| `image-js` `region_filter::rasterize_polygons`     | the same, several polygons, either rule     | `paged_kernels::coverage`       |
+| `image-js` `masking::rasterize_nonzero`            | 4 × 4 point samples, non-zero               | deleted: no caller but its test |
+| `image-js` `psd_vector_mask::rasterize`            | 17 × 15 samples, f64, component booleans    | stays                           |
+| `image-js` raster type (`ab_glyph_rasterizer`)     | signed-area accumulation                    | stays                           |
+| `paged-compose` `MaskRaster::interior`             | one sample per pixel, binary                | stays                           |
+| `paged-gpu` (vello_cpu)                            | sparse strips                               | stays                           |
+
+`paged_kernels::coverage::polygons(width, height, polygons, rule)` is the region filter's body,
+moved unchanged; the lasso is its one-polygon, even–odd case. That the two were already equal byte
+for byte was image-conformance's `cpu_twins` check; the move's own proof is the old lasso body,
+kept verbatim in the module's tests, against the new function on fixed polygons (a bow tie, a
+seven-point star, polygons reaching past the canvas, a degenerate two-point one).
+
+What stays, and why: `psd_vector_mask` draws a vector mask the way Photoshop does (image ADR 476:
+the sample grid and offsets were fitted to Photoshop's own renders, and the components fold by
+their boolean operations per sub-scanline), so the analytic scan would move every vector-mask
+golden. Raster type rasterizes glyph outlines with `ab_glyph_rasterizer`, an exact-area
+accumulator whose output (and the text goldens built on it) no scanline sampler reproduces; it is
+a crate dependency, not a copy, and moves only with a golden-by-golden slice onto the engine's
+glyph path. The compose masks are binary on purpose (the InDesign feather and shadow masks blur
+them afterwards, and the PDF writer's alpha stamps share them), and page paths are vello_cpu's.

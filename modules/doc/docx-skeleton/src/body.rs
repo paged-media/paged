@@ -43,7 +43,9 @@ use docx_lower::ir::{
     LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, LoweredTable, PropValue,
     StyleProp,
 };
+use paged_model::equation::Equation;
 use paged_model::script::{CharacterDirection, FontHint};
+use paged_model::text_warp::TextWarp;
 use paged_model::{
     AnchoredFrame, AnchoredFrameKind, AnchoredLayout, AnchoredObjectSetting, Bounds, CellWidth,
     CharacterRun, Justification, Paragraph, PathAnchor, Table, TableCell, TableColumn, TableRow,
@@ -739,6 +741,7 @@ fn build_parts(
                 anchored_frame_offsets: Vec::new(),
                 footnotes: Vec::new(),
                 endnote_references: Vec::new(),
+                equations: Vec::new(),
                 ..whole.clone()
             }
         } else if keeps {
@@ -803,6 +806,14 @@ fn build_parts(
             if *off >= from && (*off < to || (last && *off == to)) {
                 part.anchored_frames.push(f.clone());
                 part.anchored_frame_offsets.push(off - from);
+            }
+        }
+        for e in &whole.equations {
+            if e.offset >= from && (e.offset < to || (last && e.offset == to)) {
+                part.equations.push(Equation {
+                    offset: e.offset - from,
+                    ..e.clone()
+                });
             }
         }
         for f in &whole.footnotes {
@@ -1057,6 +1068,19 @@ fn build_whole(
         .iter()
         .map(|r| r.text.chars().count() as u32)
         .sum();
+    // Engine ADR 1090 — the paragraph's equations, characters of their
+    // line. A paragraph that is only display equations is one Word centres
+    // (`m:oMathParaPr/m:jc` defaults to centring the group).
+    for eq in &p.equations {
+        para.equations.push(Equation {
+            offset: eq.at.min(chars),
+            math: eq.math.clone(),
+            point_size: None,
+        });
+    }
+    if chars == 0 && !para.equations.is_empty() && para.equations.iter().all(|e| e.math.display) {
+        para.justification = Some(Justification::CenterAlign);
+    }
     for img in &p.images {
         para.anchored_frame_offsets
             .resize(para.anchored_frames.len(), 0);
@@ -1108,6 +1132,11 @@ fn build_whole(
             parent_story: Some(story),
             setting: tb.anchor.as_ref().map(anchored_setting),
             layout,
+            // Engine ADR 1091 — WordArt bends the box's text.
+            text_warp: tb.warp.as_ref().map(|w| TextWarp {
+                preset: w.preset.clone(),
+                adjusts: w.adjusts.clone(),
+            }),
             ..AnchoredFrame::default()
         };
         // The box's look (fill, outline, opacity, effects).

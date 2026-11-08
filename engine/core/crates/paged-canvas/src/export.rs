@@ -369,6 +369,14 @@ pub(crate) fn pdf_comments(
         let who = |r: &crate::channel::CommentSummary| {
             r.author.clone().unwrap_or_else(|| "Unknown".to_string())
         };
+        // The annotation a comment read from a PDF kept, written back while
+        // the comment still says what it says.
+        let kept = |r: &crate::channel::CommentSummary| {
+            r.source
+                .as_ref()
+                .filter(|s| s.format == paged_export_pdf::KEPT_ANNOT_FORMAT)
+                .map(|s| s.data.clone())
+        };
         out.push(paged_export_pdf::PdfComment {
             id: root.id.clone(),
             page_index,
@@ -378,6 +386,7 @@ pub(crate) fn pdf_comments(
             text: root.text.clone(),
             resolved: root.resolved,
             review_state: None,
+            kept: kept(root),
             replies: rows
                 .iter()
                 .filter(|r| r.parent_id.as_deref() == Some(root.id.as_str()))
@@ -386,6 +395,7 @@ pub(crate) fn pdf_comments(
                     author: who(r),
                     date: when(r),
                     text: r.text.clone(),
+                    kept: kept(r),
                 })
                 .collect(),
         });

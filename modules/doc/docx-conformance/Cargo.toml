@@ -27,3 +27,5 @@ docx-js.workspace = true
 docx-export.workspace = true
 docx-skeleton.workspace = true
 serde_json.workspace = true
+# The math tree the equation tests look into (engine ADR 1090).
+paged-math.workspace = true

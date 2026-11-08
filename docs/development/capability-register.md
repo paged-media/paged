@@ -39,7 +39,8 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
   region and cell anchors; people; tasks, reactions, review state; source blobs; derived
   orphaning; the host Comments panel and canvas pins; slide comments on engine threads; PDF
   comment annotations out (`paged export --comments`) and in (`paged comments`, `paged-pdf-annots`; the PDF
-  bundle imports them into the opened document, 2026-11-02). Oracles: PowerPoint opens the exported slide comments and
+  bundle imports them into the opened document, 2026-11-02), and an unedited imported annotation written back from
+  its kept dictionary on the thread's page and point (engine ADR 1055 amendment, 2026-11-08). Oracles: PowerPoint opens the exported slide comments and
   re-saves them with every comment, reply and the resolved state intact; Word's review round trip is recorded in
   `modules/doc/docx-conformance/fixtures/review.word.json`. Excel threaded comments are read and written in
   `sheet-xlsx` (sheet ADR 528) and projected into the engine threads as cell anchors; Excel opens and keeps what
@@ -88,7 +89,19 @@ DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-ras
 for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere: engine ADR 1044 states why (placing a whole PSD draws its merged
 composite, which already holds the styles; the consumer is a "PSD layer as a page item" flow that does not exist yet).
 `paged-composition-render` had no consumer and was deleted.
-Path coverage rasterizers ×3 in image-js.
+CPU blurs (engine ADR 1013, amendment "Blur"): `paged_kernels::blur` owns the `u8` Gaussians and the box pass with an
+explicit `Edge` and `Round`; the effects lane's RGBA and mask Gaussians, the SVG filter's Gaussian and box pass, the
+compose masks' box passes and image-gpu's selection feather moved onto it, bit-exact against the old bodies. Allowed,
+with reasons in the record: the f32 image-pipeline twin `cpu::gaussian_weights` (already here; other weights),
+image-js Refine Edge's f32 `gaussian`, `psd_vector_mask`'s f32 box feather, the `style::blur` reference twin, and the GPU
+blurs (Vello's layer blur, the `conv` and `style` WGSL).
+Polygon coverage (engine ADR 1013, amendment "Coverage"): `paged_kernels::coverage::polygons` owns the analytic
+four-sub-scanline scan; the lasso (`image-gpu` `SelectionCoverage::rasterize_polygon`) and the region filter's
+`rasterize_polygons` call it (one body, bit-exact against the old one), and `masking.rs`' point-sampled
+`rasterize_nonzero` (dead outside its own test) is deleted. Allowed, with reasons in the record: `psd_vector_mask`'s
+17 × 15-sample scan with the component booleans (fitted to Photoshop's vector masks), the compose masks' binary
+one-sample fill (the InDesign effects' masks and PDF stamps), raster type's `ab_glyph_rasterizer` (signed-area
+accumulation; its goldens are its own), and vello_cpu for page paths.
 
 ### Geometry and vector
 
@@ -147,14 +160,20 @@ Themes in IDML (engine ADR 1057, built): plain swatches for InDesign, the theme 
 Writable XML tree: the one writable tree (`XNode`) now lives in `paged_ooxml::tree` (W5; `sheet-xlsx` re-exports it). The other three are not copies of it: `docx-odt`'s `El` is a read-only ODF tree with mixed text, `pptx-export`'s `El` and `docx-export/splice.rs` are byte locators that tolerate malformed text (`paged_ooxml::splice` reports it), so they stay. Minimal `.xlsx` writer: DONE (W5), one `sheet_xlsx::minimal` (package, A1 addressing, inline-string cell) used by `slide-sheet`, `sheet-js` csv and ods. ODF layer
 shared between `docx-odt` and `ods.rs`. docProps: DONE (W5, `paged_ooxml::docprops`, PM-0018): read once, kept as document properties (`DocxDocument`, `Presentation`/`Deck`, `XlsxDocument::properties`) and carried into the engine document as the label `x-paged:core.docprops` for doc and slide; sheet has no engine document, a host reads `XlsxDocument::properties`. The parts themselves are untouched on save.
 
-Equations (engine ADR 1090, slice 1 built, W10): `paged-math` is the neutral math tree and its TeX-rule layout
+Equations (engine ADR 1090, slices 1 and 2 built): `paged-math` is the neutral math tree and its TeX-rule layout
 (fractions, scripts, radicals, n-ary operators, delimiters, matrices, accents) onto glyph runs, rules and strokes
 through a `MathMetrics` seam; `paged_ooxml::omml` is the one OMML reader for doc and slide (`m:oMath`,
-`m:oMathPara`, transitional and strict). Open: the model type and wire, the renderer's metrics and paint, doc and
-slide import, the Word-oracle comparison. Text envelope (engine ADR 1091, slice 1 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
-adjusts) for doc, slide and sheet; the guides (`paged-warp`), the frame's model and the render pass are open.
+`m:oMathPara`, transitional and strict; `in_part` for an importer's walk). The model holds an equation as an
+inline object of its paragraph (`Paragraph.equations`); the renderer's one metrics adapter and paint are
+`paged-renderer` `pipeline/equations.rs` (math face, OpenType `MATH` constants, the math alphabet
+`paged_math::alphabet`); doc imports through the native builder, slide through `pptx-import` (the choice of an
+equation's alternate content) and `slide-native`. Open: equations in table cells, a wire door, the Word-oracle
+comparison. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
+adjusts) for doc, slide and sheet; `paged_warp::textshape` is the one set of preset guides; the frame's `text_warp` is bent by the
+renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. Open: a measured match, write-back, handles.
 ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
-provider); a matting job in `apps/ml-host` and Tier-A matting models are open.
+provider); `apps/ml-host` runs a user-installed matting runner (`matting` job, Amendment 2), which `mlHostProvider` serves as
+`ml.matting@1` while the host's health lists it. Tier-A matting models are open.
 Oracle scripts live in `tooling/oracle/` (one place for the InDesign,
 Illustrator, Photoshop, Word and PowerPoint runners; windowless only).
 
@@ -179,7 +198,7 @@ data each have their own lowering. Sheet and data each have their own lowering.
 Doc has no charts (reuse `dml-chart` and the sheet engine). Not started, blocked on the doc wasm's size: after
 embedded fonts and shapes (doc ADRs 626, 627) it is 8,379,940 B (CI) of the manifest's 8,388,608 B, so a chart reader and
 drawing, or the SmartArt drawing part (`dsp`) reader, need a second wasm artifact (`wasm[]` takes several) or a raised ceiling. Slide's chart data editing carries a
-second compiled sheet engine. `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
+second compiled sheet engine (blocked on a host door: slide ADR 724). `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` are folded (W9, engine ADR 1059): `paged-action`'s `js::sandbox_context` is the one Boa sandbox (paged-script uses it too), the script surface and the batch runner are modules of `paged-data-session`, and `paged data batch` replaces the `paged-data-batch` binary. PDF read: the two hayro devices (placed PDF, pdf-import) stay two (different targets) and share `paged-pdf-page` for page box geometry and blend modes (engine ADR 1058, W9); blank IDML / OCF zip writers ×5.
 
 ### Host tools and panels (TS)
@@ -417,8 +436,18 @@ Status (draw items, one line each; updated as they land):
   pictures. A crop changed in the editor is written back as the picture's `a:srcRect` (inverse of the
   placement; unchanged crops stay byte-identical; a picture of unknown size, a metafile, is
   reported), in the body and in table cells; pictures in nested tables and in headers are not.
-- **sheet:** shapes, native picture frames (so engine filters apply), item hyperlinks.
-- **slide:** autofit (stored `fontScale` is applied as fixed values). Done and checked against PowerPoint:
+- **sheet:** done (W7, sheet ADR 529 to 531): pictures keep their crop (`a:srcRect` as the frame's
+  image placement) and picture corrections (`a:lum`, `a:duotone`, `a:grayscl`, `a:biLevel`, `a:hsl`,
+  `a:blur` as the engine's filter stack, engine ADR 1037); `xdr:sp` / `xdr:cxnSp` shapes are read, their
+  preset and custom outlines evaluated by `dml-geom` and their paint mapped by `dml-native`, and drawn
+  as native paths over the placed table; a picture's or shape's `a:hlinkClick` is the engine's item
+  hyperlink (`insertItemHyperlink`; cell links stay sheet's). Open, reported as losses: the text of a
+  shape or text box, arrowheads, shapes in groups, the in-frame grid (draws pictures raw and no
+  shapes), a rotated `xdr:pic`.
+- **slide:** autofit (stored `fontScale` / `lnSpcReduction` are applied as fixed values, which is what
+  PowerPoint draws on open; the engine has no shrink-to-fit, only frame growth: slide ADR 724). Chart
+  data editing still carries its second compiled sheet engine (`slide-sheet`); sharing sheet's needs a
+  host door that does not exist (PM-0002, slide ADR 724). Done and checked against PowerPoint:
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
   font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
   right: PowerPoint does not hyphenate.

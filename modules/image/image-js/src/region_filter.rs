@@ -186,7 +186,8 @@ impl RegionMask {
 
 /// Rasterise closed polygons filled TOGETHER as one path under `rule`
 /// (`NonZero` or `EvenOdd`; `Union` is treated as `EvenOdd` per path),
-/// anti-aliased as the lasso is (`SelectionCoverage::rasterize_polygon`):
+/// anti-aliased as the lasso is (`SelectionCoverage::rasterize_polygon`), by
+/// the same scan (`paged_kernels::coverage::polygons`, engine ADR 1013):
 /// four sub-scanlines per pixel row, each crossed with every edge, the
 /// inside spans accumulating analytic x-coverage at ¼ weight.
 pub fn rasterize_polygons(
@@ -195,59 +196,11 @@ pub fn rasterize_polygons(
     polygons: &[&[(f32, f32)]],
     rule: FillRule,
 ) -> SelectionCoverage {
-    let mut acc = vec![0.0f32; (width as usize) * (height as usize)];
-    // (x, winding direction) per crossing of one sub-scanline.
-    let mut xs: Vec<(f32, i32)> = Vec::with_capacity(16);
-    for y in 0..height {
-        for sub in 0..4u32 {
-            let sy = y as f32 + (sub as f32 * 2.0 + 1.0) / 8.0;
-            xs.clear();
-            for poly in polygons.iter().filter(|p| p.len() >= 3) {
-                let n = poly.len();
-                for i in 0..n {
-                    let (x0, y0) = poly[i];
-                    let (x1, y1) = poly[(i + 1) % n];
-                    // Half-open in y, as the lasso's rasteriser: a vertex
-                    // on the scanline counts once.
-                    let dir = if y0 <= sy && sy < y1 {
-                        1
-                    } else if y1 <= sy && sy < y0 {
-                        -1
-                    } else {
-                        continue;
-                    };
-                    let t = (sy - y0) / (y1 - y0);
-                    xs.push((x0 + t * (x1 - x0), dir));
-                }
-            }
-            xs.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("finite intersections"));
-            let mut winding = 0i32;
-            for k in 0..xs.len() {
-                winding += xs[k].1;
-                let inside = match rule {
-                    FillRule::NonZero => winding != 0,
-                    FillRule::EvenOdd | FillRule::Union => (k + 1) % 2 == 1,
-                };
-                if !inside || k + 1 == xs.len() {
-                    continue;
-                }
-                let (xa, xb) = (xs[k].0.max(0.0), xs[k + 1].0.min(width as f32));
-                if xb <= xa {
-                    continue;
-                }
-                let first = xa.floor() as u32;
-                let last = (xb.ceil() as u32).min(width);
-                for px in first..last {
-                    let cover = (xb.min(px as f32 + 1.0) - xa.max(px as f32)).max(0.0);
-                    acc[(y * width + px) as usize] += cover * 0.25;
-                }
-            }
-        }
-    }
-    let data = acc
-        .iter()
-        .map(|a| (a.clamp(0.0, 1.0) * 255.0).round() as u8)
-        .collect();
+    let rule = match rule {
+        FillRule::NonZero => paged_kernels::coverage::FillRule::NonZero,
+        FillRule::EvenOdd | FillRule::Union => paged_kernels::coverage::FillRule::EvenOdd,
+    };
+    let data = paged_kernels::coverage::polygons(width, height, polygons, rule);
     SelectionCoverage::from_data(width, height, data).expect("width · height bytes")
 }
 

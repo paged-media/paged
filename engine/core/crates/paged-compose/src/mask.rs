@@ -30,6 +30,7 @@
 //! build that has no CPU rasterizer.
 
 use crate::{DirectionalFeather, Feather, FeatherCornerType, PathData, Transform};
+use paged_kernels::blur::{self, Edge, Round};
 
 /// The pixel grid one effect rasterises on: a page-space rectangle
 /// plus its resolution. Every mask for one effect shares a grid, which
@@ -152,19 +153,19 @@ impl MaskRaster {
         let radius = (((4.0 * sigma_px * sigma_px + 1.0).sqrt() - 1.0) / 2.0)
             .round()
             .max(1.0) as i32;
+        let (w, h, r) = (self.grid.width_px, self.grid.height_px, radius as usize);
         for _ in 0..3 {
-            box_blur_h(
-                &mut self.data,
-                self.grid.width_px,
-                self.grid.height_px,
-                radius,
-            );
-            box_blur_v(
-                &mut self.data,
-                self.grid.width_px,
-                self.grid.height_px,
-                radius,
-            );
+            for horizontal in [true, false] {
+                blur::box_pass::<1>(
+                    &mut self.data,
+                    w,
+                    h,
+                    horizontal,
+                    (r, r),
+                    Edge::Clamp,
+                    Round::Truncate,
+                );
+            }
         }
     }
 
@@ -366,51 +367,6 @@ fn flatten_path_px(
         polys.push(current);
     }
     polys
-}
-
-fn box_blur_h(buf: &mut [u8], w: u32, h: u32, r: i32) {
-    let w = w as i32;
-    let h = h as i32;
-    let norm = (2 * r + 1) as u32;
-    let mut row = vec![0u8; w as usize];
-    for y in 0..h {
-        let base = (y * w) as usize;
-        let mut acc: u32 = 0;
-        for i in -r..=r {
-            acc += buf[base + i.clamp(0, w - 1) as usize] as u32;
-        }
-        for x in 0..w {
-            row[x as usize] = (acc / norm) as u8;
-            let add = (x + r + 1).clamp(0, w - 1);
-            let sub = (x - r).clamp(0, w - 1);
-            acc += buf[base + add as usize] as u32;
-            acc -= buf[base + sub as usize] as u32;
-        }
-        buf[base..base + w as usize].copy_from_slice(&row);
-    }
-}
-
-fn box_blur_v(buf: &mut [u8], w: u32, h: u32, r: i32) {
-    let w = w as i32;
-    let h = h as i32;
-    let norm = (2 * r + 1) as u32;
-    let mut col = vec![0u8; h as usize];
-    for x in 0..w {
-        let mut acc: u32 = 0;
-        for i in -r..=r {
-            acc += buf[(i.clamp(0, h - 1) * w + x) as usize] as u32;
-        }
-        for y in 0..h {
-            col[y as usize] = (acc / norm) as u8;
-            let add = (y + r + 1).clamp(0, h - 1);
-            let sub = (y - r).clamp(0, h - 1);
-            acc += buf[(add * w + x) as usize] as u32;
-            acc -= buf[(sub * w + x) as usize] as u32;
-        }
-        for y in 0..h {
-            buf[(y * w + x) as usize] = col[y as usize];
-        }
-    }
 }
 
 pub fn feather_mask(

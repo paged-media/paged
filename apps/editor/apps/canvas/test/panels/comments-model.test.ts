@@ -35,6 +35,7 @@ import {
   initialsOf,
   itemCommentMutation,
   pageCommentMutation,
+  cellCommentMutation,
   newTargetOf,
   replyMutation,
   resolveMutation,
@@ -189,6 +190,32 @@ describe("Comments panel model", () => {
     });
     expect(newTargetOf(null, [{ id: "a" }, { id: "b" }])).toBeNull();
     expect(newTargetOf(null, [])).toBeNull();
+    // A sheet frame with an active cell: the thread goes on the cell.
+    const cellOf = (item: string) => (item === "u3" ? "Sheet1!B3" : null);
+    expect(newTargetOf(null, [{ id: "u3" }], null, cellOf)).toEqual({
+      kind: "cell",
+      item: "u3",
+      address: "Sheet1!B3",
+    });
+    expect(newTargetOf(null, [{ id: "u4" }], null, cellOf)).toEqual({
+      kind: "item",
+      item: "u4",
+    });
+    expect(
+      cellCommentMutation(
+        "u3",
+        "Sheet1!B3",
+        "Sum?",
+        { name: "Ann Author" },
+        now,
+      ),
+    ).toEqual({
+      op: "insertCommentThread",
+      args: {
+        anchor: { kind: "cell", item: "u3", address: "Sheet1!B3" },
+        comment: expect.objectContaining({ text: "Sum?" }),
+      },
+    });
   });
 
   test("an InDesign note is edited and removed with the note operations", () => {

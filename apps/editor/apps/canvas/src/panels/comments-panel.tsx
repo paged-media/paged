@@ -36,12 +36,14 @@ import {
   useContentSelection,
   useDocumentMeta,
   useEditorScope,
+  selectedCommentAddress,
   useSelection,
 } from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 import {
   anchorDetail,
+  cellCommentMutation,
   deleteFor,
   editFor,
   isStoryNote,
@@ -166,19 +168,29 @@ export function CommentsPanel() {
   const add = () => {
     if (!target || draft.trim() === "") return;
     const text = draft.trim();
+    // The cell is read now: a sheet's active cell moves without a render.
+    const at = newTargetOf(
+      contentSelection,
+      elementSelection as readonly { kind?: string; id?: string }[],
+      meta?.activePage ?? null,
+      selectedCommentAddress,
+    );
+    if (!at) return;
     void write(
-      target.kind === "text"
-        ? textCommentMutation(
-            target.storyId,
-            target.start,
-            target.end,
-            text,
-            reviewer,
-            now,
-          )
-        : target.kind === "page"
-          ? pageCommentMutation(target.page, text, reviewer, now)
-          : itemCommentMutation(target.item, text, reviewer, now),
+      at.kind === "cell"
+        ? cellCommentMutation(at.item, at.address, text, reviewer, now)
+        : at.kind === "text"
+          ? textCommentMutation(
+              at.storyId,
+              at.start,
+              at.end,
+              text,
+              reviewer,
+              now,
+            )
+          : at.kind === "page"
+            ? pageCommentMutation(at.page, text, reviewer, now)
+            : itemCommentMutation(at.item, text, reviewer, now),
     );
     setDraft("");
   };

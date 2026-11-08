@@ -77,8 +77,11 @@ pub struct SheetPicture {
     /// A drawing picture's `a:blip` and its shape's `a:effectLst`, as
     /// authored (sheet ADR 527): the page lowers them through the shared
     /// DrawingML mapper. `None` for an image in a cell, or a picture with
-    /// neither an alpha, a picture effect nor an effect list.
+    /// neither an alpha, a crop (`a:srcRect`), a picture effect nor an
+    /// effect list.
     pub dml: Option<Box<PictureDml>>,
+    /// The external URL its `a:hlinkClick` names (sheet ADR 531).
+    pub link: Option<String>,
 }
 
 /// What a drawing picture paints beyond its image (sheet ADR 527).
@@ -103,8 +106,46 @@ fn picture_dml(pic: &paged_ooxml::tree::El) -> Option<Box<PictureDml>> {
         .find(|c| c.local == "spPr")
         .map(|sp| paged_ooxml::drawingml::effects_in(sp, &rels))
         .unwrap_or_default();
-    let plain = blip.alpha.is_none() && blip.effects.is_empty() && effects.is_empty();
+    let plain = blip.alpha.is_none()
+        && blip.src_rect.is_none()
+        && blip.effects.is_empty()
+        && effects.is_empty();
     (!plain).then(|| Box::new(PictureDml { blip, effects }))
+}
+
+/// The placement an `xdr:twoCellAnchor` / `oneCellAnchor` / `absoluteAnchor`
+/// states (shared with the drawing's shapes).
+pub(crate) fn anchor_of(a: &XNode) -> Option<PictureAnchor> {
+    Some(match a.local() {
+        "twoCellAnchor" => match (offset(a.child("from")), offset(a.child("to"))) {
+            (Some(from), Some(to)) => PictureAnchor::TwoCell { from, to },
+            _ => return None,
+        },
+        "oneCellAnchor" => match (offset(a.child("from")), ext(a.child("ext"))) {
+            (Some(from), Some((cx, cy))) => PictureAnchor::OneCell { from, cx, cy },
+            _ => return None,
+        },
+        "absoluteAnchor" => {
+            let pos = a.child("pos");
+            let x = pos.and_then(|p| p.attr("x")?.parse().ok()).unwrap_or(0);
+            let y = pos.and_then(|p| p.attr("y")?.parse().ok()).unwrap_or(0);
+            let (cx, cy) = ext(a.child("ext"))?;
+            PictureAnchor::Absolute { x, y, cx, cy }
+        }
+        _ => return None,
+    })
+}
+
+/// The external URL an item's `a:hlinkClick` (a child of its `cNvPr`) names
+/// through the drawing's relationships (sheet ADR 531). A link inside the
+/// workbook (`#Sheet1!A1`) or an action is not one the page can follow.
+pub(crate) fn item_link(
+    c_nv: Option<&XNode>,
+    rels: &paged_ooxml::rels::Relationships,
+) -> Option<String> {
+    let id = c_nv?.child("hlinkClick")?.attr("id")?;
+    let r = rels.items.iter().find(|r| r.id == id)?;
+    (r.target_mode.as_deref() == Some("External") && !r.target.is_empty()).then(|| r.target.clone())
 }
 
 fn offset(n: Option<&XNode>) -> Option<CellOffset> {
@@ -175,25 +216,8 @@ impl XlsxDocument {
                 let Some(pic) = a.child("pic") else {
                     continue;
                 };
-                let anchor = match a.local() {
-                    "twoCellAnchor" => match (offset(a.child("from")), offset(a.child("to"))) {
-                        (Some(from), Some(to)) => PictureAnchor::TwoCell { from, to },
-                        _ => continue,
-                    },
-                    "oneCellAnchor" => match (offset(a.child("from")), ext(a.child("ext"))) {
-                        (Some(from), Some((cx, cy))) => PictureAnchor::OneCell { from, cx, cy },
-                        _ => continue,
-                    },
-                    "absoluteAnchor" => {
-                        let pos = a.child("pos");
-                        let x = pos.and_then(|p| p.attr("x")?.parse().ok()).unwrap_or(0);
-                        let y = pos.and_then(|p| p.attr("y")?.parse().ok()).unwrap_or(0);
-                        match ext(a.child("ext")) {
-                            Some((cx, cy)) => PictureAnchor::Absolute { x, y, cx, cy },
-                            None => continue,
-                        }
-                    }
-                    _ => continue,
+                let Some(anchor) = anchor_of(a) else {
+                    continue;
                 };
                 let c_nv = pic.child("nvPicPr").and_then(|n| n.child("cNvPr"));
                 let Some(embed) = pic
@@ -224,6 +248,7 @@ impl XlsxDocument {
                     content_type: self.content_type_of_part(&media),
                     media,
                     dml,
+                    link: item_link(c_nv, &drels),
                 });
             }
         }
@@ -295,6 +320,7 @@ impl XlsxDocument {
                     content_type: self.content_type_of_part(&media),
                     media,
                     dml: None,
+                    link: None,
                 })
             })
             .collect()

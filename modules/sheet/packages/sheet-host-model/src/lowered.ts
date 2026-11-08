@@ -41,6 +41,8 @@
  *  `"general"` is Excel's default (numbers right, text left), resolved
  *  in Rust; the lowered text is already the formatted value, so the
  *  translator treats alignment as an opaque tag it forwards. */
+import type { RasterOp } from "@paged-media/plugin-api";
+
 import type { NativeFx } from "./chart";
 
 export type Align = "general" | "left" | "center" | "right";
@@ -314,6 +316,51 @@ export interface LoweredContent {
    *  a `data:` URI. The page places them over the table like data bars (an
    *  image frame each, refreshed with the table). */
   pictures?: LoweredPicture[];
+  /** Sheet ADR 530 — the drawing shapes and connectors anchored in this
+   *  content's cells, their outlines evaluated in the engine (the shared
+   *  DrawingML geometry), drawn over the table like the pictures. */
+  shapes?: LoweredShape[];
+}
+
+/** One anchor of a shape contour with its control points (pt, relative to
+ *  the shape's anchor box). */
+export interface LoweredShapeAnchor {
+  anchor: [number, number];
+  left: [number, number];
+  right: [number, number];
+}
+
+/** One path of a shape: its contours (`subpathStarts` lists where each
+ *  begins when there are several) and what the geometry paints of them. */
+export interface LoweredShapeItem {
+  anchors: LoweredShapeAnchor[];
+  subpathStarts?: number[];
+  closed: boolean;
+  filled: boolean;
+  stroked: boolean;
+}
+
+/** Sheet ADR 530 — one shape placed over a page table (see
+ *  {@link LoweredContent.shapes}). */
+export interface LoweredShape {
+  id: string;
+  name: string;
+  row: number;
+  col: number;
+  /** The anchor box's top-left inside the anchor cell, and its size (pt). */
+  dx: number;
+  dy: number;
+  wPt: number;
+  hPt: number;
+  items: LoweredShapeItem[];
+  /** The URL its click action opens (`a:hlinkClick`; sheet ADR 531): an
+   *  item hyperlink on the shape's first path. */
+  link?: string;
+  /** Fill, outline, opacity and effects as the shared DrawingML mapper
+   *  lowered them. */
+  fx?: NativeFx;
+  /** What the page cannot hold of the shape, one line per kind. */
+  losses?: string[];
 }
 
 /** W2.3 — one picture placed over a page table (see
@@ -333,6 +380,18 @@ export interface LoweredPicture {
   /** A drawing picture's opacity and effects, as the shared DrawingML
    *  mapper lowered them (sheet ADR 527). */
   fx?: NativeFx;
+  /** The picture corrections the engine's filter stack holds (`a:lum`,
+   *  `a:duotone`, `a:grayscl`, `a:biLevel`, `a:hsl`, `a:blur`, …; sheet ADR
+   *  529): set on the frame as `frameImageAdjustments`, so they apply in
+   *  every output and stay editable in the picture panel. */
+  adjustments?: RasterOp[];
+  /** A cropped picture's (`a:srcRect`) placement in its frame: the engine's
+   *  inner image transform `[a, b, c, d, e, f]` in the frame's own box,
+   *  set as `imageContentTransform` (sheet ADR 529). */
+  placement?: [number, number, number, number, number, number];
+  /** The URL its click action opens (`a:hlinkClick`; sheet ADR 531): an
+   *  item hyperlink on the frame, the engine's own link model. */
+  link?: string;
   /** What the page cannot hold of its look, one line per kind. */
   losses?: string[];
 }

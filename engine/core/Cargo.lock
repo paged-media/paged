@@ -1492,6 +1492,7 @@ dependencies = [
  "docx-lower",
  "docx-skeleton",
  "flate2",
+ "paged-math",
  "paged-ooxml",
  "paged-test-resources",
  "serde_json",
@@ -1502,6 +1503,7 @@ dependencies = [
 name = "docx-core"
 version = "0.0.0"
 dependencies = [
+ "paged-math",
  "paged-ooxml",
  "serde",
 ]
@@ -1524,6 +1526,7 @@ name = "docx-import"
 version = "0.0.0"
 dependencies = [
  "docx-core",
+ "paged-math",
  "paged-ooxml",
 ]
 
@@ -1553,6 +1556,7 @@ dependencies = [
  "base64",
  "dml-native",
  "docx-core",
+ "paged-math",
  "paged-ooxml",
  "serde",
 ]
@@ -2752,6 +2756,7 @@ version = "0.0.0"
 dependencies = [
  "half",
  "image-kernels",
+ "paged-kernels",
  "paged-pixel",
  "paged-test-resources",
  "pollster",
@@ -2791,6 +2796,7 @@ dependencies = [
  "js-sys",
  "paged-blend",
  "paged-color",
+ "paged-kernels",
  "paged-pixel",
  "paged-psd",
  "paged-raster",
@@ -4182,6 +4188,7 @@ dependencies = [
  "paged-blend",
  "paged-color",
  "paged-geom",
+ "paged-kernels",
  "paged-model",
  "paged-scene",
  "paged-text",
@@ -4438,6 +4445,7 @@ dependencies = [
  "paged-colour-math",
  "paged-compose",
  "paged-fidelity",
+ "paged-kernels",
  "paged-raster",
  "paged-svg",
  "paged-test-resources",
@@ -4499,6 +4507,9 @@ dependencies = [
 [[package]]
 name = "paged-math"
 version = "0.0.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "paged-mcp"
@@ -4514,6 +4525,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "paged-colour-math",
+ "paged-math",
  "schemars",
  "serde",
  "serde_json",
@@ -4687,6 +4699,7 @@ dependencies = [
  "paged-geom",
  "paged-gpu",
  "paged-kernels",
+ "paged-math",
  "paged-model",
  "paged-mutate",
  "paged-pdf-page",
@@ -4701,6 +4714,7 @@ dependencies = [
  "paged-test-resources",
  "paged-text",
  "paged-vector-fx",
+ "paged-warp",
  "paged-wire",
  "serde",
  "serde_json",
@@ -5286,6 +5300,7 @@ dependencies = [
  "dml-geom",
  "flate2",
  "image-webp",
+ "paged-math",
  "paged-ooxml",
  "serde",
  "serde_json",
@@ -6396,6 +6411,7 @@ version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
  "criterion",
+ "dml-geom",
  "dml-native",
  "paged-fmt",
  "paged-ooxml",
@@ -6444,6 +6460,7 @@ dependencies = [
  "base64",
  "compact_str",
  "dml-chart",
+ "dml-geom",
  "dml-native",
  "flate2",
  "paged-ooxml",
@@ -6641,6 +6658,7 @@ version = "0.0.0"
 dependencies = [
  "dml-geom",
  "paged-geom",
+ "paged-math",
  "paged-ooxml",
  "paged-test-resources",
  "pptx-core",
