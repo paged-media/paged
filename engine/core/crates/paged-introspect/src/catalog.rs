@@ -332,6 +332,8 @@ fn host_functions() -> Vec<HostFn> {
            "Full property snapshot for one element (or storyRange), or for a story (story:<id>: its text, then its story rows); null when the address names nothing."),
         f!("paged.tree", "()", "SceneTreeNode[] JSON", "read",
            "Document hierarchy: spreads → pages → frames."),
+        f!("paged.barcode", "(symbology, data, quietZone?)", "{geometry} | {error} JSON", "read",
+           "Encode data as a barcode (ean13, upca, code128 or qr) to its dark modules as rectangles in a unit box: {geometry: {symbology, rects: [{x, y, w, h}], modulesX, modulesY, text}}, or {error} when the symbology is unknown or the data does not fit it. quietZone widens the default quiet zone by that many modules per side. Pure: it reads nothing from the document, so a host can draw the rects itself."),
         f!("paged.pages", "()", "PageSummary[] JSON", "read",
            "Pages with selfId + 1-based index + sizePt. selfId is the page id for insertFrame/insertTextFrame/insertPage (and the afterPageId of insertPage) — the only way a script can obtain a usable page id."),
         f!("paged.stories", "()", "StorySummary[] JSON", "read",

@@ -361,6 +361,42 @@ fn document_meta() {
 }
 
 #[test]
+fn barcode() {
+    covers!("script:paged.barcode");
+    let mut m = blank();
+    // EAN-13: the check digit is computed, the dark bars come back in a unit box.
+    let ean = json_of(&reads(&mut m, "paged.barcode('ean13', '400638133393')"));
+    let g = &ean["geometry"];
+    has_keys(g, &["symbology", "rects", "modulesX", "modulesY", "text"]);
+    assert_eq!(g["symbology"], "ean13");
+    assert_eq!(g["text"], "4006381333931");
+    assert!(g["rects"].as_array().is_some_and(|r| !r.is_empty()));
+    for r in g["rects"].as_array().unwrap() {
+        for k in ["x", "y", "w", "h"] {
+            let v = r[k].as_f64().unwrap();
+            assert!(
+                (0.0..=1.0).contains(&v),
+                "{k} = {v} is outside the unit box"
+            );
+        }
+    }
+    // A QR code is a square grid; a wider quiet zone grows it by two modules a side.
+    let qr = json_of(&reads(&mut m, "paged.barcode('QR', 'https://paged.media')"));
+    let side = qr["geometry"]["modulesX"].as_u64().unwrap();
+    assert_eq!(qr["geometry"]["modulesY"].as_u64(), Some(side));
+    let wide = json_of(&reads(
+        &mut m,
+        "paged.barcode('qr', 'https://paged.media', 2)",
+    ));
+    assert_eq!(wide["geometry"]["modulesX"].as_u64(), Some(side + 4));
+    // Refusals are an {error}, not a throw, and the document is untouched.
+    let bad = json_of(&reads(&mut m, "paged.barcode('ean13', '12ab')"));
+    assert!(bad["error"].as_str().is_some_and(|e| !e.is_empty()));
+    let unknown = json_of(&reads(&mut m, "paged.barcode('pdf417', 'x')"));
+    assert!(unknown["error"].as_str().unwrap().contains("pdf417"));
+}
+
+#[test]
 fn planar_regions() {
     covers!("script:paged.planarRegions");
     let mut m = blank();

@@ -120,6 +120,13 @@
       "summary": "Document hierarchy: spreads → pages → frames."
     },
     {
+      "name": "paged.barcode",
+      "params": "(symbology, data, quietZone?)",
+      "returns": "{geometry} | {error} JSON",
+      "kind": "read",
+      "summary": "Encode data as a barcode (ean13, upca, code128 or qr) to its dark modules as rectangles in a unit box: {geometry: {symbology, rects: [{x, y, w, h}], modulesX, modulesY, text}}, or {error} when the symbology is unknown or the data does not fit it. quietZone widens the default quiet zone by that many modules per side. Pure: it reads nothing from the document, so a host can draw the rects itself."
+    },
+    {
       "name": "paged.pages",
       "params": "()",
       "returns": "PageSummary[] JSON",

@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 920,
+    "command": 921,
     "keybinding": 167,
-    "menu": 664,
+    "menu": 665,
     "panel": 151,
     "tool": 126
   },
@@ -4051,6 +4051,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.insert.barcode",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.insert.deletePage",
       "kind": "command",
       "owner": "editor"
@@ -7869,6 +7874,11 @@
       "id": "menu:Object/Insert arc…",
       "kind": "menu",
       "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Insert barcode…",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:Object/Insert data binding…",

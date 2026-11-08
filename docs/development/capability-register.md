@@ -375,9 +375,13 @@ Status (draw items, one line each; updated as they land):
   options (`ExportPdfWireOptions`); a shared host service would only move the option defaults, so it was not made.
 - **Illustrator graph data:** stays carried, data ADR 565 (no chart item in the engine, opaque payload, no charts
   in doc).
-- **Barcode insert in doc and slide:** open. The encoder (`paged-data-barcode`) is in the data wasm behind
-  `lower_barcode(binding, box)`; an insert command needs either that engine call without a binding or the encoder
-  in the doc and slide wasm, plus the Insert-menu row and German strings. Not started.
+- **Barcode insert in doc and slide:** built (engine ADR 1092, editor ADR 314). The encoder was already an engine
+  crate; it is now reachable as `paged.barcode(symbology, data, quietZone?)` on the script surface (a pure read,
+  no protocol bump; catalog row and contract canary 79), and the host's `paged.insert.barcode` (dialog: data,
+  symbology) draws it as grouped vector modules in one undo step, with `Object ▸ Insert barcode…` in every kind
+  of document and German strings. The row is the host's, not a doc or slide bundle entry (a bundle entry names a
+  command the bundle registered). No human-readable line under a 1D symbol; paged.data's bound barcode keeps
+  `lower_barcode`. Wasm size impact is gated by core / ci, not measured locally.
 - **CLI data verbs onto `data@1`:** open, and smaller than it looked. `data@1` has `query(sql)`, `bind` and
   `bindings`; it has no `importSource`, `merge`, `planBatch` or `apply`, which are most of `apps/cli/src/data.ts`.
   Only `previewQuery` (-> `query`, a different row shape and no `total`) and `defineProperty` (-> `bind`, property

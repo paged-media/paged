@@ -307,6 +307,8 @@ import {
 import { buildReflectCommands, REFLECT_MENU_ITEMS } from "../reflect-commands";
 import { buildStarCommands, STAR_MENU_ITEMS } from "../star-commands";
 import { StarDialog } from "../panels/star-dialog";
+import { buildBarcodeCommands, BARCODE_MENU_ITEMS } from "../barcode-commands";
+import { BarcodeDialog } from "../panels/barcode-dialog";
 import { openReflectOptions, ReflectDialog } from "../panels/reflect-dialog";
 import {
   buildCornerCommands,
@@ -1639,6 +1641,10 @@ function CanvasAppIntegration() {
     const starCommands = buildStarCommands(insertReport, () =>
       problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE),
     );
+    // `paged.insert.barcode` — Insert barcode…, in every kind of document.
+    const barcodeCommands = buildBarcodeCommands(insertReport, () =>
+      problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE),
+    );
     const alignCommands = buildTransformCommands(
       instance.services.objects.registry,
       (address) =>
@@ -1714,6 +1720,7 @@ function CanvasAppIntegration() {
       ...strokeDashCommands,
       ...insertCommands,
       ...starCommands,
+      ...barcodeCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
       // Editor ADR 309 — Object ▸ Effects ▸ <group> ▸ <effect>.
@@ -1744,6 +1751,7 @@ function CanvasAppIntegration() {
       ...STROKE_DASH_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...STAR_MENU_ITEMS,
+      ...BARCODE_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...buildEffectMenuItems(),
@@ -1973,6 +1981,7 @@ function CanvasAppRoot() {
       <TransformEachDialog />
       <ReflectDialog />
       <StarDialog />
+      <BarcodeDialog />
       <BatchDialog />
       <OpenAsTemplateDialog />
       <FindReplaceDialog />

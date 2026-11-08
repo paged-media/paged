@@ -194,6 +194,7 @@ is not written yet.
 | [1060](1060-one-pdf-page-reader.md) | One PDF page reader (`paged-pdf-page`) for the placed PDF and place-as-vectors: page box geometry and blend modes defined once | Accepted 2026-11-08 |
 | [1090](1090-equations-are-a-math-tree-the-engine-sets.md) | Equations are a math tree the engine sets: `paged-math` (tree and TeX-rule layout over a metrics seam), the shared OMML reader in `paged-ooxml`; slice 1 built | Accepted 2026-11-08 |
 | [1091](1091-a-text-warp-is-an-envelope-over-the-outlines.md) | A text warp is an envelope over the text's outlines: the shared `prstTxWarp` reader (41 presets, families, adjusts) built, guide curves and the model next | Accepted 2026-11-08 |
+| [1092](1092-paged-barcode-the-encoder-without-a-binding.md) | `paged.barcode`: the barcode encoder is reachable from the engine through the script surface, without a binding; the editor draws the symbol | Accepted 2026-11-08 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

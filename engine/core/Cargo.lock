@@ -4216,7 +4216,6 @@ dependencies = [
 name = "paged-data-barcode"
 version = "0.0.0"
 dependencies = [
- "paged-data-core",
  "rqrr",
  "serde",
  "thiserror",
@@ -4780,6 +4779,7 @@ dependencies = [
  "boa_engine",
  "paged-action",
  "paged-canvas",
+ "paged-data-barcode",
  "paged-gen",
  "paged-introspect",
  "paged-model",

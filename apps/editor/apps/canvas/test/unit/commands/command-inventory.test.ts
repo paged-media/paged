@@ -52,6 +52,7 @@ import { buildObjectCommands } from "../../../src/object-commands";
 import { buildStrokeDashCommands } from "../../../src/stroke-dash-commands";
 import { buildAppearanceCommands } from "../../../src/appearance-commands";
 import { buildStarCommands } from "../../../src/star-commands";
+import { buildBarcodeCommands } from "../../../src/barcode-commands";
 import { buildReflectCommands } from "../../../src/reflect-commands";
 import { buildCornerCommands } from "../../../src/corner-commands";
 import { buildTextFormatCommands } from "../../../src/text-format-commands";
@@ -180,6 +181,7 @@ function tableIds(): string[] {
     ...buildStrokeDashCommands(noop as never, noop, noop),
     ...buildInsertCommands(noop),
     ...buildStarCommands(noop, noop),
+    ...buildBarcodeCommands(noop, noop),
     ...buildCoreCommandEntries(),
     ...buildTransformCommands(noop),
     ...GLOBAL_LIGHT_COMMANDS,
@@ -277,6 +279,7 @@ describe("the host command inventory", () => {
       "strokeDashCommands",
       "insertCommands",
       "starCommands",
+      "barcodeCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",
       "buildEffectMenuCommands()",

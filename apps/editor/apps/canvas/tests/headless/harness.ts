@@ -139,6 +139,10 @@ import {
 } from "../../src/appearance-commands";
 import { buildStarCommands, STAR_MENU_ITEMS } from "../../src/star-commands";
 import {
+  buildBarcodeCommands,
+  BARCODE_MENU_ITEMS,
+} from "../../src/barcode-commands";
+import {
   buildReflectCommands,
   REFLECT_MENU_ITEMS,
 } from "../../src/reflect-commands";
@@ -1054,6 +1058,9 @@ export async function createHeadlessEditor(
   const starCommands = buildStarCommands(insertReport, () =>
     problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE),
   );
+  const barcodeCommands = buildBarcodeCommands(insertReport, () =>
+    problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE),
+  );
   const alignCommands = buildTransformCommands(
     objectRegistry,
     (address) => editorObjectsOf(scope).model.elementIdOf?.(address) ?? null,
@@ -1115,6 +1122,7 @@ export async function createHeadlessEditor(
       ...strokeDashCommands,
       ...insertCommands,
       ...starCommands,
+      ...barcodeCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
       ...buildTransformEachDialogCommands((paged) =>
@@ -1137,6 +1145,7 @@ export async function createHeadlessEditor(
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...STAR_MENU_ITEMS,
+      ...BARCODE_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...TRANSFORM_EACH_MENU_ITEMS,

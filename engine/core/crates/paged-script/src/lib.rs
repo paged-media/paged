@@ -46,6 +46,7 @@
 //!   paged.inspect(idStr) -> ElementProperties JSON
 //!   paged.layers() -> LayerSummary[]
 //!   paged.tree() -> SceneTreeNode[]
+//!   paged.barcode(symbology, data, quietZone?) -> {geometry} | {error} JSON
 //!   paged.selection() -> ElementId[] JSON (current element selection)
 //!   paged.contentSelection() -> ContentSelection JSON | null
 //!   paged.undo() / paged.redo()
@@ -825,6 +826,7 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
         .function(guarded(paged_commands), js_string!("commands"), 1)
         .function(guarded(paged_address), js_string!("address"), 1)
         .function(guarded(paged_tree), js_string!("tree"), 0)
+        .function(guarded(paged_barcode), js_string!("barcode"), 3)
         .function(
             guarded(paged_planar_regions),
             js_string!("planarRegions"),
@@ -6579,6 +6581,31 @@ fn paged_planar_regions(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
     let s =
         with_model(|m| serde_json::to_string(&m.planar_regions(&ids, point)).unwrap_or_default());
     Ok(JsValue::from(js_string!(s)))
+}
+
+/// `paged.barcode(symbology, data, quietZone?)` — encode `data` to the unit-box
+/// geometry of a barcode (`paged-data-barcode`): `{"geometry": {symbology, rects,
+/// modulesX, modulesY, text}}`, or `{"error": "<reason>"}` when the symbology is
+/// unknown or the data does not satisfy it. `quietZone` widens the symbology's
+/// default quiet zone by that many light modules per side. Pure: reads nothing
+/// from the document and writes nothing.
+fn paged_barcode(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let symbology = str_arg(args, 0, ctx)?;
+    let data = str_arg(args, 1, ctx)?;
+    let extra = match args.get_or_undefined(2) {
+        v if v.is_undefined() || v.is_null() => 0,
+        v => v.to_number(ctx)?.clamp(0.0, 32.0) as u32,
+    };
+    let answer = match paged_data_barcode::Symbology::from_id(&symbology) {
+        None => serde_json::json!({ "error": format!("unknown barcode symbology `{symbology}`") }),
+        Some(sym) => match paged_data_barcode::encode(sym, &data) {
+            Ok(g) => {
+                serde_json::json!({ "geometry": paged_data_barcode::with_quiet_zone(g, extra) })
+            }
+            Err(e) => serde_json::json!({ "error": e.to_string() }),
+        },
+    };
+    Ok(JsValue::from(js_string!(answer.to_string())))
 }
 
 fn paged_tree(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
