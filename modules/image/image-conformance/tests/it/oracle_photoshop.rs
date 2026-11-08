@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! THE PHOTOSHOP ORACLE, replayed. `scripts/photoshop/run-probe.sh`
+//! THE PHOTOSHOP ORACLE, replayed. `tooling/oracle/photoshop/run-probe.sh`
 //! recorded what Photoshop does to fixed 16-bit stimuli (blend modes,
 //! adjustments, filters); this file runs OUR engine on the same stimuli
 //! and measures the distance, in 8-bit levels and ΔE00.

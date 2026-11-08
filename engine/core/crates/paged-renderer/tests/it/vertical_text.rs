@@ -17,7 +17,7 @@
  */
 
 //! Vertical text (`StoryOrientation="Vertical"`), set as InDesign 20.0.1
-//! sets it (`tools/indesign-export/vertical-text-probe`, Kozuka Mincho
+//! sets it (`tooling/oracle/indesign/vertical-text-probe`, Kozuka Mincho
 //! 20 pt in a 200 × 300 pt frame, read from its PDF; Paged matched every
 //! glyph to 0.02 pt): the horizontal layout of the frame turned on its
 //! side, turned a quarter clockwise. Lines become columns from the right,

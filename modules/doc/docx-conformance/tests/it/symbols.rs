@@ -18,7 +18,7 @@
 
 //! Symbols, optional hyphens, absolute-position tabs and empty table cells
 //! (`symbols_docx()`), against Word's answer (`fixtures/symbols.word.json`,
-//! `scripts/word-symbols-probe.sh`).
+//! `tooling/oracle/office/word/word-symbols-probe.sh`).
 
 #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature
 
@@ -125,7 +125,7 @@ fn edited_save() -> (Vec<u8>, Vec<String>) {
 #[test]
 fn an_edited_save_re_imports_to_the_edited_text__feat__plugin_doc_save_back() {
     let (saved, _) = edited_save();
-    // `scripts/word-symbols-probe.sh` has Word open this very file.
+    // `tooling/oracle/office/word/word-symbols-probe.sh` has Word open this very file.
     if let Ok(path) = std::env::var("SYMBOLS_EDITED_OUT") {
         std::fs::write(path, &saved).expect("write the edited save");
     }

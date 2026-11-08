@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN LAYER STYLES, replayed in CI.
-//! `scripts/photoshop/probes/layer-styles.jsx` had Photoshop 27.10 draw one
+//! `tooling/oracle/photoshop/probes/layer-styles.jsx` had Photoshop 27.10 draw one
 //! small document per style and key parameter (every effect but the
 //! pattern-based ones, plus the blending options that change how a style
 //! composites) and save each as a PSD with REAL merged data.

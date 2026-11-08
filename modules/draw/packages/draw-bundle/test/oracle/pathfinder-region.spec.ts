@@ -21,7 +21,7 @@
 // (ids TOP TO BOTTOM) against set algebra and against ADOBE ILLUSTRATOR
 // 30.1.0 (Effect > Pathfinder on a group, then Expand Appearance), recorded
 // 2026-10-02 by
-//   scripts/illustrator/run-probe.sh scripts/illustrator/probes/pathfinder-region.jsx \
+//   tooling/oracle/illustrator/run-probe.sh tooling/oracle/illustrator/probes/pathfinder-region.jsx \
 //     packages/draw-bundle/test/fixtures/oracle/pathfinder-region.illustrator.json
 //
 // 9 cases: the six verbs on a RED rectangle with a BLUE one in front of it,
@@ -106,7 +106,7 @@ interface RegionCase {
   parameters: RegionParameters;
 }
 
-// --- the cases: a MIRROR of scripts/illustrator/probes/pathfinder-region.jsx
+// --- the cases: a MIRROR of tooling/oracle/illustrator/probes/pathfinder-region.jsx
 
 const RED: Rgb = [255, 0, 0];
 const BLUE: Rgb = [0, 0, 255];
@@ -322,7 +322,7 @@ describe("oracle — pathfinder region verbs", () => {
       expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
       expect(FIXTURE.produced_by.version).toMatch(/^\d+\.\d+/);
       expect(FIXTURE.produced_by.script).toBe(
-        "scripts/illustrator/probes/pathfinder-region.jsx",
+        "tooling/oracle/illustrator/probes/pathfinder-region.jsx",
       );
     });
 

@@ -2835,7 +2835,7 @@ fn a_right_aligned_lines_last_character_carries_no_spacing() {
 
 // ─────────────── Glyph scaling ───────────────
 //
-// InDesign 20.0.1, measured (tools/indesign-export/spelling-and-spacing-
+// InDesign 20.0.1, measured (tooling/oracle/indesign/spelling-and-spacing-
 // probe, frames `localspacing` and `glyphscale80`): `DesiredGlyphScaling`
 // scales every glyph horizontally — advance and outline — in ragged text
 // too, multiplied with a run's own `HorizontalScale`; letter and word

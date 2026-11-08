@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/filters-distort.jsx",
+    "script": "tooling/oracle/photoshop/probes/filters-distort.jsx",
     "script_sha256": "7d3bf193cc00202feb3d714137eeaf91c7d54acf5b565891a435eb4a262074c0",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-25T06:56:45.049Z",
     "host_os": "macOS 26.4"
   },

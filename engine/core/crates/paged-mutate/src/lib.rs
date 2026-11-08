@@ -8684,7 +8684,7 @@ mod tests {
             );
         }
 
-        /// InDesign 20.0.1 (`tools/indesign-export/condition-sets-probe.json`):
+        /// InDesign 20.0.1 (`tooling/oracle/indesign/condition-sets-probe.json`):
         /// applying a set gives each listed condition its recorded
         /// visibility (A shown, B hidden although it is listed) and leaves
         /// an unlisted condition (C) as it was.

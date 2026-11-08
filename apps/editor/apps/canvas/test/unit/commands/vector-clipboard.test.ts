@@ -37,7 +37,7 @@ import {
 import { createEditorClipboardBackend } from "../../../src/plugin-clipboard";
 
 // Illustrator 30.1's Edit ▸ Copy, as recorded by
-// modules/draw/scripts/illustrator/run-clipboard-probe.sh.
+// modules/draw/tooling/oracle/illustrator/run-clipboard-probe.sh.
 const ILLUSTRATOR_SVG = await Bun.file(
   new URL(
     "../../fixtures/clipboard/clipboard-copy.illustrator.svg",

@@ -80,7 +80,7 @@ fn profile_from_bytes(bytes: Vec<u8>) -> Profile {
 /// Photoshop's RGB view of a CMYK document — Edit > Convert to Profile,
 /// with the Color Settings' defaults — is Adobe ACE, RELATIVE
 /// COLORIMETRIC, with BLACK-POINT COMPENSATION (read from the app's
-/// Color Settings by `scripts/photoshop/probes/cmyk-stacks.jsx`,
+/// Color Settings by `tooling/oracle/photoshop/probes/cmyk-stacks.jsx`,
 /// "Europe General Purpose 3"). The lane does exactly that: relative
 /// colorimetric with BPC through the engine's CMS (moxcms, with
 /// `paged_color::cms`'s implementation of Adobe's BPC algorithm). Until

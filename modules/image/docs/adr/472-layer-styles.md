@@ -51,7 +51,7 @@ Size is two box passes as wide as the size, offsets are whole pixels, a softer g
 over the Range, a smooth bevel's height is the tent-blurred alpha (rounded corners), a chisel's
 is the distance (mitred corners), Depth 100 % is a 0.45 slope — were fitted to Photoshop
 27.10's own renders, one probe per style and key parameter
-(`scripts/photoshop/probes/layer-styles.jsx`, 67 recorded cases).
+(`tooling/oracle/photoshop/probes/layer-styles.jsx`, 67 recorded cases).
 
 ## Consequences
 

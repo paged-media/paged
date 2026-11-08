@@ -1123,7 +1123,7 @@ keys = [
 ]
 
 [[unseen]]
-reason = "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tools/indesign-export/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
+reason = "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tooling/oracle/indesign/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
 keys = [
   "ParagraphStyleRange@DesiredGlyphScaling",
   "ParagraphStyleRange@DesiredWordSpacing",
@@ -1151,7 +1151,7 @@ keys = [
 ]
 
 [[unseen]]
-reason = "Proportional metrics (palt), read in InDesign 20.0.1's spelling (core tools/indesign-export/kana-spacing-probe: Metrics kerning sets them anyway; with kerning off this sets them alone). Census documents set it only on paragraph styles."
+reason = "Proportional metrics (palt), read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/kana-spacing-probe: Metrics kerning sets them anyway; with kerning off this sets them alone). Census documents set it only on paragraph styles."
 keys = [
   "CharacterStyle@OTFProportionalMetrics",
   "CharacterStyleRange@OTFProportionalMetrics",
@@ -1236,7 +1236,7 @@ reason = "The style reader's pending-property arm admits every style kind ([[pro
 keys = ["CellStyle@AppliedFont", "ObjectStyle@AppliedFont", "TableStyle@AppliedFont"]
 
 [[unseen]]
-reason = "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+reason = "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
 keys = [
   "CharacterStyle@KentenAlignment",
   "CharacterStyle@KentenCustomCharacter",
@@ -1638,7 +1638,7 @@ keys = [
 ]
 
 [[unseen]]
-reason = "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
+reason = "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
 keys = [
   "CrossReference@CrossReferenceType",
   "CrossReference@CustomTypeString",
@@ -1648,7 +1648,7 @@ keys = [
 ]
 
 [[unseen]]
-reason = "Paragraph destinations (where InDesign points a cross-reference at a paragraph): no corpus document has one. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/xref-probe, 2026-10-16: an inline <ParagraphDestination Self Name Hidden DestinationUniqueKey/> at the start of the paragraph)."
+reason = "Paragraph destinations (where InDesign points a cross-reference at a paragraph): no corpus document has one. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/xref-probe, 2026-10-16: an inline <ParagraphDestination Self Name Hidden DestinationUniqueKey/> at the start of the paragraph)."
 keys = [
   "ParagraphDestination@Name",
   "ParagraphDestination@Self",
@@ -1669,7 +1669,7 @@ keys = [
 ]
 
 [[unseen]]
-reason = "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tools/indesign-export/track-changes-probe). No census document was saved with Track Changes on."
+reason = "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tooling/oracle/indesign/track-changes-probe). No census document was saved with Track Changes on."
 keys = [
   "Change@AppliedDocumentUser",
   "Change@ChangeType",
@@ -1678,7 +1678,7 @@ keys = [
 ]
 
 [[unseen]]
-reason = "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
+reason = "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tooling/oracle/indesign/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
 keys = [
   "XMLAttribute@Name",
   "XMLAttribute@Value",

@@ -18,7 +18,7 @@
 
 //! The Illustrator oracle (engine ADR 1042): `tests/fixtures/
 //! vector-effects.illustrator.json`, recorded from Illustrator 30.1 by
-//! draw's `scripts/illustrator/probes/vector-effects.jsx` (its
+//! draw's `tooling/oracle/illustrator/probes/vector-effects.jsx` (its
 //! provenance is in the fixture). Every case runs the same effect with
 //! the same parameters on the same input here and compares:
 //!

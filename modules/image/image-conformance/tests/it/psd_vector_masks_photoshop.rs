@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN VECTOR MASKS, replayed in CI.
-//! `scripts/photoshop/probes/vector-masks.jsx` had Photoshop build small
+//! `tooling/oracle/photoshop/probes/vector-masks.jsx` had Photoshop build small
 //! RGB documents whose layers carry vector masks — anti-aliased edges,
 //! curves, every path operation, the fill rules, a user mask beside the
 //! vector mask, disabled masks, shape layers — and save each as a PSD

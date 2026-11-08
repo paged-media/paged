@@ -21,7 +21,7 @@
 // renderer applies to a scaled symbol instance with guides (engine ADR
 // 1039, draw ADR 365).
 //
-// The recording (`scripts/illustrator/probes/nine-slice.jsx`) makes a
+// The recording (`tooling/oracle/illustrator/probes/nine-slice.jsx`) makes a
 // symbol of a chamfered 100 x 60 pt box with guides, places it, resizes
 // it about its centre and breaks the link, which expands it WITH the
 // slicing. Illustrator inserts an anchor where a cut crosses an edge; the

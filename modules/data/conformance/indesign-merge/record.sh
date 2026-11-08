@@ -27,7 +27,7 @@ var PAGED_DM_STAGE = "$STAGE";
 var PAGED_DM_ONLY = "${PAGED_DM_ONLY:-}";
 \$.evalFile(File("$DIR/record.jsx"));
 JSX
-# `do script` by its raw event code (core tools/indesign-export/run-export.sh
+# `do script` by its raw event code (core tooling/oracle/indesign/run-export.sh
 # explains why: InDesign's terminology is dynamic and a sandboxed shell cannot
 # fetch it at compile time).
 osascript <<OSA

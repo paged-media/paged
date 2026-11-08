@@ -5,7 +5,7 @@
   - plugin-publish `idml-export`: spreads dropped with their pages, master transparency, link
     file names (plugin-publish #52).
   - `paged-canvas`: the blank document's `Preferences.xml` (`blank.rs`).
-  - `tools/indesign-export/document-probe`.
+  - `tooling/oracle/indesign/document-probe`.
 
 ## Context
 

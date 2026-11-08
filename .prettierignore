@@ -77,8 +77,8 @@ apps/editor/apps/canvas/tests/showcase/indesign-render-thresholds.json
 modules/*/conformance/**/*.json
 # …and the SQLite oracle's, which moved with the store (PM-0015)
 engine/core/crates/paged-data-store/tests/sqlite-sql/*.json
-# InDesign probe answers, written by the probes (tools/indesign-export)
-engine/core/tools/indesign-export/*.json
+# InDesign probe answers, written by the probes (tooling/oracle/indesign)
+tooling/oracle/indesign/*.json
 # showcase inputs (HTML/CSS rendered by the web module) and recorded batches
 apps/editor/apps/canvas/tests/showcase/assets/
 apps/editor/apps/canvas/tests/e2e/harness/data-merge/

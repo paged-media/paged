@@ -169,7 +169,7 @@ fn forced_line_breaks_land_where_indesign_puts_them() {
 
 /// A forced line break ends a line, not a paragraph, so the build's
 /// paragraph count is InDesign's: 21 for this fixture (its DOM, through
-/// `tools/indesign-export/conditions-probe.sh`, 2026-10-12: one label
+/// `tooling/oracle/indesign/conditions-probe.sh`, 2026-10-12: one label
 /// paragraph and two body paragraphs on each of the 7 cases). Every
 /// piece a break leaves used to count as a paragraph of its own, which
 /// `paged-inspect` printed as 27.

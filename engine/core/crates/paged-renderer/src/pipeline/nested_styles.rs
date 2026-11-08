@@ -23,7 +23,7 @@
 //! # The rules, as InDesign 20.0.1 sets them (asked 2026-10-12)
 //!
 //! Every rule below was read off InDesign's own per-character formatting
-//! (`tools/indesign-export/nested-styles-probe.jsx`) and is pinned by a
+//! (`tooling/oracle/indesign/nested-styles-probe.jsx`) and is pinned by a
 //! test in `pipeline/tests.rs`; the `nested-styles` fixture is the pixel
 //! oracle.
 //!

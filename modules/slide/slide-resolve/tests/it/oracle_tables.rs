@@ -21,7 +21,7 @@
 //! styles, each with header, total, first/last column and banded rows, and
 //! with banded columns) resolves to the colour PowerPoint's page shows there
 //! and to its text's weight and colour. Answers recorded by
-//! `scripts/ppt-table-probe.py`.
+//! `tooling/oracle/office/powerpoint/ppt-table-probe.py`.
 
 use std::collections::BTreeMap;
 use std::path::Path;

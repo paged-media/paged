@@ -21,7 +21,7 @@
 // by shape instead of by anchor table.
 //
 // An oracle fixture is Adobe Illustrator's answer to one path operation,
-// recorded once on a maintainer's Mac by `scripts/illustrator/run-probe.sh`
+// recorded once on a maintainer's Mac by `tooling/oracle/illustrator/run-probe.sh`
 // and committed beside this lane as
 // `test/fixtures/oracle/<probe>.illustrator.json`. CI never drives
 // Illustrator; it replays the committed file against the real headless
@@ -131,8 +131,8 @@ export function loadOracle<P>(probe: string): OracleFixture<P> {
   const path = oracleFixturePath(probe);
   if (!existsSync(path)) {
     throw new Error(
-      `${path} is missing — record it with scripts/illustrator/run-probe.sh ` +
-        `scripts/illustrator/probes/${probe}.jsx <that path> (see scripts/illustrator/README.md)`,
+      `${path} is missing — record it with tooling/oracle/illustrator/run-probe.sh ` +
+        `tooling/oracle/illustrator/probes/${probe}.jsx <that path> (see tooling/oracle/illustrator/README.md)`,
     );
   }
   const parsed = JSON.parse(readFileSync(path, "utf8")) as OracleFixture<P>;

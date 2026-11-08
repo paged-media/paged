@@ -19,7 +19,7 @@
 //! `ShowMasterItems` belongs to the spread. InDesign 20.0.1 writes it only
 //! on `<Spread>` / `<MasterSpread>` and ignores a `<Page>`'s own value: a
 //! spread that shows its master's items prints them whatever its page says,
-//! and one that hides them hides them (tools/indesign-export/
+//! and one that hides them hides them (tooling/oracle/indesign/
 //! master-items-probe, two packages rewritten so the spread and the page
 //! disagree).
 

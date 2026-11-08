@@ -36,7 +36,7 @@ replayable from a recorded sample list (spec §6.3), and painting stays GPU-only
    kernel under a uniform mask. The CPU only moves windows.
 5. **The wire is by name.** `brush_dynamics_keys` publishes the ordered key list; the bundle packs a
    Float32Array by key (`DYNAMICS_FIELDS`), so a key added on one side never shifts another.
-6. **Conventions recorded against Photoshop** (`scripts/photoshop/probes/brush-strokes.jsx`,
+6. **Conventions recorded against Photoshop** (`tooling/oracle/photoshop/probes/brush-strokes.jsx`,
    `image-js/tests/it/brush_photoshop.rs`): angles are counter-clockwise on screen, a bitmap tip is
    mirrored, then squashed, then rotated; dabs sit on the path from its start at `spacing × full
    diameter`. The hardness falloff stays this engine's plateau + smoothstep; Photoshop's is a bell

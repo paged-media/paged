@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/vector-paths.jsx",
+    "script": "tooling/oracle/photoshop/probes/vector-paths.jsx",
     "script_sha256": "dedf99560914dd89cc2f2c72cb4b3461947eaeb6ab270775a3385d98eb675690",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-28T12:53:07.386Z",
     "host_os": "macOS 26.4"
   },

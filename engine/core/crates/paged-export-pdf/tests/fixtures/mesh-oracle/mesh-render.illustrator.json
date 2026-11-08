@@ -5,9 +5,9 @@
     "version": "30.1.0",
     "build": "136R",
     "locale": "de_DE",
-    "script": "scripts/illustrator/probes/mesh-render.jsx",
+    "script": "tooling/oracle/illustrator/probes/mesh-render.jsx",
     "script_sha256": "9067822220d14e023992ef1ecf0dcfc06f8de78debf8007f093b9e0a92bd2037",
-    "runner": "scripts/illustrator/run-probe.sh (PAGED_PROBE_WRITER=write-render-fixture.mjs)",
+    "runner": "tooling/oracle/illustrator/run-probe.sh (PAGED_PROBE_WRITER=write-render-fixture.mjs)",
     "recorded_at": "2026-10-29T07:10:21.579Z",
     "host_os": "macOS 26.4"
   },

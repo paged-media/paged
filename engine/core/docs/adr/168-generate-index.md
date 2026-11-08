@@ -11,7 +11,7 @@
     created.
   - `paged-script`: `paged.generateIndex`.
   - `paged-gen`: the `index` sample.
-  - `tools/indesign-export/index-probe`.
+  - `tooling/oracle/indesign/index-probe`.
   - plugin-publish `idml-import`: topics, references and options read in InDesign's spelling.
 
 ## Context
@@ -29,7 +29,7 @@ read `<IndexOptions>`.
 
 `index-probe` asks InDesign twice. First it builds a document in InDesign's DOM and generates its
 index. Then it opens the `index` sample and generates that one. Both give the same index. The probe's
-record is `tools/indesign-export/index-probe.json`. An opened document must be recomposed before
+record is `tooling/oracle/indesign/index-probe.json`. An opened document must be recomposed before
 Generate Index, or InDesign finds no page for any reference and lists none.
 
 **The IDML:**

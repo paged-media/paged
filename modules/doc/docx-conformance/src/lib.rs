@@ -97,7 +97,7 @@ const STYLES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 /// thoughts ADR 029 — pagination ground truth: what Word itself does with
 /// sections, margins and page breaks, to measure standalone open against
-/// (`scripts/word-pagination-probe.sh` exports it from Word as PDF).
+/// (`tooling/oracle/office/word/word-pagination-probe.sh` exports it from Word as PDF).
 ///
 /// Every paragraph is one line on an exact 12 pt grid (Inter 10 pt,
 /// `w:spacing w:line="240" w:lineRule="exact"`, no space before/after), so a
@@ -443,7 +443,7 @@ pub const LINE_SPACING_CASES: &[LineSpacingCase] = &[
 ];
 
 /// ADR 029 — line-spacing ground truth: what Word does with
-/// `w:spacing/@w:line` under each `@w:lineRule` (`scripts/word-line-spacing-probe.sh`
+/// `w:spacing/@w:line` under each `@w:lineRule` (`tooling/oracle/office/word/word-line-spacing-probe.sh`
 /// exports it from Word as PDF and measures it).
 ///
 /// One US-Letter section (1 in margins → 648 pt body) per
@@ -643,7 +643,7 @@ pub const SPACING_PAIRS: &[SpacingPair] = &[
 
 /// ADR 029 — paragraph-spacing ground truth: how much room Word leaves
 /// between a paragraph with space AFTER and one with space BEFORE
-/// (`scripts/word-paragraph-spacing-probe.sh` has Word export it as PDF and
+/// (`tooling/oracle/office/word/word-paragraph-spacing-probe.sh` has Word export it as PDF and
 /// measures the baseline distances).
 ///
 /// Times New Roman 12 pt, single spacing, US Letter with 1 in margins. Each
@@ -782,7 +782,7 @@ fn breaks_run(text: &str) -> String {
 }
 
 /// ADR 028/029 — break ground truth: what Word does with every way a `.docx`
-/// says "start over" (`scripts/word-breaks-probe.sh` has Word export it as
+/// says "start over" (`tooling/oracle/office/word/word-breaks-probe.sh` has Word export it as
 /// PDF; `fixtures/breaks.word.json` records the page map).
 ///
 /// Every page is the same small size with a ten-line body (Inter 10 pt on an
@@ -966,7 +966,7 @@ pub const LINE_BREAK_CASES: &[(&str, u32, &str)] = &[
 
 /// Plain line breaks and blank lines, as Word lays them out (core
 /// `ab383b1`: U+2028 is a line break inside a paragraph; `65cf615`: a caret
-/// styles a blank line). `scripts/word-line-breaks-probe.sh` has Word export
+/// styles a blank line). `tooling/oracle/office/word/word-line-breaks-probe.sh` has Word export
 /// it as PDF; `fixtures/line-breaks.word.json` records each line's page and
 /// position. Inter 10 pt (Word lays it in Calibri) on an exact pitch per
 /// paragraph ([`LINE_BREAK_CASES`]), every visible line labelled by its
@@ -1060,7 +1060,7 @@ pub const RUN_SPECIAL_CASES: &[(&str, &str)] = &[
 /// ([`RUN_SPECIAL_CASES`]): one paragraph per case on the
 /// [`line_breaks_docx`] page, Arial 10 pt on a 12 pt pitch, with left tab
 /// stops at 72 pt and 144 pt. The save-back tests edit it; Word opens the
-/// edited result (`scripts/word-run-specials-probe.sh`).
+/// edited result (`tooling/oracle/office/word/word-run-specials-probe.sh`).
 pub fn run_specials_docx() -> Vec<u8> {
     let rpr = r#"<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/></w:rPr>"#;
     let mut body = String::new();
@@ -1159,7 +1159,7 @@ pub const SYMBOL_CASES: &[(&str, &str, &str)] = &[
 /// one-row table of three 100 pt cells: `C01`, an EMPTY paragraph with an
 /// exact 48 pt line, and an empty paragraph with no properties; then a
 /// paragraph `AFTER`, whose position shows how tall Word made the row. Word
-/// saves it as PDF in `scripts/word-symbols-probe.sh`
+/// saves it as PDF in `tooling/oracle/office/word/word-symbols-probe.sh`
 /// (`fixtures/symbols.word.json`).
 pub fn symbols_docx() -> Vec<u8> {
     let rpr = r#"<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/></w:rPr>"#;
@@ -1285,7 +1285,7 @@ pub const CONTINUOUS_CASES: &[ContinuousCase] = {
 
 /// ADR 029 — continuous-section ground truth: where Word puts a section that
 /// starts `continuous` (and one `nextColumn`), in every case that decides the
-/// lowering (`scripts/word-continuous-probe.sh`; `fixtures/continuous.word.json`
+/// lowering (`tooling/oracle/office/word/word-continuous-probe.sh`; `fixtures/continuous.word.json`
 /// records the answer). The sections are [`CONTINUOUS_CASES`]; every
 /// paragraph is one line labelled `<section>-NN` (Inter 10 pt on an exact
 /// 12 pt grid, as [`breaks_docx`]), so each line's page, column and position
@@ -1428,7 +1428,7 @@ pub const COLUMNS_CASES: &[ColumnsCase] = {
 /// into another, a page-starting multi-column section, another gap, unequal
 /// columns, a section running past the page (balanced on its last page or
 /// not), and a document that ends in columns
-/// (`scripts/word-columns-probe.sh`; `fixtures/columns.word.json`). Every
+/// (`tooling/oracle/office/word/word-columns-probe.sh`; `fixtures/columns.word.json`). Every
 /// paragraph is one line holding only its label (`<section>-NN`), short
 /// enough for a 72 pt sub-column.
 pub fn columns_docx() -> Vec<u8> {
@@ -2227,7 +2227,7 @@ pub const HEADER_PARTS: &[(&str, &str, bool, &str)] = &[
 ];
 
 /// thoughts ADR 033 / RFI DOC-05 — which header and footer Word shows on
-/// each page of a three-section document (`scripts/word-headers-probe.sh`
+/// each page of a three-section document (`tooling/oracle/office/word/word-headers-probe.sh`
 /// has Word save it as PDF; `fixtures/headers.word.json` records, per page,
 /// the header and footer text).
 ///
@@ -2343,7 +2343,7 @@ pub const FOOTNOTE_NUMBERING_SECTIONS: &[(&str, &str, u32, u32)] = &[
 ];
 
 /// thoughts ADR 034 / RFI DOC-06 — footnote numbering ground truth
-/// (`scripts/word-footnotes-probe.sh`; `fixtures/footnote-numbering.word.json`
+/// (`tooling/oracle/office/word/word-footnotes-probe.sh`; `fixtures/footnote-numbering.word.json`
 /// records each note's mark as Word prints it).
 ///
 /// `settings.xml` says `w:footnotePr/w:numFmt="lowerRoman"`; each section of
@@ -2548,7 +2548,7 @@ const TINY_PNG: &[u8] = &[
 /// ADR 029 acceptance against real Word documents (`docs/acceptance-real-docx.md`):
 /// the constructs the corpus documents exposed, one paragraph each, on a
 /// 5 in × 7 in page with 0.5 in margins (a 288 pt text width). Word's answer:
-/// `scripts/word-real-docx-probe.sh` → `fixtures/real-docx.word.json`.
+/// `tooling/oracle/office/word/word-real-docx-probe.sh` → `fixtures/real-docx.word.json`.
 ///
 /// - `T01` — a TOC entry: its style (`Toc2`) sets a left stop at 0.5 in and a
 ///   RIGHT stop with a dot leader at 300 pt, past the 288 pt margin; the
@@ -2664,7 +2664,7 @@ pub const KEEPS_CASES: &[(&str, &str, u32)] = &[
 /// ADR 029 decision 3 against Word: `w:widowControl` and `w:keepLines`
 /// ([`KEEPS_CASES`]) on 5 in × 7 in pages with 0.5 in margins, Arial 10 pt
 /// on an exact 12 pt pitch, so a page holds 36 lines. Word's answer:
-/// `scripts/word-keeps-probe.sh` → `fixtures/keeps.word.json`.
+/// `tooling/oracle/office/word/word-keeps-probe.sh` → `fixtures/keeps.word.json`.
 pub fn keeps_docx() -> Vec<u8> {
     let rpr = r#"<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="20"/></w:rPr>"#;
     let spacing = r#"<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="exact"/>"#;

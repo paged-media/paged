@@ -19,7 +19,7 @@
 //! What the real corpus documents of the ADR 029 acceptance exposed
 //! (`docs/reference/acceptance-real-docx.md`), one construct per paragraph of
 //! `real_docx_docx()`, against Word's answer (`fixtures/real-docx.word.json`,
-//! `scripts/word-real-docx-probe.sh`). The text area is x = 36..324.
+//! `tooling/oracle/office/word/word-real-docx-probe.sh`). The text area is x = 36..324.
 
 #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature
 

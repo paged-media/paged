@@ -19,7 +19,7 @@
 //! Engine ADR 1008 — Photoshop is the oracle for the effect stack's
 //! layer-style Stroke, Color Overlay and Gaussian Blur.
 //!
-//! `modules/image/scripts/photoshop/probes/effect-stack.jsx` (recorded with
+//! `modules/image/tooling/oracle/photoshop/probes/effect-stack.jsx` (recorded with
 //! Photoshop 27.10, see `fixtures/photoshop-effect-stack/
 //! effect-stack.photoshop.json`) draws a black 32 px square on white in a
 //! 64 px document at 72 ppi and applies each effect; this replays the same

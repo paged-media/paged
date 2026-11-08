@@ -26,7 +26,7 @@
 //! InDesign adds one page. The master carries a text frame of the same
 //! geometry.
 //!
-//! InDesign does not reflow on open; `tools/indesign-export/reflow-probe.jsx`
+//! InDesign does not reflow on open; `tooling/oracle/indesign/reflow-probe.jsx`
 //! switches Smart Text Reflow on, nudges the story so it reflows, and reports
 //! the pages it added, their frames, and which paragraph opens each page.
 

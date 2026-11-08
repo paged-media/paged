@@ -16,7 +16,7 @@ that stretched past the tolerance; ADR 141 widened every measure by a fixed allo
 width, below the 80 % minimum, and with hyphenation off it sets "Considerable experimentation" in
 140 pt with its one space at 41 % rather than stretch "Considerable" across the measure.
 
-The question went to InDesign through its DOM (`tools/indesign-export/justified-lines-probe.*`): ten
+The question went to InDesign through its DOM (`tooling/oracle/indesign/justified-lines-probe.*`): ten
 paragraphs of plain prose, `LeftJustified` in Open Sans 10/12, English: USA, in eight frame widths
 from 120 to 260 pt, hyphenated and not: 160 paragraphs, 1276 lines. (A document a script creates
 takes the application's language, which in a German installation hyphenates English words as

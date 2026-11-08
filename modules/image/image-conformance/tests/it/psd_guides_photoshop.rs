@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN RULER GUIDES, replayed in CI (image ADR 475).
-//! `scripts/photoshop/probes/guides.jsx` had Photoshop place guides in
+//! `tooling/oracle/photoshop/probes/guides.jsx` had Photoshop place guides in
 //! small documents — whole and fractional pixels, outside the canvas, one
 //! placed in inches at 300 ppi, and none — and save each as a PSD; the
 //! probe recorded the positions Photoshop reports for them.

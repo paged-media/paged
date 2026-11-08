@@ -18,7 +18,7 @@
 
 //! Charts against PowerPoint's own drawing (ADR 705): every rectangle
 //! PowerPoint painted inside a corpus chart (recorded by
-//! `scripts/ppt-chart-probe.py` into `oracle/primary.charts.json`) has a
+//! `tooling/oracle/office/powerpoint/ppt-chart-probe.py` into `oracle/primary.charts.json`) has a
 //! bar in our layout within 3 pt on every edge.
 //!
 //! Why 3 pt: the plot area starts right of the value labels, and their

@@ -31,7 +31,7 @@ so a ruled frame rendered without its rules.
 9. one column.
 
 InDesign 20.0.1 exported it, and every rule was read from the PDF's stroke operators
-(`tools/indesign-export/pdf-strokes.py`): its width, cap, dash and both end points.
+(`tooling/oracle/indesign/pdf-strokes.py`): its width, cap, dash and both end points.
 
 ## Decision
 

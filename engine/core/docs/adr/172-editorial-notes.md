@@ -12,7 +12,7 @@
     - the `notes` collection;
     - a text delete, split or merge carries the notes with their characters.
   - `paged-script`: `paged.insertNote`, `editNote`, `deleteNote`, `convertNoteToText`.
-  - `paged-gen`: the `notes` sample. `tools/indesign-export/notes-probe`.
+  - `paged-gen`: the `notes` sample. `tooling/oracle/indesign/notes-probe`.
   - plugin-publish:
     - `idml-import` reads `<Note>`;
     - `idml-export` writes each note back, and saves a story holding notes whole.

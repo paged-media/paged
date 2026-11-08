@@ -297,7 +297,7 @@ fn a_growing_story_prints_the_final_page_count_in_every_footer() {
 
 /// A cross-reference's chapter number prints the document's chapter
 /// number live, in its chapter format, as InDesign 20.0.1 prints it
-/// (`tools/indesign-export/xref-chapter-probe`): the reference in
+/// (`tooling/oracle/indesign/xref-chapter-probe`): the reference in
 /// InDesign's own package stores "VII"; with the chapter number set to 9
 /// InDesign printed "Chapter IX, page 2" without an update.
 #[test]
@@ -330,7 +330,7 @@ fn xref_chapter_number_is_the_documents_live() {
 
 /// A live caption prints the name of the link of the image its frame
 /// touches, live, as InDesign 20.0.1 prints it
-/// (`tools/indesign-export/caption-probe`): a caption frame set under a
+/// (`tooling/oracle/indesign/caption-probe`): a caption frame set under a
 /// placed image, edge to edge, printed "Image: alpha-image.png", and
 /// "Image: beta-image.png" after the image was relinked, with no update.
 /// The fixture is InDesign's own package (its link re-pointed at

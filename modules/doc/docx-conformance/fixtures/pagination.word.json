@@ -1,6 +1,6 @@
 {
   "fixture": "docx_conformance::pagination_docx()",
-  "produced_by": "scripts/word-pagination-probe.sh (Microsoft Word 16, PDF export)",
+  "produced_by": "tooling/oracle/office/word/word-pagination-probe.sh (Microsoft Word 16, PDF export)",
   "measured": "2026-10-01",
   "pages": [
     { "size_pt": [612.0, 792.0],  "lines": 53, "first": "S1 P001", "last": "S1 P053" },

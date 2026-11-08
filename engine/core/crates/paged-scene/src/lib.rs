@@ -1559,7 +1559,7 @@ impl ResolvedParagraphAttrs {
             applied_language: None,
             // Spacing set on the range beats the style (InDesign applies a
             // paragraph's own letter spacing over its style's, measured with
-            // tools/indesign-export/spelling-and-spacing-probe).
+            // tooling/oracle/indesign/spelling-and-spacing-probe).
             minimum_word_spacing: paragraph.minimum_word_spacing,
             desired_word_spacing: paragraph.desired_word_spacing,
             maximum_word_spacing: paragraph.maximum_word_spacing,

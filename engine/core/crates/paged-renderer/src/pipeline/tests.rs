@@ -4219,7 +4219,7 @@ fn kenten_marks_emit_above_each_glyph() {
 /// Display-list commands for one 12 pt "ABC" paragraph under `composer`,
 /// its run carrying `char_attrs` (ruby, kenten, …). InDesign 20.0.1 sets
 /// ruby and kenten only under its Japanese composers
-/// (tools/indesign-export/cjk-composer-probe).
+/// (tooling/oracle/indesign/cjk-composer-probe).
 fn cjk_decoration_commands(composer: Option<&str>, char_attrs: &str) -> usize {
     use std::io::Write;
     use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};

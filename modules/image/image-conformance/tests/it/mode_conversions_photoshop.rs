@@ -17,7 +17,7 @@
  */
 
 //! Image ▸ Mode against Photoshop (image ADR 479), replayed from
-//! `fixtures/photoshop/mode-conversions` (`scripts/photoshop/probes/
+//! `fixtures/photoshop/mode-conversions` (`tooling/oracle/photoshop/probes/
 //! mode-conversions.jsx`).
 //!
 //! * MODES — the `colour-sweep` stimulus converted to CMYK (Coated

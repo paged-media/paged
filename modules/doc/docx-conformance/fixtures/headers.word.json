@@ -1,5 +1,5 @@
 {
- "source": "scripts/word-headers-probe.sh: Microsoft Word saved headers_docx() (w:evenAndOddHeaders on) and the same document without w:evenAndOddHeaders as PDF; pdftotext -bbox, per page the words Word draws in the header band (y < 54 pt, the top margin), the body and the footer band (y > 138 pt). Every header/footer is its label plus a PAGE field, so 'p3' is the page NUMBER Word gives the page.",
+ "source": "tooling/oracle/office/word/word-headers-probe.sh: Microsoft Word saved headers_docx() (w:evenAndOddHeaders on) and the same document without w:evenAndOddHeaders as PDF; pdftotext -bbox, per page the words Word draws in the header band (y < 54 pt, the top margin), the body and the footer band (y > 138 pt). Every header/footer is its label plus a PAGE field, so 'p3' is the page NUMBER Word gives the page.",
  "date": "2026-10-01",
  "word": "Microsoft Word for Mac 16.113.3",
  "findings": [

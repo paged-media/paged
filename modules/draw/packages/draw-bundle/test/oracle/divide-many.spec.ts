@@ -21,7 +21,7 @@
 // `pathfinderDivide`, against ADOBE ILLUSTRATOR 30.1.0, recorded
 // 2026-10-25 by
 //
-//   scripts/illustrator/run-probe.sh scripts/illustrator/probes/divide-many.jsx \
+//   tooling/oracle/illustrator/run-probe.sh tooling/oracle/illustrator/probes/divide-many.jsx \
 //     packages/draw-bundle/test/fixtures/oracle/divide-many.illustrator.json
 //
 // The inputs are the probe's own (recorded with the answer). Illustrator
@@ -53,7 +53,7 @@ describe("oracle — divide over many shapes", () => {
   it("the recording says who made it", () => {
     expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
     expect(FIXTURE.produced_by.script).toBe(
-      "scripts/illustrator/probes/divide-many.jsx",
+      "tooling/oracle/illustrator/probes/divide-many.jsx",
     );
     expect(FIXTURE.cases.map((c) => c.id)).toEqual([
       "divide-20",

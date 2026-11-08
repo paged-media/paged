@@ -22,7 +22,7 @@
 //! read: `moveFrame` and `deleteFrame` applied to a locked frame, so the
 //! lock held only as far as a host chose to honour it, and a script or a
 //! plugin went straight through it. The rule is InDesign's, asked of it
-//! by script (`tools/indesign-export/object-integrity-probe.json`):
+//! by script (`tooling/oracle/indesign/object-integrity-probe.json`):
 //!
 //! - a locked item cannot be moved, resized, rotated, scaled, reshaped
 //!   or restacked, nor removed — each refuses with "the object is locked"

@@ -19,7 +19,7 @@
 //! Line breaking for JUSTIFIED text the way InDesign's Paragraph Composer
 //! sets it (ADR 144). Knuth–Plass demerits over every legal break, with two
 //! departures InDesign 20.0.1 was measured to make
-//! (`tools/indesign-export/justified-lines-probe.*`, 160 paragraphs):
+//! (`tooling/oracle/indesign/justified-lines-probe.*`, 160 paragraphs):
 //!
 //! - a line may shrink its word spaces past `MinimumWordSpacing`, at a
 //!   steep price instead of being infeasible ("Considerable experimentation"

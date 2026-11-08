@@ -1,5 +1,5 @@
 {
- "source": "scripts/word-footnotes-probe.sh: Microsoft Word saved footnote_numbering_docx() and two copies as PDF -- 'start10' with S1's numStart 10 instead of 3, 'no_section_props' with every section's w:footnotePr removed (settings.xml's w:footnotePr numFmt=lowerRoman left) -- and pdftotext -layout read, per note, the mark Word prints before the note's text in the page's note area.",
+ "source": "tooling/oracle/office/word/word-footnotes-probe.sh: Microsoft Word saved footnote_numbering_docx() and two copies as PDF -- 'start10' with S1's numStart 10 instead of 3, 'no_section_props' with every section's w:footnotePr removed (settings.xml's w:footnotePr numFmt=lowerRoman left) -- and pdftotext -layout read, per note, the mark Word prints before the note's text in the page's note area.",
  "date": "2026-10-01",
  "word": "Microsoft Word for Mac 16.113.3",
  "findings": [

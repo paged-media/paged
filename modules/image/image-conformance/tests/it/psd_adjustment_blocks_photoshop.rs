@@ -17,7 +17,7 @@
  */
 
 //! PHOTOSHOP-WRITTEN ADJUSTMENT BLOCKS, read and re-written.
-//! `scripts/photoshop/probes/adjustment-layers.jsx` and
+//! `tooling/oracle/photoshop/probes/adjustment-layers.jsx` and
 //! `adjustment-layers-ext.jsx` had Photoshop 27.10 make one adjustment
 //! layer of each kind with known parameters. For each: paged-psd reads the
 //! block(s) to exactly those parameters, and writes them back BYTE FOR

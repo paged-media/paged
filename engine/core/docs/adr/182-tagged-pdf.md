@@ -7,7 +7,7 @@
   - `paged-export-pdf`: `ExportOptions.tagged` / `lang`, marked content in the page walk, and the
     structure tree.
   - `paged-canvas`: `ExportPdfWireOptions.tagged` (additive) and the document language.
-  - `tools/indesign-export/tagged-pdf-probe`, `pdf-structure.py`.
+  - `tooling/oracle/indesign/tagged-pdf-probe`, `pdf-structure.py`.
 
 ## Context
 

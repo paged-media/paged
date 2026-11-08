@@ -18,7 +18,7 @@
 
 //! Justified text breaks where InDesign 20.0.1 breaks it (ADR 144): the
 //! `justified-probe` paragraphs against the lines InDesign set for them
-//! (`tools/indesign-export/justified-lines-probe.json`). The breaker was
+//! (`tooling/oracle/indesign/justified-lines-probe.json`). The breaker was
 //! fitted on this probe; the count of paragraphs that match line for line
 //! may only grow.
 
@@ -44,7 +44,7 @@ fn norm(s: &str) -> String {
 #[test]
 fn justified_lines_break_where_indesign_breaks_them() {
     let probe: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../tools/indesign-export/justified-lines-probe.json"
+        "../../../../../../tooling/oracle/indesign/justified-lines-probe.json"
     ))
     .expect("probe json");
     let bytes = paged_gen::write_idml(&paged_gen::samples::justified_probe::build()).expect("idml");

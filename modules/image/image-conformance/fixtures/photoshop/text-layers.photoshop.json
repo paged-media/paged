@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/text-layers.jsx",
+    "script": "tooling/oracle/photoshop/probes/text-layers.jsx",
     "script_sha256": "6e4667821f9cfc36b7a46967cb7a52775d20903f30ba7a08ec0c4ba101531d89",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-05T11:01:36.636Z",
     "host_os": "macOS 26.4"
   },

@@ -212,7 +212,7 @@ fn the_bundle_fixture_is_the_structure_builder__feat__doc_word_headers_footers()
     }
 }
 
-/// Word's answer for `structure_docx()` (`scripts/word-structure-probe.sh`,
+/// Word's answer for `structure_docx()` (`tooling/oracle/office/word/word-structure-probe.sh`,
 /// Word 16 for Mac, 2026-10-28): three pages — S1's title page (its TOC),
 /// S1's second page (the page break), S2's page restarting at 1 — and per
 /// page the header and footer the lowering's masters print there, the

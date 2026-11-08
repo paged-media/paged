@@ -8,7 +8,7 @@
     - the `insertEndnote`, `deleteEndnote` and `convertFootnoteToEndnote` mutations;
     - the `endnotes` collection.
   - `paged-script`: `paged.insertEndnote`, `deleteEndnote`, `convertFootnoteToEndnote`.
-  - `tools/indesign-export/endnote-probe`.
+  - `tooling/oracle/indesign/endnote-probe`.
   - plugin-publish:
     - `idml-import` records `<EndnoteTextFrame>` as the endnote frame;
     - `idml-export` writes ranges, references, the endnote frame and the endnote story as

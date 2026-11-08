@@ -17,7 +17,7 @@
  */
 
 //! Ruby and emphasis marks set where, and as big as, InDesign 20.0.1 sets
-//! them by default (`tools/indesign-export/ruby-kenten-probe`, read from
+//! them by default (`tooling/oracle/indesign/ruby-kenten-probe`, read from
 //! its PDF).
 //!
 //! InDesign's sample is Kozuka Mincho at 30 pt under the Japanese

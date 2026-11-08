@@ -22,7 +22,7 @@
 // re-wind them by PAINT ORDER, because the engine fills non-zero and that
 // is Illustrator's rule) against ADOBE ILLUSTRATOR 30.1.0 (Object >
 // Compound Path > Make), recorded 2026-10-02 by
-//   scripts/illustrator/run-probe.sh scripts/illustrator/probes/compound-path.jsx \
+//   tooling/oracle/illustrator/run-probe.sh tooling/oracle/illustrator/probes/compound-path.jsx \
 //     packages/draw-bundle/test/fixtures/oracle/compound-path.illustrator.json
 //
 // 9 cases, all rectangles: a hole in a square from every combination of
@@ -103,7 +103,7 @@ interface CompoundCase {
   parameters: Record<string, never>;
 }
 
-// --- the cases: a MIRROR of scripts/illustrator/probes/compound-path.jsx ----
+// --- the cases: a MIRROR of tooling/oracle/illustrator/probes/compound-path.jsx ----
 
 const rect = (
   l: number,
@@ -287,7 +287,7 @@ describe("oracle — compound path winding", () => {
       expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
       expect(FIXTURE.produced_by.version).toMatch(/^\d+\.\d+/);
       expect(FIXTURE.produced_by.script).toBe(
-        "scripts/illustrator/probes/compound-path.jsx",
+        "tooling/oracle/illustrator/probes/compound-path.jsx",
       );
     });
 

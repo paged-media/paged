@@ -13,7 +13,7 @@
 
 ADR 137 found that InDesign writes the text-frame options an object style supplies off the frame.
 The same question for the style's text wrap, anchored-object and frame-fitting options went to
-InDesign 20.0.1 (`tools/indesign-export/object-style-options-probe.*`): a document built in its DOM
+InDesign 20.0.1 (`tooling/oracle/indesign/object-style-options-probe.*`): a document built in its DOM
 and exported, and the `object-style-options` fixture opened in it and read back.
 
 ## Decision

@@ -57,7 +57,7 @@ The decision above took a style's corners from its item-level pair, which was no
 InDesign. `object-style-corners-probe` asked it: InDesign authored a style with four rounded
 20 pt corners on a rectangle and exported it, the probe rewrote the style's corner attributes
 (the rectangle's own removed, so it takes the style's) and InDesign read each variant back
-through its DOM (`tools/indesign-export/object-style-corners-probe.json`):
+through its DOM (`tooling/oracle/indesign/object-style-corners-probe.json`):
 
 | The style states | The style and its rectangle read |
 |---|---|
