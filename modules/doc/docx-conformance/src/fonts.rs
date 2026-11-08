@@ -91,17 +91,16 @@ pub fn embedded_fonts_docx(faces: &[EmbedFace]) -> Vec<u8> {
     }
     table.push_str("</w:fonts>");
     rels.push_str("</Relationships>");
-    let content_types = CONTENT_TYPES
-        .replace(
-            r#"<Default Extension="txt""#,
-            r#"<Default Extension="odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/>
-  <Default Extension="txt""#,
-        )
-        .replace(
-            "</Types>",
-            r#"  <Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>
-</Types>"#,
-        );
+    let mut types = paged_ooxml::ContentTypes::parse(CONTENT_TYPES.as_bytes()).expect("types");
+    types.add_default(
+        "odttf",
+        "application/vnd.openxmlformats-officedocument.obfuscatedFont",
+    );
+    types.add_override(
+        "/word/fontTable.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml",
+    );
+    let content_types = types.render();
     let doc_rels = DOC_RELS.replace(
         "</Relationships>",
         r#"  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>

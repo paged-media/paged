@@ -56,6 +56,15 @@ drawing that is not a picture and not shown. The capability register asked for t
   the outline stays in the box's own coordinates (it does not scale).
 - Presets not listed, shapes in groups (`wpg:wgp`) and in table cells.
 
+## Size
+
+The doc wasm (release, `wasm-doc` profile, wasm-opt) measured on this change: 8,338,053 B with the
+embedded fonts (ADR 626), 8,377,028 B with the shapes: the shapes cost about 39 KB, and 11,580 B
+are left under the manifest's 8,388,608 B ceiling. That is too little for a chart reader and its
+drawing (`dml-chart`'s reader alone is over a thousand lines) or for the SmartArt drawing part's
+reader: both need a second wasm artifact (the manifest's `wasm[]` takes several, each with its own
+ceiling) or a decision on the ceiling. Neither is part of this record.
+
 ## Evidence
 
 - `docx-lower` `shape_geom` tests: triangle apex by `adj`, rounded corners by the short side,

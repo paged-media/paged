@@ -159,7 +159,9 @@ data each have their own lowering. Sheet and data each have their own lowering.
 
 ### Charts, data, scripting, PDF
 
-Doc has no charts (reuse `dml-chart` and the sheet engine). Slide's chart data editing carries a
+Doc has no charts (reuse `dml-chart` and the sheet engine). Not started, blocked on the doc wasm's size: after
+embedded fonts and shapes (doc ADRs 626, 627) it is 8,377,028 B of the manifest's 8,388,608 B, so a chart reader and
+drawing, or the SmartArt drawing part (`dsp`) reader, need a second wasm artifact (`wasm[]` takes several) or a raised ceiling. Slide's chart data editing carries a
 second compiled sheet engine. `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` overlap `paged-script` and `paged-cli`. PDF read has two
 hayro devices (placed PDF, pdf-import); blank IDML / OCF zip writers ×5.
