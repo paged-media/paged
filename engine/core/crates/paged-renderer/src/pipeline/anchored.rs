@@ -130,6 +130,9 @@ pub(super) struct InlineObject {
     pub y_offset: f32,
     /// `HorizontalAlignment` of an above-line object.
     pub alignment: String,
+    /// Engine ADR 1090 — the object is an equation: the index of its set
+    /// equation in [`InlineObjects::equations`] (`frame` is unused then).
+    pub equation: Option<usize>,
 }
 
 impl InlineObject {
@@ -158,6 +161,8 @@ pub(super) struct PlacedObject {
     /// The anchor character's point size and its face's cap height (em).
     pub point_size: f32,
     pub cap_height: f32,
+    /// The paint of the anchor character's text: an equation's.
+    pub paint: Option<Paint>,
 }
 
 /// The in-line objects of the paragraph being emitted: what its lines
@@ -168,6 +173,9 @@ pub(super) struct InlineObjects {
     /// The next object a composed segment takes.
     pub next: usize,
     pub placed: Vec<Option<PlacedObject>>,
+    /// Engine ADR 1090 — the paragraph's equations, set; an object whose
+    /// `equation` is `Some(k)` is the k-th.
+    pub equations: Vec<super::equations::SetEquation>,
 }
 
 /// `paragraph` with each anchored object's options read over its object
@@ -271,17 +279,39 @@ fn inline_object(af: &paged_model::AnchoredFrame, frame: usize) -> InlineObject 
             .as_ref()
             .and_then(|s| s.horizontal_alignment.clone())
             .unwrap_or_default(),
+        equation: None,
+    }
+}
+
+/// A set equation as the object of its line: as wide as the equation, its
+/// box standing on the baseline lowered by its descent, so it rises its
+/// ascent above the baseline (engine ADR 1090).
+fn equation_object(set: &super::equations::SetEquation, k: usize) -> InlineObject {
+    let l = &set.layout;
+    InlineObject {
+        frame: usize::MAX,
+        above_line: false,
+        width: l.width.max(0.0),
+        height: (l.ascent + l.descent).max(0.0),
+        stroke_half: 0.0,
+        y_offset: -l.descent.max(0.0),
+        alignment: String::new(),
+        equation: Some(k),
     }
 }
 
 /// `paragraph` with one [`paged_text::layout::OBJECT_REPLACEMENT`]
 /// character per in-line object at its anchor (a run of its own, with
 /// the attributes of the run it falls in), and the objects in text
-/// order. `None` when the paragraph has no in-line object.
+/// order. `None` when the paragraph has no in-line object. `equations`
+/// are the paragraph's set equations (engine ADR 1090), objects too; an
+/// anchored frame goes before an equation at the same offset.
 pub(super) fn with_object_placeholders(
     paragraph: &paged_model::Paragraph,
+    equations: Vec<super::equations::SetEquation>,
 ) -> Option<(paged_model::Paragraph, InlineObjects)> {
-    let mut anchors: Vec<(u32, usize)> = paragraph
+    // (offset, 0 for a frame and 1 for an equation, its index).
+    let mut anchors: Vec<(u32, u8, usize)> = paragraph
         .anchored_frames
         .iter()
         .enumerate()
@@ -292,8 +322,9 @@ pub(super) fn with_object_placeholders(
                 .get(i)
                 .copied()
                 .unwrap_or(0);
-            (offset, i)
+            (offset, 0, i)
         })
+        .chain(equations.iter().enumerate().map(|(k, e)| (e.offset, 1, k)))
         .collect();
     if anchors.is_empty() {
         return None;
@@ -315,7 +346,7 @@ pub(super) fn with_object_placeholders(
         let chars = run.text.chars().count() as u32;
         let mut rest = run.text.as_str();
         let mut at = pos;
-        while let Some(&&(offset, _)) = pending.peek() {
+        while let Some(&&(offset, _, _)) = pending.peek() {
             if offset >= pos + chars {
                 break;
             }
@@ -346,14 +377,20 @@ pub(super) fn with_object_placeholders(
     }
     let objects: Vec<InlineObject> = anchors
         .iter()
-        .map(|&(_, i)| inline_object(&paragraph.anchored_frames[i], i))
+        .map(|&(_, kind, i)| match kind {
+            0 => inline_object(&paragraph.anchored_frames[i], i),
+            _ => equation_object(&equations[i], i),
+        })
         .collect();
     let placed = vec![None; objects.len()];
     // The table's character moves on past the placeholders before it (an
     // object anchored at the table's own offset goes first).
-    let table_anchor = paragraph
-        .table_anchor
-        .map(|t| t + anchors.iter().filter(|&&(offset, _)| offset <= t).count() as u32);
+    let table_anchor = paragraph.table_anchor.map(|t| {
+        t + anchors
+            .iter()
+            .filter(|&&(offset, _, _)| offset <= t)
+            .count() as u32
+    });
     Some((
         paged_model::Paragraph {
             runs,
@@ -364,6 +401,7 @@ pub(super) fn with_object_placeholders(
             objects,
             next: 0,
             placed,
+            equations,
         },
     ))
 }
@@ -483,6 +521,21 @@ pub(super) fn emit_inline_objects(
     pages: &mut [BuiltPage],
 ) {
     for (obj, placed) in objects.objects.iter().zip(&objects.placed) {
+        // Engine ADR 1090 — an equation is drawn on its character's
+        // baseline, in its text's paint.
+        if let (Some(k), Some(at)) = (obj.equation, placed) {
+            if let (Some(set), Some(page)) = (objects.equations.get(k), pages.get_mut(at.page)) {
+                let paint = at.paint.unwrap_or(em.options.fallback_text_paint);
+                super::equations::paint_equation(
+                    set,
+                    em.font_table,
+                    (at.x, at.baseline),
+                    paint,
+                    &mut page.list,
+                );
+            }
+            continue;
+        }
         let (Some(at), Some(af)) = (placed, paragraph.anchored_frames.get(obj.frame)) else {
             continue;
         };
@@ -2102,9 +2155,11 @@ mod tests {
                 stroke_half: 0.0,
                 y_offset: 0.0,
                 alignment: String::new(),
+                equation: None,
             }],
             next: 0,
             placed: vec![None],
+            equations: Vec::new(),
         }
     }
 

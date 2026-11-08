@@ -142,11 +142,14 @@ Themes in IDML (engine ADR 1057, built): plain swatches for InDesign, the theme 
 Writable XML tree: the one writable tree (`XNode`) now lives in `paged_ooxml::tree` (W5; `sheet-xlsx` re-exports it). The other three are not copies of it: `docx-odt`'s `El` is a read-only ODF tree with mixed text, `pptx-export`'s `El` and `docx-export/splice.rs` are byte locators that tolerate malformed text (`paged_ooxml::splice` reports it), so they stay. Minimal `.xlsx` writer: DONE (W5), one `sheet_xlsx::minimal` (package, A1 addressing, inline-string cell) used by `slide-sheet`, `sheet-js` csv and ods. ODF layer
 shared between `docx-odt` and `ods.rs`. docProps: DONE (W5, `paged_ooxml::docprops`, PM-0018): read once, kept as document properties (`DocxDocument`, `Presentation`/`Deck`, `XlsxDocument::properties`) and carried into the engine document as the label `x-paged:core.docprops` for doc and slide; sheet has no engine document, a host reads `XlsxDocument::properties`. The parts themselves are untouched on save.
 
-Equations (engine ADR 1090, slice 1 built, W10): `paged-math` is the neutral math tree and its TeX-rule layout
+Equations (engine ADR 1090, slices 1 and 2 built): `paged-math` is the neutral math tree and its TeX-rule layout
 (fractions, scripts, radicals, n-ary operators, delimiters, matrices, accents) onto glyph runs, rules and strokes
 through a `MathMetrics` seam; `paged_ooxml::omml` is the one OMML reader for doc and slide (`m:oMath`,
-`m:oMathPara`, transitional and strict). Open: the model type and wire, the renderer's metrics and paint, doc and
-slide import, the Word-oracle comparison. Text envelope (engine ADR 1091, slice 1 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
+`m:oMathPara`, transitional and strict; `in_part` for an importer's walk). The model holds an equation as an
+inline object of its paragraph (`Paragraph.equations`); the renderer's one metrics adapter and paint are
+`paged-renderer` `pipeline/equations.rs` (math face, OpenType `MATH` constants, the math alphabet
+`paged_math::alphabet`); doc imports through the native builder. Open: slide import, equations in table cells,
+a wire door, the Word-oracle comparison. Text envelope (engine ADR 1091, slice 1 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
 adjusts) for doc, slide and sheet; the guides (`paged-warp`), the frame's model and the render pass are open.
 ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
 provider); a matting job in `apps/ml-host` and Tier-A matting models are open.

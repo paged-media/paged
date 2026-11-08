@@ -34,6 +34,7 @@ pub mod appearance;
 pub mod comments;
 pub mod content_control;
 pub mod effect_stack;
+pub mod equation;
 pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
@@ -8009,6 +8010,13 @@ pub struct Paragraph {
     /// `w:pPrChange`): the paragraph's properties before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub props_change: Option<ParaPropsChange>,
+    /// Engine ADR 1090 — the equations standing in this paragraph, in text
+    /// order: each is a character of its line at its offset, as an inline
+    /// anchored object is ([`Self::anchored_frame_offsets`]), and its text
+    /// is no character of the paragraph's. Skipped when empty, so a document
+    /// without one keeps its bytes and state hash.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub equations: Vec<equation::Equation>,
 }
 impl Paragraph {
     /// Keep the anchors of [`Self::anchored_frame_offsets`], the
@@ -8021,12 +8029,14 @@ impl Paragraph {
         let footnotes = self.footnotes.iter_mut().filter_map(|f| f.anchor.as_mut());
         let notes = self.notes.iter_mut().map(|n| &mut n.anchor);
         let table = self.table_anchor.as_mut();
+        let equations = self.equations.iter_mut().map(|e| &mut e.offset);
         for offset in self
             .anchored_frame_offsets
             .iter_mut()
             .chain(footnotes)
             .chain(notes)
             .chain(table)
+            .chain(equations)
         {
             if delta >= 0 {
                 if *offset >= at {

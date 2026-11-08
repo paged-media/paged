@@ -14,3 +14,5 @@ workspace = true
 [dependencies]
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
 docx-core.workspace = true
+# The math tree the shared OMML reader returns (engine ADR 1090).
+paged-math.workspace = true

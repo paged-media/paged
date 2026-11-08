@@ -52,6 +52,48 @@ fn collect(el: &El, out: &mut Vec<Math>) {
     }
 }
 
+/// Every equation of a part's bytes, one per element that holds equations,
+/// in document order: an `m:oMathPara` as one display equation (its lines
+/// stacked, [`as_one`]) and an `m:oMath` outside one as an inline one. The
+/// part is not built beyond those elements. What an `mc:Fallback` holds is
+/// left out: it repeats its `mc:Choice`, which a typed reader walks. For an
+/// importer that meets the equations in its own walk of the part and takes
+/// them here in the same order (paged.doc, engine ADR 1090).
+pub fn in_part(bytes: &[u8]) -> Result<Vec<Math>, String> {
+    let picked = crate::tree::subtrees(bytes, |uri, local| match crate::tree::ns_of(uri) {
+        Ns::M => local == "oMathPara" || local == "oMath",
+        Ns::Mc => local == "Fallback",
+        _ => false,
+    })?;
+    Ok(picked
+        .iter()
+        .filter_map(|el| {
+            if el.is(Ns::M, "oMathPara") {
+                Some(as_one(read_para(el)))
+            } else if el.is(Ns::M, "oMath") {
+                Some(read_math(el, false))
+            } else {
+                None
+            }
+        })
+        .collect())
+}
+
+/// The equations of one `m:oMathPara` as one display equation: a single
+/// one as itself, several as the rows of an equation array (Word sets each
+/// on a line of its own, the group centred).
+pub fn as_one(mut lines: Vec<Math>) -> Math {
+    if lines.len() == 1 {
+        return lines.remove(0);
+    }
+    Math {
+        display: true,
+        body: vec![Node::EqArr {
+            rows: lines.into_iter().map(|m| m.body).collect(),
+        }],
+    }
+}
+
 /// Parse an XML fragment (it must bind the `m:` prefix) and read its equations.
 pub fn parse_all(xml: &str) -> Result<Vec<Math>, String> {
     Ok(read_all(&crate::tree::parse(xml.as_bytes())?))

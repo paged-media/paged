@@ -1492,6 +1492,7 @@ dependencies = [
  "docx-lower",
  "docx-skeleton",
  "flate2",
+ "paged-math",
  "paged-ooxml",
  "paged-test-resources",
  "serde_json",
@@ -1502,6 +1503,7 @@ dependencies = [
 name = "docx-core"
 version = "0.0.0"
 dependencies = [
+ "paged-math",
  "paged-ooxml",
  "serde",
 ]
@@ -1524,6 +1526,7 @@ name = "docx-import"
 version = "0.0.0"
 dependencies = [
  "docx-core",
+ "paged-math",
  "paged-ooxml",
 ]
 
@@ -1553,6 +1556,7 @@ dependencies = [
  "base64",
  "dml-native",
  "docx-core",
+ "paged-math",
  "paged-ooxml",
  "serde",
 ]
@@ -4500,6 +4504,9 @@ dependencies = [
 [[package]]
 name = "paged-math"
 version = "0.0.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "paged-mcp"
@@ -4515,6 +4522,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "paged-colour-math",
+ "paged-math",
  "schemars",
  "serde",
  "serde_json",
@@ -4688,6 +4696,7 @@ dependencies = [
  "paged-geom",
  "paged-gpu",
  "paged-kernels",
+ "paged-math",
  "paged-model",
  "paged-mutate",
  "paged-pdf-page",

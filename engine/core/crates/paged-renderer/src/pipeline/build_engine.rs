@@ -6731,7 +6731,16 @@ pub(super) fn emit_paragraph_into_chain(
     // the paragraph is laid out. The segments re-enter here while
     // `inline_objects` is set.
     if em.inline_objects.is_none() {
-        if let Some((with_objects, objects)) = anchored::with_object_placeholders(paragraph) {
+        // Engine ADR 1090 — the paragraph's equations are set first: each
+        // is an in-line object as wide as it is set.
+        let equations = if paragraph.equations.is_empty() {
+            Vec::new()
+        } else {
+            super::equations::set_equations(em.document, em.font_table, paragraph)
+        };
+        if let Some((with_objects, objects)) =
+            anchored::with_object_placeholders(paragraph, equations)
+        {
             em.inline_objects = Some(objects);
             emit_paragraph_lines(em, &with_objects, pages, total_stats);
             if let Some(objects) = em.inline_objects.take() {
@@ -9332,6 +9341,7 @@ fn emit_paragraph_lines(
                             column: (text_origin_pt.0, text_origin_pt.0 + full_col_pt),
                             point_size: lo.point_size,
                             cap_height,
+                            paint: Some(picker.pick(g.cluster)),
                         });
                     }
                 }

@@ -27,7 +27,7 @@ const ROOT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 /// `[Content_Types].xml` for the main document and the given parts, written
 /// by the owner (`paged_ooxml::content_types`).
-fn content_types(parts: &[(&str, &str)]) -> String {
+pub(crate) fn content_types(parts: &[(&str, &str)]) -> String {
     let mut c = paged_ooxml::content_types::ContentTypes::new();
     c.add_default(
         "rels",

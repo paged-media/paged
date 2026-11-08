@@ -793,6 +793,7 @@ fn split_paragraph_at(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32)
     let before: usize = para.runs[..run_idx].iter().map(|r| r.text.len()).sum();
     let split_char = para.char_offset_of_byte(before + byte_in_run);
     let (moved_frames, moved_offsets) = take_anchors_from(para, split_char);
+    let moved_equations = take_equations_from(para, split_char);
     let (moved_notes, moved_table) = take_notes_and_table_from(para, split_char);
     let moved_editorial = take_editorial_notes_from(para, split_char);
     let moved_deletions = take_tracked_deletions_from(para, split_char);
@@ -825,9 +826,30 @@ fn split_paragraph_at(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32)
         table_anchor,
         // Engine ADR 1040 — the paragraph's mark ends the tail.
         mark_revision: para.mark_revision.take(),
+        equations: moved_equations,
         ..Default::default()
     };
     paragraphs.insert(paragraph_idx + 1, new_para);
+}
+
+/// Engine ADR 1090 — remove from `para` the equations standing at
+/// character `from` or later, returning them with their offsets rebased to
+/// `from`.
+fn take_equations_from(
+    para: &mut paged_model::Paragraph,
+    from: u32,
+) -> Vec<paged_model::equation::Equation> {
+    let (moved, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut para.equations)
+        .into_iter()
+        .partition(|e| e.offset >= from);
+    para.equations = kept;
+    moved
+        .into_iter()
+        .map(|mut e| {
+            e.offset -= from;
+            e
+        })
+        .collect()
 }
 
 /// Drop the footnotes whose reference stands in characters `[from, to)` of
@@ -1147,6 +1169,12 @@ fn apply_delete_range(
         let end_char = paragraphs[end_para].char_offset_of_byte(end_local);
         drop_notes_in(&mut paragraphs[end_para], 0, end_char);
         let (moved_frames, moved_offsets) = take_anchors_from(&mut paragraphs[end_para], end_char);
+        // Engine ADR 1090 — the equations after the deletion move with
+        // their text; those inside it go with it.
+        let moved_equations = take_equations_from(&mut paragraphs[end_para], end_char);
+        paragraphs[start_para]
+            .equations
+            .retain(|e| e.offset <= start_char);
         let (moved_notes, moved_table) =
             take_notes_and_table_from(&mut paragraphs[end_para], end_char);
         let moved_editorial = take_editorial_notes_from(&mut paragraphs[end_para], end_char);
@@ -1162,6 +1190,12 @@ fn apply_delete_range(
         start_para_ref
             .anchored_frame_offsets
             .extend(moved_offsets.into_iter().map(|o| o + start_char));
+        start_para_ref
+            .equations
+            .extend(moved_equations.into_iter().map(|mut e| {
+                e.offset += start_char;
+                e
+            }));
         start_para_ref
             .footnotes
             .extend(moved_notes.into_iter().map(|mut f| {

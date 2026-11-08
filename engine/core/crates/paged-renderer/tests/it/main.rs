@@ -29,6 +29,7 @@ mod drop_cap_pipeline;
 mod effect_stack;
 mod effect_stack_photoshop;
 mod element_visibility;
+mod equations_pipeline;
 mod feathered_picture;
 mod feathered_stroke_and_text;
 mod flow_parity;

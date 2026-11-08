@@ -522,6 +522,11 @@ pub struct Run {
     /// 614. Every run of the control carries it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control: Option<ContentControl>,
+    /// An equation standing here (`m:oMath`, or an `m:oMathPara` as one
+    /// display equation), engine ADR 1090: such a run has no text and no
+    /// `w:r` of its own; the equation's markup stays in the part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub math: Option<paged_math::Math>,
 }
 
 fn is_zero_usize(n: &usize) -> bool {

@@ -270,6 +270,12 @@ impl FontTable {
                     keys.insert((family, resolved.font_style));
                 }
             }
+            // Engine ADR 1090 — an equation is set in a math face.
+            if !paragraph.equations.is_empty() {
+                for family in super::equations::MATH_FAMILIES {
+                    keys.insert((family.to_string(), None));
+                }
+            }
             for inner in nested_paragraphs(paragraph) {
                 harvest(document, inner, keys);
             }
@@ -369,6 +375,17 @@ impl FontTable {
                             let wght = wght_for_font_style(resolved.font_style.as_deref());
                             face_keys.insert((font_id, wght.to_bits()));
                             id_to_bytes.entry(font_id).or_insert_with(|| b.clone());
+                        }
+                    }
+                    // Engine ADR 1090 — the math faces an equation is set
+                    // in, so its glyphs name their bytes (a PDF's text).
+                    if !paragraph.equations.is_empty() {
+                        for family in super::equations::MATH_FAMILIES {
+                            if let Some(b) = cache.get(&(family.to_string(), None)) {
+                                let font_id = font_id(b);
+                                face_keys.insert((font_id, wght_for_font_style(None).to_bits()));
+                                id_to_bytes.entry(font_id).or_insert_with(|| b.clone());
+                            }
                         }
                     }
                     for inner in nested_paragraphs(paragraph) {

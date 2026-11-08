@@ -20,6 +20,8 @@ schema = ["dep:schemars"]
 serde = { workspace = true }
 # The theme swatches' colour transforms (engine ADR 1056).
 paged-colour-math = { path = "../paged-colour-math" }
+# Equations in text: the math tree a paragraph stores (engine ADR 1090).
+paged-math = { path = "../paged-math", features = ["serde"] }
 base64 = { workspace = true }
 # The effect stack's IDML label (engine ADR 1008).
 serde_json = "1"

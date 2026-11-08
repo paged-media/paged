@@ -56,6 +56,7 @@ mod datefmt;
 mod decorations;
 mod deltas;
 mod direction;
+mod equations;
 mod font_table;
 mod footnotes;
 mod geom;
