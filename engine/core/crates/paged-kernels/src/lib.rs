@@ -33,6 +33,7 @@
 
 pub mod abi;
 pub mod blur;
+pub mod coverage;
 pub mod cpu;
 pub mod def;
 // Before `families`: textual macro scope runs in declaration order.

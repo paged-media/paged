@@ -2817,6 +2817,7 @@ dependencies = [
  "js-sys",
  "paged-blend",
  "paged-color",
+ "paged-kernels",
  "paged-pixel",
  "paged-psd",
  "paged-raster",

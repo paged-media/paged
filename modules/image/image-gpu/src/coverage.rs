@@ -218,50 +218,20 @@ impl SelectionCoverage {
     /// accumulate ANALYTIC x-coverage per pixel at ¼ weight each
     /// (exact in x, 4× supersampled in y). `points` are `(x, y)` image-px
     /// vertices; the closing edge last→first is implicit. Fewer than 3
-    /// vertices rasterize to empty.
+    /// vertices rasterize to empty. The scan is `paged_kernels::coverage`
+    /// (engine ADR 1013), shared with the region filter's polygons.
     pub fn rasterize_polygon(width: u32, height: u32, points: &[(f32, f32)]) -> Self {
-        let mut out = SelectionCoverage::empty(width, height);
-        if points.len() < 3 {
-            return out;
+        let data = paged_kernels::coverage::polygons(
+            width,
+            height,
+            &[points],
+            paged_kernels::coverage::FillRule::EvenOdd,
+        );
+        SelectionCoverage {
+            width,
+            height,
+            data,
         }
-        let n = points.len();
-        // f32 coverage accumulator (¼ per sub-scanline span overlap).
-        let mut acc = vec![0.0f32; (width as usize) * (height as usize)];
-        let mut xs: Vec<f32> = Vec::with_capacity(8);
-        for y in 0..height {
-            for sub in 0..4u32 {
-                let sy = y as f32 + (sub as f32 * 2.0 + 1.0) / 8.0;
-                xs.clear();
-                for i in 0..n {
-                    let (x0, y0) = points[i];
-                    let (x1, y1) = points[(i + 1) % n];
-                    // Half-open in y (`[min, max)`) so a vertex exactly on
-                    // the scanline counts once — the classic even–odd
-                    // crossing rule.
-                    if (y0 <= sy && sy < y1) || (y1 <= sy && sy < y0) {
-                        let t = (sy - y0) / (y1 - y0);
-                        xs.push(x0 + t * (x1 - x0));
-                    }
-                }
-                xs.sort_by(|a, b| a.partial_cmp(b).expect("finite intersections"));
-                for pair in xs.as_chunks::<2>().0 {
-                    let (xa, xb) = (pair[0].max(0.0), pair[1].min(width as f32));
-                    if xb <= xa {
-                        continue;
-                    }
-                    let first = xa.floor() as u32;
-                    let last = (xb.ceil() as u32).min(width);
-                    for px in first..last {
-                        let cover = (xb.min(px as f32 + 1.0) - xa.max(px as f32)).max(0.0);
-                        acc[(y * width + px) as usize] += cover * 0.25;
-                    }
-                }
-            }
-        }
-        for (dst, &a) in out.data.iter_mut().zip(acc.iter()) {
-            *dst = (a.clamp(0.0, 1.0) * 255.0).round() as u8;
-        }
-        out
     }
 
     /// Magic-wand coverage over straight-RGBA8 `rgba` (`width·height·4`

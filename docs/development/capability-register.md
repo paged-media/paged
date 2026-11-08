@@ -95,7 +95,13 @@ compose masks' box passes and image-gpu's selection feather moved onto it, bit-e
 with reasons in the record: the f32 image-pipeline twin `cpu::gaussian_weights` (already here; other weights),
 image-js Refine Edge's f32 `gaussian`, `psd_vector_mask`'s f32 box feather, the `style::blur` reference twin, and the GPU
 blurs (Vello's layer blur, the `conv` and `style` WGSL).
-Path coverage rasterizers ×3 in image-js.
+Polygon coverage (engine ADR 1013, amendment "Coverage"): `paged_kernels::coverage::polygons` owns the analytic
+four-sub-scanline scan; the lasso (`image-gpu` `SelectionCoverage::rasterize_polygon`) and the region filter's
+`rasterize_polygons` call it (one body, bit-exact against the old one), and `masking.rs`' point-sampled
+`rasterize_nonzero` (dead outside its own test) is deleted. Allowed, with reasons in the record: `psd_vector_mask`'s
+17 × 15-sample scan with the component booleans (fitted to Photoshop's vector masks), the compose masks' binary
+one-sample fill (the InDesign effects' masks and PDF stamps), raster type's `ab_glyph_rasterizer` (signed-area
+accumulation; its goldens are its own), and vello_cpu for page paths.
 
 ### Geometry and vector
 

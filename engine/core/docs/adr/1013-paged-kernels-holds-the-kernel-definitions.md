@@ -174,3 +174,32 @@ What stays, and why:
 - **The GPU blurs**: Vello's layer blur in `paged-gpu/src/vello_rs.rs` (a sample grid of offset
   layers), and the WGSL of `conv.gaussian_*` and `style.blur_*`. The GPU cannot call Rust; the
   WGSL definitions are already single (`families::conv` here, `style` in image-kernels).
+
+## Amendment 2026-11-08 — Coverage
+
+paged.image filled polygons into 8-bit coverage three ways, and the engine two more:
+
+| Rasterizer                                         | Sampling                                    | Result here                     |
+| -------------------------------------------------- | ------------------------------------------- | ------------------------------- |
+| `image-gpu` `SelectionCoverage::rasterize_polygon` | 4 sub-scanlines, analytic x, even–odd       | `paged_kernels::coverage`       |
+| `image-js` `region_filter::rasterize_polygons`     | the same, several polygons, either rule     | `paged_kernels::coverage`       |
+| `image-js` `masking::rasterize_nonzero`            | 4 × 4 point samples, non-zero               | deleted: no caller but its test |
+| `image-js` `psd_vector_mask::rasterize`            | 17 × 15 samples, f64, component booleans    | stays                           |
+| `image-js` raster type (`ab_glyph_rasterizer`)     | signed-area accumulation                    | stays                           |
+| `paged-compose` `MaskRaster::interior`             | one sample per pixel, binary                | stays                           |
+| `paged-gpu` (vello_cpu)                            | sparse strips                               | stays                           |
+
+`paged_kernels::coverage::polygons(width, height, polygons, rule)` is the region filter's body,
+moved unchanged; the lasso is its one-polygon, even–odd case. That the two were already equal byte
+for byte was image-conformance's `cpu_twins` check; the move's own proof is the old lasso body,
+kept verbatim in the module's tests, against the new function on fixed polygons (a bow tie, a
+seven-point star, polygons reaching past the canvas, a degenerate two-point one).
+
+What stays, and why: `psd_vector_mask` draws a vector mask the way Photoshop does (image ADR 476:
+the sample grid and offsets were fitted to Photoshop's own renders, and the components fold by
+their boolean operations per sub-scanline), so the analytic scan would move every vector-mask
+golden. Raster type rasterizes glyph outlines with `ab_glyph_rasterizer`, an exact-area
+accumulator whose output (and the text goldens built on it) no scanline sampler reproduces; it is
+a crate dependency, not a copy, and moves only with a golden-by-golden slice onto the engine's
+glyph path. The compose masks are binary on purpose (the InDesign feather and shadow masks blur
+them afterwards, and the PDF writer's alpha stamps share them), and page paths are vello_cpu's.
