@@ -50,7 +50,6 @@ import { Icon } from "../icons";
 import { FIELD } from "./messages";
 import { BindPopover, type BindTarget } from "./bind-popover";
 import { useDataService } from "../state/data-door";
-import { useRegistries } from "../state/registries-context";
 import { useCanvasClient } from "../state/canvas-client-context";
 import {
   Dialog,
@@ -69,10 +68,7 @@ import {
 } from "./object-model";
 import type { ShellPropertySchema, ShellValueType } from "./object-model-types";
 import {
-  BIND_PROPERTY_ARGS,
-  BIND_PROPERTY_COMMAND_IDS,
   OID_LABEL_KEY,
-  checkArgs,
   oidFromEnvelope,
   resolveBindTarget,
   scopedBindTarget,
@@ -224,12 +220,9 @@ interface BindRequest {
   schema: string;
 }
 
-type BindNotice = BindRequest & {
-  /** Why nothing bound: no data plugin offers the command yet, or it
-   *  refused. `null` with `command: null` = the not-yet case. */
-  reason: string | null;
-  command: string | null;
-};
+/** What the not-yet dialog shows: the request, when no bundle serves the
+ *  document's data yet. */
+type BindNotice = BindRequest;
 
 const mintOid = (): string =>
   globalThis.crypto?.randomUUID?.() ??
@@ -237,11 +230,13 @@ const mintOid = (): string =>
 
 /**
  * "Bind to data…": resolve a DURABLE target for the field's first object,
- * then hand paged.data `(selector, path, schema)` through its bindProperty
- * command. paged.data's universal binding arrives in Wave 5 (ADR 558);
- * until a bundle registers the command the editor shows the prefilled
- * request with a not-yet message — and writes nothing (no oid label is
- * minted for a binding that cannot be made).
+ * then open the bind popover, which binds through the data door (data@1,
+ * editor ADR 292). paged.data is a built-in (PM-0017) and serves the door as
+ * the editor starts; until it does (the first moments of a session, or an
+ * embedding that loads no data bundle) the editor shows the prefilled request
+ * with a not-yet message and writes nothing: no oid label is minted for a
+ * binding that cannot be made. There is no second route through a bundle's
+ * own bindProperty command: the door covers every caller.
  */
 
 export function useBindToData(
@@ -251,12 +246,8 @@ export function useBindToData(
 ) {
   const model = useObjectModel();
   const client = useCanvasClient();
-  const { commands } = useRegistries();
   const readLabels = useElementLabels();
   const [notice, setNotice] = useState<BindNotice | null>(null);
-  // Editor ADR 292: with a bundle serving the document's data (data@1), the
-  // bind popover binds here; without one the request goes to a bundle's
-  // bindProperty command, or the notice says nothing can bind yet.
   const service = useDataService();
   const [popover, setPopover] = useState<BindTarget | null>(null);
 
@@ -265,13 +256,6 @@ export function useBindToData(
     if (!model || !field.row) return;
     const address = field.addresses[0];
     if (!address) return;
-    const typed = await model.objects.commands().catch(() => []);
-    const plain =
-      BIND_PROPERTY_COMMAND_IDS.find((id) => commands.get(id)) ?? null;
-    const typedId =
-      BIND_PROPERTY_COMMAND_IDS.find((id) => typed.some((c) => c.id === id)) ??
-      null;
-    const command = plain ?? typedId;
     const depsFor = (element: ElementId | null) => ({
       objects: model.objects,
       readName: async () => (await readLabels(element)).name,
@@ -295,13 +279,13 @@ export function useBindToData(
             resolveBindTarget(
               depsFor(host.element as ElementId | null),
               host.address,
-              { write: command !== null || service !== null },
+              { write: service !== null },
             ),
           )
         : null) ??
       (
         await resolveBindTarget(depsFor(field.elementOf(address)), address, {
-          write: command !== null || service !== null,
+          write: service !== null,
         })
       ).selector;
     const request: BindRequest = {
@@ -313,18 +297,8 @@ export function useBindToData(
       setPopover({ selector: target, path, label: path });
       return;
     }
-    const bad = checkArgs(BIND_PROPERTY_ARGS, request);
-    if (bad || !command) {
-      setNotice({ ...request, reason: bad, command: null });
-      return;
-    }
-    try {
-      if (plain) await commands.invoke(plain, request);
-      else await model.objects.invoke(command, request);
-    } catch (err) {
-      setNotice({ ...request, reason: String(err), command });
-    }
-  }, [model, client, field, commands, readLabels, path, scopeOf, service]);
+    setNotice(request);
+  }, [model, client, field, readLabels, path, scopeOf, service]);
 
   return {
     open,
@@ -350,9 +324,7 @@ export function BindNoticeDialog({
         <DialogHeader>
           <DialogTitle>{strings.t(FIELD.bindToData)}</DialogTitle>
           <DialogDescription data-bind-notice="">
-            {notice?.reason
-              ? strings.t(FIELD.bindFailed, { reason: notice.reason })
-              : strings.t(FIELD.bindPending)}
+            {strings.t(FIELD.bindPending)}
           </DialogDescription>
         </DialogHeader>
         {notice && (

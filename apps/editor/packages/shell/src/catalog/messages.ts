@@ -29,9 +29,8 @@ export const FIELD = defineMessages("shell.field", {
   typeInferred: "type inferred",
   bindToData: "Bind to data",
   bindToDataMenu: "Bind to data…",
-  bindFailed: "The binding could not be made: {reason}",
   bindPending:
-    "Property binding arrives with paged.data's universal binding. This is the request it will receive.",
+    "No data source is ready yet, so nothing can be bound. This is the request the binding will receive.",
   target: "Target",
   property: "Property",
   type: "Type",

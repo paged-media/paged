@@ -575,20 +575,24 @@ test("bind target: a plugin address is its own durable key (ADR 559 §6)", async
   });
 });
 
-test("the bindProperty args are declared and checked", () => {
-  assert.equal(M.BIND_PROPERTY_COMMAND, "media.paged.data.bindProperty");
+test("checkArgs holds a payload to a declared struct", () => {
+  const args = {
+    kind: "struct",
+    fields: {
+      selector: { kind: "text" },
+      path: { kind: "text" },
+      schema: { kind: "text", multiline: true },
+    },
+  };
   const good = {
     selector: 'frame[name="a"]',
     path: "frameStrokeWeight",
     schema: "{}",
   };
-  assert.equal(M.checkArgs(M.BIND_PROPERTY_ARGS, good), null);
-  assert.match(M.checkArgs(M.BIND_PROPERTY_ARGS, { ...good, path: 3 }), /path/);
-  assert.match(M.checkArgs(M.BIND_PROPERTY_ARGS, { selector: "x" }), /missing/);
-  assert.match(
-    M.checkArgs(M.BIND_PROPERTY_ARGS, { ...good, extra: 1 }),
-    /extra/,
-  );
+  assert.equal(M.checkArgs(args, good), null);
+  assert.match(M.checkArgs(args, { ...good, path: 3 }), /path/);
+  assert.match(M.checkArgs(args, { selector: "x" }), /missing/);
+  assert.match(M.checkArgs(args, { ...good, extra: 1 }), /extra/);
 });
 
 // ───────────────────────────────────────────── editor.* automation
@@ -674,32 +678,10 @@ test("editor.* without a registry refuses with a code", async () => {
 
 const { createCommandRegistry } = await import(shell("registries/command.ts"));
 
-test("the command registry declares bindProperty's args before any plugin registers it", () => {
+test("the command registry declares no args of its own: a command's payload is its contribution's", () => {
   const reg = createCommandRegistry(() => null);
-  assert.deepEqual(
-    reg.argsOf("media.paged.data.bindProperty"),
-    M.BIND_PROPERTY_ARGS,
-  );
-  assert.equal(reg.get("media.paged.data.bindProperty"), undefined);
+  assert.equal(reg.argsOf("media.paged.data.bindProperty"), undefined);
   assert.equal(reg.argsOf("paged.view.zoomIn"), undefined);
-});
-
-test("invoke refuses a payload that does not match the declared args, before the handler runs", async () => {
-  const reg = createCommandRegistry(() => null);
-  const seen = [];
-  reg.register({
-    id: "media.paged.data.bindProperty",
-    title: "Bind",
-    handler: (_p, payload) => seen.push(payload),
-  });
-  await assert.rejects(
-    reg.invoke("media.paged.data.bindProperty", { selector: "x" }),
-    /invalidValue/,
-  );
-  assert.equal(seen.length, 0);
-  const ok = { selector: "frame", path: "frameStrokeWeight", schema: "{}" };
-  await reg.invoke("media.paged.data.bindProperty", ok);
-  assert.deepEqual(seen, [ok]);
 });
 
 test("a contribution's own args are checked too; untyped commands still take anything", async () => {

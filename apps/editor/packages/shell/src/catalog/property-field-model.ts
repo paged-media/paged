@@ -622,33 +622,6 @@ export async function resolveBindTarget(
   };
 }
 
-// ------------------------------------------- the bindProperty command
-
-/** The command "Bind to data…" routes to: paged.data's typed
- *  `objectModel` command (ADR 558), which opens its Bindings panel
- *  prefilled. Headless definition is `media.paged.data.defineProperty`.
- *  With no bundle offering it the editor shows the prefilled request. */
-export const BIND_PROPERTY_COMMAND = "media.paged.data.bindProperty";
-/** Ids it may be reachable under: the typed command (via `host.objects`
- *  or the command registry) and the manifest-namespaced untyped twin. */
-export const BIND_PROPERTY_COMMAND_IDS: readonly string[] = [
-  BIND_PROPERTY_COMMAND,
-  "media.paged.data.command.bindProperty",
-];
-
-/** `selector` — the durable target (ADR 558 `TargetRef::Selector`);
- *  `path` — the ADR 132 path; `schema` — the target's schema row as JSON
- *  (a `ValueType` cannot describe a `ValueType`, so the row travels as
- *  text and the data plugin parses it). */
-export const BIND_PROPERTY_ARGS: ShellValueType = {
-  kind: "struct",
-  fields: {
-    selector: { kind: "text" },
-    path: { kind: "text" },
-    schema: { kind: "text", multiline: true },
-  },
-};
-
 /** A minimal structural check of command args against their declared
  *  type (the SDK's `validateValue` lives in plugin-sdk, which the shell
  *  does not depend on). `null` = conforms. */

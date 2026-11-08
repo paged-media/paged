@@ -334,26 +334,10 @@ describe("args validation (ADR 323)", () => {
     expect(await r.invoke("t.text", "hello")).toBe("hello");
   });
 
-  test("the editor's declared args apply to the bind-property ids, registered or not", async () => {
+  test("only a contribution's own args declare a command's payload", async () => {
     const r = createCommandRegistry(() => null);
-    for (const id of [
-      "media.paged.data.bindProperty",
-      "media.paged.data.command.bindProperty",
-    ]) {
-      // Declared before any plugin registers it.
-      expect(r.argsOf(id)?.kind).toBe("struct");
-      r.register({ id, title: "Bind", handler: () => "bound" });
-      await expect(r.invoke(id, { selector: "x" })).rejects.toThrow(
-        /invalidValue/,
-      );
-      expect(
-        await r.invoke(id, { selector: "s", path: "p", schema: "{}" }),
-      ).toBe("bound");
-    }
-  });
-
-  test("a contribution's own args win over the editor's declaration", async () => {
-    const r = createCommandRegistry(() => null);
+    // The editor declares nothing for a command nobody registered.
+    expect(r.argsOf("media.paged.data.bindProperty")).toBeUndefined();
     r.register({
       id: "media.paged.data.bindProperty",
       title: "Bind",

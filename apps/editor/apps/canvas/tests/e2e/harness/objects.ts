@@ -20,9 +20,8 @@
 // ADR 323 (Wave 6) — the shared steps of the object-model panel specs:
 // read a property THROUGH `host.objects` (`__canvas.objects`, the one
 // shared registry), undo exactly once, and open "Bind to data…" on a
-// field as a dry run (no data plugin registers `paged.data.bindProperty`
-// in these specs, so the dialog shows the prefilled request and writes
-// nothing).
+// field as a dry run (the bind popover opens over the data door and is
+// cancelled, so nothing is bound).
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
@@ -77,12 +76,11 @@ export function fieldOf(scope: Locator | Page, path: string): Locator {
   return scope.locator(`[data-property-field="${path}"]`).first();
 }
 
-/** Right-click a field → "Bind to data…". With paged.data loaded the
- *  request routes to its `media.paged.data.bindProperty`, which opens the
- *  Bindings panel with a DRAFT naming the path and the durable target
- *  (nothing is bound until a query and an expression are given — the
- *  draft is cancelled here). Without a data command the editor's fallback
- *  dialog shows the same request. Returns the target selector. */
+/** Right-click a field → "Bind to data…". With paged.data serving the data
+ *  door (data@1) the bind popover opens naming the path and the durable
+ *  target (nothing is bound until a query and an expression are given; it is
+ *  cancelled here). Before a bundle serves it the editor's not-yet dialog
+ *  shows the same request. Returns the target selector. */
 export async function bindToData(
   page: Page,
   field: Locator,
@@ -91,24 +89,16 @@ export async function bindToData(
   await expect(field).toHaveAttribute("data-value-type", /.+/);
   await field.click({ button: "right" });
   await page.locator('[data-menu-item="bind-to-data"]').click();
-  const draft = page.locator("[data-data-bind-property]");
   const dialog = page.locator("[data-bind-to-data]");
   // The bind popover (editor ADR 292) when a bundle serves the document's
   // data (data@1): it binds through that service, so it counts as routed.
   const popover = page.locator("[data-bind-popover]");
-  await expect(draft.or(dialog).or(popover).first()).toBeVisible();
+  await expect(popover.or(dialog).first()).toBeVisible();
   if (await popover.isVisible()) {
     await expect(popover).toHaveAttribute("data-bind-path", path);
     const selector = (await popover.getAttribute("data-bind-selector")) ?? "";
     await page.keyboard.press("Escape");
     await expect(popover).toHaveCount(0);
-    return { selector, routed: true };
-  }
-  if (await draft.isVisible()) {
-    const codes = draft.locator("code");
-    await expect(codes.nth(0)).toHaveText(path);
-    const selector = (await codes.nth(1).textContent()) ?? "";
-    await draft.getByRole("button", { name: "Cancel" }).click();
     return { selector, routed: true };
   }
   await expect(dialog.locator("[data-bind-path]")).toHaveText(path);
@@ -120,15 +110,13 @@ export async function bindToData(
 }
 
 /** The panel specs' family check: Bind to data… on `field` reaches
- *  paged.data's real command (the data bundle is loaded in the editor). */
+ *  the data door (the data bundle is loaded in the editor). */
 export async function bindDryRun(
   page: Page,
   field: Locator,
   path: string,
 ): Promise<string> {
   const r = await bindToData(page, field, path);
-  expect(r.routed, "Bind to data… reached paged.data's bindProperty").toBe(
-    true,
-  );
+  expect(r.routed, "Bind to data… reached the data door").toBe(true);
   return r.selector;
 }

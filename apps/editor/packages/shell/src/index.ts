@@ -930,9 +930,6 @@ export {
 } from "./catalog/object-property-field";
 export {
   probeBound,
-  BIND_PROPERTY_ARGS,
-  BIND_PROPERTY_COMMAND,
-  BIND_PROPERTY_COMMAND_IDS,
   OID_LABEL_KEY,
   checkArgs,
   formatValue,

@@ -142,7 +142,7 @@ test.describe("ADR 323 — object model in the editor", () => {
     await expect.poll(() => readWeight(page)).toBe(before);
   });
 
-  test("OM-2 — Bind to data… routes (selector, path, schema) to paged.data's media.paged.data.bindProperty: its Bindings panel opens with the draft; nothing is bound yet @feat:editor-shell.panels.stroke @feat:data.bind.authoring @level:happy", async ({
+  test("OM-2 — Bind to data… opens the bind popover over the data door (data@1) with (selector, path); nothing is bound yet @feat:editor-shell.panels.stroke @feat:data.bind.authoring @level:happy", async ({
     page,
   }) => {
     const { selector } = await bindToData(
@@ -151,10 +151,9 @@ test.describe("ADR 323 — object model in the editor", () => {
       "frameStrokeWeight",
     );
     expect(selector.length).toBeGreaterThan(0);
-    // No fallback dialog on the routed path: paged.data owns the binding UI.
+    // No not-yet dialog: the data door is served, so the popover was the route.
     await expect(page.locator("[data-bind-to-data]")).toHaveCount(0);
-    // A draft is not a binding: the badge stays off. (The Bindings panel
-    // took the dock slot; bring Stroke back.)
+    // An open popover is not a binding: the badge stays off.
     await openPanel(page, "paged.stroke");
     await expect(page.locator(FIELD)).not.toHaveAttribute("data-bound", "");
   });

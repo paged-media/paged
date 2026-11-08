@@ -54,3 +54,13 @@ refusal is shown in the popover.
   real-stack spec has the engine evaluate the same shapes on records.
 - Units, colours and enums are typed values here (`=MM(4)`, `=SWATCH("Red")`); a picker per
   schema type is a later refinement.
+
+## Amendment 1 (2026-11-08): the door is the only route
+
+The fallback is gone. "Bind to data…" no longer invokes a bundle's `media.paged.data.bindProperty`
+command when no service is live, and the editor no longer declares that command's args in the
+command registry (`BIND_PROPERTY_*`, the registry's declared-args table). paged.data is a built-in
+(PM-0017) and serves `data@1` as the editor starts, so the door covers every caller; before it is
+served (or in an embedding that loads no data bundle) the dialog shows the request with a not-yet
+message and writes nothing, as it did. The data bundle keeps its `bindProperty` command for
+programmatic callers; the editor just does not route through it.

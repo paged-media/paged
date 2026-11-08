@@ -23,21 +23,7 @@ import type * as Api from "@paged-media/plugin-api";
 import { isEnabled } from "./types";
 import type { Disposable, Registrable } from "./types";
 import type { ShellValueType } from "../catalog/object-model-types";
-import {
-  BIND_PROPERTY_ARGS,
-  BIND_PROPERTY_COMMAND_IDS,
-  checkArgs,
-} from "../catalog/property-field-model";
-
-/**
- * ADR 323 — args the EDITOR declares for commands a bundle is expected to
- * register, so a caller (PropertyField's "Bind to data…") and the
- * registering plugin meet on one typed shape before the plugin exists.
- * A contribution's own `args` wins over a declaration.
- */
-const DECLARED_ARGS: ReadonlyMap<string, ShellValueType> = new Map(
-  BIND_PROPERTY_COMMAND_IDS.map((id) => [id, BIND_PROPERTY_ARGS] as const),
-);
+import { checkArgs } from "../catalog/property-field-model";
 
 /**
  * Canonical action primitive. Every menu item, every keybinding,
@@ -198,7 +184,7 @@ export function createCommandRegistry(
       if (!isEnabled(cmd.when, getEditor) || !offered(id)) return undefined;
       // ADR 323 — a typed command refuses a payload that does not conform,
       // before anything runs (and before any observer records it).
-      const args = cmd.args ?? DECLARED_ARGS.get(id);
+      const args = cmd.args;
       if (args) {
         const bad = checkArgs(args, payload);
         if (bad) throw new Error(`invalidValue: ${id}: ${bad}`);
@@ -239,7 +225,7 @@ export function createCommandRegistry(
       return Array.from(byId.values());
     },
     argsOf(id) {
-      return byId.get(id)?.args ?? DECLARED_ARGS.get(id);
+      return byId.get(id)?.args;
     },
     observe(observer) {
       observers.add(observer);

@@ -62,7 +62,7 @@ Panel fields read and write through `host.objects`, the one object registry the 
 automation surface and the panels share. A schema-driven field (`PropertyField`) takes its
 widget from the target's schema row; a bespoke control keeps its widget inside an
 `ObjectFieldFrame`. Both write one batch over the whole selection (one undo step), offer
-"Bind to data…" (routed to paged.data's `media.paged.data.bindProperty`) and show a badge
+"Bind to data…" (the bind popover, over the data door `data@1`) and show a badge
 when paged.data reports a property binding on the path
 (`media.paged.data.propertyBindings`).
 
