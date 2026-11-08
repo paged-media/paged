@@ -70,3 +70,16 @@ label. Until then pins stay at the item's top-left, as today.
 - A bundle's tests run through the harness, which shares one anchor registry
   (`harness.commentAnchors`).
 - plugin-sdk and plugin-api 0.74.3-canary.70.
+
+## Amendment 2026-11-08 — the selected address
+
+`CommentAnchorContribution` gains an optional `selected(item): string | null`: the address the
+user has selected in `item` now. The registry's `selected(item)` asks each resolver in turn and
+returns the first address. The editor's Comments panel reads it when "New comment" is clicked
+with one item selected (`selectedCommentAddress` of the shell, at the click, because a module's
+cell selection moves without a document change): an address makes the new thread a `cell`
+thread (`insertCommentThread` with `{ kind: "cell", item, address }`), none leaves it on the
+item. paged.sheet answers its active cell (`Sheet1!B3`) for a frame that shows the active sheet;
+the workbook takes the thread at its next reconcile (sheet ADR 528), as any cell thread started
+in the document. The editor injects the registry (`plugin-host-options.ts`), so the flag of the
+section above is true there now. plugin-sdk and plugin-api 0.74.3-canary.79.

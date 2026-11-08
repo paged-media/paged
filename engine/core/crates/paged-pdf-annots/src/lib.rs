@@ -45,6 +45,7 @@
 //! engine's page, and what the PDF export writes around), else the crop box, with
 //! `/Rotate` applied and the box's origin (never assumed to be zero) subtracted.
 
+pub mod kept;
 mod source;
 mod text;
 
@@ -378,7 +379,7 @@ impl<'a> Annot<'a> {
     fn blob(&self) -> SourceBlob {
         SourceBlob {
             format: SOURCE_FORMAT.into(),
-            data: source::dict_to_string(&self.dict),
+            data: source::dict_to_string(&self.dict, self.frame.rotate),
         }
     }
 

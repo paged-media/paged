@@ -53,6 +53,9 @@ export interface CommentAnchorBackend {
   /** Where `address` of `item` points: the first resolver that knows it
    *  answers; null when none does. */
   resolve(item: string, address: string): CommentAnchorGeometry | null;
+  /** The address selected in `item` now: the first resolver that has one
+   *  answers; null when none does. */
+  selected(item: string): string | null;
   /** Fires when a resolver is added or removed (pins are placed again). */
   onDidChange(listener: () => void): Disposable;
 }
@@ -81,6 +84,18 @@ export function createCommentAnchorRegistry(): CommentAnchorBackend {
           if (g) return g;
         } catch {
           // A resolver that throws does not take the pin down with it.
+        }
+      }
+      return null;
+    },
+    selected(item) {
+      for (const { c } of [...entries]) {
+        if (c.kind !== "cell" || !c.selected) continue;
+        try {
+          const address = c.selected(item);
+          if (address) return address;
+        } catch {
+          // As in `resolve`: one resolver's failure is not the panel's.
         }
       }
       return null;

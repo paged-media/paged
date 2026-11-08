@@ -22,14 +22,18 @@
 // the panel on a real engine.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { focusThread } from "@paged-media/shell";
+import { createCommentAnchorRegistry } from "@paged-media/plugin-sdk";
+import { focusThread, setCommentAnchorLookup } from "@paged-media/shell";
 import { covers } from "@paged-media/test-kit";
 
 import { CommentsPanel } from "../../src/panels/comments-panel";
 import { richScene } from "./fixtures";
 import { mountPanel, unmountAll } from "./harness";
 
-afterEach(unmountAll);
+afterEach(() => {
+  setCommentAnchorLookup(null);
+  unmountAll();
+});
 
 const mount = () =>
   mountPanel(CommentsPanel, { id: "paged.comments", scene: richScene });
@@ -163,6 +167,45 @@ describe("Comments panel", () => {
     });
     expect(sent[0]!.args.comment.text).toBe("Looks off");
     expect(h.root.querySelector('[data-where="item"]')).not.toBeNull();
+  });
+
+  test("a new comment goes on the cell the frame's module has selected", async () => {
+    covers("panel:paged.comments");
+    const h = await mount();
+    // The registry the canvas shares with every bundle, with a resolver
+    // that says what the sheet module's does: the active cell of its frame.
+    const anchors = createCommentAnchorRegistry();
+    setCommentAnchorLookup(anchors);
+    let active = "Sheet1!B3";
+    const sub = anchors.register("media.paged.sheet", {
+      id: "media.paged.sheet.commentAnchor.cell",
+      kind: "cell",
+      resolve: (address, item) =>
+        item === rectId(h) ? { rect: [10, 20, 40, 12], label: address } : null,
+      selected: (item) => (item === rectId(h) ? active : null),
+    });
+    await h.select([h.scene.rect]);
+    // The cell moves after the selection did: the click reads it then.
+    active = "Sheet1!C4";
+    const from = h.mark();
+    await h.typeInto(q(h.root, "[data-new-comment-input]"), "Check this sum");
+    await h.click(q(h.root, "[data-new-comment-add]"));
+    const sent = h.mutations(from) as unknown as {
+      op: string;
+      args: {
+        anchor: { kind: string; item: string; address: string };
+        comment: { text: string };
+      };
+    }[];
+    expect(sent.map((m) => m.op)).toEqual(["insertCommentThread"]);
+    expect(sent[0]!.args.anchor).toEqual({
+      kind: "cell",
+      item: rectId(h),
+      address: "Sheet1!C4",
+    });
+    expect(sent[0]!.args.comment.text).toBe("Check this sum");
+    expect(h.root.querySelector('[data-where="cell"]')).not.toBeNull();
+    sub.dispose();
   });
 
   test("a new comment goes on the selected text range", async () => {

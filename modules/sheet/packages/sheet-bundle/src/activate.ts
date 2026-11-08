@@ -613,6 +613,9 @@ export function activate(host: BundleHost): BundleHandle {
         id: "media.paged.sheet.commentAnchor.cell",
         kind: "cell",
         resolve: (address, item) => session.commentAnchor(address, item),
+        // The active cell, so the Comments panel's "New comment" starts a
+        // thread on it.
+        selected: (item) => session.selectedAddress(item),
       })
     : null;
   // Keys while a sheet frame is entered and focus is not in a text field.

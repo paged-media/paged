@@ -3,8 +3,8 @@
 - **Status:** Accepted 2026-11-01; built: the engine model, the host Comments panel and canvas pins, the slide, Excel and
   Word readers and writers (slide ADR 711, sheet ADR 528, doc ADR 622), PDF comment annotations in and out (import
   2026-11-02), IDML notes as `note` rows, and the `comments@1` door (extensions ADR 1101). Open: a sheet thread started
-  from the panel on a cell, Word mentions, document threads in IDML (reported as lost), and re-emitting a PDF thread's
-  kept annotation on export. Extends [ADR 1020](1020-range-comments-with-threads.md) (range
+  from the panel on a cell, Word mentions and document threads in IDML (reported as lost). A PDF thread's kept annotation is
+  written back on export (amendment 2026-11-08, below). Extends [ADR 1020](1020-range-comments-with-threads.md) (range
   comments with threads) and [ADR 172](172-editorial-notes.md) (InDesign notes). Part of the
   capability layering of PM-0014 and PM-0017.
 - **Scope:** `paged-model` (`review.rs`), `paged-mutate`, `paged-wire`, `paged-canvas` (the
@@ -231,8 +231,45 @@ Rides protocol v78 (added before its first consumer sync; governance rule 4).
   anchor kind and reason: a document thread (item, page, region, cell) is dropped, a folded reply
   and a resolved state are reported, and a range comment whose text is gone is dropped.
 - Not yet: the format readers and writers for Word (people, mentions) and Excel (threaded comments,
-  editable); writing a PDF thread's kept annotation back on export (it is read and kept, 2026-11-02); a
+  editable); a
   document thread as an IDML note on its item's story (they are reported, not carried).
+
+## Amendment 2026-11-08 — Re-emitting a kept annotation
+
+What a PDF export does with a comment that was read from a PDF (it carries a `pdf-annot` source:
+its annotation, then the state annotations of it, one dictionary per line):
+
+- **Unedited → written back.** The export reads the kept dictionary the way the reader read the
+  file (`paged_pdf_annots::kept::read_kept`) and compares it with the model's comment: the text,
+  the author (a kept annotation without `/T` takes any) and the date the canvas hands on (`/M`,
+  else `/CreationDate`). When they agree, the dictionary is the annotation: every key it kept
+  (`/C`, `/Subj`, `/Name`, `/CA`, `/F`, the subtype, `/QuadPoints`, …) is written as it was.
+- **Edited, or made in paged → regenerated** from the model, as before: a 20-point sticky note at
+  its point.
+- **Placed on the destination page.** The thread's place in the model decides where: the kept
+  root's anchor corner (the top-left of `/QuadPoints` for text markup, else of `/Rect`, as the
+  reader anchored it) lands on the thread's point on its page, and the same move applies to the
+  root's replies and states, to `/Rect`, `/QuadPoints`, `/CL` and `/Vertices`. A source page's
+  `/Rotate` is undone (the reader keeps a non-zero angle in the dictionary as
+  `/PagedSourceRotate`, which is never written into a PDF), so a note from a turned page stands
+  upright at the same shown point. A thread moved in paged moves with its annotations.
+- **References rebuilt.** `/P` is the destination page, `/IRT` the new object of the comment a
+  reply or state is about, and a written-back root gets a new closed `/Popup` (its `/Parent` the
+  root), since the source's pop-up was not kept.
+- **States.** The root's kept states are written back while the model's state is still theirs
+  (resolved exactly when the latest `/Review` state is `Completed`); so an `Accepted`, `Rejected` or
+  `Marked` state the model has no field for survives an unchanged round trip. Resolving or
+  re-opening the thread in paged writes the model's state instead. A written-back reply takes its
+  own kept states with it; a regenerated reply has none.
+- A reply that was deleted in paged is not written; a new reply is regenerated with `/IRT` to the
+  root, whether the root was written back or not.
+
+The test is `paged-export-pdf`'s `an_unedited_imported_annotation_is_written_back_and_an_edited_one_regenerated`:
+a hand-made Acrobat-style PDF (a note with a pop-up, a reply, an `Accepted` state, a highlight, a
+note on a page turned 90 degrees) read by `paged-pdf-annots`, exported with one thread moved and
+one edited, and read back: the kept keys, the reply, the `Accepted` state, the moved quads and the
+upright note are there, the edited note is the model's, and `/P`, `/IRT` and `/Popup` name objects
+of the new file. Acrobat itself has not opened the result (no oracle run).
 
 ## Verification
 
