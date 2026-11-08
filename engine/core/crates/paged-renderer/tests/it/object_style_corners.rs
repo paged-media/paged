@@ -17,7 +17,7 @@
  */
 
 //! An object style's corners, as InDesign reads them (ADR 149;
-//! `tools/indesign-export/object-style-corners-probe`). InDesign 20.0.1
+//! `tooling/oracle/indesign/object-style-corners-probe`). InDesign 20.0.1
 //! read back, for a rectangle that states no corners of its own:
 //!
 //!   * the style's all-corner `CornerOption` / `CornerRadius` pair alone:

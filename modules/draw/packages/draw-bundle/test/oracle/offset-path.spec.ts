@@ -22,7 +22,7 @@
 //   1. THE JOIN'S DEFINITION (closed form). A miter, round or bevel offset
 //      of a convex polygon has an exact area and exact bounds.
 //   2. ADOBE ILLUSTRATOR 30.1.0, recorded 2026-10-02 by
-//        scripts/illustrator/run-probe.sh scripts/illustrator/probes/offset-path.jsx \
+//        tooling/oracle/illustrator/run-probe.sh tooling/oracle/illustrator/probes/offset-path.jsx \
 //          packages/draw-bundle/test/fixtures/oracle/offset-path.illustrator.json
 //      and replayed here. CI never drives Illustrator.
 //
@@ -111,7 +111,7 @@ interface OffsetCase {
   parameters: OffsetParameters;
 }
 
-// --- the cases: a MIRROR of scripts/illustrator/probes/offset-path.jsx -----
+// --- the cases: a MIRROR of tooling/oracle/illustrator/probes/offset-path.jsx -----
 // Points, page-local, Y down. RECT and TRI are drawn clockwise.
 
 /** 100 x 60. Area 6000, perimeter 320. */
@@ -294,7 +294,7 @@ describe("oracle — offset path", () => {
       expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
       expect(FIXTURE.produced_by.version).toMatch(/^\d+\.\d+/);
       expect(FIXTURE.produced_by.script).toBe(
-        "scripts/illustrator/probes/offset-path.jsx",
+        "tooling/oracle/illustrator/probes/offset-path.jsx",
       );
       expect(Number.isNaN(Date.parse(FIXTURE.produced_by.recorded_at))).toBe(
         false,

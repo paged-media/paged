@@ -19,7 +19,7 @@
 //! Pathfinder Divide over MANY shapes against Adobe Illustrator 30.1.0
 //! (engine ADR 1019). The paged.draw oracle recorded Divide over 20, 50
 //! and 100 generated rectangles and circles
-//! (`modules/draw/scripts/illustrator/probes/divide-many.jsx`, fixture
+//! (`modules/draw/tooling/oracle/illustrator/probes/divide-many.jsx`, fixture
 //! `divide-many.illustrator.json`); `tests/fixtures/divide-many.summary.json`
 //! is that recording reduced to what this kernel answers: the inputs
 //! (back to front) and, per piece, the input whose fill it carries — the

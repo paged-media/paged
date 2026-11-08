@@ -18,7 +18,7 @@
 
 //! ADR 029 — the room between two paragraphs is the room WORD leaves.
 //! `paragraph_spacing_docx()` is the document Word laid out
-//! (`scripts/word-paragraph-spacing-probe.sh`); the baseline step of each
+//! (`tooling/oracle/office/word/word-paragraph-spacing-probe.sh`); the baseline step of each
 //! pair is `fixtures/paragraph-spacing.word.json`. Word leaves the larger
 //! of space after and space before; the engine adds them. So each pair's
 //! lowered space after + space before must equal Word's step less one line.

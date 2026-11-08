@@ -21,7 +21,7 @@ attributes were not read at all; `Position="OTSuperscript"` (and its three sibli
 a scaled, raised glyph; historical forms, stylistic alternates and the case-sensitive forms of All
 Caps were never asked of the font.
 
-InDesign 20.0.1 was asked. `tools/indesign-export/nested-styles-probe.jsx` builds a document in
+InDesign 20.0.1 was asked. `tooling/oracle/indesign/nested-styles-probe.jsx` builds a document in
 the DOM, reads every character's effective formatting back (InDesign resolves nested styles into
 it), and exports the document; its answers are in `nested-styles-probe.json`. The `nested-styles`
 and `opentype` fixtures are the pixel oracles, and the `opentype` reference's glyph ids say which

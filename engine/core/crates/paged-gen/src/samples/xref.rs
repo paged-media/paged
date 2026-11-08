@@ -31,7 +31,7 @@
 //! The formats are spelled as an English InDesign spells its defaults.
 //! InDesign's PDF of this file is the gate's reference (what it prints
 //! before Update Cross-References); what the update writes is recorded by
-//! `tools/indesign-export/xref-update-probe.sh` against this file.
+//! `tooling/oracle/indesign/xref-update-probe.sh` against this file.
 
 use crate::builders::{
     designmap::{write_designmap, DesignMap},

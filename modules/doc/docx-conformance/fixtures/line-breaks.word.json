@@ -1,6 +1,6 @@
 {
   "fixture": "docx_conformance::line_breaks_docx()",
-  "produced_by": "scripts/word-line-breaks-probe.sh (Microsoft Word 16, PDF export, macOS)",
+  "produced_by": "tooling/oracle/office/word/word-line-breaks-probe.sh (Microsoft Word 16, PDF export, macOS)",
   "measured": "2026-10-01",
   "method": "pdftotext -bbox: per page, every visible line's label (its first word) and top below the 36 pt top margin; line = (top - first top) / 12 on the 12 pt grid. Word laid Inter in Calibri; the exact pitches make that harmless.",
   "page_size_pt": [

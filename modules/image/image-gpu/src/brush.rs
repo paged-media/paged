@@ -27,7 +27,7 @@
 //! same registered kernel dispatches as every other stroke.
 //!
 //! # Conventions (recorded, and checked against Photoshop where a probe
-//! # can reach them — `scripts/photoshop/probes/brush-strokes.jsx`)
+//! # can reach them — `tooling/oracle/photoshop/probes/brush-strokes.jsx`)
 //!
 //! * **Angle** is in degrees, positive COUNTER-CLOCKWISE ON SCREEN. The
 //!   image's y axis points down, so the tip's major axis runs along

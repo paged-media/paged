@@ -19,7 +19,7 @@
 //! THE BRUSH ORACLE: Photoshop's own dab placement and dab profile,
 //! replayed.
 //!
-//! `scripts/photoshop/probes/brush-strokes.jsx` strokes straight work
+//! `tooling/oracle/photoshop/probes/brush-strokes.jsx` strokes straight work
 //! paths with Photoshop's Brush tool (Stroke Path, every dynamics pane
 //! off, black on white) and records the PNGs in
 //! `image-conformance/fixtures/photoshop/brush-strokes/`. Photoshop cannot

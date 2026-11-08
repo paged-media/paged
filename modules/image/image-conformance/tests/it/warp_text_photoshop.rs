@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! WARP TEXT, recorded from Photoshop (`scripts/photoshop/probes/
+//! WARP TEXT, recorded from Photoshop (`tooling/oracle/photoshop/probes/
 //! warp-text.jsx`): one line of type in each Warp Text style at ±50 %
 //! bend, saved as a layered PSD with the warped layer's bounds.
 //!

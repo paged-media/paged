@@ -18,7 +18,7 @@
 
 //! The doc-reach documents: drop caps (`w:framePr w:dropCap`) and cropped
 //! pictures (`a:srcRect`). `dump-fixture <out> drop-cap|picture-crop|picture-crop-cell` writes
-//! them; `scripts/word-pagination-probe.sh` has Word render them to PDF.
+//! them; `tooling/oracle/office/word/word-pagination-probe.sh` has Word render them to PDF.
 
 use std::io::Write;
 

@@ -23,7 +23,7 @@
 //   node scripts/clipboard-flavours.mjs [--headed] [--write]
 //
 // READ (default): put something on the clipboard first (Illustrator's
-// Edit > Copy: modules/draw/scripts/illustrator/run-clipboard-probe.sh
+// Edit > Copy: modules/draw/tooling/oracle/illustrator/run-clipboard-probe.sh
 // records what it puts there), then run this. It prints, for Chromium as
 // Playwright ships it: the types `navigator.clipboard.read()` exposes,
 // each one's size and first bytes, and the types a real paste event's

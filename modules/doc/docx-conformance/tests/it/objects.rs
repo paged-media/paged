@@ -20,7 +20,7 @@
 //! page items or anchored objects, text boxes read, placed and saved back,
 //! a nested table shown and kept, the table look lowered, and `w:lang`
 //! lowered to the applied language. Where Word's answer is committed
-//! (`fixtures/objects-*.word.json`, `scripts/word-objects-probe.sh`) the
+//! (`fixtures/objects-*.word.json`, `tooling/oracle/office/word/word-objects-probe.sh`) the
 //! planned geometry is held against it.
 
 #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature

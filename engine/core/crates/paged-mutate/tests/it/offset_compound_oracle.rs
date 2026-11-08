@@ -18,7 +18,7 @@
 
 //! Offset Path of compound and open paths against Adobe Illustrator
 //! 30.1.0 (engine ADR 1019). The paged.draw oracle recorded these cases
-//! on 2026-10-25 (`modules/draw/scripts/illustrator/probes/offset-compound.jsx`,
+//! on 2026-10-25 (`modules/draw/tooling/oracle/illustrator/probes/offset-compound.jsx`,
 //! fixture `offset-compound.illustrator.json`); the inputs and the
 //! measured answers are copied here so the engine carries its own
 //! evidence. Page space, y down, points.

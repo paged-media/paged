@@ -173,7 +173,7 @@ pub enum GestureType {
     Rotate,
     /// Phase D — scale about a pivot, by the ratio of the pointer's and
     /// the anchor's offsets from it. InDesign's rule for the axes
-    /// (`tools/indesign-export/scale-frame-probe.jsx`): ONE target — a
+    /// (`tooling/oracle/indesign/scale-frame-probe.jsx`): ONE target — a
     /// frame or a group — scales along its own axes, so a rotated one
     /// stays a rectangle at its angle and a side handle changes only the
     /// dimension along its axis; SEVERAL targets scale as one unit along
@@ -1220,7 +1220,7 @@ impl CanvasModel {
     /// its groups expand) works on: one target's own box — a group's is
     /// the box InDesign draws around it ([`crate::group_box`]) — or the
     /// axis-aligned box of several, as InDesign's selection box is for
-    /// several items (`tools/indesign-export/scale-frame-probe.json`,
+    /// several items (`tooling/oracle/indesign/scale-frame-probe.json`,
     /// cases 1c–1e). `None` when a target has no geometry.
     fn selection_box(
         &self,

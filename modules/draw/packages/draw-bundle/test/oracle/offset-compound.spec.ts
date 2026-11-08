@@ -20,7 +20,7 @@
 // engine's `offsetPath { elementId, delta, join, miterLimit, side? }`
 // against ADOBE ILLUSTRATOR 30.1.0, recorded 2026-10-25 by
 //
-//   scripts/illustrator/run-probe.sh scripts/illustrator/probes/offset-compound.jsx \
+//   tooling/oracle/illustrator/run-probe.sh tooling/oracle/illustrator/probes/offset-compound.jsx \
 //     packages/draw-bundle/test/fixtures/oracle/offset-compound.illustrator.json
 //
 // WHAT ILLUSTRATOR SAID (14 cases):
@@ -151,7 +151,7 @@ describe("oracle — offset path of compound and open paths", () => {
   it("the recording says who made it, and is self-consistent", () => {
     expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
     expect(FIXTURE.produced_by.script).toBe(
-      "scripts/illustrator/probes/offset-compound.jsx",
+      "tooling/oracle/illustrator/probes/offset-compound.jsx",
     );
     expect(FIXTURE.cases).toHaveLength(14);
     for (const c of FIXTURE.cases) {

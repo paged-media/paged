@@ -189,7 +189,7 @@ theme or preset, create from swatches, relink; one undo step each.
   rows), and shows what opening a file dropped from the `importNotes` collection (rows
   `{ message }`, the lines of `CanvasModel::import_notes()`). Additive wire change, contract canary.
 - **CMYK followers and spot swatches:** decided under (b), "Colour space".
-- **Label size, measured.** `tools/indesign-export/label-size-probe.sh` (windowless, never
+- **Label size, measured.** `tooling/oracle/indesign/label-size-probe.sh` (windowless, never
   interactive) sets one document label on a new document in Adobe InDesign 20.0.1.32 (2025) and
   reads it back; the recording is `label-size-probe.json`. A label of 1 KiB to 16 Mi characters
   (quotes, angle brackets, an ampersand and non-ASCII included) is kept in memory, and through an

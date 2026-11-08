@@ -20,7 +20,7 @@
 //! and `MinimumFirstBaselineOffset`, pinned against InDesign 20.0.1's
 //! geometry for `table-cell-baseline.idml` (every cell's first baseline
 //! and three frames' first lines, read through its DOM by
-//! `tools/indesign-export/cells-probe.sh`; tolerance 0.05 pt).
+//! `tooling/oracle/indesign/cells-probe.sh`; tolerance 0.05 pt).
 //!
 //! What InDesign answered:
 //! * ascent, cap height, x height, the leading and `FixedHeight` (the

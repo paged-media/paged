@@ -33,7 +33,7 @@
 //! headings also `KeepWithNext` 1 (`w:keepNext`). Paragraphs are numbered
 //! (`P07head`, `P08lineA…`) so a misplaced page break reads at a glance.
 //!
-//! InDesign does not reflow on open; `tools/indesign-export/reflow-probe.sh`
+//! InDesign does not reflow on open; `tooling/oracle/indesign/reflow-probe.sh`
 //! switches Smart Text Reflow on, nudges the story and reports every page's
 //! first and last line.
 

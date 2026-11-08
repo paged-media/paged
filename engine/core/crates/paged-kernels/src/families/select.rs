@@ -27,7 +27,7 @@
 //! from the source and skips the mask properties for it).
 //!
 //! THE MODEL was fitted to Photoshop 27.10's recorded answers
-//! (`scripts/photoshop/probes/selection.jsx`, replayed by
+//! (`tooling/oracle/photoshop/probes/selection.jsx`, replayed by
 //! `image-conformance/tests/it/oracle_photoshop_selection.rs`):
 //!
 //! * SAMPLED colours: the samples span a Lab (D50) BOX; a pixel's

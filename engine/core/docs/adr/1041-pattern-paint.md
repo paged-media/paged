@@ -165,7 +165,7 @@ The contract advertises it as `document.patternPaint@1`.
   the same page, with the loss lines (used and unused).
 - `crates/paged-store/tests/it/pattern_paint.rs`: the native round trip; no key without a
   pattern.
-- The Illustrator oracle: `modules/draw/scripts/illustrator/probes/pattern-render.jsx` opens the
+- The Illustrator oracle: `modules/draw/tooling/oracle/illustrator/probes/pattern-render.jsx` opens the
   engine's PDFs of four patterns (`paged-export-pdf/tests/fixtures/pattern-oracle/`: a grid turned
   20°, a brick-by-row lattice, an overlapping hex-by-column lattice, a brick-by-column stroke) in
   Illustrator 30.1, exports its rendering at 1 px = 1 pt and saves its own PDF. Recorded

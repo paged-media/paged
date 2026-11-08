@@ -20,7 +20,7 @@
 // cap, join, miterLimit }` against the stroke's closed-form definition and
 // against ADOBE ILLUSTRATOR 30.1.0 (Object > Path > Outline Stroke),
 // recorded 2026-10-02 by
-//   scripts/illustrator/run-probe.sh scripts/illustrator/probes/outline-stroke.jsx \
+//   tooling/oracle/illustrator/run-probe.sh tooling/oracle/illustrator/probes/outline-stroke.jsx \
 //     packages/draw-bundle/test/fixtures/oracle/outline-stroke.illustrator.json
 //
 // 11 cases: butt / round / square caps × miter / round / bevel joins on an
@@ -92,7 +92,7 @@ interface OutlineCase {
   parameters: OutlineParameters;
 }
 
-// --- the cases: a MIRROR of scripts/illustrator/probes/outline-stroke.jsx ---
+// --- the cases: a MIRROR of tooling/oracle/illustrator/probes/outline-stroke.jsx ---
 
 const openPolyline = (points: readonly Vec2[]): OraclePath => ({
   closed: false,
@@ -246,7 +246,7 @@ describe("oracle — outline stroke", () => {
       expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
       expect(FIXTURE.produced_by.version).toMatch(/^\d+\.\d+/);
       expect(FIXTURE.produced_by.script).toBe(
-        "scripts/illustrator/probes/outline-stroke.jsx",
+        "tooling/oracle/illustrator/probes/outline-stroke.jsx",
       );
     });
 

@@ -18,7 +18,7 @@
 
 //! ADR 026 — page growth over the generated `reflow.idml`,
 //! against what InDesign 2025's Smart Text Reflow did with the same file
-//! (`tools/indesign-export/reflow-probe.sh`, 2026-10-01):
+//! (`tooling/oracle/indesign/reflow-probe.sh`, 2026-10-01):
 //!
 //! - two authored pages, one threaded frame each (33 lines a frame), 80
 //!   one-line paragraphs: InDesign added ONE page, carrying paragraphs
@@ -221,7 +221,7 @@ fn the_hint_settles_and_is_reused() {
 /// InDesign does once it has reflowed. Re-imported WITHOUT any grow rule,
 /// the document keeps its three pages and nothing is overset.
 /// `PAGED_REFLOW_EXPORT=<path>` also writes the exported package, so
-/// InDesign can be asked to open it (tools/indesign-export/reflow-probe.sh
+/// InDesign can be asked to open it (tooling/oracle/indesign/reflow-probe.sh
 /// with PAGED_REFLOW_EDIT=none).
 #[test]
 fn an_export_writes_generated_pages_as_real_pages() {

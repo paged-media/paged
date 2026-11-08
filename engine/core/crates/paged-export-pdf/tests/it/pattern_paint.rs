@@ -370,7 +370,7 @@ fn oracle_cases() -> Vec<(&'static str, Document)> {
 }
 
 /// Write the oracle's input PDFs (the engine's own export of each case),
-/// which `modules/draw/scripts/illustrator/probes/pattern-render.jsx`
+/// which `modules/draw/tooling/oracle/illustrator/probes/pattern-render.jsx`
 /// opens in Illustrator. Run by hand before recording.
 #[test]
 #[ignore = "writes the Illustrator oracle's inputs"]
@@ -394,7 +394,7 @@ const ORACLE_FAR_PCT: usize = 5;
 const ORACLE_LEVELS: u8 = 40;
 
 /// Engine ADR 1041 — the Illustrator oracle (recorded by
-/// `modules/draw/scripts/illustrator/probes/pattern-render.jsx`):
+/// `modules/draw/tooling/oracle/illustrator/probes/pattern-render.jsx`):
 /// Illustrator opens the engine's tiling pattern as a pattern swatch on
 /// the frame's path, draws it as the engine does, and writes it back as
 /// a tiling pattern. Skips (reported) until the probe has been recorded.

@@ -289,7 +289,7 @@ pub struct ComposeOptions<'a> {
     /// Paragraph Composer breaks it. InDesign keeps a word that overruns
     /// the measure by a sliver — 1/32 em in ragged text, 3/64 em in
     /// justified text, for a six-letter last word (asked of InDesign
-    /// 20.0.1: `tools/indesign-export/fit-tolerance-probe.*`). `0`: lines
+    /// 20.0.1: `tooling/oracle/indesign/fit-tolerance-probe.*`). `0`: lines
     /// fit their measure exactly. The minimum-raggedness breaker reads
     /// `overrun_size` instead, whose allowance follows each line's last
     /// word (ADR 142), and justified text in a plain frame is broken by

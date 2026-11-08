@@ -26,7 +26,7 @@ a document grid with snapping (editor ADR 287) and an Info panel (WP4.5), all ab
   grid cycle, then i32 locations in 1/32 px and a direction byte). `paged-psd` types it
   losslessly; it is read when a PSD opens (not an undo step) and written before a PSD save.
   Writing the guides a file already has changes nothing, so an unedited PSD still saves
-  byte for byte (§10.4). The Photoshop oracle (`scripts/photoshop/probes/guides.jsx`,
+  byte for byte (§10.4). The Photoshop oracle (`tooling/oracle/photoshop/probes/guides.jsx`,
   replayed by `image-conformance/tests/it/psd_guides_photoshop.rs`) pins the layout: the
   positions read exactly and the canonical re-encode is Photoshop's own bytes. Count (1080), notes and slices (1050) are not written to PSD yet.
 - **Host chrome stays the host's.** The rulers, the guides' drawing and dragging and the grid

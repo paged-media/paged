@@ -40,7 +40,7 @@
 //! The Adobe Photoshop File Format specification (sections "Placed Layer",
 //! "Linked Layer", "Filter Effects", "Filter Mask"), checked against and
 //! completed from files Photoshop 27.10 wrote with known content
-//! (`modules/image/scripts/photoshop/probes/smart-objects.jsx`): the
+//! (`modules/image/tooling/oracle/photoshop/probes/smart-objects.jsx`): the
 //! `liFD` version 8 tail (a child document id, an asset time, a lock flag
 //! and a `contentID` descriptor), the `FEid` channels' 4-byte row counts,
 //! and the filter mask after each entry's framed part are [OBS].

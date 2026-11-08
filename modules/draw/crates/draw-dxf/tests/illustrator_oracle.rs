@@ -18,7 +18,7 @@
 
 //! Draw ADR 364 — the Illustrator oracle of interchange, replayed.
 //!
-//! `scripts/illustrator/probes/interchange-open.jsx` (recorded with
+//! `tooling/oracle/illustrator/probes/interchange-open.jsx` (recorded with
 //! Illustrator 30.1, `packages/draw-bundle/test/fixtures/oracle/
 //! interchange-open.illustrator.json`) has, for one synthetic drawing:
 //!

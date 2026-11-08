@@ -18,7 +18,7 @@
 
 //! Update Cross-References (ADR 169) on `xref`, whose sources are stale:
 //! the update writes what InDesign 20.0.1 writes, recorded by
-//! `xref-update-probe` in `tools/indesign-export/xref-update-probe.json`
+//! `xref-update-probe` in `tooling/oracle/indesign/xref-update-probe.json`
 //! (each source's ranges after `update()`; a page-number range carries
 //! the variable's result).
 
@@ -74,7 +74,7 @@ fn source_text(m: &CanvasModel, source: &str) -> (String, Option<String>) {
 /// dump runs on into the next paragraph) and its page variable's result.
 fn indesign_after() -> Vec<(String, (String, Option<String>))> {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tools/indesign-export/xref-update-probe.json");
+        .join("../../../../tooling/oracle/indesign/xref-update-probe.json");
     let json: serde_json::Value =
         serde_json::from_slice(&std::fs::read(path).expect("probe record")).expect("json");
     let decode = |s: &str| {

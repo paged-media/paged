@@ -4,9 +4,9 @@
     "app": "Adobe InDesign",
     "version": "20.0.1.32",
     "locale": "GERMAN_LOCALE",
-    "script": "scripts/indesign/lib/read-document.jsx",
+    "script": "tooling/oracle/indesign/roundtrip/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
-    "runner": "scripts/indesign/run-roundtrip.sh",
+    "runner": "tooling/oracle/indesign/roundtrip/run-roundtrip.sh",
     "recorded_at": "2026-10-20T01:20:41.545Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"

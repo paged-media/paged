@@ -19,7 +19,7 @@
 // ORACLE — Illustrator's PERSPECTIVE GRID against draw-geometry's
 // (`src/warp/perspective-grid.ts`, `src/warp/homography.ts`).
 //
-// The recording (`scripts/illustrator/probes/perspective-grid.jsx`) draws
+// The recording (`tooling/oracle/illustrator/probes/perspective-grid.jsx`) draws
 // four rectangles and an ellipse on each plane of Illustrator's default
 // two-point grid: with the grid shown and a plane active,
 // `pathItems.rectangle(top, left, width, height)` takes its arguments as

@@ -5,7 +5,7 @@
   `is_generated_marker`, `FootnoteOptions::{start_at, numbering_style, label}`,
   `Paragraph::shift_anchors`), `paged-renderer` (`pipeline/build_engine.rs`: the table split and
   the footnote queue; `pipeline/footnotes.rs`: the footnote area), `paged-gen`
-  (`table-inline-text`, `footnote-references`), `tools/indesign-export/footnote-pool-probe.*`. The
+  (`table-inline-text`, `footnote-references`), `tooling/oracle/indesign/footnote-pool-probe.*`. The
   IDML spelling is plugin-publish's (`idml-import` `story.rs` and `designmap.rs`, `idml-export`
   `rewrite.rs`). Every model addition is serde-default: no protocol bump.
 

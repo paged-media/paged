@@ -4,7 +4,7 @@
 - **Scope:** `paged-compose` (`dash_fit`: `fit_dashes`, `push_stroke`; the rect and ellipse stroke
   primitives), `paged-renderer` (the stroke module's path branch, graphic lines, and the
   built-in stroke-style table in `color_paint.rs`), `paged-gen` (`stroke-styles`),
-  `tools/indesign-export/pdf-strokes.py`. No model, wire or protocol change.
+  `tooling/oracle/indesign/pdf-strokes.py`. No model, wire or protocol change.
 
 ## Context
 
@@ -19,7 +19,7 @@ have) drew dots, and the dot spacings were guesses.
 
 `stroke-styles` (a `paged-gen` sample) strokes nine built-in styles on a 120 × 60 rectangle at
 2 pt, a 137 × 61 rectangle at 5 pt and an open 150 pt line at 4 pt. Its PDF from InDesign 20.0.1
-is read back operator by operator with `tools/indesign-export/pdf-strokes.py`, which prints every
+is read back operator by operator with `tooling/oracle/indesign/pdf-strokes.py`, which prints every
 stroke's width, cap, dash array and path in page space. `line-ends` adds dashed ellipses with a
 `StrokeDashAndGap` of 14 10.
 

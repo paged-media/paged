@@ -77,7 +77,7 @@ amendment 1).
   rule picks them, print Word's header and footer on every page of `headers.word.json` (with
   and without even/odd); linked sections share masters; frame bounds follow the distances.
 - `tests/it/structure.rs` on `structure_docx()` and Word's answer
-  (`fixtures/structure.word.json`, `scripts/word-structure-probe.sh`): per-section masters
+  (`fixtures/structure.word.json`, `tooling/oracle/office/word/word-structure-probe.sh`): per-section masters
   with a linked footer, PAGE and NUMPAGES with Word's numbers on all three pages, each footnote
   on its reference's page; notes, markers and the TOC lowered.
 - `docx-skeleton/tests/skeleton.rs`: master spreads, their frames and empty stories, the pages'

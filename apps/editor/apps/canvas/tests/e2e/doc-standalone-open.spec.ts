@@ -21,7 +21,7 @@
 //
 // The fixture is plugin-doc's docx_conformance::pagination_docx(), whose
 // pages Word itself reported (plugin-doc docx-conformance/fixtures/
-// pagination.word.json, via scripts/word-pagination-probe.sh):
+// pagination.word.json, via tooling/oracle/office/word/word-pagination-probe.sh):
 //   Letter 53 / 54 / 13 lines (keepNext pushes S1 P054 onto page 2),
 //   then A5 landscape 28 / 12.
 // The per-line content is pinned against Word in core

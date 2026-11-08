@@ -22,7 +22,7 @@
 // draws as `starAnchors` (`@paged-media/helpers`) draws it; the Polygon
 // tool's live polygon follows InDesign's polygon tool.
 //
-// The recording (`scripts/illustrator/probes/live-shapes.jsx`) asks
+// The recording (`tooling/oracle/illustrator/probes/live-shapes.jsx`) asks
 // `PathItems.polygon(cx, cy, r, sides)` and `PathItems.star(cx, cy, r, ri,
 // points)` about one centre, and reflects an ellipse's properties. What
 // it says, and what is asserted:

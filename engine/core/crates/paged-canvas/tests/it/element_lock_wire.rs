@@ -19,7 +19,7 @@
 //! C-77 on the WIRE, as the editor's reproduction saw it
 //! (`engine-findings.md` §13): `moveFrame` and `deleteFrame` applied to a
 //! frame whose `elementLocked` is true. The rule (InDesign's, asked of it
-//! by script: `tools/indesign-export/object-integrity-probe.json`) is the
+//! by script: `tooling/oracle/indesign/object-integrity-probe.json`) is the
 //! engine's now, so a script or a plugin meets it as the editor does; the
 //! kernel half is `paged-mutate/tests/it/element_lock.rs`.
 

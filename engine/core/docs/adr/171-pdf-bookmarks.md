@@ -6,7 +6,7 @@
   - `paged-model`: `DesignMap.bookmark_parents` (serde default).
   - `paged-canvas`: `ExportPdfWireOptions.bookmarks` (additive) and `export::pdf_bookmarks`.
   - plugin-publish `idml-import`: bookmark nesting.
-  - `tools/indesign-export/pdf-outlines.py`.
+  - `tooling/oracle/indesign/pdf-outlines.py`.
 
 ## Context
 
