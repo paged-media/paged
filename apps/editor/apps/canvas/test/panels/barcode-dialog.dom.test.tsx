@@ -62,7 +62,7 @@ describe("paged.insert.barcode [editor-shell.insert-barcode]", () => {
     expect(BARCODE_MENU_ITEMS.map((m) => [m.path, m.command])).toEqual([
       ["Object/Insert barcode…", PAGED_INSERT_BARCODE],
     ]);
-    const when = BARCODE_MENU_ITEMS[0]!.when!;
+    const when = BARCODE_MENU_ITEMS[0]!.when as (state: unknown) => boolean;
     // The gate reads an open document at its root, never the document's kind:
     // a Word document, a deck and a layout all qualify.
     for (const _kind of ["layout", "doc", "slide"]) {

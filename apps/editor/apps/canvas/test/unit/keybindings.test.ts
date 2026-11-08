@@ -643,6 +643,48 @@ describe("the text-format chords (paged.text.*)", () => {
     expect(textFires("cmd+b", caret)).toBe("paged.text.bold");
   });
 
+  test("each chord fires its verb, Cmd and Ctrl alike", () => {
+    covers(
+      "keybinding:cmd+b→paged.text.bold",
+      "keybinding:ctrl+b→paged.text.bold",
+      "keybinding:cmd+i→paged.text.italic",
+      "keybinding:ctrl+i→paged.text.italic",
+      "keybinding:cmd+u→paged.text.underline",
+      "keybinding:ctrl+u→paged.text.underline",
+      "keybinding:shift+cmd+/→paged.text.strikethrough",
+      "keybinding:shift+ctrl+/→paged.text.strikethrough",
+      "keybinding:shift+cmd+?→paged.text.strikethrough",
+      "keybinding:shift+ctrl+?→paged.text.strikethrough",
+      "keybinding:shift+cmd+k→paged.text.allCaps",
+      "keybinding:shift+ctrl+k→paged.text.allCaps",
+      "keybinding:shift+cmd+h→paged.text.smallCaps",
+      "keybinding:shift+ctrl+h→paged.text.smallCaps",
+      "keybinding:shift+cmd+=→paged.text.superscript",
+      "keybinding:shift+ctrl+=→paged.text.superscript",
+      "keybinding:alt+shift+cmd+=→paged.text.subscript",
+      "keybinding:alt+shift+ctrl+=→paged.text.subscript",
+      "keybinding:shift+cmd+l→paged.text.alignLeft",
+      "keybinding:shift+ctrl+l→paged.text.alignLeft",
+      "keybinding:shift+cmd+c→paged.text.alignCenter",
+      "keybinding:shift+ctrl+c→paged.text.alignCenter",
+      "keybinding:shift+cmd+r→paged.text.alignRight",
+      "keybinding:shift+ctrl+r→paged.text.alignRight",
+      "keybinding:shift+cmd+j→paged.text.justify",
+      "keybinding:shift+ctrl+j→paged.text.justify",
+      "keybinding:shift+cmd+.→paged.text.growFont",
+      "keybinding:shift+ctrl+.→paged.text.growFont",
+      "keybinding:shift+cmd+>→paged.text.growFont",
+      "keybinding:shift+ctrl+>→paged.text.growFont",
+      "keybinding:shift+cmd+,→paged.text.shrinkFont",
+      "keybinding:shift+ctrl+,→paged.text.shrinkFont",
+      "keybinding:shift+cmd+<→paged.text.shrinkFont",
+      "keybinding:shift+ctrl+<→paged.text.shrinkFont",
+    );
+    for (const k of TEXT_FORMAT_KEYBINDINGS) {
+      expect(textFires(k.key, caret), k.key).toBe(k.command);
+    }
+  });
+
   test("every chord has its Ctrl twin, none repeats, and only Cmd/Ctrl+U shares a chord with a host binding", () => {
     const sig = new Set(
       TEXT_FORMAT_KEYBINDINGS.map((k) => `${k.key}→${k.command}`),

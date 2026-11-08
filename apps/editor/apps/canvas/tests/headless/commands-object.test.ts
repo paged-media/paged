@@ -867,3 +867,34 @@ describe("Insert star", () => {
     expect(dumpDiff(before, after)).toEqual([]);
   });
 });
+
+describe("Insert barcode", () => {
+  test("a payload draws the symbol as one group in one undo step; a refused value changes nothing", async () => {
+    covers("command:paged.insert.barcode");
+    const e = await open();
+    const before = await e.dump();
+    await e.invoke("paged.insert.barcode", {
+      symbology: "ean13",
+      data: "4006381333931",
+    });
+    await e.idle();
+    expect(e.problems()).toEqual([]);
+    const after = await e.dump();
+    expect(pageOne(after)).toHaveLength(pageOne(before).length + 1);
+    await expectOneUndoStep(e, before);
+    await e.invoke("paged.insert.barcode", {
+      symbology: "ean13",
+      data: "12ab",
+    });
+    await e.idle();
+    expect(e.problems().length).toBeGreaterThan(0);
+    expect(dumpDiff(before, await e.dump())).toEqual([]);
+  });
+
+  test("run bare it opens the dialog and writes nothing", async () => {
+    covers("command:paged.insert.barcode");
+    const e = await open();
+    const { before, after } = await run(e, "paged.insert.barcode");
+    expect(dumpDiff(before, after)).toEqual([]);
+  });
+});

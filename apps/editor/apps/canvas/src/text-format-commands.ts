@@ -380,40 +380,55 @@ function formFieldHasFocus(): boolean {
   );
 }
 
-/** The chord of each verb, without the Cmd / Ctrl. Bold, italic and underline
- *  are the word processors'; the rest are InDesign's. A shifted punctuation
- *  key reports the shifted glyph on some layouts, so those register both
- *  spellings (the bracket pair's rule, `OBJECT_KEYBINDINGS`). Not bound, as
- *  there is no convention to follow: the indents and the line spacings. */
-const TEXT_CHORDS: ReadonlyArray<readonly [TextVerb, readonly string[]]> = [
-  ["bold", ["b"]],
-  ["italic", ["i"]],
-  ["underline", ["u"]],
-  ["strikethrough", ["shift+/", "shift+?"]],
-  ["allCaps", ["shift+k"]],
-  ["smallCaps", ["shift+h"]],
-  ["superscript", ["shift+="]],
-  ["subscript", ["alt+shift+="]],
-  ["alignLeft", ["shift+l"]],
-  ["alignCenter", ["shift+c"]],
-  ["alignRight", ["shift+r"]],
-  ["justify", ["shift+j"]],
-  ["growFont", ["shift+.", "shift+>"]],
-  ["shrinkFont", ["shift+,", "shift+<"]],
+/** Every chord with the verb it runs, written out (the surface gate reads the
+ *  table statically), each with its Cmd (macOS) and Ctrl (Linux, Windows)
+ *  twin: the registry has no `mod`. Bold, italic and underline are the word
+ *  processors'; the rest are InDesign's (Shift+L / C / R / J align, K all
+ *  caps, H small caps, / strikethrough, = superscript, Alt+= subscript, . and
+ *  , the size steps). A shifted punctuation key reports the shifted glyph on
+ *  some layouts, so those register both spellings (the bracket pair's rule,
+ *  `OBJECT_KEYBINDINGS`). Not bound, as there is no convention to follow: the
+ *  indents and the line spacings. */
+const TEXT_CHORDS: ReadonlyArray<readonly [string, string]> = [
+  ["cmd+b", "paged.text.bold"],
+  ["ctrl+b", "paged.text.bold"],
+  ["cmd+i", "paged.text.italic"],
+  ["ctrl+i", "paged.text.italic"],
+  ["cmd+u", "paged.text.underline"],
+  ["ctrl+u", "paged.text.underline"],
+  ["shift+cmd+/", "paged.text.strikethrough"],
+  ["shift+ctrl+/", "paged.text.strikethrough"],
+  ["shift+cmd+?", "paged.text.strikethrough"],
+  ["shift+ctrl+?", "paged.text.strikethrough"],
+  ["shift+cmd+k", "paged.text.allCaps"],
+  ["shift+ctrl+k", "paged.text.allCaps"],
+  ["shift+cmd+h", "paged.text.smallCaps"],
+  ["shift+ctrl+h", "paged.text.smallCaps"],
+  ["shift+cmd+=", "paged.text.superscript"],
+  ["shift+ctrl+=", "paged.text.superscript"],
+  ["alt+shift+cmd+=", "paged.text.subscript"],
+  ["alt+shift+ctrl+=", "paged.text.subscript"],
+  ["shift+cmd+l", "paged.text.alignLeft"],
+  ["shift+ctrl+l", "paged.text.alignLeft"],
+  ["shift+cmd+c", "paged.text.alignCenter"],
+  ["shift+ctrl+c", "paged.text.alignCenter"],
+  ["shift+cmd+r", "paged.text.alignRight"],
+  ["shift+ctrl+r", "paged.text.alignRight"],
+  ["shift+cmd+j", "paged.text.justify"],
+  ["shift+ctrl+j", "paged.text.justify"],
+  ["shift+cmd+.", "paged.text.growFont"],
+  ["shift+ctrl+.", "paged.text.growFont"],
+  ["shift+cmd+>", "paged.text.growFont"],
+  ["shift+ctrl+>", "paged.text.growFont"],
+  ["shift+cmd+,", "paged.text.shrinkFont"],
+  ["shift+ctrl+,", "paged.text.shrinkFont"],
+  ["shift+cmd+<", "paged.text.shrinkFont"],
+  ["shift+ctrl+<", "paged.text.shrinkFont"],
 ];
 
-/** Every chord with its Cmd (macOS) and Ctrl (Linux, Windows) twin: the
- *  registry has no `mod`. */
 export const TEXT_FORMAT_KEYBINDINGS: KeybindingContribution[] =
-  TEXT_CHORDS.flatMap(([verb, chords]) =>
-    chords.flatMap((chord) => {
-      // Modifier order is the tables': alt, shift, then the platform key.
-      const parts = chord.split("+");
-      const key = parts.pop()!;
-      return ["cmd", "ctrl"].map((mod) => ({
-        key: [...parts, mod, key].join("+"),
-        command: textCommandId(verb),
-        when: textVerbKeysApply,
-      }));
-    }),
-  );
+  TEXT_CHORDS.map(([key, command]) => ({
+    key,
+    command,
+    when: textVerbKeysApply,
+  }));
