@@ -409,7 +409,7 @@ The release order when core and the IDML adapter pin each other is in
   depends on `salsa`, which `crates/paged-canvas/src/lib.rs` still names as a later phase.
 - Rendering a document from the composition model. `paged-composition` is derived from the
   scene, the function that stores it as a part is called only by tests, and
-  `paged-composition-render` (single page, page-relative positions) has no dependents.
+  the former `paged-composition-render` (single page, page-relative positions) had no dependents and was deleted.
 - `TextFlow`, the region-chain form of story layout, as the live path: per
   `crates/paged-renderer/src/flow.rs:31-33` it does not replace `StoryEmitter`.
 - A shared GPU device or texture for plugins

@@ -203,7 +203,7 @@ best-effort + diagnostic for composition features IDML can't hold (a `screen` su
 
 ## 10. Relationship to the render pipeline (unchanged below)
 
-_Status note (2026-10-02): this section predates the implementation; `crates/paged-composition-render/src/lib.rs` renders one page of a composition through a `RegionRenderer` (single page, `PageRelative` positions). The production pipeline does not go through it; it builds display lists from the document model ([ADR 107](../adr/107-whole-document-build.md))._
+_Status note (2026-10-02): this section predates the implementation; the former `paged-composition-render` (deleted unused) rendered one page of a composition through a `RegionRenderer`. The production pipeline does not go through it; it builds display lists from the document model ([ADR 107](../adr/107-whole-document-build.md))._
 
 The composition **drives the compositor**: for a target surface, resolve constraints → geometry; ask
 each region's engine to render its `part:selector` into that geometry → a `SceneLayer` (per region, per

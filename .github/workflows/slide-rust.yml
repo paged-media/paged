@@ -17,12 +17,12 @@ on:
       - "modules/slide/**"
       # slide-chart labels through paged.sheet's number-format engine (ADR 710):
       # path dependencies on sheet-format and sheet-core (whose build reads the
-      # function registry) and through them on platform/shared/fmt.
+      # function registry) and through them on engine/core/crates/paged-fmt.
       - "modules/sheet/Cargo.toml"
       - "modules/sheet/sheet-core/**"
       - "modules/sheet/sheet-format/**"
       - "modules/sheet/registry/functions/**"
-      - "platform/shared/fmt/**"
+      - "engine/core/crates/paged-fmt/**"
       - ".github/workflows/slide-rust.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -48,12 +48,12 @@ on:
       - "modules/slide/**"
       # slide-chart labels through paged.sheet's number-format engine (ADR 710):
       # path dependencies on sheet-format and sheet-core (whose build reads the
-      # function registry) and through them on platform/shared/fmt.
+      # function registry) and through them on engine/core/crates/paged-fmt.
       - "modules/sheet/Cargo.toml"
       - "modules/sheet/sheet-core/**"
       - "modules/sheet/sheet-format/**"
       - "modules/sheet/registry/functions/**"
-      - "platform/shared/fmt/**"
+      - "engine/core/crates/paged-fmt/**"
       - ".github/workflows/slide-rust.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"

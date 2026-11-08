@@ -106,7 +106,7 @@ pub struct LocaleData {
     pub short_date: &'static str,
 }
 
-/// A row of Excel's, from the shared locale table (platform/shared/fmt):
+/// A row of Excel's, from the shared locale table (engine/core/crates/paged-fmt):
 /// its separators and the language's calendar names, plus what only Excel
 /// has, the list separator and the default short-date code. AM/PM is the en
 /// markers in every locale (the ruling above).

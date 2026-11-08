@@ -13,8 +13,8 @@ workspace = true
 # NOTE: this crate stays PURE (paged-flow + serde only, no render stack).
 # `paged-scene` depends on it (for `Document::to_composition`), and the
 # render stack (paged-compose/paged-gpu) depends on `paged-scene` — so the
-# compositor drive lives one layer up, in `paged-composition-render`, to keep
-# the dependency graph acyclic.
+# compositor drive, if it returns, lives one layer up to keep the dependency
+# graph acyclic.
 [dependencies]
 paged-flow = { path = "../paged-flow" }
 serde = { workspace = true }

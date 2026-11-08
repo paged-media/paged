@@ -271,7 +271,9 @@ main at `4be5f0eba`:
 - **Outside this repository:** the cockpit feature registry maps some tests by path. The
   moved `ai` and `cli` suites and the retired draw Pencil tests need re-pointing there.
 
-## C2 — `platform/shared/fmt` (Rust)
+## C2 — `paged-fmt` (Rust; now `engine/core/crates/paged-fmt`, an L2 engine crate)
+
+Moved out of `platform/shared` because engine crates read it; the text below is its history.
 
 `paged-fmt` holds the formatting facts more than one Rust formatter needs: the proleptic
 Gregorian calendar, the locale table and digit grouping. It is standard library only and a

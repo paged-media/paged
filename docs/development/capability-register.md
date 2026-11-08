@@ -85,7 +85,9 @@ rule in the record, each behind the registry gate and the conformance goldens. D
 `image_decode.rs` keeps `jpeg-decoder` for the DCT-scaled decode of oversized JPEGs (`paged-raster` has no
 DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-raster` could not read (HDR);
 `pdf-import`'s `encode::png` writes through the `png` crate, whose bytes differ from `paged-raster`'s encoder
-for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere.
+for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere: engine ADR 1044 states why (placing a whole PSD draws its merged
+composite, which already holds the styles; the consumer is a "PSD layer as a page item" flow that does not exist yet).
+`paged-composition-render` had no consumer and was deleted.
 Path coverage rasterizers ×3 in image-js.
 
 ### Geometry and vector
@@ -112,8 +114,10 @@ The host `tools` package still imports `@paged-media/draw/geometry` and `/machin
 
 ### Text and fonts
 
-`image-js` has its own harfrust, skrifa and ab_glyph beside `paged-text`. `pptx-fonts` and
-`paged-fmt` belong at L2 (`paged-fmt` is used by engine crates from `platform/shared`).
+`image-js` keeps its own harfrust + skrifa shaping and outlines beside `paged-text`: raster type
+does not take `paged-text` (it would pull the model and composer into the image wasm, and its
+1/64 pt advance rounding is not pixel-identical); the fontations stack is pinned once in the
+engine workspace (engine ADR 1058). `pptx-fonts` and `paged-fmt` now live at L2 (`engine/core/crates/pptx-fonts`, `engine/core/crates/paged-fmt`).
 Chart label width ×2 → `dml-chart`. Number and date formats: `paged-numfmt` out of `sheet-format`.
 
 ### Office / OOXML / ODF
@@ -160,7 +164,7 @@ data each have their own lowering. Sheet and data each have their own lowering.
 ### Charts, data, scripting, PDF
 
 Doc has no charts (reuse `dml-chart` and the sheet engine). Not started, blocked on the doc wasm's size: after
-embedded fonts and shapes (doc ADRs 626, 627) it is 8,377,028 B of the manifest's 8,388,608 B, so a chart reader and
+embedded fonts and shapes (doc ADRs 626, 627) it is 8,379,940 B (CI) of the manifest's 8,388,608 B, so a chart reader and
 drawing, or the SmartArt drawing part (`dsp`) reader, need a second wasm artifact (`wasm[]` takes several) or a raised ceiling. Slide's chart data editing carries a
 second compiled sheet engine (blocked on a host door: slide ADR 724). `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` overlap `paged-script` and `paged-cli`. PDF read has two

@@ -1,6 +1,5 @@
 [package]
 name = "paged-fmt"
-workspace = "../../../engine/core"
 version = "0.0.0"
 edition = "2021"
 rust-version = "1.99"
