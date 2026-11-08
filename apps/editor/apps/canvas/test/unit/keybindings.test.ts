@@ -49,6 +49,7 @@ import { INSERT_KEYBINDINGS } from "../../src/insert-commands";
 import { OBJECT_KEYBINDINGS } from "../../src/object-commands";
 import { SELECT_ALL_KEYBINDINGS } from "../../src/select-all";
 import { VIEW_KEYBINDINGS } from "../../src/view-commands";
+import { TEXT_FORMAT_KEYBINDINGS } from "../../src/text-format-commands";
 
 const TABLES: KeybindingContribution[] = [
   ...APP_KEYBINDINGS,
@@ -117,6 +118,10 @@ class FakeElement {
   tagName = "BODY";
   isContentEditable = false;
   type = "";
+  attrs: Record<string, string> = {};
+  hasAttribute(name: string): boolean {
+    return name in this.attrs;
+  }
 }
 const focus = (patch: Partial<FakeElement>) =>
   stubGlobal("document", {
@@ -549,5 +554,115 @@ describe("the View menu's chords (editor ADR 287)", () => {
     );
     // Cmd+1 without Shift stays 100 %.
     expect(real("1", "Digit1", { meta: true })).toBe("paged.view.zoom100");
+  });
+});
+
+describe("the text-format chords (paged.text.*)", () => {
+  const ALL = [...TABLES, ...TEXT_FORMAT_KEYBINDINGS];
+  const textFires = (combo: string, state: unknown) =>
+    resolveBinding(ALL, press(combo), () => state)?.command ?? null;
+  const caret = at({ contentSelection: { contentSelection: { offset: 2 } } });
+
+  test("a caret or a range makes Cmd/Ctrl+B, I, U and the InDesign chords the verbs", () => {
+    covers(
+      "keybinding:cmd+b→paged.text.bold",
+      "keybinding:ctrl+b→paged.text.bold",
+      "keybinding:cmd+i→paged.text.italic",
+      "keybinding:cmd+u→paged.text.underline",
+      "keybinding:shift+cmd+l→paged.text.alignLeft",
+      "keybinding:shift+cmd+j→paged.text.justify",
+      "keybinding:alt+shift+cmd+=→paged.text.subscript",
+      "keybinding:shift+cmd+>→paged.text.growFont",
+    );
+    for (const mod of ["cmd", "ctrl"]) {
+      expect(textFires(`${mod}+b`, caret)).toBe("paged.text.bold");
+      expect(textFires(`${mod}+i`, caret)).toBe("paged.text.italic");
+      expect(textFires(`${mod}+u`, caret)).toBe("paged.text.underline");
+      expect(textFires(`${mod}+shift+k`, caret)).toBe("paged.text.allCaps");
+      expect(textFires(`${mod}+shift+h`, caret)).toBe("paged.text.smallCaps");
+      expect(textFires(`${mod}+shift+l`, caret)).toBe("paged.text.alignLeft");
+      expect(textFires(`${mod}+shift+c`, caret)).toBe("paged.text.alignCenter");
+      expect(textFires(`${mod}+shift+r`, caret)).toBe("paged.text.alignRight");
+      expect(textFires(`${mod}+shift+j`, caret)).toBe("paged.text.justify");
+      expect(textFires(`${mod}+shift+/`, caret)).toBe(
+        "paged.text.strikethrough",
+      );
+      expect(textFires(`${mod}+shift+?`, caret)).toBe(
+        "paged.text.strikethrough",
+      );
+      expect(textFires(`${mod}+shift+=`, caret)).toBe("paged.text.superscript");
+      expect(textFires(`${mod}+alt+shift+=`, caret)).toBe(
+        "paged.text.subscript",
+      );
+      expect(textFires(`${mod}+shift+.`, caret)).toBe("paged.text.growFont");
+      expect(textFires(`${mod}+shift+>`, caret)).toBe("paged.text.growFont");
+      expect(textFires(`${mod}+shift+,`, caret)).toBe("paged.text.shrinkFont");
+      expect(textFires(`${mod}+shift+<`, caret)).toBe("paged.text.shrinkFont");
+    }
+  });
+
+  test("without a text selection they are not the page's: Cmd+B does nothing and Cmd+U is still Smart Guides", () => {
+    covers("keybinding:cmd+u→paged.view.smartGuides");
+    expect(textFires("cmd+b", AT_ROOT)).toBeNull();
+    expect(textFires("cmd+shift+l", AT_ROOT)).toBeNull();
+    expect(textFires("cmd+u", AT_ROOT)).toBe("paged.view.smartGuides");
+    expect(textFires("ctrl+u", AT_ROOT)).toBe("paged.view.smartGuides");
+    // With text selected the narrower claim wins the chord.
+    expect(textFires("cmd+u", caret)).toBe("paged.text.underline");
+  });
+
+  test("no document, an edit context or a focused form field keeps the chord quiet; the canvas's text surface does not", () => {
+    const inSheet = at({
+      contentSelection: { contentSelection: {} },
+      editContext: { type: "sheet" },
+    });
+    expect(textFires("cmd+b", inSheet)).toBeNull();
+    expect(
+      textFires(
+        "cmd+b",
+        at({
+          document: { handle: null },
+          contentSelection: { contentSelection: {} },
+        }),
+      ),
+    ).toBeNull();
+    for (const field of [
+      { tagName: "INPUT", type: "text" },
+      { tagName: "TEXTAREA" },
+      { tagName: "SELECT" },
+      { tagName: "DIV", isContentEditable: true },
+    ]) {
+      focus(field);
+      expect({ field, fires: textFires("cmd+b", caret) }).toEqual({
+        field,
+        fires: null,
+      });
+    }
+    // The canvas's own text input is where the text is typed.
+    focus({ tagName: "TEXTAREA", attrs: { "data-canvas-surface": "text" } });
+    expect(textFires("cmd+b", caret)).toBe("paged.text.bold");
+  });
+
+  test("every chord has its Ctrl twin, none repeats, and only Cmd/Ctrl+U shares a chord with a host binding", () => {
+    const sig = new Set(
+      TEXT_FORMAT_KEYBINDINGS.map((k) => `${k.key}→${k.command}`),
+    );
+    expect(sig.size).toBe(TEXT_FORMAT_KEYBINDINGS.length);
+    for (const k of TEXT_FORMAT_KEYBINDINGS) {
+      const twin = k.key.includes("cmd")
+        ? k.key.replace("cmd", "ctrl")
+        : k.key.replace("ctrl", "cmd");
+      expect(sig.has(`${twin}→${k.command}`), k.key).toBe(true);
+      expect(k.when, k.key).toBeDefined();
+    }
+    const host = new Set(TABLES.map((k) => k.key));
+    expect(
+      TEXT_FORMAT_KEYBINDINGS.filter((k) => host.has(k.key)).map((k) => k.key),
+    ).toEqual(["cmd+u", "ctrl+u"]);
+    // paged.slide's chords stay free.
+    const slide = new Set(SLIDE_KEYBINDINGS.map(([key]) => key));
+    expect(
+      TEXT_FORMAT_KEYBINDINGS.filter((k) => slide.has(k.key)).map((k) => k.key),
+    ).toEqual([]);
   });
 });

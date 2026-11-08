@@ -37,6 +37,7 @@
 
 import type {
   CommandContribution,
+  KeybindingContribution,
   MenuItemContribution,
 } from "@paged-media/shell";
 import type { CanvasClient } from "@paged-media/client";
@@ -339,3 +340,80 @@ export const TEXT_FORMAT_MENU_ITEMS: MenuItemContribution[] = ENTRIES.map(
 
 /** The verbs, for tests. */
 export const TEXT_FORMAT_VERBS = TEXT_VERBS;
+
+// ---------------------------------------------------------------- keys
+
+/** A text selection to format: a document at its root with a caret or a
+ *  range in a story, and no form field (a panel's input, the command
+ *  palette) holding the keyboard. The canvas's own text surface is not a form
+ *  field: it is where the text is typed, and it leaves these chords alone
+ *  (it handles Cmd+Z, Cmd+A, Cmd+C/X and the arrows, none of these).
+ *
+ *  Guarded on purpose: a guarded binding beats an unguarded one on the same
+ *  chord, so Cmd+U underlines while a text selection exists and is still
+ *  Smart Guides everywhere else. */
+export const textVerbKeysApply = (state: unknown): boolean => {
+  const s = state as {
+    document?: { handle?: { pageCount?: number } | null } | null;
+    editContext?: unknown;
+    contentSelection?: { contentSelection?: unknown } | null;
+  } | null;
+  if (!s?.document?.handle || (s.document.handle.pageCount ?? 0) === 0) {
+    return false;
+  }
+  if (s.editContext) return false;
+  if (!s.contentSelection?.contentSelection) return false;
+  return !formFieldHasFocus();
+};
+
+/** Does a form field outside the canvas's text surface hold focus? */
+function formFieldHasFocus(): boolean {
+  const el = typeof document === "undefined" ? null : document.activeElement;
+  if (!(el instanceof HTMLElement)) return false;
+  // The canvas text surface (`data-canvas-surface="text"`) is the canvas.
+  if (el.hasAttribute("data-canvas-surface")) return false;
+  return (
+    el.tagName === "INPUT" ||
+    el.tagName === "TEXTAREA" ||
+    el.tagName === "SELECT" ||
+    el.isContentEditable
+  );
+}
+
+/** The chord of each verb, without the Cmd / Ctrl. Bold, italic and underline
+ *  are the word processors'; the rest are InDesign's. A shifted punctuation
+ *  key reports the shifted glyph on some layouts, so those register both
+ *  spellings (the bracket pair's rule, `OBJECT_KEYBINDINGS`). Not bound, as
+ *  there is no convention to follow: the indents and the line spacings. */
+const TEXT_CHORDS: ReadonlyArray<readonly [TextVerb, readonly string[]]> = [
+  ["bold", ["b"]],
+  ["italic", ["i"]],
+  ["underline", ["u"]],
+  ["strikethrough", ["shift+/", "shift+?"]],
+  ["allCaps", ["shift+k"]],
+  ["smallCaps", ["shift+h"]],
+  ["superscript", ["shift+="]],
+  ["subscript", ["alt+shift+="]],
+  ["alignLeft", ["shift+l"]],
+  ["alignCenter", ["shift+c"]],
+  ["alignRight", ["shift+r"]],
+  ["justify", ["shift+j"]],
+  ["growFont", ["shift+.", "shift+>"]],
+  ["shrinkFont", ["shift+,", "shift+<"]],
+];
+
+/** Every chord with its Cmd (macOS) and Ctrl (Linux, Windows) twin: the
+ *  registry has no `mod`. */
+export const TEXT_FORMAT_KEYBINDINGS: KeybindingContribution[] =
+  TEXT_CHORDS.flatMap(([verb, chords]) =>
+    chords.flatMap((chord) => {
+      // Modifier order is the tables': alt, shift, then the platform key.
+      const parts = chord.split("+");
+      const key = parts.pop()!;
+      return ["cmd", "ctrl"].map((mod) => ({
+        key: [...parts, mod, key].join("+"),
+        command: textCommandId(verb),
+        when: textVerbKeysApply,
+      }));
+    }),
+  );

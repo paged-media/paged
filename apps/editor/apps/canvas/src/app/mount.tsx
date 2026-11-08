@@ -318,6 +318,7 @@ import {
 import {
   TEXT_FORMAT_DIAGNOSTIC_SOURCE,
   TEXT_FORMAT_MENU_ITEMS,
+  TEXT_FORMAT_KEYBINDINGS,
   buildTextFormatCommands,
 } from "../text-format-commands";
 import {
@@ -1778,6 +1779,7 @@ function CanvasAppIntegration() {
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,
       ...VIEW_KEYBINDINGS,
+      ...TEXT_FORMAT_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k));
     return () => {
       for (const d of cmdDisposables) d.dispose();

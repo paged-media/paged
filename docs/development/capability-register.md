@@ -325,8 +325,14 @@ Status (draw items, one line each; updated as they land):
   `runTextVerb` through `host.text` (doc's own verb code and `format.ts` arithmetic are gone, its
   recording-host spec passes unchanged). No doc id was removed, so no deprecation entry. Kept in
   doc, not generic: the multilevel list presets (`lists.ts`: Word's `1. a. i.` / `1.1.1.`), styles,
-  highlight, borders. Not done: host key bindings for the verbs (no default Cmd+B yet, to avoid
-  shadowing the text input's own keys); slide's own format painter was not touched.
+  highlight, borders. Host key bindings: DONE 2026-11-08 (`TEXT_FORMAT_KEYBINDINGS`, each with its Cmd and
+  Ctrl twin): Cmd/Ctrl+B bold, I italic, U underline, and InDesign's chords for the rest (Shift+L / C / R / J
+  align, Shift+K all caps, Shift+H small caps, Shift+/ strikethrough, Shift+= superscript, Alt+Shift+= subscript,
+  Shift+. and Shift+, the size steps; the indents and line spacings have no convention and no key). They are guarded
+  on a text selection with no form field holding focus (the canvas text surface is not one: it handles only Cmd+Z,
+  A, C, X and the arrows), so they never shadow the text input. A guarded binding beats an unguarded one on a
+  chord, so Cmd+U underlines while text is selected and stays Smart Guides otherwise; a Word document's scoped
+  Cmd+B / I / U (rank 100) still wins inside it. Not done: slide's own format painter was not touched.
 - PDF vectors dialog: DONE 2026-11-03. File > Import > PDF or AI as Vectors… is paged.pdf's now: a
   panel (`media.paged.pdf.panel.importVectors`, `vectors/import-panel.tsx`), the command
   `media.paged.pdf.command.importVectors` and the same menu row, all contributed by the bundle. The panel
