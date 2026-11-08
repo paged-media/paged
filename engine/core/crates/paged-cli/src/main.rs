@@ -163,6 +163,7 @@ fn main() -> Result<()> {
         Command::Ops { json } => paged_cli::invoke::list(json),
         Command::Parts { what } => paged_cli::parts::run(&what),
         Command::Data { what } => match what {
+            paged_cli::cli::DataCommand::Batch { job } => paged_cli::data::batch_job(&job),
             paged_cli::cli::DataCommand::Bindings { doc, json, assets } => {
                 paged_cli::data::bindings(&doc, &assets, json)
             }

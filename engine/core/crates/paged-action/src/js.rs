@@ -136,20 +136,54 @@ fn message(e: impl std::fmt::Display) -> String {
     e.to_string().lines().next().unwrap_or_default().to_string()
 }
 
-/// A bare context: the built-ins, the budget, a fixed clock. The clock is
-/// fixed because an action is pure and cached by its input, so the time must
-/// not reach its result (`Date.now()` is the epoch); Boa's default clock also
-/// panics on wasm32-unknown-unknown.
-fn context(budget: JsBudget) -> Result<Context, String> {
-    let mut ctx = Context::builder()
-        .clock(Rc::new(FixedClock))
-        .build()
-        .map_err(message)?;
-    ctx.runtime_limits_mut()
-        .set_loop_iteration_limit(budget.loop_iterations);
-    ctx.runtime_limits_mut()
-        .set_recursion_limit(budget.recursion_depth);
+/// How a bare context is set up: the one sandbox of the engine's JavaScript
+/// (core ADR 1015, amended by ADR 1059). `paged-script` (the editor's
+/// scripts) builds its context here too, with the stack limit and, off wasm,
+/// the host's clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sandbox {
+    pub budget: JsBudget,
+    /// Boa's native stack limit; `None` keeps Boa's default.
+    pub stack_size: Option<usize>,
+    /// The clock is the epoch, always: an action is pure and cached by its
+    /// input, so the time must not reach its result (`Date.now()` is the
+    /// epoch). `false` keeps Boa's own clock, for a script that runs once
+    /// against a live document; Boa's default clock panics on
+    /// wasm32-unknown-unknown, so a wasm host sets `true`.
+    pub fixed_clock: bool,
+}
+
+impl Sandbox {
+    /// What an action and a build script run in: the budget, a fixed clock.
+    pub fn pure(budget: JsBudget) -> Sandbox {
+        Sandbox {
+            budget,
+            stack_size: None,
+            fixed_clock: true,
+        }
+    }
+}
+
+/// A bare context: the built-ins, the limits, no host functions.
+pub fn sandbox_context(sandbox: Sandbox) -> Result<Context, String> {
+    let builder = Context::builder();
+    let builder = if sandbox.fixed_clock {
+        builder.clock(Rc::new(FixedClock))
+    } else {
+        builder
+    };
+    let mut ctx = builder.build().map_err(message)?;
+    let limits = ctx.runtime_limits_mut();
+    limits.set_loop_iteration_limit(sandbox.budget.loop_iterations);
+    limits.set_recursion_limit(sandbox.budget.recursion_depth);
+    if let Some(stack) = sandbox.stack_size {
+        limits.set_stack_size_limit(stack);
+    }
     Ok(ctx)
+}
+
+fn context(budget: JsBudget) -> Result<Context, String> {
+    sandbox_context(Sandbox::pure(budget))
 }
 
 /// Evaluate a script in a bare context and give its completion value as

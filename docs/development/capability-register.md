@@ -107,9 +107,17 @@ renderer); the f64 affine (`[f64;6]`: slide-resolve, pptx-export's `geom`, `dml-
 `paged-svg` and `Transform` of `paged-compose` keep their types but their product and point map call
 `paged_geom::affine`.
 Draw's TS copies of width, brush,
-along-path, envelope and `appearance-bake.ts` → `paged-vector-fx`. `dml-native` still maps
-pattern fill to a two-colour mix, drops gradient alpha and loses `clrChange`: adopt paint v2.
-`a:custGeom` / `a:xfrm` writer (`pptx-export/geom.rs`) → `dml-geom`. Pie wedge ×3 → `dml-chart`.
+along-path, envelope and `appearance-bake.ts` → `paged-vector-fx`. `dml-native` adopts paint v2 where the
+module's items are the engine's own (paged.slide, `Mapper::alpha_stops` / `pattern_swatches`): a gradient
+whose stops differ in alpha keeps it as the swatch's opacity stops (ADR 1007; no gradient feather rides
+on the item, and a gradient stroke fades too), and an opaque `a:pattFill` as a stroke's pattern swatch
+(ADR 1041; the 8 x 8 pt cell as vector items). Open: the doc and sheet lane (`NativeFx` onto the wire,
+TypeScript lowerings) still carries the feather and the two-colour mix until its lowerings take opacity
+stops and pattern swatches; slide's pattern fill stays a picture of PowerPoint-measured tiles (an engine
+pattern would need the slide-grid phase through `pattern_transform` per frame and would move the
+goldens); a translucent pattern has no swatch (a tile item paints a colour without alpha). `a:clrChange`
+stays a recorded loss: the filter stack (`RasterOp`) has no colour-replace op.
+`a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3: examined, left open, they are not copies of one another: `slide-resolve/chart.rs` builds clockwise-from-12-o'clock `SubPath`s with arcs split at 90° by `ceil(|sweep|/90)`, `sheet-chart` emits a `Primitive::Wedge` that its renderer draws, and the engine's `pie_anchors` is f32, counter-clockwise from 3 o'clock with a `ceil(sweep/(pi/2) - 1e-9)` split; a shared primitive would move anchors in the last bits and the slide goldens with them. Chart label width ×2: also left open, `sheet-chart` counts characters at one advance (`ADVANCE_EM`), `slide-chart` weighs digits, separators and letters apart, so they measure differently on purpose (neither goes through `paged-text`). Default Office palette: `pptx-import` and `slide-resolve` keep their theme readers (not re-examined in this pass).
 The host `tools` package still imports `@paged-media/draw/geometry` and `/machines`.
 
 ### Text and fonts
@@ -167,8 +175,7 @@ Doc has no charts (reuse `dml-chart` and the sheet engine). Not started, blocked
 embedded fonts and shapes (doc ADRs 626, 627) it is 8,379,940 B (CI) of the manifest's 8,388,608 B, so a chart reader and
 drawing, or the SmartArt drawing part (`dsp`) reader, need a second wasm artifact (`wasm[]` takes several) or a raised ceiling. Slide's chart data editing carries a
 second compiled sheet engine (blocked on a host door: slide ADR 724). `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
-sandboxes; `data-script` and `data-cli` overlap `paged-script` and `paged-cli`. PDF read has two
-hayro devices (placed PDF, pdf-import); blank IDML / OCF zip writers ×5.
+sandboxes; `data-script` and `data-cli` are folded (W9, engine ADR 1059): `paged-action`'s `js::sandbox_context` is the one Boa sandbox (paged-script uses it too), the script surface and the batch runner are modules of `paged-data-session`, and `paged data batch` replaces the `paged-data-batch` binary. PDF read: the two hayro devices (placed PDF, pdf-import) stay two (different targets) and share `paged-pdf-page` for page box geometry and blend modes (engine ADR 1058, W9); blank IDML / OCF zip writers ×5.
 
 ### Host tools and panels (TS)
 
@@ -352,6 +359,32 @@ Status (draw items, one line each; updated as they land):
   `LossEntry`, so the move is mechanical but wide), image-js `LosslessShape` (a save-back classification, not
   a count), paged-psd-fx `StyleLoss { effect, what }` (Display only), and the TS/Rust diagnostics of sheet-xlsx,
   doc (docx lowering notes), slide (PPTX) and the IDML import report, which are free-form note lists.
+
+### W9 status (2026-11-08): PDF, scripting, data leftovers
+
+- **Done:** one PDF page reader for the placed PDF and place-as-vectors (`paged-pdf-page`, engine ADR 1060); one
+  Boa sandbox, `data-script` and `data-cli` folded into `paged-data-session`, `paged data batch` (engine ADR 1059).
+- **Slide handout PDF (`slide-output/pdf.rs`): stays its own writer, for now.** It is 70 lines of object
+  serialisation (classic xref, one Helvetica Type1 font, RGB Flate image XObjects) under the handout layouts, which
+  stay in slide. `paged-export-pdf` is a display-list backend (subset CID fonts, ICC, PDF/X); moving the handouts
+  onto it means building a display list of image and Helvetica text commands, and the bytes change (object order,
+  font object, no `/Info` title string form), with no visible gain; the tests pin the structure, not a golden. The
+  profitable change is the other way round: a `pdf-writer`-based `serialize` (the crate `paged-export-pdf` already
+  builds on) would drop the hand-written xref, but it is a byte change for nothing the user sees. Open, not
+  blocked. The host `ExportPdfDialog` and the bundle's `exportPdf` already share the engine's `exportPdfBegin`
+  options (`ExportPdfWireOptions`); a shared host service would only move the option defaults, so it was not made.
+- **Illustrator graph data:** stays carried, data ADR 565 (no chart item in the engine, opaque payload, no charts
+  in doc).
+- **Barcode insert in doc and slide:** open. The encoder (`paged-data-barcode`) is in the data wasm behind
+  `lower_barcode(binding, box)`; an insert command needs either that engine call without a binding or the encoder
+  in the doc and slide wasm, plus the Insert-menu row and German strings. Not started.
+- **CLI data verbs onto `data@1`:** open, and smaller than it looked. `data@1` has `query(sql)`, `bind` and
+  `bindings`; it has no `importSource`, `merge`, `planBatch` or `apply`, which are most of `apps/cli/src/data.ts`.
+  Only `previewQuery` (-> `query`, a different row shape and no `total`) and `defineProperty` (-> `bind`, property
+  bindings only) have door equivalents. Moving them splits the verbs across two doors for two calls; do it together
+  with `importSource`/`merge`/`apply` moving into the door.
+- **Publish preflight-fix actions:** open. `media.paged.publish.preflight` answers findings; a fix is an
+  `actions@1` step per finding kind, which needs the finding kinds to carry an addressable target first.
 
 ### Reach (gaps between modules)
 

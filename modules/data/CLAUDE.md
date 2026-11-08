@@ -24,14 +24,14 @@ SDK gap tracker: the cross-repo RFI `thoughts/docs/paged/plugin-platform/rfi-cor
 Rust crates (spec §4). Since PM-0015 the engine-level ones are
 `engine/core/crates/paged-data-*` in the ENGINE's Cargo workspace (library names
 unchanged: `data_core`, …); this workspace keeps `data-js` (a wasm shim over
-`paged-data-session`'s `DataSession`), `data-cli`, `data-script` and
+`paged-data-session`'s `DataSession`) and
 `data-conformance`, which reach them by path: `data-core` (frozen
 types + Expr AST), `data-expr` (the binding DSL), `data-sources`, `data-query`,
 `data-bind` (resolution/sync engine), `data-lower`, `data-store` (the query
 store and the file readers), `data-xlsx`, `data-js` (wasm-bindgen surface),
 `data-conformance` (TEST-ONLY), plus the §10 automation lane —
-`data-automation` (batch plan/run), `data-cli` (headless native CLI), and
-`data-script` (sandboxed Boa surface). TS packages (`packages/*`, in the root Bun workspace):
+`data-automation` (batch plan/run); the headless batch runner (`paged data batch`) and the
+sandboxed Boa script surface are modules of `paged-data-session` (engine ADR 1059). TS packages (`packages/*`, in the root Bun workspace):
 `data-host-model` (pure LoweredContent→Mutation translation) + `data-bundle`
 (manifest + `activate(host)` + panels + commands + the handle on the engine's
 store, `src/query/store.ts`). ONE wasm artifact, `bin/data_js_bg.wasm` (the store
@@ -52,7 +52,7 @@ The ENGINE is far ahead of what a user can reach from the panels:
   pagination (multi-level nested grouping, per-group SUM/AVG/MIN/MAX footers,
   parent path on spill) landed in the lowering lane.
 - Print automation is SHIPPED end-to-end (per-record / per-group / one-catalog
-  batch plan + RUN executor + the data-cli + the data-script Boa surface).
+  batch plan + RUN executor + `paged data batch` + the script Boa surface, both in `paged-data-session`).
 - The D-09 data-provider contract is SHIPPED (register a provider, publish a
   RecordSet to other consumers; never knows its consumers, §7.1). The
   governed-catalog KERNEL is built (schema + column-metadata sidecar), but

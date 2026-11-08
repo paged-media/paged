@@ -27,6 +27,7 @@ the code as it stood, for decisions made earlier; their status says so.
 | [562](562-transforms-are-javascript-over-tables.md) | Transforms are JavaScript over tables, stored in the document, run in the sandboxed interpreter | Accepted 2026-10-24 |
 | [563](563-asset-columns.md) | Asset columns: fetched for a consented origin, kept by content hash, run through an action chain | Accepted 2026-10-24 |
 | [564](564-data-issues.md) | Data issues: what may be wrong with the placed content, named where it is | Accepted 2026-10-24 |
+| [565](565-graph-data-stays-carried.md) | Illustrator graph data stays carried: no chart item in the engine to bind to, an opaque payload, no charts in doc yet | Accepted 2026-11-08 |
 
 Reserved by [PM-0015](../../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md)
 (2026-10-24), each written when its code lands: **562** (transforms) and **563** (asset

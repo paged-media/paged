@@ -40,8 +40,8 @@ The query engine is DuckDB-WASM (data ADR 015), and its costs are measured:
 Computed steps over assets and tables have no common home either:
 - the image module's filter stacks and the draw module's generators are reachable only inside
   those modules;
-- data's batch scripts run in a second Boa interpreter (`modules/data/data-script`) beside the
-  engine's (`engine/core/crates/paged-script`).
+- data's batch scripts ran in a second Boa interpreter (`modules/data/data-script`) beside the
+  engine's (`engine/core/crates/paged-script`); folded, see engine ADR 1059.
 
 A data row that names an image by URL has no way to fetch it, fit it or convert it before it
 is placed.
@@ -125,7 +125,7 @@ interpreter gains `paged.data.*` and `paged.actions.*`.
 - **`paged-node`** (Bun) runs the same sources for batch and server jobs. An action that needs
   npm runs only there and is marked as headless-only.
 - **No second semantics.** A transform gives the same result wherever it runs.
-- **data-script.** paged.data's own interpreter merges into the engine's.
+- **data-script.** paged.data's own interpreter merges into the engine's. Done (engine ADR 1059): one sandbox, `paged_action::js::sandbox_context`.
 
 ## Reserved records
 

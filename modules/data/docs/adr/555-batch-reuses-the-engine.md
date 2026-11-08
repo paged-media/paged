@@ -1,6 +1,7 @@
 # ADR 555 — Batch generation reuses the interactive engine
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `6b96ce5`.
+- **Amendment (2026-11-08, engine ADR 1059):** `data-cli` and `data-script` are modules of `paged-data-session` (`batch`, `script`); the `paged-data-batch` binary is `paged data batch` in the engine's `paged` CLI. The file references below name their former places.
 - **Scope:** `data-automation`, `DataSession::run_record_flow_batch` in `data-js`, `data-cli`,
   `data-script`
 

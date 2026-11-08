@@ -1,0 +1,11 @@
+$ paged data batch
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <JOB>
+
+Usage: paged data batch <JOB>
+
+For more information, try '--help'.

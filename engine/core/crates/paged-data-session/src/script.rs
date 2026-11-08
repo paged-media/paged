@@ -16,11 +16,11 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! # data-script — the constrained scripting surface (spec §10)
+//! # script — the constrained scripting surface (spec §10)
 //!
 //! "A constrained scripting surface (Boa, capability-gated) exposes the
 //! binding/build API for scriptable queries and templated runs — **not arbitrary
-//! code execution against the host**." This crate is the engine-neutral half: a
+//! code execution against the host**." This module is the engine-neutral half: a
 //! sandboxed [Boa](https://boajs.dev) (Rust JS) context in which the script
 //! **computes and returns a build spec** — `{ locale?, params?, build? }` — and
 //! the host reads + applies it.
@@ -36,9 +36,9 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
+use crate::core::DataSession;
 use data_automation::BatchMode;
 use data_core::{Locale, Value};
-use data_js::core::DataSession;
 
 /// What a build script returns (spec §10): a declarative description of a run.
 /// Every field is optional so a script can parameterize, set the locale, request
@@ -72,7 +72,7 @@ pub struct BuildSpec {
 /// It is handed no host access; a reference to an absent global (`require`,
 /// `process`, `fetch`) is a `ReferenceError`, surfaced here as an `Err`.
 pub fn eval_spec(script: &str) -> Result<ScriptSpec, String> {
-    // The engine's sandbox (core ADR 1015): one interpreter for paged.data's
+    // The engine's one sandbox (core ADR 1015, ADR 1059): one interpreter for paged.data's
     // build scripts and its transforms, with a budget and a fixed clock.
     let json = paged_action::js::eval(script, paged_action::js::JsBudget::default())
         .map_err(|e| format!("script error: {e}"))?
@@ -106,11 +106,11 @@ fn json_to_value(value: &serde_json::Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::{DataSession, LoweredOutput};
     use data_core::{
         Binding, BindingDef, BindingId, FieldType, MissingPolicy, PlaceholderRef, Query, QueryId,
         RecordSet, ResultShape, Schema,
     };
-    use data_js::core::{DataSession, LoweredOutput};
 
     #[test]
     fn data_automation_script_evaluates_a_build_spec() {
