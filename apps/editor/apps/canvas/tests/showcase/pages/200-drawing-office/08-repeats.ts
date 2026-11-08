@@ -27,11 +27,10 @@
 // parameters, Expand stops tracking the ring while keeping every
 // instance as artwork.
 //
-// A SYMBOL is a named artwork DEFINITION in a container part, and an
-// INSTANCE is re-emitted native geometry carrying a per-LEAF link
-// (core has no symbol node, no duplicate op, and a group cannot hold
-// metadata). Redefine REBUILDS every linked instance from the new
-// capture — which is why a broken link is the way to keep a
+// A SYMBOL is a named artwork DEFINITION in the engine's symbol store
+// (document.symbols@1, draw ADR 361/365), and an INSTANCE is the engine's
+// `instance` node: it draws the definition under its own transform.
+// Redefine reaches every instance; a broken link is the way to keep a
 // deviation, and the page shows exactly that.
 
 import { expect } from "@playwright/test";
@@ -43,6 +42,7 @@ import {
   ConsoleTap,
   geometryOf,
   newRefs,
+  sceneRefs,
   settle,
   type Ref,
 } from "../../plugin-support";
@@ -60,8 +60,12 @@ import {
 interface RepeatLibrary {
   repeats: Array<{ id: string; name: string }>;
 }
-interface SymbolLibrary {
-  symbols: Array<{ id: string; name: string }>;
+/** One row of the engine's `symbols` collection (`document.symbols@1`,
+ *  draw ADR 361/365) — the symbol store moved off the draw part. */
+interface SymbolRow {
+  id: string;
+  name: string;
+  instances?: string[];
 }
 
 export async function build(ctx: PageContext): Promise<PageReport> {
@@ -277,14 +281,18 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     { kind: "polygon", id: dot },
   ]);
   await draw(ctx, "defineSymbol", { name: "Annual badge" });
-  const symLib = await readDrawPart<SymbolLibrary>(ctx, "symbols.json");
-  const badge = symLib?.symbols.find((s) => s.name === "Annual badge");
-  expect(badge, "the symbol library holds Annual badge").toBeTruthy();
+  const symRows = (await doc.designer.collection(
+    "symbols",
+  )) as unknown as SymbolRow[];
+  const badge = symRows.find((s) => s.name === "Annual badge");
+  expect(badge, "the engine symbol store holds Annual badge").toBeTruthy();
 
   const placeXs = [180, 262, 344];
-  let instanceLeaves: Ref[] = [];
+  // An instance is an engine `instance` node (one per placement).
+  const instanceKind = "instance";
+  const placedRefs: Ref[][] = [];
   for (const x of placeXs) {
-    const before = await polygons(ctx);
+    const before = await sceneRefs(ctx.page, instanceKind);
     await withActivePage(ctx.page, pageId, () =>
       draw(ctx, "placeSymbolInstance", {
         symbolId: badge!.id,
@@ -295,13 +303,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
     const placed = await settle(
       ctx.page,
-      async () => (await polygons(ctx)).length > before.length,
+      async () =>
+        (await sceneRefs(ctx.page, instanceKind)).length > before.length,
       15_000,
     );
     expect(placed, `instance at x=${x} placed`).toBe(true);
-    const minted = await newRefs(ctx.page, "polygon", before);
-    await reseat(ctx, minted, offset);
-    instanceLeaves.push(...minted);
+    const minted = await newRefs(ctx.page, instanceKind, before);
+    // The place command takes the page origin into account itself; an
+    // instance is re-seated only when its MEASURED centre says the
+    // stored/page-local seam displaced it (reseat composes onto the
+    // instance's own transform, it does not replace it).
+    const [g] = await geometryOf(ctx.page, minted.slice(0, 1));
+    if (g?.bounds && !onOrigin) {
+      const cx = (g.bounds[1] + g.bounds[3]) / 2;
+      if (Math.abs(cx - offset[0] - x) < Math.abs(cx - x)) {
+        await reseat(ctx, minted, offset);
+      }
+    }
+    placedRefs.push(minted);
     for (const ref of minted) elements.push(ref.id);
   }
 
@@ -321,25 +340,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     value: screenBlue,
   });
 
-  // BREAK LINK — the first instance leaves the family (metadata only,
-  // works on any engine). Its leaves are found by MEASURED geometry
-  // (nearest x=180), never by assumed mint order.
-  const geo = await geometryOf(ctx.page, instanceLeaves);
-  const firstLeaves = geo
-    .filter((g) => g.bounds)
-    .filter((g) => {
-      const cx = (g.bounds![1] + g.bounds![3]) / 2 - offset[0];
-      return cx > placeXs[0] - 40 && cx < placeXs[0] + 60;
-    })
-    .map((g) => g.ref);
-  expect(
-    firstLeaves.length,
-    "found the first instance's leaves",
-  ).toBeGreaterThan(0);
+  // BREAK LINK — the first instance leaves the family (the engine
+  // turns the instance back into native artwork; one undo step).
+  const firstLeaves = placedRefs[0] ?? [];
+  expect(firstLeaves.length, "found the first instance's node").toBeGreaterThan(
+    0,
+  );
   await doc.designer.selectElements(firstLeaves);
   await draw(ctx, "breakSymbolLink");
+  const afterBreak = (await doc.designer.collection(
+    "symbols",
+  )) as unknown as SymbolRow[];
+  expect(
+    afterBreak.find((s) => s.id === badge!.id)?.instances?.length,
+    "break link took one instance out of the family",
+  ).toBe(placeXs.length - 1);
   notes.push(
-    "redefineSymbol deliberately NOT run: its per-instance rebuild rides the one-batch dissolve-and-regroup this engine refuses (recorded for updateRepeat on this page), and a half-applied rebuild strands artwork",
+    "redefineSymbol deliberately NOT run on this page: the source recolour above is the point, the instances keep the definition until it is redefined",
   );
 
   const symCaption = await proseFrame(
@@ -348,7 +365,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [left, 496, right, 566],
     [
       {
-        text: "One badge defined from the two source shapes at far left and placed three times - each instance re-emitted native geometry with a per-leaf link. The source then turned blue, and no badge followed: an instance is STATIC (core has no symbol node and no duplicate op), so a new look travels only through Redefine's rebuild - which this engine refuses at the instance-group re-create, the same one-batch dissolve-and-regroup seam the margin note records for Update. The first instance also broke its link: it now would not follow even a successful redefine.",
+        text: "One badge defined from the two source shapes at far left and placed three times - each instance an engine instance node that draws the definition under its own transform. The source then turned blue, and no badge followed: only Redefine carries a new look outward, and this page does not run it. The first instance also broke its link: it is artwork now and would not follow even a redefine.",
         style: STYLE.caption,
       },
     ],
@@ -369,7 +386,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       (updateWorked
         ? ""
         : "updateRepeat's dissolve-and-regroup batch is refused by this engine; ") +
-        "symbols refuse text and have no symbol sets, nine-slice or 3D mapping; Redefine rides the same refused batch and is not run here → Appendix A",
+        "symbols refuse text and have no symbol sets or 3D mapping; Redefine is not run here → Appendix A",
     ),
   );
   notes.push(

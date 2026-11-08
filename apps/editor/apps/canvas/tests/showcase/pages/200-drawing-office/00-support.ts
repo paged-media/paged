@@ -446,18 +446,41 @@ export async function reseat(
 ): Promise<void> {
   if (refs.length === 0) return;
   if (offset[0] === 0 && offset[1] === 0) return;
+  // An engine `instance` (document.symbols@1) carries its placement in its
+  // frameTransform, so it is translated ON TOP of what it has; the plain
+  // artwork a planner minted carries none and is replaced.
+  const matrices = await Promise.all(
+    refs.map(async (ref) => {
+      if (ref.kind !== "instance") return [1, 0, 0, 1, 0, 0];
+      const t = await propOf(ctx, ref, "frameTransform");
+      const v = t?.value;
+      return Array.isArray(v) && v.length === 6
+        ? (v as number[])
+        : [1, 0, 0, 1, 0, 0];
+    }),
+  );
   await ctx.doc.batch(
-    refs.map((ref) => ({
-      op: "setElementProperty",
-      args: {
-        elementId: ref,
-        path: "frameTransform",
-        value: {
-          type: "transform",
-          value: [1, 0, 0, 1, -offset[0], -offset[1]],
+    refs.map((ref, i) => {
+      const m = matrices[i]!;
+      return {
+        op: "setElementProperty",
+        args: {
+          elementId: ref,
+          path: "frameTransform",
+          value: {
+            type: "transform",
+            value: [
+              m[0],
+              m[1],
+              m[2],
+              m[3],
+              m[4]! - offset[0],
+              m[5]! - offset[1],
+            ],
+          },
         },
-      },
-    })),
+      };
+    }),
   );
 }
 
