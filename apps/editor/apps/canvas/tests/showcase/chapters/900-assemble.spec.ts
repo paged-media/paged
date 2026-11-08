@@ -301,7 +301,19 @@ test.describe("annual assembly", () => {
     // six (exhibit leftovers: a deleted table's story, a released
     // anchored frame's); they are junk, not silent loss, and a repair
     // chapter deleting them is the book-side answer.
-    const allowedLoss = [/opacity/i, /referenced by no frame/];
+    //
+    // Symbol instances (engine ADR 1039; chapter 202 places three) and an
+    // appearance with more than one fill or stroke (the Appearance chapter)
+    // are `.paged`-native too: IDML has neither, so the export writes the
+    // artwork (the instance's link rides a label and comes back) and the
+    // item's first fill and stroke, and says so in the ledger. Listed on
+    // 2026-11-08 once the chapters after 202 built again.
+    const allowedLoss = [
+      /opacity/i,
+      /referenced by no frame/,
+      /symbol instance .* is written as its artwork/,
+      /the appearance of .* has no IDML form/,
+    ];
     const unexpectedLoss = lost.filter(
       (l) => !allowedLoss.some((re) => re.test(l)),
     );
