@@ -64,6 +64,9 @@ pub struct EmbeddedFaces {
     pub diagnostics: Vec<String>,
 }
 
+/// An embedded slot's relationship id, font key and `w:subsetted`.
+type Slot<'a> = (&'a str, Option<&'a str>, bool);
+
 /// The font table part name (via the main document's `.rels`).
 fn font_table_part(pkg: &OpcPackage, main_part: &str) -> Option<String> {
     let rels_bytes = pkg.part(&rels::rels_part_name(main_part))?;
@@ -93,7 +96,7 @@ pub fn embedded_faces(pkg: &OpcPackage, main_part: &str) -> EmbeddedFaces {
         let wml::FontsChoice::Font(font) = choice else {
             continue;
         };
-        let slots: [(&'static str, Option<(&str, Option<&str>, bool)>); 4] = [
+        let slots: [(&'static str, Option<Slot<'_>>); 4] = [
             (
                 "Regular",
                 font.embed_regular_font
@@ -150,11 +153,7 @@ pub fn embedded_faces(pkg: &OpcPackage, main_part: &str) -> EmbeddedFaces {
     out
 }
 
-fn slot<'a>(
-    id: &'a str,
-    key: &'a Option<String>,
-    subsetted: &Option<OnOffValue>,
-) -> (&'a str, Option<&'a str>, bool) {
+fn slot<'a>(id: &'a str, key: &'a Option<String>, subsetted: &Option<OnOffValue>) -> Slot<'a> {
     let subset = matches!(
         subsetted,
         Some(OnOffValue::True | OnOffValue::On | OnOffValue::One | OnOffValue::Empty)

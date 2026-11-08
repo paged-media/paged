@@ -40,7 +40,7 @@ pub struct Outline {
 }
 
 /// The control-point distance of a quarter circle, over its radius.
-const KAPPA: f32 = 0.552_284_75;
+const KAPPA: f32 = 0.552_284_8;
 
 /// A pen that draws contours as anchors with handles.
 #[derive(Default)]
@@ -399,19 +399,21 @@ mod tests {
 
     #[test]
     fn a_custom_path_scales_to_the_box_and_a_no_fill_path_stays_open() {
-        let mut s = Shape::default();
-        s.geometry = ShapeGeometry::Custom(vec![CustomPath {
-            w: 100,
-            h: 100,
-            no_fill: true,
-            no_stroke: false,
-            commands: vec![
-                PathCommand::Move(0, 0),
-                PathCommand::Line(100, 0),
-                PathCommand::Line(100, 100),
-                PathCommand::Close,
-            ],
-        }]);
+        let s = Shape {
+            geometry: ShapeGeometry::Custom(vec![CustomPath {
+                w: 100,
+                h: 100,
+                no_fill: true,
+                no_stroke: false,
+                commands: vec![
+                    PathCommand::Move(0, 0),
+                    PathCommand::Line(100, 0),
+                    PathCommand::Line(100, 100),
+                    PathCommand::Close,
+                ],
+            }]),
+            ..Shape::default()
+        };
         let o = outline(&s, 200.0, 50.0).unwrap();
         assert_eq!(
             pos(&o),
