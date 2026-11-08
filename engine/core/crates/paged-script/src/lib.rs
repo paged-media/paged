@@ -6596,11 +6596,11 @@ fn paged_barcode(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResu
         v if v.is_undefined() || v.is_null() => 0,
         v => v.to_number(ctx)?.clamp(0.0, 32.0) as u32,
     };
-    let answer = match paged_data_barcode::Symbology::from_id(&symbology) {
+    let answer = match data_barcode::Symbology::from_id(&symbology) {
         None => serde_json::json!({ "error": format!("unknown barcode symbology `{symbology}`") }),
-        Some(sym) => match paged_data_barcode::encode(sym, &data) {
+        Some(sym) => match data_barcode::encode(sym, &data) {
             Ok(g) => {
-                serde_json::json!({ "geometry": paged_data_barcode::with_quiet_zone(g, extra) })
+                serde_json::json!({ "geometry": data_barcode::with_quiet_zone(g, extra) })
             }
             Err(e) => serde_json::json!({ "error": e.to_string() }),
         },
