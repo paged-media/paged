@@ -77,6 +77,7 @@ fn comment(id: &str, page_index: usize, text: &str) -> PdfComment {
         resolved: false,
         review_state: None,
         replies: Vec::new(),
+        kept: None,
     }
 }
 
@@ -145,6 +146,7 @@ fn replies_and_a_resolved_state_are_annotations_in_reply() {
         author: "Bob".into(),
         date: None,
         text: "Done".into(),
+        kept: None,
     }];
     c.resolved = true;
     let pdf = export(vec![c], None);
@@ -225,12 +227,14 @@ fn exported_comments_read_back_as_the_same_threads() {
             author: "Bob Builder".into(),
             date: Some("2026-11-01T11:00:00+01:00".into()),
             text: "Because".into(),
+            kept: None,
         },
         PdfReply {
             id: "c1.2".into(),
             author: "Ann Author".into(),
             date: Some("2026-11-01T12:15:30Z".into()),
             text: "OK".into(),
+            kept: None,
         },
     ];
     let mut rejected = comment("c2", 1, "No");
@@ -295,4 +299,200 @@ fn exported_comments_read_back_as_the_same_threads() {
     assert_eq!(c2.comments[0].review_state, Some(ReviewState::Rejected));
     assert!(!c2.comments[0].resolved && c2.comments[0].date.is_none());
     assert!(!report.threads[2].comments[0].resolved);
+}
+
+/// A PDF of the given objects (object `n` is `objects[n - 1]`), with an xref.
+fn hand_pdf(objects: &[&str]) -> Vec<u8> {
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    for off in offsets {
+        out.extend(format!("{off:010} 00000 n \n").as_bytes());
+    }
+    out.extend(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        )
+        .as_bytes(),
+    );
+    out
+}
+
+/// The comments of a read report as the canvas hands them to the export: each
+/// thread at its point (a region's top-left), each comment with its kept
+/// annotation.
+fn as_exported(report: &paged_pdf_annots::PdfCommentsReport) -> Vec<PdfComment> {
+    report
+        .threads
+        .iter()
+        .map(|t| {
+            let kept = |id: &str| {
+                let lines: Vec<&str> = t
+                    .source
+                    .iter()
+                    .filter(|(k, _)| k == id)
+                    .map(|(_, b)| b.data.as_str())
+                    .collect();
+                (!lines.is_empty()).then(|| lines.join("\n"))
+            };
+            let at = match t.anchor {
+                ImportedAnchor::Point { at } => at,
+                ImportedAnchor::Region { rect } => [rect[0], rect[1]],
+            };
+            let root = &t.comments[0];
+            let when = |c: &paged_model::Comment| c.modified.clone().or(c.date.clone());
+            PdfComment {
+                id: root.id.clone(),
+                page_index: t.page_index,
+                at: [at[0] as f32, at[1] as f32],
+                author: root.author.clone().unwrap_or_default(),
+                date: when(root),
+                text: root.text.clone(),
+                resolved: root.resolved,
+                review_state: None,
+                replies: t.comments[1..]
+                    .iter()
+                    .map(|r| PdfReply {
+                        id: r.id.clone(),
+                        author: r.author.clone().unwrap_or_default(),
+                        date: when(r),
+                        text: r.text.clone(),
+                        kept: kept(&r.id),
+                    })
+                    .collect(),
+                kept: kept(&root.id),
+            }
+        })
+        .collect()
+}
+
+/// Engine ADR 1055, amendment "Re-emitting a kept annotation": an imported
+/// annotation nobody edited is written back from the dictionary it kept, on
+/// the page and at the point its thread has now, with `/P`, `/IRT` and
+/// `/Popup` rebuilt; an edited one is written from the model.
+#[test]
+fn an_unedited_imported_annotation_is_written_back_and_an_edited_one_regenerated() {
+    let source = hand_pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] \
+            /Annots [5 0 R 6 0 R 7 0 R 8 0 R 9 0 R 10 0 R] >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Rotate 90 /Annots [11 0 R] >>",
+        // 5: a sticky note with Acrobat's extras and a pop-up (6)
+        "<< /Type /Annot /Subtype /Text /NM (n1) /Rect [100 700 120 720] /T (Ann Author) \
+            /CreationDate (D:20261101100000Z) /M (D:20261101103000Z) /Contents (Why this word?) \
+            /C [1 1 0] /Subj (Comment) /Name /Note /F 28 /Popup 6 0 R /P 3 0 R >>",
+        "<< /Type /Annot /Subtype /Popup /Rect [612 600 792 720] /Parent 5 0 R >>",
+        // 7: a reply; 8: Acrobat's Accepted state of the root
+        "<< /Subtype /Text /NM (n1.1) /Rect [100 700 120 720] /T (Bob) /M (D:20261101110000Z) \
+            /Contents (Because) /IRT 5 0 R /RT /R /C [0 0 1] >>",
+        "<< /Subtype /Text /Rect [100 700 120 720] /T (Ann Author) /M (D:20261101120000Z) \
+            /IRT 5 0 R /RT /R /StateModel (Review) /State (Accepted) /F 30 >>",
+        // 9: a highlight over one word; 10: a note the test edits
+        "<< /Subtype /Highlight /NM (h1) /Rect [200 600 260 612] /T (Cy) /Contents (Too loose) \
+            /C [0.5 1 0.5] /CA 0.6 /QuadPoints [200 612 260 612 200 600 260 600] >>",
+        "<< /Subtype /Text /NM (n2) /Rect [300 500 320 520] /T (Dee) /Contents (Old) /C [1 0 0] >>",
+        // 11: a sticky note on the turned page
+        "<< /Subtype /Text /NM (r1) /Rect [10 20 30 40] /T (Eve) /Contents (Turned) /C [0 1 0] >>",
+    ]);
+    let report = paged_pdf_annots::read_pdf_comments(&source).expect("reads");
+    let mut comments = as_exported(&report);
+    let ids: Vec<&str> = comments.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, ["n1", "h1", "n2", "r1"]);
+    // The highlight moves to another point; the second note is edited.
+    comments[1].at = [100.0, 200.0];
+    comments[2].text = "New".into();
+    comments[2].date = Some("2026-11-08T09:00:00Z".into());
+
+    let pdf = export(comments, None);
+    let back = paged_pdf_annots::read_pdf_comments(&pdf).expect("reads back");
+    assert!(back.losses.is_empty(), "{:?}", back.losses);
+    let ids: Vec<&str> = back.threads.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids, ["n1", "h1", "n2", "r1"]);
+    let root_source = |i: usize| back.threads[i].source[0].1.data.clone();
+
+    // The note: Acrobat's keys survive, the reply too, and the Accepted state
+    // the model has no field for.
+    let near = |a: f64, b: f64| (a - b).abs() < 0.01;
+    let n1 = &back.threads[0];
+    let ImportedAnchor::Point { at } = n1.anchor else {
+        panic!("a point")
+    };
+    assert!(near(at[0], 100.0) && near(at[1], 72.0), "{at:?}");
+    assert_eq!(n1.comments[0].text, "Why this word?");
+    assert_eq!(n1.comments[0].date.as_deref(), Some("2026-11-01T10:00:00Z"));
+    assert_eq!(n1.comments[0].review_state, Some(ReviewState::Accepted));
+    assert!(!n1.comments[0].resolved);
+    assert_eq!(n1.comments[1].text, "Because");
+    assert_eq!(n1.comments[1].parent.as_deref(), Some("n1"));
+    let src = root_source(0);
+    assert!(
+        src.contains("/Subj <436F6D6D656E74>") && src.contains("/C [ 1 1 0 ]"),
+        "{src}"
+    );
+    assert!(
+        src.contains("/Name /Note") && src.contains("/F 28"),
+        "{src}"
+    );
+    assert!(back.threads[0].source[1].1.data.contains("/C [ 0 0 1 ]"));
+
+    // The highlight: still a highlight, its quads moved with the point.
+    let h1 = &back.threads[1];
+    assert_eq!(h1.subtype, "Highlight");
+    let ImportedAnchor::Region { rect } = h1.anchor else {
+        panic!("a region: {:?}", h1.anchor)
+    };
+    assert!(
+        near(rect[0], 100.0) && near(rect[1], 200.0) && near(rect[2], 60.0) && near(rect[3], 12.0),
+        "{rect:?}"
+    );
+    assert!(root_source(1).contains("/CA 0.6"), "{}", root_source(1));
+
+    // The edited note is the model's: new text, none of the old keys.
+    let n2 = &back.threads[2];
+    assert_eq!(n2.comments[0].text, "New");
+    assert!(!root_source(2).contains("/C ["), "{}", root_source(2));
+
+    // The turned page's note, on an upright page at the point it had.
+    let r1 = &back.threads[3];
+    assert_eq!(r1.page_index, 1);
+    let ImportedAnchor::Point { at } = r1.anchor else {
+        panic!("a point")
+    };
+    assert!(near(at[0], 20.0) && near(at[1], 10.0), "{at:?}");
+    assert!(root_source(3).contains("/C [ 0 1 0 ]"));
+
+    // Every reference points into this file: the page, the reply's root and
+    // a pop-up whose parent is the note.
+    let doc = Document::load_mem(&pdf).expect("re-parse");
+    let pages: Vec<ObjectId> = doc.get_pages().into_values().collect();
+    let annots = text_annots(&doc, 0);
+    let (root_id, root) = annots
+        .iter()
+        .find(|(_, d)| d.get(b"NM").map(text).ok().as_deref() == Some("n1"))
+        .expect("n1");
+    assert_eq!(root.get(b"P").unwrap().as_reference().unwrap(), pages[0]);
+    let popup = doc
+        .get_dictionary(root.get(b"Popup").unwrap().as_reference().unwrap())
+        .unwrap();
+    assert_eq!(popup.get(b"Subtype").unwrap().as_name().unwrap(), b"Popup");
+    assert_eq!(
+        popup.get(b"Parent").unwrap().as_reference().unwrap(),
+        *root_id
+    );
+    let reply = annots
+        .iter()
+        .find(|(_, d)| d.get(b"NM").map(text).ok().as_deref() == Some("n1.1"))
+        .expect("n1.1");
+    assert_eq!(
+        reply.1.get(b"IRT").unwrap().as_reference().unwrap(),
+        *root_id
+    );
+    assert!(!String::from_utf8_lossy(&pdf).contains("PagedSourceRotate"));
 }

@@ -39,7 +39,8 @@ Status: **done**, **partial**, **open**. A row is only done when the ratchet has
   region and cell anchors; people; tasks, reactions, review state; source blobs; derived
   orphaning; the host Comments panel and canvas pins; slide comments on engine threads; PDF
   comment annotations out (`paged export --comments`) and in (`paged comments`, `paged-pdf-annots`; the PDF
-  bundle imports them into the opened document, 2026-11-02). Oracles: PowerPoint opens the exported slide comments and
+  bundle imports them into the opened document, 2026-11-02), and an unedited imported annotation written back from
+  its kept dictionary on the thread's page and point (engine ADR 1055 amendment, 2026-11-08). Oracles: PowerPoint opens the exported slide comments and
   re-saves them with every comment, reply and the resolved state intact; Word's review round trip is recorded in
   `modules/doc/docx-conformance/fixtures/review.word.json`. Excel threaded comments are read and written in
   `sheet-xlsx` (sheet ADR 528) and projected into the engine threads as cell anchors; Excel opens and keeps what
