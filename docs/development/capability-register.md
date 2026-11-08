@@ -85,7 +85,9 @@ rule in the record, each behind the registry gate and the conformance goldens. D
 `image_decode.rs` keeps `jpeg-decoder` for the DCT-scaled decode of oversized JPEGs (`paged-raster` has no
 DCT scaling) and `image::load_from_memory` as the fallback for a file `paged-raster` could not read (HDR);
 `pdf-import`'s `encode::png` writes through the `png` crate, whose bytes differ from `paged-raster`'s encoder
-for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere.
+for the same pixels, so a move needs a stated reason to change the embedded bytes. `paged-psd-fx` is wired nowhere: engine ADR 1044 states why (placing a whole PSD draws its merged
+composite, which already holds the styles; the consumer is a "PSD layer as a page item" flow that does not exist yet).
+`paged-composition-render` had no consumer and was deleted.
 Path coverage rasterizers ×3 in image-js.
 
 ### Geometry and vector
