@@ -1,4 +1,4 @@
-# ADR 1058 — One PDF page reader for the placed PDF and place-as-vectors
+# ADR 1060 — One PDF page reader for the placed PDF and place-as-vectors
 
 - **Status:** Accepted 2026-11-08; built (slice 1 of W9).
 - **Scope:** `paged-pdf-page` (new), `paged-renderer` (`pipeline/placed_pdf.rs`), paged.publish's `pdf-import`

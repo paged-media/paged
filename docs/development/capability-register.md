@@ -362,7 +362,7 @@ Status (draw items, one line each; updated as they land):
 
 ### W9 status (2026-11-08): PDF, scripting, data leftovers
 
-- **Done:** one PDF page reader for the placed PDF and place-as-vectors (`paged-pdf-page`, engine ADR 1058); one
+- **Done:** one PDF page reader for the placed PDF and place-as-vectors (`paged-pdf-page`, engine ADR 1060); one
   Boa sandbox, `data-script` and `data-cli` folded into `paged-data-session`, `paged data batch` (engine ADR 1059).
 - **Slide handout PDF (`slide-output/pdf.rs`): stays its own writer, for now.** It is 70 lines of object
   serialisation (classic xref, one Helvetica Type1 font, RGB Flate image XObjects) under the handout layouts, which
