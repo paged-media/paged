@@ -4,20 +4,20 @@ $ paged comments review.pdf --json
 {
   "losses": [
     {
+      "code": "Link",
       "count": 1,
-      "kind": "Link",
+      "message": "a hyperlink or destination, not a review comment",
       "pages": [
         0
-      ],
-      "reason": "a hyperlink or destination, not a review comment"
+      ]
     },
     {
+      "code": "Stamp",
       "count": 1,
-      "kind": "Stamp",
+      "message": "not an annotation type paged imports as a comment (Text, FreeText, Highlight, Underline, StrikeOut, Squiggly)",
       "pages": [
         0
-      ],
-      "reason": "not an annotation type paged imports as a comment (Text, FreeText, Highlight, Underline, StrikeOut, Squiggly)"
+      ]
     }
   ],
   "threads": [

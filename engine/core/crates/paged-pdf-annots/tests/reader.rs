@@ -147,13 +147,13 @@ fn unsupported_types_are_one_loss_line_each_and_popups_are_skipped() {
     let losses: Vec<(&str, usize, Vec<usize>)> = report
         .losses
         .iter()
-        .map(|l| (l.kind.as_str(), l.count, l.pages.clone()))
+        .map(|l| (l.code.as_str(), l.count, l.pages.clone()))
         .collect();
     assert_eq!(losses, [("Link", 2, vec![0]), ("Stamp", 1, vec![0])]);
     assert!(report.losses[0]
         .to_string()
         .starts_with("2 x Link (page 1):"));
-    assert!(!report.losses.iter().any(|l| l.kind == "Popup"));
+    assert!(!report.losses.iter().any(|l| l.code == "Popup"));
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn review_states_and_unknown_state_models() {
     let marked = report
         .losses
         .iter()
-        .find(|l| l.kind == "state:Marked")
+        .find(|l| l.code == "state:Marked")
         .unwrap();
     assert_eq!(marked.count, 1);
 }

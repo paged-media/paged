@@ -323,6 +323,20 @@ Status (draw items, one line each; updated as they land):
   `media.paged.data.bindProperty` (it opens paged.data's Bindings panel prefilled) in `object-field.tsx`
   and its typed args in `registries/command.ts`; with no data door nothing can bind, so it is dead
   weight to delete next, with the `BindNotice` command text.
+- Path and shape tools in every context: DONE 2026-11-03. `CONTEXT_SHARED_TOOL_IDS` lists Pen, Direct
+  Selection, Line, Rectangle, Ellipse and Polygon besides Free Transform; solo profiles keep the same list.
+  The unit spec (`host-panels-every-context.test.ts`) and the parked e2e (`tests/host-panels-every-context.spec.ts`)
+  are updated; the e2e was not run (suite parked).
+- LossReport (C18): STARTED 2026-11-03. One shape: `LossReport { losses: LossEntry[] }`,
+  `LossEntry { code, count, pages?, message }` in `@paged-media/plugin-api` (`host.ts`, contract canary 78) and
+  `paged_model::report::{LossEntry, LossReport}` in Rust (empty `pages` / `message` stay off the wire).
+  Migrated: paged-pdf-annots' `Loss` (now `LossEntry`; `kind` / `reason` became `code` / `message`, with the
+  bundle's `PdfLoss` and its spec) and the PDF bundle's `LossLine` (now the contract type, same fields).
+  Not migrated (each is its own producer shape): pdf-import's vector-place `Loss { code: &'static str, count }`
+  (a `&'static str` code threaded through the device and snippet collectors; its JSON is already a subset of
+  `LossEntry`, so the move is mechanical but wide), image-js `LosslessShape` (a save-back classification, not
+  a count), paged-psd-fx `StyleLoss { effect, what }` (Display only), and the TS/Rust diagnostics of sheet-xlsx,
+  doc (docx lowering notes), slide (PPTX) and the IDML import report, which are free-form note lists.
 
 ### Reach (gaps between modules)
 
@@ -340,7 +354,7 @@ Status (draw items, one line each; updated as they land):
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
   font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
   right: PowerPoint does not hyphenate.
-- **all:** path tools in every context (`CONTEXT_SHARED_TOOL_IDS` is Free Transform only);
+- **all:** path tools in every context (DONE 2026-11-03: `CONTEXT_SHARED_TOOL_IDS` adds Pen, Direct Selection, Line, Rectangle, Ellipse, Polygon; editor ADR 311 amended);
   image filters as `actions@1` steps on any picture; barcode insert; ML service and door.
 
 ### Small helpers
