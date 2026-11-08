@@ -58,6 +58,37 @@ export function tablePictureBox(
   return [top, left, top + p.hPt, left + p.wPt * (p.inCell ? k : 1)];
 }
 
+/** A picture's crop and corrections on its frame (sheet ADR 529): the
+ *  image's placement (`imageContentTransform`, after `placeImage`, which
+ *  fits it whole) and the engine's filter stack (`frameImageAdjustments`,
+ *  engine ADR 1037), so a cropped, corrected picture is drawn by the engine
+ *  in every output and stays editable. */
+function pictureLookOps(p: LoweredPicture, handle: string): Mutation[] {
+  const elementId = { kind: "rectangle", id: `$h:${handle}` };
+  const ops: Mutation[] = [];
+  if (p.placement) {
+    ops.push({
+      op: "setElementProperty",
+      args: {
+        elementId,
+        path: "imageContentTransform",
+        value: { type: "transform", value: p.placement },
+      },
+    } as unknown as Mutation);
+  }
+  if (p.adjustments && p.adjustments.length > 0) {
+    ops.push({
+      op: "setElementProperty",
+      args: {
+        elementId,
+        path: "frameImageAdjustments",
+        value: { type: "imageAdjustments", value: p.adjustments },
+      },
+    } as unknown as Mutation);
+  }
+  return ops;
+}
+
 /** The ops that place `content`'s pictures over its table: per picture an
  *  `insertFrame` bound to a handle, its `placeImage`, and (sheet ADR 527)
  *  the opacity and effects its DrawingML asks for — their colours minted
@@ -91,6 +122,15 @@ export function tablePictureOps(
         kind: "rectangle",
         id: `$h:${handle}`,
       }),
+      ...pictureLookOps(p, handle),
+      ...(p.link
+        ? [
+            {
+              op: "insertItemHyperlink",
+              args: { item: `$h:${handle}`, url: p.link, name: p.id },
+            } as unknown as Mutation,
+          ]
+        : []),
     );
     for (const c of [
       p.fx?.dropShadow?.color,

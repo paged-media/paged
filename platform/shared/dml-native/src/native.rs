@@ -33,7 +33,7 @@ use paged_ooxml::drawingml::resolved::{self, Paint};
 use paged_ooxml::drawingml::{self, Blip, Fill, Rgba, ShapeProperties};
 use serde::{Deserialize, Serialize};
 
-use crate::{axis_start, feather_of, placement, pt, Mapper, Transparency};
+use crate::{axis_start, feather_of, placement, pt, Mapper, RasterOp, Transparency};
 
 /// A gradient fill on a native item.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -400,6 +400,18 @@ impl Lowering {
             self.mapper.lose(l);
         }
         mapped.opacity
+    }
+
+    /// A picture's opacity factor and its filter stack (engine ADR 1037)
+    /// for a lane that sets `frameImageAdjustments` on the frame (paged.sheet's
+    /// page, sheet ADR 529): `a:lum`, `a:duotone`, `a:grayscl`, `a:biLevel`,
+    /// `a:hsl`, `a:clrRepl` and `a:blur` become the frame's ops in blip order;
+    /// the effects with no op stay reported. `px_per_pt` is the image's pixels
+    /// per point as placed (a blur radius is in the picture's own pixels).
+    pub fn picture_filters(&mut self, blip: &Blip, px_per_pt: Option<f64>) -> (f64, Vec<RasterOp>) {
+        let pic = resolved::picture(blip, &self.slots);
+        let mapped = self.mapper.picture_at(&pic, px_per_pt);
+        (mapped.opacity, mapped.adjustments)
     }
 
     /// A picture's look on a `w` × `h` box: its shape properties (the fill

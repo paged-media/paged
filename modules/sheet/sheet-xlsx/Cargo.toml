@@ -57,6 +57,9 @@ paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-fl
 # The workbook theme as the engine's theme (engine ADR 1056): the one lowering
 # of a theme part, shared with doc and slide.
 dml-native = { path = "../../../platform/shared/dml-native" }
+# A drawing's shapes (`xdr:sp`, `xdr:cxnSp`): the custom geometry they author
+# (sheet ADR 530); the preset outlines are evaluated by the page lowering.
+dml-geom = { path = "../../../platform/shared/dml-geom" }
 # The DrawingML chart reader and model, shared with slide (slide ADR 709):
 # `parts::chart` folds it into `sheet_chart::ChartModel`, the Excel profile.
 dml-chart = { path = "../../../platform/shared/dml-chart" }

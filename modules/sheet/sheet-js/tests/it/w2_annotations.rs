@@ -399,11 +399,17 @@ fn a_drawing_pictures_alpha_and_shadow_reach_the_page__feat__sheet_chart_native_
         (sh.size, sh.opacity, sh.color.as_str()),
         (3.0, 40.0, "#000000")
     );
+    // Sheet ADR 529: the grayscale rides the frame's filter stack now, it
+    // is no loss.
     assert!(
-        pics[0].losses[0].contains("a:grayscl"),
+        matches!(
+            pics[0].adjustments.as_slice(),
+            [sheet_chart::native::RasterOp::BlackWhite { .. }]
+        ),
         "{:?}",
-        pics[0].losses
+        pics[0].adjustments
     );
+    assert!(pics[0].losses.is_empty(), "{:?}", pics[0].losses);
     let spec = sheet_js::core::TracksSpec {
         rows: (0..6).collect(),
         cols: (9..14).collect(),
@@ -412,8 +418,46 @@ fn a_drawing_pictures_alpha_and_shadow_reach_the_page__feat__sheet_chart_native_
     let page = s.get_tracks_page(0, spec).unwrap();
     let on_page = s.page_pictures(0, &page);
     assert_eq!(on_page[0].fx, pics[0].fx);
+    assert_eq!(on_page[0].adjustments, pics[0].adjustments);
     // An unstyled picture carries none.
     let plain = SheetSession::load_xlsx(&fixture("16-structure.xlsx")).unwrap();
     let p = &plain.list_pictures(0).unwrap()[0];
     assert!(p.fx.is_none() && p.losses.is_empty());
+    assert!(p.adjustments.is_empty() && p.placement.is_none());
+}
+
+/// Sheet ADR 529 — a drawing picture's `a:srcRect` crop is the image's
+/// placement in its frame, and its `a:lum` is the frame's brightness and
+/// contrast; an uncropped picture has no placement.
+#[test]
+fn a_cropped_picture_is_placed_and_its_lum_is_a_filter__feat__sheet_chart_native_effects() {
+    let bytes = fixture("16-structure.xlsx");
+    let drawing = part(&bytes, "xl/drawings/drawing1.xml").unwrap();
+    let cropped = drawing.replacen(
+        r#"<a:blip r:embed="rId1"/>"#,
+        r#"<a:blip r:embed="rId1"><a:lum bright="20000" contrast="-10000"/></a:blip><a:srcRect l="25000" r="25000"/>"#,
+        1,
+    );
+    let bytes = rezip(
+        &bytes,
+        &[("xl/drawings/drawing1.xml", cropped.into_bytes())],
+    );
+    let s = SheetSession::load_xlsx(&bytes).unwrap();
+    let p = &s.list_pictures(0).unwrap()[0];
+    let m = p.placement.expect("the crop's placement");
+    // l = r = 25 %: the image is shown twice the frame's width, a quarter of
+    // that (half the frame's width) left of the frame; the height is untouched.
+    let img = s.picture_bytes(&p.media).unwrap();
+    let (pw, ph) = paged_ooxml::media::pixel_size(&img).unwrap();
+    assert!((m[0] * f64::from(pw) - 2.0 * p.w).abs() < 1e-6, "{m:?}");
+    assert!((m[3] * f64::from(ph) - p.h).abs() < 1e-6, "{m:?}");
+    assert!((m[4] + p.w / 2.0).abs() < 1e-6 && m[5] == 0.0, "{m:?}");
+    assert!(
+        matches!(
+            p.adjustments.as_slice(),
+            [sheet_chart::native::RasterOp::BrightnessContrast { .. }]
+        ),
+        "{:?}",
+        p.adjustments
+    );
 }
