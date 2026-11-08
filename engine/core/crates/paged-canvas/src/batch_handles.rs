@@ -199,6 +199,10 @@ fn is_reference(s: &str) -> bool {
 /// frames and links them, and the driver had to flush the batch before
 /// every link.
 ///
+/// `insertItemHyperlink` names the page item it makes a link source `item`
+/// (engine ADR 1026), so a link on an item the same batch created (a placed
+/// picture or shape, paged.sheet ADR 531) rides that batch too.
+///
 /// The `tableCell` address spells its keys in snake_case
 /// (`{ story_id, table_id, row, col }` — the `ElementId` struct variants
 /// keep Rust field names), so `story_id` / `table_id` are named too:
@@ -211,7 +215,10 @@ fn is_reference(s: &str) -> bool {
 fn is_address_key(key: &str) -> bool {
     key.ends_with("Id")
         || key.ends_with("Ids")
-        || matches!(key, "from" | "to" | "frame" | "story_id" | "table_id")
+        || matches!(
+            key,
+            "from" | "to" | "frame" | "item" | "story_id" | "table_id"
+        )
         || is_page_key(key)
 }
 
@@ -501,6 +508,21 @@ mod tests {
             "swatch:Color/Red"
         );
         assert!(substitute(&set_on("$h:zz"), &t).unwrap_err().contains("zz"));
+    }
+
+    #[test]
+    fn an_item_hyperlink_takes_the_bound_item() {
+        let scope = scope_with("a", ElementId::Rectangle("u9".into()), None);
+        let child: Mutation = serde_json::from_str(
+            r#"{"op":"insertItemHyperlink","args":{"item":"$h:a","url":"https://paged.media"}}"#,
+        )
+        .expect("decode");
+        match substitute(&child, &scope).expect("resolve") {
+            Mutation::InsertItemHyperlink { item, url, .. } => {
+                assert_eq!((item.as_str(), url.as_str()), ("u9", "https://paged.media"));
+            }
+            other => panic!("expected InsertItemHyperlink, got {other:?}"),
+        }
     }
 
     #[test]

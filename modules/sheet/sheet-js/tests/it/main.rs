@@ -7,6 +7,7 @@ mod doc_style_map;
 mod w2_annotations;
 mod w2_cf_authoring;
 mod w2_visual;
+mod w3_shapes;
 mod w5_files;
 mod wave4_features;
 mod wave6_format;

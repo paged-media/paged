@@ -41,6 +41,7 @@
 //! never set here.
 
 use dml_native::native::Lowering;
+pub use dml_native::RasterOp;
 use paged_ooxml::drawingml::{resolved::Paint, Rgba};
 
 pub use dml_native::native::{
@@ -154,33 +155,135 @@ impl NativeLowering {
     }
 
     /// A drawing picture's look: its `a:blip` (`a:alphaModFix` as the
-    /// opacity; every other picture effect reported, the Office 2010
-    /// corrections already in the stored image) and its shape's effect
-    /// list, as the shared mapper lowers them.
+    /// opacity; the picture corrections the engine's filter stack holds as
+    /// that stack, sheet ADR 529; the rest reported, the Office 2010
+    /// corrections already in the stored image) and its shape's effect list,
+    /// as the shared mapper lowers them. `px_per_pt`: the image's pixels per
+    /// point as placed.
     pub fn picture(
         &mut self,
         blip: &paged_ooxml::drawingml::Blip,
         effects: &paged_ooxml::drawingml::Effects,
-    ) -> Option<NativeFx> {
+        px_per_pt: Option<f64>,
+    ) -> (Option<NativeFx>, Vec<RasterOp>) {
         let l = &mut self.lowering;
-        let alpha = l.picture_alpha(blip);
+        let (alpha, adjustments) = l.picture_filters(blip, px_per_pt);
         let fx = l.resolve_effects(effects);
         let mut out = NativeFx::default();
         l.look_into(&Paint::None, &fx, alpha, false, &mut out);
-        (!out.is_empty()).then_some(out)
+        ((!out.is_empty()).then_some(out), adjustments)
     }
 }
 
 /// A drawing picture's native look against the workbook theme (sheet ADR
-/// 527), and what the page cannot hold of it, one line per kind.
-pub fn picture_fx(
+/// 527, 529).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PictureLook {
+    /// Opacity and effects.
+    pub fx: Option<NativeFx>,
+    /// The frame's filter stack (`frameImageAdjustments`, engine ADR 1037).
+    pub adjustments: Vec<RasterOp>,
+    /// What the page cannot hold of the look, one line per kind.
+    pub losses: Vec<String>,
+}
+
+/// A drawing picture's native look; see [`NativeLowering::picture`].
+pub fn picture_look(
     theme: &[u32; 12],
     blip: &paged_ooxml::drawingml::Blip,
     effects: &paged_ooxml::drawingml::Effects,
+    px_per_pt: Option<f64>,
+) -> PictureLook {
+    let mut n = NativeLowering::new(theme);
+    let (fx, adjustments) = n.picture(blip, effects, px_per_pt);
+    PictureLook {
+        fx,
+        adjustments,
+        losses: n.take_losses(),
+    }
+}
+
+/// A drawing picture of `w` × `h` pt, bytes `image`, looked at as placed:
+/// its [`PictureLook`] (a blur radius is in the image's own pixels, so the
+/// density comes from the pixel size and the cropped display size) and the
+/// crop's [`crop_placement`] when it has one and the bytes give a size.
+pub fn picture_placed(
+    theme: &[u32; 12],
+    blip: &paged_ooxml::drawingml::Blip,
+    effects: &paged_ooxml::drawingml::Effects,
+    image: Option<&[u8]>,
+    w: f64,
+    h: f64,
+) -> (PictureLook, Option<[f64; 6]>) {
+    let px = image.and_then(paged_ooxml::media::pixel_size);
+    let placement = blip
+        .src_rect
+        .zip(px)
+        .and_then(|(c, px)| crop_placement(c, px, w, h));
+    let shown = match (&placement, px) {
+        (Some(m), Some(px)) => Some((m[0] * f64::from(px.0), m[3] * f64::from(px.1))),
+        (None, Some(_)) => Some((w, h)),
+        _ => None,
+    };
+    let density = px.zip(shown).and_then(|(px, (dw, dh))| {
+        (dw > 0.0 && dh > 0.0).then(|| (f64::from(px.0) / dw + f64::from(px.1) / dh) / 2.0)
+    });
+    (picture_look(theme, blip, effects, density), placement)
+}
+
+/// A drawing shape's native look (sheet ADR 530) on a `w` × `h` pt box
+/// against the workbook theme: its fill (solid, gradient, a pattern as its
+/// mixed colour), outline, opacity and effects, as the shared mapper lowers
+/// them, and what the page cannot hold of it, one line per kind.
+pub fn shape_look(
+    theme: &[u32; 12],
+    props: &paged_ooxml::drawingml::ShapeProperties,
+    w: f64,
+    h: f64,
 ) -> (Option<NativeFx>, Vec<String>) {
     let mut n = NativeLowering::new(theme);
-    let fx = n.picture(blip, effects);
-    (fx, n.take_losses())
+    let fx = n.lowering.shape(props, w, h);
+    ((!fx.is_empty()).then_some(fx), n.take_losses())
+}
+
+/// A cropped picture's placement in its frame (sheet ADR 529): the engine's
+/// inner image transform `[a, b, c, d, e, f]` (natural pixels to points, in
+/// the frame's own box) for an image of `px` pixels shown in a `w` × `h` pt
+/// frame with the `a:srcRect` sides `crop` (1 000ths of a percent, left, top,
+/// right, bottom) left out. The image is shown at `w / (1 - l - r)` by
+/// `h / (1 - t - b)` with its top-left corner `l` and `t` of that outside the
+/// frame (the mapping slide's pictures and doc's use). `None` for no crop, a
+/// crop that pads (negative sides) or leaves no picture.
+pub fn crop_placement(
+    crop: paged_ooxml::drawingml::RelRect,
+    px: (u32, u32),
+    w: f64,
+    h: f64,
+) -> Option<[f64; 6]> {
+    let f = |v: i32| f64::from(v) / 100_000.0;
+    let (l, t, r, b) = (f(crop.0), f(crop.1), f(crop.2), f(crop.3));
+    if (l == 0.0 && t == 0.0 && r == 0.0 && b == 0.0)
+        || l < 0.0
+        || t < 0.0
+        || r < 0.0
+        || b < 0.0
+        || l + r >= 1.0
+        || t + b >= 1.0
+        || px.0 == 0
+        || px.1 == 0
+    {
+        return None;
+    }
+    let disp_w = w / (1.0 - l - r);
+    let disp_h = h / (1.0 - t - b);
+    Some([
+        disp_w / f64::from(px.0),
+        0.0,
+        0.0,
+        disp_h / f64::from(px.1),
+        -l * disp_w,
+        -t * disp_h,
+    ])
 }
 
 /// The bounding box `(x, y, w, h)` of a point list.
@@ -379,14 +482,28 @@ mod tests {
         let fx = fx_of(
             r#"<a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="2700000"><a:srgbClr val="000000"><a:alpha val="40000"/></a:srgbClr></a:outerShdw></a:effectLst>"#,
         );
-        let (out, losses) = picture_fx(&OFFICE_THEME, &blip, &fx.effects);
-        let out = out.unwrap();
+        let look = picture_look(&OFFICE_THEME, &blip, &fx.effects, None);
+        let out = look.fx.unwrap();
         assert_eq!(out.opacity, Some(60.0));
         assert_eq!(out.drop_shadow.unwrap().opacity, 40.0);
+        // The grayscale rides the frame's filter stack (sheet ADR 529).
         assert!(
-            losses.iter().any(|m| m.contains("adjustment blackWhite")),
-            "{losses:?}"
+            matches!(look.adjustments.as_slice(), [RasterOp::BlackWhite { .. }]),
+            "{:?}",
+            look.adjustments
         );
+        assert!(look.losses.is_empty(), "{:?}", look.losses);
+    }
+
+    #[test]
+    fn a_crop_is_the_pictures_placement_in_its_frame__feat__sheet_chart_native_effects() {
+        // l = r = 25 %: the middle half of a 200 x 100 px image fills a
+        // 100 x 50 pt frame, so the image is shown 200 x 100 pt, 50 pt left.
+        let m = crop_placement((25_000, 0, 25_000, 0), (200, 100), 100.0, 50.0).unwrap();
+        assert_eq!(m, [1.0, 0.0, 0.0, 0.5, -50.0, 0.0]);
+        assert!(crop_placement((0, 0, 0, 0), (200, 100), 100.0, 50.0).is_none());
+        assert!(crop_placement((-5_000, 0, 0, 0), (200, 100), 100.0, 50.0).is_none());
+        assert!(crop_placement((60_000, 0, 40_000, 0), (200, 100), 100.0, 50.0).is_none());
     }
 
     #[test]

@@ -81,6 +81,8 @@ import {
   tableDiagonalOps,
   tablePictureLosses,
   tablePictureOps,
+  tableShapeLosses,
+  tableShapeOps,
   cellRotationOps,
   needsRotationStyles,
   cellAlignApplies,
@@ -572,17 +574,38 @@ async function barOps(
   // colours are the table's own cell-stroke mints).
   const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);
   // W2.3: the pictures over the table; sheet ADR 527: their opacity and
-  // effects, whose colours are chart swatches too.
+  // effects, whose colours are chart swatches too. Sheet ADR 530: the
+  // drawing shapes, painted with chart swatches as well.
   const styledPictures = (content.pictures ?? []).some((p) => p.fx);
+  const shapes = (content.shapes ?? []).length > 0;
   const pictureLosses = tablePictureLosses(content);
   if (pictureLosses.length > 0) {
     host.log.warn(`lower: pictures drawn without: ${pictureLosses.join("; ")}`);
   }
+  const shapeLosses = tableShapeLosses(content);
+  if (shapeLosses.length > 0) {
+    host.log.warn(`lower: shapes drawn without: ${shapeLosses.join("; ")}`);
+  }
   if (!bars && sparks.length === 0) {
-    const known = styledPictures ? await readKnownSwatchIds(host) : undefined;
+    const known =
+      styledPictures || shapes ? await readKnownSwatchIds(host) : undefined;
+    const shapeOps = tableShapeOps(
+      content,
+      at.widths,
+      at.pageId,
+      at.origin,
+      known,
+    );
     return [
       ...diagonals,
-      ...tablePictureOps(content, at.widths, at.pageId, at.origin, known),
+      ...shapeOps,
+      ...tablePictureOps(
+        content,
+        at.widths,
+        at.pageId,
+        at.origin,
+        withMints(known, shapeOps),
+      ),
     ];
   }
   const known = await readKnownSwatchIds(host);
@@ -593,25 +616,46 @@ async function barOps(
     ...sparklineOps(content, at, known),
   ];
   // A colour the bars or sparklines mint in this batch is not minted again.
-  const minted =
-    known === null
-      ? null
-      : new Set([
-          ...known,
-          ...art.flatMap((o) =>
-            o.op === "createSwatch"
-              ? [
-                  (o.args as { spec: { selfId?: string | null } }).spec
-                    .selfId ?? "",
-                ]
-              : [],
-          ),
-        ]);
+  const afterArt = withMints(known, art);
+  const shapeOps = tableShapeOps(
+    content,
+    at.widths,
+    at.pageId,
+    at.origin,
+    afterArt,
+  );
   return [
     ...art,
     ...diagonals,
-    ...tablePictureOps(content, at.widths, at.pageId, at.origin, minted),
+    ...shapeOps,
+    ...tablePictureOps(
+      content,
+      at.widths,
+      at.pageId,
+      at.origin,
+      withMints(afterArt, shapeOps),
+    ),
   ];
+}
+
+/** The swatch ids known after `ops` ran: `known` and what they mint (a
+ *  swatch minted twice in one batch fails the whole batch). `undefined`
+ *  (mint everything) and `null` (a failed read, mint nothing) stay. */
+function withMints(
+  known: Awaited<ReturnType<typeof readKnownSwatchIds>> | undefined,
+  ops: readonly Mutation[],
+): Awaited<ReturnType<typeof readKnownSwatchIds>> | undefined {
+  if (known === undefined || known === null) {
+    return known;
+  }
+  return new Set([
+    ...known,
+    ...ops.flatMap((o) =>
+      o.op === "createSwatch" || o.op === "createGradient"
+        ? [(o.args as { spec: { selfId?: string | null } }).spec.selfId ?? ""]
+        : [],
+    ),
+  ]);
 }
 
 /** W4 — the page art of `content`'s sparklines, each drawn in its table
@@ -2485,7 +2529,8 @@ export async function refreshLoweredTable(
     oldBars.length > 0 ||
     (next.databars ?? []).length > 0 ||
     (next.sparklines ?? []).length > 0 ||
-    (next.pictures ?? []).length > 0
+    (next.pictures ?? []).length > 0 ||
+    (next.shapes ?? []).length > 0
   ) {
     const at = await frameOrigin(host, info.frameId);
     if (at) drawn = await barOps(host, next, { ...at, widths: nextWidths });

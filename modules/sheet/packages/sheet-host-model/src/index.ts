@@ -36,6 +36,9 @@ export {
   type IconRect,
   type FillPattern,
   type LoweredPicture,
+  type LoweredShape,
+  type LoweredShapeAnchor,
+  type LoweredShapeItem,
   type LoweredRun,
   type Merge,
   type Page,
@@ -291,3 +294,4 @@ export {
   tablePictureLosses,
   tablePictureOps,
 } from "./table-pictures";
+export { tableShapeBox, tableShapeLosses, tableShapeOps } from "./table-shapes";
