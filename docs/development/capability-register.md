@@ -134,7 +134,11 @@ Equations (engine ADR 1090, slice 1 built, W10): `paged-math` is the neutral mat
 (fractions, scripts, radicals, n-ary operators, delimiters, matrices, accents) onto glyph runs, rules and strokes
 through a `MathMetrics` seam; `paged_ooxml::omml` is the one OMML reader for doc and slide (`m:oMath`,
 `m:oMathPara`, transitional and strict). Open: the model type and wire, the renderer's metrics and paint, doc and
-slide import, the Word-oracle comparison. Oracle scripts live in `tooling/oracle/` (one place for the InDesign,
+slide import, the Word-oracle comparison. Text envelope (engine ADR 1091, slice 1 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
+adjusts) for doc, slide and sheet; the guides (`paged-warp`), the frame's model and the render pass are open.
+ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
+provider); a matting job in `apps/ml-host` and Tier-A matting models are open.
+Oracle scripts live in `tooling/oracle/` (one place for the InDesign,
 Illustrator, Photoshop, Word and PowerPoint runners; windowless only).
 
 ### Lowering
