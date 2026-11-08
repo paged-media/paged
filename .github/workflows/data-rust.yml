@@ -20,8 +20,8 @@ on:
       - "engine/core/crates/paged-action/**"
       - "engine/core/Cargo.toml"
       - "engine/core/Cargo.lock"
-      # The shared formatting crate (platform/shared/fmt), a path dependency.
-      - "platform/shared/fmt/**"
+      # The shared formatting crate (engine/core/crates/paged-fmt), a path dependency.
+      - "engine/core/crates/paged-fmt/**"
       # The XLSX reader paged-data-xlsx runs on (sheet-xlsx and what it builds on).
       - "modules/sheet/sheet-core/**"
       - "modules/sheet/sheet-format/**"
@@ -53,8 +53,8 @@ on:
       - "engine/core/crates/paged-action/**"
       - "engine/core/Cargo.toml"
       - "engine/core/Cargo.lock"
-      # The shared formatting crate (platform/shared/fmt), a path dependency.
-      - "platform/shared/fmt/**"
+      # The shared formatting crate (engine/core/crates/paged-fmt), a path dependency.
+      - "engine/core/crates/paged-fmt/**"
       # The XLSX reader paged-data-xlsx runs on (sheet-xlsx and what it builds on).
       - "modules/sheet/sheet-core/**"
       - "modules/sheet/sheet-format/**"

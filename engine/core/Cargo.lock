@@ -4204,18 +4204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "paged-composition-render"
-version = "0.0.0"
-dependencies = [
- "image",
- "paged-compose",
- "paged-composition",
- "paged-flow",
- "paged-gpu",
- "serde_json",
-]
-
-[[package]]
 name = "paged-data-automation"
 version = "0.0.0"
 dependencies = [

@@ -75,7 +75,7 @@ pub fn crop_png() -> Vec<u8> {
     out
 }
 
-fn package(body: &str, with_image: bool) -> Vec<u8> {
+pub(crate) fn package(body: &str, with_image: bool) -> Vec<u8> {
     let document = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document {NS}><w:body>{body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>"#

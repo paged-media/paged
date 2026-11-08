@@ -15,7 +15,7 @@ paged-scene = { path = "../paged-scene" }
 # Shaping engine (rustybuzz's official successor on the fontations
 # stack). ttf-parser stays alongside it for metric/table reads — the
 # two share the same font bytes via `shape::Face`.
-harfrust = "0.14"
+harfrust = { workspace = true }
 ttf-parser = "0.25"
 # The shaper shares a caller's font buffer (`Face::from_bytes`).
 bytes = { workspace = true }

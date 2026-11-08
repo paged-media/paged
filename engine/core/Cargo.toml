@@ -4,7 +4,6 @@ members = [
     "crates/paged-model",
     "crates/paged-flow",
     "crates/paged-composition",
-    "crates/paged-composition-render",
     "crates/paged-scene",
     "crates/paged-text",
     "crates/paged-color",
@@ -72,6 +71,9 @@ members = [
     "crates/paged-data-session",
     # Actions (core ADR 1015): the registry, chains, the cache key, JS actions.
     "crates/paged-action",
+    # L2 foundations moved from platform/shared and modules/slide (gap closing).
+    "crates/paged-fmt",
+    "crates/pptx-fonts",
     # Modules that joined this workspace (docs/development/one-workspace.md).
     # A member outside this directory names this root in its [package]
     # (`workspace = "…/engine/core"`).
@@ -93,7 +95,6 @@ members = [
     "../../platform/shared/dml-chart",
     "../../platform/shared/dml-geom",
     "../../platform/shared/dml-native",
-    "../../platform/shared/fmt",
     "../../platform/shared/test-resources",
     "../../modules/doc/docx-core",
     "../../modules/doc/docx-import",
@@ -106,7 +107,6 @@ members = [
     "../../modules/doc/docx-conformance",
     "../../modules/slide/pptx-core",
     "../../modules/slide/pptx-import",
-    "../../modules/slide/pptx-fonts",
     "../../modules/slide/slide-chart",
     "../../modules/slide/slide-sheet",
     "../../modules/slide/slide-resolve",
@@ -219,6 +219,10 @@ wasm-bindgen = "0.2"
 hayro-interpret = { version = "0.8", default-features = false }
 kurbo = "0.13"
 png = "0.18"
+# The fontations stack, pinned once (engine ADR 1058): shaping (harfrust) and glyph
+# outlines and metrics (skrifa) of paged-text, image-js and pptx-fonts.
+harfrust = "0.14"
+skrifa = "0.48"
 # paged.draw's image-trace kernel, the colour clustering, path walking and spline
 # fitting under vtracer (MIT/Apache-2.0). It pulls bit-vec, num-traits and
 # flo_curves 0.3. READ THIS BEFORE BUMPING: the engine's [patch] below replaces
@@ -277,7 +281,7 @@ dml-native = { path = "../../platform/shared/dml-native" }
 pptx-export = { path = "../../modules/slide/pptx-export" }
 pptx-core = { path = "../../modules/slide/pptx-core" }
 pptx-import = { path = "../../modules/slide/pptx-import" }
-pptx-fonts = { path = "../../modules/slide/pptx-fonts" }
+pptx-fonts = { path = "crates/pptx-fonts" }
 slide-geom = { path = "../../platform/shared/dml-geom", package = "dml-geom" }
 slide-chart = { path = "../../modules/slide/slide-chart" }
 slide-sheet = { path = "../../modules/slide/slide-sheet" }

@@ -11,6 +11,7 @@
       "readNative": true,
       "openNative": true
     },
+    "assets": ["fonts"],
     "rendering": ["hitTest"],
     "editContext": ["wordDocument"],
     "keybindings": true,

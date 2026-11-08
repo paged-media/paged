@@ -24,8 +24,9 @@
 //! in.
 
 use docx_core::{
-    BorderEdge, Borders, CellLook, Float, FloatPosition, FloatWrap, HeightRule, Language,
-    Paragraph, PictureLook, PreferredWidth, TableLook, TableStyleProps, TextBox, Theme, WidthKind,
+    BorderEdge, Borders, CellLook, CustomPath, Float, FloatPosition, FloatWrap, HeightRule,
+    Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape, ShapeGeometry, TableLook,
+    TableStyleProps, TextBox, Theme, WidthKind,
 };
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_office_word as w10;
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_vml as vml;
@@ -61,14 +62,30 @@ pub(crate) fn language(l: &wml::Languages) -> Language {
 #[derive(Default)]
 pub(crate) struct PartObjects {
     looks: std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>>,
+    /// Every shape's outline, transform and completed look by the same id
+    /// (doc ADR 627), read for the shapes that hold no text.
+    shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
     next_ordinal: u32,
+}
+
+/// What the shapes pass reads of one `wps:wsp`.
+struct ShapeRead {
+    geometry: ShapeGeometry,
+    rotation: i32,
+    flip_h: bool,
+    flip_v: bool,
+    /// The look with the `wps:style` references completed.
+    look: PictureLook,
+    line_ends: bool,
 }
 
 impl PartObjects {
     /// A fresh part: its shapes' looks.
     pub(crate) fn for_part(part: &[u8]) -> Self {
+        let (looks, shapes) = shape_looks(part);
         PartObjects {
-            looks: shape_looks(part),
+            looks,
+            shapes,
             next_ordinal: 0,
         }
     }
@@ -78,18 +95,26 @@ impl PartObjects {
 const NS_WP: &[u8] = b"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
 
 /// Every DrawingML shape's (`wps:wsp`) `wps:spPr` look in a part, by its
-/// drawing's `wp:docPr/@id`, in document order.
+/// drawing's `wp:docPr/@id`, in document order; and, for the shapes that hold
+/// no text, their outline and transform with the look completed from the
+/// `wps:style` references (doc ADR 627).
+#[allow(clippy::type_complexity)]
 fn shape_looks(
     part: &[u8],
-) -> std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>> {
+) -> (
+    std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>>,
+    std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
+) {
     use paged_ooxml::drawingml;
     use paged_ooxml::tree::{self, Ns};
     let mut out: std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>> =
         Default::default();
+    let mut shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>> =
+        Default::default();
     let Ok(drawings) = tree::subtrees(part, |uri, local| {
         uri == NS_WP && (local == "inline" || local == "anchor")
     }) else {
-        return out;
+        return (out, shapes);
     };
     let no_rels = |_: &str| None;
     for d in &drawings {
@@ -107,18 +132,156 @@ fn shape_looks(
         else {
             continue;
         };
-        let shape = wsp
-            .children
-            .iter()
-            .find(|c| c.local == "spPr")
+        let sp_pr = wsp.children.iter().find(|c| c.local == "spPr");
+        let shape = sp_pr
             .map(|sp| drawingml::shape_properties(sp, &no_rels))
             .unwrap_or_default();
+        if !wsp.children.iter().any(|c| c.local == "txbx") {
+            let look = complete_from_style(shape.clone(), wsp);
+            let xfrm = sp_pr.and_then(|sp| sp.children.iter().find(|c| c.local == "xfrm"));
+            shapes.entry(id).or_default().push_back(ShapeRead {
+                geometry: sp_pr.map(read_geometry).unwrap_or_default(),
+                rotation: xfrm.and_then(|x| x.attr_i32("rot")).unwrap_or(0),
+                flip_h: xfrm.and_then(|x| x.attr_bool("flipH")).unwrap_or(false),
+                flip_v: xfrm.and_then(|x| x.attr_bool("flipV")).unwrap_or(false),
+                line_ends: look
+                    .line
+                    .as_ref()
+                    .is_some_and(|l| l.head.is_some() || l.tail.is_some()),
+                look: PictureLook {
+                    shape: look,
+                    blip: Default::default(),
+                },
+            });
+        }
         out.entry(id).or_default().push_back(PictureLook {
             shape,
             blip: Default::default(),
         });
     }
-    out
+    (out, shapes)
+}
+
+/// Line widths of the theme's line styles `a:lnRef idx` 1, 2 and 3 (Office's
+/// own: 0.5, 1 and 1.5 pt), in EMU.
+const LINE_STYLE_WIDTHS: [i64; 3] = [6350, 12700, 19050];
+
+/// The fill and the line a shape leaves to its `wps:style` (a shape inserted
+/// from Word's gallery states neither in `wps:spPr`): `a:fillRef` and
+/// `a:lnRef` carry the colour, `lnRef` also names the theme's line style. The
+/// theme's gradient fill styles (`idx` 2 and 3) are drawn as the solid colour
+/// of the reference.
+fn complete_from_style(
+    mut props: paged_ooxml::drawingml::ShapeProperties,
+    wsp: &paged_ooxml::tree::El,
+) -> paged_ooxml::drawingml::ShapeProperties {
+    use paged_ooxml::drawingml::{color_in, Fill, Line};
+    let Some(style) = wsp.children.iter().find(|c| c.local == "style") else {
+        return props;
+    };
+    let reference = |name: &str| {
+        let el = style.children.iter().find(|c| c.local == name)?;
+        let idx = el.attr_i32("idx").unwrap_or(0);
+        (idx > 0).then(|| (idx, color_in(el)))
+    };
+    if props.fill.is_none() {
+        if let Some((_, Some(c))) = reference("fillRef") {
+            props.fill = Some(Fill::Solid(c));
+        }
+    }
+    if let Some((idx, color)) = reference("lnRef") {
+        let line = props.line.get_or_insert_with(Line::default);
+        if line.width.is_none() {
+            line.width = LINE_STYLE_WIDTHS.get((idx - 1) as usize).copied();
+        }
+        if line.fill.is_none() {
+            line.fill = color.map(Fill::Solid);
+        }
+    }
+    props
+}
+
+/// A shape's outline: the preset's name and guides, or a custom geometry whose
+/// points are literal numbers.
+fn read_geometry(sp_pr: &paged_ooxml::tree::El) -> ShapeGeometry {
+    if let Some(p) = sp_pr.children.iter().find(|c| c.local == "prstGeom") {
+        let adjust = p
+            .children
+            .iter()
+            .find(|c| c.local == "avLst")
+            .map(|av| {
+                av.children
+                    .iter()
+                    .filter(|g| g.local == "gd")
+                    .filter_map(|g| {
+                        let name = g.attr("name")?.to_string();
+                        let value = g.attr("fmla")?.strip_prefix("val ")?.trim().parse().ok()?;
+                        Some((name, value))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        return ShapeGeometry::Preset {
+            name: p.attr("prst").unwrap_or("rect").to_string(),
+            adjust,
+        };
+    }
+    if let Some(c) = sp_pr.children.iter().find(|c| c.local == "custGeom") {
+        return read_custom(c).map_or(ShapeGeometry::Unsupported, ShapeGeometry::Custom);
+    }
+    ShapeGeometry::default()
+}
+
+fn read_custom(cust: &paged_ooxml::tree::El) -> Option<Vec<CustomPath>> {
+    let list = cust.children.iter().find(|c| c.local == "pathLst")?;
+    let mut paths = Vec::new();
+    for path in list.children.iter().filter(|c| c.local == "path") {
+        let point = |el: &paged_ooxml::tree::El| -> Option<(i64, i64)> {
+            let pt = el.children.iter().find(|c| c.local == "pt")?;
+            Some((pt.attr("x")?.parse().ok()?, pt.attr("y")?.parse().ok()?))
+        };
+        let points = |el: &paged_ooxml::tree::El| -> Option<Vec<(i64, i64)>> {
+            el.children
+                .iter()
+                .filter(|c| c.local == "pt")
+                .map(|pt| Some((pt.attr("x")?.parse().ok()?, pt.attr("y")?.parse().ok()?)))
+                .collect()
+        };
+        let mut commands = Vec::new();
+        for cmd in &path.children {
+            match cmd.local.as_str() {
+                "moveTo" => {
+                    let (x, y) = point(cmd)?;
+                    commands.push(PathCommand::Move(x, y));
+                }
+                "lnTo" => {
+                    let (x, y) = point(cmd)?;
+                    commands.push(PathCommand::Line(x, y));
+                }
+                "quadBezTo" => {
+                    let p = points(cmd)?;
+                    let [a, b] = p[..] else { return None };
+                    commands.push(PathCommand::Quad([a.0, a.1, b.0, b.1]));
+                }
+                "cubicBezTo" => {
+                    let p = points(cmd)?;
+                    let [a, b, c] = p[..] else { return None };
+                    commands.push(PathCommand::Cubic([a.0, a.1, b.0, b.1, c.0, c.1]));
+                }
+                "close" => commands.push(PathCommand::Close),
+                // An arc is a guide computation: not taken.
+                _ => return None,
+            }
+        }
+        paths.push(CustomPath {
+            w: path.attr_i64("w").unwrap_or(0),
+            h: path.attr_i64("h").unwrap_or(0),
+            no_fill: path.attr("fill") == Some("none"),
+            no_stroke: path.attr_bool("stroke") == Some(false),
+            commands,
+        });
+    }
+    Some(paths)
 }
 
 /// Word's default text box insets: 0.1" left and right, 0.05" top and
@@ -273,6 +436,66 @@ pub(crate) fn drawing_text_box(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Text
         ordinal,
         vml: false,
         held,
+    })
+}
+
+/// A shape that holds no text, drawn by a `w:drawing` (`wps:wsp` without
+/// `wps:txbx`), or `None` when the drawing is not one (doc ADR 627).
+pub(crate) fn drawing_shape(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Shape> {
+    use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_wordprocessing_drawing as wp;
+    let (width_emu, height_emu, graphic, float, doc_pr): (
+        i64,
+        i64,
+        &aml::Graphic,
+        Option<Float>,
+        Option<u32>,
+    ) = match d.drawing_choice.as_ref()? {
+        wml::DrawingChoice::Inline(i) => (
+            i.extent.cx,
+            i.extent.cy,
+            &i.graphic,
+            None,
+            Some(i.doc_properties.id),
+        ),
+        wml::DrawingChoice::Anchor(a) => {
+            let a: &wp::Anchor = a;
+            (
+                a.extent.cx,
+                a.extent.cy,
+                &a.graphic,
+                Some(map_float(a)),
+                a.doc_properties.as_ref().map(|p| p.id),
+            )
+        }
+    };
+    let wsp = graphic
+        .graphic_data
+        .graphic_data_choice
+        .iter()
+        .find_map(|c| match c {
+            aml::GraphicDataChoice::WordprocessingShape(s) => Some(s),
+            _ => None,
+        })?;
+    // Text makes it a text box (drawn as its box).
+    if wsp.wordprocessing_shape_choice2.is_some() {
+        return None;
+    }
+    let read = ctx
+        .objects
+        .borrow_mut()
+        .shapes
+        .get_mut(&doc_pr?)
+        .and_then(|q| q.pop_front())?;
+    Some(Shape {
+        width_emu,
+        height_emu,
+        float,
+        geometry: read.geometry,
+        rotation: read.rotation,
+        flip_h: read.flip_h,
+        flip_v: read.flip_v,
+        look: Some(Box::new(read.look)).filter(|l| !l.is_plain()),
+        line_ends: read.line_ends,
     })
 }
 
@@ -686,6 +909,7 @@ pub(crate) fn alternate_content(
     ctx: &ImportCtx,
     images: &mut Vec<docx_core::Image>,
     text_boxes: &mut Vec<TextBox>,
+    shapes: &mut Vec<Shape>,
     other_drawings: &mut u32,
 ) {
     use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_markup_compatibility_2006::AlternateContentChoice as B;
@@ -717,7 +941,10 @@ pub(crate) fn alternate_content(
                             tb.held |= fallback;
                             text_boxes.push(tb);
                         }
-                        None => *other_drawings += 1,
+                        None => match drawing_shape(&d, ctx) {
+                            Some(sh) => shapes.push(sh),
+                            None => *other_drawings += 1,
+                        },
                     },
                 },
                 Err(_) => *other_drawings += 1,

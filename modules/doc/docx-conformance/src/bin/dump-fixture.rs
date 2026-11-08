@@ -74,6 +74,22 @@ fn main() {
         "drop-cap" => docx_conformance::drop_cap_docx(),
         "picture-crop" => docx_conformance::picture_crop_docx(),
         "picture-crop-cell" => docx_conformance::picture_crop_cell_docx(),
+        "shapes" => docx_conformance::shapes_docx(),
+        "embedded-fonts" => {
+            // The font is read from the path in PAGED_FIXTURE_FONT (an OFL
+            // face from the engine's corpus).
+            let font = std::fs::read(
+                std::env::var("PAGED_FIXTURE_FONT").expect("PAGED_FIXTURE_FONT: a .ttf to embed"),
+            )
+            .expect("read the font");
+            docx_conformance::embedded_fonts_docx(&[docx_conformance::EmbedFace {
+                typeface: "Paged Embedded Lora",
+                slot: "embedRegular",
+                key: &docx_conformance::font_key(1),
+                font: &font,
+                subsetted: false,
+            }])
+        }
         "objects-languages" => docx_conformance::objects_languages_docx(),
         _ => docx_conformance::memo_docx(),
     };
