@@ -41,6 +41,7 @@ pub mod live_shape;
 pub mod media;
 pub mod mesh;
 pub mod pattern;
+pub mod report;
 pub mod review;
 pub mod script;
 pub mod theme;
