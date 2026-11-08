@@ -63,6 +63,7 @@ mod objects;
 mod ops;
 pub mod outline;
 pub mod protect;
+pub mod shapes;
 pub mod sort;
 pub mod tables;
 pub mod validation;

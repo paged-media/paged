@@ -231,6 +231,21 @@ pub fn picture_placed(
     (picture_look(theme, blip, effects, density), placement)
 }
 
+/// A drawing shape's native look (sheet ADR 530) on a `w` × `h` pt box
+/// against the workbook theme: its fill (solid, gradient, a pattern as its
+/// mixed colour), outline, opacity and effects, as the shared mapper lowers
+/// them, and what the page cannot hold of it, one line per kind.
+pub fn shape_look(
+    theme: &[u32; 12],
+    props: &paged_ooxml::drawingml::ShapeProperties,
+    w: f64,
+    h: f64,
+) -> (Option<NativeFx>, Vec<String>) {
+    let mut n = NativeLowering::new(theme);
+    let fx = n.lowering.shape(props, w, h);
+    ((!fx.is_empty()).then_some(fx), n.take_losses())
+}
+
 /// A cropped picture's placement in its frame (sheet ADR 529): the engine's
 /// inner image transform `[a, b, c, d, e, f]` (natural pixels to points, in
 /// the frame's own box) for an image of `px` pixels shown in a `w` × `h` pt

@@ -135,6 +135,85 @@ pub struct PictureInfo {
     pub losses: Vec<String>,
 }
 
+/// An anchor placed in sheet points (the top-left of A1 is the origin): its
+/// box, its anchor cell and the offset into it.
+pub(crate) struct Placed {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub row: u32,
+    pub col: u32,
+    pub dx: f64,
+    pub dy: f64,
+    pub in_cell: bool,
+}
+
+/// [`Placed`] for `anchor` on sheet `ws` (hidden tracks take no room).
+pub(crate) fn place_anchor(ws: Option<&Worksheet>, anchor: &PictureAnchor) -> Placed {
+    let at = |o: &sheet_xlsx::parts::pictures::CellOffset| {
+        (
+            sheet_x(ws, o.col) + o.col_off as f64 / EMU_PER_PT,
+            sheet_y(ws, o.row) + o.row_off as f64 / EMU_PER_PT,
+        )
+    };
+    let (dx, dy) = match *anchor {
+        PictureAnchor::TwoCell { from, .. } | PictureAnchor::OneCell { from, .. } => (
+            from.col_off as f64 / EMU_PER_PT,
+            from.row_off as f64 / EMU_PER_PT,
+        ),
+        PictureAnchor::Absolute { x, y, .. } => (x as f64 / EMU_PER_PT, y as f64 / EMU_PER_PT),
+        PictureAnchor::InCell { .. } => (0.0, 0.0),
+    };
+    let (x, y, w, h, row, col, in_cell) = match *anchor {
+        PictureAnchor::TwoCell { from, to } => {
+            let (x0, y0) = at(&from);
+            let (x1, y1) = at(&to);
+            (
+                x0,
+                y0,
+                (x1 - x0).max(0.0),
+                (y1 - y0).max(0.0),
+                from.row,
+                from.col,
+                false,
+            )
+        }
+        PictureAnchor::OneCell { from, cx, cy } => {
+            let (x0, y0) = at(&from);
+            let (w, h) = (cx as f64 / EMU_PER_PT, cy as f64 / EMU_PER_PT);
+            (x0, y0, w, h, from.row, from.col, false)
+        }
+        PictureAnchor::Absolute { x, y, cx, cy } => (
+            x as f64 / EMU_PER_PT,
+            y as f64 / EMU_PER_PT,
+            cx as f64 / EMU_PER_PT,
+            cy as f64 / EMU_PER_PT,
+            0,
+            0,
+            false,
+        ),
+        PictureAnchor::InCell { row, col } => {
+            let x0 = sheet_x(ws, col);
+            let y0 = sheet_y(ws, row);
+            let w = sheet_lower::tracks::col_width_pt(ws, col);
+            let h = sheet_lower::tracks::row_height_pt(ws, row);
+            (x0, y0, w, h, row, col, true)
+        }
+    };
+    Placed {
+        x,
+        y,
+        w,
+        h,
+        row,
+        col,
+        dx,
+        dy,
+        in_cell,
+    }
+}
+
 /// The sheet x of a column's left edge (hidden columns take no room).
 pub(crate) fn sheet_x(ws: Option<&Worksheet>, col: u32) -> f64 {
     (0..col)
@@ -193,13 +272,15 @@ pub struct PagePicture {
     pub losses: Vec<String>,
 }
 
-/// Lowered page content with the pictures anchored in its cells.
+/// Lowered page content with the pictures and shapes anchored in its cells.
 #[derive(serde::Serialize, Debug)]
 pub struct PageContent<'a> {
     #[serde(flatten)]
     pub content: &'a sheet_lower::LoweredContent,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub pictures: Vec<PagePicture>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub shapes: Vec<super::shapes::PageShape>,
 }
 
 /// Standard base64 (RFC 4648, padded).
@@ -507,63 +588,22 @@ impl SheetSession {
     pub fn list_pictures(&self, sheet: u16) -> Result<Vec<PictureInfo>, SessionError> {
         self.validate_sheet(sheet)?;
         let ws = self.engine().model().sheets.get(sheet as usize);
-        let at = |o: &sheet_xlsx::parts::pictures::CellOffset| {
-            (
-                sheet_x(ws, o.col) + o.col_off as f64 / EMU_PER_PT,
-                sheet_y(ws, o.row) + o.row_off as f64 / EMU_PER_PT,
-            )
-        };
         Ok(self
             .doc
             .pictures_of(sheet)
             .into_iter()
             .map(|p| {
-                let (dx, dy) = match p.anchor {
-                    PictureAnchor::TwoCell { from, .. } | PictureAnchor::OneCell { from, .. } => (
-                        from.col_off as f64 / EMU_PER_PT,
-                        from.row_off as f64 / EMU_PER_PT,
-                    ),
-                    PictureAnchor::Absolute { x, y, .. } => {
-                        (x as f64 / EMU_PER_PT, y as f64 / EMU_PER_PT)
-                    }
-                    PictureAnchor::InCell { .. } => (0.0, 0.0),
-                };
-                let (x, y, w, h, row, col, in_cell) = match p.anchor {
-                    PictureAnchor::TwoCell { from, to } => {
-                        let (x0, y0) = at(&from);
-                        let (x1, y1) = at(&to);
-                        (
-                            x0,
-                            y0,
-                            (x1 - x0).max(0.0),
-                            (y1 - y0).max(0.0),
-                            from.row,
-                            from.col,
-                            false,
-                        )
-                    }
-                    PictureAnchor::OneCell { from, cx, cy } => {
-                        let (x0, y0) = at(&from);
-                        let (w, h) = (cx as f64 / EMU_PER_PT, cy as f64 / EMU_PER_PT);
-                        (x0, y0, w, h, from.row, from.col, false)
-                    }
-                    PictureAnchor::Absolute { x, y, cx, cy } => (
-                        x as f64 / EMU_PER_PT,
-                        y as f64 / EMU_PER_PT,
-                        cx as f64 / EMU_PER_PT,
-                        cy as f64 / EMU_PER_PT,
-                        0,
-                        0,
-                        false,
-                    ),
-                    PictureAnchor::InCell { row, col } => {
-                        let x0 = sheet_x(ws, col);
-                        let y0 = sheet_y(ws, row);
-                        let w = sheet_lower::tracks::col_width_pt(ws, col);
-                        let h = sheet_lower::tracks::row_height_pt(ws, row);
-                        (x0, y0, w, h, row, col, true)
-                    }
-                };
+                let Placed {
+                    x,
+                    y,
+                    w,
+                    h,
+                    row,
+                    col,
+                    dx,
+                    dy,
+                    in_cell,
+                } = place_anchor(ws, &p.anchor);
                 let (look, placement) = match p.dml.as_deref() {
                     Some(d) => sheet_chart::native::picture_placed(
                         &self

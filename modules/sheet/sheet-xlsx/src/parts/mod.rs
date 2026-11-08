@@ -32,6 +32,7 @@ pub mod freeze;
 pub mod metadata;
 pub mod pictures;
 pub mod protection;
+pub mod shapes;
 pub mod shared_strings;
 pub mod sparkline;
 pub mod style_model;

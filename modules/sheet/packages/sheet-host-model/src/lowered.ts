@@ -316,6 +316,48 @@ export interface LoweredContent {
    *  a `data:` URI. The page places them over the table like data bars (an
    *  image frame each, refreshed with the table). */
   pictures?: LoweredPicture[];
+  /** Sheet ADR 530 — the drawing shapes and connectors anchored in this
+   *  content's cells, their outlines evaluated in the engine (the shared
+   *  DrawingML geometry), drawn over the table like the pictures. */
+  shapes?: LoweredShape[];
+}
+
+/** One anchor of a shape contour with its control points (pt, relative to
+ *  the shape's anchor box). */
+export interface LoweredShapeAnchor {
+  anchor: [number, number];
+  left: [number, number];
+  right: [number, number];
+}
+
+/** One path of a shape: its contours (`subpathStarts` lists where each
+ *  begins when there are several) and what the geometry paints of them. */
+export interface LoweredShapeItem {
+  anchors: LoweredShapeAnchor[];
+  subpathStarts?: number[];
+  closed: boolean;
+  filled: boolean;
+  stroked: boolean;
+}
+
+/** Sheet ADR 530 — one shape placed over a page table (see
+ *  {@link LoweredContent.shapes}). */
+export interface LoweredShape {
+  id: string;
+  name: string;
+  row: number;
+  col: number;
+  /** The anchor box's top-left inside the anchor cell, and its size (pt). */
+  dx: number;
+  dy: number;
+  wPt: number;
+  hPt: number;
+  items: LoweredShapeItem[];
+  /** Fill, outline, opacity and effects as the shared DrawingML mapper
+   *  lowered them. */
+  fx?: NativeFx;
+  /** What the page cannot hold of the shape, one line per kind. */
+  losses?: string[];
 }
 
 /** W2.3 — one picture placed over a page table (see

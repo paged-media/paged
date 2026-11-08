@@ -1371,14 +1371,19 @@ mod wasm {
         content: &sheet_lower::LoweredContent,
     ) -> Result<JsValue, JsValue> {
         let pictures = session.page_pictures(sheet, content);
-        if pictures.is_empty() {
+        let shapes = session.page_shapes(sheet, content);
+        if pictures.is_empty() && shapes.is_empty() {
             return to_js(content);
         }
         use serde::Serialize;
         let ser = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        crate::core::annotations::PageContent { content, pictures }
-            .serialize(&ser)
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+        crate::core::annotations::PageContent {
+            content,
+            pictures,
+            shapes,
+        }
+        .serialize(&ser)
+        .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     pub(crate) fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
