@@ -91,6 +91,9 @@ pub struct LoweredTextBox {
     /// The shape's look (fill, outline, effects).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fx: Option<dml_native::native::NativeFx>,
+    /// Engine ADR 1091 — WordArt: the preset its text is bent to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warp: Option<docx_core::WordArt>,
 }
 
 /// A shape that holds no text, anchored in its paragraph (doc ADR 627): an
@@ -241,6 +244,9 @@ pub enum LoweredItemKind {
         paragraphs: Vec<LoweredParagraph>,
         /// The box's internal margins, top, left, bottom, right, pt.
         insets_pt: [f32; 4],
+        /// Engine ADR 1091 — WordArt: the preset its text is bent to.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        warp: Option<docx_core::WordArt>,
     },
 }
 

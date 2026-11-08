@@ -40,6 +40,8 @@ pub struct JobSpec {
 pub enum Kind {
     Generate,
     Edit,
+    /// The foreground's alpha, by the matting runner (not sd).
+    Matting,
 }
 
 impl Kind {
@@ -47,6 +49,7 @@ impl Kind {
         match self {
             Kind::Generate => "generate",
             Kind::Edit => "edit",
+            Kind::Matting => "matting",
         }
     }
 }

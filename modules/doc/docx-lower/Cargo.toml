@@ -20,6 +20,8 @@ paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-fl
 # engine's model crate for its value types only, never the scene or store.
 dml-native = { path = "../../../platform/shared/dml-native" }
 docx-core.workspace = true
+# The math tree of an equation (engine ADR 1090).
+paged-math = { workspace = true, features = ["serde"] }
 serde.workspace = true
 base64 = { workspace = true }
 # Word's charts (doc ADR 628): paged.slide's chart layout from the cached

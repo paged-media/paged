@@ -164,3 +164,7 @@ pub mod field;
 /// Puppet Warp: an as-rigid-as-possible triangle mesh bent by pins, and
 /// its raster backward field (WP5.6).
 pub mod puppet;
+
+/// Text warps (engine ADR 1091): WordArt's preset shapes as the map the
+/// text's outlines move through.
+pub mod textshape;

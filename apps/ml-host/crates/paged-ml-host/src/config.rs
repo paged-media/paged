@@ -36,6 +36,64 @@ pub struct Config {
     pub model: Option<Model>,
     #[serde(default)]
     pub extra_args: Vec<String>,
+    /// The matting runner (`ml.matting@1`, extensions ADR 1100 amendment 2):
+    /// a program the user installed that writes the foreground's alpha.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matting: Option<Matting>,
+}
+
+/// The placeholders a matting runner's arguments name.
+pub const MATTING_INPUT: &str = "{input}";
+pub const MATTING_OUTPUT: &str = "{output}";
+pub const MATTING_MODEL: &str = "{model}";
+
+/// A matting runner: `<binary> <args>` with `{input}` the picture (PNG),
+/// `{output}` the PNG it writes (an RGBA cut-out, whose alpha is the matte,
+/// or a greyscale matte) and `{model}` the model file. Its weights are the
+/// user's, under their own licence, as the generative model's are.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Matting {
+    pub id: String,
+    #[serde(default)]
+    pub licence_id: Option<String>,
+    /// Anything but `true` is refused (`licence_not_acknowledged`).
+    #[serde(default)]
+    pub licence_acknowledged: Option<bool>,
+    pub binary: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<PathBuf>,
+    /// The arguments, with the placeholders; empty is `{input} {output}`.
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+impl Matting {
+    pub fn acknowledged(&self) -> bool {
+        self.licence_acknowledged == Some(true)
+    }
+
+    /// The arguments with the placeholders filled.
+    pub fn args_for(&self, input: &Path, output: &Path) -> Vec<std::ffi::OsString> {
+        let template: Vec<String> = if self.args.is_empty() {
+            vec![MATTING_INPUT.into(), MATTING_OUTPUT.into()]
+        } else {
+            self.args.clone()
+        };
+        template
+            .iter()
+            .map(|a| match a.as_str() {
+                MATTING_INPUT => input.as_os_str().to_owned(),
+                MATTING_OUTPUT => output.as_os_str().to_owned(),
+                MATTING_MODEL => self
+                    .model
+                    .as_deref()
+                    .map(|m| m.as_os_str().to_owned())
+                    .unwrap_or_default(),
+                other => other.into(),
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -101,8 +159,39 @@ impl Config {
                 ));
             }
         }
+        if let Some(m) = &self.matting {
+            if m.id.trim().is_empty() {
+                return bad("matting.id must not be empty".into());
+            }
+            if !m.args.is_empty()
+                && !(m.args.iter().any(|a| a == MATTING_INPUT)
+                    && m.args.iter().any(|a| a == MATTING_OUTPUT))
+            {
+                return bad("matting.args must name {input} and {output}".into());
+            }
+            if m.args.iter().any(|a| a == MATTING_MODEL) && m.model.is_none() {
+                return bad("matting.args names {model} but matting.model is not set".into());
+            }
+            if !m.acknowledged() {
+                return Err((
+                    409,
+                    "licence_not_acknowledged",
+                    format!(
+                        "matting model {:?} is used under its own licence ({}); set licenceAcknowledged to true to accept it",
+                        m.id,
+                        m.licence_id.as_deref().unwrap_or("unspecified")
+                    ),
+                ));
+            }
+        }
         if let Some(sd) = &self.sd_binary {
             check_file("sdBinary", sd)?;
+        }
+        if let Some(m) = &self.matting {
+            check_file("matting.binary", &m.binary)?;
+            if let Some(model) = &m.model {
+                check_file("matting.model", model)?;
+            }
         }
         if let Some(model) = &self.model {
             check_file("model.diffusionModel", &model.diffusion_model)?;

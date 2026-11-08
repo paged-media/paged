@@ -29,6 +29,7 @@ use zip::write::SimpleFileOptions;
 mod charts;
 mod first_fit;
 mod fonts;
+mod math;
 mod native;
 mod objects;
 mod reach;
@@ -44,6 +45,7 @@ pub use first_fit::{
     FIRST_FIT_FULL_MEASURE_PT,
 };
 pub use fonts::{embedded_fonts_docx, font_key, EmbedFace};
+pub use math::{equations_document_xml, equations_docx, EQUATION_LEAD};
 pub use native::{break_kept_body_docx, endnote_body_docx};
 pub use objects::{
     float_cases, objects_floats_docx, objects_languages_docx, objects_nested_tables_docx,

@@ -2128,7 +2128,16 @@ impl Lowering {
         let mut shapes: Vec<crate::ir::LoweredShape> = Vec::new();
         let mut charts: Vec<crate::ir::LoweredGroup> = Vec::new();
         let mut diagrams: Vec<crate::ir::LoweredGroup> = Vec::new();
+        let mut equations: Vec<crate::ir::LoweredEquation> = Vec::new();
         for (ri, r) in p.runs.iter().enumerate() {
+            // Engine ADR 1090 — an equation stands after the text of the
+            // runs before it (its own run has none).
+            if let Some(math) = &r.math {
+                equations.push(crate::ir::LoweredEquation {
+                    at: before.min(total),
+                    math: math.clone(),
+                });
+            }
             for (ii, img) in r.images.iter().enumerate() {
                 // A float placed as a page item (doc ADR 614) is not in
                 // the text.
@@ -2258,6 +2267,7 @@ impl Lowering {
                 charts,
                 diagrams,
                 drop_cap,
+                equations,
             },
             tail,
         )

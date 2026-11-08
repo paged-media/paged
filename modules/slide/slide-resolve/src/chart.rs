@@ -124,6 +124,7 @@ pub(super) fn items(prims: Vec<Prim>, t: Affine, w: f64, h: f64, ctx: &Ctx) -> V
                     shrink: None,
                     rotation: 0.0,
                     paragraphs: vec![text::paragraph(&p, &tctx)],
+                    warp: None,
                 };
                 out.push(item(Vec::new(), None, None, Some(tf)));
             }

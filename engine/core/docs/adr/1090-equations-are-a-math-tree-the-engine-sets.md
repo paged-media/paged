@@ -1,9 +1,10 @@
 # ADR 1090 — Equations are a math tree the engine sets
 
 - **Status:** Accepted 2026-11-08; **slice 1 built** (the tree, its layout and the shared OMML
-  reader, with tests). Open, in this order: the model type and wire (Amendment slot below), the
-  renderer's metrics adapter and paint, doc import and slide import, MathML, write-back. Part of
-  the capability layering of PM-0014 and PM-0017
+  reader, with tests); **slice 2 built** (Amendment 1: the model, the renderer's metrics and
+  paint, doc and slide import). Open, in this order: the Word-oracle comparison, equations in
+  table cells, a wire door (insert/edit), MathML, write-back. Part of the capability layering
+  of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Equations").
 - **Scope:** `paged-math` (new leaf crate: `model`, `layout`); `paged-ooxml::omml` (the shared
   reader); later `paged-model`, `paged-scene`, `paged-wire`, `paged-renderer`, `docx-*`,
@@ -124,3 +125,74 @@ the layout constants are TeX's until one does (follow-up below).
 4. **Word oracle.** Generate a `.docx` of the fixture equations, save it as PDF headless, and add
    the extents to the fidelity set; tune the constants against it.
 5. **Editing and MathML/LaTeX input**, `m:borderBox` borders, alignment points.
+
+## Amendment 1 — the model, the render and the doc import (2026-11-08)
+
+**Model.** `Paragraph.equations: Vec<paged_model::equation::Equation>` (`{ offset, math }`),
+skipped when empty, so a document without one keeps its bytes and state hash. An equation is an
+inline object of its paragraph, like an inline anchored frame (ADR 1050): it stands at a
+character offset and is no character of the paragraph's text, so a caret, a selection and the
+text's bytes never see it. `Paragraph::shift_anchors` moves it with the text; the canvas's
+paragraph split and cross-paragraph delete move it with the text after the cut and drop it with
+deleted text. `paged-math` gained an optional `serde` feature for this; it stays a leaf crate.
+The equation is **not on the wire yet**: no mutation creates or edits one (the doc import
+reaches the engine through the `.paged` model, ADR 606), so the catalog and `wire.d.ts` are
+unchanged. The `StoryRun::Equation` sketched under "Next slices" became this paragraph field:
+the model has no run enum, and the inline-object machinery already does what an equation needs.
+
+**Render.** `paged-renderer` `pipeline/equations.rs`:
+
+- *Face.* The first of `Cambria Math`, `STIX Two Math`, `Latin Modern Math` the document's
+  font resolver has as itself (the font table asks for them when a paragraph holds an equation),
+  else the face of the run the equation stands in.
+- *Metrics.* `MathMetrics` over the face: advances from shaping (`paged-text`), extents from the
+  glyphs' bounding boxes. A run's `Variant` maps a letter to its Mathematical Alphanumeric code
+  point (`paged_math::alphabet::styled`, the block's holes included) where the face has it; a
+  face without math-italic letters draws the plain letter leaned 12°.
+- *Constants.* The face's OpenType `MATH` table (`ttf-parser`) where present (axis, rule,
+  fraction shifts, script shifts and drops, limit gap), TeX's otherwise.
+- *Placement.* The equation is set before its paragraph is composed, at the resolved size of the
+  run it stands in, and becomes an inline object: as wide as its layout, its box standing on the
+  baseline lowered by its descent, so it rises its ascent (the line grows by the rise under auto
+  leading, as any inline object). It is drawn where its character landed, in that character's
+  paint: `Glyphs` through `emit_glyph_slice` (a stretched delimiter as the glyph's `y_scale`),
+  `Rule` as a filled path, `Stroke` (the radical sign) as a stroked path.
+- Not yet: equations in table cells (the cell path sets no equations), rotated frames' equations
+  follow the anchored-object path, a descent does not push the next line.
+
+**Doc import.** `docx-import` reads each part's equations once through
+`paged_ooxml::omml::in_part` (every `m:oMathPara` as one display equation, its lines an `eqArr`;
+every `m:oMath` outside one inline; what an `mc:Fallback` holds left out) and takes them in
+order as its typed walk meets `m:oMath` / `m:oMathPara` in a paragraph, a hyperlink, a field, a
+content control or a tracked insertion (a tracked deletion's is left out). The equation is a
+text-less `docx_core::Run` with `math`; the lowering puts it on the paragraph
+(`LoweredParagraph.equations`, `at` = the characters before it) and the native builder
+(`docx-skeleton` `body.rs`) onto the model paragraph; a paragraph that is only display equations
+is centred (Word's `centerGroup` default). The pour path (a deferred block) has no door for an
+equation. The doc wasm grew past its 8 MiB manifest budget by 25 KB (8.02 MiB, measured by
+`doc / bun test`); the manifest's `maxBytes` is 9 MiB now. **Unchanged parts stay byte-identical:** the reader never writes, the equation's run
+has no `w:r` and is no run of the lowering, so the save-back's run bindings are unchanged; a
+test edits the run beside an inline equation and holds the equations' markup and the paragraphs
+after it to their bytes.
+
+**Slide import.** PowerPoint writes an equation's shape as an `mc:AlternateContent` whose
+choice holds the text with `a14:m` and whose fallback is a picture of the equation. The reader
+(`pptx-import`) now takes the choice of a shape that holds an equation (any other alternate
+content still takes its fallback), and reads an `a14:m` (alone or as the choice of a paragraph's
+alternate content) through the shared OMML reader into `pptx_core::RunKind::Math`; the resolver
+carries it on its `TextRun` (`math`), and `slide-native` puts it on the model paragraph at its
+character, with its run's size (`Equation::point_size`, which a source states when it has one).
+A slide nobody edited is written back as the deck had it (slide ADR 704), so its bytes hold.
+
+**Verification.** `paged-math` (layout invariants, the alphabet's holes), `paged-ooxml`
+(`in_part`: order, the fallback, a two-line display paragraph), the renderer
+(`tests/it/equations_pipeline.rs`: the text after an inline fraction moves by its width, the bar
+is TeX's rule on the axis at the pen, the glyphs are drawn, a display fraction grows its line),
+doc (`docx-conformance` `equations.rs`: the runs, the lowering's offsets, the byte-identical
+edit; `docx-skeleton` `equations.rs`: the model paragraphs), slide (`pptx-import` unit tests:
+an `a14:m` paragraph, the choice over the fallback). Slide's resolver and native builder are
+held by the compiler only: no deck fixture with an equation is committed yet. **Not verified:** any match to
+Word's rendering. No fixture in the repository carries Word's picture of an equation (Word
+writes no fallback image for `m:oMath` in a `.docx`), and no math face is committed, so the
+public gate sets equations in a text face at TeX's constants; the `MATH`-table path is exercised
+only where a math face is installed.

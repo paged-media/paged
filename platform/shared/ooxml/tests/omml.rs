@@ -194,3 +194,30 @@ fn a_fixture_lays_out_end_to_end() {
         }
     }
 }
+
+#[test]
+fn a_part_gives_one_equation_per_element_and_skips_the_fallback() {
+    let ns = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006""#;
+    let part = format!(
+        r#"<w:document {ns}><w:body>
+<w:p><w:r><w:t>x</w:t></w:r><m:oMath><m:r><m:t>a</m:t></m:r></m:oMath></w:p>
+<w:p><mc:AlternateContent><mc:Choice Requires="wps"><m:oMath><m:r><m:t>b</m:t></m:r></m:oMath></mc:Choice><mc:Fallback><m:oMath><m:r><m:t>b</m:t></m:r></m:oMath></mc:Fallback></mc:AlternateContent></w:p>
+<w:p><m:oMathPara><m:oMath><m:r><m:t>c</m:t></m:r></m:oMath><m:oMath><m:r><m:t>d</m:t></m:r></m:oMath></m:oMathPara></w:p>
+<w:p><m:oMathPara><m:oMath><m:r><m:t>e</m:t></m:r></m:oMath></m:oMathPara></w:p>
+</w:body></w:document>"#
+    );
+    let m = paged_ooxml::omml::in_part(part.as_bytes()).unwrap();
+    assert_eq!(m.len(), 4, "a, b (once), the c/d paragraph, e");
+    assert_eq!((text(&m[0].body), m[0].display), ("a".into(), false));
+    assert_eq!(text(&m[1].body), "b");
+    // Two lines of one display paragraph: an equation array.
+    assert!(m[2].display);
+    match &m[2].body[..] {
+        [Node::EqArr { rows }] => {
+            assert_eq!(rows.len(), 2);
+            assert_eq!((text(&rows[0]), text(&rows[1])), ("c".into(), "d".into()));
+        }
+        other => panic!("an equation array: {other:?}"),
+    }
+    assert_eq!((text(&m[3].body), m[3].display), ("e".into(), true));
+}

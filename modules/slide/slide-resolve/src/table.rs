@@ -423,6 +423,7 @@ pub(super) fn table(t: &pptx_core::Table, ctx: &Ctx) -> Table {
                     shrink: None,
                     rotation: 0.0,
                     paragraphs: text::body(tb, &tctx),
+                    warp: None,
                 }),
             });
         }

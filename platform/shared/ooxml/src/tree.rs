@@ -108,7 +108,7 @@ const NAMESPACES: [(&[u8], Ns); 14] = [
     (b"http://purl.oclc.org/ooxml/officeDocument/math", Ns::M),
 ];
 
-fn ns_of(uri: &[u8]) -> Ns {
+pub(crate) fn ns_of(uri: &[u8]) -> Ns {
     // A table rather than a `match`: the same answer, in a fraction of the
     // wasm a string match compiles to.
     NAMESPACES

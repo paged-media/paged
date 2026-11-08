@@ -2864,6 +2864,7 @@ pub(super) fn build_document_inner(
             emitter.emit_paragraph(paragraph, &mut pages, &mut total_stats);
         }
         emitter.apply_vertical_justification(&mut pages);
+        emitter.apply_text_warp(&mut pages);
         emitter.apply_behind_text(&mut pages);
         emitter.apply_column_rules(&mut pages);
         emitter.apply_polygon_clip(&mut pages);
@@ -3708,6 +3709,7 @@ pub(super) fn build_document_inner(
                 .map(|&p| pages[p].list.commands.len())
                 .collect();
             emitter.apply_vertical_justification(&mut pages);
+            emitter.apply_text_warp(&mut pages);
             emitter.apply_behind_text(&mut pages);
             emitter.apply_column_rules(&mut pages);
             emitter.apply_polygon_clip(&mut pages);
@@ -5672,6 +5674,32 @@ impl<'a> StoryEmitter<'a> {
             .map_or(0.0, |grid| grid.snap_exact(baseline))
     }
 
+    /// Engine ADR 1091 — bend each warped frame's text: its outlines are
+    /// mapped onto the preset's shape (`text_warp::warp_range`).
+    pub(super) fn apply_text_warp(&self, pages: &mut [BuiltPage]) {
+        for (i, frame) in self.chain.iter().enumerate() {
+            let Some(warp) = frame.text_warp.as_ref().filter(|w| w.is_active()) else {
+                continue;
+            };
+            let Some((start, end)) = self.frame_cmd_ranges[i] else {
+                continue;
+            };
+            let Some(page) = pages.get_mut(self.chain_pages[i]) else {
+                continue;
+            };
+            let (ox, oy) = page.spread_origin;
+            let insets = frame.inset_spacing.unwrap_or([0.0; 4]);
+            let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+            let area = paged_warp::textshape::Box2 {
+                x: f64::from(sx - ox + insets[1]),
+                y: f64::from(sy - oy + insets[0]),
+                w: f64::from(frame.bounds.width() - insets[1] - insets[3]),
+                h: f64::from(frame.bounds.height() - insets[0] - insets[2]),
+            };
+            super::text_warp::warp_range(&mut page.list, start..end, warp, area);
+        }
+    }
+
     pub(super) fn apply_vertical_justification(&self, pages: &mut [BuiltPage]) {
         for (i, frame) in self.chain.iter().enumerate() {
             let Some((start, end)) = self.frame_cmd_ranges[i] else {
@@ -6731,7 +6759,16 @@ pub(super) fn emit_paragraph_into_chain(
     // the paragraph is laid out. The segments re-enter here while
     // `inline_objects` is set.
     if em.inline_objects.is_none() {
-        if let Some((with_objects, objects)) = anchored::with_object_placeholders(paragraph) {
+        // Engine ADR 1090 — the paragraph's equations are set first: each
+        // is an in-line object as wide as it is set.
+        let equations = if paragraph.equations.is_empty() {
+            Vec::new()
+        } else {
+            super::equations::set_equations(em.document, em.font_table, paragraph)
+        };
+        if let Some((with_objects, objects)) =
+            anchored::with_object_placeholders(paragraph, equations)
+        {
             em.inline_objects = Some(objects);
             emit_paragraph_lines(em, &with_objects, pages, total_stats);
             if let Some(objects) = em.inline_objects.take() {
@@ -9332,6 +9369,7 @@ fn emit_paragraph_lines(
                             column: (text_origin_pt.0, text_origin_pt.0 + full_col_pt),
                             point_size: lo.point_size,
                             cap_height,
+                            paint: Some(picker.pick(g.cluster)),
                         });
                     }
                 }

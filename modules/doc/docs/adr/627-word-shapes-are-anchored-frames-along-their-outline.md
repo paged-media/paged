@@ -86,7 +86,8 @@ ceiling) or a decision on the ceiling. Neither is part of this record.
 
 The owner decided to raise the ceiling of `docx_js_bg.wasm` for charts and SmartArt rather than
 ship a second wasm artifact, by as much as they need plus headroom and at most to 10 MiB. The
-manifest's `maxBytes` goes from 8,388,608 B to 9,437,184 B (9 MiB). Charts (ADR 628) measure
+manifest's `maxBytes` goes from 8,388,608 B to 9,437,184 B (9 MiB), one raise shared with the
+equations' reader (engine ADR 1090), which landed the same value first. Charts (ADR 628) measure
 8,529,596 B on the author's machine (CI's number is in ADR 628); the rest is the headroom for the
 SmartArt drawing part. With SmartArt and `dml-geom` (ADR 629) the editor's `dist/` budget goes to
 74.25 MiB (PM-0013, amendment 6).

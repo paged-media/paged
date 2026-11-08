@@ -34,6 +34,7 @@ pub mod appearance;
 pub mod comments;
 pub mod content_control;
 pub mod effect_stack;
+pub mod equation;
 pub mod fitting;
 pub mod image_adjust;
 pub mod image_bytes;
@@ -44,6 +45,7 @@ pub mod pattern;
 pub mod report;
 pub mod review;
 pub mod script;
+pub mod text_warp;
 pub mod theme;
 pub mod vector_effect;
 pub mod winding;
@@ -1874,6 +1876,11 @@ pub struct TextFrame {
     /// at every straight-line corner).
     #[serde(default)]
     pub corners: [CornerSpec; 4],
+    /// Engine ADR 1091 — WordArt: the preset shape the frame's text is
+    /// bent to after it is laid out. Skipped when unset, so a frame without
+    /// one keeps its bytes and state hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_warp: Option<text_warp::TextWarp>,
 }
 
 impl TextFrame {
@@ -1954,6 +1961,7 @@ impl TextFrame {
             corner_radius: None,
             corner_option: None,
             corners: Default::default(),
+            text_warp: None,
         }
     }
 }
@@ -8009,6 +8017,13 @@ pub struct Paragraph {
     /// `w:pPrChange`): the paragraph's properties before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub props_change: Option<ParaPropsChange>,
+    /// Engine ADR 1090 — the equations standing in this paragraph, in text
+    /// order: each is a character of its line at its offset, as an inline
+    /// anchored object is ([`Self::anchored_frame_offsets`]), and its text
+    /// is no character of the paragraph's. Skipped when empty, so a document
+    /// without one keeps its bytes and state hash.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub equations: Vec<equation::Equation>,
 }
 impl Paragraph {
     /// Keep the anchors of [`Self::anchored_frame_offsets`], the
@@ -8021,12 +8036,14 @@ impl Paragraph {
         let footnotes = self.footnotes.iter_mut().filter_map(|f| f.anchor.as_mut());
         let notes = self.notes.iter_mut().map(|n| &mut n.anchor);
         let table = self.table_anchor.as_mut();
+        let equations = self.equations.iter_mut().map(|e| &mut e.offset);
         for offset in self
             .anchored_frame_offsets
             .iter_mut()
             .chain(footnotes)
             .chain(notes)
             .chain(table)
+            .chain(equations)
         {
             if delta >= 0 {
                 if *offset >= at {
@@ -8348,6 +8365,10 @@ pub struct AnchoredFrame {
     /// and filled. See [`Rectangle::subpath_open`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub subpath_open: Vec<bool>,
+    /// Engine ADR 1091 — an anchored text frame's WordArt warp (a Word text
+    /// box's `wps:bodyPr/a:prstTxWarp`); see [`TextFrame::text_warp`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_warp: Option<text_warp::TextWarp>,
 }
 
 /// Engine ADR 1050 — how a custom-positioned anchored object stands

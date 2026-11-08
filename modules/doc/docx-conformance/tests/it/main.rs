@@ -16,6 +16,7 @@ mod continuous;
 mod crop_saveback;
 mod drop_cap;
 mod embedded_fonts;
+mod equations;
 mod feature_evidence;
 mod files;
 mod first_fit;

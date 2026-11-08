@@ -26,7 +26,7 @@
 use docx_core::{
     BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, DiagramDrawing, Float, FloatPosition,
     FloatWrap, HeightRule, Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape,
-    ShapeGeometry, TableLook, TableStyleProps, TextBox, Theme, WidthKind,
+    ShapeGeometry, TableLook, TableStyleProps, TextBox, Theme, WidthKind, WordArt,
 };
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_office_word as w10;
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_vml as vml;
@@ -61,7 +61,8 @@ pub(crate) fn language(l: &wml::Languages) -> Language {
 /// pictures' are), and the running `w:txbxContent` ordinal.
 #[derive(Default)]
 pub(crate) struct PartObjects {
-    looks: std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>>,
+    looks:
+        std::collections::HashMap<u32, std::collections::VecDeque<(PictureLook, Option<WordArt>)>>,
     /// Every shape's outline, transform and completed look by the same id
     /// (doc ADR 627), read for the shapes that hold no text.
     shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
@@ -172,10 +173,29 @@ fn shape_looks(part: &[u8]) -> PartRead {
                 },
             });
         }
-        out.entry(id).or_default().push_back(PictureLook {
-            shape,
-            blip: Default::default(),
-        });
+        // Engine ADR 1091 — the box's WordArt warp, read by the shared
+        // reader; an inactive or unknown preset is none.
+        let warp = wsp
+            .children
+            .iter()
+            .find(|c| c.local == "bodyPr")
+            .and_then(drawingml::textwarp::read)
+            .filter(|w| w.is_active())
+            .map(|w| WordArt {
+                preset: w.preset.name().to_string(),
+                adjusts: w
+                    .adjusts
+                    .iter()
+                    .filter_map(|(n, _)| Some((n.clone(), w.adjust(n)?)))
+                    .collect(),
+            });
+        out.entry(id).or_default().push_back((
+            PictureLook {
+                shape,
+                blip: Default::default(),
+            },
+            warp,
+        ));
     }
     read
 }
@@ -183,7 +203,8 @@ fn shape_looks(part: &[u8]) -> PartRead {
 /// What [`shape_looks`] reads of a part.
 #[derive(Default)]
 struct PartRead {
-    looks: std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>>,
+    looks:
+        std::collections::HashMap<u32, std::collections::VecDeque<(PictureLook, Option<WordArt>)>>,
     shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
     charts: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
     diagrams: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
@@ -429,13 +450,15 @@ pub(crate) fn drawing_text_box(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Text
         }
         _ => return None,
     };
-    let look = doc_pr.and_then(|id| {
-        ctx.objects
-            .borrow_mut()
-            .looks
-            .get_mut(&id)
-            .and_then(|q| q.pop_front())
-    });
+    let (look, warp) = doc_pr
+        .and_then(|id| {
+            ctx.objects
+                .borrow_mut()
+                .looks
+                .get_mut(&id)
+                .and_then(|q| q.pop_front())
+        })
+        .map_or((None, None), |(look, warp)| (Some(look), warp));
     let ordinal = next_ordinal(ctx);
     let (paragraphs, held) = content_paragraphs(content, ctx);
     let mut insets = DEFAULT_INSETS;
@@ -463,6 +486,7 @@ pub(crate) fn drawing_text_box(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Text
         ordinal,
         vml: false,
         held,
+        warp,
     })
 }
 
@@ -656,6 +680,7 @@ pub(crate) fn vml_text_box(p: &wml::Picture, ctx: &ImportCtx) -> Option<TextBox>
             ordinal,
             vml: true,
             held,
+            warp: None,
         });
     }
     None
@@ -1061,6 +1086,45 @@ pub(crate) fn alternate_content(
                 },
                 Err(_) => *other_drawings += 1,
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A part with one text box drawing, `body_pr` its `wps:bodyPr`.
+    fn part(body_pr: &str) -> String {
+        format!(
+            r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><w:body><w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="457200"/><wp:docPr id="7" name="WordArt"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:spPr/><wps:txbx><w:txbxContent><w:p><w:r><w:t>Hi</w:t></w:r></w:p></w:txbxContent></wps:txbx>{body_pr}</wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p></w:body></w:document>"#
+        )
+    }
+
+    #[test]
+    fn a_text_box_keeps_its_wordart_warp() {
+        let xml = part(
+            r#"<wps:bodyPr><a:prstTxWarp prst="textArchUp"><a:avLst><a:gd name="adj" fmla="val 12000000"/></a:avLst></a:prstTxWarp></wps:bodyPr>"#,
+        );
+        let looks = shape_looks(xml.as_bytes()).looks;
+        let (_, warp) = looks[&7].front().expect("the box's look").clone();
+        assert_eq!(
+            warp,
+            Some(WordArt {
+                preset: "textArchUp".into(),
+                adjusts: vec![("adj".into(), 12_000_000)],
+            })
+        );
+    }
+
+    #[test]
+    fn a_plain_box_has_no_warp() {
+        for body in [
+            "<wps:bodyPr/>",
+            r#"<wps:bodyPr><a:prstTxWarp prst="textNoShape"/></wps:bodyPr>"#,
+        ] {
+            let looks = shape_looks(part(body).as_bytes()).looks;
+            assert_eq!(looks[&7].front().expect("look").1, None, "{body}");
         }
     }
 }

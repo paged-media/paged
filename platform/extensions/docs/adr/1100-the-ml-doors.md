@@ -106,3 +106,28 @@ matting job, the local host. Not built: a matting job in `apps/ml-host` (its API
 `generate` and `edit` only; a runner for a matting model is a new capability the host's `health`
 would list, which is the flag the editor's `supports("ml.matting@1")` already reads), and Tier-A
 matting models (they wait for reviewed files, hashes and licences, editor ADR 290).
+
+## Amendment 2 (2026-11-08): the local host's matting job
+
+The local host (`apps/ml-host`, API v1, additive) runs a **matting runner** the user installed, as it
+runs stable-diffusion.cpp: the config's `matting { id, licenceId, licenceAcknowledged, binary,
+model?, args? }` names a program and its arguments, with `{input}` (the picture, PNG), `{output}`
+(the PNG it writes) and `{model}` filled in per job (`{input} {output}` when `args` is empty). The
+licence gate and the file checks are the generative model's. `POST /api/ml/jobs {kind: "matting",
+image}` runs it, one job at a time in the same queue; the result is the runner's PNG: an RGBA cut-out
+(its alpha is the matte) or a greyscale matte. Each kind is ready on its own: `health.capabilities`
+lists `matting` while the runner is configured, acknowledged and executable (`health.matting`
+says which part is missing), `generate` and `edit` while sd and a model are; a job of a kind that is
+not ready is `503 not_ready`.
+
+**The flag is the health.** `mlHostProvider` answers the capabilities the host's last health listed
+(its `capabilities` follow the health; a change fires `onStatus`), and is healthy while it lists
+any. So `supports("ml.matting@1")` turns true when the host serves matting, and
+`media.paged.image/remove-background` uses it through the same door (Tier A first, then the host),
+with no change to the action. The provider reads the runner's PNG back as the matte
+(`imageToMatte`: the alpha of a cut-out, the grey of an opaque matte). The editor keeps a host
+matting configuration when the user sets a generative model in Settings ▸ Models (the host stores
+the whole configuration). CI keeps the fake provider for the action; the host's own tests drive a
+fake runner (a shell script), the SDK's a fake host.
+
+plugin-sdk and plugin-api 0.74.3-canary.80.

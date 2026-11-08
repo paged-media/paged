@@ -552,6 +552,8 @@ struct Made {
     fx: Option<dml_native::native::NativeFx>,
     picture: Option<String>,
     text_box: Option<([f32; 4], u32, bool, bool)>,
+    /// A text box's WordArt warp (engine ADR 1091).
+    warp: Option<docx_core::WordArt>,
 }
 
 impl Made {
@@ -569,6 +571,7 @@ impl Made {
                     story_id: item_story_id(n),
                     paragraphs: Vec::new(),
                     insets_pt,
+                    warp: self.warp,
                 },
                 LoweredItemSource {
                     part: part.to_string(),
@@ -626,6 +629,7 @@ fn run_items(
                 fx: picture_fx(img, w, h, slots),
                 picture: Some(lower_image(img).uri),
                 text_box: None,
+                warp: None,
             },
         ));
     }
@@ -660,6 +664,7 @@ fn run_items(
                 fx: box_fx(tb, w, h, slots),
                 picture: None,
                 text_box: Some((box_insets(tb), tb.ordinal, tb.vml, tb.held)),
+                warp: tb.warp.clone(),
             },
         ));
     }
@@ -922,6 +927,7 @@ impl crate::Lowering {
             insets_pt,
             paragraphs,
             fx,
+            warp: tb.warp.clone(),
         }
     }
 

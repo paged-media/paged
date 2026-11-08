@@ -369,18 +369,22 @@ name = "paged-fmt"
 version = "0.0.0"
 
 [[package]]
+name = "paged-math"
+version = "0.0.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "paged-model"
 version = "0.0.0"
 dependencies = [
  "base64",
  "paged-colour-math",
+ "paged-math",
  "serde",
  "serde_json",
 ]
-
-[[package]]
-name = "paged-math"
-version = "0.0.0"
 
 [[package]]
 name = "paged-ooxml"
@@ -622,6 +626,7 @@ name = "sheet-format"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "dml-native",
  "paged-fmt",
  "paged-ooxml",
  "rustc-hash",
@@ -657,6 +662,7 @@ name = "sheet-js"
 version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
+ "dml-native",
  "paged-fmt",
  "paged-ooxml",
  "serde",
@@ -699,6 +705,7 @@ dependencies = [
  "base64",
  "compact_str",
  "dml-chart",
+ "dml-native",
  "flate2",
  "paged-ooxml",
  "quick-xml",

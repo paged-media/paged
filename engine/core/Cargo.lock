@@ -1492,6 +1492,7 @@ dependencies = [
  "docx-lower",
  "docx-skeleton",
  "flate2",
+ "paged-math",
  "paged-ooxml",
  "paged-test-resources",
  "serde_json",
@@ -1502,6 +1503,7 @@ dependencies = [
 name = "docx-core"
 version = "0.0.0"
 dependencies = [
+ "paged-math",
  "paged-ooxml",
  "pptx-core",
  "serde",
@@ -1526,6 +1528,7 @@ version = "0.0.0"
 dependencies = [
  "dml-chart",
  "docx-core",
+ "paged-math",
  "paged-ooxml",
  "pptx-core",
 ]
@@ -1557,6 +1560,7 @@ dependencies = [
  "dml-geom",
  "dml-native",
  "docx-core",
+ "paged-math",
  "paged-ooxml",
  "pptx-core",
  "serde",
@@ -4510,6 +4514,9 @@ dependencies = [
 [[package]]
 name = "paged-math"
 version = "0.0.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "paged-mcp"
@@ -4525,6 +4532,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "paged-colour-math",
+ "paged-math",
  "schemars",
  "serde",
  "serde_json",
@@ -4698,6 +4706,7 @@ dependencies = [
  "paged-geom",
  "paged-gpu",
  "paged-kernels",
+ "paged-math",
  "paged-model",
  "paged-mutate",
  "paged-pdf-page",
@@ -4712,6 +4721,7 @@ dependencies = [
  "paged-test-resources",
  "paged-text",
  "paged-vector-fx",
+ "paged-warp",
  "paged-wire",
  "serde",
  "serde_json",
@@ -5296,6 +5306,7 @@ dependencies = [
  "dml-geom",
  "flate2",
  "image-webp",
+ "paged-math",
  "paged-ooxml",
  "serde",
  "serde_json",
@@ -6653,6 +6664,7 @@ version = "0.0.0"
 dependencies = [
  "dml-geom",
  "paged-geom",
+ "paged-math",
  "paged-ooxml",
  "paged-test-resources",
  "pptx-core",

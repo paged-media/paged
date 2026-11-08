@@ -556,6 +556,19 @@ pub struct LoweredParagraph {
     /// style.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drop_cap: Option<LoweredDropCap>,
+    /// Engine ADR 1090 — the equations standing in this paragraph, in text
+    /// order: the engine's paragraph equations. The native builder sets
+    /// them; the pour has no door for one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub equations: Vec<LoweredEquation>,
+}
+
+/// An equation of a paragraph: the character offset of its place (past the
+/// text, at its end) and its math tree.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LoweredEquation {
+    pub at: u32,
+    pub math: paged_math::Math,
 }
 
 /// A paragraph's drop cap: its first `characters` characters stand over

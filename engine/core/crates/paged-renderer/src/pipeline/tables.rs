@@ -3735,7 +3735,9 @@ fn cell_paragraph_widths(
 fn cell_with_objects(
     paragraph: &paged_model::Paragraph,
 ) -> Option<(paged_model::Paragraph, anchored::InlineObjects, Vec<u32>)> {
-    let (with, objects) = anchored::with_object_placeholders(paragraph)?;
+    // A cell's equations are not set yet (engine ADR 1090): its objects
+    // are its pictures.
+    let (with, objects) = anchored::with_object_placeholders(paragraph, Vec::new())?;
     let mut bytes = Vec::with_capacity(objects.objects.len());
     let mut at = 0u32;
     for run in &with.runs {

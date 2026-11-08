@@ -19,3 +19,5 @@ docx-core.workspace = true
 # out).
 dml-chart = { path = "../../../platform/shared/dml-chart", features = ["serde"] }
 pptx-core.workspace = true
+# The math tree the shared OMML reader returns (engine ADR 1090).
+paged-math.workspace = true

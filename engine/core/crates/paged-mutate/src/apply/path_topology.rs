@@ -1510,6 +1510,7 @@ pub(crate) fn new_text_frame(
         corner_radius: None,
         corner_option: None,
         corners: Default::default(),
+        text_warp: None,
     }
 }
 

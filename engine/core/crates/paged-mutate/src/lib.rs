@@ -306,6 +306,7 @@ mod tests {
             corner_radius: None,
             corner_option: None,
             corners: Default::default(),
+            text_warp: None,
         }
     }
 

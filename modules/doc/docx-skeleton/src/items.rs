@@ -141,11 +141,17 @@ pub fn add_page_items(doc: &mut Document, items: &[LoweredPageItem]) {
             LoweredItemKind::TextBox {
                 story_id,
                 insets_pt,
+                warp,
                 ..
             } => {
                 let mut f = text_frame(&item.id, story_id, item.bounds);
                 f.next_text_frame = None;
                 f.inset_spacing = Some(*insets_pt);
+                // Engine ADR 1091 — WordArt bends the box's text.
+                f.text_warp = warp.as_ref().map(|w| paged_model::text_warp::TextWarp {
+                    preset: w.preset.clone(),
+                    adjusts: w.adjusts.clone(),
+                });
                 if let Some(fill) = fill {
                     f.fill_color = Some(fill);
                 }

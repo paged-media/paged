@@ -91,6 +91,19 @@ pub struct TextBox {
     /// the box is refused.
     #[serde(default)]
     pub held: bool,
+    /// WordArt (engine ADR 1091): the `wps:bodyPr/a:prstTxWarp` the box's
+    /// text is bent to; `None` for unbent text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warp: Option<WordArt>,
+}
+
+/// A text warp as the box states it: the `ST_TextShapeType` preset's name
+/// and its adjusts that are plain values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WordArt {
+    pub preset: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adjusts: Vec<(String, i64)>,
 }
 
 /// A DrawingML shape that holds no text (`wps:wsp` without `wps:txbx`: a

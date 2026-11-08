@@ -45,6 +45,7 @@ import {
   createMlHostClient,
   createMlRegistry,
   fakeMlProvider,
+  imageToMatte,
   mlHostProvider,
   mlObjectModel,
   MlHostError,
@@ -344,7 +345,11 @@ describe("[plugin-platform.ml-service] the Tier-B client against a fake local ho
             );
           const body = (await req.json()) as MlHostJobRequest;
           const id = `j${++n}`;
-          jobs.set(id, { body, state: "queued", hold: body.prompt === "hold" });
+          jobs.set(id, {
+            body,
+            state: "queued",
+            hold: "prompt" in body && body.prompt === "hold",
+          });
           return Response.json({ id, state: "queued" }, { status: 202 });
         }
         const m = /^\/api\/ml\/jobs\/([^/]+)(\/events|\/result)?$/.exec(p);
@@ -448,7 +453,9 @@ describe("[plugin-platform.ml-service] the Tier-B client against a fake local ho
     ctl.abort();
     await expect(running).rejects.toThrow();
     expect(
-      [...jobs.values()].find((j) => j.body.prompt === "hold")!.state,
+      [...jobs.values()].find(
+        (j) => "prompt" in j.body && j.body.prompt === "hold",
+      )!.state,
     ).toBe("cancelled");
   });
 
@@ -514,6 +521,121 @@ describe("[plugin-platform.ml-service] the Tier-B client against a fake local ho
       const b = new Uint8Array(len).map((_, i) => (i * 37) & 255);
       expect(toBase64(b)).toBe(Buffer.from(b).toString("base64"));
     }
+  });
+});
+
+describe("[plugin-platform.ml-service] the local host's matting runner", () => {
+  let server: ReturnType<typeof Bun.serve>;
+  let base = "";
+  let matting = false;
+  const sent: MlHostJobRequest[] = [];
+
+  beforeAll(() => {
+    server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const p = new URL(req.url).pathname;
+        if (p === "/api/ml/health")
+          return Response.json({
+            ok: true,
+            version: "0.1.0",
+            api: 1,
+            runtime: { binary: null, found: false },
+            model: { id: null, configured: false, licenceAcknowledged: false },
+            ready: false,
+            matting: {
+              id: matting ? "a-matting-model" : null,
+              configured: matting,
+              licenceAcknowledged: matting,
+              ready: matting,
+            },
+            capabilities: matting ? ["matting"] : [],
+            queue: { running: 0, queued: 0 },
+          });
+        if (p === "/api/ml/jobs" && req.method === "POST") {
+          sent.push((await req.json()) as MlHostJobRequest);
+          return Response.json({ id: "m1", state: "queued" }, { status: 202 });
+        }
+        if (p === "/api/ml/jobs/m1/events") {
+          const enc = new TextEncoder();
+          const done = {
+            id: "m1",
+            kind: "matting",
+            state: "done",
+            progress: { step: 1, total: 1 },
+          };
+          return new Response(
+            enc.encode(`event: done\ndata: ${JSON.stringify(done)}\n\n`),
+            { headers: { "content-type": "text/event-stream" } },
+          );
+        }
+        if (p === "/api/ml/jobs/m1/result")
+          return new Response(PNG, {
+            headers: { "content-type": "image/png" },
+          });
+        return Response.json(
+          { error: "no_job", message: "no" },
+          { status: 404 },
+        );
+      },
+    });
+    base = `http://127.0.0.1:${server.port}`;
+  });
+  afterAll(() => server.stop(true));
+
+  it("serves ml.matting@1 only while the host lists it, as the runner's alpha", async () => {
+    const backend = createMlRegistry();
+    // The runner answers a cut-out: transparent left column, opaque right.
+    const cutOut: MlImage = {
+      width: 2,
+      height: 1,
+      data: new Uint8ClampedArray([10, 10, 10, 0, 10, 10, 10, 255]),
+    };
+    const codec = {
+      async encode(img: MlImage) {
+        return new Uint8Array([img.width, img.height]);
+      },
+      async decode() {
+        return cutOut;
+      },
+    };
+    let changed = 0;
+    const provider = mlHostProvider({
+      client: createMlHostClient({ baseUrl: base }),
+      codec,
+      onStatus: () => changed++,
+    });
+    backend.register(provider);
+    const h = host(ALL, backend);
+    await provider.refresh();
+    expect(h.supports("ml.matting@1")).toBe(false);
+    const seen = changed;
+    matting = true;
+    await provider.refresh();
+    // The capability arriving is a change of its own.
+    expect(changed).toBe(seen + 1);
+    expect(h.supports("ml.matting@1")).toBe(true);
+    // Matting alone: generation is still not served.
+    expect(h.supports("ml.generate@1")).toBe(false);
+    const r = await h.ml.matting({ image: rgba(2, 1) });
+    expect(r).toMatchObject({ provider: "paged.ml-host", tier: "B" });
+    expect([...r.alpha.data]).toEqual([0, 255]);
+    expect(sent.at(-1)).toEqual({
+      kind: "matting",
+      image: toBase64(new Uint8Array([2, 1])),
+    });
+    matting = false;
+    await provider.refresh();
+    expect(h.supports("ml.matting@1")).toBe(false);
+  });
+
+  it("an opaque answer is read as a grey matte", () => {
+    const grey: MlImage = {
+      width: 2,
+      height: 1,
+      data: new Uint8ClampedArray([0, 0, 0, 255, 200, 200, 200, 255]),
+    };
+    expect([...imageToMatte(grey).data]).toEqual([0, 200]);
   });
 });
 
