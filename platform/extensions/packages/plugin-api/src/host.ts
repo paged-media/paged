@@ -3155,6 +3155,30 @@ export interface DataProvidersSurface {
   onDidChange(id: string, listener: (revision: string) => void): Disposable;
 }
 
+// ------------------------------------------------------------ loss report
+//
+// What a source carried that the target could not keep (capability register
+// C18): one shape for every importer, exporter and mapper, mirrored by the
+// engine's `paged_model::report::{LossEntry, LossReport}`. A consumer reads
+// any producer's report with the same code.
+
+/** One kind of loss. */
+export interface LossEntry {
+  /** A stable code: an annotation type, a mapper code (`shading.sampled`). */
+  code: string;
+  /** How many times it happened. */
+  count: number;
+  /** The 0-based pages it stood on, when the source has pages. */
+  pages?: readonly number[];
+  /** Why or what, worded; empty when the consumer words the code. */
+  message: string;
+}
+
+/** What a conversion left behind. */
+export interface LossReport {
+  losses: readonly LossEntry[];
+}
+
 // ------------------------------------------------------------ data (data@1)
 //
 // The DATA door (extensions ADR 343, PM-0015): the document's data as a

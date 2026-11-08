@@ -83,10 +83,10 @@ const REPORT: PdfCommentsReport = {
   ],
   losses: [
     {
-      kind: "Link",
+      code: "Link",
       count: 2,
       pages: [0, 2],
-      reason: "a hyperlink or destination, not a review comment",
+      message: "a hyperlink or destination, not a review comment",
     },
   ],
 };

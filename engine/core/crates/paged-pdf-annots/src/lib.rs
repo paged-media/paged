@@ -130,31 +130,11 @@ pub struct ImportedThread {
     pub source: Vec<(String, SourceBlob)>,
 }
 
-/// What a PDF carried that the comment model does not: one line per type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Loss {
-    /// The annotation type (`Link`, `Stamp`, …), or `state:Marked`.
-    pub kind: String,
-    pub count: usize,
-    /// The 0-based pages they stand on.
-    pub pages: Vec<usize>,
-    pub reason: String,
-}
-
-impl fmt::Display for Loss {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let pages: Vec<String> = self.pages.iter().map(|p| (p + 1).to_string()).collect();
-        write!(
-            f,
-            "{} x {} (page {}): {}",
-            self.count,
-            self.kind,
-            pages.join(", "),
-            self.reason
-        )
-    }
-}
+/// What a PDF carried that the comment model does not: one line per type,
+/// the shared [`LossEntry`] (`code` is the annotation type, `Link`, `Stamp`,
+/// …, or `state:Marked`; `pages` the 0-based pages they stand on; `message`
+/// why).
+pub use paged_model::report::LossEntry as Loss;
 
 /// The threads of a PDF and what was left behind.
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
@@ -433,11 +413,11 @@ impl Losses {
     fn finish(self) -> Vec<Loss> {
         self.0
             .into_iter()
-            .map(|(kind, (count, pages, reason))| Loss {
-                kind,
+            .map(|(code, (count, pages, message))| Loss {
+                code,
                 count,
                 pages: pages.into_iter().collect(),
-                reason,
+                message,
             })
             .collect()
     }
