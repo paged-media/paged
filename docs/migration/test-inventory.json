@@ -4120,7 +4120,7 @@
     "reason": "full recalc lane: opt-in (PAGED_XLSX_CORPUS=1 + the private corpus mount)"
    },
    {
-    "file": "modules/slide/pptx-fonts/tests/fixtures.rs",
+    "file": "engine/core/crates/pptx-fonts/tests/fixtures.rs",
     "name": "record",
     "reason": "records the oracle from the source fonts (PAGED_FONT_SOURCES)"
    }

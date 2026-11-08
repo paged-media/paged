@@ -41,7 +41,7 @@ use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 fn fixtures() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../slide-conformance/fixtures")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../modules/slide/slide-conformance/fixtures")
 }
 
 /// The `.fntdata` parts of a fixture deck, by part name.

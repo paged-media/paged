@@ -17,8 +17,8 @@ on:
     branches: [main]
     paths:
       - "engine/core/**"
-      # The shared formatting crate (platform/shared/fmt), a path dependency.
-      - "platform/shared/fmt/**"
+      # The shared formatting crate (engine/core/crates/paged-fmt), a path dependency.
+      - "engine/core/crates/paged-fmt/**"
       - ".github/workflows/core-ci.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -32,8 +32,8 @@ on:
   pull_request:
     paths:
       - "engine/core/**"
-      # The shared formatting crate (platform/shared/fmt), a path dependency.
-      - "platform/shared/fmt/**"
+      # The shared formatting crate (engine/core/crates/paged-fmt), a path dependency.
+      - "engine/core/crates/paged-fmt/**"
       - ".github/workflows/core-ci.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"

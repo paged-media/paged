@@ -13,7 +13,7 @@ project:
 
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
 # The engine crates (engine/core/crates/paged-data-*, PM-0015) and
-# platform/shared/fmt are path dependencies.
+# engine/core/crates/paged-fmt are path dependencies.
 dependsOn:
   - id: "core"
     scope: "production"
@@ -21,8 +21,6 @@ dependsOn:
     scope: "development"
   - id: "test-kit"
     scope: "development"
-  - id: "fmt"
-    scope: "production"
   # paged-data-xlsx reads a workbook through sheet-xlsx (W5): the sheet
   # project and what its XLSX reader builds on.
   - id: "sheet"
@@ -42,8 +40,8 @@ fileGroups:
     - "/engine/core/Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
-    - "/platform/shared/fmt/src/**/*.rs"
-    - "/platform/shared/fmt/Cargo.toml"
+    - "/engine/core/crates/paged-fmt/src/**/*.rs"
+    - "/engine/core/crates/paged-fmt/Cargo.toml"
     - "/engine/core/crates/paged-data-*/**/*.rs"
     - "/engine/core/crates/paged-data-*/Cargo.toml"
     - "/engine/core/crates/paged-data-core/functions/*.yaml"

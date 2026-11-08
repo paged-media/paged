@@ -113,7 +113,7 @@ The host `tools` package still imports `@paged-media/draw/geometry` and `/machin
 ### Text and fonts
 
 `image-js` has its own harfrust, skrifa and ab_glyph beside `paged-text`. `pptx-fonts` and
-`paged-fmt` belong at L2 (`paged-fmt` is used by engine crates from `platform/shared`).
+`paged-fmt` now live at L2 (`engine/core/crates/pptx-fonts`, `engine/core/crates/paged-fmt`).
 Chart label width ×2 → `dml-chart`. Number and date formats: `paged-numfmt` out of `sheet-format`.
 
 ### Office / OOXML / ODF

@@ -15,8 +15,8 @@ on:
     branches: [main]
     paths:
       - "modules/sheet/**"
-      # The shared formatting crate (platform/shared/fmt), a path dependency.
-      - "platform/shared/fmt/**"
+      # The shared formatting crate (engine/core/crates/paged-fmt), a path dependency.
+      - "engine/core/crates/paged-fmt/**"
       - ".github/workflows/sheet-rust.yml"
       - ".github/actions/wasm-tools/**"
       # The wasm-bindgen and binaryen pins the action reads.
@@ -43,8 +43,8 @@ on:
   pull_request:
     paths:
       - "modules/sheet/**"
-      # The shared formatting crate (platform/shared/fmt), a path dependency.
-      - "platform/shared/fmt/**"
+      # The shared formatting crate (engine/core/crates/paged-fmt), a path dependency.
+      - "engine/core/crates/paged-fmt/**"
       - ".github/workflows/sheet-rust.yml"
       - ".github/actions/wasm-tools/**"
       # The wasm-bindgen and binaryen pins the action reads.

@@ -32,7 +32,7 @@
 //! ## Where the values come from
 //!
 //! Each row is a row of the built-ins' shared locale table
-//! (`paged_fmt::locale`, platform/shared/fmt), which holds the tag, the picker
+//! (`paged_fmt::locale`, engine/core/crates/paged-fmt), which holds the tag, the picker
 //! name, the decimal and group separators and the minimum grouping digits
 //! (Unicode CLDR v45), plus what only these kernels read, also from CLDR v45:
 //! `currencyFormats[latn]/standard` (the `¤` position and the space beside
