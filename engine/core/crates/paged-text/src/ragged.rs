@@ -97,7 +97,7 @@ const HYPHEN_WEIGHT: f64 = 7.75;
 /// measure to keep its last word, `word` wide after `before` of the line
 /// (both 1/64 pt), at `size` pt: a 99th of the word, and a little more the
 /// more the line holds before it. Fitted on 45 lines at 8, 12 and 18 pt
-/// (`tools/indesign-export/ragged-squeeze-probe.*`), every one within
+/// (`tooling/oracle/indesign/ragged-squeeze-probe.*`), every one within
 /// 0.12 pt. InDesign takes the overrun from the word spaces, evenly and
 /// past `MinimumWordSpacing` (1.4 pt from one 3.1 pt space).
 fn overrun_allowance(size: f32, word: i64, before: i64) -> i64 {

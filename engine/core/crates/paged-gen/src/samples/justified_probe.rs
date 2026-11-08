@@ -20,7 +20,7 @@
 //! (ADR 144): ten paragraphs of plain prose in eight frame widths, 120 to
 //! 260 pt, hyphenated on page 1 and not on page 2; Open Sans 10/12,
 //! `LeftJustified`, zero insets. InDesign 20.0.1's lines for each are in
-//! `tools/indesign-export/justified-lines-probe.json` (asked through its
+//! `tooling/oracle/indesign/justified-lines-probe.json` (asked through its
 //! DOM by `justified-lines-probe.jsx`, which sets the same paragraphs), and
 //! `paged-renderer`'s `justified_lines` test compares them. Not a gate
 //! fixture: `emit-all` leaves it out; `paged-gen emit --sample
@@ -54,7 +54,7 @@ pub const WIDTHS: [f32; 8] = [120.0, 140.0, 160.0, 180.0, 200.0, 220.0, 240.0, 2
 
 /// The paragraphs, top to bottom.
 /// The paragraphs, plain prose of mixed word lengths. The InDesign probe
-/// (`tools/indesign-export/justified-lines-probe.jsx`) sets the same ten.
+/// (`tooling/oracle/indesign/justified-lines-probe.jsx`) sets the same ten.
 pub const TEXTS: [&str; 10] = [
     "Printing from movable type changed how knowledge travelled, because a page set once \
      could be pressed hundreds of times before the forme was broken up and the letters \

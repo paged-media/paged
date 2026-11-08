@@ -19,7 +19,7 @@
 //! Engine ADR 1043 — native appearance against Adobe Illustrator.
 //!
 //! `tests/fixtures/illustrator/appearance/` holds the recording of
-//! `modules/draw/scripts/illustrator/probes/appearance.jsx`: for each case
+//! `modules/draw/tooling/oracle/illustrator/probes/appearance.jsx`: for each case
 //! an object built with the Appearance panel's Add New Fill / Add New Stroke
 //! (a yellow 100 pt square, sometimes over a grey backdrop), Illustrator's
 //! PNG-24 export of the artboard at 72 ppi, and what Expand Appearance made

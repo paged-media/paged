@@ -1,7 +1,7 @@
 # Drop caps: Word's layout, measured, against paged's (doc ADR 624)
 
 Word's own render of `docx_conformance::drop_cap_docx()` (`dump-fixture <out> drop-cap`),
-saved as PDF by Word 16 for Mac. `scripts/word-drop-cap-probe.sh` extracts the numbers into
+saved as PDF by Word 16 for Mac. `tooling/oracle/office/word/word-drop-cap-probe.sh` extracts the numbers into
 `docx-conformance/fixtures/drop-cap.word.json`; `packages/doc-bundle/test/headless/drop-cap.spec.ts`
 holds the engine against them. Calibri 11 pt, US Letter, 72 pt margins.
 

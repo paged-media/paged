@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! SMART OBJECTS against Photoshop (image ADR 482). `scripts/photoshop/
+//! SMART OBJECTS against Photoshop (image ADR 482). `tooling/oracle/photoshop/
 //! probes/smart-objects.jsx` had Photoshop 27.10 make an embedded smart
 //! object of a textured square of the colour-sweep stimulus, then
 //! transform it, give it smart filters (with a filter mask, a switched-off

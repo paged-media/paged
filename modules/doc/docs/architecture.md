@@ -272,5 +272,5 @@ run --profile corpus --run-ignored only` runs them (`docs/development/testing.md
   `.github/workflows/vitest.yml` adds a typecheck and a manifest check with the published
   `@paged-media/plugin-cli`. The tests use recording hosts and stub engines, not the wasm.
 - The `scripts/word-*-probe.sh` scripts put the questions to desktop Microsoft Word on
-  macOS; the fixtures record their output. `scripts/real-docx-acceptance.sh` needs an editor
+  macOS; the fixtures record their output. `tooling/oracle/office/word/real-docx-acceptance.sh` needs an editor
   checkout; its results are [`reference/acceptance-real-docx.md`](reference/acceptance-real-docx.md).

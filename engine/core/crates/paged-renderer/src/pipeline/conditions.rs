@@ -19,7 +19,7 @@
 //! Conditional text: which runs print.
 //!
 //! Asked of InDesign 20.0.1 (the `conditions` fixture, probed with
-//! `tools/indesign-export/conditions-probe.sh`, toggling each condition so
+//! `tooling/oracle/indesign/conditions-probe.sh`, toggling each condition so
 //! InDesign applies the `Visible` flags it read):
 //!
 //! * a range under several conditions prints while ANY of them is

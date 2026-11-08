@@ -1208,7 +1208,7 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                             name: attr(&e, b"Name"),
                             // The spread decides: InDesign 20.0.1 ignores a
                             // page's own `ShowMasterItems` whenever it reads the
-                            // spread's (core tools/indesign-export/
+                            // spread's (core tooling/oracle/indesign/
                             // master-items-probe: spread true + page false
                             // prints the master items, spread false + page true
                             // hides them). A page spelling is only a fallback,

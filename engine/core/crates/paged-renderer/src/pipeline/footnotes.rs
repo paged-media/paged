@@ -109,7 +109,7 @@ pub(super) struct ComposedFootnote {
 /// apart, and does not move the area's top for the first's space
 /// before, but sets the two paragraphs of one such note 12 + 9 pt more
 /// than a leading apart (InDesign 20.0.1,
-/// `tools/indesign-export/footnote-paragraphs-probe`).
+/// `tooling/oracle/indesign/footnote-paragraphs-probe`).
 ///
 /// `column_width_pt` is the host frame's content width. Returns `None`
 /// when no run resolves to any font (nothing to shape) — the caller skips
@@ -478,7 +478,7 @@ pub(super) fn compose_footnote_paragraphs(
 
 /// The baselines of a frame's footnote area, top to bottom, measured
 /// from the area's top: `(note, paragraph, line, baseline)`. Asked of
-/// InDesign 20.0.1 (`tools/indesign-export/footnote-pool-probe.jsx` over
+/// InDesign 20.0.1 (`tooling/oracle/indesign/footnote-pool-probe.jsx` over
 /// the `footnotes` fixture, and `footnote-paragraphs-probe`):
 ///
 /// * a note's first line sits its first-baseline offset below the

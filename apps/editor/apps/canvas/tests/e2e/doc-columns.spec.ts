@@ -22,7 +22,7 @@
 // The fixtures are plugin-doc's docx_conformance::continuous_docx() and
 // columns_docx(), whose page maps Word itself reported (plugin-doc
 // docx-conformance/fixtures/continuous.word.json and columns.word.json, via
-// scripts/word-continuous-probe.sh / word-columns-probe.sh). Word balances
+// tooling/oracle/office/word/word-continuous-probe.sh / word-columns-probe.sh). Word balances
 // a section's columns by line count before a continuous break, fills them in
 // turn before a page-starting section or the document's end, and fills a
 // page's columns to the bottom when the section runs on.

@@ -296,7 +296,7 @@ fn the_tree_saves_as_idml_and_is_the_pdfs_outline() {
 }
 
 /// The edited tree saved for InDesign to read back
-/// (`PROBE_IN=<path> bash tools/indesign-export/bookmarks-probe.sh`):
+/// (`PROBE_IN=<path> bash tooling/oracle/indesign/bookmarks-probe.sh`):
 /// `PAGED_BOOKMARKS_IDML=<path> cargo test -p paged-canvas --test
 /// bookmark_ops -- --ignored`.
 #[test]

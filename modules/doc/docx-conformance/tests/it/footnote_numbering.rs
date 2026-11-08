@@ -19,7 +19,7 @@
 //! Footnote numbering (`w:footnotePr`, thoughts ADR 034, RFI DOC-06) from
 //! `footnote_numbering_docx()`, against Word's answer
 //! (`fixtures/footnote-numbering.word.json`,
-//! `scripts/word-footnotes-probe.sh`): each note's mark as Word prints it.
+//! `tooling/oracle/office/word/word-footnotes-probe.sh`): each note's mark as Word prints it.
 
 #![allow(non_snake_case)] // `…__feat__<id>` test names link the cockpit feature
 

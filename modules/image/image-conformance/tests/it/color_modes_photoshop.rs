@@ -18,7 +18,7 @@
 
 //! The colour modes and the depth of image ADR 484 against Photoshop,
 //! replayed from `fixtures/photoshop/color-modes`
-//! (`scripts/photoshop/probes/color-modes.jsx`, Photoshop 27.10).
+//! (`tooling/oracle/photoshop/probes/color-modes.jsx`, Photoshop 27.10).
 //!
 //! * BLENDING IN THE MODE — layered Lab and Grayscale documents (8 and 16
 //!   bits) and a 32-bit float one, each with one feathered layer per
@@ -527,7 +527,7 @@ fn saved_cases() -> Vec<(&'static str, Vec<u8>, Pixels)> {
 }
 
 /// Writes the saved documents for a recording (`PAGED_MODE_READBACK_OUT`,
-/// then `scripts/photoshop/probes/mode-readback.jsx`).
+/// then `tooling/oracle/photoshop/probes/mode-readback.jsx`).
 #[test]
 #[ignore = "writes the mode-readback probe's inputs; run by hand with PAGED_MODE_READBACK_OUT"]
 fn write_mode_readback_inputs() {

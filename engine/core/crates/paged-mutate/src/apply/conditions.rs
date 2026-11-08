@@ -80,7 +80,7 @@ pub(super) fn apply_activate_condition_set(
     }
     // Applying a set gives each condition it lists the visibility it
     // recorded; a condition it does not list keeps its own (InDesign
-    // 20.0.1, `tools/indesign-export/condition-sets-probe.json`).
+    // 20.0.1, `tooling/oracle/indesign/condition-sets-probe.json`).
     for (id, def) in doc.styles.conditions.iter_mut() {
         if let Some(visible) = recorded.get(id) {
             def.visible = Some(*visible);

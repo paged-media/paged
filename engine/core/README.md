@@ -83,7 +83,7 @@ named; the published artifact is the SDK.
 | `paged-sdk`                                  | the published SDK wasm surface — a WebGPU `ViewerSession` (load → present to canvas → headless RGBA readback); npm `@paged-media/viewer/session` |
 
 `spikes/` — Vello eval, composer calibration, WASM size.
-`tools/indesign-export/` — drives InDesign to export reference PDFs for the
+`tooling/oracle/indesign/` — drives InDesign to export reference PDFs for the
 fidelity harness (Python/ExtendScript; outside the Cargo workspace).
 
 ## Capabilities

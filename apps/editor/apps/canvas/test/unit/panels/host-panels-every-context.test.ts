@@ -38,6 +38,16 @@ const PANELS = [
   "paged.history",
 ];
 const FREE_TRANSFORM = "paged.tool.freeTransform";
+/** Editor ADR 311, amended: path and shape tools are shared too. */
+const SHARED_TOOLS = [
+  FREE_TRANSFORM,
+  "paged.tool.pen",
+  "paged.tool.directSelect",
+  "paged.tool.line",
+  "paged.tool.rectangle",
+  "paged.tool.ellipse",
+  "paged.tool.polygon",
+];
 
 /** Each module's edit contexts, as registered. */
 const CONTEXTS = [
@@ -84,15 +94,19 @@ describe("the shared host panels and Free Transform in every edit context [edito
       for (const id of PANELS)
         expect(panelBelongsHere(standingIn(ctx.type), id), id).toBe(true);
       if (ctx.toolIds) {
-        expect(toolStaysInContext(FREE_TRANSFORM, ctx.toolIds)).toBe(true);
+        for (const id of SHARED_TOOLS)
+          expect(toolStaysInContext(id, ctx.toolIds), id).toBe(true);
         // The rule is real: another editing tool is still the way out.
-        expect(toolStaysInContext("paged.tool.pen", ctx.toolIds)).toBe(false);
+        expect(toolStaysInContext("paged.tool.scissors", ctx.toolIds)).toBe(
+          false,
+        );
       }
     });
   }
 
-  test("Free Transform is the shared tool; the view tools stay too", () => {
-    expect(CONTEXT_SHARED_TOOL_IDS).toContain(FREE_TRANSFORM);
+  test("Free Transform, the Pen, Direct Selection and the shape tools are shared; the view tools stay too", () => {
+    for (const id of SHARED_TOOLS)
+      expect(CONTEXT_SHARED_TOOL_IDS).toContain(id);
     expect(toolStaysInContext("paged.tool.hand", [])).toBe(true);
     expect(toolStaysInContext("paged.tool.zoom", [])).toBe(true);
   });
@@ -101,7 +115,8 @@ describe("the shared host panels and Free Transform in every edit context [edito
     for (const profile of Object.values(SOLO_PROFILES)) {
       for (const id of PANELS)
         expect(profile.panelIds, profile.bundleId).toContain(id);
-      expect(profile.toolIds, profile.bundleId).toContain(FREE_TRANSFORM);
+      for (const id of SHARED_TOOLS)
+        expect(profile.toolIds, profile.bundleId).toContain(id);
       expect(new Set(profile.panelIds).size, profile.bundleId).toBe(
         profile.panelIds.length,
       );

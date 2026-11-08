@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/adjustment-layers.jsx",
+    "script": "tooling/oracle/photoshop/probes/adjustment-layers.jsx",
     "script_sha256": "b24d8ad54c83be4c53143bce0dc4f8f25fd6c4b3f6edbd6dc38e6b0d7d5a87ba",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-05T09:47:25.087Z",
     "host_os": "macOS 26.4"
   },

@@ -21,7 +21,7 @@
 // Chromium's clipboard (Playwright's, in-process when headless) takes
 // `image/svg+xml`: Copy of a polygon writes it beside text/plain and
 // text/html; a paste of Illustrator's Edit ▸ Copy (its SVG source as
-// plain text, recorded by modules/draw/scripts/illustrator/
+// plain text, recorded by modules/draw/tooling/oracle/illustrator/
 // run-clipboard-probe.sh) lands its two paths as native page items in
 // one undo step.
 

@@ -41,7 +41,7 @@ fn part(bytes: &[u8], name: &str) -> String {
 }
 
 /// With `W4B_DUMP` set, the saved file lands there (the Word probe opens
-/// it: `scripts/word-pagination-probe.sh`).
+/// it: `tooling/oracle/office/word/word-pagination-probe.sh`).
 fn dump(name: &str, bytes: &[u8]) {
     if let Ok(dir) = std::env::var("W4B_DUMP") {
         std::fs::write(format!("{dir}/{name}.docx"), bytes).unwrap();
@@ -278,7 +278,7 @@ fn control_values_are_saved_into_their_sdt__feat__doc_content_controls() {
 }
 
 /// Word's answer for the W4b documents (`fixtures/w4b-*.word.json`,
-/// `scripts/word-objects-probe.sh <out> w4b-scripts w4b-controls`), or
+/// `tooling/oracle/office/word/word-objects-probe.sh <out> w4b-scripts w4b-controls`), or
 /// `None` where the recording is absent.
 fn word(name: &str) -> Option<serde_json::Value> {
     let path = format!("{}/fixtures/{name}.word.json", env!("CARGO_MANIFEST_DIR"));

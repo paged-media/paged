@@ -44,7 +44,7 @@ var PROBE_OUT = "$out";
 \$.evalFile(File("$HERE/probe.jsx"));
 JSX
   # The raw `do script` event: sandboxed shells cannot compile `do script`
-  # (see core tools/indesign-export/run-export.sh).
+  # (see core tooling/oracle/indesign/run-export.sh).
   osascript <<OSA || true
 with timeout of 300 seconds
     tell application "$APP"

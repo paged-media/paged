@@ -492,7 +492,7 @@ Recolouring a raster is pixel work and is not registered.
   patterns (their first colour), dashes, opacity, blend, clips (content written whole),
   masks, filters, images. Illustrator 30.1 reads the exported SVG exactly; paged.draw reads
   Illustrator's DXF exactly (fills from its HATCH), recorded in
-  `scripts/illustrator/probes/interchange-open.jsx`. Illustrator's opening of the exported
+  `tooling/oracle/illustrator/probes/interchange-open.jsx`. Illustrator's opening of the exported
   DXF is not recorded: its DXF/DWG Options dialog cannot be filled in from a script.
 - **AI** needs paged.pdf loaded (the importer runs its `placeVectors`); an `.ai` saved
   without PDF compatibility is refused there. **EPS** needs a `%%BoundingBox`; where the

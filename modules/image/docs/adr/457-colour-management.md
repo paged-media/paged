@@ -94,7 +94,7 @@ The decision stands (one seam, moxcms for the print lane, CPU at decode). What c
   conversion as a function.
 - **The intent is Perceptual, as a stated approximation of Photoshop's view.** Photoshop's
   default conversion of a CMYK document to RGB is Adobe ACE, relative colorimetric with
-  black-point compensation (read from the app by `scripts/photoshop/probes/cmyk-stacks.jsx`).
+  black-point compensation (read from the app by `tooling/oracle/photoshop/probes/cmyk-stacks.jsx`).
   moxcms has no BPC; relative colorimetric without it is 28 levels off on Coated FOGRA39 ink
   patches, perceptual is within 4 (mean 0.44) — as close as lcms2's own relcol + BPC. The
   replay `image-conformance/tests/it/psd_cmyk_photoshop.rs` holds those numbers. A profile whose

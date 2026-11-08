@@ -43,6 +43,7 @@
 // resolves every id against the real arrays so that fails in CI rather
 // than in the UI.
 
+import { CONTEXT_SHARED_TOOL_IDS } from "@paged-media/shell";
 import type { ModeCockpitSlots } from "@paged-media/shell";
 import { defineMessages, t } from "@paged-media/strings";
 
@@ -59,7 +60,8 @@ const M = defineMessages("app.soloProfiles", {
 
 /** Editor ADR 311 (plan WP10.7) — the host panels and tools that work on
  *  any page item, so every solo application keeps them whatever else it
- *  drops: Gradients, Picture adjustments and History; Free Transform. */
+ *  drops: Gradients, Picture adjustments and History; the context-shared
+ *  tools (Free Transform, Pen, Direct Selection, the shape tools). */
 const SHARED_HOST_PANELS: readonly string[] = [
   "paged.gradients",
   "paged.picture-adjustments",
@@ -71,7 +73,7 @@ const SHARED_HOST_PANELS_WITH_THEME: readonly string[] = [
   ...SHARED_HOST_PANELS,
   "paged.theme",
 ];
-const SHARED_HOST_TOOLS: readonly string[] = ["paged.tool.freeTransform"];
+const SHARED_HOST_TOOLS: readonly string[] = CONTEXT_SHARED_TOOL_IDS;
 
 /** A profile's own list, then each shared id it does not name already. */
 function withShared(

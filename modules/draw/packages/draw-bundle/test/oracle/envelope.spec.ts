@@ -17,7 +17,7 @@
  */
 
 // Draw ADR 367 — Envelope Distort ▸ Make with Top Object against
-// Illustrator 30.1 (`scripts/illustrator/probes/envelope.jsx`): the front
+// Illustrator 30.1 (`tooling/oracle/illustrator/probes/envelope.jsx`): the front
 // shape's patch (`outlinePatch`), each content's part of it over the union
 // box (`restrictPatch`), and the engine's map (`envelopePoint`), against
 // what Illustrator's Make Envelope + Expand Envelope left. Compared: every

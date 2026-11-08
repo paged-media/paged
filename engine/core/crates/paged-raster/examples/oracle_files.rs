@@ -22,7 +22,7 @@
 //!
 //!     cargo run -p paged-raster --example oracle_files -- <dir>
 //!
-//! `modules/image/scripts/photoshop/probes/codecs-open.jsx` opens them;
+//! `modules/image/tooling/oracle/photoshop/probes/codecs-open.jsx` opens them;
 //! the replay (`tests/it/oracle.rs`) regenerates every file, checks it is
 //! byte-identical to the recorded copy, and holds this crate's reading of
 //! it to Photoshop's.

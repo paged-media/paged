@@ -19,7 +19,7 @@
 //! Update Table of Contents (ADR 165) on `toc`, whose TOC story is out of
 //! date. Until the update it prints its stored text; the update writes
 //! what InDesign 20.0.1 writes, recorded by `toc-update-probe` in
-//! `tools/indesign-export/toc-update-probe.json`.
+//! `tooling/oracle/indesign/toc-update-probe.json`.
 
 use paged_canvas::{CanvasModel, CanvasOptions, Mutation};
 use paged_gen::samples::toc;
@@ -89,7 +89,7 @@ fn toc_story(m: &CanvasModel) -> Vec<Para> {
 /// paragraph ends (`\r`), so the text is re-split there.
 fn indesign_after() -> Vec<Para> {
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tools/indesign-export/toc-update-probe.json");
+        .join("../../../../tooling/oracle/indesign/toc-update-probe.json");
     let json: serde_json::Value =
         serde_json::from_slice(&std::fs::read(path).expect("probe record")).expect("json");
     let decode = |s: &str| s.replace("<U+0009>", "\t");

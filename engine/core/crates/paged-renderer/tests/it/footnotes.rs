@@ -172,7 +172,7 @@ fn too_tall_footnote_fires_overflow_diagnostic() {
 }
 
 /// Where InDesign 20.0.1 puts the `footnotes` fixture's footnote area
-/// (`tools/indesign-export/footnote-pool-probe.jsx`, case `as-authored`;
+/// (`tooling/oracle/indesign/footnote-pool-probe.jsx`, case `as-authored`;
 /// page-space baselines from its DOM). The area sits on the frame's foot,
 /// its last kept line on the content bottom (300.472). The too-tall third
 /// note keeps as many lines as fit with the area's top no higher than the

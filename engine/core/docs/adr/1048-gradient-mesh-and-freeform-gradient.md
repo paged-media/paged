@@ -160,7 +160,7 @@ which the mesh follows by construction.
 - `crates/paged-store/tests/it/mesh_fill.rs`: the native model round trip; no key without a mesh.
 - The Illustrator oracle. Illustrator's scripting cannot build a mesh or a freeform gradient
   (`MeshItem` has no constructor; the menu commands open dialogs; the DOM has no freeform type), so
-  `modules/draw/scripts/illustrator/probes/mesh-render.jsx` opens the engine's own PDFs of three
+  `modules/draw/tooling/oracle/illustrator/probes/mesh-render.jsx` opens the engine's own PDFs of three
   meshes (`paged-export-pdf/tests/fixtures/mesh-oracle/`: a bilinear four-corner patch, a 2 × 2
   grid with a moved node and bent edges, a tensor patch) in Illustrator 30.1, exports its rendering
   at 1 px = 1 pt and saves its own PDF. Recorded 2026-10-29 and replayed by

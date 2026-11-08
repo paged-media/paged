@@ -18,7 +18,7 @@
 
 //! THE PHOTOSHOP ORACLE FOR SELECTIONS (image ADR 470): Select ▸ Color
 //! Range and Select ▸ Grow / Similar, recorded by
-//! `scripts/photoshop/probes/selection.jsx` on the `colour-sweep`
+//! `tooling/oracle/photoshop/probes/selection.jsx` on the `colour-sweep`
 //! stimulus (each selection rendered as white-through-the-selection over
 //! black, so the output's grey IS the coverage).
 //!

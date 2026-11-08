@@ -20,7 +20,7 @@
 //!
 //! Every line of every case of `baseline-grid` and `baseline-grid-margin`
 //! stands where InDesign set it: the baselines are InDesign's own, read
-//! through its DOM by `tools/indesign-export/baseline-grid-probe.sh` into
+//! through its DOM by `tooling/oracle/indesign/baseline-grid-probe.sh` into
 //! `corpus/generated/<stem>.baselines.json` (page pt from the page top).
 //! A case's frame is found there by its top-left corner.
 

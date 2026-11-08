@@ -19,7 +19,7 @@
 // The ROUND-TRIP lane's GENERATOR: author every case (`author.ts`) and
 // write the IDML the engine exports to `test/fixtures/roundtrip/<case>.idml`
 // — the file InDesign is then asked to read
-// (`scripts/indesign/run-roundtrip.sh`). A maintainer action, gated on an
+// (`tooling/oracle/indesign/roundtrip/run-roundtrip.sh`). A maintainer action, gated on an
 // environment variable so `pnpm test` never rewrites a committed fixture:
 //
 //   PAGED_ROUNDTRIP_WRITE=1 pnpm --filter @paged-media/draw exec \

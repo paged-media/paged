@@ -207,7 +207,7 @@ pub fn map_justification(
 
 /// How far (1/64 pt) InDesign lets a line run past its measure before the
 /// Paragraph Composer breaks it, at `size` pt. Asked of InDesign 20.0.1
-/// (`tools/indesign-export/fit-tolerance-probe.json`, bisected at 6 to 48
+/// (`tooling/oracle/indesign/fit-tolerance-probe.json`, bisected at 6 to 48
 /// pt): ragged lines keep a word up to `size / 32 + 0.254 / size` pt over,
 /// justified lines up to `0.0466 × size + 0.178 / size` pt — every
 /// measured point within 0.003 pt, at any word spacing and however many

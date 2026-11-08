@@ -83,6 +83,6 @@ operation over with its full paint, mask and blend.
 - Colours arrive as sRGB: hayro converts CMYK, spot and Lab before the reader sees them. The
   report says so on every placement.
 - A ramp the PDF stops at its ends (`Extend false`) pads natively; reported.
-- The Illustrator oracle (`modules/draw/scripts/illustrator/probes/pdf-ai-export.jsx`, replayed
+- The Illustrator oracle (`modules/draw/tooling/oracle/illustrator/probes/pdf-ai-export.jsx`, replayed
   by `crates/pdf-import/tests/illustrator_oracle.rs`) holds the reader to Illustrator's own model
   of the artwork it saved.

@@ -55,7 +55,7 @@ needs the presets as behaviour templates.
    the same output (`rand()` is seeded by the node).
 5. **The preset table comes from the oracle** (ADR 705). `slide-conformance/fixtures/animations`
    is a deck PowerPoint wrote through its own scripting dictionary
-   (`scripts/fixtures/animations.applescript`): every effect it offers, every direction it takes
+   (`tooling/oracle/office/powerpoint/fixtures/animations.applescript`): every effect it offers, every direction it takes
    for each, and the exit twin of each entrance effect. `slide-anim/data/presets.json` is
    generated from it (a test regenerates it and fails while it differs), and authoring an effect
    from the table writes what PowerPoint wrote for it.

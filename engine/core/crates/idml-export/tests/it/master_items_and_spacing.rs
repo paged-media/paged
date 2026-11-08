@@ -18,7 +18,7 @@
 
 //! Two attributes as InDesign 20.0.1 reads them:
 //! - `ShowMasterItems` lives on `<Spread>`; InDesign ignores it on `<Page>`
-//!   (core tools/indesign-export/master-items-probe), so a minted spread
+//!   (core tooling/oracle/indesign/master-items-probe), so a minted spread
 //!   carries it there and its pages do not.
 //! - Word and letter spacing and glyph scaling set on a
 //!   `<ParagraphStyleRange>` are the paragraph's own: read, saved

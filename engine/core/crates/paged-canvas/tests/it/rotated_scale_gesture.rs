@@ -22,7 +22,7 @@
 //! anchor and the opposite handle as its pivot, then update + commit.
 //!
 //! InDesign's rule, read from InDesign itself
-//! (`tools/indesign-export/scale-frame-probe.jsx`, answers in
+//! (`tooling/oracle/indesign/scale-frame-probe.jsx`, answers in
 //! `scale-frame-probe.json`):
 //!
 //! - ONE selected item — a frame or a group — has its own box, turned

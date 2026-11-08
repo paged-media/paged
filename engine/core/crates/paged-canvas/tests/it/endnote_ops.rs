@@ -254,7 +254,7 @@ fn a_first_endnote_saves_its_story_and_frame() {
 }
 
 /// The endnotes saved for InDesign to read back
-/// (`PROBE_IN=<path> bash tools/indesign-export/endnote-probe.sh`):
+/// (`PROBE_IN=<path> bash tooling/oracle/indesign/endnote-probe.sh`):
 /// `PAGED_ENDNOTES_IDML=<dir> cargo test -p paged-canvas --test
 /// endnote_ops -- --ignored` writes `inserted.idml` (the endnotes sample
 /// with a note inserted and one deleted) and `first.idml` (a first endnote

@@ -21,7 +21,7 @@
 //! `w:spacing/@w:line` is relative to the FONT's single line, not to the
 //! point size, so lowering it to the engine's `characterLeading` (a line
 //! pitch in points) needs that single line. Word was asked
-//! (`scripts/word-line-spacing-probe.sh` on `docx_conformance::
+//! (`tooling/oracle/office/word/word-line-spacing-probe.sh` on `docx_conformance::
 //! line_spacing_docx()`, recorded in `docx-conformance/fixtures/
 //! line-spacing.word.json`), and its numbers say:
 //!

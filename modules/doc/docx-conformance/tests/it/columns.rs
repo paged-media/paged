@@ -18,7 +18,7 @@
 
 //! thoughts ADR 029 — continuous sections that CHANGE THE COLUMNS mid-page,
 //! as Word lays them out. `columns_docx()` is the document Word paginated;
-//! `fixtures/columns.word.json` is its answer (`scripts/word-columns-probe.sh`).
+//! `fixtures/columns.word.json` is its answer (`tooling/oracle/office/word/word-columns-probe.sh`).
 //!
 //! What Word does (the map, page by page):
 //! - a section before a `continuous` break is balanced by line count

@@ -107,7 +107,7 @@ No CI workflow or script sets them any more.
 separate clean-room mount, not the private corpus.
 
 `PAGED_CORPUS_DIR` used to be the input directory of
-`engine/core/tools/indesign-export/run-export.sh`; that is `PAGED_EXPORT_DIR`
+`tooling/oracle/indesign/run-export.sh`; that is `PAGED_EXPORT_DIR`
 now.
 
 ## Opt-in lanes

@@ -147,3 +147,14 @@ budget. `bun audit` gates its advisories as for every package (PM-0011). NOTICE 
   - prompt-driven segmentation adapters (SAM-class encoder and decoder pairs);
   - `paged.server` managing the local host;
   - stable-diffusion.cpp's server mode, which the host does not drive yet.
+
+## Amendment 1 (2026-11-08): what exists, and the first action over it
+
+The service this record describes is built: the registry and `models.json`, the OPFS model store,
+the ML worker, the Tier-A provider, `/api/ml` and the Models panel are in `apps/canvas/src/ml/` and
+`apps/canvas/src/panels/`, the doors are extensions [ADR 1100](../../../../platform/extensions/docs/adr/1100-the-ml-doors.md),
+and `apps/ml-host` serves Tier B. What is not built is the list under "Not part of this record" above.
+The first step reachable from any picture is the action `media.paged.image/remove-background`
+(extensions ADR 1100, Amendment 1), tested against the SDK's fake provider so CI needs no model.
+The local host gains a matting runner behind its `health.capabilities` list when a model is chosen;
+until then the action reports "no model installed" rather than approximating.

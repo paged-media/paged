@@ -20,7 +20,7 @@
 //! drew each case, saved it as a `.pdf` and as an `.ai` (PDF compatible;
 //! one case without), and recorded its own model of what it drew
 //! (`fixtures/illustrator/pdf-ai-export.illustrator.json`, recorded by
-//! `modules/draw/scripts/illustrator/probes/pdf-ai-export.jsx`). The page
+//! `modules/draw/tooling/oracle/illustrator/probes/pdf-ai-export.jsx`). The page
 //! reader reads both files back; every path's anchors, fill, stroke and
 //! fill rule, the clipping path, the gradients, the transparency and the
 //! text must be Illustrator's.

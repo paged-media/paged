@@ -22,18 +22,18 @@ from the private corpus, addressed by path:
 ## Method
 
 - **Word's answer.** Microsoft Word 16 (macOS) saved each file as PDF
-  (`scripts/word-pagination-probe.sh`, staged in Word's own container). Per page,
-  the body lines inside the section's margin box (`scripts/real-docx/word_map.py`,
+  (`tooling/oracle/office/word/word-pagination-probe.sh`, staged in Word's own container). Per page,
+  the body lines inside the section's margin box (`tooling/oracle/office/word/real-docx/word_map.py`,
   `pdftotext -bbox-layout`; headers and footers fall outside it).
 - **Ours.** The editor on the PUBLISHED engine `@paged-media/canvas-wasm@0.64.0`
   (editor `main` 04e4f80 in a worktree, `@paged-media/doc` linked to this repo's
   bundle), File▸Open of the `.docx`, page growth settled; then per paragraph of
   every story the pages its lines land on (`paragraphBounds` walk +
-  `selectionGeometry`, `scripts/real-docx/measure.spec.ts`).
+  `selectionGeometry`, `tooling/oracle/office/word/real-docx/measure.spec.ts`).
 - **The metric.** A page's START PARAGRAPH is the body paragraph holding its first
   line (one continuing from the previous page counts; empty paragraphs are invisible
   on both sides). Word's paragraphs are found in its PDF text by aligning our
-  paragraph texts in order (`scripts/real-docx/compare.py`; 624/626, 173/178 and
+  paragraph texts in order (`tooling/oracle/office/word/real-docx/compare.py`; 624/626, 173/178 and
   813/813 non-empty paragraphs aligned). A page matches when both start in the same
   paragraph. `Δ ¶` is how many paragraphs ours is ahead (+) or behind (−).
 - **Two measurements per document.** _As opened_: what a user gets, the editor's
@@ -51,7 +51,7 @@ from the private corpus, addressed by path:
   Lucida Sans, Symbol, Wingdings, Courier New and Arial Unicode MS; not Times (the
   macOS face bug59058 uses in 1,211 runs), which stays on the default face.
 
-Reproduce: `bash scripts/real-docx-acceptance.sh <editor-worktree> <out-dir> <docx…>`.
+Reproduce: `bash tooling/oracle/office/word/real-docx-acceptance.sh <editor-worktree> <out-dir> <docx…>`.
 It is a script, not an editor spec: the documents are the private corpus and the
 fonts are this machine's, so CI could run neither.
 
@@ -85,9 +85,9 @@ brought out an engine keep anomaly (P0-4) and took it to 64.
 ## What was fixed (plugin-doc)
 
 Each against Word's answer: `docx-conformance/fixtures/real-docx.word.json`
-(`real_docx_docx()`, `scripts/word-real-docx-probe.sh`, tests
+(`real_docx_docx()`, `tooling/oracle/office/word/word-real-docx-probe.sh`, tests
 `docx-conformance/tests/it/real_docx.rs`) and `fixtures/keeps.word.json`
-(`keeps_docx()`, `scripts/word-keeps-probe.sh`, `tests/keeps.rs`).
+(`keeps_docx()`, `tooling/oracle/office/word/word-keeps-probe.sh`, `tests/keeps.rs`).
 
 1. **Tab alignments are IDML's names.** The lowering emitted Word's names
    (`right`, `center`, `decimal`); the engine's composer reads only `RightAlign`,
@@ -389,7 +389,7 @@ Re-measured after the engine fixes the first round asked for: fonts registered a
 load (`133f19b`), inline pictures as characters of their line (`17d3d3d`), the
 single-line composer (`fc2df8a`, set through `paragraphComposer`), widow control on
 growing chains (`dd3bfe7`), table row heights (`2e3c998`, `bd2563a`). Same three
-documents, same Word PDFs, `scripts/real-docx-acceptance.sh` (now three modes).
+documents, same Word PDFs, `tooling/oracle/office/word/real-docx-acceptance.sh` (now three modes).
 
 | Document      | Word | Ours (none / word / word-reload) | Exact page start   | Within ±1 paragraph | Median drift (paragraphs) |
 | ------------- | ---- | -------------------------------- | ------------------ | ------------------- | ------------------------- |
@@ -420,7 +420,7 @@ Engine at core `protocol-65` rebased on main `1663863`. Same three documents, `w
 mode, plus `REAL_TIMES_DIR` (the macOS "Times" faces extracted from `Times.ttc`, which
 bug59058 asks for 1,211 times and round 2 never registered). The page-start numbers did
 not move (6.6% / 0% / 8%), so this round measured LINES per paragraph against Word's PDF
-(`linecmp.py` in the session scratch; worth promoting to `scripts/real-docx/`) and
+(`linecmp.py` in the session scratch; worth promoting to `tooling/oracle/office/word/real-docx/`) and
 compared pages side by side.
 
 | Document      | Word lines | Ours (round 2 → 3) | Paragraphs with equal line count |
@@ -487,7 +487,7 @@ blank paragraphs, counted list markers and dropped trailing spaces (RFI C-56; co
 `14948b8`, `3506c7b`, `42d9109`). The same defect misplaced the caret and the selection in
 the editor, and it had been shifting this comparison's page starts by a paragraph.
 
-With correct offsets, two tools read the difference directly (`scripts/real-docx/`):
+With correct offsets, two tools read the difference directly (`tooling/oracle/office/word/real-docx/`):
 `line_geometry.py` (lines per paragraph, with each line's extent on both sides) and
 `paragraph_advance.py` (the distance from one paragraph's top to the next, Word against
 ours, summed by style pair).

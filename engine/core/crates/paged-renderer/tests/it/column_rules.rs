@@ -18,7 +18,7 @@
 
 //! Column rules (ADR 155), pinned against InDesign 20.0.1's PDF of
 //! `column-rules.idml`, read from its stroke operators
-//! (`tools/indesign-export/pdf-strokes.py`; tolerance 0.05 pt).
+//! (`tooling/oracle/indesign/pdf-strokes.py`; tolerance 0.05 pt).
 //!
 //! What InDesign answered: one rule per gutter, at the gutter's centre
 //! moved by `ColumnRuleOffset`, from the text area's top moved down by

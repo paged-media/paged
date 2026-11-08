@@ -17,7 +17,7 @@
  */
 
 //! A frame of CJK text sets its first baseline where InDesign 20.0.1 does
-//! (`tools/indesign-export/cjk-first-baseline-probe`: 30 pt, the first
+//! (`tooling/oracle/indesign/cjk-first-baseline-probe`: 30 pt, the first
 //! baseline's distance below the frame's top).
 //!
 //! * Ascent (the default) is not the face's `hhea` ascender for a CJK

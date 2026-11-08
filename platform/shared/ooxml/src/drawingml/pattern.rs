@@ -22,7 +22,7 @@
 //! turned with the shape. [`CELLS`] holds the cells as PowerPoint 16.114
 //! writes them into its PDF (the `patterns` fixture of
 //! `modules/slide/slide-conformance`, read by
-//! `modules/slide/scripts/ppt-pattern-probe.py`): one byte a row, top row
+//! `tooling/oracle/office/powerpoint/ppt-pattern-probe.py`): one byte a row, top row
 //! first, the high bit the leftmost, a set bit the foreground.
 
 /// The side of a pattern cell, pt (and bits).

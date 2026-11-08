@@ -10,7 +10,10 @@
   its ML service (editor [ADR 290](../../../../apps/editor/docs/adr/290-the-ml-service.md)),
   in `paged-node` by the local host (`apps/cli/src/ml.ts`). Decided by
   [PM-0014](../../../../docs/adr/PM-0014-capability-layering.md) (record "extensions 338–342":
-  the ML doors; numbered 345 because 338 to 344 were taken or reserved when it landed).
+  the ML doors). PM-0014 reserved 338–342 for them; those numbers were taken when it landed, and the
+  record was first numbered 345, which is the presentations record
+  ([ADR 345](345-presentations-and-module-views.md)). The ML doors are **1100**; cite 1100, never
+  345.
 
 ## Context
 
@@ -85,3 +88,21 @@ install (Tier A) or installed by the user themselves (Tier B, never by paged).
   image alone; prompt-driven segmentation (a SAM encoder and decoder pair) needs an adapter of its
   own when such a model is admitted to the registry.
 - plugin-sdk and plugin-api 0.74.3-canary.21.
+
+## Amendment 1 (2026-11-08): the first action step over the doors
+
+Remove background is an action: `media.paged.image/remove-background` (`actions@1`, ADR 344), input
+and output `asset`. The image bundle registers it with the other picture actions; any bundle with
+`capabilities.actions.run` runs it on a picture, alone or in a chain (a data row's picture column,
+a script, another module's picture). It decodes the picture, asks `host.ml.matting` (else
+`host.ml.segment`), multiplies the picture's alpha by the answer and writes a PNG. It never guesses:
+when neither `ml.matting@1` nor `ml.segment@1` is served it rejects "no model installed", and the
+cache of ADR 344 keys the result by content and parameters, so a later model change does not
+silently replace a kept result (the caller clears the cache entry or changes a parameter).
+
+Tests run against `fakeMlProvider` (the CI backend; pixels brighter than mid-grey are the
+foreground); the real route is the same door served by a Tier-A model or, when the host grows a
+matting job, the local host. Not built: a matting job in `apps/ml-host` (its API v1 knows
+`generate` and `edit` only; a runner for a matting model is a new capability the host's `health`
+would list, which is the flag the editor's `supports("ml.matting@1")` already reads), and Tier-A
+matting models (they wait for reviewed files, hashes and licences, editor ADR 290).

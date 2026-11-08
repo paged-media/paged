@@ -14,7 +14,7 @@ workspace members (`spikes/vello-eval`, `spikes/composer-calibration`, `spikes/w
 `spikes/blitz-wasm` is excluded and has its own lockfile. The toolchain is pinned to 1.99.1
 in `rust-toolchain.toml`, `Cargo.lock` is tracked, and the workspace sets `publish = false`.
 Besides Rust there is one TypeScript package (`web/idml-viewer`), bash for the gates
-(`scripts/`, `corpus/generated/*.sh`), and ExtendScript in `tools/indesign-export`.
+(`scripts/`, `corpus/generated/*.sh`), and ExtendScript in `tooling/oracle/indesign`.
 
 The IDML import/export adapter is part of this workspace: `crates/idml-import`,
 `crates/idml-export` and the coverage tool `crates/idml-coverage`. They fill and read this

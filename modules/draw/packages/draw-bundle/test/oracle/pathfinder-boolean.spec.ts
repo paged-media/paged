@@ -21,7 +21,7 @@
 // set algebra and against ADOBE ILLUSTRATOR 30.1.0 (Effect > Pathfinder >
 // Add / Subtract / Intersect / Exclude on a group, then Expand Appearance),
 // recorded 2026-10-02 by
-//   scripts/illustrator/run-probe.sh scripts/illustrator/probes/pathfinder-boolean.jsx \
+//   tooling/oracle/illustrator/run-probe.sh tooling/oracle/illustrator/probes/pathfinder-boolean.jsx \
 //     packages/draw-bundle/test/fixtures/oracle/pathfinder-boolean.illustrator.json
 //
 // 8 cases: the four verbs on two overlapping rectangles, and on a circle cut
@@ -89,7 +89,7 @@ interface BooleanCase {
   parameters: BooleanParameters;
 }
 
-// --- the cases: a MIRROR of scripts/illustrator/probes/pathfinder-boolean.jsx
+// --- the cases: a MIRROR of tooling/oracle/illustrator/probes/pathfinder-boolean.jsx
 
 /** Back: [100,100]-[200,180], 8000 pt². */
 const RECT_A = polygon([
@@ -209,7 +209,7 @@ describe("oracle — pathfinder booleans", () => {
       expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
       expect(FIXTURE.produced_by.version).toMatch(/^\d+\.\d+/);
       expect(FIXTURE.produced_by.script).toBe(
-        "scripts/illustrator/probes/pathfinder-boolean.jsx",
+        "tooling/oracle/illustrator/probes/pathfinder-boolean.jsx",
       );
     });
 

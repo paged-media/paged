@@ -39036,25 +39036,25 @@
       "element": "Change",
       "attribute": "AppliedDocumentUser",
       "kind": "attr",
-      "reason": "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tools/indesign-export/track-changes-probe). No census document was saved with Track Changes on."
+      "reason": "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tooling/oracle/indesign/track-changes-probe). No census document was saved with Track Changes on."
     },
     {
       "element": "Change",
       "attribute": "ChangeType",
       "kind": "attr",
-      "reason": "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tools/indesign-export/track-changes-probe). No census document was saved with Track Changes on."
+      "reason": "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tooling/oracle/indesign/track-changes-probe). No census document was saved with Track Changes on."
     },
     {
       "element": "Change",
       "attribute": "Date",
       "kind": "attr",
-      "reason": "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tools/indesign-export/track-changes-probe). No census document was saved with Track Changes on."
+      "reason": "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tooling/oracle/indesign/track-changes-probe). No census document was saved with Track Changes on."
     },
     {
       "element": "Change",
       "attribute": "UserName",
       "kind": "attr",
-      "reason": "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tools/indesign-export/track-changes-probe). No census document was saved with Track Changes on."
+      "reason": "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tooling/oracle/indesign/track-changes-probe). No census document was saved with Track Changes on."
     },
     {
       "element": "CharacterStyle",
@@ -39084,19 +39084,19 @@
       "element": "CharacterStyle",
       "attribute": "KentenAlignment",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "KentenCustomCharacter",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "KentenFont",
       "kind": "properties-child",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
@@ -39108,7 +39108,7 @@
       "element": "CharacterStyle",
       "attribute": "KentenFontStyle",
       "kind": "properties-child",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
@@ -39120,25 +39120,25 @@
       "element": "CharacterStyle",
       "attribute": "KentenPlacement",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "KentenPosition",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "KentenXScale",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "KentenYScale",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
@@ -39186,7 +39186,7 @@
       "element": "CharacterStyle",
       "attribute": "OTFProportionalMetrics",
       "kind": "attr",
-      "reason": "Proportional metrics (palt), read in InDesign 20.0.1's spelling (core tools/indesign-export/kana-spacing-probe: Metrics kerning sets them anyway; with kerning off this sets them alone). Census documents set it only on paragraph styles."
+      "reason": "Proportional metrics (palt), read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/kana-spacing-probe: Metrics kerning sets them anyway; with kerning off this sets them alone). Census documents set it only on paragraph styles."
     },
     {
       "element": "CharacterStyle",
@@ -39222,13 +39222,13 @@
       "element": "CharacterStyle",
       "attribute": "RubyAlignment",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyAutoScaling",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
@@ -39240,43 +39240,43 @@
       "element": "CharacterStyle",
       "attribute": "RubyFont",
       "kind": "properties-child",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyFontSize",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyFontStyle",
       "kind": "properties-child",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyParentOverhangAmount",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyParentScalingPercent",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyParentSpacing",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyPosition",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
@@ -39294,25 +39294,25 @@
       "element": "CharacterStyle",
       "attribute": "RubyXOffset",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyXScale",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyYOffset",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
       "attribute": "RubyYScale",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyle",
@@ -39366,31 +39366,31 @@
       "element": "CharacterStyleRange",
       "attribute": "KentenAlignment",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "KentenCustomCharacter",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "KentenPlacement",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "KentenPosition",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "KentenYScale",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
@@ -39420,7 +39420,7 @@
       "element": "CharacterStyleRange",
       "attribute": "OTFProportionalMetrics",
       "kind": "attr",
-      "reason": "Proportional metrics (palt), read in InDesign 20.0.1's spelling (core tools/indesign-export/kana-spacing-probe: Metrics kerning sets them anyway; with kerning off this sets them alone). Census documents set it only on paragraph styles."
+      "reason": "Proportional metrics (palt), read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/kana-spacing-probe: Metrics kerning sets them anyway; with kerning off this sets them alone). Census documents set it only on paragraph styles."
     },
     {
       "element": "CharacterStyleRange",
@@ -39468,13 +39468,13 @@
       "element": "CharacterStyleRange",
       "attribute": "RubyAlignment",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "RubyAutoScaling",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
@@ -39486,49 +39486,49 @@
       "element": "CharacterStyleRange",
       "attribute": "RubyFont",
       "kind": "properties-child",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "RubyParentOverhangAmount",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "RubyParentScalingPercent",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "RubyParentSpacing",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "RubyPosition",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "RubyXOffset",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "RubyYOffset",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
       "attribute": "RubyYScale",
       "kind": "attr",
-      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tools/indesign-export/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
+      "reason": "Ruby and kenten settings, read in InDesign 20.0.1's spelling (core tooling/oracle/indesign/ruby-kenten-options-probe, ruby-parent-spacing-probe). No corpus document sets them."
     },
     {
       "element": "CharacterStyleRange",
@@ -39570,25 +39570,25 @@
       "element": "CrossReference",
       "attribute": "CrossReferenceType",
       "kind": "attr",
-      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
+      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
     },
     {
       "element": "CrossReference",
       "attribute": "CustomTypeString",
       "kind": "attr",
-      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
+      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
     },
     {
       "element": "CrossReference",
       "attribute": "ReferencedTopic",
       "kind": "attr",
-      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
+      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
     },
     {
       "element": "CrossReference",
       "attribute": "Self",
       "kind": "attr",
-      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
+      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
     },
     {
       "element": "CrossReferenceSource",
@@ -40362,7 +40362,7 @@
       "element": "PageReference",
       "attribute": "ReferencedTopic",
       "kind": "attr",
-      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
+      "reason": "An index's See references and the topic a page reference names: no corpus document has an index. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/index-probe, 2026-10-16: a topic's <CrossReference ReferencedTopic CrossReferenceType CustomTypeString> nests inside its <Topic>, and a <PageReference> names its topic as ReferencedTopic)."
     },
     {
       "element": "PageReference",
@@ -40374,13 +40374,13 @@
       "element": "ParagraphDestination",
       "attribute": "Name",
       "kind": "attr",
-      "reason": "Paragraph destinations (where InDesign points a cross-reference at a paragraph): no corpus document has one. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/xref-probe, 2026-10-16: an inline <ParagraphDestination Self Name Hidden DestinationUniqueKey/> at the start of the paragraph)."
+      "reason": "Paragraph destinations (where InDesign points a cross-reference at a paragraph): no corpus document has one. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/xref-probe, 2026-10-16: an inline <ParagraphDestination Self Name Hidden DestinationUniqueKey/> at the start of the paragraph)."
     },
     {
       "element": "ParagraphDestination",
       "attribute": "Self",
       "kind": "attr",
-      "reason": "Paragraph destinations (where InDesign points a cross-reference at a paragraph): no corpus document has one. Their spelling was asked of InDesign 20.0.1 (core tools/indesign-export/xref-probe, 2026-10-16: an inline <ParagraphDestination Self Name Hidden DestinationUniqueKey/> at the start of the paragraph)."
+      "reason": "Paragraph destinations (where InDesign points a cross-reference at a paragraph): no corpus document has one. Their spelling was asked of InDesign 20.0.1 (core tooling/oracle/indesign/xref-probe, 2026-10-16: an inline <ParagraphDestination Self Name Hidden DestinationUniqueKey/> at the start of the paragraph)."
     },
     {
       "element": "ParagraphStyle",
@@ -40572,13 +40572,13 @@
       "element": "ParagraphStyleRange",
       "attribute": "DesiredGlyphScaling",
       "kind": "attr",
-      "reason": "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tools/indesign-export/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
+      "reason": "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tooling/oracle/indesign/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
     },
     {
       "element": "ParagraphStyleRange",
       "attribute": "DesiredWordSpacing",
       "kind": "attr",
-      "reason": "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tools/indesign-export/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
+      "reason": "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tooling/oracle/indesign/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
     },
     {
       "element": "ParagraphStyleRange",
@@ -40674,13 +40674,13 @@
       "element": "ParagraphStyleRange",
       "attribute": "MaximumWordSpacing",
       "kind": "attr",
-      "reason": "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tools/indesign-export/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
+      "reason": "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tooling/oracle/indesign/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
     },
     {
       "element": "ParagraphStyleRange",
       "attribute": "MinimumWordSpacing",
       "kind": "attr",
-      "reason": "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tools/indesign-export/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
+      "reason": "InDesign writes these on a <ParagraphStyleRange> whose paragraph sets its spacing itself rather than through its style (asked of InDesign 20.0.1, 2026-10-13: core tooling/oracle/indesign/spelling-and-spacing-probe builds the paragraph in its DOM and exports it; all nine Minimum/Desired/Maximum Word and Letter Spacing and Glyph Scaling land on the range). The census documents set them only on styles, bar one range's letter spacing and four documents' Min/Max glyph scaling."
     },
     {
       "element": "ParagraphStyleRange",
@@ -41550,19 +41550,19 @@
       "element": "XMLAttribute",
       "attribute": "Name",
       "kind": "attr",
-      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
+      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tooling/oracle/indesign/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
     },
     {
       "element": "XMLAttribute",
       "attribute": "Value",
       "kind": "attr",
-      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
+      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tooling/oracle/indesign/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
     },
     {
       "element": "XMLElement",
       "attribute": "XMLContent",
       "kind": "attr",
-      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
+      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tooling/oracle/indesign/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
     }
   ],
   "unresolved": [],

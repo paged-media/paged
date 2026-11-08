@@ -25,7 +25,7 @@ members' outlines measured in the group's own space and placed by the group's co
 
 InDesign transforms a group as one object about a reference point on the group's box (the centre
 by default), and a handle drag on a group is a scale of the group along its own axes about the
-opposite handle: `tools/indesign-export/scale-frame-probe.json`, cases 2–4, measured on InDesign
+opposite handle: `tooling/oracle/indesign/scale-frame-probe.json`, cases 2–4, measured on InDesign
 20.0.1 — a group's box turns with the group, a scale along its axes is composed into the members
 (a member turned inside the group comes out sheared, cases 3a and 3b). Several selected items
 share a box aligned to the pasteboard (cases 1c–1e).

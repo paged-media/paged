@@ -16,7 +16,7 @@ held the page's whole residual: mean ΔE 1.246, p99 81.67, ink 29.93.
 
 The rows were already in `stroke-styles`: each style on a 120 × 60 rectangle at 2 pt, a 137 × 61
 rectangle at 5 pt and an open 150 pt line at 4 pt. Their geometry is read from InDesign
-20.0.1's PDF with `tools/indesign-export/pdf-strokes.py`. A hash style is one stroke of many
+20.0.1's PDF with `tooling/oracle/indesign/pdf-strokes.py`. A hash style is one stroke of many
 two-point subpaths; a diamond is a stroke of its own, a closed four-point path.
 
 ## Decision

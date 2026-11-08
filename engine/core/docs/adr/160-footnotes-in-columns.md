@@ -7,7 +7,7 @@
   - `paged-renderer`: `EmittedFootnote::{pool_rect_pt, frame_footnotes}`, `footnote_pool_rect`,
     the reservation keys, and `resolve_footnote_metrics` taking the frame's override.
   - `paged-gen`: `TextFramePref::footnotes_span_across_columns`; the `footnote-columns` and
-    `footnote-straddle` samples; `tools/indesign-export/footnote-columns-probe`.
+    `footnote-straddle` samples; `tooling/oracle/indesign/footnote-columns-probe`.
   - plugin-publish `idml-import`: `EnableStraddling` on `<FootnoteOption>` and the four
     `Footnotes*` attributes of `<TextFramePreference>`.
   - No wire or protocol change.

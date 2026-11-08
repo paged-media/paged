@@ -5,9 +5,9 @@
     "version": "30.1.0",
     "build": "136R",
     "locale": "de_DE",
-    "script": "scripts/illustrator/probes/pattern-render.jsx",
+    "script": "tooling/oracle/illustrator/probes/pattern-render.jsx",
     "script_sha256": "140d0c2784f1b7f99b5c823e356e94c74562e432240d6630772c0ecf21c98d56",
-    "runner": "scripts/illustrator/run-probe.sh (PAGED_PROBE_WRITER=write-render-fixture.mjs)",
+    "runner": "tooling/oracle/illustrator/run-probe.sh (PAGED_PROBE_WRITER=write-render-fixture.mjs)",
     "recorded_at": "2026-10-29T13:42:06.862Z",
     "host_os": "macOS 26.4"
   },

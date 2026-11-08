@@ -204,7 +204,7 @@ fn release_home(
 
 /// C-84 — InDesign removes a group together with its last member, and a
 /// group whose only member was that group with it (asked of InDesign:
-/// `tools/indesign-export/object-integrity-probe.json`, 5a–5c — removing
+/// `tooling/oracle/indesign/object-integrity-probe.json`, 5a–5c — removing
 /// members keeps a group of one; removing the last one removes the
 /// group). The engine used to keep the EMPTY group: it painted nothing,
 /// still sat in the z-order, and the plugin batch `remove a, remove b,

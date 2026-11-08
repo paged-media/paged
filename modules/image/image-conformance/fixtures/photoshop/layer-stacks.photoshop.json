@@ -6,9 +6,9 @@
     "build": "27.10.0 (20260824.r.26 9d9635d)",
     "locale": "de_DE",
     "color_settings": "Europe General Purpose 3",
-    "script": "scripts/photoshop/probes/layer-stacks.jsx",
+    "script": "tooling/oracle/photoshop/probes/layer-stacks.jsx",
     "script_sha256": "80f917b728a421adf8898812be2ce84272354c736d81223d446c1a6bb2646b06",
-    "runner": "scripts/photoshop/run-probe.sh",
+    "runner": "tooling/oracle/photoshop/run-probe.sh",
     "recorded_at": "2026-10-04T09:30:50.111Z",
     "host_os": "macOS 26.4"
   },

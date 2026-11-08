@@ -72,7 +72,7 @@ with the sum.
   to keep its own rules (J03 compressed, no break at a dash).
 - `crates/paged-canvas/tests/it/paragraph_composer_path.rs` — `"Word First-fit"` is accepted on
   a style over the wire and kept.
-- The doc module's `docx_conformance::first_fit_docx()` and `scripts/word-first-fit-probe.sh`
+- The doc module's `docx_conformance::first_fit_docx()` and `tooling/oracle/office/word/word-first-fit-probe.sh`
   ask Word the same questions in Courier New (every glyph 1229/2048 em); its answer is
   `docx-conformance/fixtures/first-fit.word.json` and this crate's copy.
 
