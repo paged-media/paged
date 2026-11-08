@@ -493,7 +493,10 @@ fn rule_name(r: &FillRule) -> &'static str {
 
 /// A PDF blend mode in IDML's spelling; `None` for `Normal`.
 pub(super) fn blend_name(b: BlendMode) -> Option<&'static str> {
-    paged_pdf_page::Blend::from_hayro(b).idml_name()
+    match paged_pdf_page::blend(b) {
+        paged_blend::BlendMode::Normal => None,
+        m => Some(m.idml_name()),
+    }
 }
 
 fn p2(p: Point) -> [f32; 2] {

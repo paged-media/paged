@@ -15,8 +15,8 @@ first.
 ## Decision
 
 `paged-pdf-page` is a pure leaf crate over `hayro-interpret` (no features, so the renderer's native embedded
-fonts do not unify into the bundle) and `kurbo` 0.13. It owns `geometry(page, PageBox)` and the `Blend` enum
-(`from_hayro`, `idml_name`). Both consumers map their own box enum onto it and keep their own `Device`.
+fonts do not unify into the bundle), `kurbo` 0.13 and `paged-blend`. It owns `geometry(page, PageBox)` and
+`blend(hayro mode) -> paged_blend::BlendMode` (the single-owner ratchet allows no second blend enum; ADR 1034). Both consumers map their own box enum onto it and keep their own `Device`.
 
 The two devices stay two: they write different targets (display-list commands in linear light with patterns as a
 stand-in grey, against IR items with shadings, masks and losses), and a shared device would be a trait with two
@@ -26,6 +26,7 @@ decided once.
 ## Consequences
 
 - Behaviour is bit-identical: the geometry code and both blend tables moved without change (the renderer's
-  `Normal` fallback for an unnamed mode is `Blend::Normal`). The placed-PDF tests and goldens and the
+  `Normal` fallback for an unnamed mode is kept, and the bundle's IDML name is `idml_name()` of the same modes,
+  `None` for `Normal`). The placed-PDF tests and goldens and the
   `pdf-import` vector tests are the proof.
 - A third PDF reader (a handout import, a PDF/X check) takes the crate, not a third copy.

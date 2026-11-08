@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "The one PDF page reader the engine's placed PDF and paged.publish's place-as-vectors share (ADR 1058): hayro's page geometry per PDF box, rotation included, and the PDF blend modes as one enum. Pure: no model, no display list."
+description = "The one PDF page reader the engine's placed PDF and paged.publish's place-as-vectors share (ADR 1058): hayro's page geometry per PDF box, rotation included, and hayro's blend modes as the engine's `paged_blend::BlendMode`. Pure: no model, no display list."
 
 [lints]
 workspace = true
@@ -16,3 +16,4 @@ workspace = true
 # them out (comes from PDFium), and a feature set here would unify them.
 hayro-interpret = { workspace = true }
 kurbo = { workspace = true }
+paged-blend = { workspace = true }

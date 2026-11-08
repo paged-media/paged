@@ -266,25 +266,7 @@ fn paint(p: &PdfPaint<'_>) -> Paint {
 }
 
 fn blend(b: PdfBlend) -> BlendMode {
-    use paged_pdf_page::Blend;
-    match Blend::from_hayro(b) {
-        Blend::Normal => BlendMode::Normal,
-        Blend::Multiply => BlendMode::Multiply,
-        Blend::Screen => BlendMode::Screen,
-        Blend::Overlay => BlendMode::Overlay,
-        Blend::Darken => BlendMode::Darken,
-        Blend::Lighten => BlendMode::Lighten,
-        Blend::ColorDodge => BlendMode::ColorDodge,
-        Blend::ColorBurn => BlendMode::ColorBurn,
-        Blend::HardLight => BlendMode::HardLight,
-        Blend::SoftLight => BlendMode::SoftLight,
-        Blend::Difference => BlendMode::Difference,
-        Blend::Exclusion => BlendMode::Exclusion,
-        Blend::Hue => BlendMode::Hue,
-        Blend::Saturation => BlendMode::Saturation,
-        Blend::Color => BlendMode::Color,
-        Blend::Luminosity => BlendMode::Luminosity,
-    }
+    paged_pdf_page::blend(b)
 }
 
 impl ListDevice<'_> {

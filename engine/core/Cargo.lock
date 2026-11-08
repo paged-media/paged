@@ -4585,6 +4585,7 @@ version = "0.0.0"
 dependencies = [
  "hayro-interpret",
  "kurbo 0.13.1",
+ "paged-blend",
 ]
 
 [[package]]
@@ -5013,6 +5014,7 @@ dependencies = [
  "hayro-interpret",
  "idml-import",
  "kurbo 0.13.1",
+ "paged-blend",
  "paged-model",
  "paged-pdf-annots",
  "paged-pdf-page",

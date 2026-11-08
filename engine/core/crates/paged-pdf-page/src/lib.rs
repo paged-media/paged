@@ -31,6 +31,7 @@ use hayro_interpret::hayro_syntax::object::Rect as PdfRect;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::BlendMode as HayroBlend;
 use kurbo::{Affine, Point};
+use paged_blend::BlendMode;
 
 /// Which box of a PDF page a frame or an import shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,69 +109,25 @@ pub fn geometry(page: &Page<'_>, chosen: PageBox) -> Geometry {
     }
 }
 
-/// A PDF blend mode (PDF 32000 table 136) without hayro's type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Blend {
-    Normal,
-    Multiply,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
-}
-
-impl Blend {
-    /// hayro's mode; one it does not name is `Normal`.
-    pub fn from_hayro(b: HayroBlend) -> Blend {
-        match b {
-            HayroBlend::Multiply => Blend::Multiply,
-            HayroBlend::Screen => Blend::Screen,
-            HayroBlend::Overlay => Blend::Overlay,
-            HayroBlend::Darken => Blend::Darken,
-            HayroBlend::Lighten => Blend::Lighten,
-            HayroBlend::ColorDodge => Blend::ColorDodge,
-            HayroBlend::ColorBurn => Blend::ColorBurn,
-            HayroBlend::HardLight => Blend::HardLight,
-            HayroBlend::SoftLight => Blend::SoftLight,
-            HayroBlend::Difference => Blend::Difference,
-            HayroBlend::Exclusion => Blend::Exclusion,
-            HayroBlend::Hue => Blend::Hue,
-            HayroBlend::Saturation => Blend::Saturation,
-            HayroBlend::Color => Blend::Color,
-            HayroBlend::Luminosity => Blend::Luminosity,
-            _ => Blend::Normal,
-        }
-    }
-
-    /// The mode in IDML's spelling; `None` for `Normal`.
-    pub fn idml_name(self) -> Option<&'static str> {
-        Some(match self {
-            Blend::Normal => return None,
-            Blend::Multiply => "Multiply",
-            Blend::Screen => "Screen",
-            Blend::Overlay => "Overlay",
-            Blend::Darken => "Darken",
-            Blend::Lighten => "Lighten",
-            Blend::ColorDodge => "ColorDodge",
-            Blend::ColorBurn => "ColorBurn",
-            Blend::HardLight => "HardLight",
-            Blend::SoftLight => "SoftLight",
-            Blend::Difference => "Difference",
-            Blend::Exclusion => "Exclusion",
-            Blend::Hue => "Hue",
-            Blend::Saturation => "Saturation",
-            Blend::Color => "Color",
-            Blend::Luminosity => "Luminosity",
-        })
+/// hayro's blend mode as the engine's (`paged_blend::BlendMode`, ADR 1034);
+/// one hayro does not name is `Normal`.
+pub fn blend(b: HayroBlend) -> BlendMode {
+    match b {
+        HayroBlend::Multiply => BlendMode::Multiply,
+        HayroBlend::Screen => BlendMode::Screen,
+        HayroBlend::Overlay => BlendMode::Overlay,
+        HayroBlend::Darken => BlendMode::Darken,
+        HayroBlend::Lighten => BlendMode::Lighten,
+        HayroBlend::ColorDodge => BlendMode::ColorDodge,
+        HayroBlend::ColorBurn => BlendMode::ColorBurn,
+        HayroBlend::HardLight => BlendMode::HardLight,
+        HayroBlend::SoftLight => BlendMode::SoftLight,
+        HayroBlend::Difference => BlendMode::Difference,
+        HayroBlend::Exclusion => BlendMode::Exclusion,
+        HayroBlend::Hue => BlendMode::Hue,
+        HayroBlend::Saturation => BlendMode::Saturation,
+        HayroBlend::Color => BlendMode::Color,
+        HayroBlend::Luminosity => BlendMode::Luminosity,
+        _ => BlendMode::Normal,
     }
 }
