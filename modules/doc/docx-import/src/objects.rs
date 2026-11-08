@@ -24,9 +24,9 @@
 //! in.
 
 use docx_core::{
-    BorderEdge, Borders, CellLook, CustomPath, Float, FloatPosition, FloatWrap, HeightRule,
-    Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape, ShapeGeometry, TableLook,
-    TableStyleProps, TextBox, Theme, WidthKind,
+    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, Float, FloatPosition, FloatWrap,
+    HeightRule, Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape,
+    ShapeGeometry, TableLook, TableStyleProps, TextBox, Theme, WidthKind,
 };
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_office_word as w10;
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_vml as vml;
@@ -65,6 +65,9 @@ pub(crate) struct PartObjects {
     /// Every shape's outline, transform and completed look by the same id
     /// (doc ADR 627), read for the shapes that hold no text.
     shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
+    /// Every chart's relationship id (`c:chart r:id`) by the same id (doc
+    /// ADR 628).
+    charts: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
     next_ordinal: u32,
 }
 
@@ -82,10 +85,11 @@ struct ShapeRead {
 impl PartObjects {
     /// A fresh part: its shapes' looks.
     pub(crate) fn for_part(part: &[u8]) -> Self {
-        let (looks, shapes) = shape_looks(part);
+        let read = shape_looks(part);
         PartObjects {
-            looks,
-            shapes,
+            looks: read.looks,
+            shapes: read.shapes,
+            charts: read.charts,
             next_ordinal: 0,
         }
     }
@@ -97,24 +101,21 @@ const NS_WP: &[u8] = b"http://schemas.openxmlformats.org/drawingml/2006/wordproc
 /// Every DrawingML shape's (`wps:wsp`) `wps:spPr` look in a part, by its
 /// drawing's `wp:docPr/@id`, in document order; and, for the shapes that hold
 /// no text, their outline and transform with the look completed from the
-/// `wps:style` references (doc ADR 627).
-#[allow(clippy::type_complexity)]
-fn shape_looks(
-    part: &[u8],
-) -> (
-    std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>>,
-    std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
-) {
+/// `wps:style` references (doc ADR 627); and every chart's relationship id
+/// (doc ADR 628).
+fn shape_looks(part: &[u8]) -> PartRead {
     use paged_ooxml::drawingml;
     use paged_ooxml::tree::{self, Ns};
-    let mut out: std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>> =
-        Default::default();
-    let mut shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>> =
-        Default::default();
+    let mut read = PartRead::default();
+    let PartRead {
+        looks: out,
+        shapes,
+        charts,
+    } = &mut read;
     let Ok(drawings) = tree::subtrees(part, |uri, local| {
         uri == NS_WP && (local == "inline" || local == "anchor")
     }) else {
-        return (out, shapes);
+        return read;
     };
     let no_rels = |_: &str| None;
     for d in &drawings {
@@ -126,10 +127,15 @@ fn shape_looks(
         else {
             continue;
         };
-        let Some(wsp) = d
-            .path(&[(Ns::A, "graphic"), (Ns::A, "graphicData")])
-            .and_then(|g| g.children.iter().find(|c| c.local == "wsp"))
-        else {
+        let data = d.path(&[(Ns::A, "graphic"), (Ns::A, "graphicData")]);
+        if let Some(rid) = data
+            .and_then(|g| g.child(Ns::C, "chart"))
+            .and_then(|c| c.attr_ns(Ns::R, "id"))
+        {
+            charts.entry(id).or_default().push_back(rid.to_string());
+            continue;
+        }
+        let Some(wsp) = data.and_then(|g| g.children.iter().find(|c| c.local == "wsp")) else {
             continue;
         };
         let sp_pr = wsp.children.iter().find(|c| c.local == "spPr");
@@ -159,7 +165,15 @@ fn shape_looks(
             blip: Default::default(),
         });
     }
-    (out, shapes)
+    read
+}
+
+/// What [`shape_looks`] reads of a part.
+#[derive(Default)]
+struct PartRead {
+    looks: std::collections::HashMap<u32, std::collections::VecDeque<PictureLook>>,
+    shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
+    charts: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
 }
 
 /// Line widths of the theme's line styles `a:lnRef idx` 1, 2 and 3 (Office's
@@ -496,6 +510,41 @@ pub(crate) fn drawing_shape(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Shape> 
         flip_v: read.flip_v,
         look: Some(Box::new(read.look)).filter(|l| !l.is_plain()),
         line_ends: read.line_ends,
+    })
+}
+
+/// A chart drawn by a `w:drawing` (`c:chart`), read from its chart part
+/// through the shared DrawingML chart reader, or `None` when the drawing is
+/// not one or its part cannot be read (doc ADR 628).
+pub(crate) fn drawing_chart(d: &wml::Drawing, ctx: &ImportCtx) -> Option<ChartDrawing> {
+    use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_wordprocessing_drawing as wp;
+    let (width_emu, height_emu, float, doc_pr) = match d.drawing_choice.as_ref()? {
+        wml::DrawingChoice::Inline(i) => {
+            (i.extent.cx, i.extent.cy, None, Some(i.doc_properties.id))
+        }
+        wml::DrawingChoice::Anchor(a) => {
+            let a: &wp::Anchor = a;
+            (
+                a.extent.cx,
+                a.extent.cy,
+                Some(map_float(a)),
+                a.doc_properties.as_ref().map(|p| p.id),
+            )
+        }
+    };
+    let rid = ctx
+        .objects
+        .borrow_mut()
+        .charts
+        .get_mut(&doc_pr?)
+        .and_then(|q| q.pop_front())?;
+    let (part, chart) = crate::chart::read(&ctx.images, &rid)?;
+    Some(ChartDrawing {
+        width_emu,
+        height_emu,
+        float,
+        part,
+        chart: Box::new(chart),
     })
 }
 
@@ -910,6 +959,7 @@ pub(crate) fn alternate_content(
     images: &mut Vec<docx_core::Image>,
     text_boxes: &mut Vec<TextBox>,
     shapes: &mut Vec<Shape>,
+    charts: &mut Vec<ChartDrawing>,
     other_drawings: &mut u32,
 ) {
     use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_markup_compatibility_2006::AlternateContentChoice as B;
@@ -943,7 +993,10 @@ pub(crate) fn alternate_content(
                         }
                         None => match drawing_shape(&d, ctx) {
                             Some(sh) => shapes.push(sh),
-                            None => *other_drawings += 1,
+                            None => match drawing_chart(&d, ctx) {
+                                Some(c) => charts.push(c),
+                                None => *other_drawings += 1,
+                            },
                         },
                     },
                 },

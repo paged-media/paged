@@ -22,3 +22,7 @@ dml-native = { path = "../../../platform/shared/dml-native" }
 docx-core.workspace = true
 serde.workspace = true
 base64 = { workspace = true }
+# Word's charts (doc ADR 628): paged.slide's chart layout from the cached
+# values (PowerPoint's, which is Office's), and its chart model.
+slide-chart.workspace = true
+pptx-core.workspace = true

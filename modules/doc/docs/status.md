@@ -5,17 +5,18 @@
 `docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-doc` profile,
 then `wasm-opt -Oz`):
 
-|                       | bytes                |
-| --------------------- | -------------------- |
-| raw (2026-10-30, W4)  | 7,721,704 (7.36 MiB) |
-| raw (2026-10-29, W4a) | 7,686,229 (7.33 MiB) |
-| raw (2026-10-25, W5)  | 7,321,347 (6.98 MiB) |
-| raw                   | 6,879,227 (6.56 MiB) |
-| gzip -9               | 1,876,393 (1.79 MiB) |
-| brotli -q 11          | 1,070,924 (1.02 MiB) |
-| manifest `maxBytes`   | 8,388,608 (8 MiB)    |
+|                                   | bytes                                              |
+| --------------------------------- | -------------------------------------------------- |
+| raw (2026-11-08, charts, ADR 628) | 8,529,596 (8.13 MiB)                               |
+| raw (2026-10-30, W4)              | 7,721,704 (7.36 MiB)                               |
+| raw (2026-10-29, W4a)             | 7,686,229 (7.33 MiB)                               |
+| raw (2026-10-25, W5)              | 7,321,347 (6.98 MiB)                               |
+| raw                               | 6,879,227 (6.56 MiB)                               |
+| gzip -9                           | 1,876,393 (1.79 MiB)                               |
+| brotli -q 11                      | 1,070,924 (1.02 MiB)                               |
+| manifest `maxBytes`               | 9,437,184 (9 MiB, ADR 627 amendment; 8 MiB before) |
 
-That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
+That leaves 0.87 MiB of headroom under the 9 MiB ceiling (1.44 MiB under 8 MiB when measured in October). The 8.64 MB in the editor's
 panel audit (2026-10-11) was measured before the `wasm-release` profile existed.
 That profile landed on 2026-10-14 and uses size-first codegen for `ooxmlsdk` and the
 engine model crates. The build also enforces `maxBytes`.

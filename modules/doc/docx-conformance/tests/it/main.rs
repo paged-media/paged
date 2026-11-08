@@ -8,6 +8,7 @@ mod layout;
 
 mod annual_report;
 mod breaks;
+mod charts;
 mod columns;
 mod conformance;
 mod container_bytes;

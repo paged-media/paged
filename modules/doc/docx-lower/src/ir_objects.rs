@@ -121,6 +121,50 @@ pub struct LoweredShape {
     pub fx: Option<dml_native::native::NativeFx>,
 }
 
+/// A chart anchored in its paragraph (doc ADR 628): an anchored group of
+/// the chart's pieces as `slide-chart` lays them out from the cached values,
+/// in the chart's own box.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredChart {
+    /// Where it is anchored, as a shape is.
+    #[serde(default)]
+    pub at: u32,
+    pub width_pt: f32,
+    pub height_pt: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<LoweredAnchor>,
+    #[serde(default)]
+    pub layout: LoweredFloatLayout,
+    /// The chart part (`word/charts/chart1.xml`).
+    pub part: String,
+    /// The pieces in z-order.
+    pub pieces: Vec<LoweredChartPiece>,
+}
+
+/// One piece of a [`LoweredChart`], placed by its box in the chart's box.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum LoweredChartPiece {
+    /// A bar, a line, an area, a wedge or a gridline: its outline in its
+    /// own box (`[x, y, left x, left y, right x, right y]`, pt) and look.
+    Shape {
+        /// Left, top, width, height in the chart's box, pt.
+        bounds: [f32; 4],
+        anchors: Vec<[f32; 6]>,
+        starts: Vec<usize>,
+        open: Vec<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fx: Option<Box<dml_native::native::NativeFx>>,
+    },
+    /// A title, a legend entry or an axis or data label: a text frame
+    /// with a story of its own.
+    Label {
+        bounds: [f32; 4],
+        paragraphs: Vec<LoweredParagraph>,
+    },
+}
+
 /// How text wraps around a page item: the engine's `TextWrap`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

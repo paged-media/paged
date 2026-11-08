@@ -42,8 +42,9 @@ pub use controls::{ContentControl, ContentControlKind, ListItem};
 pub mod symbols;
 pub mod theme;
 pub use objects::{
-    BorderEdge, Borders, CellLook, CustomPath, HeightRule, Language, NestedTable, PathCommand,
-    PreferredWidth, Shape, ShapeGeometry, TableLook, TableStyleProps, TextBox, WidthKind,
+    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, HeightRule, Language, NestedTable,
+    PathCommand, PreferredWidth, Shape, ShapeGeometry, TableLook, TableStyleProps, TextBox,
+    WidthKind,
 };
 pub use review::{
     ChangeKind, Comment, FormatChange, ParaPropsChange, ParagraphReview, Revision, RunChange,
@@ -518,6 +519,10 @@ pub struct Run {
     /// `wps:wsp`), doc ADR 627.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shapes: Vec<Shape>,
+    /// Charts drawn by this run (`w:drawing` holding a `c:chart`), doc ADR
+    /// 628.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub charts: Vec<ChartDrawing>,
     /// The inline content control (`w:sdt`) this run is content of, doc ADR
     /// 614. Every run of the control carries it.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -40,8 +40,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use docx_lower::ir::{
-    LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, LoweredTable, PropValue,
-    StyleProp,
+    LoweredBlock, LoweredChartPiece, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle,
+    LoweredTable, PropValue, StyleProp,
 };
 use paged_model::script::{CharacterDirection, FontHint};
 use paged_model::{
@@ -598,6 +598,7 @@ struct Minted {
     notes: usize,
     boxes: usize,
     shapes: usize,
+    charts: usize,
     /// The invented styles paragraphs keep (see `build_whole`).
     keep: std::collections::BTreeSet<String>,
     /// The stories of inline text boxes, made beside the body's.
@@ -1153,6 +1154,86 @@ fn build_whole(
         }
         para.anchored_frames.push(frame);
         minted.shapes += 1;
+    }
+    // Doc ADR 628 — a chart: an anchored Group of its pieces, outlined
+    // Rectangles and text frames with a story each, in the chart's box.
+    for ch in &p.charts {
+        let mut children = Vec::new();
+        for (k, piece) in ch.pieces.iter().enumerate() {
+            let bounds = |b: &[f32; 4]| Bounds {
+                top: b[1],
+                left: b[0],
+                bottom: b[1] + b[3],
+                right: b[0] + b[2],
+            };
+            match piece {
+                LoweredChartPiece::Shape {
+                    bounds: b,
+                    anchors,
+                    starts,
+                    open,
+                    fx,
+                } => {
+                    let mut frame = AnchoredFrame {
+                        frame_kind: AnchoredFrameKind::Rectangle,
+                        self_id: Some(format!("docx_chart{}_{k}", minted.charts)),
+                        bounds: Some(bounds(b)),
+                        anchors: anchors
+                            .iter()
+                            .map(|a| PathAnchor {
+                                anchor: (a[0], a[1]),
+                                left: (a[2], a[3]),
+                                right: (a[4], a[5]),
+                            })
+                            .collect(),
+                        subpath_starts: starts.clone(),
+                        subpath_open: open.clone(),
+                        ..AnchoredFrame::default()
+                    };
+                    if let Some(fx) = fx {
+                        paint_frame(&mut frame, fx, &mut minted.looks)?;
+                    }
+                    children.push(frame);
+                }
+                LoweredChartPiece::Label {
+                    bounds: b,
+                    paragraphs,
+                } => {
+                    let paragraphs = box_paragraphs(doc, styles, paragraphs, minted)?;
+                    let story = format!("docx_chart{}_t{k}", minted.charts);
+                    minted.extra.push((story.clone(), paragraphs));
+                    children.push(AnchoredFrame {
+                        frame_kind: AnchoredFrameKind::TextFrame,
+                        self_id: Some(format!("docx_chart{}_{k}", minted.charts)),
+                        bounds: Some(bounds(b)),
+                        parent_story: Some(story),
+                        layout: AnchoredLayout {
+                            inset_spacing: Some([0.0; 4]),
+                            ..AnchoredLayout::default()
+                        },
+                        ..AnchoredFrame::default()
+                    });
+                }
+            }
+        }
+        para.anchored_frame_offsets
+            .resize(para.anchored_frames.len(), 0);
+        para.anchored_frame_offsets.push(ch.at.min(chars));
+        para.anchored_frames.push(AnchoredFrame {
+            frame_kind: AnchoredFrameKind::Group,
+            self_id: Some(format!("docx_chart{}", minted.charts)),
+            bounds: Some(Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: ch.height_pt,
+                right: ch.width_pt,
+            }),
+            setting: ch.anchor.as_ref().map(anchored_setting),
+            layout: anchored_layout(&ch.layout),
+            children,
+            ..AnchoredFrame::default()
+        });
+        minted.charts += 1;
     }
     Ok(para)
 }

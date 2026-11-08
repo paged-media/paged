@@ -14,3 +14,8 @@ workspace = true
 [dependencies]
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
 docx-core.workspace = true
+# Word's charts (doc ADR 628): the shared DrawingML chart reader, with
+# paged.slide's paint and text property types (the model slide-chart lays
+# out).
+dml-chart = { path = "../../../platform/shared/dml-chart", features = ["serde"] }
+pptx-core.workspace = true

@@ -542,6 +542,10 @@ pub struct LoweredParagraph {
     /// engine's anchored frames drawn along the shape's outline.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shapes: Vec<crate::ir_objects::LoweredShape>,
+    /// Charts anchored in this paragraph (doc ADR 628): anchored groups of
+    /// the chart's pieces.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub charts: Vec<crate::ir_objects::LoweredChart>,
     /// Doc ADR 624 — the paragraph's Word drop cap, set on its first native
     /// paragraph as the engine's paragraph drop cap. A paragraph property of
     /// its own, not a style's: the engine refuses the drop cap paths on a

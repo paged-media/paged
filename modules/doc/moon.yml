@@ -26,6 +26,12 @@ dependsOn:
   # engine model (slide ADR 722, doc ADR 618).
   - id: "dml-native"
     scope: "production"
+  # dml-chart and paged.slide's chart model and layout (pptx-core,
+  # slide-chart), which doc's charts are read and drawn with (doc ADR 628).
+  - id: "dml-chart"
+    scope: "production"
+  - id: "slide"
+    scope: "production"
 
 # Path dependencies into the engine (docx-skeleton / slide-native build on
 # paged-model, paged-scene, paged-store; ADR 606 / ADR 708) and into
@@ -47,6 +53,12 @@ fileGroups:
     - "/platform/shared/ooxml/Cargo.toml"
     - "/platform/shared/dml-native/src/**/*.rs"
     - "/platform/shared/dml-native/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
+    - "/modules/slide/pptx-core/**/*.rs"
+    - "/modules/slide/pptx-core/Cargo.toml"
+    - "/modules/slide/slide-chart/**/*.rs"
+    - "/modules/slide/slide-chart/Cargo.toml"
   rust-tests:
     - "**/*"
     - "!docs/**"
@@ -59,6 +71,12 @@ fileGroups:
     - "/platform/shared/ooxml/Cargo.toml"
     - "/platform/shared/dml-native/src/**/*.rs"
     - "/platform/shared/dml-native/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
+    - "/modules/slide/pptx-core/**/*.rs"
+    - "/modules/slide/pptx-core/Cargo.toml"
+    - "/modules/slide/slide-chart/**/*.rs"
+    - "/modules/slide/slide-chart/Cargo.toml"
 
 # The doc crates are members of the engine's Cargo workspace (one Cargo
 # workspace, docs/development/one-workspace.md): this directory has no

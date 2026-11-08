@@ -1091,3 +1091,60 @@ fn shapes_are_anchored_frames_along_their_outline() {
     assert!(frames[1].setting.is_some());
     assert!(frames[1].layout.text_wrap.is_some());
 }
+
+/// Doc ADR 628 — a chart is an anchored Group of its pieces: outlined
+/// Rectangles (bars, gridlines) and text frames whose stories hold the
+/// labels; the whole body stays native.
+#[test]
+fn charts_are_anchored_groups_of_their_pieces() {
+    use paged_model::AnchoredFrameKind;
+    let ir = lowered(&docx_conformance::charts_docx());
+    let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
+    let groups: Vec<_> = stories.stories[0]
+        .iter()
+        .flat_map(|p| p.anchored_frames.iter())
+        .filter(|f| {
+            f.self_id
+                .as_deref()
+                .is_some_and(|i| i.starts_with("docx_chart"))
+        })
+        .collect();
+    assert_eq!(groups.len(), 2);
+    let bar = groups[0];
+    assert!(matches!(bar.frame_kind, AnchoredFrameKind::Group));
+    assert_eq!(
+        bar.bounds.map(|b| (b.width(), b.height())),
+        Some((360.0, 216.0))
+    );
+    assert!(bar.setting.is_none(), "inline: a character of its line");
+    let shapes: Vec<_> = bar
+        .children
+        .iter()
+        .filter(|c| matches!(c.frame_kind, AnchoredFrameKind::Rectangle))
+        .collect();
+    let labels: Vec<_> = bar
+        .children
+        .iter()
+        .filter(|c| matches!(c.frame_kind, AnchoredFrameKind::TextFrame))
+        .collect();
+    assert!(
+        shapes.len() >= 6 && labels.len() >= 6,
+        "{} {}",
+        shapes.len(),
+        labels.len()
+    );
+    for s in &shapes {
+        assert!(!s.anchors.is_empty());
+        assert!(s.fill_color.is_some() || s.stroke_color.is_some());
+    }
+    // Every label's story is one of the stories made beside the body's.
+    for l in &labels {
+        let story = l.parent_story.as_deref().expect("a story");
+        assert!(stories
+            .extra
+            .iter()
+            .any(|(id, ps)| id == story && ps.len() == 1));
+    }
+    // The pie floats with its wrap.
+    assert!(groups[1].setting.is_some() && groups[1].layout.text_wrap.is_some());
+}

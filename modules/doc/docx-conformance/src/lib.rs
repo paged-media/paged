@@ -26,6 +26,7 @@ use std::io::Write;
 
 use zip::write::SimpleFileOptions;
 
+mod charts;
 mod first_fit;
 mod fonts;
 mod native;
@@ -33,6 +34,10 @@ mod objects;
 mod reach;
 mod shapes;
 mod structure;
+pub use charts::{
+    bar_chart_xml, charts_docx, pie_chart_xml, CHART_CATEGORIES, CHART_PARTS, CHART_SERIES,
+    CHART_TITLE, CHART_WORKBOOK,
+};
 pub use first_fit::{
     first_fit_cases, first_fit_cases_json, first_fit_docx, FirstFitCase, CHAR_PT,
     FIRST_FIT_FULL_MEASURE_PT,

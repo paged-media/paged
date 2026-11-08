@@ -180,6 +180,25 @@ pub enum PathCommand {
     Close,
 }
 
+/// A chart drawn by a `w:drawing` (`a:graphicData` of the chart namespace,
+/// `c:chart r:id`), doc ADR 628: the chart part read by the shared DrawingML
+/// chart reader with the cached values Word draws from. The part itself is
+/// carried by the package and saved as it was.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ChartDrawing {
+    /// The drawing's extent (`wp:extent`).
+    pub width_emu: i64,
+    pub height_emu: i64,
+    /// Where the chart floats; `None` for a chart set inline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub float: Option<Float>,
+    /// The chart part's name (`word/charts/chart1.xml`).
+    pub part: String,
+    /// The chart as read (`c:chartSpace`), with the paints and text
+    /// properties as authored.
+    pub chart: Box<pptx_core::chart::Chart>,
+}
+
 /// One border edge (`w:top`, `w:insideH`, … in `w:tblBorders` /
 /// `w:tcBorders`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
