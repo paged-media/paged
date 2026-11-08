@@ -46,8 +46,8 @@ use docx_lower::ir::{
 use paged_model::script::{CharacterDirection, FontHint};
 use paged_model::{
     AnchoredFrame, AnchoredFrameKind, AnchoredLayout, AnchoredObjectSetting, Bounds, CellWidth,
-    CharacterRun, Justification, Paragraph, Table, TableCell, TableColumn, TableRow, TableWidth,
-    TextWrap, TextWrapMode, TextWrapSide, WordField, WordTableLayout,
+    CharacterRun, Justification, Paragraph, PathAnchor, Table, TableCell, TableColumn, TableRow,
+    TableWidth, TextWrap, TextWrapMode, TextWrapSide, WordField, WordTableLayout,
 };
 use paged_model::{Change, ChangeKind, Comment, FormatChange, ParaPropsChange};
 use paged_model::{
@@ -597,6 +597,7 @@ struct Minted {
     frames: usize,
     notes: usize,
     boxes: usize,
+    shapes: usize,
     /// The invented styles paragraphs keep (see `build_whole`).
     keep: std::collections::BTreeSet<String>,
     /// The stories of inline text boxes, made beside the body's.
@@ -1115,6 +1116,43 @@ fn build_whole(
         }
         para.anchored_frames.push(frame);
         minted.boxes += 1;
+    }
+    // Doc ADR 627 — a shape without text: an anchored Rectangle frame drawn
+    // along the shape's outline (engine ADR 1050, amendment 2026-11-08).
+    for sh in &p.shapes {
+        para.anchored_frame_offsets
+            .resize(para.anchored_frames.len(), 0);
+        para.anchored_frame_offsets.push(sh.at.min(chars));
+        let mut frame = AnchoredFrame {
+            frame_kind: AnchoredFrameKind::Rectangle,
+            self_id: Some(format!("docx_shape{}", minted.shapes)),
+            bounds: Some(Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: sh.height_pt,
+                right: sh.width_pt,
+            }),
+            setting: sh.anchor.as_ref().map(anchored_setting),
+            layout: anchored_layout(&sh.layout),
+            anchors: sh
+                .anchors
+                .iter()
+                .map(|a| PathAnchor {
+                    anchor: (a[0], a[1]),
+                    left: (a[2], a[3]),
+                    right: (a[4], a[5]),
+                })
+                .collect(),
+            subpath_starts: sh.starts.clone(),
+            subpath_open: sh.open.clone(),
+            ..AnchoredFrame::default()
+        };
+        // The shape's look (fill, outline, opacity, effects).
+        if let Some(fx) = &sh.fx {
+            paint_frame(&mut frame, fx, &mut minted.looks)?;
+        }
+        para.anchored_frames.push(frame);
+        minted.shapes += 1;
     }
     Ok(para)
 }

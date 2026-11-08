@@ -159,7 +159,9 @@ data each have their own lowering. Sheet and data each have their own lowering.
 
 ### Charts, data, scripting, PDF
 
-Doc has no charts (reuse `dml-chart` and the sheet engine). Slide's chart data editing carries a
+Doc has no charts (reuse `dml-chart` and the sheet engine). Not started, blocked on the doc wasm's size: after
+embedded fonts and shapes (doc ADRs 626, 627) it is 8,377,028 B of the manifest's 8,388,608 B, so a chart reader and
+drawing, or the SmartArt drawing part (`dsp`) reader, need a second wasm artifact (`wasm[]` takes several) or a raised ceiling. Slide's chart data editing carries a
 second compiled sheet engine (blocked on a host door: slide ADR 724). `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` overlap `paged-script` and `paged-cli`. PDF read has two
 hayro devices (placed PDF, pdf-import); blank IDML / OCF zip writers ×5.
@@ -349,8 +351,13 @@ Status (draw items, one line each; updated as they land):
 
 ### Reach (gaps between modules)
 
-- **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, OpenType features,
-  embedded fonts, equations. Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
+- **doc:** recolour, charts, SmartArt, OpenType features, equations. Shapes: PARTLY DONE (doc ADR 627:
+  non-text `wps:wsp` as anchored Rectangle frames drawn along their outline, 14 hand-ported presets and
+  literal custom geometry, `wps:style` completing the look; the other presets are told. `dml-geom` is not
+  linked because its 526 KB of preset XML does not fit the doc wasm's ceiling; line ends and a shape's own
+  text wrap are open). Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to
+  their `fsType` licence and given to the document-font door, as slide does; the shared part is
+  `paged_ooxml::fonts`). Drop caps are the engine's paragraph drop cap (doc ADR 624), checked
   against Word's render: a 2-line cap matches, a 3-line cap is +10 % tall and 2.1 pt wide, a following
   paragraph is not wrapped beside a cap taller than its own (known differences, in the note). Picture crop (`srcRect`) is done (doc ADR 623): the lowering sets
   the picture's placement on its anchored frame (`imageContentTransform`, engine ADR 1045's

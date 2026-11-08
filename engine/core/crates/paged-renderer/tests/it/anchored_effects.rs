@@ -424,3 +424,63 @@ fn an_anchored_picture_with_an_item_transform_is_placed_with_its_frame() {
         ]
     ));
 }
+
+/// Engine ADR 1050, amendment 2026-11-08 — an anchored frame with an outline
+/// is drawn along it, not as its box: a triangle (apex top centre) leaves the
+/// box's top corners paper, and an open two-anchor contour is stroked.
+#[test]
+#[allow(non_snake_case)]
+fn an_anchored_frame_is_drawn_along_its_outline__feat__anchored_inline_objects_anchored_effects() {
+    let anchor = |x: f32, y: f32| paged_model::PathAnchor {
+        anchor: (x, y),
+        left: (x, y),
+        right: (x, y),
+    };
+    let render_with = |outline: bool| {
+        let mut doc = document("");
+        let af = &mut doc.stories[0].story.paragraphs[0].anchored_frames[0];
+        af.image_link = None;
+        af.fill_color = Some("Color/Black".into());
+        if outline {
+            af.anchors = vec![anchor(30.0, 0.0), anchor(60.0, 60.0), anchor(0.0, 60.0)];
+            af.subpath_starts = vec![0];
+            af.subpath_open = vec![false];
+        }
+        let br = resolver();
+        let opts = PipelineOptions {
+            assets: Some(&br),
+            ..PipelineOptions::default()
+        };
+        pipeline::render_document(&doc, &opts, 72.0, Color::WHITE)
+            .unwrap()
+            .1
+            .into_iter()
+            .next()
+            .unwrap()
+    };
+    let dark = |p: &image::Rgba<u8>| p.0[0] < 60 && p.0[1] < 60;
+    let boxed = render_with(false);
+    // The box's extent on the page: the dark pixels of the plain frame.
+    let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+    for (x, y, p) in boxed.enumerate_pixels() {
+        if dark(p) {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+        }
+    }
+    assert!(
+        x1 - x0 >= 58 && y1 - y0 >= 58,
+        "the box: {x0} {y0} {x1} {y1}"
+    );
+    let tri = render_with(true);
+    let at = |img: &image::RgbaImage, dx: u32, dy: u32| *img.get_pixel(x0 + dx, y0 + dy);
+    // The box is dark at its top-left corner; the triangle is not.
+    assert!(dark(&at(&boxed, 3, 3)));
+    assert!(
+        !dark(&at(&tri, 3, 3)),
+        "the corner outside the outline is paper"
+    );
+    assert!(!dark(&at(&tri, 56, 3)));
+    // Inside the triangle: its base and the middle are filled.
+    assert!(dark(&at(&tri, 30, 50)));
+    assert!(dark(&at(&tri, 6, 56)));
+}

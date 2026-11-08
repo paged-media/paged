@@ -8331,6 +8331,23 @@ pub struct AnchoredFrame {
     /// objects keep their earlier rendering); a Word float sets it.
     #[serde(default, skip_serializing_if = "AnchoredLayout::is_unset")]
     pub layout: AnchoredLayout,
+    /// Engine ADR 1050, amendment 2026-11-08 — the outline of an anchored
+    /// Rectangle that is not its box: path anchors in the frame's own box
+    /// (`(0, 0)` at its top left, so a shape's geometry travels with the
+    /// box the anchored pass places), drawn, filled and stroked by the
+    /// renderer as the free Rectangle's Q-11 path is. Word's DrawingML
+    /// shapes (a triangle, an ellipse, a line) are such frames. Empty
+    /// (the default) is the box, and writes no key, so the `.paged` bytes
+    /// and the state hash of every other anchored frame are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<PathAnchor>,
+    /// Subpath start offsets into `anchors`; see [`Rectangle::subpath_starts`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subpath_starts: Vec<usize>,
+    /// Parallel to `subpath_starts`: an open contour is stroked, not closed
+    /// and filled. See [`Rectangle::subpath_open`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subpath_open: Vec<bool>,
 }
 
 /// Engine ADR 1050 — how a custom-positioned anchored object stands

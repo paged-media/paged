@@ -65,6 +65,8 @@ fn plain(p: &LoweredParagraph) -> Result<(), &'static str> {
         Err("picture look")
     } else if !p.text_boxes.is_empty() {
         Err("text box")
+    } else if !p.shapes.is_empty() {
+        Err("shape")
     } else if !p.segments.is_empty() {
         Err("break inside a paragraph")
     } else if p.mark_change.is_some() || p.props_change.is_some() {

@@ -96,6 +96,12 @@ export const DOC = defineMessages("doc.bundle", {
     "This editor version cannot change columns mid-page: each Word section that does opens a new page instead.",
   cannotApply: "This engine cannot apply {what}: {reason}",
   noModelField: "The document model has no field for it.",
+  noFontDoor:
+    "This host cannot give the document the fonts it embeds ({families}" +
+    "); text set in them is drawn in a substitute.",
+  fontRefused:
+    "The embedded font “{family}” ({style}" +
+    ") was not loaded: {reason}. Text set in it is drawn in a substitute.",
 });
 
 /** The menu item this bundle adds: the path stays English (it is the

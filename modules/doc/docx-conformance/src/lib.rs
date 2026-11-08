@@ -27,14 +27,17 @@ use std::io::Write;
 use zip::write::SimpleFileOptions;
 
 mod first_fit;
+mod fonts;
 mod native;
 mod objects;
 mod reach;
+mod shapes;
 mod structure;
 pub use first_fit::{
     first_fit_cases, first_fit_cases_json, first_fit_docx, FirstFitCase, CHAR_PT,
     FIRST_FIT_FULL_MEASURE_PT,
 };
+pub use fonts::{embedded_fonts_docx, font_key, EmbedFace};
 pub use native::{break_kept_body_docx, endnote_body_docx};
 pub use objects::{
     float_cases, objects_floats_docx, objects_languages_docx, objects_nested_tables_docx,
@@ -45,6 +48,7 @@ pub use reach::{
     crop_png, drop_cap_docx, drop_cap_paragraphs, picture_crop_cell_docx, picture_crop_docx,
     CELL_CROP_CASES, CROP_CASES, CROP_PNG_H, CROP_PNG_W, DROP_CAP_FILLER,
 };
+pub use shapes::{shapes_docx, SHAPE_CASES};
 pub use structure::{structure_docx, STRUCTURE_NOTES};
 
 /// Zip a set of `(name, bytes)` parts into an OPC package, in the given order.

@@ -276,10 +276,14 @@ async function open(name: string, native: boolean): Promise<Opened> {
     }
   }
   const idml = (await h.exportDocument("idml")).bytes;
+  // Doc ADR 627 — the shapes without text are drawn by the native open only
+  // (the old pour has no frame with an outline): their frames are not part of
+  // the comparison, and `shapes.spec.ts` holds them.
   const looks = zipTexts(idml, "Stories/")
     .flatMap(
       (xml) => xml.match(/<(Rectangle|TextFrame)\b[\s\S]*?<\/\1>/g) ?? [],
     )
+    .filter((xml) => !/\bSelf="docx_shape\d+"/.test(xml))
     .map(lookOf);
   return {
     h,
@@ -321,6 +325,8 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     "objects-languages.docx",
     "endnote-body.docx",
     "break-kept-body.docx",
+    "shapes.docx",
+    "embedded-fonts.docx",
   ];
 
   for (const name of FIXTURES) {

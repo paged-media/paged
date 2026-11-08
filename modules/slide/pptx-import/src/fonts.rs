@@ -38,41 +38,9 @@ use paged_ooxml::OpcPackage;
 use pptx_core::EmbeddedFont;
 use pptx_fonts::Embedding;
 
-/// What may be done with an embedded face.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FaceUse {
-    /// The document may use it and be edited: installable or editable
-    /// embedding.
-    Editable,
-    /// Licensed for preview and print only (the document must be
-    /// read-only): not used.
-    PreviewAndPrint,
-    /// Not licensed for embedding: not used.
-    Restricted,
-    /// Only the face's bitmaps may be embedded: not used.
-    BitmapOnly,
-    /// Tied to named web addresses: not used.
-    SitesOnly,
-    /// The part could not be read: not used.
-    Unreadable,
-    /// The relationship names a part the package does not hold.
-    Missing,
-}
-
-impl FaceUse {
-    /// The camelCase name the import report uses.
-    pub fn name(self) -> &'static str {
-        match self {
-            FaceUse::Editable => "editable",
-            FaceUse::PreviewAndPrint => "previewAndPrint",
-            FaceUse::Restricted => "restricted",
-            FaceUse::BitmapOnly => "bitmapOnly",
-            FaceUse::SitesOnly => "sitesOnly",
-            FaceUse::Unreadable => "unreadable",
-            FaceUse::Missing => "missing",
-        }
-    }
-}
+/// What may be done with an embedded face (shared with doc: the OOXML
+/// foundation's [`FaceUse`]).
+pub use paged_ooxml::fonts::FaceUse;
 
 /// One embedded face: a style slot of an embedded typeface.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -93,6 +93,34 @@ pub struct LoweredTextBox {
     pub fx: Option<dml_native::native::NativeFx>,
 }
 
+/// A shape that holds no text, anchored in its paragraph (doc ADR 627): an
+/// anchored Rectangle frame whose outline is the shape's.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredShape {
+    /// Where it is anchored: the paragraph's start (a float) or its
+    /// character offset (an inline shape).
+    #[serde(default)]
+    pub at: u32,
+    pub width_pt: f32,
+    pub height_pt: f32,
+    /// Its settings; `None` for an inline shape (a character of its line).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<LoweredAnchor>,
+    #[serde(default)]
+    pub layout: LoweredFloatLayout,
+    /// The outline in the shape's own box: path anchors
+    /// `[x, y, left x, left y, right x, right y]` in points.
+    pub anchors: Vec<[f32; 6]>,
+    /// Where each contour starts in `anchors`, and whether it is open
+    /// (stroked, not filled).
+    pub starts: Vec<usize>,
+    pub open: Vec<bool>,
+    /// The shape's look (fill, outline, effects).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fx: Option<dml_native::native::NativeFx>,
+}
+
 /// How text wraps around a page item: the engine's `TextWrap`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

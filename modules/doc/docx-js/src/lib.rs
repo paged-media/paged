@@ -24,6 +24,7 @@
 
 pub mod core;
 pub mod files;
+pub mod fonts;
 
 pub use crate::core::DocSession;
 pub use crate::files::{FileFormat, FileOptions, OpenReport};
@@ -306,6 +307,24 @@ mod wasm {
                 .map(|s| s.style_tokens())
                 .unwrap_or_default();
             serde_json::to_string(&tokens).unwrap_or_else(|_| "[]".into())
+        }
+
+        /// Doc ADR 626 — the faces the document embeds: the report as JSON
+        /// (`{ faces, diagnostics }`; each face says where its bytes sit)
+        /// and the bytes themselves (`embedded_font_data`).
+        pub fn embedded_fonts(&self) -> Result<String, JsValue> {
+            self.session
+                .as_ref()
+                .map(|s| s.embedded_fonts_json())
+                .ok_or_else(|| JsValue::from_str("no document loaded"))
+        }
+
+        /// The usable embedded faces, one after the other.
+        pub fn embedded_font_data(&self) -> Result<Vec<u8>, JsValue> {
+            self.session
+                .as_ref()
+                .map(|s| s.embedded_fonts().data)
+                .ok_or_else(|| JsValue::from_str("no document loaded"))
         }
 
         /// The refusal ledger of the LAST `save_edited*` call, as a JSON string
