@@ -321,6 +321,32 @@ Status (draw items, one line each; updated as they land):
   and its typed args in `registries/command.ts`; with no data door nothing can bind, so it is dead
   weight to delete next, with the `BindNotice` command text.
 
+### W9 status (2026-11-08): PDF, scripting, data leftovers
+
+- **Done:** one PDF page reader for the placed PDF and place-as-vectors (`paged-pdf-page`, engine ADR 1058); one
+  Boa sandbox, `data-script` and `data-cli` folded into `paged-data-session`, `paged data batch` (engine ADR 1059).
+- **Slide handout PDF (`slide-output/pdf.rs`): stays its own writer, for now.** It is 70 lines of object
+  serialisation (classic xref, one Helvetica Type1 font, RGB Flate image XObjects) under the handout layouts, which
+  stay in slide. `paged-export-pdf` is a display-list backend (subset CID fonts, ICC, PDF/X); moving the handouts
+  onto it means building a display list of image and Helvetica text commands, and the bytes change (object order,
+  font object, no `/Info` title string form), with no visible gain; the tests pin the structure, not a golden. The
+  profitable change is the other way round: a `pdf-writer`-based `serialize` (the crate `paged-export-pdf` already
+  builds on) would drop the hand-written xref, but it is a byte change for nothing the user sees. Open, not
+  blocked. The host `ExportPdfDialog` and the bundle's `exportPdf` already share the engine's `exportPdfBegin`
+  options (`ExportPdfWireOptions`); a shared host service would only move the option defaults, so it was not made.
+- **Illustrator graph data:** stays carried, data ADR 565 (no chart item in the engine, opaque payload, no charts
+  in doc).
+- **Barcode insert in doc and slide:** open. The encoder (`paged-data-barcode`) is in the data wasm behind
+  `lower_barcode(binding, box)`; an insert command needs either that engine call without a binding or the encoder
+  in the doc and slide wasm, plus the Insert-menu row and German strings. Not started.
+- **CLI data verbs onto `data@1`:** open, and smaller than it looked. `data@1` has `query(sql)`, `bind` and
+  `bindings`; it has no `importSource`, `merge`, `planBatch` or `apply`, which are most of `apps/cli/src/data.ts`.
+  Only `previewQuery` (-> `query`, a different row shape and no `total`) and `defineProperty` (-> `bind`, property
+  bindings only) have door equivalents. Moving them splits the verbs across two doors for two calls; do it together
+  with `importSource`/`merge`/`apply` moving into the door.
+- **Publish preflight-fix actions:** open. `media.paged.publish.preflight` answers findings; a fix is an
+  `actions@1` step per finding kind, which needs the finding kinds to carry an addressable target first.
+
 ### Reach (gaps between modules)
 
 - **doc:** shapes (`dml-geom`), recolour, charts, SmartArt, OpenType features,
