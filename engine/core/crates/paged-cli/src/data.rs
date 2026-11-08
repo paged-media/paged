@@ -174,6 +174,29 @@ fn rows(recipe: &RestoredRecipe) -> Vec<BindingRow> {
         .collect()
 }
 
+/// `paged data batch`: a headless batch job (`data_session::batch::Job`,
+/// spec §10) from `job` (`-` is stdin) through the engine the editor uses; the
+/// per-document lowered IR is printed as JSON. It was the module's separate
+/// `paged-data-batch` binary (ADR 1059).
+pub fn batch_job(job: &Path) -> Result<()> {
+    use std::io::Read;
+    let input = if job == Path::new("-") {
+        let mut s = String::new();
+        std::io::stdin()
+            .read_to_string(&mut s)
+            .context("cannot read stdin")?;
+        s
+    } else {
+        std::fs::read_to_string(job).with_context(|| format!("cannot read '{}'", job.display()))?
+    };
+    let job: data_session::batch::Job =
+        serde_json::from_str(&input).map_err(|e| anyhow!("invalid job JSON: {e}"))?;
+    let out = data_session::batch::run_job(job).map_err(|e| anyhow!(e))?;
+    eprintln!("generated {} document(s)", out.document_count);
+    println!("{}", serde_json::to_string_pretty(&out)?);
+    Ok(())
+}
+
 /// `paged data bindings DOC`.
 pub fn bindings(doc: &Path, assets: &DocumentOptions, json: bool) -> Result<()> {
     let mut session = Session::new();

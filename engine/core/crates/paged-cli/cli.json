@@ -5066,6 +5066,28 @@
       "name": "data",
       "subcommands": [
         {
+          "about": "Run a batch job headless: a JSON job (the binding recipe, the pre-materialized query results, the run mode and the frame chain) goes through the engine the editor uses, and the per-document lowered IR comes out as JSON",
+          "args": [
+            {
+              "defaults": [],
+              "help": "The job file, or `-` for stdin",
+              "long": null,
+              "name": "job",
+              "positional": true,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "JOB"
+              ]
+            }
+          ],
+          "longAbout": null,
+          "name": "batch",
+          "subcommands": []
+        },
+        {
           "about": "The bindings the document's labels carry, with the object each writes and the source files the recipe asks for",
           "args": [
             {

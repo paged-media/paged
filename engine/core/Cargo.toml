@@ -79,8 +79,6 @@ members = [
     "../../modules/draw/crates/draw-dxf",
     "../../modules/draw/crates/trace-js",
     "../../modules/data/data-js",
-    "../../modules/data/data-cli",
-    "../../modules/data/data-script",
     "../../modules/data/data-conformance",
     "../../modules/image/image-kernels",
     "../../modules/image/image-gpu",

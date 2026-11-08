@@ -27,27 +27,27 @@
 
 - id: data.automation.cli
   title: Headless batch CLI — drive a batch run server/CI from a JSON job (§10)
-  spec: plugin-data data-cli (base-idea §10, D-7)
+  spec: plugin-data batch runner (base-idea §10, D-7)
   status: implemented
   provenance:
     [
-      "plain-Rust binary (paged-data-batch) + run_job lib over the SAME engine the editor uses; reads recipe + pre-materialized results + a frame chain, emits the per-document lowered IR; query engine NOT embedded (§3); napi-rs node binding is a future packaging option over run_job",
+      "`paged data batch` (the engine CLI) + run_job in paged-data-session over the SAME engine the editor uses; reads recipe + pre-materialized results + a frame chain, emits the per-document lowered IR; query engine NOT embedded (§3); napi-rs node binding is a future packaging option over run_job",
     ]
   tests:
-    rust: ["data-cli/src/lib.rs::data_automation_cli"]
+    rust: ["engine:paged-data-session/src/batch.rs::data_automation_cli"]
 
 - id: data.automation.native
   title: napi-rs node binding — call the batch runner as a native Node library (§10)
-  spec: plugin-data (base-idea §10, D-7 — a future packaging option over data-cli's run_job)
+  spec: plugin-data (base-idea §10, D-7 — a future packaging option over run_job)
   status: planned
 
 - id: data.automation.script
   title: Constrained Boa scripting surface — scriptable queries + templated runs (§10)
-  spec: plugin-data data-script (base-idea §10 — capability-gated)
+  spec: plugin-data script surface (base-idea §10 — capability-gated)
   status: implemented
   provenance:
     [
-      "sandboxed Boa (Rust JS); the script COMPUTES + RETURNS a build spec ({locale?,params?,build?}) — handed no host functions, so no fs/network/engine access (return-a-value, not call-the-host); consumed by data-cli (an optional job.script)",
+      "sandboxed Boa (Rust JS); the script COMPUTES + RETURNS a build spec ({locale?,params?,build?}) — handed no host functions, so no fs/network/engine access (return-a-value, not call-the-host); consumed by the batch runner (an optional job.script)",
     ]
   tests:
-    rust: ["data-script/src/lib.rs::data_automation_script"]
+    rust: ["engine:paged-data-session/src/script.rs::data_automation_script"]

@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.data's session (PM-0015): the plain-Rust DataSession that joins the data crates (sources, queries, the store, bindings, sync, lowering, batch), and the bindings a document carries in its labels (core ADR 1014). The wasm surface (modules/data/data-js), the module's CLI and its script surface wrap it; the engine's CLI resolves a document's bindings through it."
+description = "paged.data's session (PM-0015): the plain-Rust DataSession that joins the data crates (sources, queries, the store, bindings, sync, lowering, batch), and the bindings a document carries in its labels (core ADR 1014). The wasm surface (modules/data/data-js) wraps it; it holds the module's batch runner (`paged data batch`) and constrained script surface (ADR 1059); the engine's CLI resolves a document's bindings through it."
 
 [lib]
 name = "data_session"

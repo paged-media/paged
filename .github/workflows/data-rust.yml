@@ -81,7 +81,7 @@ on:
 permissions:
   contents: read
 
-# data-js, data-cli, data-script and data-conformance are members of the engine's
+# data-js and data-conformance are members of the engine's
 # Cargo workspace (docs/development/one-workspace.md): cargo runs in engine/core
 # and selects crates with -p.
 defaults:
@@ -107,8 +107,8 @@ jobs:
           prefix-key: v0-rust-data
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo fmt -p data-js -p data-cli -p data-script -p data-conformance --check
-      - run: cargo clippy -p data-js -p data-cli -p data-script -p data-conformance --all-targets -- -D warnings
+      - run: cargo fmt -p data-js -p data-conformance --check
+      - run: cargo clippy -p data-js -p data-conformance --all-targets -- -D warnings
       # Each guard fails explicitly: bash's errexit ignores a `!`-negated
       # command. The data-expr guard moved with the crate to core / ci
       # (paged-data-expr, PM-0015).
@@ -145,7 +145,7 @@ jobs:
       # The module's crates and the engine-level data crates
       # (engine/core/crates/paged-data-*) are one workspace, one run, one junit.
       - name: nextest (junit)
-        run: cargo nextest run --profile ci --no-fail-fast --no-tests=fail -p data-js -p data-cli -p data-script -p data-conformance -p paged-data-core -p paged-data-expr -p paged-data-query -p paged-data-bind -p paged-data-lower -p paged-data-barcode -p paged-data-dataset -p paged-data-sources -p paged-data-store -p paged-data-xlsx -p paged-data-automation -p paged-data-session -p paged-action
+        run: cargo nextest run --profile ci --no-fail-fast --no-tests=fail -p data-js -p data-conformance -p paged-data-core -p paged-data-expr -p paged-data-query -p paged-data-bind -p paged-data-lower -p paged-data-barcode -p paged-data-dataset -p paged-data-sources -p paged-data-store -p paged-data-xlsx -p paged-data-automation -p paged-data-session -p paged-action
       # The §12.2 invariant, both halves: every `implemented` registry row
       # names a test that exists, AND (with --junit) that test ran in the
       # nextest run above and passed. An #[ignore]d skeleton or a red test is

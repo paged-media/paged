@@ -56,18 +56,18 @@ fileGroups:
 # crates with -p.
 tasks:
   rust-fmt:
-    script: "cd ../../engine/core && cargo fmt -p data-js -p data-cli -p data-script -p data-conformance --check"
+    script: "cd ../../engine/core && cargo fmt -p data-js -p data-conformance --check"
   rust-check:
-    script: "cd ../../engine/core && cargo check -p data-js -p data-cli -p data-script -p data-conformance --all-targets"
+    script: "cd ../../engine/core && cargo check -p data-js -p data-conformance --all-targets"
   rust-lint:
-    script: "cd ../../engine/core && cargo clippy -p data-js -p data-cli -p data-script -p data-conformance --all-targets -- -D warnings"
+    script: "cd ../../engine/core && cargo clippy -p data-js -p data-conformance --all-targets -- -D warnings"
   rust-test:
     script: >-
       cd ../../engine/core
-      && cargo nextest run -p data-js -p data-cli -p data-script -p data-conformance
-      && cargo test --doc -p data-js -p data-cli -p data-script -p data-conformance
+      && cargo nextest run -p data-js -p data-conformance
+      && cargo test --doc -p data-js -p data-conformance
   rust-build:
-    script: "cd ../../engine/core && cargo build -p data-js -p data-cli -p data-script -p data-conformance"
+    script: "cd ../../engine/core && cargo build -p data-js -p data-conformance"
 
   js-test:
     # data-vitest.yml builds the engine wasm (the query store is inside it)

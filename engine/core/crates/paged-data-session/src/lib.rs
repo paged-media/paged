@@ -29,8 +29,10 @@
 //! labels and its document label (core ADR 1014): the recipe a document
 //! keeps through an InDesign save, rebuilt without the module.
 
+pub mod batch;
 pub mod columns;
 pub mod core;
 pub mod labels;
 pub mod record_status;
 pub mod review;
+pub mod script;

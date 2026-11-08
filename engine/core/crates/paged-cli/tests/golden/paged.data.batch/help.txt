@@ -1,0 +1,14 @@
+$ paged data batch --help
+--- exit: 0
+--- stdout
+Run a batch job headless: a JSON job (the binding recipe, the pre-materialized query results, the run mode and the frame chain) goes through the engine the editor uses, and the per-document lowered IR comes out as JSON
+
+Usage: paged data batch <JOB>
+
+Arguments:
+  <JOB>  The job file, or `-` for stdin
+
+Options:
+  -h, --help  Print help
+--- stderr
+(empty)

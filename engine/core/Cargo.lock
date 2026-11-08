@@ -1353,19 +1353,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "data-cli"
-version = "0.0.0"
-dependencies = [
- "data-js",
- "data-script",
- "paged-data-automation",
- "paged-data-core",
- "paged-data-lower",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "data-conformance"
 version = "0.0.0"
 dependencies = [
@@ -1403,18 +1390,6 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "data-script"
-version = "0.0.0"
-dependencies = [
- "data-js",
- "paged-action",
- "paged-data-automation",
- "paged-data-core",
- "serde",
- "serde_json",
 ]
 
 [[package]]

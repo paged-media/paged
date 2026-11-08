@@ -335,39 +335,20 @@ fn push_output(line: String) {
 /// boundaries. See `ScriptBudget` for the full mechanism + the precise
 /// wasm wall-clock guarantee.
 fn budgeted_context(budget: &ScriptBudget) -> Context {
-    // v71 — the bridge runs promise jobs, and Boa's job loop reads the
-    // context clock; its default (`StdClock`, `SystemTime::now`) panics on
-    // wasm32-unknown-unknown. A fixed clock: no timer jobs are ever queued
-    // (scripts have no setTimeout), and the wall-clock budget has its own
-    // host-injected clock.
-    #[cfg(target_arch = "wasm32")]
-    let builder = Context::builder().clock(Rc::new(FixedClock));
-    #[cfg(not(target_arch = "wasm32"))]
-    let builder = Context::builder();
-    let mut ctx = builder.build().expect("a Boa context builds");
-    let mut limits = boa_engine::vm::RuntimeLimits::default();
-    limits.set_loop_iteration_limit(budget.loop_iterations);
-    limits.set_recursion_limit(budget.recursion_depth);
-    limits.set_stack_size_limit(budget.stack_size);
-    ctx.set_runtime_limits(limits);
-    ctx
-}
-
-/// See `budgeted_context`.
-#[cfg(target_arch = "wasm32")]
-struct FixedClock;
-
-#[cfg(target_arch = "wasm32")]
-impl boa_engine::context::time::Clock for FixedClock {
-    fn now(&self) -> boa_engine::context::time::JsInstant {
-        boa_engine::context::time::JsInstant::new(0, 0)
-    }
-
-    /// `Date` reads this since Boa 0.22 (it read `now` before): the epoch,
-    /// as before.
-    fn system_time_millis(&self) -> i64 {
-        0
-    }
+    // The engine's one sandbox (core ADR 1015, ADR 1059). On wasm the clock
+    // is fixed (v71: the bridge runs promise jobs, and Boa's job loop reads
+    // the context clock; its default panics on wasm32-unknown-unknown); no
+    // timer jobs are ever queued (scripts have no setTimeout), and the
+    // wall-clock budget has its own host-injected clock. Native keeps Boa's.
+    paged_action::js::sandbox_context(paged_action::js::Sandbox {
+        budget: paged_action::js::JsBudget {
+            loop_iterations: budget.loop_iterations,
+            recursion_depth: budget.recursion_depth,
+        },
+        stack_size: Some(budget.stack_size),
+        fixed_clock: cfg!(target_arch = "wasm32"),
+    })
+    .expect("a Boa context builds")
 }
 
 /// Run `source` against the given `CanvasModel` with the default

@@ -1,0 +1,6 @@
+$ paged data batch bad.json
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: invalid job JSON: key must be a string at line 1 column 3

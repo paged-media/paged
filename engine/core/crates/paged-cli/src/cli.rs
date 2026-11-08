@@ -393,6 +393,14 @@ pub enum Command {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum DataCommand {
+    /// Run a batch job headless: a JSON job (the binding recipe, the
+    /// pre-materialized query results, the run mode and the frame chain)
+    /// goes through the engine the editor uses, and the per-document
+    /// lowered IR comes out as JSON.
+    Batch {
+        /// The job file, or `-` for stdin.
+        job: PathBuf,
+    },
     /// The bindings the document's labels carry, with the object each
     /// writes and the source files the recipe asks for.
     Bindings {
