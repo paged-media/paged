@@ -12,7 +12,7 @@
 # MONOREPO (step A3): ported from paged-media/editor .github/workflows/
 # showcase-nightly.yml; schedule + dispatch only, so no path filters.
 #
-# macos-14, not ubuntu: the image chapter's kernels are GPU-only WGSL,
+# macOS (macos-latest, Apple silicon; macos-14 is no longer offered), not ubuntu: the image chapter's kernels are GPU-only WGSL,
 # and the Linux runners expose no WebGPU adapter — chapter 070 would
 # permanently degrade to notes. Apple silicon + Metal + real Chrome in
 # new-headless is the same lane the journeys-gpu project uses locally.
@@ -40,7 +40,7 @@ defaults:
 jobs:
   build-annual:
     name: build the reference document (macOS, WebGPU)
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 180
     steps:
       # One checkout of the repository: editor (apps/editor) and engine
