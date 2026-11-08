@@ -5295,6 +5295,7 @@ dependencies = [
  "dml-geom",
  "flate2",
  "image-webp",
+ "paged-math",
  "paged-ooxml",
  "serde",
  "serde_json",
@@ -6650,6 +6651,7 @@ version = "0.0.0"
 dependencies = [
  "dml-geom",
  "paged-geom",
+ "paged-math",
  "paged-ooxml",
  "paged-test-resources",
  "pptx-core",

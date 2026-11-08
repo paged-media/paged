@@ -194,9 +194,49 @@ pub fn run_props(el: &El, ctx: &Ctx) -> RunProps {
     }
 }
 
+/// The equation `el` is: an `a14:m` (any `m:` child of it), or an
+/// `mc:AlternateContent` whose choice holds one.
+pub(crate) fn equation(el: &El) -> Option<pptx_core::Math> {
+    if el.is(Ns::Mc, "AlternateContent") {
+        let (choice, _) = paged_ooxml::tree::alternate(el);
+        return choice?.children.iter().find_map(equation);
+    }
+    if el.local != "m" || el.ns == Ns::A || el.ns == Ns::M {
+        return None;
+    }
+    el.children.iter().find_map(|c| {
+        if c.is(Ns::M, "oMathPara") {
+            Some(paged_ooxml::omml::as_one(paged_ooxml::omml::read_para(c)))
+        } else if c.is(Ns::M, "oMath") {
+            Some(paged_ooxml::omml::read_math(c, false))
+        } else {
+            None
+        }
+    })
+}
+
+/// Whether anything under `el` is an equation (`a14:m`): a shape whose
+/// `mc:Choice` holds one is read from the choice, not from its fallback
+/// picture.
+pub(crate) fn holds_equation(el: &El) -> bool {
+    equation(el).is_some() || el.children.iter().any(holds_equation)
+}
+
 fn paragraph(el: &El, ctx: &Ctx) -> Paragraph {
     let mut runs = Vec::new();
     for c in &el.children {
+        // Engine ADR 1090 — an equation: `a14:m`, alone or as the choice of
+        // an `mc:AlternateContent` whose fallback is its text or picture.
+        if let Some(math) = equation(c) {
+            runs.push(Run {
+                kind: RunKind::Math(math),
+                props: c
+                    .child(Ns::A, "rPr")
+                    .map(|r| run_props(r, ctx))
+                    .unwrap_or_default(),
+            });
+            continue;
+        }
         if c.ns != Ns::A {
             continue;
         }
@@ -238,5 +278,39 @@ fn paragraph(el: &El, ctx: &Ctx) -> Paragraph {
             .unwrap_or_default(),
         runs,
         end_props: el.child(Ns::A, "endParaRPr").map(|r| run_props(r, ctx)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const NS: &str = r#"xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006""#;
+
+    fn parsed(xml: &str) -> El {
+        crate::xml::parse(xml.as_bytes()).expect("parses")
+    }
+
+    #[test]
+    fn an_a14_math_paragraph_is_one_display_equation() {
+        let p = parsed(&format!(
+            r#"<a:p {NS}><a14:m><m:oMathPara><m:oMath><m:r><m:t>x=1</m:t></m:r></m:oMath></m:oMathPara></a14:m></a:p>"#
+        ));
+        let m = equation(&p.children[0]).expect("an equation");
+        assert!(m.display);
+        assert!(holds_equation(&p));
+    }
+
+    #[test]
+    fn the_choice_of_alternate_content_is_the_equation_not_its_fallback() {
+        let p = parsed(&format!(
+            r#"<a:p {NS}><mc:AlternateContent><mc:Choice Requires="a14"><a14:m><m:oMath><m:r><m:t>y</m:t></m:r></m:oMath></a14:m></mc:Choice><mc:Fallback><a:r><a:t>y</a:t></a:r></mc:Fallback></mc:AlternateContent><a:r><a:t>z</a:t></a:r></a:p>"#
+        ));
+        let m = equation(&p.children[0]).expect("the choice's equation");
+        assert!(!m.display);
+        // A text run is no equation; nor is a paragraph without one.
+        assert!(equation(&p.children[1]).is_none());
+        let plain = parsed(&format!(r#"<a:p {NS}><a:r><a:t>z</a:t></a:r></a:p>"#));
+        assert!(!holds_equation(&plain));
     }
 }

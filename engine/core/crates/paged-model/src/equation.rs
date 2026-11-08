@@ -39,4 +39,9 @@ pub struct Equation {
     /// end.
     pub offset: u32,
     pub math: Math,
+    /// The size the equation is set at, pt, when its source states one (a
+    /// slide's math runs carry theirs); `None` takes the size of the run it
+    /// stands in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point_size: Option<f32>,
 }

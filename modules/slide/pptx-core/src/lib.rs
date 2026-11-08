@@ -39,6 +39,8 @@ pub mod chart;
 pub use paged_ooxml::media;
 pub mod transcode;
 
+/// The math tree of an equation (engine ADR 1090).
+pub use paged_math::Math;
 use serde::{Deserialize, Serialize};
 
 /// English Metric Units: 914 400 per inch, 12 700 per point.
@@ -831,6 +833,9 @@ pub enum RunKind {
         kind: Option<String>,
         text: String,
     },
+    /// An equation (`a14:m` holding `m:oMathPara` / `m:oMath`), engine ADR
+    /// 1090: read by the shared OMML reader.
+    Math(Math),
 }
 
 /// `a:rPr` / `a:defRPr` / `a:endParaRPr` — every field optional.

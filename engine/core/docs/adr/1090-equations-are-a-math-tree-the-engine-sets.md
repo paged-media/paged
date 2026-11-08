@@ -2,8 +2,8 @@
 
 - **Status:** Accepted 2026-11-08; **slice 1 built** (the tree, its layout and the shared OMML
   reader, with tests); **slice 2 built** (Amendment 1: the model, the renderer's metrics and
-  paint, doc import). Open, in this order: slide import, the Word-oracle comparison, equations
-  in table cells, a wire door (insert/edit), MathML, write-back. Part of the capability layering
+  paint, doc and slide import). Open, in this order: the Word-oracle comparison, equations in
+  table cells, a wire door (insert/edit), MathML, write-back. Part of the capability layering
   of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Equations").
 - **Scope:** `paged-math` (new leaf crate: `model`, `layout`); `paged-ooxml::omml` (the shared
@@ -174,12 +174,23 @@ has no `w:r` and is no run of the lowering, so the save-back's run bindings are 
 test edits the run beside an inline equation and holds the equations' markup and the paragraphs
 after it to their bytes.
 
+**Slide import.** PowerPoint writes an equation's shape as an `mc:AlternateContent` whose
+choice holds the text with `a14:m` and whose fallback is a picture of the equation. The reader
+(`pptx-import`) now takes the choice of a shape that holds an equation (any other alternate
+content still takes its fallback), and reads an `a14:m` (alone or as the choice of a paragraph's
+alternate content) through the shared OMML reader into `pptx_core::RunKind::Math`; the resolver
+carries it on its `TextRun` (`math`), and `slide-native` puts it on the model paragraph at its
+character, with its run's size (`Equation::point_size`, which a source states when it has one).
+A slide nobody edited is written back as the deck had it (slide ADR 704), so its bytes hold.
+
 **Verification.** `paged-math` (layout invariants, the alphabet's holes), `paged-ooxml`
 (`in_part`: order, the fallback, a two-line display paragraph), the renderer
 (`tests/it/equations_pipeline.rs`: the text after an inline fraction moves by its width, the bar
 is TeX's rule on the axis at the pen, the glyphs are drawn, a display fraction grows its line),
 doc (`docx-conformance` `equations.rs`: the runs, the lowering's offsets, the byte-identical
-edit; `docx-skeleton` `equations.rs`: the model paragraphs). **Not verified:** any match to
+edit; `docx-skeleton` `equations.rs`: the model paragraphs), slide (`pptx-import` unit tests:
+an `a14:m` paragraph, the choice over the fallback). Slide's resolver and native builder are
+held by the compiler only: no deck fixture with an equation is committed yet. **Not verified:** any match to
 Word's rendering. No fixture in the repository carries Word's picture of an equation (Word
 writes no fallback image for `m:oMath` in a `.docx`), and no math face is committed, so the
 public gate sets equations in a text face at TeX's constants; the `MATH`-table path is exercised

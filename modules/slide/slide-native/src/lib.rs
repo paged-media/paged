@@ -1822,7 +1822,18 @@ impl Builder<'_> {
                 None => {}
             }
             // An empty paragraph's line is its size alone: no run.
+            let mut chars = 0u32;
             for r in &p.runs {
+                // Engine ADR 1090 — an equation stands at its character, at
+                // the size of its own run.
+                if let Some(math) = &r.math {
+                    para.equations.push(paged_model::equation::Equation {
+                        offset: chars,
+                        math: math.clone(),
+                        point_size: (r.size > 0.0).then(|| n(r.size)),
+                    });
+                    continue;
+                }
                 let color = self.run_color(r.rgb, r.theme.as_deref());
                 let (font, character_style) = match r.theme_font.as_deref() {
                     Some(f) if Some(f) == root_font => (None, NO_CHAR_STYLE),
@@ -1845,6 +1856,7 @@ impl Builder<'_> {
                 if text.is_empty() {
                     continue;
                 }
+                chars += text.chars().count() as u32;
                 let tracking = if r.size > 0.0 {
                     r.tracking / r.size * 1000.0
                 } else {

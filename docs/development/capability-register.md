@@ -148,8 +148,9 @@ through a `MathMetrics` seam; `paged_ooxml::omml` is the one OMML reader for doc
 `m:oMathPara`, transitional and strict; `in_part` for an importer's walk). The model holds an equation as an
 inline object of its paragraph (`Paragraph.equations`); the renderer's one metrics adapter and paint are
 `paged-renderer` `pipeline/equations.rs` (math face, OpenType `MATH` constants, the math alphabet
-`paged_math::alphabet`); doc imports through the native builder. Open: slide import, equations in table cells,
-a wire door, the Word-oracle comparison. Text envelope (engine ADR 1091, slice 1 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
+`paged_math::alphabet`); doc imports through the native builder, slide through `pptx-import` (the choice of an
+equation's alternate content) and `slide-native`. Open: equations in table cells, a wire door, the Word-oracle
+comparison. Text envelope (engine ADR 1091, slice 1 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
 adjusts) for doc, slide and sheet; the guides (`paged-warp`), the frame's model and the render pass are open.
 ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
 provider); a matting job in `apps/ml-host` and Tier-A matting models are open.

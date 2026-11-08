@@ -152,7 +152,11 @@ pub(super) fn set_equations(
         let host = host_run(paragraph, eq.offset);
         let default_run = paged_model::CharacterRun::default();
         let resolved = document.resolved_run_attrs(paragraph, host.unwrap_or(&default_run));
-        let size = resolved.point_size.unwrap_or(12.0).max(0.1);
+        let size = eq
+            .point_size
+            .or(resolved.point_size)
+            .unwrap_or(12.0)
+            .max(0.1);
         let Some(face) = math_face(
             table,
             resolved.font.as_deref(),

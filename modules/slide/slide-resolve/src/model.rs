@@ -334,6 +334,9 @@ pub struct TextRun {
     /// `a:fld type` (`slidenum`, `datetime1`, …); `text` holds the value
     /// PowerPoint last computed.
     pub field: Option<String>,
+    /// An equation standing here (engine ADR 1090); `text` is empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub math: Option<paged_math::Math>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

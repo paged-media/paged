@@ -130,6 +130,7 @@ fn an_equation_takes_its_width_in_the_line_and_draws_its_bar() {
     story.story.paragraphs[0].equations.push(Equation {
         offset: 0,
         math: fraction(),
+        point_size: None,
     });
     let after = build(&doc);
     let (x_after, baseline_after) = first_a(&after);
@@ -197,6 +198,7 @@ fn a_display_equation_rises_its_line() {
     story.story.paragraphs[0].equations.push(Equation {
         offset: 1,
         math: tall,
+        point_size: None,
     });
     let plain = build(&document());
     let built = build(&doc);

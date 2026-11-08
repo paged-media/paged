@@ -811,7 +811,7 @@ fn build_parts(
             if e.offset >= from && (e.offset < to || (last && e.offset == to)) {
                 part.equations.push(Equation {
                     offset: e.offset - from,
-                    math: e.math.clone(),
+                    ..e.clone()
                 });
             }
         }
@@ -1074,6 +1074,7 @@ fn build_whole(
         para.equations.push(Equation {
             offset: eq.at.min(chars),
             math: eq.math.clone(),
+            point_size: None,
         });
     }
     if chars == 0 && !para.equations.is_empty() && para.equations.iter().all(|e| e.math.display) {
