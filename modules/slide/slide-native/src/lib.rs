@@ -1954,7 +1954,9 @@ pub fn slide_key(it: &Item) -> String {
 pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) -> Built {
     let mut w = Builder {
         images,
-        dml: Mapper::with_theme_keys(&deck.theme_colors, theme_namer),
+        dml: Mapper::with_theme_keys(&deck.theme_colors, theme_namer)
+            .alpha_stops()
+            .pattern_swatches(),
         stories: Vec::new(),
         story_of: BTreeMap::new(),
         para_styles: BTreeSet::new(),
@@ -2187,6 +2189,9 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
     }
     for g in w.dml.palette.gradient_entries() {
         palette.gradients.insert(g.self_id.clone(), g);
+    }
+    for p in w.dml.palette.pattern_entries() {
+        palette.patterns.insert(p.self_id.clone(), p);
     }
     palette.swatches.insert(
         NONE_SWATCH.into(),

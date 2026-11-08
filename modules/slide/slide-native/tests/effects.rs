@@ -108,14 +108,16 @@ fn alpha_stops_patterns_and_dashes_open_as_powerpoint_draws_them__feat__plugin_s
 ) {
     let (doc, diagnostics) = built();
     let a = shape(&doc, "alpha gradient");
-    let gf = a
+    // A fade is the swatch's opacity stops (engine ADR 1007), not a gradient
+    // feather on the item.
+    assert!(a
         .effects
         .as_ref()
-        .and_then(|e| e.gradient_feather.clone())
-        .expect("feather");
+        .is_none_or(|e| e.gradient_feather.is_none()));
+    let g = &doc.palette.gradients[a.fill_color.as_deref().expect("gradient fill")];
     assert_eq!(
-        gf.stops.iter().map(|s| s.alpha_pct).collect::<Vec<_>>(),
-        [100.0, 10.0]
+        g.stops.iter().map(|s| s.opacity_pct).collect::<Vec<_>>(),
+        [Some(100.0), Some(10.0)]
     );
     let r = shape(&doc, "radial gradient");
     assert!(r.fill_color.as_deref().unwrap().starts_with("Gradient/"));

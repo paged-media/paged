@@ -30,15 +30,18 @@
 //! - **Fills** ([`Mapper::paint`], [`placement`]): a solid colour; a linear
 //!   gradient's angle and span as PowerPoint runs it (across the box
 //!   projected on its direction); a radial one's centre and reach; a
-//!   pattern as the mix of its two colours (the engine has no pattern
-//!   paint yet: reported), or, for a module that places pictures, as a
-//!   picture of its tiles ([`pattern`], [`Mapper::pattern_tile`]).
+//!   pattern as the mix of its two colours (reported), as a pattern swatch
+//!   of its 8 x 8 pt cell for a module that keeps them
+//!   ([`Mapper::pattern_swatches`], engine ADR 1041; opaque colours only),
+//!   or, for a module that places pictures, as a picture of its tiles
+//!   ([`pattern`], [`Mapper::pattern_tile`]).
 //! - **Strokes** ([`Mapper::stroke`]): weight, compound lines as stroke
 //!   styles, preset and custom dashes as per-item dash patterns, caps,
 //!   joins, the miter limit, inside alignment and arrowheads.
 //! - **Transparency and effects** ([`Mapper::transparency`]): the item
-//!   opacity; a gradient whose stops differ in alpha as a gradient feather
-//!   (gradient swatches carry no alpha); the outer shadow as the drop
+//!   opacity; a gradient whose stops differ in alpha as the swatch's opacity
+//!   stops for a module that keeps them ([`Mapper::alpha_stops`], engine ADR
+//!   1007), else as a gradient feather; the outer shadow as the drop
 //!   shadow; the inner shadow, glow and soft edge as `FrameEffects`; a
 //!   preset shadow as a plain drop shadow; the fill overlay, blur and
 //!   reflection as the item's ordered effect stack (engine ADR 1008:
@@ -50,8 +53,8 @@
 //!   and (given the picture's pixel density) `a:blur` as the image
 //!   frame's filter stack (engine ADR 1037); the Office 2010 corrections
 //!   and artistic effects are already in the image Office stored; a
-//!   colour change and a tint, which have no equivalent op, are
-//!   reported.
+//!   colour change and a tint, which have no equivalent op (the filter
+//!   stack has no colour-replace), are reported.
 //! - **Fill rule** ([`Mapper::fill_rule`]): PowerPoint fills each
 //!   `a:path` even-odd; an outline where that differs from non-zero takes
 //!   the even-odd rule (engine ADR 1006).
@@ -82,8 +85,9 @@ use paged_model::effect_stack::{
 use paged_model::{
     ArrowheadType, BevelEmbossParams, ColorEntry, ColorModel, ColorSpace, DropShadowSetting,
     FeatherParams, FillRule, FrameEffects, GradientEntry, GradientFeatherParams,
-    GradientFeatherStop, GradientKind, GradientStopRef, InnerShadowParams, OuterGlowParams,
-    PathAnchor, RasterOp,
+    GradientFeatherStop, GradientKind, GradientStopRef, InlineStopColor, InnerShadowParams,
+    OuterGlowParams, PathAnchor, PatternColor, PatternEntry, PatternItem, PatternLayout,
+    PatternPlacement, RasterOp,
 };
 pub use paged_ooxml::drawingml::resolved::{
     radial_reach, BevelSide, Blur, Effects, FillOverlay, Glow, ImageEffect, Paint, PatternPaint,
@@ -165,8 +169,9 @@ pub fn axis_start(p: &Placement, w: f64, h: f64) -> Option<[f32; 2]> {
     Some([pt(w / 2.0 - half * cs), pt(h / 2.0 + half * sn)])
 }
 
-/// A gradient swatch: id, kind, (location %, colour id) stops.
-type GradientSwatch = (String, GradientKind, Vec<(f64, String)>);
+/// A gradient swatch: id, kind, (location %, colour id, opacity 0-1 when
+/// the stop carries one) stops.
+type GradientSwatch = (String, GradientKind, Vec<(f64, String, Option<f64>)>);
 
 /// How a document names the theme colour a solid paint keeps
 /// (`Paint::Solid::theme`): its swatch id and name, or `None` for a key it
@@ -184,6 +189,14 @@ pub struct Palette {
     named: BTreeMap<String, (String, Rgb)>,
     /// In minting order.
     gradients: Vec<GradientSwatch>,
+    /// Stops that differ in alpha keep it as the swatch's opacity stops
+    /// (engine ADR 1007) instead of leaving it to a gradient feather.
+    alpha_stops: bool,
+    /// Pattern swatches (engine ADR 1041), in minting order: id, preset,
+    /// foreground, background.
+    patterns: Vec<(String, String, Rgb, Rgb)>,
+    /// A fully opaque pattern paint becomes a pattern swatch.
+    pattern_swatches: bool,
 }
 
 impl Palette {
@@ -194,6 +207,116 @@ impl Palette {
             theme_names: theme_colors.iter().map(|(k, c)| (*c, k.clone())).collect(),
             ..Palette::default()
         }
+    }
+
+    /// A palette whose opaque pattern paints become pattern swatches
+    /// (engine ADR 1041) rather than the mix of their colours.
+    pub fn with_pattern_swatches(mut self) -> Self {
+        self.pattern_swatches = true;
+        self
+    }
+
+    /// The pattern swatch of `pp` (`Pattern/pN`): `None` unless this
+    /// palette keeps pattern swatches, the preset is known and both colours
+    /// are opaque (a tile item paints a colour, which carries no alpha).
+    pub fn pattern(&mut self, pp: &PatternPaint) -> Option<String> {
+        let opaque = |a: f64| a >= 0.999;
+        if !self.pattern_swatches
+            || pattern::cell(&pp.preset).is_none()
+            || !opaque(pp.fg_alpha)
+            || !opaque(pp.bg_alpha)
+        {
+            return None;
+        }
+        if let Some((id, ..)) = self
+            .patterns
+            .iter()
+            .find(|(_, p, fg, bg)| *p == pp.preset && *fg == pp.fg && *bg == pp.bg)
+        {
+            return Some(id.clone());
+        }
+        let id = format!("Pattern/p{}", self.patterns.len() + 1);
+        self.patterns
+            .push((id.clone(), pp.preset.clone(), pp.fg, pp.bg));
+        Some(id)
+    }
+
+    /// The pattern entries of every pattern minted: PowerPoint's 8 x 8 pt
+    /// cell as the tile, the background a square under one rectangle per
+    /// run of foreground bits ([`pattern::cell`]).
+    pub fn pattern_entries(&self) -> Vec<PatternEntry> {
+        self.patterns
+            .iter()
+            .filter_map(|(id, preset, fg, bg)| {
+                let c = pattern::cell(preset)?;
+                let cell = pattern::CELL_PT as f32;
+                let color = |rgb: &Rgb| {
+                    PatternColor::Inline(InlineStopColor {
+                        space: ColorSpace::Rgb,
+                        value: rgb.iter().map(|&v| f32::from(v)).collect(),
+                    })
+                };
+                let rect = |x0: f32, y0: f32, x1: f32, y1: f32, fill: PatternColor| {
+                    let corner = |x, y| PathAnchor {
+                        anchor: (x, y),
+                        left: (x, y),
+                        right: (x, y),
+                    };
+                    PatternItem {
+                        anchors: vec![
+                            corner(x0, y0),
+                            corner(x1, y0),
+                            corner(x1, y1),
+                            corner(x0, y1),
+                        ],
+                        subpath_starts: Vec::new(),
+                        subpath_open: Vec::new(),
+                        fill_rule: Default::default(),
+                        fill: Some(fill),
+                        stroke: None,
+                        stroke_weight: 0.0,
+                    }
+                };
+                let mut items = vec![rect(0.0, 0.0, cell, cell, color(bg))];
+                for (y, row) in c.iter().enumerate() {
+                    let mut x = 0;
+                    while x < 8 {
+                        if (row >> (7 - x)) & 1 == 0 {
+                            x += 1;
+                            continue;
+                        }
+                        let from = x;
+                        while x < 8 && (row >> (7 - x)) & 1 == 1 {
+                            x += 1;
+                        }
+                        let k = cell / 8.0;
+                        items.push(rect(
+                            from as f32 * k,
+                            y as f32 * k,
+                            x as f32 * k,
+                            (y + 1) as f32 * k,
+                            color(fg),
+                        ));
+                    }
+                }
+                Some(PatternEntry {
+                    self_id: id.clone(),
+                    name: Some(id.trim_start_matches("Pattern/").to_string()),
+                    width: cell,
+                    height: cell,
+                    layout: PatternLayout::default(),
+                    placement: PatternPlacement::default(),
+                    items,
+                })
+            })
+            .collect()
+    }
+
+    /// A palette whose gradient swatches keep the stops' alpha as opacity
+    /// stops (engine ADR 1007).
+    pub fn with_alpha_stops(mut self) -> Self {
+        self.alpha_stops = true;
+        self
     }
 
     /// The colour swatch of `rgb` (`Color/accent1` for a theme colour,
@@ -234,10 +357,20 @@ impl Palette {
         self.named.iter()
     }
 
-    /// The gradient swatch of `kind` through `stops` (alpha aside: the
-    /// engine's gradient swatches carry none).
+    /// The gradient swatch of `kind` through `stops`. Alpha rides on the
+    /// swatch's opacity stops (engine ADR 1007) when this palette keeps
+    /// them ([`Palette::with_alpha_stops`]) and the stops differ in alpha
+    /// (one alpha throughout is the item's opacity); otherwise the swatch
+    /// carries none.
     pub fn gradient(&mut self, kind: GradientKind, stops: &[Stop]) -> String {
-        let refs: Vec<(f64, String)> = stops.iter().map(|s| (s.pos, self.color(s.rgb))).collect();
+        let varies = self.alpha_stops
+            && stops
+                .first()
+                .is_some_and(|f| stops.iter().any(|s| (s.alpha - f.alpha).abs() >= 1e-3));
+        let refs: Vec<(f64, String, Option<f64>)> = stops
+            .iter()
+            .map(|s| (s.pos, self.color(s.rgb), varies.then_some(s.alpha)))
+            .collect();
         if let Some((id, _, _)) = self
             .gradients
             .iter()
@@ -294,11 +427,11 @@ impl Palette {
                 kind: *kind,
                 stops: stops
                     .iter()
-                    .map(|(pos, c)| GradientStopRef {
+                    .map(|(pos, c, a)| GradientStopRef {
                         stop_color: c.clone(),
                         location_pct: pt(*pos),
                         midpoint_pct: None,
-                        opacity_pct: None,
+                        opacity_pct: a.map(|a| pt((a * 100.0).clamp(0.0, 100.0))),
                         inline_color: None,
                     })
                     .collect(),
@@ -438,6 +571,25 @@ impl Mapper {
         }
     }
 
+    /// A mapper whose opaque pattern paints become pattern swatches
+    /// (engine ADR 1041) where a paint is a swatch (a stroke); a pattern
+    /// fill that [`Mapper::pattern_tile`] places stays its picture of
+    /// tiles.
+    pub fn pattern_swatches(mut self) -> Self {
+        self.palette = self.palette.with_pattern_swatches();
+        self
+    }
+
+    /// A mapper whose gradient swatches keep the stops' alpha as opacity
+    /// stops (engine ADR 1007), so a gradient that fades is a fill that
+    /// fades and no gradient feather rides on the item. For a module whose
+    /// items are the engine's own (paged.slide); a module that lowers onto
+    /// the wire ([`native`]) keeps the feather.
+    pub fn alpha_stops(mut self) -> Self {
+        self.palette = self.palette.with_alpha_stops();
+        self
+    }
+
     /// One line per kind of loss, in the order first met.
     pub fn losses(&self) -> &[String] {
         &self.losses
@@ -476,6 +628,9 @@ impl Mapper {
             Paint::Linear { stops, .. } => self.palette.gradient(GradientKind::Linear, stops),
             Paint::Radial { stops, .. } => self.palette.gradient(GradientKind::Radial, stops),
             Paint::Pattern(pp) => {
+                if let Some(id) = self.palette.pattern(pp) {
+                    return id;
+                }
                 self.lose(
                     "pattern fill drawn as the mix of its two colours (no pattern paint yet)",
                 );
@@ -622,7 +777,10 @@ impl Mapper {
             });
             any = true;
         }
-        if let Some(gf) = fade.and_then(feather_of) {
+        if let Some(gf) = fade
+            .filter(|_| !self.palette.alpha_stops)
+            .and_then(feather_of)
+        {
             effects.gradient_feather = Some(gf);
             any = true;
         }

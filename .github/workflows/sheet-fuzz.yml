@@ -50,7 +50,7 @@ jobs:
       - name: fuzz ${{ matrix.target }} (20 min)
         working-directory: modules/sheet/fuzz
         run: >
-          cargo +nightly fuzz run ${{ matrix.target }} --
+          cargo +nightly fuzz run --fuzz-dir . ${{ matrix.target }} --
           -max_total_time=1200 -rss_limit_mb=2048 -max_len=1048576
       - if: failure()
         uses: actions/upload-artifact@v4
