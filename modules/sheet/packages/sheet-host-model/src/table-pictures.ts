@@ -123,6 +123,14 @@ export function tablePictureOps(
         id: `$h:${handle}`,
       }),
       ...pictureLookOps(p, handle),
+      ...(p.link
+        ? [
+            {
+              op: "insertItemHyperlink",
+              args: { item: `$h:${handle}`, url: p.link, name: p.id },
+            } as unknown as Mutation,
+          ]
+        : []),
     );
     for (const c of [
       p.fx?.dropShadow?.color,

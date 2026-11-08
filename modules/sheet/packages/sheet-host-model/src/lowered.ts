@@ -353,6 +353,9 @@ export interface LoweredShape {
   wPt: number;
   hPt: number;
   items: LoweredShapeItem[];
+  /** The URL its click action opens (`a:hlinkClick`; sheet ADR 531): an
+   *  item hyperlink on the shape's first path. */
+  link?: string;
   /** Fill, outline, opacity and effects as the shared DrawingML mapper
    *  lowered them. */
   fx?: NativeFx;
@@ -386,6 +389,9 @@ export interface LoweredPicture {
    *  inner image transform `[a, b, c, d, e, f]` in the frame's own box,
    *  set as `imageContentTransform` (sheet ADR 529). */
   placement?: [number, number, number, number, number, number];
+  /** The URL its click action opens (`a:hlinkClick`; sheet ADR 531): an
+   *  item hyperlink on the frame, the engine's own link model. */
+  link?: string;
   /** What the page cannot hold of its look, one line per kind. */
   losses?: string[];
 }

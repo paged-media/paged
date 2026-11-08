@@ -73,6 +73,7 @@ function itemOps(
   pageId: PageId,
   left: number,
   top: number,
+  link?: { handle: string; url: string },
 ): Mutation[] {
   const at = (p: [number, number]): [number, number] => [
     left + p[0],
@@ -93,6 +94,7 @@ function itemOps(
   const ops: Mutation[] = [
     { op: "insertPath", args: { pageId, anchors: first, open: !item.closed } },
   ];
+  if (link) ops.push({ op: "bindCreated", args: { handle: link.handle } });
   if (starts.length > 1) {
     ops.push(
       set("framePath", {
@@ -115,6 +117,14 @@ function itemOps(
   // path) stays so over the shape's paint.
   if (!item.filled) ops.push(set("frameFillColor", colorRef(NONE)));
   if (!item.stroked) ops.push(set("frameStrokeColor", colorRef(NONE)));
+  // The shape's click action: an item hyperlink (engine ADR 1026), on its
+  // first path (the sheet ADR 531).
+  if (link) {
+    ops.push({
+      op: "insertItemHyperlink",
+      args: { item: `$h:${link.handle}`, url: link.url, name: s.id },
+    } as unknown as Mutation);
+  }
   return ops;
 }
 
@@ -135,12 +145,16 @@ export function tableShapeOps(
     string,
     NonNullable<LoweredShape["fx"]>["gradient"]
   >();
-  for (const s of content.shapes ?? []) {
+  (content.shapes ?? []).forEach((s, si) => {
     const box = tableShapeBox(content, widths, origin, s);
-    if (!box) continue;
+    if (!box) return;
+    let linked = false;
     for (const item of s.items) {
       if (item.anchors.length < 2) continue;
-      drawn.push(...itemOps(s, item, pageId, box[1], box[0]));
+      const link: { handle: string; url: string } | undefined =
+        s.link && !linked ? { handle: `shp${si}`, url: s.link } : undefined;
+      if (link) linked = true;
+      drawn.push(...itemOps(s, item, pageId, box[1], box[0], link));
     }
     for (const c of nativeFxColors(s.fx, true)) {
       const h = normalizePaletteHex(c);
@@ -148,7 +162,7 @@ export function tableShapeOps(
     }
     const g = s.fx?.gradient;
     if (g) gradients.set(chartGradientId(g), g);
-  }
+  });
   if (drawn.length === 0) return [];
   return [
     ...swatchMintOps("chart", [...hexes], knownSwatchIds),

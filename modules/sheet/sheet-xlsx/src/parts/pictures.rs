@@ -80,6 +80,8 @@ pub struct SheetPicture {
     /// neither an alpha, a crop (`a:srcRect`), a picture effect nor an
     /// effect list.
     pub dml: Option<Box<PictureDml>>,
+    /// The external URL its `a:hlinkClick` names (sheet ADR 531).
+    pub link: Option<String>,
 }
 
 /// What a drawing picture paints beyond its image (sheet ADR 527).
@@ -132,6 +134,18 @@ pub(crate) fn anchor_of(a: &XNode) -> Option<PictureAnchor> {
         }
         _ => return None,
     })
+}
+
+/// The external URL an item's `a:hlinkClick` (a child of its `cNvPr`) names
+/// through the drawing's relationships (sheet ADR 531). A link inside the
+/// workbook (`#Sheet1!A1`) or an action is not one the page can follow.
+pub(crate) fn item_link(
+    c_nv: Option<&XNode>,
+    rels: &paged_ooxml::rels::Relationships,
+) -> Option<String> {
+    let id = c_nv?.child("hlinkClick")?.attr("id")?;
+    let r = rels.items.iter().find(|r| r.id == id)?;
+    (r.target_mode.as_deref() == Some("External") && !r.target.is_empty()).then(|| r.target.clone())
 }
 
 fn offset(n: Option<&XNode>) -> Option<CellOffset> {
@@ -234,6 +248,7 @@ impl XlsxDocument {
                     content_type: self.content_type_of_part(&media),
                     media,
                     dml,
+                    link: item_link(c_nv, &drels),
                 });
             }
         }
@@ -305,6 +320,7 @@ impl XlsxDocument {
                     content_type: self.content_type_of_part(&media),
                     media,
                     dml: None,
+                    link: None,
                 })
             })
             .collect()

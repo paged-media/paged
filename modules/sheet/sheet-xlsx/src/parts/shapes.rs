@@ -27,7 +27,7 @@
 //! lowering evaluates the geometry (`dml-geom`) and maps the paint
 //! (`dml-native`), the same two crates paged.slide lowers its shapes with.
 
-use crate::parts::pictures::{anchor_of, PictureAnchor};
+use crate::parts::pictures::{anchor_of, item_link, PictureAnchor};
 use crate::rels::{part_dir, resolve_target, REL_DRAWING};
 use crate::xtree::XNode;
 use crate::XlsxDocument;
@@ -71,6 +71,8 @@ pub struct SheetShape {
     pub text: String,
     /// The outline has arrowheads (`a:headEnd` / `a:tailEnd`).
     pub arrowheads: bool,
+    /// The external URL its `a:hlinkClick` names (sheet ADR 531).
+    pub link: Option<String>,
 }
 
 /// `a:lnRef idx` to the width of the line style it names (EMU): the Office
@@ -180,6 +182,7 @@ impl XlsxDocument {
             let Some(bytes) = self.part_bytes(&drawing) else {
                 continue;
             };
+            let drels = self.rels_of_part(&drawing);
             let (Ok(root), Ok(dml_root)) = (XNode::parse(&bytes), paged_ooxml::tree::parse(&bytes))
             else {
                 continue;
@@ -241,6 +244,14 @@ impl XlsxDocument {
                     props,
                     text: text_of(el.children.iter().find(|c| c.local == "txBody")),
                     arrowheads,
+                    link: drels.as_ref().and_then(|r| {
+                        let nv = a
+                            .child("sp")
+                            .or_else(|| a.child("cxnSp"))
+                            .and_then(|n| n.child("nvSpPr").or_else(|| n.child("nvCxnSpPr")))
+                            .and_then(|n| n.child("cNvPr"));
+                        item_link(nv, r)
+                    }),
                 });
             }
         }

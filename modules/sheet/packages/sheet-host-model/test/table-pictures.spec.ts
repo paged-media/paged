@@ -193,3 +193,18 @@ describe("a picture's crop and corrections [sheet.chart.native-effects]", () => 
     });
   });
 });
+
+describe("a picture's click action [sheet.xlsx.pictures]", () => {
+  it("makes the frame an item hyperlink in the same batch", () => {
+    const ops = tablePictureOps(
+      { ...content, pictures: [{ ...pic, link: "https://paged.media" }] },
+      [40, 60],
+      "p1" as never,
+      [0, 0],
+    ) as { op: string; args: Record<string, unknown> }[];
+    expect(ops.at(-1)).toEqual({
+      op: "insertItemHyperlink",
+      args: { item: "$h:pic0", url: "https://paged.media", name: pic.id },
+    });
+  });
+});

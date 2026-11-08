@@ -182,4 +182,31 @@ describe("shapes over a page table [sheet.xlsx.shapes]", () => {
     expect(last.args.path).toBe("frameStrokeColor");
     expect((last.args.value as { value: string }).value).toBe("Swatch/None");
   });
+
+  it("links the first path of a shape with a click action to its URL", () => {
+    const ops = tableShapeOps(
+      {
+        ...content,
+        shapes: [
+          {
+            ...shape,
+            link: "https://paged.media",
+            items: [shape.items[0]!, shape.items[0]!],
+          },
+        ],
+      },
+      [40, 60],
+      "p1" as never,
+      [0, 0],
+    ) as Op[];
+    const links = ops.filter((o) => o.op === "insertItemHyperlink");
+    expect(links).toEqual([
+      {
+        op: "insertItemHyperlink",
+        args: { item: "$h:shp0", url: "https://paged.media", name: shape.id },
+      },
+    ]);
+    const bind = ops.findIndex((o) => o.op === "bindCreated");
+    expect(ops[bind - 1]!.op).toBe("insertPath");
+  });
 });

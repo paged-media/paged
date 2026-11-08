@@ -44,6 +44,7 @@ it stood, for decisions made earlier; their status says so.
 | [528](528-threaded-comments-read-and-written-with-their-notes.md) | Threaded comments: read and written together with their legacy notes | Accepted 2026-11-01; amends 526 |
 | [529](529-picture-frames-take-crop-and-the-filter-stack.md) | Picture frames take the crop (`a:srcRect`) and the engine's filter stack | Accepted 2026-11-08; extends 526, 527 |
 | [530](530-shapes-on-the-page-through-the-shared-geometry-and-mapper.md) | Drawing shapes on the page, through the shared geometry and mapper | Accepted 2026-11-08; extends 526, 527 |
+| [531](531-item-hyperlinks-on-the-engines-hyperlink-model.md) | Item hyperlinks: a picture's or shape's click action is the engine's link | Accepted 2026-11-08; extends 526, 530 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed

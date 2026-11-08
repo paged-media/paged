@@ -43,7 +43,7 @@ fn part(bytes: &[u8], name: &str) -> String {
     s
 }
 
-fn rezip(bytes: &[u8], name: &str, new: Vec<u8>) -> Vec<u8> {
+fn rezip(bytes: &[u8], edits: &[(&str, Vec<u8>)]) -> Vec<u8> {
     let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
     let mut out = Vec::new();
     {
@@ -55,7 +55,8 @@ fn rezip(bytes: &[u8], name: &str, new: Vec<u8>) -> Vec<u8> {
             let mut b = Vec::new();
             f.read_to_end(&mut b).unwrap();
             w.start_file(n.clone(), opts).unwrap();
-            w.write_all(if n == name { &new } else { &b }).unwrap();
+            let edited = edits.iter().find(|(e, _)| *e == n);
+            w.write_all(edited.map_or(&b, |(_, new)| new)).unwrap();
         }
         w.finish().unwrap();
     }
@@ -73,7 +74,7 @@ fn session_with(shapes: &str) -> SheetSession {
     let bytes = fixture("16-structure.xlsx");
     let drawing = part(&bytes, "xl/drawings/drawing1.xml");
     let edited = drawing.replacen("</xdr:wsDr>", &format!("{shapes}</xdr:wsDr>"), 1);
-    let bytes = rezip(&bytes, "xl/drawings/drawing1.xml", edited.into_bytes());
+    let bytes = rezip(&bytes, &[("xl/drawings/drawing1.xml", edited.into_bytes())]);
     SheetSession::load_xlsx(&bytes).unwrap()
 }
 
@@ -165,4 +166,73 @@ fn text_and_arrowheads_are_reported__feat__sheet_xlsx_shapes() {
     assert_eq!(shapes.len(), 2);
     assert!(shapes[0].losses.iter().any(|l| l.contains("arrowheads")));
     assert!(shapes[1].losses.iter().any(|l| l.contains("text")));
+}
+
+/// Sheet ADR 531 — a picture's and a shape's click action (`a:hlinkClick`)
+/// is the external URL its relationship names; a link inside the workbook is
+/// none.
+#[test]
+fn an_items_click_action_is_its_external_url__feat__sheet_xlsx_shapes() {
+    let bytes = fixture("16-structure.xlsx");
+    let drawing = part(&bytes, "xl/drawings/drawing1.xml");
+    let rels = part(&bytes, "xl/drawings/_rels/drawing1.xml.rels");
+    let link = |id: &str| format!(r#"<a:hlinkClick r:id="{id}"/>"#);
+    let picture_linked = drawing.replacen(
+        r#"<xdr:cNvPr id="2" name="Picture 1"/>"#,
+        &format!(
+            r#"<xdr:cNvPr id="2" name="Picture 1">{}</xdr:cNvPr>"#,
+            link("rId90")
+        ),
+        1,
+    );
+    let shape = RECT.replacen(
+        r#"<xdr:cNvPr id="5" name="Rectangle 4"/>"#,
+        &format!(
+            r#"<xdr:cNvPr id="5" name="Rectangle 4">{}</xdr:cNvPr>"#,
+            link("rId91")
+        ),
+        1,
+    );
+    let inside = RECT.replacen(
+        r#"<xdr:cNvPr id="5" name="Rectangle 4"/>"#,
+        &format!(
+            r#"<xdr:cNvPr id="6" name="Inside">{}</xdr:cNvPr>"#,
+            link("rId92")
+        ),
+        1,
+    );
+    let edited = picture_linked.replacen(
+        "</xdr:wsDr>",
+        &format!(
+            "{}{}</xdr:wsDr>",
+            anchored(3, 12, 1_270_000, 635_000, &shape),
+            anchored(4, 14, 1_270_000, 635_000, &inside)
+        ),
+        1,
+    );
+    let rels = rels.replacen(
+        "</Relationships>",
+        concat!(
+            r#"<Relationship Id="rId90" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://paged.media/a" TargetMode="External"/>"#,
+            r#"<Relationship Id="rId91" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://paged.media/b" TargetMode="External"/>"#,
+            r##"<Relationship Id="rId92" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="#Sheet1!A1"/>"##,
+            "</Relationships>"
+        ),
+        1,
+    );
+    let bytes = rezip(
+        &bytes,
+        &[
+            ("xl/drawings/drawing1.xml", edited.into_bytes()),
+            ("xl/drawings/_rels/drawing1.xml.rels", rels.into_bytes()),
+        ],
+    );
+    let s = SheetSession::load_xlsx(&bytes).unwrap();
+    assert_eq!(
+        s.list_pictures(0).unwrap()[0].link.as_deref(),
+        Some("https://paged.media/a")
+    );
+    let shapes = s.list_shapes(0).unwrap();
+    assert_eq!(shapes[0].link.as_deref(), Some("https://paged.media/b"));
+    assert_eq!(shapes[1].link, None, "a link inside the workbook");
 }

@@ -133,6 +133,9 @@ pub struct PictureInfo {
     /// What the page cannot hold of its look, one line per kind.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub losses: Vec<String>,
+    /// The URL its click action opens (`a:hlinkClick`, sheet ADR 531).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
 }
 
 /// An anchor placed in sheet points (the top-left of A1 is the origin): its
@@ -270,6 +273,9 @@ pub struct PagePicture {
     pub placement: Option<[f64; 6]>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub losses: Vec<String>,
+    /// The URL its click action opens (sheet ADR 531).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
 }
 
 /// Lowered page content with the pictures and shapes anchored in its cells.
@@ -622,6 +628,7 @@ impl SheetSession {
                     fx: look.fx,
                     adjustments: look.adjustments,
                     losses: look.losses,
+                    link: p.link,
                     placement,
                     id: p.id,
                     sheet,
@@ -680,6 +687,7 @@ impl SheetSession {
                     adjustments: p.adjustments,
                     placement: p.placement,
                     losses: p.losses,
+                    link: p.link,
                 })
             })
             .collect()
