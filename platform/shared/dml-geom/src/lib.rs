@@ -41,6 +41,7 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 pub mod live;
+pub mod place;
 pub mod read;
 
 const DEFINITIONS: &str = include_str!("../data/presetShapeDefinitions.xml");

@@ -107,7 +107,7 @@ renderer); the f64 affine (`[f64;6]`: slide-resolve, pptx-export's `geom`, `dml-
 Draw's TS copies of width, brush,
 along-path, envelope and `appearance-bake.ts` → `paged-vector-fx`. `dml-native` still maps
 pattern fill to a two-colour mix, drops gradient alpha and loses `clrChange`: adopt paint v2.
-`a:custGeom` / `a:xfrm` writer (`pptx-export/geom.rs`) → `dml-geom`. Pie wedge ×3 → `dml-chart`.
+`a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3 → `dml-chart`.
 The host `tools` package still imports `@paged-media/draw/geometry` and `/machines`.
 
 ### Text and fonts
