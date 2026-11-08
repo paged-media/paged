@@ -1,6 +1,7 @@
 # ADR PM-0013 — A fourth public package: `@paged-media/editor`
 
-- **Status:** Accepted 2026-10-23; amended 2026-11-02 (amendments 4 and 5: the `dist/` budget is 73 MiB).
+- **Status:** Accepted 2026-10-23; amended 2026-11-02 (amendments 4 and 5: the `dist/` budget is 73 MiB)
+  and 2026-11-08 (amendment 6: 73.5 MiB).
 - **Amends:** [PM-0008](PM-0008-npm-packages-and-release.md) (three public packages since its
   amendment 3; four from here).
 - **Scope:** `apps/editor/packages/editor`, `tooling/release/*`, `.github/workflows/release.yml`
@@ -205,3 +206,15 @@ The budget for `dist/` goes from 72.25 to 73 MiB (76,546,048 bytes, from 75,759,
 decision to give the following slices room instead of amending it each time: font references on styles,
 doc and sheet lowering onto the theme model, and the PDF annotation reader. Amendment 4's reasons stand;
 the entry budgets stay at 16 KiB.
+
+## Amendment 6 (2026-11-08): a 73.5 MiB budget for `dist/`
+
+The budget for `dist/` goes from 73 to 73.5 MiB (77,070,336 bytes, from 76,546,048), together with
+the doc wasm's ceiling (doc ADR 627, amendment: 9 MiB, from 8 MiB), on the owner's decision of
+2026-11-08 to make room in the one doc wasm for charts and SmartArt instead of a second artifact.
+Word's charts (doc ADR 628) and SmartArt with every Annex D preset (doc ADR 629, which links
+`dml-geom`'s 526 KB of preset definitions) grow `docx_js_bg.wasm` from 8,379,940 to about 9.12 MB
+(CI's `doc / rust` builds: 8,533,653 B with charts). `dist/` measured 72.6 MiB before them (CI's
+check-dist, 2026-11-08), which puts it at about 73.3 MiB with them; the new budget keeps a margin of
+about a quarter of a MiB, as amendment 4 did. The entry budgets stay at 16 KiB.
+

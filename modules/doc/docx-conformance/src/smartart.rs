@@ -22,7 +22,7 @@
 //! named by the data part's `dsp:dataModelExt`). `dump-fixture <out> smartart`
 //! writes the document.
 
-use crate::{zip_parts, ROOT_RELS, THEME_STYLES, THEME_XML};
+use crate::{zip_parts, ROOT_RELS, THEME_CONTENT_TYPES, THEME_STYLES, THEME_XML};
 
 const NS: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram""#;
 
@@ -146,40 +146,25 @@ pub fn smartart_docx() -> Vec<u8> {
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document {NS}><w:body>{body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>"#
     );
-    let ov = |part: &str, ty: &str| {
-        format!(r#"<Override PartName="/word/diagrams/{part}" ContentType="{ty}"/>"#)
-    };
-    let types = [
-        ov(
-            "data1.xml",
-            "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
-        ),
-        ov(
-            "data2.xml",
-            "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml",
-        ),
-        ov(
-            "layout1.xml",
-            "application/vnd.openxmlformats-officedocument.drawingml.diagramLayout+xml",
-        ),
-        ov(
-            "quickStyle1.xml",
-            "application/vnd.openxmlformats-officedocument.drawingml.diagramStyle+xml",
-        ),
-        ov(
-            "colors1.xml",
-            "application/vnd.openxmlformats-officedocument.drawingml.diagramColors+xml",
-        ),
-        ov(
-            "drawing1.xml",
-            "application/vnd.ms-office.drawingml.diagramDrawing+xml",
-        ),
-    ]
-    .concat();
-    let content_types = format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>{types}</Types>"#
+    let mut types =
+        paged_ooxml::ContentTypes::parse(THEME_CONTENT_TYPES.as_bytes()).expect("types");
+    for (part, ty) in [
+        ("data1.xml", "diagramData"),
+        ("data2.xml", "diagramData"),
+        ("layout1.xml", "diagramLayout"),
+        ("quickStyle1.xml", "diagramStyle"),
+        ("colors1.xml", "diagramColors"),
+    ] {
+        types.add_override(
+            &format!("/word/diagrams/{part}"),
+            &format!("application/vnd.openxmlformats-officedocument.drawingml.{ty}+xml"),
+        );
+    }
+    types.add_override(
+        "/word/diagrams/drawing1.xml",
+        "application/vnd.ms-office.drawingml.diagramDrawing+xml",
     );
+    let content_types = types.render();
     let rel = |id: &str, ty: &str, target: &str| {
         format!(r#"<Relationship Id="{id}" Type="{ty}" Target="{target}"/>"#)
     };
