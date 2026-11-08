@@ -220,6 +220,10 @@ wasm-bindgen = "0.2"
 hayro-interpret = { version = "0.8", default-features = false }
 kurbo = "0.13"
 png = "0.18"
+# The fontations stack, pinned once (engine ADR 1058): shaping (harfrust) and glyph
+# outlines and metrics (skrifa) of paged-text, image-js and pptx-fonts.
+harfrust = "0.14"
+skrifa = "0.48"
 # paged.draw's image-trace kernel, the colour clustering, path walking and spline
 # fitting under vtracer (MIT/Apache-2.0). It pulls bit-vec, num-traits and
 # flo_curves 0.3. READ THIS BEFORE BUMPING: the engine's [patch] below replaces

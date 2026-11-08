@@ -52,8 +52,8 @@ image-cms = { path = "../image-cms" }
 image-graph = { path = "../image-graph" }
 half = { workspace = true }
 thiserror = { workspace = true }
-harfrust = "0.14"
-skrifa = "0.48"
+harfrust = { workspace = true }
+skrifa = { workspace = true }
 ab_glyph_rasterizer = "0.1"
 
 [features]

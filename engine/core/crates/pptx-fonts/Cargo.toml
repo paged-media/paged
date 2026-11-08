@@ -15,6 +15,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 # Parses the decoded faces back in tests (never in the wasm).
-skrifa = "0.48"
+skrifa = { workspace = true }
 zip.workspace = true
 flate2.workspace = true
