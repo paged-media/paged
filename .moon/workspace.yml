@@ -35,6 +35,8 @@ projects:
   strings: "platform/shared/strings"
   test-kit: "platform/shared/test-kit"
   test-resources: "platform/shared/test-resources"
+  vector-geometry: "platform/shared/vector-geometry"
+  vector-tools: "platform/shared/vector-tools"
   wasm-boot: "platform/shared/wasm-boot"
   # Extension contract and SDK
   extensions: "platform/extensions"

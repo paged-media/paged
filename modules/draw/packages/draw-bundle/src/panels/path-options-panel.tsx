@@ -52,7 +52,7 @@ import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
 
 import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
-import { FLARE_MAX_RAYS, FLARE_MAX_RINGS } from "@paged-media/draw-geometry";
+import { FLARE_MAX_RAYS, FLARE_MAX_RINGS } from "@paged-media/vector-geometry";
 import { supportsDuplicate } from "../commands/join-average";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import { MAX_RASTERIZE_PPI, MIN_RASTERIZE_PPI } from "../commands/rasterize";

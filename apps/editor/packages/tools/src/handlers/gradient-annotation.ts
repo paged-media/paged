@@ -27,7 +27,7 @@
 //
 // paged.draw carried this as a tool of its own (the Gradient Annotator); it
 // is the host's now (PM-0017). The stop machine (`GradientStopMachine`, in
-// `@paged-media/draw/machines`) and the spec of a moved stop
+// `@paged-media/vector-tools`) and the spec of a moved stop
 // (`gradientSpecWithStop`, in `@paged-media/helpers`) are shared.
 //
 // Facts the markers carry, named rather than hidden:
@@ -44,7 +44,7 @@ import {
   GradientStopMachine,
   pointOnAxis,
   type GradientAxis,
-} from "@paged-media/draw/machines";
+} from "@paged-media/vector-tools";
 import { gradientSpecWithStop } from "@paged-media/helpers";
 import type { ElementId } from "@paged-media/client";
 import type {

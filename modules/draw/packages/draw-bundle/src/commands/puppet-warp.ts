@@ -19,7 +19,7 @@
 // PUPPET WARP as commands.
 //
 // `puppetWarp { holds, from, to, autoPins }` is the tool's session as
-// data: the selection's paths are meshed (draw-tools
+// data: the selection's paths are meshed (vector-tools
 // `PuppetWarpMachine`), `autoPins` automatic pins are placed, a pin is
 // added at every `holds` point (they stay where they are), and the pin at
 // `from` (added there when there is none) is dragged to `to`. The ARAP
@@ -35,7 +35,7 @@
 // how to reach the tool instead of pretending it switched.
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
-import { PuppetWarpMachine } from "@paged-media/draw-tools";
+import { PuppetWarpMachine } from "@paged-media/vector-tools";
 import { defineMessages } from "@paged-media/strings";
 
 import { registerCommand } from "../command-registry";

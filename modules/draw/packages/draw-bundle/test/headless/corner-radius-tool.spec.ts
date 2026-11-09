@@ -46,7 +46,7 @@ import {
   affineRotate,
   applyAffine,
   type Affine,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { createCornerRadiusHandler, drawBundle } from "../../src";
 import { packageWithSpread, pathItem } from "../fixtures/build-idml";

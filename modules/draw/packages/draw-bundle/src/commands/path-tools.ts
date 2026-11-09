@@ -22,7 +22,7 @@
 // the CLI reach them and the specs drive exactly the tool's code. Each is
 // ONE batch: one undo step.
 //
-// JOIN (`joinScrub { page, path, tolerance }`). draw-geometry
+// JOIN (`joinScrub { page, path, tolerance }`). vector-geometry
 // `planJoinScrub` decides what the scrub asked for; the ENGINE joins:
 //   · one path's two ends → `closePath`;
 //   · a gap between two paths → the first is extended by a straight
@@ -36,7 +36,7 @@
 //   wrong. Candidates are open single-contour paths — the selection, or
 //   with nothing selected every path the scrub's box touches.
 //
-// PATH ERASER (`pathErase { page, path, width }`). draw-geometry
+// PATH ERASER (`pathErase { page, path, width }`). vector-geometry
 // `planPathErase` finds the covered stretches; the first piece left is
 // written ONTO the path (a closed one is opened first with `pathOpenAt`,
 // because `framePath` cannot change the open flag), every further piece
@@ -48,7 +48,7 @@
 // RESHAPE (`reshapeAt { point, to, radius }`). The one selected path's
 // anchor at `point` — added there first when `point` is on a segment —
 // moves to `to`, its contour following by the falloff
-// (draw-tools `ReshapeMachine`); the table is written with one
+// (vector-tools `ReshapeMachine`); the table is written with one
 // `framePath`.
 
 import type {
@@ -68,8 +68,8 @@ import {
   type AnchorTable,
   type AnchorTriple,
   type Vec2,
-} from "@paged-media/draw-geometry";
-import { ReshapeMachine } from "@paged-media/draw-tools";
+} from "@paged-media/vector-geometry";
+import { ReshapeMachine } from "@paged-media/vector-tools";
 
 import { batchMutationFor } from "./batch-handles";
 import { compoundPaintOf } from "./compound-path";

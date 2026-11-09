@@ -453,7 +453,7 @@ export const LASSO_OPTIONS = defineToolOptions({
 });
 
 /** Reshape — how far along the path the drag reaches (pt; the cosine
- *  falloff of draw-geometry `reshapeTable`). */
+ *  falloff of vector-geometry `reshapeTable`). */
 export const RESHAPE_OPTIONS = defineToolOptions({
   toolId: "media.paged.draw.tool.reshape",
   fields: [

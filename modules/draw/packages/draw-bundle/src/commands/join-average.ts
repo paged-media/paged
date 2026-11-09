@@ -64,7 +64,7 @@ import type {
   Mutation,
 } from "@paged-media/plugin-api";
 
-import type { AnchorTable, Vec2 } from "@paged-media/draw-geometry";
+import type { AnchorTable, Vec2 } from "@paged-media/vector-geometry";
 
 import { registerCommand } from "../command-registry";
 import { batchMutationFor } from "./batch-handles";

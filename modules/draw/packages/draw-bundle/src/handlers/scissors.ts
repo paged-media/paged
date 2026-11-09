@@ -21,7 +21,7 @@
 // this one cuts wherever the click lands on a segment: the segment is
 // split there first (the de Casteljau insert the Add Anchor tool plans),
 // then opened at the new anchor — ONE batch, one undo step
-// (draw-tools `scissors.ts` plans it; this file only resolves the
+// (vector-tools `scissors.ts` plans it; this file only resolves the
 // target and the click).
 //
 // The target is what the click hits, or — a hairline is hard to hit —
@@ -41,12 +41,12 @@ import {
   affineScale,
   inverseApplyAffine,
   type Affine,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 import {
   planScissorsAt,
   scissorsMutation,
   type ScissorsPlan,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 /** Screen-space pick radius around anchors and segments. */
 const PICK_TOLERANCE_PX = 6;

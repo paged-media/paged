@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// THE RESHAPE TOOL — a host-routed shim over draw-tools'
+// THE RESHAPE TOOL — a host-routed shim over vector-tools'
 // `ReshapeMachine`, in the host's TRANSFORM flyout (Illustrator keeps it
 // with Scale and Shear). Press on the path under the pointer (or the one
 // selected path) — on an anchor, or on a segment, where an anchor is
@@ -42,8 +42,11 @@ import {
   inverseApplyAffine,
   type Affine,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
-import { ReshapeMachine, type ReshapeSnapshot } from "@paged-media/draw-tools";
+} from "@paged-media/vector-geometry";
+import {
+  ReshapeMachine,
+  type ReshapeSnapshot,
+} from "@paged-media/vector-tools";
 
 import { applyReshapeTable } from "../commands/path-tools";
 import {

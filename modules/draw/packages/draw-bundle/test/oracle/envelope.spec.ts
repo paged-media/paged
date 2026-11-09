@@ -33,7 +33,7 @@ import {
   restrictPatch,
   type AnchorTriple,
   type Vec2 as GVec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import {
   loadOracle,

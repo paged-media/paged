@@ -8,12 +8,11 @@ Next GmbH; license headers on every source file).
 
 The distillation repo for draw capability during the
 incubate-then-extract window (strategy:
-`thoughts/docs/paged/plugin-draw/reality-check.md`). Three packages:
-`draw-geometry` (pure math), `draw-tools` (host-agnostic state machines),
-`draw-bundle` (manifest + `activate(host)`). The editor consumes
-geometry/tools through the published `@paged-media/draw` (its `./geometry` and
-`./machines` exports) and wraps the machines in thin
-`GestureHandler` shims.
+`thoughts/docs/paged/plugin-draw/reality-check.md`). One package here, `draw-bundle` (manifest + `activate(host)`). The generic
+geometry and tool machines moved to `platform/shared/vector-geometry` (pure
+math) and `platform/shared/vector-tools` (host-agnostic state machines): draw,
+image and the editor's `tools` package all import those, and the editor wraps
+the machines in thin `GestureHandler` shims.
 
 Since Image Trace (2026-08-04) there is ALSO a Rust half, in `crates/`:
 `draw-trace` (the tracer kernel over the `visioncortex` crate — colour
@@ -96,7 +95,7 @@ C-30), REPEATS v1 (the Illustrator §12.4 row, and the catalog's SIBLING
 of pattern — read the difference before the code: a PATTERN is a
 swatch-shaped FILL, a REPEAT is an object TRANSFORM with expand/release.
 Radial / grid / mirror, one AFFINE per instance in
-`draw-geometry/src/repeat.ts` because a repeat rotates and REFLECTS where
+`vector-geometry/src/repeat.ts` because a repeat rotates and REFLECTS where
 a tile field only translates. It is the FIRST feature in this repo that
 builds in ONE UNDO STEP: plugin-sdk `bc52766` put C-15's `bindCreated`
 in the contract, so one batch inserts, binds, paints, links and groups —
@@ -175,7 +174,7 @@ the real SVG corpus, and fake-engine cases).
 **ONE SHARED KERNEL, AND ONLY ONE.** §16.2 (blend spines) and §16.3
 (objects on a path) landed together, so the "is there a common placement
 kernel?" question had to be answered with facts. There is, and it is
-`draw-geometry/src/along-path.ts`: BOTH rows need _point + tangent at a
+`vector-geometry/src/along-path.ts`: BOTH rows need _point + tangent at a
 fraction of a path's ARC LENGTH_, which means flattening, cumulative
 lengths, a lookup and a tangent — ~150 lines that go wrong twice if
 written twice — plus the same count/spacing distribution rule on top
@@ -308,7 +307,7 @@ batch. Replace Symbol is the `symbolInstanceSymbol` path (so the
 `symbolChoice` template field keeps its target id), Symbol Options is the
 Symbols panel's options section (no dialog door) and a symbol's 9-slice
 guides are `redefineSymbol { nineSlice }`. The 9-slice mapping is the
-renderer's formula in `draw-geometry/src/nine-slice.ts`, held to Illustrator
+renderer's formula in `vector-geometry/src/nine-slice.ts`, held to Illustrator
 by `test/oracle/nine-slice.spec.ts` (setSymbol9SliceGrid's rectangle is
 read from the art's BOTTOM-LEFT, Y up — the probe's header). A v0 library
 (the second container part) moves onto the engine's store once, on open
@@ -565,8 +564,8 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
 
 ## Hard rules
 
-- **Host-agnostic means host-agnostic.** `draw-geometry` has zero deps;
-  `draw-tools` may import ONLY `draw-geometry` + _types_ from
+- **Host-agnostic means host-agnostic.** `vector-geometry` depends only on `@paged-media/helpers`;
+  `vector-tools` may import ONLY `vector-geometry` + _types_ from
   `@paged-media/plugin-api`. Never import `@paged-media/shell` /
   `@paged-media/client` / React here — that's the editor shim's job. If a
   machine seems to need host state, the missing piece is an event/option
@@ -579,7 +578,7 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
   out; tolerances are passed in (the host converts px→pt at zoom). Every
   behavior change lands with a unit test (`packages/*/test/`).
 - **Wire compatibility is the contract's type.** The machines' `*Wire`
-  shapes (`draw-tools/src/path-edit-ops.ts`, `scissors.ts`) are the
+  shapes (`vector-tools/src/path-edit-ops.ts`, `scissors.ts`) are the
   contract's `Mutation` variants, so a protocol break fails
   `bun run typecheck` at the lowering. Don't cast around it to make a
   build green.
@@ -591,11 +590,11 @@ paints nothing), Illustrator's clipping mask. Measured, and asserted in
   because Image Trace's kernel is computer vision, not path algebra, and
   `visioncortex` already is that kernel — and, since ADR 364, because DXF
   is format I/O over the `dxf` crate (`draw-dxf`, in the same wasm). Path math still belongs in
-  `draw-geometry` — in particular the tracer does NOT decide winding: it
+  `vector-geometry` — in particular the tracer does NOT decide winding: it
   reports contours, and `makeCompoundTable` (`mergeCompound` +
   `orientForNonZeroHoles`) re-winds holes by nesting depth, because the
   engine fills NON-ZERO. Winding is decided in TS, in
-  `draw-geometry/src/compound.ts`, and nowhere else. There are TWO rules
+  `vector-geometry/src/compound.ts`, and nowhere else. There are TWO rules
   there, for two kinds of contour, and they are NOT interchangeable:
   nesting depth (even-odd in effect) for traced contours, which have no
   paint order; PAINT ORDER (`orientByPaintOrder` — the backmost path one

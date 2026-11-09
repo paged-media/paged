@@ -58,7 +58,7 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 
-import { simplifyAnchorTable } from "@paged-media/draw-geometry";
+import { simplifyAnchorTable } from "@paged-media/vector-geometry";
 
 import { registerCommand } from "../command-registry";
 import { batchMutationFor, oneBatchFor } from "./batch-handles";
@@ -338,7 +338,7 @@ export async function applyOffsetPath(
  *  caller before WP6.1 sent) it is the engine's `simplifyPath`, exactly as
  *  before. The wire op has no corner field, so a CORNER ANGLE (degrees,
  *  0–180: anchors at least that sharp stay sharp) is applied by
- *  draw-geometry's `simplifyAnchorTable` — the fit the Path Options
+ *  vector-geometry's `simplifyAnchorTable` — the fit the Path Options
  *  preview draws — and written as each path's new table (`framePath` +
  *  `frameBounds`, `./path-rewrite.ts`). Either lane is ONE batch for the
  *  whole selection: one undo step. */

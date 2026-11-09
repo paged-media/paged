@@ -25,7 +25,7 @@ What the editor ships and what it does not, read from the code at commit `6d098e
   and five marked `planned`. Direct Selection is the Selection tool's pointer path plus path-edit
   mode, kept on while the tool is in hand (`packages/shell/src/state/selection-context.tsx:52-57`);
   its behaviour, and the Pen's, are paged.draw's `DirectSelectMachine` and `PenMachine`
-  (`@paged-media/draw/machines`), so the Pen also continues, closes and joins open paths.
+  (`@paged-media/vector-tools`), so the Pen also continues, closes and joins open paths.
 - **Commands.** A command palette, menus and keybindings over one registry. Insert commands
   for text frame, rectangle, ellipse, line, table, page and placed image; arrange, group
   and ungroup; undo and redo.

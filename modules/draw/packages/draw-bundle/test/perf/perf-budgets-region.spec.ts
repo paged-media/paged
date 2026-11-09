@@ -43,7 +43,7 @@ import type { MutationInput, ToolPreviewShape } from "@paged-media/plugin-api";
 import {
   pointInAnchorPath,
   type AnchorTriple,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import {
   BIND_LIVE_PAINT_FACE,

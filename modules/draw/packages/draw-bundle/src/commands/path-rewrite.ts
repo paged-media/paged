@@ -42,7 +42,7 @@ import {
   type Affine,
   type AnchorTable,
   type AnchorTriple,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { bindCreatedMutationFor, handleElementId } from "./batch-handles";
 import { framePathMutationFor, type CompoundPaint } from "./compound-path";

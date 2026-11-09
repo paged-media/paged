@@ -18,7 +18,7 @@
 
 // @paged-media/web-model — the webFrame source model + diagnostics,
 // pure TS, zero dependencies, host-free. The distillation layer of
-// paged.web (the same role draw-geometry/draw-tools play for
+// paged.web (the same role vector-geometry/vector-tools play for
 // paged.draw): no host, no DOM, no engine.
 
 export {

@@ -158,7 +158,7 @@ import {
   type PathMetric,
   type PathSlot,
   type RepeatBounds,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import {
   pageOriginOf,
@@ -494,7 +494,7 @@ export function onPathHullOf(
  * `home` written back verbatim.
  *
  * The SHARED kernel supplies the slots (both modes, with their tangents)
- * — see `draw-geometry/src/along-path.ts` for why that much is shared
+ * — see `vector-geometry/src/along-path.ts` for why that much is shared
  * with §16.2's blend spine and no more.
  */
 export function placeObjectsOnPath(args: {

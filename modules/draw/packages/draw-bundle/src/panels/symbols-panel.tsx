@@ -68,7 +68,7 @@ import {
   readEngineSymbols,
   type EngineSymbol,
 } from "../commands/symbols-engine";
-import { defaultNineSlice } from "@paged-media/draw-geometry";
+import { defaultNineSlice } from "@paged-media/vector-geometry";
 import { usePanelReload } from "./use-panel-reload";
 import {
   About,

@@ -29,7 +29,7 @@
 // Measure was retired in favour of paged.draw's (built-in-tools.ts records
 // it), which made the capability exist only with that bundle loaded. It is
 // the host's again (PM-0017) and paged.draw's tool is gone. The state machine
-// (`MeasureMachine`) stays in `@paged-media/draw/machines`, which this tool
+// (`MeasureMachine`) stays in `@paged-media/vector-tools`, which this tool
 // and nothing else drives.
 
 import {
@@ -37,12 +37,12 @@ import {
   applyAffine,
   inverseApplyAffine,
   type Affine,
-} from "@paged-media/draw/geometry";
+} from "@paged-media/vector-geometry";
 import {
   MeasureMachine,
   type MeasureReadout,
   type MeasureSnapshot,
-} from "@paged-media/draw/machines";
+} from "@paged-media/vector-tools";
 import type { ElementId } from "@paged-media/client";
 import type {
   CanvasPointerEvent,

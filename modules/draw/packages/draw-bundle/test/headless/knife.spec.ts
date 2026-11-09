@@ -49,7 +49,7 @@ import type {
   PathAnchorsResult,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { contourRanges, contourSignedArea } from "@paged-media/draw-geometry";
+import { contourRanges, contourSignedArea } from "@paged-media/vector-geometry";
 
 import {
   applyKnife,

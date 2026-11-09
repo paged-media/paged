@@ -63,6 +63,7 @@
         "@paged-media/strings": "workspace:*",
         "@paged-media/tools": "workspace:*",
         "@paged-media/ui": "workspace:*",
+        "@paged-media/vector-geometry": "workspace:*",
         "@paged-media/web": "workspace:*",
         "onnxruntime-web": "1.30.0",
         "react": "catalog:",
@@ -240,12 +241,13 @@
       "version": "0.0.0",
       "dependencies": {
         "@paged-media/client": "workspace:*",
-        "@paged-media/draw": "workspace:*",
         "@paged-media/helpers": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
         "@paged-media/shell": "workspace:*",
         "@paged-media/strings": "workspace:*",
+        "@paged-media/vector-geometry": "workspace:*",
+        "@paged-media/vector-tools": "workspace:*",
       },
       "devDependencies": {
         "@paged-media/test-kit": "workspace:*",
@@ -416,13 +418,13 @@
         "@paged-media/helpers": "workspace:*",
         "@paged-media/panel-kit": "workspace:*",
         "@paged-media/strings": "workspace:*",
+        "@paged-media/vector-geometry": "workspace:*",
+        "@paged-media/vector-tools": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
-        "@paged-media/draw-geometry": "workspace:*",
-        "@paged-media/draw-tools": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
         "@paged-media/test-kit": "workspace:*",
@@ -444,33 +446,6 @@
         "react": ">=19.3",
       },
     },
-    "modules/draw/packages/draw-geometry": {
-      "name": "@paged-media/draw-geometry",
-      "version": "0.1.0-canary.0",
-      "dependencies": {
-        "@paged-media/helpers": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "catalog:",
-        "fast-check": "^4.10.2",
-        "mitata": "^1.0.34",
-        "typescript": "catalog:",
-      },
-    },
-    "modules/draw/packages/draw-tools": {
-      "name": "@paged-media/draw-tools",
-      "version": "0.1.0-canary.0",
-      "dependencies": {
-        "@paged-media/draw-geometry": "workspace:*",
-        "@paged-media/plugin-api": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "catalog:",
-        "fast-check": "^4.10.2",
-        "mitata": "^1.0.34",
-        "typescript": "catalog:",
-      },
-    },
     "modules/image": {
       "name": "paged-media-plugin-image",
       "version": "0.0.0",
@@ -482,12 +457,12 @@
       "name": "@paged-media/image",
       "version": "0.1.0-canary.21",
       "dependencies": {
-        "@paged-media/draw-geometry": "workspace:*",
-        "@paged-media/draw-tools": "workspace:*",
         "@paged-media/helpers": "workspace:*",
         "@paged-media/panel-kit": "workspace:*",
         "@paged-media/react-live": "workspace:*",
         "@paged-media/strings": "workspace:*",
+        "@paged-media/vector-geometry": "workspace:*",
+        "@paged-media/vector-tools": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },
       "devDependencies": {
@@ -875,6 +850,33 @@
         "typescript": "catalog:",
       },
     },
+    "platform/shared/vector-geometry": {
+      "name": "@paged-media/vector-geometry",
+      "version": "0.1.0-canary.0",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "fast-check": "^4.10.2",
+        "mitata": "^1.0.34",
+        "typescript": "catalog:",
+      },
+    },
+    "platform/shared/vector-tools": {
+      "name": "@paged-media/vector-tools",
+      "version": "0.1.0-canary.0",
+      "dependencies": {
+        "@paged-media/plugin-api": "workspace:*",
+        "@paged-media/vector-geometry": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "fast-check": "^4.10.2",
+        "mitata": "^1.0.34",
+        "typescript": "catalog:",
+      },
+    },
     "platform/shared/wasm-boot": {
       "name": "@paged-media/wasm-boot",
       "version": "0.0.0",
@@ -1074,10 +1076,6 @@
 
     "@paged-media/draw": ["@paged-media/draw@workspace:modules/draw/packages/draw-bundle"],
 
-    "@paged-media/draw-geometry": ["@paged-media/draw-geometry@workspace:modules/draw/packages/draw-geometry"],
-
-    "@paged-media/draw-tools": ["@paged-media/draw-tools@workspace:modules/draw/packages/draw-tools"],
-
     "@paged-media/editor": ["@paged-media/editor@workspace:apps/editor/packages/editor"],
 
     "@paged-media/helpers": ["@paged-media/helpers@workspace:platform/shared/helpers"],
@@ -1117,6 +1115,10 @@
     "@paged-media/tools": ["@paged-media/tools@workspace:apps/editor/packages/tools"],
 
     "@paged-media/ui": ["@paged-media/ui@workspace:apps/editor/packages/ui"],
+
+    "@paged-media/vector-geometry": ["@paged-media/vector-geometry@workspace:platform/shared/vector-geometry"],
+
+    "@paged-media/vector-tools": ["@paged-media/vector-tools@workspace:platform/shared/vector-tools"],
 
     "@paged-media/viewer": ["@paged-media/viewer@workspace:engine/core/web/idml-viewer"],
 

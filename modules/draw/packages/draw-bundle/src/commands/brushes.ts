@@ -47,7 +47,7 @@ import {
   normalizeWidthPoints,
   WIDTH_PROFILE_PRESETS,
   type WidthPoint,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 import { defineMessages } from "@paged-media/strings";
 
 import { oneBatchFor } from "./batch-handles";

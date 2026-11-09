@@ -191,8 +191,8 @@ before and after the format:
 | `modules/doc/packages/doc-host-model` | bun test | 44 pass, 0 skip, 0 fail |
 | `modules/draw/packages/draw-bundle` | bun test | 1480 pass, 34 skip, 0 fail |
 | `modules/draw/packages/draw-bundle` (`test:dom`) | bun test | 165 pass, 0 skip, 0 fail |
-| `modules/draw/packages/draw-geometry` | bun test | 681 pass, 0 skip, 0 fail |
-| `modules/draw/packages/draw-tools` | bun test | 337 pass, 0 skip, 0 fail |
+| `platform/shared/vector-geometry` | bun test | 681 pass, 0 skip, 0 fail |
+| `platform/shared/vector-tools` | bun test | 337 pass, 0 skip, 0 fail |
 | `modules/image/glue` | bun test | 343 pass, 0 skip, 0 fail |
 | `modules/image/manifest` | paged-plugin validate | exit 0 |
 | `modules/publish/packages/pdf-bundle` | bun test | 26 pass, 0 skip, 0 fail |

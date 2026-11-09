@@ -34,7 +34,7 @@ import type {
   ElementId,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
-import { type Affine, type AnchorTable } from "@paged-media/draw-geometry";
+import { type Affine, type AnchorTable } from "@paged-media/vector-geometry";
 
 import {
   OBJECTS_ON_PATH_DEFAULTS,

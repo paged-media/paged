@@ -26,7 +26,7 @@
 // WHY THIS LIVES IN THE EDITOR AND NOT IN A PLUGIN. Swatches, fills and the
 // colour wheel are the host's; paged.draw carried a Color Guide panel of its
 // own beside the host's Color Wheel (PM-0017). The colour maths (`harmonyOf`,
-// `variationsOf`) is `@paged-media/draw/geometry`'s, which the Recolor
+// `variationsOf`) is `@paged-media/vector-geometry`'s, which the Recolor
 // Artwork panel shares; this file is the reads and the write.
 //
 //  1. THE BASE is the first selected item's own fill, as the document shows
@@ -37,7 +37,11 @@
 //  3. THE ENGINE'S REFUSAL is returned in words.
 
 import type { CanvasClient, ElementId, Mutation } from "@paged-media/client";
-import { parseCssColor, rgbToHex, type Rgb } from "@paged-media/draw/geometry";
+import {
+  parseCssColor,
+  rgbToHex,
+  type Rgb,
+} from "@paged-media/vector-geometry";
 import { refusalText } from "@paged-media/panel-kit";
 
 type Reads = Pick<CanvasClient, "elementProperties" | "send" | "collection">;

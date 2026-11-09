@@ -55,7 +55,7 @@
 // inner one, and the engine fills NON-ZERO (`paged-compose`'s display
 // list says so; `paged-export-pdf` emits `f`, never `f*`). Contours wound
 // the SAME way paint a solid coin. So every region's contours go through
-// draw-geometry's `makeCompoundTable` — `mergeCompound` +
+// vector-geometry's `makeCompoundTable` — `mergeCompound` +
 // `orientForNonZeroHoles` — which re-winds by NESTING DEPTH, and the
 // conformance spec proves the hole in an exported PDF rather than in an
 // anchor table. Make Compound Path re-winds by PAINT ORDER instead
@@ -63,7 +63,7 @@
 // traced contour comes from the tracer with nesting and no paint order,
 // and a hole cut in a traced island — three levels deep — must stay a
 // hole, which the paint-order rule paints solid. Both rules live in
-// draw-geometry; no winding is written in this module.
+// vector-geometry; no winding is written in this module.
 //
 // MUTATION / UNDO SHAPE (the RFI C-15 rule — assert the real count,
 // never claim "one undo"): ONE batch ⇒ 1 undo step (DRW-6, ADR 360). The
@@ -139,7 +139,7 @@ import {
   type AnchorTable,
   type AnchorTriple,
   type Rgb,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import manifest from "../../manifest.json";
 import {
