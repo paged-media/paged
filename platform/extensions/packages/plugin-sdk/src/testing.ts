@@ -46,6 +46,9 @@ import type {
   MlTier,
   ProviderField,
   ProviderRecordSet,
+  WorkbookEditRequest,
+  WorkbookEditSession,
+  WorkbookEditorContribution,
 } from "@paged-media/plugin-api";
 
 import type {
@@ -510,6 +513,66 @@ export function fakeMlProvider(
         }
       }
       throw new Error(`fakeMlProvider: unknown capability ${capability}`);
+    },
+  };
+}
+
+// ------------------------------------------------------------- workbooks
+
+/** One session a {@link fakeWorkbookEditor} opened. */
+export interface FakeWorkbookSession {
+  /** What the consumer asked for (the editor's own copy of the bytes). */
+  readonly request: WorkbookEditRequest;
+  /** Stand in for the user's edit: the workbook becomes `xlsx`. */
+  edit(xlsx: Uint8Array): void;
+  /** Whether the consumer closed it. */
+  readonly closed: boolean;
+}
+
+/** A workbook editor for tests (extensions ADR 1102): it keeps the bytes it
+ *  was given, renders nothing, and changes only when the test calls
+ *  `edit`. Register it with `host.contribute.workbookEditor(fake)`;
+ *  `sessions` lists what consumers opened, newest last. Bytes that do not
+ *  start like a ZIP (`PK`) are refused, as an XLSX reader would. */
+export function fakeWorkbookEditor(
+  id = "test.workbooks/editor",
+): WorkbookEditorContribution & { readonly sessions: FakeWorkbookSession[] } {
+  const sessions: FakeWorkbookSession[] = [];
+  return {
+    id,
+    sessions,
+    async open(request) {
+      if (request.xlsx[0] !== 0x50 || request.xlsx[1] !== 0x4b)
+        throw new Error("fakeWorkbookEditor: not an XLSX workbook");
+      let bytes = request.xlsx;
+      let changed = false;
+      let closed = false;
+      const listeners = new Set<() => void>();
+      const session: WorkbookEditSession = {
+        editor: id,
+        Surface: () => null,
+        changed: () => changed,
+        xlsx: () => bytes,
+        onDidChange(listener) {
+          listeners.add(listener);
+          return { dispose: () => void listeners.delete(listener) };
+        },
+        close() {
+          closed = true;
+        },
+      };
+      sessions.push({
+        request,
+        edit(xlsx) {
+          bytes = xlsx;
+          changed = true;
+          for (const l of [...listeners]) l();
+        },
+        get closed() {
+          return closed;
+        },
+      });
+      return session;
     },
   };
 }

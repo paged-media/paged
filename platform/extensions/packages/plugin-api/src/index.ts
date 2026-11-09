@@ -440,6 +440,16 @@ export type {
 } from "./comments.js";
 
 export type {
+  WorkbookRange,
+  WorkbookRangeRole,
+  WorkbookEditRequest,
+  WorkbookEditorProps,
+  WorkbookEditSession,
+  WorkbookEditorContribution,
+  WorkbooksSurface,
+} from "./workbooks.js";
+
+export type {
   ClipboardSurface,
   ClipboardPayload,
   TabularClipboard,

@@ -65,3 +65,7 @@ export {
   SLIDE_NORMAL_VIEW_KEYS,
 } from "./commands.js";
 export { COMMENTS_PANEL_ID } from "./activate.js";
+// The chart data sheet's frame (slide ADR 724 amendment 1): the editor's
+// round trip through the workbook door mounts it over paged.sheet's grid.
+export { makeChartDataSurface } from "./chart-data-surface.js";
+export { rangesOf, type GridSheet } from "./charts.js";

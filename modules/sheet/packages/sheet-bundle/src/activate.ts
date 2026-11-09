@@ -70,6 +70,7 @@ import { contributeLayoutCommands } from "./layout-commands";
 import { contributeSheetTemplateFields } from "./template-fields";
 import { makeWorkbookPanel } from "./panels/workbook-panel";
 import { makeGridPanel } from "./panels/grid-panel";
+import { contributeWorkbookEditor } from "./workbook-editor";
 import { makeSheetFrameSurface } from "./surface/sheet-frame-surface";
 import { makeDatasetsPanel } from "./panels/datasets-panel";
 import {
@@ -154,6 +155,9 @@ export function activate(host: BundleHost): BundleHandle {
   // open and a document undo/redo all end in `reconcile`, which loads the
   // workbook version the document's label names.
   const objectModel = contributeObjectModel(host, session);
+  // Extensions ADR 1102 — the grid and engine edit the workbooks other
+  // bundles keep (a chart's data in paged.slide), each in a detached session.
+  const workbookEditorDisposers = contributeWorkbookEditor(host);
   // Plan G3/G4: the template field kinds and the layout commands, through
   // the object model's write door.
   const templateFields = contributeSheetTemplateFields(
@@ -912,6 +916,7 @@ export function activate(host: BundleHost): BundleHandle {
       templateFields.dispose();
       layoutCommands.dispose();
       objectModel.dispose();
+      for (const d of workbookEditorDisposers) d();
       session.dispose();
     },
   };

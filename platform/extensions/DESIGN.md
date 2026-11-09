@@ -3355,3 +3355,16 @@ new engine operation and no new capability: reads need `document.read`, writes
 `B7`, slide the shape for `shape:12`. The shared registry is the dynamic
 `contribute.commentAnchor@1`; the host that reads it pins the thread there. The editor has not
 wired the registry yet.
+
+## 33. The workbook door (ADR 1102 — `workbooks@1`, `contribute.workbookEditor@1`)
+
+**One spreadsheet UI.** A bundle that keeps a workbook of its own (a chart's data in paged.slide)
+does not draw a grid of its own: it opens the bytes in the editor another bundle offers
+(`host.workbooks.open({ xlsx, name, ranges })`), mounts the session's `Surface` in its own UI, and
+takes `xlsx()` back when the user is done. paged.sheet offers its grid and engine through
+`contribute.workbookEditor`, one detached workbook session per open.
+
+**The consumer keeps the bytes.** Nothing the door does reaches the document; the consumer writes
+the bytes it got, in its own undo step. While nothing changed `xlsx()` answers the request's own
+bytes, so a chart that was only looked at stays byte-identical. Both flags are dynamic (a shared
+registry is wired); `available()` says whether an editor is registered now.

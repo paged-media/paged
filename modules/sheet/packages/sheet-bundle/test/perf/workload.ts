@@ -145,6 +145,8 @@ interface Glue {
   SheetEngine: new () => {
     set_cell(s: number, r: number, c: number, input: string): unknown;
     save_xlsx(): Uint8Array;
+    load_xlsx(bytes: Uint8Array): void;
+    get_cell_display(s: number, r: number, c: number): string;
     free(): void;
   };
 }
@@ -175,6 +177,22 @@ export async function authorWorkbook(
     }
     for (const [r, c, v] of extra) e.set_cell(0, r, c, v);
     return e.save_xlsx();
+  } finally {
+    e.free();
+  }
+}
+
+/** A cell's shown text in `xlsx`, read by a fresh REAL engine (sheet 0). */
+export async function readCell(
+  xlsx: Uint8Array,
+  row: number,
+  col: number,
+): Promise<string> {
+  const g = await glue();
+  const e = new g.SheetEngine();
+  try {
+    e.load_xlsx(xlsx);
+    return e.get_cell_display(0, row, col);
   } finally {
     e.free();
   }
