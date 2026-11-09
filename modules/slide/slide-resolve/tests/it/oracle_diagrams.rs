@@ -138,6 +138,9 @@ fn smartart_draws_what_powerpoint_drew() {
 /// resolve for it, and stands as that frame turns: the vertical chevron
 /// list's and the manual-operation list's turned shapes keep their text
 /// upright, the hierarchy's quarter-turned root turns its text with it.
+/// A text frame's text, its page box and its turn, degrees.
+type Frame = (String, (f64, f64, f64, f64), f64);
+
 #[test]
 fn smartart_text_turns_as_powerpoint_drew_it() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../slide-conformance/fixtures");
@@ -161,7 +164,7 @@ fn smartart_text_turns_as_powerpoint_drew_it() {
             walk(it, &mut items);
         }
         // Each text frame: its text, its page box and its turn, degrees.
-        let frames: Vec<(String, (f64, f64, f64, f64), f64)> = items
+        let frames: Vec<Frame> = items
             .iter()
             .filter_map(|it| {
                 let ItemKind::Shape { text: Some(tf), .. } = &it.kind else {

@@ -146,10 +146,24 @@ function turnedInk(
 ): { w: number; h: number } | null {
   const near = (i: number, c: [number, number, number]) =>
     c.every((v, k) => Math.abs(img.rgba[i + k]! - v) <= 6);
+  // The shape's own fill: a pixel of `rgb` with `rgb` 3 px off on every
+  // side (the anti-aliased edges of the page's black text are grey too).
+  const fill = (x: number, y: number) =>
+    x >= 3 &&
+    y >= 3 &&
+    x < img.w - 3 &&
+    y < img.h - 3 &&
+    [
+      [0, 0],
+      [3, 0],
+      [-3, 0],
+      [0, 3],
+      [0, -3],
+    ].every(([dx, dy]) => near(((y + dy!) * img.w + x + dx!) * 4, rgb));
   let [x0, y0, x1, y1] = [img.w, img.h, -1, -1];
   for (let y = 0; y < img.h; y++)
     for (let x = 0; x < img.w; x++)
-      if (near((y * img.w + x) * 4, rgb)) {
+      if (fill(x, y)) {
         [x0, y0, x1, y1] = [
           Math.min(x0, x),
           Math.min(y0, y),
