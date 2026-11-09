@@ -2,7 +2,8 @@
 
 - **Status:** Accepted 2026-11-08; **slice 1 built** (the shared reader of `prstTxWarp` with the 41
   presets, their families and adjusts); **slice 2 built** (Amendment 1: the preset guides, the
-  model field, the render pass, doc and slide import). Open: a measured match of Word's and
+  model field, the render pass, doc and slide import); **turned frames built** (Amendment 2, 2026-11-09).
+  Open: a measured match of Word's and
   PowerPoint's shapes, write-back of an edited warp, the adjust handles. Part of the capability
   layering of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Text envelope").
@@ -98,9 +99,9 @@ frame's command range: every filled or stroked path the frame's text drew (glyph
 underlines) is flattened in page space (0.05 pt), its straight pieces cut to 0.5 pt, and each
 point mapped. The source square is the text's ink box, the target the frame's text area (its box
 less its insets), so the text fills the shape, as WordArt does. A bent glyph is a path: its
-glyph-run record is dropped, and a PDF draws it as an outline. Not yet: rotated frames (the area
-is the frame's unrotated top-left box), stroke widths are not bent, a warp in a frame with
-threaded text bends each frame on its own.
+glyph-run record is dropped, and a PDF draws it as an outline. Turned frames: Amendment 2.
+Not yet: stroke widths are not bent, a warp in a frame with threaded text bends each frame on
+its own.
 
 **Import.** doc: a `wps:wsp` text box's `wps:bodyPr` through the shared reader
 (`docx-import` `shape_looks`, keyed like the box's look by `wp:docPr/@id`), carried as
@@ -116,3 +117,41 @@ move the guides, a circle closes, every preset name maps), the renderer (`text_w
 the text inside the area's ellipse and above its centre), doc and slide readers (the warp and its
 adjusts are kept, `textNoShape` is none). **Not verified:** any match to Word's or PowerPoint's
 drawing of a preset; the forms are the guides' shapes, not measured ones.
+
+## Amendment 2 — turned frames (2026-11-09)
+
+**Render.** A turned frame's lines are laid out upright from its spread top-left and turned about
+it by the frame's linear part (the line emit's `frame_is_upright` pass). The warp now works in
+that upright space: `text_warp::warp_range` takes a `Turn` (the linear part and its pivot), takes
+each flattened point back through it, maps it onto the preset's shape over the frame's upright
+text area and turns it again, so the bent text turns with its frame. Vertical justification of a
+turned frame moves its lines along the frame's own vertical axis (`frame_down`), no longer along
+the page's.
+
+**Anchored frames turn** (engine ADR 1050, amendment 2026-11-09): the anchored pass gives the
+TextFrame and Rectangle it synthesises the linear part of the anchored frame's `item_transform`
+about the centre of the placed box (`anchored::anchored_turn`), so an anchored Word text box —
+WordArt or not — turns with its text, warp, fill and outline.
+
+**Import.** doc: `shape_looks` reads a text box's `wps:spPr/a:xfrm/@rot` beside its look and warp
+(`docx_core::TextBox.rotation`), carried as `LoweredTextBox.rotation` /
+`LoweredItemKind::TextBox.rotation` (degrees) onto the anchored frame's `item_transform` (linear
+only) or the page item's text frame (about its centre on the page). slide: unchanged (a shape's
+turn is its item's transform); a shape whose text is bent no longer grows to its text
+(`slide-native` leaves `auto_sizing` unset for a warped frame), since the text is bent onto the
+box itself: grown to the text, an arch had a box one line tall and collapsed to a line.
+
+**Verification.** `text_warp` unit test (a quarter-turned frame is bent in its upright space);
+`tests/it/text_warp_pipeline.rs` (the arch of a frame turned a quarter about its centre, turned
+back, is the upright frame's arch); `tests/it/anchored_turn_pipeline.rs` (a turned anchored text
+frame's glyphs turn); `docx-import` (a turned box keeps its `rot`), `docx-conformance` `wordart`
+(the `wordart` fixture: a page-item arch at 30 degrees and an anchored wave at -20 degrees are
+read, lowered and built turned).
+
+**Oracle.** PowerPoint 16 (the `rotated-text` fixture of `slide-conformance`, slide 1: an arch up
+turned 30 degrees, a wave turned -20 degrees, authored by
+`tooling/oracle/office/powerpoint/fixtures/rotated-text.*`): our render and PowerPoint's PDF agree
+on the turn of both boxes and their bent text; the wave matches closely. The arch follows the box's
+turn, but PowerPoint sets the text along part of the arc at its own length while ours stretches it
+over the whole half ellipse: the preset's form, not the turn (still the open "measured match").
+Word: see doc ADR 629's amendment for the probe of the `wordart` fixture.

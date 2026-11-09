@@ -157,8 +157,8 @@ the model has no run enum, and the inline-object machinery already does what an 
   leading, as any inline object). It is drawn where its character landed, in that character's
   paint: `Glyphs` through `emit_glyph_slice` (a stretched delimiter as the glyph's `y_scale`),
   `Rule` as a filled path, `Stroke` (the radical sign) as a stroked path.
-- Not yet: equations in table cells (the cell path sets no equations), rotated frames' equations
-  follow the anchored-object path, a descent does not push the next line.
+- Not yet: equations in table cells (the cell path sets no equations), a descent does not push
+  the next line. (Rotated frames' equations: amendment 2026-11-09.)
 
 **Doc import.** `docx-import` reads each part's equations once through
 `paged_ooxml::omml::in_part` (every `m:oMathPara` as one display equation, its lines an `eqArr`;
@@ -196,3 +196,13 @@ Word's rendering. No fixture in the repository carries Word's picture of an equa
 writes no fallback image for `m:oMath` in a `.docx`), and no math face is committed, so the
 public gate sets equations in a text face at TeX's constants; the `MATH`-table path is exercised
 only where a math face is installed.
+
+## Amendment 2026-11-09 — an equation in a turned frame turns with its line
+
+An equation is painted after its paragraph's lines, at the place its character landed in the
+line's upright layout. In a turned frame (a turned text frame, or an anchored frame turned by
+engine ADR 1050's amendment of 2026-11-09) the lines are turned about the frame's spread top-left
+by its linear part; the equation's placement now records that turn (`PlacedObject.turn`) and its
+commands are turned the same way, so it stays on its line. Evidence:
+`paged-renderer/tests/it/equations_pipeline.rs` (in a frame turned a quarter, the fraction's bar
+stands upright).

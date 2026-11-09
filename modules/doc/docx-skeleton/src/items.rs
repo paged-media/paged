@@ -142,9 +142,17 @@ pub fn add_page_items(doc: &mut Document, items: &[LoweredPageItem]) {
                 story_id,
                 insets_pt,
                 warp,
+                rotation,
                 ..
             } => {
                 let mut f = text_frame(&item.id, story_id, item.bounds);
+                // A turned box turns about its centre, text and all.
+                if *rotation != 0.0 {
+                    let (cx, cy) = ((left + right) / 2.0, (top + bottom) / 2.0);
+                    let (s, c) = rotation.to_radians().sin_cos();
+                    f.item_transform =
+                        Some([c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy]);
+                }
                 f.next_text_frame = None;
                 f.inset_spacing = Some(*insets_pt);
                 // Engine ADR 1091 — WordArt bends the box's text.

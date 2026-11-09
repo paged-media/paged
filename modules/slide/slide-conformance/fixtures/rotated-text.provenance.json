@@ -1,0 +1,9 @@
+{
+ "oracle": "Microsoft PowerPoint 16.114.4",
+ "recorded": "2026-11-09",
+ "authored_by": "tooling/oracle/office/powerpoint/fixtures/rotated-text.applescript",
+ "slides": 4,
+ "fonts_in_pdf": [
+  "Aptos"
+ ]
+}

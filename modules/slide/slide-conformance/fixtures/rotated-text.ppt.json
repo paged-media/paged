@@ -1,0 +1,73 @@
+{
+ "slides": 4,
+ "powerpoint": "16.114.4",
+ "file": "rotated-text.pptx",
+ "shapes": {
+  "1": [
+   {
+    "index": 1,
+    "name": "Arch 30",
+    "left": 120.0,
+    "top": 120.0,
+    "width": 360.0,
+    "height": 144.0,
+    "rotation": 30.0,
+    "type": "auto",
+    "autosize": "ppAutoSizeNone",
+    "word_wrap": "true",
+    "first_run_size_pt": 40.0,
+    "paragraphs": 1
+   },
+   {
+    "index": 2,
+    "name": "Wave -20",
+    "left": 540.0,
+    "top": 288.0,
+    "width": 324.0,
+    "height": 108.0,
+    "rotation": 340.0,
+    "type": "auto",
+    "autosize": "ppAutoSizeNone",
+    "word_wrap": "true",
+    "first_run_size_pt": 40.0,
+    "paragraphs": 1
+   }
+  ],
+  "2": [
+   {
+    "index": 1,
+    "name": "Diagram 1",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "3": [
+   {
+    "index": 1,
+    "name": "Diagram 2",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ],
+  "4": [
+   {
+    "index": 1,
+    "name": "Diagram 3",
+    "left": 100.0,
+    "top": 100.0,
+    "width": 720.0,
+    "height": 360.0,
+    "rotation": 0.0,
+    "type": "smartart graphic"
+   }
+  ]
+ }
+}

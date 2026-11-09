@@ -1,6 +1,6 @@
 # ADR 629 — SmartArt is drawn from the layout Word saved; shapes take every Annex D preset and their line ends
 
-- **Status:** Accepted 2026-11-08.
+- **Status:** Accepted 2026-11-08; amended 2026-11-09 (turned text boxes).
 - **Scope:** `docx-core` (`DiagramDrawing`, `Run::diagrams`), `docx-import` (`diagram`,
   `objects::drawing_diagram`), `docx-lower` (`diagram`, `shape_geom`, `LoweredGroup`),
   `docx-skeleton` (`body::group_frame`), the doc manifest's wasm ceiling (ADR 627 amendment).
@@ -58,7 +58,6 @@ block arcs, circular arrows, …). `dml-geom` evaluates all 187 from ECMA-376 An
 
 - A diagram is not edited as a diagram (adding a node, retyping its text in the data model): it
   is drawn, and its parts round-trip.
-- Rotated text boxes (`dsp:txXfrm/@rot`) are set unrotated.
 
 ## Size
 
@@ -85,3 +84,25 @@ for it (PM-0013, amendment 6).
   the arrow as a Group of its line and two filled heads.
 - `test/headless/smartart.spec.ts` (real engine): the shapes are painted in the theme's accents; an
   unedited export keeps the diagram's parts.
+
+## Amendment 2026-11-09 — a shape's text turns
+
+Word, like PowerPoint (slide ADR 717, amendment 2026-11-09), states a diagram shape's text box
+(`dsp:txXfrm`) in the drawing's space, unturned, and turns it about its centre by the shape's
+`a:xfrm/@rot` plus the box's own `rot`: a turned layout shape whose text stands upright says so
+with the opposite `rot`, a turned shape with no text box of its own turns its text with it. The
+reader kept the box and dropped both turns, so the text of every turned shape stood upright.
+
+- **Read.** `DiagramText.rotation` (60 000ths of a degree): the shape's `rot` plus the text box's,
+  modulo a full turn.
+- **Lower.** `LoweredPiece::Label.rotation` (degrees), onto the text frame of the group as the
+  linear part of its `item_transform`; the renderer turns an anchored frame about the centre of
+  its placed box (engine ADR 1050, amendment 2026-11-09).
+- **Text boxes.** A Word text box (WordArt or not) turned by its `a:xfrm/@rot` turns too
+  (engine ADR 1091, amendment 2): `TextBox.rotation`, `LoweredTextBox.rotation`,
+  `LoweredItemKind::TextBox.rotation`.
+- **Evidence.** `docx-conformance` `smartart` (the fixture's chevron is now turned a quarter with
+  its text box turned back, its ellipse turned a quarter with no text box: turns 0, 0 and 90
+  degrees, read and lowered); `docx-skeleton` `body_native` (the ellipse's text frame carries the
+  quarter turn, the others none); `test/headless/smartart.spec.ts` (real engine: the turned
+  ellipse's white text ink stands taller than it is wide); `docx-conformance` `wordart`.

@@ -50,3 +50,4 @@ mod template_fields;
 mod theme_saveback;
 mod w0_losses;
 mod w4b;
+mod wordart;

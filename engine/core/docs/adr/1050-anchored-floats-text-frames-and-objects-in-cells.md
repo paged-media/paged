@@ -108,3 +108,16 @@ are unchanged. No operation sets them: the document modules build the model in R
 627). The text wrap of a shape is still its box, and an IDML export writes the frame's box.
 Evidence: `paged-renderer/tests/it/anchored_effects.rs`, a triangle that leaves the box's corners
 paper.
+
+## Amendment 2026-11-09 — an anchored frame can turn
+
+A Word text box or SmartArt text turned by its `a:xfrm/@rot` floats as its unturned box: Word
+places the box and turns it about its centre. The anchored pass now honours the linear part of
+`AnchoredFrame.item_transform` (a rotation, a shear, a flip): the TextFrame and Rectangle it
+synthesises for the placed box take that linear part about the box's centre as their
+`item_transform` (`anchored::anchored_turn`), so the frame's text, warp, fill, outline and
+picture turn with it. Placement still uses only the translation (a group's children) and the
+box; the wrap is still the unturned box. An upright frame (the identity, or a translation as
+IDML writes for most anchored objects) is unchanged; an IDML anchored object with a turned
+`ItemTransform`, drawn upright before, is now drawn turned about its box's centre. Evidence:
+`paged-renderer/tests/it/anchored_turn_pipeline.rs`.

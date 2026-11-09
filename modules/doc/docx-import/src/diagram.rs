@@ -190,17 +190,21 @@ fn shape(sp: &El, place: Place) -> Option<DiagramShape> {
         .iter()
         .find(|c| c.local == "txBody")
         .and_then(|body| {
-            // The text's own box, or the shape's.
-            let (tx, ty, tw, th) = match sp.children.iter().find(|c| c.local == "txXfrm") {
+            // The text's own box, or the shape's; it turns with the shape
+            // and by its own `rot` (doc ADR 629, amendment).
+            let (tx, ty, tw, th, turn) = match sp.children.iter().find(|c| c.local == "txXfrm") {
                 Some(t) => {
                     let ((ox, oy), (cx, cy)) = xfrm(t);
                     let (x, y) = place.point(ox, oy);
                     let (w, h) = place.size(cx, cy);
-                    (x, y, w, h)
+                    (x, y, w, h, t.attr_i32("rot").unwrap_or(0))
                 }
-                None => (x_emu, y_emu, width_emu, height_emu),
+                None => (x_emu, y_emu, width_emu, height_emu, 0),
             };
-            text(body, sp, (tx, ty, tw, th))
+            text(body, sp, (tx, ty, tw, th)).map(|mut t| {
+                t.rotation = (shape.rotation + turn).rem_euclid(21_600_000);
+                t
+            })
         });
     Some(DiagramShape {
         x_emu,
@@ -274,5 +278,6 @@ fn text(body: &El, sp: &El, (x, y, w, h): (i64, i64, i64, i64)) -> Option<Diagra
         ],
         anchor: pr.and_then(|p| p.attr("anchor")).unwrap_or("t").to_string(),
         paragraphs,
+        rotation: 0,
     })
 }

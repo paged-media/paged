@@ -170,7 +170,9 @@ inline object of its paragraph (`Paragraph.equations`); the renderer's one metri
 equation's alternate content) and `slide-native`. Open: equations in table cells, a wire door, the Word-oracle
 comparison. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
 adjusts) for doc, slide and sheet; `paged_warp::textshape` is the one set of preset guides; the frame's `text_warp` is bent by the
-renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. Open: a measured match, write-back, handles.
+renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. A turned frame bends in its own upright space and
+turns its text with it, an anchored frame (a Word text box, SmartArt text) included (engine ADR 1091 amendment 2, ADR 1050 amendment 2026-11-09;
+equations turn with their line, ADR 1090 amendment 2026-11-09). Open: a measured match, write-back, handles.
 ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
 provider); `apps/ml-host` runs a user-installed matting runner (`matting` job, Amendment 2), which `mlHostProvider` serves as
 `ml.matting@1` while the host's health lists it. Tier-A matting models are open.
@@ -424,7 +426,8 @@ Status (draw items, one line each; updated as they land):
 
 - **doc:** recolour, chart data editing, SmartArt editing, OpenType features, equations. Charts: DONE from the cached values
   (doc ADR 628, `slide-chart`'s layout, anchored groups; chart data editing is open; the workbook door, extensions ADR 1102, is the way slide took). SmartArt:
-  DONE as drawn (doc ADR 629: the `dsp:drawing` Word saved, as an anchored group of shapes and text frames; editing the
+  DONE as drawn (doc ADR 629: the `dsp:drawing` Word saved, as an anchored group of shapes and text frames, a text box
+  turned with its shape and by its own `dsp:txXfrm/@rot`, as in slide (slide ADR 717 amendment 2026-11-09); editing the
   diagram is open). Shapes: PARTLY DONE (doc ADR 627: non-text `wps:wsp` as anchored Rectangle frames drawn along their
   outline, every Annex D preset through `dml-geom` since doc ADR 629 and literal custom geometry, `wps:style` completing
   the look; a shape's own text wrap is open). Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to

@@ -136,6 +136,7 @@ impl crate::Lowering {
                 "b" => Some("BottomAlign".into()),
                 _ => None,
             },
+            rotation: t.rotation as f32 / 60_000.0,
         }
     }
 }

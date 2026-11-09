@@ -130,3 +130,114 @@ fn smartart_draws_what_powerpoint_drew() {
     assert!(checked >= 40, "only {checked} blocks checked");
     assert!(misses.is_empty(), "{}", misses.join("\n"));
 }
+
+/// Slide ADR 705 amendment — SmartArt text turns as PowerPoint draws it: a
+/// shape's text box (`dsp:txXfrm`) turns with the shape and by its own
+/// `rot`. Every word PowerPoint drew in the `rotated-text` fixture's diagrams
+/// (`rotated-text.words.json`, from its PDF) stands inside the text frame we
+/// resolve for it, and stands as that frame turns: the vertical chevron
+/// list's and the manual-operation list's turned shapes keep their text
+/// upright, the hierarchy's quarter-turned root turns its text with it.
+#[test]
+fn smartart_text_turns_as_powerpoint_drew_it() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../slide-conformance/fixtures");
+    let bytes = std::fs::read(dir.join("rotated-text.pptx")).unwrap();
+    let words: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(dir.join("rotated-text.words.json")).unwrap())
+            .unwrap();
+    let deck = slide_resolve::resolve(&pptx_import::import_pptx(&bytes).unwrap());
+    let mut checked = 0;
+    let mut misses = Vec::new();
+    let mut turned = 0;
+    for (k, page) in words["pages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .skip(1)
+    {
+        let mut items = Vec::new();
+        for it in &deck.slides[k].items {
+            walk(it, &mut items);
+        }
+        // Each text frame: its text, its page box and its turn, degrees.
+        let frames: Vec<(String, (f64, f64, f64, f64), f64)> = items
+            .iter()
+            .filter_map(|it| {
+                let ItemKind::Shape { text: Some(tf), .. } = &it.kind else {
+                    return None;
+                };
+                let text: String = tf
+                    .paragraphs
+                    .iter()
+                    .flat_map(|p| p.runs.iter().map(|r| r.text.as_str()))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let m = &it.transform;
+                let turn =
+                    (m[1].atan2(m[0]).to_degrees() + tf.rotation + tf.turn).rem_euclid(360.0);
+                let (l, t, r, b) = tf.rect;
+                let (cx, cy) = ((l + r) / 2.0, (t + b) / 2.0);
+                let (hw, hh) = if tf.rotation != 0.0 {
+                    ((b - t) / 2.0, (r - l) / 2.0)
+                } else {
+                    ((r - l) / 2.0, (b - t) / 2.0)
+                };
+                let (s, c) = (tf.rotation + tf.turn).to_radians().sin_cos();
+                let mut bx = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+                for (dx, dy) in [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)] {
+                    let (x, y) = (cx + c * dx - s * dy, cy + s * dx + c * dy);
+                    let (px, py) = (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]);
+                    bx = (bx.0.min(px), bx.1.min(py), bx.2.max(px), bx.3.max(py));
+                }
+                Some((text, bx, turn))
+            })
+            .collect();
+        for w in page.as_array().unwrap() {
+            let text = w["text"].as_str().unwrap();
+            let v: Vec<f64> = w["box"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_f64().unwrap())
+                .collect();
+            let (wx, wy) = ((v[0] + v[2]) / 2.0, (v[1] + v[3]) / 2.0);
+            let tall = (v[3] - v[1]) > 1.2 * (v[2] - v[0]);
+            // The frame holding the word where PowerPoint drew it (a word
+            // can stand in several).
+            let holding: Vec<_> = frames
+                .iter()
+                .filter(|(t, ..)| t.split(' ').any(|p| p == text))
+                .collect();
+            if holding.is_empty() {
+                misses.push(format!("slide {}: no frame holds {text:?}", k + 1));
+                continue;
+            }
+            checked += 1;
+            let inside = |bx: &(f64, f64, f64, f64)| {
+                bx.0 - 2.0 <= wx && wx <= bx.2 + 2.0 && bx.1 - 2.0 <= wy && wy <= bx.3 + 2.0
+            };
+            let Some(&&(_, _, turn)) = holding.iter().find(|(_, bx, _)| inside(bx)) else {
+                misses.push(format!(
+                    "slide {}: {text:?} drawn at ({wx:.1}, {wy:.1}), our frames {:.1?}",
+                    k + 1,
+                    holding.iter().map(|h| h.1).collect::<Vec<_>>()
+                ));
+                continue;
+            };
+            let quarter = (turn - 90.0).abs() < 1.0 || (turn - 270.0).abs() < 1.0;
+            let upright = turn < 1.0 || turn > 359.0;
+            turned += usize::from(quarter);
+            if (tall && !quarter) || (!tall && !upright) {
+                misses.push(format!(
+                    "slide {}: {text:?} drawn {}, our frame turned {turn:.1}",
+                    k + 1,
+                    if tall { "turned" } else { "upright" }
+                ));
+            }
+        }
+    }
+    assert!(checked >= 15, "only {checked} words checked");
+    assert_eq!(turned, 1, "one turned word (the hierarchy's root)");
+    assert!(misses.is_empty(), "{}", misses.join("\n"));
+}

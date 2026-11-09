@@ -174,3 +174,24 @@ shape, in one `document.mutate` on release, so one undo step; a cancelled drag (
 nothing. The handles take the host's round handle look, not PowerPoint's yellow. The bundle shows
 them only when `overlay.handles.hostDrag@1` holds. The overlay contribution, its DOM pointer code
 and its own screen metrics are deleted.
+
+## Amendment (2026-11-09): SmartArt text turns with its shape
+
+A SmartArt drawing shape states its text box (`dsp:txXfrm`) in the drawing's space, unturned,
+like its own `a:xfrm`; PowerPoint turns that box about its centre by the shape's turn plus the
+box's own `rot`. A quarter-turned chevron of the vertical chevron list keeps its text upright with
+`rot="-5400000"`; the horizontal multi-level hierarchy's root, turned 270 degrees with a text box
+that states no `rot`, turns its text with it. `slide-resolve` placed the box at its offset from the
+shape's corner inside the turned shape and ignored its `rot`, so the chevrons' text stood turned
+and out of place. Now `smartart_text_box` takes the box's centre back through the shape's turn
+and flips into the shape's own box and keeps its extent, and its `rot` is the text frame's new
+`turn` (degrees about the box's centre, on top of the `vert` rotation, which alone swaps the box's
+sides); `slide-native` turns the frame by both.
+
+Evidence: the `rotated-text` fixture (written by PowerPoint 16 from
+`tooling/oracle/office/powerpoint/fixtures/rotated-text.*`: slides 2 to 4 are a vertical chevron
+list, a horizontal multi-level hierarchy and a manual-operation list, laid out by PowerPoint from
+its own layout definitions) and the words PowerPoint drew in its PDF (`rotated-text.words.json`):
+`slide-resolve` `oracle_diagrams::smartart_text_turns_as_powerpoint_drew_it` finds every word
+inside the text frame we resolve for it and standing as that frame turns (the root's turned, the
+rest upright). Slide 1 holds turned WordArt (engine ADR 1091, amendment 2).

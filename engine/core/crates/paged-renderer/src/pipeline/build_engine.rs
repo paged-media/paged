@@ -5727,13 +5727,24 @@ impl<'a> StoryEmitter<'a> {
             let (ox, oy) = page.spread_origin;
             let insets = frame.inset_spacing.unwrap_or([0.0; 4]);
             let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+            // The lines were laid out upright from the frame's top left
+            // and turned about it by the frame's linear part (see
+            // `frame_is_upright` in the line emit): the warp works in that
+            // upright space.
+            let (px, py) = (sx - ox, sy - oy);
             let area = paged_warp::textshape::Box2 {
-                x: f64::from(sx - ox + insets[1]),
-                y: f64::from(sy - oy + insets[0]),
+                x: f64::from(px + insets[1]),
+                y: f64::from(py + insets[0]),
                 w: f64::from(frame.bounds.width() - insets[1] - insets[3]),
                 h: f64::from(frame.bounds.height() - insets[0] - insets[2]),
             };
-            super::text_warp::warp_range(&mut page.list, start..end, warp, area);
+            let turn = super::text_warp::Turn {
+                linear: frame
+                    .item_transform
+                    .map_or([1.0, 0.0, 0.0, 1.0], |m| [m[0], m[1], m[2], m[3]]),
+                pivot: (px, py),
+            };
+            super::text_warp::warp_range(&mut page.list, start..end, warp, area, turn);
         }
     }
 
@@ -5784,7 +5795,11 @@ impl<'a> StoryEmitter<'a> {
                         continue;
                     }
                     let dy_pt = dy_64 as f32 / paged_text::shape::ADVANCE_PRECISION;
-                    list.map_transforms(seg_start..seg_end, |t| t.0[5] += dy_pt);
+                    let (sx, sy) = frame_down(frame, dy_pt);
+                    list.map_transforms(seg_start..seg_end, |t| {
+                        t.0[4] += sx;
+                        t.0[5] += sy;
+                    });
                 }
                 continue;
             }
@@ -5797,9 +5812,13 @@ impl<'a> StoryEmitter<'a> {
                 continue;
             }
             let dy_pt = dy_64 as f32 / paged_text::shape::ADVANCE_PRECISION;
+            let (sx, sy) = frame_down(frame, dy_pt);
             pages[self.chain_pages[i]]
                 .list
-                .map_transforms(start..end, |t| t.0[5] += dy_pt);
+                .map_transforms(start..end, |t| {
+                    t.0[4] += sx;
+                    t.0[5] += sy;
+                });
         }
     }
 
@@ -9431,6 +9450,12 @@ fn emit_paragraph_lines(
                             point_size: lo.point_size,
                             cap_height,
                             paint: Some(picker.pick(g.cluster)),
+                            turn: super::text_warp::Turn {
+                                linear: frame
+                                    .item_transform
+                                    .map_or([1.0, 0.0, 0.0, 1.0], |m| [m[0], m[1], m[2], m[3]]),
+                                pivot: (sx - ox, sy - oy),
+                            },
                         });
                     }
                 }
@@ -10180,4 +10205,14 @@ fn master_paint_order(spread: &paged_model::Spread) -> Vec<paged_model::FrameRef
     let rest: Vec<FrameRef> = legacy.filter(|fr| !seen(fr)).collect();
     order.extend(rest);
     order
+}
+
+/// `dy` pt down a frame's text column, on the page: along the frame's own
+/// vertical axis, which its linear part turns (a frame's lines are turned
+/// with it, so their vertical justification is too).
+fn frame_down(frame: &TextFrame, dy: f32) -> (f32, f32) {
+    match frame.item_transform {
+        Some(m) => (m[2] * dy, m[3] * dy),
+        None => (0.0, dy),
+    }
 }

@@ -19,8 +19,8 @@
 // Doc ADR 629 — SmartArt on the real engine: File ▸ Open of `smartart.docx`
 // draws the shapes Word saved of the diagram's layout in the theme's
 // accents (the rounded rectangle and the arrow in the first, the chevron
-// in the second, the ellipse in the third); an unedited export keeps the
-// diagram's parts byte for byte.
+// in the second, the ellipse in the third), the turned ellipse's text turned
+// with it; an unedited export keeps the diagram's parts byte for byte.
 
 import { readFileSync } from "node:fs";
 import { inflateRawSync, inflateSync } from "node:zlib";
@@ -135,6 +135,46 @@ function paint(
   return { count, box: (x1 - x0 + 1) * (y1 - y0 + 1) };
 }
 
+/**
+ * The box of the white ink inside the round shape painted `rgb` (within its
+ * inscribed circle, so the page around the shape is not counted), or null
+ * when the render has no such shape.
+ */
+function turnedInk(
+  img: { w: number; h: number; rgba: Uint8Array },
+  rgb: [number, number, number],
+): { w: number; h: number } | null {
+  const near = (i: number, c: [number, number, number]) =>
+    c.every((v, k) => Math.abs(img.rgba[i + k]! - v) <= 6);
+  let [x0, y0, x1, y1] = [img.w, img.h, -1, -1];
+  for (let y = 0; y < img.h; y++)
+    for (let x = 0; x < img.w; x++)
+      if (near((y * img.w + x) * 4, rgb)) {
+        [x0, y0, x1, y1] = [
+          Math.min(x0, x),
+          Math.min(y0, y),
+          Math.max(x1, x),
+          Math.max(y1, y),
+        ];
+      }
+  if (x1 < 0) return null;
+  const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
+  const r = 0.9 * Math.min(x1 - x0, y1 - y0) * 0.5;
+  let [a0, b0, a1, b1] = [img.w, img.h, -1, -1];
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++) {
+      if ((x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
+      if (!near((y * img.w + x) * 4, [0xff, 0xff, 0xff])) continue;
+      [a0, b0, a1, b1] = [
+        Math.min(a0, x),
+        Math.min(b0, y),
+        Math.max(a1, x),
+        Math.max(b1, y),
+      ];
+    }
+  return a1 < 0 ? null : { w: a1 - a0 + 1, h: b1 - b0 + 1 };
+}
+
 /** One entry of a ZIP, decompressed. */
 function inflatedPart(bytes: Uint8Array, name: string): Uint8Array {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -233,6 +273,13 @@ describe.skipIf(!docxPresent)(
       expect(count([0x44, 0x72, 0xc4])).toBeGreaterThan(500);
       expect(count([0xed, 0x7d, 0x31])).toBeGreaterThan(500);
       expect(count([0xa5, 0xa5, 0xa5])).toBeGreaterThan(500);
+      // Doc ADR 629, amendment: the ellipse is turned a quarter and its
+      // text turns with it, so its white ink stands taller than it is wide.
+      const ink = renders
+        .map((img) => turnedInk(img, [0xa5, 0xa5, 0xa5]))
+        .find((b) => b !== null);
+      expect(ink).toBeDefined();
+      expect(ink!.h).toBeGreaterThan(1.5 * ink!.w);
 
       const exporter = h
         .exportersContributed()

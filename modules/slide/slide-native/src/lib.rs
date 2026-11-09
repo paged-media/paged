@@ -1604,11 +1604,18 @@ impl Builder<'_> {
             }
         }
         // Vertical text (`vert`, `vert270`): the frame is the text rectangle
-        // turned a quarter, so lines run along its long side.
-        let (paths, transform) = if tf.rotation != 0.0 {
+        // turned a quarter, so lines run along its long side. A text box
+        // turned in its shape (`turn`, a SmartArt shape's `txXfrm`) keeps
+        // its extent and turns about its centre too.
+        let turn = tf.rotation + tf.turn;
+        let (paths, transform) = if turn != 0.0 {
             let (cx, cy) = ((l + r) / 2.0, (t + b) / 2.0);
-            let (hw, hh) = ((b - t) / 2.0, (r - l) / 2.0);
-            let (sn, cs) = tf.rotation.to_radians().sin_cos();
+            let (hw, hh) = if tf.rotation != 0.0 {
+                ((b - t) / 2.0, (r - l) / 2.0)
+            } else {
+                ((r - l) / 2.0, (b - t) / 2.0)
+            };
+            let (sn, cs) = turn.to_radians().sin_cos();
             let rot = [
                 cs,
                 sn,
@@ -1647,12 +1654,17 @@ impl Builder<'_> {
             // anchored edge shows the same lines in the same place (a frame
             // that fits is unchanged in effect: shrinking toward the anchor
             // moves no line).
-            f.auto_sizing = Some(AutoSizingType::HeightOnly);
-            f.auto_sizing_reference_point = Some(match tf.anchor.as_str() {
-                "middle" => AutoSizingReferencePoint::CenterPoint,
-                "bottom" => AutoSizingReferencePoint::BottomCenterPoint,
-                _ => AutoSizingReferencePoint::TopCenterPoint,
-            });
+            // WordArt is the exception: its text is bent onto the box
+            // itself (engine ADR 1091), so the box keeps its size.
+            let warped = tf.warp.is_some();
+            if !warped {
+                f.auto_sizing = Some(AutoSizingType::HeightOnly);
+                f.auto_sizing_reference_point = Some(match tf.anchor.as_str() {
+                    "middle" => AutoSizingReferencePoint::CenterPoint,
+                    "bottom" => AutoSizingReferencePoint::BottomCenterPoint,
+                    _ => AutoSizingReferencePoint::TopCenterPoint,
+                });
+            }
             match first_baseline(tf) {
                 Some(v) => {
                     f.first_baseline_offset = Some(FirstBaselineOffset::FixedHeight);

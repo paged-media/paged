@@ -84,13 +84,27 @@ fn a_diagram_is_read_from_the_drawing_word_saved__feat__doc_smartart() {
     assert_eq!(names, ["roundRect", "rightArrow", "chevron", "ellipse"]);
     // The group halves the chevron and moves it to its offset.
     let chevron = &d.shapes[2];
-    assert_eq!((chevron.x_emu, chevron.y_emu), (1_935_480, 0));
+    assert_eq!(
+        (chevron.x_emu, chevron.y_emu),
+        (1_935_480 + 228_600, -228_600)
+    );
     assert_eq!(
         (chevron.shape.width_emu, chevron.shape.height_emu),
-        (1_371_600, 914_400)
+        (914_400, 1_371_600)
     );
     let text = chevron.text.as_ref().expect("text");
     assert_eq!((text.x_emu, text.width_emu), (1_935_480 + 457_200, 457_200));
+    // Doc ADR 629, amendment: a text box turns with its shape and by its own
+    // `rot`. The chevron's quarter turn is undone by its text box's; the
+    // ellipse's text turns with it; the rounded rectangle's stands.
+    assert_eq!(chevron.shape.rotation, 5_400_000);
+    let turns: Vec<i32> = d
+        .shapes
+        .iter()
+        .filter_map(|s| s.text.as_ref())
+        .map(|t| t.rotation)
+        .collect();
+    assert_eq!(turns, [0, 0, 5_400_000]);
     // The texts, the insets, the anchor and the style's font colour.
     let texts: Vec<_> = d
         .shapes
@@ -146,6 +160,15 @@ fn a_diagram_lowers_to_an_anchored_group_of_shapes_and_texts__feat__doc_smartart
         })
         .collect();
     assert_eq!(labels, SMARTART_TEXTS);
+    let turns: Vec<f32> = g
+        .pieces
+        .iter()
+        .filter_map(|p| match p {
+            LoweredPiece::Label { rotation, .. } => Some(*rotation),
+            LoweredPiece::Shape { .. } => None,
+        })
+        .collect();
+    assert_eq!(turns, [0.0, 0.0, 90.0]);
     let messages: Vec<&str> = ir.diagnostics.iter().map(|d| d.message.as_str()).collect();
     assert!(
         messages

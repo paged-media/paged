@@ -1197,13 +1197,24 @@ fn smartart_is_an_anchored_group_of_its_drawing() {
         .filter(|c| matches!(c.frame_kind, AnchoredFrameKind::TextFrame))
         .collect();
     assert_eq!((shapes.len(), texts.len()), (4, 3));
-    // The chevron, halved by its group, sits after the arrow.
+    // The chevron, halved by its group, sits after the arrow (its unturned
+    // box: it is turned a quarter about its centre).
     let chevron = shapes[2];
     assert_eq!(chevron.anchors.len(), 6);
     let b = chevron.bounds.unwrap();
     assert!(
-        (b.left - 152.4).abs() < 0.01 && (b.width() - 108.0).abs() < 0.01,
+        (b.left - 170.4).abs() < 0.01 && (b.width() - 72.0).abs() < 0.01,
         "{b:?}"
+    );
+    // Doc ADR 629, amendment: the ellipse's text turns a quarter with it,
+    // about its box's centre; the others stand.
+    let turns: Vec<_> = texts.iter().map(|t| t.item_transform).collect();
+    assert_eq!(turns[..2], [None, None]);
+    let m = turns[2].expect("the ellipse's text is turned");
+    let want = [0.0, 1.0, -1.0, 0.0, 0.0, 0.0];
+    assert!(
+        m.iter().zip(want).all(|(a, b)| (a - b).abs() < 1e-6),
+        "{m:?}"
     );
     // Text is centred in its box, as Word anchors it.
     for t in &texts {

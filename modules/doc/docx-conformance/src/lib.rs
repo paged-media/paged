@@ -49,8 +49,8 @@ pub use math::{equations_document_xml, equations_docx, EQUATION_LEAD};
 pub use native::{break_kept_body_docx, endnote_body_docx};
 pub use objects::{
     float_cases, objects_floats_docx, objects_languages_docx, objects_nested_tables_docx,
-    objects_table_look_docx, objects_text_boxes_docx, FLOAT_PAGE_PARAGRAPHS, FLOAT_SIZE_PT,
-    LANGUAGE_CASES, TABLE_LOOK_CASES, TEXT_BOX_LINES,
+    objects_table_look_docx, objects_text_boxes_docx, wordart_docx, FLOAT_PAGE_PARAGRAPHS,
+    FLOAT_SIZE_PT, LANGUAGE_CASES, TABLE_LOOK_CASES, TEXT_BOX_LINES,
 };
 pub use reach::{
     crop_png, drop_cap_docx, drop_cap_paragraphs, picture_crop_cell_docx, picture_crop_docx,

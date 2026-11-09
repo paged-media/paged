@@ -61,7 +61,7 @@ use paged_ooxml::drawingml::resolved;
 
 /// `[a, b, c, d, tx, ty]`: x' = a·x + c·y + tx, y' = b·x + d·y + ty.
 pub use paged_geom::affine64::Affine64 as Affine;
-use paged_geom::affine64::{apply, multiply as mul, IDENTITY};
+use paged_geom::affine64::{apply, invert, multiply as mul, IDENTITY};
 
 fn translate(x: f64, y: f64) -> Affine {
     [1.0, 0.0, 0.0, 1.0, x, y]
@@ -543,6 +543,32 @@ fn outline(geometry: Option<&Geometry>, w: f64, h: f64) -> slide_geom::Outline {
     }
 }
 
+/// A SmartArt shape's text box (`dsp:txXfrm`) in the shape's own box: its
+/// rectangle, and the degrees it turns about its centre there. PowerPoint
+/// states the box in the drawing's space, unturned, like the shape's
+/// `xfrm`, and turns it about its centre by the shape's turn plus its own
+/// `rot` (a quarter-turned chevron whose text stands upright says
+/// `rot="-5400000"`; a turned box that says none turns its text with it).
+/// The shape's box is turned (and flipped) about its centre, so the text
+/// box's centre is taken back through that turn into the box; a stretched
+/// group (`scale`) stretches the offset and the extent.
+fn smartart_text_box(tx: &Xfrm, x: &Xfrm, scale: (f64, f64)) -> ((f64, f64, f64, f64), f64) {
+    let pt = |v: i64| v as f64 / EMU_PER_PT;
+    let (sw, sh) = (pt(x.ext.0), pt(x.ext.1));
+    let (tw, th) = (pt(tx.ext.0) * scale.0, pt(tx.ext.1) * scale.1);
+    let d = (
+        pt(tx.off.0) + pt(tx.ext.0) / 2.0 - pt(x.off.0) - sw / 2.0,
+        pt(tx.off.1) + pt(tx.ext.1) / 2.0 - pt(x.off.1) - sh / 2.0,
+    );
+    let back = invert(&orient(x.rot as f64 / 60_000.0, x.flip_h, x.flip_v)).unwrap_or(IDENTITY);
+    let (dx, dy) = apply(&back, d);
+    let (cx, cy) = ((sw / 2.0 + dx) * scale.0, (sh / 2.0 + dy) * scale.1);
+    (
+        (cx - tw / 2.0, cy - th / 2.0, cx + tw / 2.0, cy + th / 2.0),
+        tx.rot as f64 / 60_000.0,
+    )
+}
+
 fn text_frame(
     chain: &[&Sp],
     rect: (f64, f64, f64, f64),
@@ -639,6 +665,7 @@ fn text_frame(
         grow: matches!(body.autofit, Some(pptx_core::Autofit::Shape)),
         shrink,
         rotation,
+        turn: 0.0,
         paragraphs: text::body(own, &tctx),
         warp: body.warp.clone().filter(|w| w.preset != "textNoShape"),
     })
@@ -683,22 +710,16 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 .map(|s| &s.props)
                 .unwrap_or(&sp.props);
             let stroke = shape_stroke(line_props, style, ctx);
-            // A SmartArt shape's text box (`txXfrm`) is its own rectangle
-            // in the shape's coordinate space.
-            let text_rect = match (&sp.text_xfrm, &sp.props.xfrm) {
-                (Some(tx), Some(x)) => {
-                    let l = (tx.off.0 - x.off.0) as f64 / EMU_PER_PT;
-                    let t = (tx.off.1 - x.off.1) as f64 / EMU_PER_PT;
-                    (
-                        l,
-                        t,
-                        l + tx.ext.0 as f64 / EMU_PER_PT,
-                        t + tx.ext.1 as f64 / EMU_PER_PT,
-                    )
-                }
-                _ => o.text_rect,
+            // A SmartArt shape's text box (`txXfrm`): its own rectangle,
+            // turned with the shape and by its own `rot`.
+            let (text_rect, turn) = match (&sp.text_xfrm, &sp.props.xfrm) {
+                (Some(tx), Some(x)) => smartart_text_box(tx, x, space.scale),
+                _ => (o.text_rect, 0.0),
             };
-            let text = text_frame(&chain, text_rect, w, h, ctx);
+            let mut text = text_frame(&chain, text_rect, w, h, ctx);
+            if let Some(t) = &mut text {
+                t.turn = turn;
+            }
             if matches!(fill, Paint::None) && stroke.is_none() && text.is_none() && !prompt {
                 return None;
             }
