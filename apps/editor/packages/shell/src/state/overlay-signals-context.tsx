@@ -210,7 +210,7 @@ interface OverlaySignalsValue {
   setOverlayLayer: (key: string, shapes: readonly ToolPreviewShape[]) => void;
   /** Drop a layer and its place in the stack. */
   removeOverlayLayer: (key: string) => void;
-  /** Extensions ADR 1102 — register (`null`: drop) a bundle's handle
+  /** Extensions ADR 1103 — register (`null`: drop) a bundle's handle
    *  router, which the Selection tools ask before their own hit test.
    *  Not state: registering one re-renders nothing. */
   setHandleRouter: (key: string, router: HostHandleRouter | null) => void;
@@ -283,7 +283,7 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
     [],
   );
 
-  // ADR 1102 — a ref, not state: the canvas reads the routers on each
+  // ADR 1103 — a ref, not state: the canvas reads the routers on each
   // press, and a bundle (un)registering one must not re-render the shell.
   const routersRef = useRef(new Map<string, HostHandleRouter>());
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)

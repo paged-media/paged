@@ -24,7 +24,7 @@
 // The handles are a host handle set (`host.overlay.handles`, extensions ADR
 // 339) the host draws and hit-tests at a constant screen size, and the
 // host's own Selection tools hand a drag on one to this bundle
-// (`onHostDrag`, extensions ADR 1102): slide contributes no tool, the
+// (`onHostDrag`, extensions ADR 1103): slide contributes no tool, the
 // selection is the host's. The drag's outline preview is a retained
 // overlay layer. Where the handles are and what a drag writes is the slide
 // engine's (one wasm call each, dml-geom's handles); this file keeps the

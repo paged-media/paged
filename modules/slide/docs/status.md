@@ -22,7 +22,7 @@ Read from the code on 2026-10-30.
   rectangle keeps its corner radius), with its detail element and text frame. A connector glued
   to two shapes (`a:stCxn` / `a:endCxn`) is routed again when one of them moves. Both are written
   in the edit's undo step. The selected preset shows its adjust handles (a host handle set the
-  host's Selection tool drags, extensions ADR 1102); a drag changes the adjust values (one undo
+  host's Selection tool drags, extensions ADR 1103); a drag changes the adjust values (one undo
   step). Insert ▸ Shapes opens a Shapes panel with every preset, and
   the typed command `media.paged.slide.insertShape` inserts one; either way the shape is a live
   preset. Export writes a live preset as `a:prstGeom` with its `a:avLst`.
@@ -35,8 +35,10 @@ Read from the code on 2026-10-30.
   one made from the chart's cached values in PowerPoint's sheet layout, the series bound to the
   cells by their formulas, formulas calculated by `sheet-calc`. Kept per chart as a container
   part. Double-click a chart (twice: group, then chart) to edit its data in the chart data
-  sheet (the `slideChart` context's frame surface: the bound cells tinted, sheet tabs, full
-  screen); leaving redraws every frame of the chart in one undo step, where the frame stands now.
+  sheet (the `slideChart` context's frame surface around paged.sheet's grid, opened through the
+  workbook door, ADR 724 amendment 1: the bound cells tinted, sheet tabs, formula bar, full
+  screen); leaving redraws every frame of the chart in one undo step, where the frame stands now,
+  and an unedited chart writes nothing.
   `slide-chart` draws the 2-D bar, line, area, pie and doughnut charts from the live values;
   paged.sheet's chart engine draws every other kind (scatter, bubble, radar, stock, surface,
   3-D, the Office 2016 kinds). Export writes an edited chart's part (caches from the cells) and

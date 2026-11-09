@@ -1060,7 +1060,7 @@ export interface ToolPreviewText {
 }
 
 /**
- * Extensions ADR 1102 — what the host's Selection tools ask about a
+ * Extensions ADR 1103 — what the host's Selection tools ask about a
  * bundle's handles (`PagedEditor.overlaySignals.setHandleRouter`). The
  * SDK builds one per bundle from the handle sets that have an
  * `onHostDrag` listener; the host never sees the sets themselves.
@@ -1324,7 +1324,7 @@ export interface PagedEditor {
     setOverlayLayer?(key: string, shapes: readonly ToolPreviewShape[]): void;
     /** W-20 — drop a layer and its place in the stack. */
     removeOverlayLayer?(key: string): void;
-    /** Extensions ADR 1102 — register (or, with `null`, drop) the router
+    /** Extensions ADR 1103 — register (or, with `null`, drop) the router
      *  the host's own Selection tools ask before they hit-test the
      *  selection: a press on a handle the router answers is the
      *  bundle's drag, not a move or a marquee. `key` is host-wide (the

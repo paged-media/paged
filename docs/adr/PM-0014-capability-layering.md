@@ -117,7 +117,7 @@ sites are DrawingML's. So the lowest layer every consumer reaches is the shared 
 not L2. It is its own Cargo workspace, a path dependency of the modules, and it keeps its old
 name in the slide workspace through a `package = "dml-geom"` alias, as this record asks of a
 moved crate. Adjust handles are a host handle set (extensions ADR 339) that the host's Selection
-tools drag (extensions ADR 1102, 2026-11-09).
+tools drag (extensions ADR 1103, 2026-11-09).
 
 ## Amendment (2026-11-01): the built-ins are part of the core
 

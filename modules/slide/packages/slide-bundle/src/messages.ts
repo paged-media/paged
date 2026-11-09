@@ -313,7 +313,9 @@ export const CHARTS = defineMessages("slide.charts", {
   done: "Done",
   fullScreen: "Full screen",
   backToSlide: "Back to slide",
-  refused: "The workbook did not take that entry.",
+  noEditor:
+    "Editing chart data needs paged.sheet's workbook editor, which this editor does not load.",
+  failed: "The chart's workbook could not be opened.",
 });
 
 /** The typed twins' titles (output/commands.ts), worded as the manifest's

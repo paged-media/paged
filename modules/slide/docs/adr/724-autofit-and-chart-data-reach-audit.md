@@ -79,3 +79,39 @@ it; a bundle-to-bundle import is exactly what the boundary rule forbids.
 - The capability register's reach rows for slide say "autofit: stored values only; engine
   shrink-to-fit absent (ADR 724)" and "chart data: second sheet engine, blocked on a host door".
 - No golden, wasm size or contract number changes.
+
+## Amendment 1 (2026-11-09): chart data is edited on paged.sheet's grid, through the workbook door
+
+Section 2's door exists: extensions ADR 1102, the workbook door (`host.workbooks`,
+`contribute.workbookEditor`). paged.sheet offers its grid and engine as a workbook editor (one
+detached workbook session per open: nothing is written into the document for it); a bundle hands
+over a workbook's XLSX bytes and the cells it reads, mounts the editor's surface, and takes the
+edited bytes back.
+
+- **Edit Data opens the chart's workbook in paged.sheet's editor.** Entering the `slideChart`
+  context (`charts.ts`) reads the document's copy of the chart's workbook (or the one the slide wasm
+  made from the cached values), asks the slide wasm which cells the chart reads, and opens the bytes
+  with those ranges by role (series names, categories, values: PowerPoint's tints). The context's
+  frame surface (`chart-data-surface.tsx`) is only the frame around the editor's surface: the title,
+  full screen (asked for over a box too small for the sheet), Done, and an Esc the grid did not take.
+  `chart-surface.tsx`, slide's own grid, is deleted, and with it slide's cell entry
+  (`LiveCharts.enter` is no longer exported from the slide wasm).
+- **Leaving keeps what changed, and only that.** On commit the session's bytes, when a cell
+  changed, go back into the slide wasm's chart book (`LiveCharts.open` with the bytes, which
+  recalculates them), are stored as the chart's workbook part, mark the chart edited and redraw its
+  frames in one undo step, as before. A chart opened and left without an edit writes nothing: the
+  door answers the consumer's own bytes, so the workbook part, the index and the exported deck stay
+  byte-identical (tested headless). Esc throws the session away.
+- **Honest absence.** Without a workbook editor (a host that shares no registry, or an editor
+  profile that does not load paged.sheet, such as `?solo=paged.slide`), the data sheet says that
+  editing chart data needs paged.sheet's workbook editor and nothing else changes.
+- **`slide-sheet` stays in the slide wasm.** It is not only the editor: the slide wasm reads the
+  chart's workbook to recalculate it and draw the chart from its cells (`LiveCharts.snippet`, the
+  PowerPoint-verified goldens of ADR 715), writes the chart part's caches and the embedded workbook
+  on export (`pptx-export`), and makes a workbook from the cached values for a chart without one
+  (`synth.rs`). Only the cell entry left. Slide wasm (release, `scripts/build-wasm.sh`): 7,546,890
+  bytes before, 7,529,338 after (−17,552).
+- **Consequences:** the capability register's slide row says chart data is edited on paged.sheet's
+  surface and engine through the door; the "second compiled sheet engine" remains as the reader and
+  writer of chart workbooks, not as an editor. Doc's charts can use the same door when doc edits
+  chart data.

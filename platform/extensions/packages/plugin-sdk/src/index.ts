@@ -74,7 +74,16 @@ export {
   fakeMlProvider,
   type FakeMlProvider,
   type FakeMlProviderOptions,
+  fakeWorkbookEditor,
+  type FakeWorkbookSession,
 } from "./testing.js";
+// Extensions ADR 1102 — the workbook door's shared registry and the
+// consumer's surface over it.
+export {
+  createWorkbookEditorRegistry,
+  createWorkbooksSurface,
+  type WorkbookEditorBackend,
+} from "./doors-workbooks.js";
 // Extensions ADR 1101 — the comments door's surface builder, the shared
 // anchor registry behind `contribute.commentAnchor`, and the row grouping.
 export {

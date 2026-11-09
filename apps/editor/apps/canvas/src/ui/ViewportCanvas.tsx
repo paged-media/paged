@@ -269,7 +269,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     startPointer: [number, number];
     maxDelta: number;
   } | null>(null);
-  // Extensions ADR 1102 — a Selection-tool drag of a bundle's handle: the
+  // Extensions ADR 1103 — a Selection-tool drag of a bundle's handle: the
   // router that took the press owns the drag until the release.
   const handleDragRef = useRef<{
     router: HostHandleRouter;
@@ -754,7 +754,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       cmd: e.metaKey || e.ctrlKey,
     };
     const tool = props.activeTool ?? "select";
-    // Extensions ADR 1102 — a bundle's handle (a preset's adjust handle)
+    // Extensions ADR 1103 — a bundle's handle (a preset's adjust handle)
     // under a Selection-tool press is the bundle's drag: it wins over the
     // path session, the resize handles, the body move and the marquee.
     if (
@@ -1153,7 +1153,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       props.toolGesture.onMove(buildToolPointer(e, toolDrag.maxDelta));
       return;
     }
-    // ADR 1102 — a bundle's handle drag.
+    // ADR 1103 — a bundle's handle drag.
     const handleDrag = handleDragRef.current;
     if (handleDrag) {
       const d = Math.hypot(
@@ -1190,7 +1190,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         const el = wrapperRef.current;
         if (el) el.style.cursor = refined ?? props.cursor ?? "grab";
       } else if ((props.activeTool ?? "select") === "select") {
-        // ADR 1102 — over a bundle's handle the Selection tool shows the
+        // ADR 1103 — over a bundle's handle the Selection tool shows the
         // handle's cursor (the pointer is the default).
         const routers = overlaySignals.handleRouters();
         const el = wrapperRef.current;
@@ -1337,7 +1337,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         return;
       }
     }
-    // ADR 1102 — the release of a bundle's handle drag: the bundle
+    // ADR 1103 — the release of a bundle's handle drag: the bundle
     // writes its change (one undo step); nothing else runs.
     const handleDrag = handleDragRef.current;
     if (handleDrag) {
@@ -1527,7 +1527,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       toolDragRef.current = null;
       props.toolGesture.onCancel();
     }
-    // A bundle's handle drag (ADR 1102): the bundle writes nothing.
+    // A bundle's handle drag (ADR 1103): the bundle writes nothing.
     const handleDrag = handleDragRef.current;
     if (handleDrag) {
       handleDragRef.current = null;

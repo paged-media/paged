@@ -1,4 +1,4 @@
-# ADR 1102 — The host's Selection tools drag a bundle's handles
+# ADR 1103 — The host's Selection tools drag a bundle's handles
 
 - **Status:** Accepted 2026-11-09.
 - **Scope:** `OverlayHandleSet.onHostDrag`, `OverlayHandleDrag` and `OverlayHandleDragListener` in

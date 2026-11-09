@@ -181,7 +181,7 @@ export function makeFakeEditor(opts?: {
   /** W-20 — wire the retained overlay-layer sink
    *  (`setOverlayLayer` + `removeOverlayLayer`). Off = an older host. */
   overlayLayers?: boolean;
-  /** Extensions ADR 1102 — wire `setHandleRouter` (the host Selection
+  /** Extensions ADR 1103 — wire `setHandleRouter` (the host Selection
    *  tools' route to a bundle's handle sets). Off = an older host. */
   handleRouters?: boolean;
 }) {
@@ -203,7 +203,7 @@ export function makeFakeEditor(opts?: {
   let toolPreviews: unknown = null;
   // W-20 — key → shapes, in first-set (stack) order.
   const overlayLayers = new Map<string, unknown[]>();
-  // ADR 1102 — key → the router a bundle registered.
+  // ADR 1103 — key → the router a bundle registered.
   const handleRouters = new Map<string, HostHandleRouter>();
   // C-16 — the scriptable `requestSceneTree` reply (the parentage
   // source). Empty roots by default, as before.
@@ -413,7 +413,7 @@ export function makeFakeEditor(opts?: {
     /** W-20 — the live layers in stack order. */
     getOverlayLayers: () =>
       [...overlayLayers].map(([key, shapes]) => ({ key, shapes })),
-    /** ADR 1102 — the registered handle routers, by key. */
+    /** ADR 1103 — the registered handle routers, by key. */
     handleRouters: () => new Map(handleRouters),
     /** C-16 — script the scene tree the parentage read derives from.
      *  Counts the `requestSceneTree` sends via `sent`, which is how the

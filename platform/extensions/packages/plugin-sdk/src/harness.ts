@@ -146,6 +146,10 @@ import {
   createCommentAnchorRegistry,
   type CommentAnchorBackend,
 } from "./doors-comments.js";
+import {
+  createWorkbookEditorRegistry,
+  type WorkbookEditorBackend,
+} from "./doors-workbooks.js";
 import { satisfiesApiVersion, API_VERSION } from "./version.js";
 import { mapBacking } from "./testing.js";
 import { createCoreObjects } from "./core-objects.js";
@@ -222,6 +226,7 @@ export interface HarnessOptions
       | "actions"
       | "ml"
       | "commentAnchors"
+      | "workbookEditors"
       | "objects"
       | "willSave"
       | "toolSettings"
@@ -505,7 +510,7 @@ export interface HeadlessHost {
     key: string;
     shapes: readonly ToolPreviewShape[];
   }>;
-  /** Extensions ADR 1102 — play the host's Selection tool on a drag from
+  /** Extensions ADR 1103 — play the host's Selection tool on a drag from
    *  `from` to `to` (page-local pt of `pageId`; the harness camera is at
    *  1x and a page's origin at 0). The press goes first to the bundles'
    *  handle routers, as the editor's tool does: when a handle set with an
@@ -524,7 +529,7 @@ export interface HeadlessHost {
       cancel?: boolean;
     },
   ): boolean;
-  /** Extensions ADR 1102 — what a host Selection tool press at a point
+  /** Extensions ADR 1103 — what a host Selection tool press at a point
    *  lands on among the bundles' handles (with its cursor), or `null`. */
   selectionToolHandleAt(
     pageId: string,
@@ -575,6 +580,11 @@ export interface HeadlessHost {
    *  extensions ADR 1101): a bundle's resolvers land here; `resolve(item,
    *  address)` is what the host panel asks. */
   readonly commentAnchors: CommentAnchorBackend;
+  /** The SHARED workbook editor registry (`workbooks@1`, extensions ADR
+   *  1102): every bundle host here registers into and opens from it, so a
+   *  provider bundle and a consumer bundle loaded together meet; a test with
+   *  no provider registers `fakeWorkbookEditor()`. */
+  readonly workbookEditors: WorkbookEditorBackend;
   /** The will-save registry this host injected: `fire()` runs every
    *  bundle's `document.onWillSave` listener and awaits them, as a save
    *  would. */
@@ -1049,7 +1059,7 @@ export async function createHeadlessHost(
     overlayLayerMap,
     options.engineShaper === true,
   );
-  // Extensions ADR 1102 — the host Selection tools' route to the bundles'
+  // Extensions ADR 1103 — the host Selection tools' route to the bundles'
   // handle sets. Wired, so `supports("overlay.handles.hostDrag@1")` is
   // true headlessly and `dragWithSelectionTool` plays the tool.
   const handleRouters = new Map<string, HostHandleRouter>();
@@ -1255,6 +1265,8 @@ export async function createHeadlessHost(
   const ml = options.ml ?? createMlRegistry();
   const commentAnchors =
     options.commentAnchors ?? createCommentAnchorRegistry();
+  const workbookEditors =
+    options.workbookEditors ?? createWorkbookEditorRegistry();
   const objects =
     options.objects ??
     createObjectRegistry({
@@ -1290,6 +1302,7 @@ export async function createHeadlessHost(
       actions,
       ml,
       commentAnchors,
+      workbookEditors,
       objects,
       willSave: options.willSave ?? willSave,
       toolSettings: options.toolSettings ?? toolSettings,
@@ -1575,6 +1588,7 @@ export async function createHeadlessHost(
     actions,
     ml,
     commentAnchors,
+    workbookEditors,
     willSave,
     toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {

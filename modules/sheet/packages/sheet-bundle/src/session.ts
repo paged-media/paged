@@ -150,6 +150,7 @@ import {
   cellAddress,
   createSheetComments,
   type AnchorGeometry,
+  type SheetComments,
 } from "./comments-model";
 import {
   csvBytes,
@@ -948,6 +949,12 @@ export interface WorkbookSession extends DataToolsApi {
    *  the write completes in the background), free the engine, drop
    *  listeners. */
   dispose(): void;
+  /** Counts the workbook's committed edits and loads (the owner of a
+   *  detached workbook asks whether it changed). */
+  editRevision(): number;
+  /** The workbook as XLSX now (the preservation-first save); null without
+   *  one. */
+  saveXlsx(): Uint8Array | null;
 
   // ── Wave 4 ──────────────────────────────────────────────────────────
 
@@ -1278,12 +1285,19 @@ export function tsvToRows(text: string): string[][] {
 export interface SessionOptions {
   /** Cmd+F on the grid: the host side opens the find UI (the grid panel). */
   onFindRequest?: () => void;
+  /** A workbook that is not the document's (extensions ADR 1102: a chart's
+   *  workbook another bundle hands over): nothing is persisted (no container
+   *  part, no blob), the document's changes, saves and comment threads are
+   *  not followed. The owner takes the bytes with `saveXlsx`. */
+  detached?: boolean;
 }
 
 export function createWorkbookSession(
   host: BundleHost,
   options: SessionOptions = {},
 ): WorkbookSession {
+  const detached = options.detached === true;
+  const NO_SUB = { dispose() {} };
   // Panel-facing engine READS, memoised until the next change signal
   // (every engine write is followed by one): a panel re-renders on every
   // keystroke in its own inputs, and each render used to re-window the
@@ -2361,12 +2375,14 @@ export function createWorkbookSession(
   }
 
   let historyChain: Promise<void> = Promise.resolve();
-  const historySub = host.document.onDidChange((e) => {
-    if (e.kind !== "undoApplied" && e.kind !== "redoApplied") return;
-    historyChain = historyChain.then(followDocumentHistory).catch((err) => {
-      host.log.warn("document-undo follower failed", err);
-    });
-  });
+  const historySub = detached
+    ? NO_SUB
+    : host.document.onDidChange((e) => {
+        if (e.kind !== "undoApplied" && e.kind !== "redoApplied") return;
+        historyChain = historyChain.then(followDocumentHistory).catch((err) => {
+          host.log.warn("document-undo follower failed", err);
+        });
+      });
 
   // ── Wave 5 — selection model, bulk writes, fill, clear, find, keys ──
 
@@ -3307,6 +3323,8 @@ export function createWorkbookSession(
     name: string,
     chartSlots: readonly number[] | null = null,
   ): Promise<void> {
+    // A detached workbook is its owner's to keep (`saveXlsx`).
+    if (detached) return persistChain;
     const epoch = docEpoch;
     persistChain = persistChain.then(() =>
       epoch === docEpoch ? writeWorkbook(bytes, name, chartSlots) : undefined,
@@ -3335,6 +3353,7 @@ export function createWorkbookSession(
 
   /** Re-save the cache part (and blob) after the debounce. */
   function schedulePersist(): void {
+    if (detached) return;
     persistDirty = true;
     if (persistTimer !== null) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
@@ -3413,18 +3432,19 @@ export function createWorkbookSession(
   // (`document.onWillSave@1`) the save waits for the pending write first.
   // Without it, the debounce, the flush on frame exit and the flush on
   // dispose remain.
-  const willSaveSub = host.supports("document.onWillSave@1")
-    ? host.document.onWillSave(() =>
-        Promise.all([
-          flushPersist().catch((err) =>
-            host.log.warn("workbook persist before save failed", err),
-          ),
-          flushPlacementRecords().catch((err) =>
-            host.log.warn("placement records before save failed", err),
-          ),
-        ]).then(() => undefined),
-      )
-    : null;
+  const willSaveSub =
+    !detached && host.supports("document.onWillSave@1")
+      ? host.document.onWillSave(() =>
+          Promise.all([
+            flushPersist().catch((err) =>
+              host.log.warn("workbook persist before save failed", err),
+            ),
+            flushPlacementRecords().catch((err) =>
+              host.log.warn("placement records before save failed", err),
+            ),
+          ]).then(() => undefined),
+        )
+      : null;
 
   // ── what the placed tables show, kept for a later session ──────────────
   //
@@ -3490,41 +3510,54 @@ export function createWorkbookSession(
       ownWrites -= 1;
     }
   }
-  const foreignChangeSub = host.document.onDidChange((e) => {
-    if (e.kind === "mutationApplied" && ownWrites > 0) return;
-    // P7 — a swatch or style the cells reference may have changed: the
-    // grid re-reads the document's colours (debounced with the rest).
-    docStyleRevision += 1;
-    scheduleStyleNotice();
-    scheduleDocStyleSync();
-    for (const frameId of loweredTables.keys()) unverified.add(frameId);
-    // ADR 510 (P6) — a window frame's box is its window: a resize shows
-    // what fits now. The engine names the resized frame's content box; a
-    // gesture that resized without saying which (several frames, an older
-    // engine) re-reads the window frames' geometry.
-    if (e.reflow) {
-      rewindow(e.reflow.frameId, {
-        widthPt: e.reflow.contentBox[3] - e.reflow.contentBox[1],
-        heightPt: e.reflow.contentBox[2] - e.reflow.contentBox[0],
+  const foreignChangeSub = detached
+    ? NO_SUB
+    : host.document.onDidChange((e) => {
+        if (e.kind === "mutationApplied" && ownWrites > 0) return;
+        // P7 — a swatch or style the cells reference may have changed: the
+        // grid re-reads the document's colours (debounced with the rest).
+        docStyleRevision += 1;
+        scheduleStyleNotice();
+        scheduleDocStyleSync();
+        for (const frameId of loweredTables.keys()) unverified.add(frameId);
+        // ADR 510 (P6) — a window frame's box is its window: a resize shows
+        // what fits now. The engine names the resized frame's content box; a
+        // gesture that resized without saying which (several frames, an older
+        // engine) re-reads the window frames' geometry.
+        if (e.reflow) {
+          rewindow(e.reflow.frameId, {
+            widthPt: e.reflow.contentBox[3] - e.reflow.contentBox[1],
+            heightPt: e.reflow.contentBox[2] - e.reflow.contentBox[0],
+          });
+        } else if (e.kind === "gestureCommitted") {
+          void rereadWindowBoxes();
+        }
+        // A link, an unlink or a resize of a chain frame changes the window.
+        scheduleChainRead();
+        // A band the host inserted, a style or a reflow may leave a window
+        // frame's table taller than its box: the windows check their fit.
+        scheduleWindowFit();
       });
-    } else if (e.kind === "gestureCommitted") {
-      void rereadWindowBoxes();
-    }
-    // A link, an unlink or a resize of a chain frame changes the window.
-    scheduleChainRead();
-    // A band the host inserted, a style or a reflow may leave a window
-    // frame's table taller than its box: the windows check their fit.
-    scheduleWindowFit();
-  });
 
   // Sheet ADR 528 / engine ADR 1055 — the workbook's threaded comments and the
   // document's comment threads, kept in step (comments-model.ts).
-  const sheetComments = createSheetComments({
-    host,
-    engine: () => state.engine,
-    ownWrite,
-    edited: schedulePersist,
-  });
+  // A detached workbook's threads are not the document's.
+  const sheetComments: SheetComments = detached
+    ? {
+        sync: async () => {},
+        startThread: async () => ({
+          ok: false,
+          reason: "this workbook is not the document's",
+        }),
+        reset() {},
+        dispose() {},
+      }
+    : createSheetComments({
+        host,
+        engine: () => state.engine,
+        ownWrite,
+        edited: schedulePersist,
+      });
 
   let windowFitTimer: ReturnType<typeof setTimeout> | null = null;
   /** Check every window frame's fit, after the document settles. */
@@ -7690,6 +7723,12 @@ export function createWorkbookSession(
         return null;
       const sheet = engine.listSheets().find((x) => x.id === info.sheet);
       return sheet ? cellAddress(sheet.name, at.row, at.col) : null;
+    },
+
+    editRevision: () => revision,
+
+    saveXlsx() {
+      return state.engine ? state.engine.saveXlsx() : null;
     },
 
     async startCellComment(text) {

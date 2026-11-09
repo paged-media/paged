@@ -183,7 +183,7 @@ export type {
   OverlayHandleSet,
   OverlayHandleSpace,
   OverlayHandleSpec,
-  // Extensions ADR 1102 — host-tool drags of a handle set.
+  // Extensions ADR 1103 — host-tool drags of a handle set.
   OverlayHandleDrag,
   OverlayHandleDragListener,
   ProjectiveMatrix,
@@ -441,6 +441,16 @@ export type {
   CommentAnchorGeometry,
   CommentAnchorContribution,
 } from "./comments.js";
+
+export type {
+  WorkbookRange,
+  WorkbookRangeRole,
+  WorkbookEditRequest,
+  WorkbookEditorProps,
+  WorkbookEditSession,
+  WorkbookEditorContribution,
+  WorkbooksSurface,
+} from "./workbooks.js";
 
 export type {
   ClipboardSurface,

@@ -151,7 +151,7 @@ export function createHandleSets(deps: OverlayDoorDeps) {
     string,
     { handles: ResolvedHandle[]; generation: number; key: string }
   >();
-  // Extensions ADR 1102 — the sets whose handles the HOST's selection
+  // Extensions ADR 1103 — the sets whose handles the HOST's selection
   // tools drag, and the one router per bundle that answers for them.
   const dragListeners = new Map<string, OverlayHandleDragListener>();
   const routerKey = `${deps.manifestId}/handleDrag`;

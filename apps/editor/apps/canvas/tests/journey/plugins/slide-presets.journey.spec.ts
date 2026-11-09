@@ -165,7 +165,7 @@ test.describe("journey · paged.slide live presets", () => {
     });
     expect(outline).not.toBeNull();
     await designer.selectElement("polygon", outline!);
-    // The bundle's handle set, drawn by the host (extensions ADR 1102).
+    // The bundle's handle set, drawn by the host (extensions ADR 1103).
     const handle = page
       .locator(
         '[data-overlay-layer="media.paged.slide/handles:adjust"] [data-preview-handle="round"]',

@@ -151,6 +151,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         "page this run (the active-page race went the other way), so " +
         "nothing was carried",
     );
+    // The fill rule is part of the repair's contract either way: pin it on
+    // the contours that sit on the page, writing back the value the import
+    // gave them. Without this the `frameFillRule` path was exercised only
+    // when the race went the other way, so identical builds counted 201 and
+    // 202 property paths.
+    for (const g of geo.filter((x) => x.pageId === pageId)) {
+      const contour = await readContour(ctx, g.ref.id);
+      if (contour?.fillRule && contour.fillRule !== "NonZero") {
+        await doc.setProperty("polygon", g.ref.id, "frameFillRule", {
+          type: "text",
+          value: contour.fillRule,
+        });
+      }
+    }
     return {
       title: "Ch.14 — the crest, carried to the page that describes it",
       covers: ["plugin-draw.svg-io", "frames-paths.path.insert"],

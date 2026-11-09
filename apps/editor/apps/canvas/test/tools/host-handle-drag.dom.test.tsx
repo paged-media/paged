@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Extensions ADR 1102 — the host's Selection tool routes a press on a
+// Extensions ADR 1103 — the host's Selection tool routes a press on a
 // bundle's handle (`OverlayHandleSet.onHostDrag`) to the bundle: the
 // selected frame under the handle does not move, no marquee is drawn, the
 // bundle hears start / moves / one end in page space, and its one write

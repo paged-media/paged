@@ -644,7 +644,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Live presets and connectors (ADR 717): a resized preset is drawn
   // again, a connector follows the shapes it is glued to, in the edit's
   // undo step; the selected preset's adjust handles are a host handle set
-  // the host's Selection tools drag (extensions ADR 1102).
+  // the host's Selection tools drag (extensions ADR 1103).
   // The follow-up write needs the amend door; without it a redraw would be
   // an undo step of its own, so nothing follows.
   const follower = new LiveFollower(host, slideEngine, () =>

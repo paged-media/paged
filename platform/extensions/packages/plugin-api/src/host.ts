@@ -88,6 +88,10 @@ import type {
 import type { ClipboardSurface } from "./clipboard.js";
 import type { MlSurface } from "./ml.js";
 import type { CommentAnchorContribution, CommentsSurface } from "./comments.js";
+import type {
+  WorkbookEditorContribution,
+  WorkbooksSurface,
+} from "./workbooks.js";
 import type { MutationInput } from "./mutations.js";
 import type { PluginManifest, WasmArtifact } from "./manifest.js";
 import type { SchemaPanelContribution } from "./panel-schema.js";
@@ -517,6 +521,10 @@ export interface ContributionSurface {
    *  `supports("contribute.commentAnchor@1")`: true when the host reads
    *  the resolvers; otherwise a no-op. */
   commentAnchor(contribution: CommentAnchorContribution): Disposable;
+  /** Offer a surface that edits a workbook other bundles hand over
+   *  (extensions ADR 1102). Probe `supports("contribute.workbookEditor@1")`:
+   *  true when the host shares the registry; otherwise a no-op. */
+  workbookEditor(contribution: WorkbookEditorContribution): Disposable;
   /**
    * Register an EDIT CONTEXT (W3.2, closes B-02): a double-click (or
    * programmatic) entry on a content type that pushes a scoped context
@@ -2494,7 +2502,7 @@ export interface OverlayHandleSet extends Disposable {
    *  scale for the screen-px radii. */
   hitTest(pageId: string, pagePoint: [number, number]): string | null;
   /**
-   * Extensions ADR 1102 — hear drags of this set's handles under the
+   * Extensions ADR 1103 — hear drags of this set's handles under the
    * HOST's Selection and Direct Selection tools, for a bundle that
    * contributes no tool of its own (a preset's adjust handles live on the
    * host's selection). A press on one of the set's handles is the
@@ -2514,7 +2522,7 @@ export interface OverlayHandleSet extends Disposable {
   onHostDrag(listener: OverlayHandleDragListener): Disposable;
 }
 
-/** Extensions ADR 1102 — one moment of a host-tool handle drag. */
+/** Extensions ADR 1103 — one moment of a host-tool handle drag. */
 export interface OverlayHandleDrag {
   /** The set's id and the dragged handle's id. */
   set: string;
@@ -2529,7 +2537,7 @@ export interface OverlayHandleDrag {
   modifiers: CanvasPointerEvent["modifiers"];
 }
 
-/** Extensions ADR 1102 — `OverlayHandleSet.onHostDrag`'s listener. */
+/** Extensions ADR 1103 — `OverlayHandleSet.onHostDrag`'s listener. */
 export interface OverlayHandleDragListener {
   onStart?(drag: OverlayHandleDrag): void;
   onMove(drag: OverlayHandleDrag): void;
@@ -3891,6 +3899,12 @@ export interface BundleHost {
    *  `capabilities.document.read`; a write without
    *  `capabilities.document.write` answers `{ ok: false, reason }`. */
   readonly comments: CommentsSurface;
+  /** The WORKBOOK door (extensions ADR 1102): open a workbook's bytes in
+   *  the editor another bundle offers (paged.sheet's grid), mount its
+   *  surface, take the edited bytes back. Always present;
+   *  `supports("workbooks@1")` says the host shares the registry and
+   *  `available()` whether an editor is registered now. */
+  readonly workbooks: WorkbooksSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** ADR 025 — the local flight recorder. Probe `supports("journal@1")`
    *  before relying on it reaching a buffer; calling it is always safe. */

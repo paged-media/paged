@@ -30,7 +30,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: editor-showcase-nightly
+  group: editor-showcase-${{ github.event_name == 'schedule' && 'nightly' || github.run_id }}
   cancel-in-progress: true
 
 defaults:

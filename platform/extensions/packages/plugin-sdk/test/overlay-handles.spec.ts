@@ -384,7 +384,7 @@ describe("host.transformBox — tool and edit context [editor-tools.free-transfo
   });
 });
 
-// Extensions ADR 1102 — the host's Selection tools drag a set's handles
+// Extensions ADR 1103 — the host's Selection tools drag a set's handles
 // for a bundle that contributes no tool (`onHostDrag`,
 // `overlay.handles.hostDrag@1`).
 describe("host.overlay.handles — host-tool drags (overlay.handles.hostDrag@1)", () => {

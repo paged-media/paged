@@ -167,7 +167,7 @@ Consequences and limits:
 The adjust handles leave `contribute.overlay`. They are a host handle set
 (`host.overlay.handles("adjust")`, extensions ADR 339): the host draws them at a constant screen size
 and hit-tests them, and its Selection and Direct Selection tools hand a drag on one to the bundle
-(`onHostDrag`, extensions [ADR 1102](../../../../platform/extensions/docs/adr/1102-host-tools-drag-a-bundles-handles.md)).
+(`onHostDrag`, extensions [ADR 1103](../../../../platform/extensions/docs/adr/1103-host-tools-drag-a-bundles-handles.md)).
 The drag's outline preview is an overlay layer (`adjustPreview`, the engine's path as cubic preview
 shapes). What a drag writes is unchanged: the engine's adjust values for every element of the
 shape, in one `document.mutate` on release, so one undo step; a cancelled drag (Escape) writes
