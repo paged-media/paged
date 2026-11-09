@@ -40,7 +40,7 @@ import {
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { ovalToPath, type Affine } from "@paged-media/draw-geometry";
+import { ovalToPath, type Affine } from "@paged-media/vector-geometry";
 
 import { drawBundle } from "../../src";
 import {

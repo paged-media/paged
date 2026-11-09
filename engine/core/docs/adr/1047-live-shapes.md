@@ -33,7 +33,7 @@ carries.
   `star_inset` (0..=99 percent; 0 is the plain polygon). The anchors are what the parameters make
   (`polygon_anchors` / `polygon_anchors_in`): the first point at twelve o'clock, the points
   clockwise on the page, a star's inner points between them at `1 − inset/100` of the outer
-  radius — the Polygon tool's construction and draw-geometry's `starPath`. The renderer, the
+  radius — the Polygon tool's construction and vector-geometry's `starPath`. The renderer, the
   hit test, PDF and IDML go on reading the anchors.
 - **Live while the anchors are its shape.** `live_polygon` answers the parameters only while the
   anchors are still exactly what they make in their own bounding box (to 0.001 pt, or a

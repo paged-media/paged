@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// ORACLE — Illustrator's PERSPECTIVE GRID against draw-geometry's
+// ORACLE — Illustrator's PERSPECTIVE GRID against vector-geometry's
 // (`src/warp/perspective-grid.ts`, `src/warp/homography.ts`).
 //
 // The recording (`tooling/oracle/illustrator/probes/perspective-grid.jsx`) draws
@@ -33,7 +33,7 @@
 //      vertical (their v direction maps to a point at infinity straight
 //      up), their ground lines run to vanishing points on ONE horizontal
 //      horizon, and the floor's two vanishing points ARE those two.
-//   3. OUR CONSTRUCTION SPANS ILLUSTRATOR'S: a draw-geometry grid built
+//   3. OUR CONSTRUCTION SPANS ILLUSTRATOR'S: a vector-geometry grid built
 //      from those vanishing points and horizon, with its origin where
 //      Illustrator's plane origin lands, reproduces every recorded corner
 //      once the plane's two axes are rescaled (Illustrator's plane unit
@@ -62,7 +62,7 @@ import {
   defaultGrid,
   type Homography,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { loadOracle } from "./oracle";
 

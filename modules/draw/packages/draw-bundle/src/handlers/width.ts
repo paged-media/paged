@@ -57,8 +57,8 @@ import {
   type Affine,
   type RunLocation,
   type Vec2,
-} from "@paged-media/draw-geometry";
-import { WidthMachine, type WidthSnapshot } from "@paged-media/draw-tools";
+} from "@paged-media/vector-geometry";
+import { WidthMachine, type WidthSnapshot } from "@paged-media/vector-tools";
 
 import { outlineStrokeVariableMutationFor } from "./brush";
 import { outlineParamsOf, supportsPathOps } from "../commands/path-ops";

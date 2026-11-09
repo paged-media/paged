@@ -45,13 +45,13 @@
 import { expect } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import type { AnchorTable } from "@paged-media/draw-geometry";
-import type { AnchorEditPlan } from "@paged-media/draw-tools";
+import type { AnchorTable } from "@paged-media/vector-geometry";
+import type { AnchorEditPlan } from "@paged-media/vector-tools";
 import {
   planAnchorAdd,
   planAnchorDelete,
   planAnchorConvert,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 import { mutationFor, type AnchorEditMode } from "../src";
 
 /** A recorded gesture: which anchor tool fired, the page-local click,

@@ -17,7 +17,7 @@
  */
 
 // Conformance — the DIRECT SELECTION machine's plans against the REAL
-// engine. The machine's own spec (draw-tools) proves what a plan SAYS;
+// engine. The machine's own spec (vector-tools) proves what a plan SAYS;
 // this proves what it DOES: each test feeds the machine the engine's
 // live `pathAnchors`, drives a gesture, lowers the committed plan with
 // the machine's own `directSelectMutation`, sends that ONE batch through
@@ -39,13 +39,13 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { evalCubic } from "@paged-media/draw-geometry";
+import { evalCubic } from "@paged-media/vector-geometry";
 import {
   DirectSelectMachine,
   directSelectMutation,
   type DirectSelectHit,
   type DirectSelectSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import { F2_CLOSED_QUAD } from "../fixtures/corpus";
 import {

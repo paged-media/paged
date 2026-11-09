@@ -80,7 +80,7 @@ const TOOLS = [
   "media.paged.draw.tool.typeOnPath",
   "media.paged.draw.tool.repeat",
   // canary.14 — the cutting pair in the host's Scissors flyout (driven
-  // end to end in journey/plugins/draw-tools.journey.spec.ts).
+  // end to end in journey/plugins/vector-tools.journey.spec.ts).
   "media.paged.draw.tool.knife",
   "media.paged.draw.tool.scissorsAnyPoint",
   // WP6.1 — keyless, in the host's transform / pencil / shape flyouts.

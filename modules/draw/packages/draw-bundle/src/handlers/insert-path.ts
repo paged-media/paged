@@ -21,12 +21,12 @@
 // EXACT wire shape the live tools emit (no second copy to drift from).
 
 import type { Mutation } from "@paged-media/plugin-api";
-import type { AnchorTriple } from "@paged-media/draw-geometry";
+import type { AnchorTriple } from "@paged-media/vector-geometry";
 
 /** `insertPath{ pageId, anchors, open }` for a committed anchor run.
  *  The anchors carry their fitted handles, so the engine's optional
  *  `smooth` pass is NOT requested — the machines own the smoothing
- *  (draw-geometry's Catmull-Rom fit), keeping preview == committed
+ *  (vector-geometry's Catmull-Rom fit), keeping preview == committed
  *  geometry. */
 export function insertPathMutationFor(
   pageId: string,

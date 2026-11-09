@@ -51,7 +51,7 @@ import {
   rawTextOutlines,
   type TextOutlinesWire,
 } from "../../src/index";
-import { transformBounds, type Affine } from "@paged-media/draw-geometry";
+import { transformBounds, type Affine } from "@paged-media/vector-geometry";
 
 import { buildIdml } from "../fixtures/build-idml";
 import { countingHost } from "../perf/counting-host";

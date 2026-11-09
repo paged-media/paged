@@ -28,7 +28,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 import { covers, gestures, type GestureDsl } from "@paged-media/test-kit";
-import { flatNet } from "@paged-media/draw-geometry";
+import { flatNet } from "@paged-media/vector-geometry";
 
 import { exportGraphicStyles } from "../src";
 import { rectEl, unitRig, type UnitRig } from "./commands/unit-kit";

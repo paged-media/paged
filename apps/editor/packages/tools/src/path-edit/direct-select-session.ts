@@ -65,7 +65,7 @@ import {
   isCornerAnchor,
   snapPoint,
   type SnapTarget,
-} from "@paged-media/draw/geometry";
+} from "@paged-media/vector-geometry";
 import {
   DirectSelectMachine,
   anchorEditOps,
@@ -76,7 +76,7 @@ import {
   type DirectSelectPlan,
   type DirectSelectRefusal,
   type PathPointOp,
-} from "@paged-media/draw/machines";
+} from "@paged-media/vector-tools";
 
 import { hitPathTable, pathHitRadii } from "./path-hit";
 import {

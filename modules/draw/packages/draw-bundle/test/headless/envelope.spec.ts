@@ -39,7 +39,7 @@ import {
   flatNet,
   netIndex,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import {
   createEnvelopeMeshHandler,

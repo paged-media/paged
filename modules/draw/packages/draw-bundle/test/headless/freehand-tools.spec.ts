@@ -30,7 +30,7 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { CurvatureMachine, PencilMachine } from "@paged-media/draw-tools";
+import { CurvatureMachine, PencilMachine } from "@paged-media/vector-tools";
 
 import { drawBundle, insertPathMutationFor } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";

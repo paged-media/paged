@@ -57,7 +57,7 @@ import type {
   Mutation,
   MutationInput,
 } from "@paged-media/plugin-api";
-import type { AnchorTriple } from "@paged-media/draw-geometry";
+import type { AnchorTriple } from "@paged-media/vector-geometry";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {

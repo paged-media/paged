@@ -11,7 +11,7 @@ The repo is two workspaces at one root: a pnpm workspace (`packages/*`, TypeScri
 Cargo workspace (`crates/draw-trace`, `crates/trace-js`, Rust pinned to 1.99.1 with the
 `wasm32-unknown-unknown` target in `rust-toolchain.toml`).
 
-**`packages/draw-geometry`** — private, no dependencies, no import other than relative
+**`packages/vector-geometry`** — private, no dependencies, no import other than relative
 ones. Pure path math over one vocabulary, `AnchorTriple` (anchor plus two handles) and
 `AnchorTable` (anchors plus contour boundaries): polyline simplification, Bézier split and
 closest-point, handle derivation, a smooth fit through points, affine helpers, arc-length
@@ -20,9 +20,9 @@ width profiles, parametric shapes, contour re-winding for compound paths (`compo
 and an SVG reader and writer with its own XML scanner (`svg-doc.ts`, `svg-path.ts`,
 `svg-arc.ts`, `svg-shapes.ts`, `svg-color.ts`).
 
-**`packages/draw-tools`** — private. Eleven tool modules that take page-local points and
+**`packages/vector-tools`** — private. Eleven tool modules that take page-local points and
 return snapshots, plans or commits: anchor editing, pen, pencil, curvature, brush, width,
-measure, shape builder, live paint, corner radius, repeat. It imports `draw-geometry` and,
+measure, shape builder, live paint, corner radius, repeat. It imports `vector-geometry` and,
 as types only, `@paged-media/plugin-api`. The machines' wire shapes are the contract's own
 `Mutation` variants, so a protocol change that breaks them fails the typecheck here.
 
@@ -41,22 +41,22 @@ out, over the `visioncortex` crate. No wasm-bindgen dependency.
 `traceInit`, `traceLimits` and `traceRgba`, with options and results as JSON strings.
 
 ```
- draw-geometry     imports nothing
+ vector-geometry     imports nothing
       ^
- draw-tools        + @paged-media/plugin-api (types only)
+ vector-tools        + @paged-media/plugin-api (types only)
       ^
- draw-bundle       + draw-geometry, @paged-media/plugin-api, @paged-media/plugin-sdk, react
+ draw-bundle       + vector-geometry, @paged-media/plugin-api, @paged-media/plugin-sdk, react
       | imports at run time
       v
  packages/draw-bundle/wasm/  <== scripts/build-wasm.sh ==  crates/trace-js --> crates/draw-trace
 ```
 
 - `draw-bundle` reaches the two internal packages through the workspace and has two
-  entry points: the bundle, and `./geometry`, a re-export of `draw-geometry`
+  entry points: the bundle, and `./geometry`, a re-export of `vector-geometry`
   (`geometry.ts`). The editor imports both: the bundle in `editor: apps/canvas/src/main.tsx`
   and the geometry in its built-in Pen and Pencil (`editor: packages/tools/src/handlers/`).
   The Pencil is the host's alone (ADR 359): its handler is a shim over `PencilMachine`.
-  `draw-tools` has no entry point of its own.
+  `vector-tools` has no entry point of its own.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies of the
   published package. The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on any import
   or `export … from` that is not one of those three, a package of this repo, a shared package
@@ -107,7 +107,7 @@ are the host's. See [ADR 352](adr/352-basic-operations-belong-to-the-host.md).
 **A tool gesture.** The host delivers pointer events to the active tool's handler. For the
 anchor tools (`handlers/anchors.ts`) the handler hit-tests the click, reads the element's
 anchor table with `host.document.pathAnchors`, maps the point into the path's own space,
-and asks a planner in `draw-tools` for a plan. `mutationFor` turns the plan into engine
+and asks a planner in `vector-tools` for a plan. `mutationFor` turns the plan into engine
 operations (`pathPointSet`, `pathPointInsert`, `pathPointRemove`, `pathPointCurveType`),
 and the handler sends them through `host.document.mutate`. Curvature feeds
 events to a machine, show its preview with `host.overlay.setToolPreview`, and commit an
@@ -124,7 +124,7 @@ Live Paint tools read the planar arrangement of the inputs through
 `host.document.planarRegions`; `handlers/planar-regions.ts` is the one place that calls it,
 caches the answer per gesture, and maps between page space and the raw path space the
 engine works in. The Shape Builder builds its result from those faces, the way the Knife builds
-its pieces: `planShapeBuild` (draw-tools) decides which faces merge, which an input keeps in
+its pieces: `planShapeBuild` (vector-tools) decides which faces merge, which an input keeps in
 place and which become new pieces, and `commands/shape-build.ts` sends it as one batch, with
 the merged faces united by the engine's `pathfinderFaces`. An oval has no path in the engine
 (the arrangement reads its bounding box), so at release an oval set is read through stand-in
@@ -173,11 +173,11 @@ Objects on a Path is the exception in kind: it inserts nothing and writes one
 `OffscreenCanvas` (`io/raster-decode.ts`), downsamples to at most 1,048,576 pixels by
 default, and calls `traceRgba` synchronously on the calling thread. The kernel refuses
 rasters above 4096 px on a side or 4,194,304 pixels. Each region's contours are merged and
-re-wound by `makeCompoundTable` in `draw-geometry`. Two mutations follow: one creates the
+re-wound by `makeCompoundTable` in `vector-geometry`. Two mutations follow: one creates the
 colour swatches and inserts every contour, the second merges contours, deletes the
 surplus, sets fills, stamps a record on the image frame and groups the result.
 
-**SVG.** The importer parses the file with the reader in `draw-geometry` and inserts one
+**SVG.** The importer parses the file with the reader in `vector-geometry` and inserts one
 path per contour into the open document. Solid colours become swatches and reach each new
 path through the document's creation defaults, which the importer sets before an insert
 and restores at the end. The exporter serialises the selected elements' anchors and solid
@@ -243,8 +243,8 @@ for the C-15 handles and the B-18 nesting pair).
   present, `wasm-opt -Oz`, and writes `packages/draw-bundle/wasm/`. It is needed only when
   `crates/` changes. The manifest caps the module at 2,097,152 bytes; the script's own size
   check is set to 100,000,000 bytes. The committed module is 173,402 bytes.
-- `pnpm test` runs the import lint, then `bun test` in the three packages (draw-bundle's rendered panel specs, `*.dom.test.tsx`, in a separate task with happy-dom). `draw-geometry` and
-  `draw-tools` are unit tests. In `draw-bundle`, the specs in `test/headless/`
+- `pnpm test` runs the import lint, then `bun test` in the three packages (draw-bundle's rendered panel specs, `*.dom.test.tsx`, in a separate task with happy-dom). `vector-geometry` and
+  `vector-tools` are unit tests. In `draw-bundle`, the specs in `test/headless/`
   boot the published engine wasm in Node with `createHeadlessHost` from `@paged-media/plugin-sdk`
   and drive the bundle through its real document door; `@paged-media/canvas-wasm` is a devDependency
   for that purpose. The specs call the same exported builder functions the live code calls.

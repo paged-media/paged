@@ -204,7 +204,7 @@ export {
   contributeJoinAverageCommands,
   type EndpointMove,
 } from "./commands/join-average";
-// Reverse path direction — the per-contour reversal over draw-geometry's
+// Reverse path direction — the per-contour reversal over vector-geometry's
 // `reverseContour` and its one-batch framePath write, exported for the
 // conformance spec (the no-second-copy rule).
 export {
@@ -934,7 +934,7 @@ export {
   type PaintCriterion,
   type SelectSameCriterion,
 } from "./commands/select-same";
-// WP6.1 — Global Edit: select by geometry (draw-geometry's `sameShape`).
+// WP6.1 — Global Edit: select by geometry (vector-geometry's `sameShape`).
 export {
   GLOBAL_EDIT_COMMAND_ID,
   GLOBAL_EDIT_COMMAND_IDS,

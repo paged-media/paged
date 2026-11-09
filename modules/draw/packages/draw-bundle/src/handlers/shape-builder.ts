@@ -26,7 +26,7 @@
 //   collect  a drag appends every distinct face it crosses, in
 //            first-cross order (the pure machine owns that set);
 //   commit   pointer-up builds the result from the arrangement —
-//            `planShapeBuild` (draw-tools): a plain drag MERGES the
+//            `planShapeBuild` (vector-tools): a plain drag MERGES the
 //            faces it crossed into one path, an Alt-drag deletes them,
 //            and every other face of a shape the gesture touched STAYS,
 //            in the paint of the shape on top of it there — and sends it
@@ -92,7 +92,7 @@ import type {
   MutationInput,
   PathfinderKind,
 } from "@paged-media/plugin-api";
-import type { Affine } from "@paged-media/draw-geometry";
+import type { Affine } from "@paged-media/vector-geometry";
 
 import {
   ShapeBuilderMachine,
@@ -101,7 +101,7 @@ import {
   type RegionFace,
   type ShapeBuilderMode,
   type ShapeBuilderSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import { engineOpVocabulary } from "../commands/join-average";
 import {

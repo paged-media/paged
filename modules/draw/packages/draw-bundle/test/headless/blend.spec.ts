@@ -114,7 +114,7 @@ import {
   type BlendKey,
   type BlendSource,
 } from "../../src";
-import { measureSegment } from "@paged-media/draw-geometry";
+import { measureSegment } from "@paged-media/vector-geometry";
 import { F1_MULTI_SHAPE, F4_OVERLAP } from "../fixtures/corpus";
 import { openHost } from "./host";
 import { runThrough, type LaneName } from "./one-batch";

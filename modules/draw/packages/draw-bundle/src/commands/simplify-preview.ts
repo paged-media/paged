@@ -20,7 +20,7 @@
 // section draws over the canvas while its tolerance or corner angle is
 // edited, before anything is written.
 //
-// WHAT IT DRAWS. Every selected path, simplified by draw-geometry's
+// WHAT IT DRAWS. Every selected path, simplified by vector-geometry's
 // `simplifyAnchorTable` at the section's values and mapped to page space,
 // as a DASHED cubic preview path per contour, plus the anchor counts
 // before and after (the section shows them).
@@ -44,7 +44,10 @@ import type {
   OverlayLayer,
   ToolPreviewShape,
 } from "@paged-media/plugin-api";
-import { contourRanges, simplifyAnchorTable } from "@paged-media/draw-geometry";
+import {
+  contourRanges,
+  simplifyAnchorTable,
+} from "@paged-media/vector-geometry";
 
 import { anchorsToPage, readEditablePath, tableOfRead } from "./path-rewrite";
 import { supportsPathOps } from "./path-ops";

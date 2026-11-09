@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// THE FLARE tool — a host-routed shim over draw-tools' `FlareMachine`, in
+// THE FLARE tool — a host-routed shim over vector-tools' `FlareMachine`, in
 // the host's SHAPE flyout beside Rectangle, Ellipse and Polygon. (Star is
 // the host's: Object ▸ Insert star… and the Polygon tool's Star option.)
 //
@@ -30,12 +30,12 @@ import type {
   CanvasPointerEvent,
   GestureHandler,
 } from "@paged-media/plugin-api";
-import { flareParts } from "@paged-media/draw-geometry";
+import { flareParts } from "@paged-media/vector-geometry";
 import {
   FlareMachine,
   type FlareGesture,
   type FlareSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import { applyInsertFlare, type FlareParams } from "../commands/star-flare";
 import {

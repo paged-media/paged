@@ -36,13 +36,13 @@ import type {
 } from "@paged-media/plugin-api";
 import { CLICK_DRAG_THRESHOLD_PX } from "@paged-media/plugin-sdk";
 
-import { affineScale, inverseApplyAffine } from "@paged-media/draw-geometry";
+import { affineScale, inverseApplyAffine } from "@paged-media/vector-geometry";
 import {
   planAnchorAdd,
   planAnchorConvert,
   planAnchorDelete,
   type AnchorEditPlan,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 /** Screen-space pick radius around anchors / segments. */
 const PICK_TOLERANCE_PX = 6;

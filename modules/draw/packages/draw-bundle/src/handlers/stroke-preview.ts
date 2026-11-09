@@ -54,7 +54,7 @@
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
-import type { Vec2 } from "@paged-media/draw-geometry";
+import type { Vec2 } from "@paged-media/vector-geometry";
 
 export interface StrokePreview {
   /** The machine's kept samples after one event. Appends what is new and

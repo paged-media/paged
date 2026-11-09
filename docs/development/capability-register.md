@@ -131,7 +131,7 @@ pattern would need the slide-grid phase through `pattern_transform` per frame an
 goldens); a translucent pattern has no swatch (a tile item paints a colour without alpha). `a:clrChange`
 stays a recorded loss: the filter stack (`RasterOp`) has no colour-replace op.
 `a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3: examined, left open, they are not copies of one another: `slide-chart`'s `outline` (slide-resolve's and doc's charts, doc ADR 628) builds clockwise-from-12-o'clock `SubPath`s with arcs split at 90° by `ceil(|sweep|/90)`, `sheet-chart` emits a `Primitive::Wedge` that its renderer draws, and the engine's `pie_anchors` is f32, counter-clockwise from 3 o'clock with a `ceil(sweep/(pi/2) - 1e-9)` split; a shared primitive would move anchors in the last bits and the slide goldens with them. Chart label width ×2: also left open, `sheet-chart` counts characters at one advance (`ADVANCE_EM`), `slide-chart` weighs digits, separators and letters apart, so they measure differently on purpose (neither goes through `paged-text`). Default Office palette and theme readers: `pptx-import` and `slide-resolve` re-examined 2026-11-08 (see the OOXML foundation row): fonts and `SLOTS` shared, the colour reader kept for the unresolved `Color` the goldens rest on.
-The host `tools` package still imports `@paged-media/draw/geometry` and `/machines`.
+Draw's TS geometry and vector-tool machines moved to `platform/shared/vector-geometry` and `platform/shared/vector-tools` (C15), so the host `tools` package and draw both import shared packages; draw keeps only its Illustrator workflows in `draw-bundle`.
 
 ### Text and fonts
 
@@ -238,7 +238,7 @@ Status (draw items, one line each; updated as they land):
   the axis drag as before, Esc cancels. The line is drawn from the frame's centre and the gradient
   is a swatch (every object using it changes), as draw's note said. Draw's tool, handler, specs and
   the axis builder are gone (tool id left through the deprecation window). The stop machine stays
-  in `@paged-media/draw/machines`. The annotation's gesture tests run on the fake client; the
+  in `@paged-media/vector-tools`. The annotation's gesture tests run on the fake client; the
   canvas behaviour is covered by the gradient e2e (now on the host tool).
 - Appearance stack: MERGED 2026-11-01. The host declares `paged.appearance.*` (Add fill, Add
   stroke, Clear, Remove layer, Move layer; `appearance-commands.ts`) over the panel's own list
@@ -295,7 +295,7 @@ Status (draw items, one line each; updated as they land):
   selection's fill as the base (as the document shows it), a harmony rule menu, the harmony chips,
   and a row of variations per harmony colour (shades and tints, warm and cool, vivid and muted);
   a click paints the selection's fill through a swatch named for the hex (found or created, one
-  batch), Alt-click its stroke. The maths is `@paged-media/draw/geometry`'s, shared with Recolor
+  batch), Alt-click its stroke. The maths is `@paged-media/vector-geometry`'s, shared with Recolor
   Artwork. Draw's panel and its `applyGuideColor` command are gone (ids left through the
   deprecation window; draw ADR 362 amended). Not verified locally: the section's DOM behaviour
   (no DOM test could run without wasm); the reads and the write are unit-tested.
@@ -303,7 +303,7 @@ Status (draw items, one line each; updated as they land):
   `handlers/measure-tool.ts`, `shift+m`): drag to read a distance and an angle, the segment and its
   label as one preview that stays after the release, Esc clears, Shift snaps to 45 degrees, and the
   origin snaps to the nearest point on the path under the press (the hit-test's transform is reused,
-  so no anchor table is read). It drives `MeasureMachine` from `@paged-media/draw/machines`. Draw's
+  so no anchor table is read). It drives `MeasureMachine` from `@paged-media/vector-tools`. Draw's
   tool, handler, the raw nearest-point read, its readout binding (nothing read it) and specs are
   gone; the tool id leaves through the deprecation window.
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,

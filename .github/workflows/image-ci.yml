@@ -32,6 +32,8 @@ on:
       # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
       - "platform/shared/helpers/**"
+      - "platform/shared/vector-geometry/**"
+      - "platform/shared/vector-tools/**"
       - "platform/shared/panel-kit/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
@@ -76,6 +78,8 @@ on:
       # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
       - "platform/shared/helpers/**"
+      - "platform/shared/vector-geometry/**"
+      - "platform/shared/vector-tools/**"
       - "platform/shared/panel-kit/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.

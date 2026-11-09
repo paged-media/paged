@@ -1,7 +1,7 @@
 // The VECTOR TOOLS inside the image (image ADR 476, WP5.11): the Pen, the
 // Freeform Pen, Path Selection, Direct Selection and the five shape
 // tools. Thin gestures over draw's machines — `PenMachine`,
-// `DirectSelectMachine` and `PencilMachine` from `@paged-media/draw-tools`,
+// `DirectSelectMachine` and `PencilMachine` from `@paged-media/vector-tools`,
 // imported, not copied (the Phase 11 rule) — fed through the same frame
 // fit as every image tool.
 //
@@ -25,7 +25,7 @@ import {
   type AnchorTable,
   type AnchorTriple,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 import {
   applyPathOps,
   DirectSelectMachine,
@@ -36,7 +36,7 @@ import {
   type DirectSelectKey,
   type PenHit,
   type PenSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 import type {
   BundleHost,
   CanvasPointerEvent,

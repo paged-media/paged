@@ -17,7 +17,7 @@
  */
 
 // THE PERSPECTIVE GRID TOOL and THE PERSPECTIVE SELECTION TOOL — shims
-// over draw-tools' `PerspectiveGridMachine` / `PerspectiveSelectMachine`.
+// over vector-tools' `PerspectiveGridMachine` / `PerspectiveSelectMachine`.
 //
 // Both show the page's grid (activating either SHOWS it, creating a
 // default two-point grid on a page that has none — Illustrator's
@@ -44,7 +44,10 @@ import type {
   GestureHandler,
   ToolPreviewShape,
 } from "@paged-media/plugin-api";
-import { gridHandles, type PerspectiveGrid } from "@paged-media/draw-geometry";
+import {
+  gridHandles,
+  type PerspectiveGrid,
+} from "@paged-media/vector-geometry";
 import {
   PerspectiveGridMachine,
   PerspectiveSelectMachine,
@@ -52,7 +55,7 @@ import {
   planeWidgetLayout,
   type PerspectiveHit,
   type PlaneWidgetCell,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   readDistortTargets,

@@ -51,7 +51,7 @@ import type {
   PathAnchorsResult,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { BrushMachine, WidthMachine } from "@paged-media/draw-tools";
+import { BrushMachine, WidthMachine } from "@paged-media/vector-tools";
 
 import { drawTools } from "../../src/tools";
 import {

@@ -37,7 +37,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { applyAffine, type Affine } from "@paged-media/draw-geometry";
+import { applyAffine, type Affine } from "@paged-media/vector-geometry";
 import {
   DirectSelectMachine,
   anchorEditOps,
@@ -45,7 +45,7 @@ import {
   planAnchorAddAt,
   planAnchorConvertAt,
   type PathPointOp,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   F1_MULTI_SHAPE,

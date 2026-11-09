@@ -1,7 +1,7 @@
 $schema: "../../.moon/cache/schemas/project.json"
 
 # paged.draw: the image-trace crates (members of the engine's Cargo workspace) and JS packages
-# (draw-geometry, draw-tools, draw-bundle).
+# (vector-geometry, vector-tools, draw-bundle).
 language: "rust"
 layer: "library"
 stack: "systems"

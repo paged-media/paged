@@ -169,7 +169,7 @@ export interface TraceAnchor {
 }
 
 /** One closed contour. `area`'s SIGN is the walked winding; the
- *  authoritative hole orientation is applied by draw-geometry's
+ *  authoritative hole orientation is applied by vector-geometry's
  *  `orientForNonZeroHoles` on the way to the document. */
 export interface TraceContour {
   anchors: TraceAnchor[];

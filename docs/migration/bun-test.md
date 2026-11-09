@@ -79,8 +79,8 @@ of plugin-sdk (2) and slide (1); every base id is still there.
 | plugin-sdk | 713 | 715 | yes, + 2 | codemod; `modules.spec` stubs `fetch` by hand (a public package does not import the internal kit, PM-0002). The 2 new ids are B6's tests (efa3d9597), merged from main between the base and the flip; main's sync-wire fix (746bd02be) then added a 716th |
 | ai | 31 | 31 | yes | codemod; tsconfig `types` gains `bun` |
 | cli | 54 + 1 skipped | 54 + 1 skipped | yes | `vitest.config.ts` deleted: one file at a time and 120 s timeouts become `bun test --timeout 120000` (no `--parallel`); its `server.deps.inline` was a Vite transform bun does not need. `.runIf` → `.if` (with a boolean). The shipped `node-shims.ts` routes DuckDB's worker in-process under Bun too (below) |
-| draw-geometry | 681 | 681 | yes | codemod; one `.each` title: vitest's `$name` quoted strings, bun's does not, so the quotes are in the title; 5 bench files → mitata |
-| draw-tools | 337 | 337 | yes | codemod; 1 bench file → mitata |
+| vector-geometry | 681 | 681 | yes | codemod; one `.each` title: vitest's `$name` quoted strings, bun's does not, so the quotes are in the title; 5 bench files → mitata |
+| vector-tools | 337 | 337 | yes | codemod; 1 bench file → mitata |
 | draw-bundle | 1645 + 34 skipped | 1480 + 34 skipped (main) + 165 (DOM) | yes, with 12 renamed files | the 12 jsdom specs become `test/panels/*.dom.test.tsx` in the DOM task; 3 conformance files' `ctx.skip()` → load-time probes + `it.skipIf`; `expect.poll` → `waitFor`; 1 bench file → mitata |
 
 ## Refactors beyond the codemod
@@ -304,8 +304,8 @@ the absolute numbers are noisy; the two runners of a package ran within a minute
 | plugin-sdk | 9.5 s | 1.7 s | 5.7× |
 | ai | 9.4 s | 5.0 s | 1.9× |
 | cli | 46.2 s | 23.1 s | 2.0× |
-| draw-geometry | 22.3 s | 0.9 s | 24.2× |
-| draw-tools | 26.4 s | 2.6 s | 10.3× |
+| vector-geometry | 22.3 s | 0.9 s | 24.2× |
+| vector-tools | 26.4 s | 2.6 s | 10.3× |
 | draw-bundle | 33.6 s | 11.2 s (main 7.9 + DOM 3.3) | 3.0× |
 | **all twenty** | **215 s** | **94 s** | **2.3×** |
 

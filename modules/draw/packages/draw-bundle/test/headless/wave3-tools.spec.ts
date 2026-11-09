@@ -36,7 +36,7 @@ import type {
   SceneTreeNode,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { recogniseShape, type Vec2 } from "@paged-media/draw-geometry";
+import { recogniseShape, type Vec2 } from "@paged-media/vector-geometry";
 
 import {
   applyInsertFlare,
@@ -65,7 +65,7 @@ import { countingHost } from "../perf/counting-host";
 import { pointerAt, settle } from "../perf/pointer-stream";
 import { openHost } from "./host";
 import { covers } from "@paged-media/test-kit";
-import strokes from "../../../draw-geometry/test/fixtures/shaper-strokes.json";
+import strokes from "../../../../../../platform/shared/vector-geometry/test/fixtures/shaper-strokes.json";
 
 const S = strokes as unknown as Record<string, Vec2[]>;
 const SQ = poly("sq");

@@ -38,7 +38,7 @@ import {
   ovalToPath,
   transformBounds,
   type Affine,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 export type EngineShape = "spread" | "page";
 export const SHAPES: readonly EngineShape[] = ["spread", "page"];

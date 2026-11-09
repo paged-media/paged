@@ -42,8 +42,8 @@ import {
   type Affine,
   type AnchorTable,
   type Vec2,
-} from "@paged-media/draw/geometry";
-import { segmentPairsOf } from "@paged-media/draw/machines";
+} from "@paged-media/vector-geometry";
+import { segmentPairsOf } from "@paged-media/vector-tools";
 
 /** What a point on the page is over. `index` is the flat anchor index
  *  (across contours); a segment is named by its START anchor — the

@@ -33,7 +33,7 @@
 // their wording is pinned by a conformance test.
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
-import type { RepeatKind } from "@paged-media/draw-geometry";
+import type { RepeatKind } from "@paged-media/vector-geometry";
 import * as React from "react";
 
 import {

@@ -51,7 +51,7 @@ Four questions needed a decision:
   pixels Photoshop stored: strokes are not drawn yet.
 - **The tools are draw's machines.** The Pen (`PenMachine`), Direct Selection
   (`DirectSelectMachine`) and the Freeform Pen (the Pencil's `PencilMachine`) are IMPORTED from
-  `@paged-media/draw-tools`; the shapes come from `@paged-media/draw-geometry` (rectangle, ellipse,
+  `@paged-media/vector-tools`; the shapes come from `@paged-media/vector-geometry` (rectangle, ellipse,
   polygon, star, SVG path data). The machines' pointer space is the page and their inner space the
   image, with the frame fit as the affine between them, so a plan comes back in image px and is
   applied with draw's own `applyPathOps`. The image glue's lint boundary allows exactly these two

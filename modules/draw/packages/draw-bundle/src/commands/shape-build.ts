@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// THE SHAPE BUILDER'S COMMIT — a `ShapeBuildPlan` (draw-tools, pure) turned
+// THE SHAPE BUILDER'S COMMIT — a `ShapeBuildPlan` (vector-tools, pure) turned
 // into ONE batch, so a gesture is one undo step.
 //
 // WHY THE RESULT IS BUILT HERE. The engine's `pathfinderFaces { faces, mode }`
@@ -73,8 +73,8 @@ import {
   tableBounds,
   type Affine,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
-import type { ShapeBuildPlan } from "@paged-media/draw-tools";
+} from "@paged-media/vector-geometry";
+import type { ShapeBuildPlan } from "@paged-media/vector-tools";
 
 import {
   compoundPaintOf,

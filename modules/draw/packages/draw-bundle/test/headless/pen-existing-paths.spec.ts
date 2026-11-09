@@ -52,7 +52,7 @@ import {
   type PenPath,
   type PenPlan,
   type PenSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   OPEN_THEN_CLOSED,

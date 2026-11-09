@@ -35,7 +35,7 @@ import type {
   Mutation,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import type { AnchorTable } from "@paged-media/draw-geometry";
+import type { AnchorTable } from "@paged-media/vector-geometry";
 
 import {
   drawBundle,

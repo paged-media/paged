@@ -74,7 +74,7 @@ import { TRACE_PRESET_IDS } from "../commands/trace-presets";
 import { RECOLOR_MODES } from "../commands/recolor";
 import { GENERATIVE_ROUTES } from "../commands/generative";
 import { WARP_STYLES } from "../commands/envelope";
-import { HARMONY_RULES, LIQUIFY_KINDS } from "@paged-media/draw-geometry";
+import { HARMONY_RULES, LIQUIFY_KINDS } from "@paged-media/vector-geometry";
 import {
   BOOL,
   COLOR,

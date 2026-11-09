@@ -146,8 +146,8 @@
       "allowReason": "test fixtures that pin a literal, truncated number on purpose (the oracle recordings and the bake fidelity case); the full-precision uses import KAPPA",
       "allow": [
         "modules/draw/packages/draw-bundle/test/roundtrip/author.ts",
-        "modules/draw/packages/draw-geometry/test/bench-data.ts",
-        "modules/draw/packages/draw-geometry/test/polygon.spec.ts",
+        "platform/shared/vector-geometry/test/bench-data.ts",
+        "platform/shared/vector-geometry/test/polygon.spec.ts",
         "modules/web/packages/web-bundle/test/bake-fidelity.spec.ts"
       ],
       "owner": [

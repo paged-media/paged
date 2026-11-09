@@ -204,7 +204,7 @@ import type {
   MutationInput,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
-import { splitCompound, type AnchorTable } from "@paged-media/draw-geometry";
+import { splitCompound, type AnchorTable } from "@paged-media/vector-geometry";
 
 import { stampDrawMetadata } from "./appearance-bake";
 import { groupMutationFor, ungroupMutationFor } from "./group";

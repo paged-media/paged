@@ -77,8 +77,8 @@ import {
   applyAffine,
   inverseApplyAffine,
   type Affine,
-} from "@paged-media/draw-geometry";
-import type { RegionFace } from "@paged-media/draw-tools";
+} from "@paged-media/vector-geometry";
+import type { RegionFace } from "@paged-media/vector-tools";
 
 import { BIND_PATHFINDER_STATUS } from "../commands/pathfinder-region";
 import { pageOriginOf, SPREAD_ORIGIN, type PageOrigin } from "../page-origin";
