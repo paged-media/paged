@@ -90,6 +90,7 @@ mod stroke_geom;
 mod symbols;
 pub use symbols::{BuiltSymbol, SymbolCache};
 mod tables;
+mod text_fit;
 mod text_frame;
 mod text_path;
 mod text_slots;

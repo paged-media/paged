@@ -3,6 +3,12 @@
 - **Status:** Accepted, 2026-11-08. Records two checked gaps of the capability register's reach
   matrix. No code changes: both need a decision above this module (an engine feature; a contract
   door), and the reasons are written down so the next attempt starts from facts.
+- **Amended 2026-11-09:** section 1 is built: engine
+  [ADR 1061](../../../../engine/core/docs/adr/1061-a-text-frame-shrinks-its-text-to-fit.md) gives a
+  text frame a shrink-to-fit, `slide-native` lowers `normAutofit` onto it and `slide-resolve` no
+  longer scales the runs, and `pptx-export` writes the fit back. The engine starts from the stored
+  values and steps down from them in PowerPoint's steps (7.5 % of the size, not the 10 % guessed
+  below); the field stays off the wire.
 - **Scope:** `slide-resolve` (`text.rs`, `shrink`), `slide-native`, `pptx-export` (`probe.rs`),
   `slide-sheet`, `packages/slide-bundle` (`chart-surface.tsx`); engine `paged-model`
   (`AutoSizingType`), PM-0002, ADR 715.

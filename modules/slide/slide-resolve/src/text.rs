@@ -52,7 +52,9 @@ pub struct TextCtx<'a> {
     pub font_ref: Option<(String, Option<KeyedColor>)>,
     /// Paragraph style name prefix (`Title`, `Body`, `Other`).
     pub style_prefix: Option<&'static str>,
-    /// `normAutofit` scales (font, line spacing) PowerPoint applied.
+    /// `normAutofit` (font scale, line spacing reduction) PowerPoint saved.
+    /// The text keeps its written sizes: the engine sets it at the fit
+    /// (engine ADR 1061, slide ADR 724).
     pub shrink: Option<(f64, f64)>,
 }
 
@@ -153,7 +155,6 @@ fn theme_font(face: Option<&str>, ctx: &TextCtx) -> Option<String> {
 }
 
 fn run(props: &RunProps, text: String, line_break: bool, ctx: &TextCtx) -> TextRun {
-    let scale = ctx.shrink.map(|s| s.0).unwrap_or(1.0);
     let (rgba, theme) = solid(&props.fill, ctx)
         .or_else(|| ctx.font_ref.as_ref().and_then(|(_, c)| c.clone()))
         .unwrap_or((Rgba::BLACK, None));
@@ -165,7 +166,7 @@ fn run(props: &RunProps, text: String, line_break: bool, ctx: &TextCtx) -> TextR
             Some("minor") => Some("+mn-lt"),
             _ => None,
         });
-    let size = props.size.unwrap_or(1800) as f64 / 100.0 * scale;
+    let size = props.size.unwrap_or(1800) as f64 / 100.0;
     TextRun {
         text,
         line_break,
@@ -223,18 +224,21 @@ pub fn paragraph(p: &Paragraph, ctx: &TextCtx) -> Para {
         .map(|r| r.size)
         .fold(None, |m: Option<f64>, s| Some(m.map_or(s, |m| m.max(s))))
         .unwrap_or(empty_size);
-    let line_scale = 1.0 - ctx.shrink.map(|s| s.1).unwrap_or(0.0);
+    // A line spacing reduction (`normAutofit`) applies to a percentage
+    // spacing: 100 % is then written out, so the engine reduces it and the
+    // first baseline follows (engine ADR 1061).
+    let reduces = ctx.shrink.is_some_and(|s| s.1 > 0.0);
     let (leading, line_percent) = match props.line_spacing {
         Some(Spacing::Points(v)) => (Some(v as f64 / 100.0), None),
         Some(Spacing::Percent(v)) => {
-            let pct = v as f64 / 100_000.0 * line_scale;
-            if (pct - 1.0).abs() > 1e-6 {
+            let pct = v as f64 / 100_000.0;
+            if (pct - 1.0).abs() > 1e-6 || reduces {
                 (Some(size * 1.2 * pct), Some(pct))
             } else {
                 (None, None)
             }
         }
-        None if line_scale < 1.0 => (Some(size * 1.2 * line_scale), Some(line_scale)),
+        None if reduces => (Some(size * 1.2), Some(1.0)),
         None => (None, None),
     };
     let spacing_pt = |s: Option<Spacing>| match s {

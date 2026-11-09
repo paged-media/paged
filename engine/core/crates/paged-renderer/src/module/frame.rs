@@ -768,6 +768,7 @@ mod tests {
             locked: false,
             corners: Default::default(),
             text_warp: None,
+            shrink_to_fit: None,
         }
     }
 

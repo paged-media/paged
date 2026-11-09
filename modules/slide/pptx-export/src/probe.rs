@@ -92,8 +92,6 @@ pub fn probe_shape(s: &Shape) -> Shape {
 #[derive(Debug, Clone)]
 pub struct Defaults {
     pub levels: Vec<Para>,
-    /// `normAutofit` font scale the resolver applied to every size.
-    pub font_scale: f64,
 }
 
 impl Defaults {
@@ -104,7 +102,6 @@ impl Defaults {
     fn of(tf: &TextFrame) -> Defaults {
         Defaults {
             levels: tf.paragraphs.clone(),
-            font_scale: tf.shrink.map(|s| s.0).unwrap_or(1.0),
         }
     }
 }

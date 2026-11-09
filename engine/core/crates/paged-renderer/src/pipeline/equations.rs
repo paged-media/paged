@@ -146,17 +146,14 @@ pub(super) fn set_equations(
     document: &paged_scene::Document,
     table: &FontTable,
     paragraph: &paged_model::Paragraph,
+    font_scale: f32,
 ) -> Vec<SetEquation> {
     let mut out = Vec::with_capacity(paragraph.equations.len());
     for eq in &paragraph.equations {
         let host = host_run(paragraph, eq.offset);
         let default_run = paged_model::CharacterRun::default();
         let resolved = document.resolved_run_attrs(paragraph, host.unwrap_or(&default_run));
-        let size = eq
-            .point_size
-            .or(resolved.point_size)
-            .unwrap_or(12.0)
-            .max(0.1);
+        let size = (eq.point_size.or(resolved.point_size).unwrap_or(12.0) * font_scale).max(0.1);
         let Some(face) = math_face(
             table,
             resolved.font.as_deref(),

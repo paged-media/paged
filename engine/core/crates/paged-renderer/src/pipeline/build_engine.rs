@@ -925,6 +925,10 @@ pub(super) fn build_document_inner(
             let fitted = auto_sized.get(id)?;
             let mut clone = layout_frames.get(id).unwrap_or(frame).clone();
             clone.bounds = fitted.bounds;
+            // Engine ADR 1061 — the step the text was fitted at.
+            if fitted.fit.is_some() {
+                clone.shrink_to_fit = fitted.fit;
+            }
             Some((id.to_string(), clone))
         })
         .collect();
@@ -4763,6 +4767,9 @@ pub(super) struct StoryEmitter<'a> {
     /// knows which frames' text will move INSIDE their body's object
     /// group (and so needs no object bracket of its own). `None` for the
     /// passes whose text is not relocated.
+    /// Engine ADR 1061 — the shrink-to-fit the head frame sets its text
+    /// at (`text_fit`); `None` sets it as written.
+    pub(super) text_fit: Option<paged_model::text_fit::ShrinkToFit>,
     pub(super) text_slots: Option<&'a HashMap<(usize, String), crate::module::TextSlot>>,
     pub(super) palette: &'a Graphic,
     /// Reserved for the upcoming CMYK text-fill path. The current
@@ -5205,9 +5212,11 @@ impl<'a> StoryEmitter<'a> {
             .collect();
         let chain_wrap_rects_owned: Vec<Vec<WrapShape>> =
             chain_wrap_rects.iter().map(|s| s.to_vec()).collect();
+        let text_fit = super::text_fit::chain_fit(&chain);
         Self {
             document,
             options,
+            text_fit,
             text_slots: None,
             palette,
             color_ctx,
@@ -5615,6 +5624,34 @@ impl<'a> StoryEmitter<'a> {
         }
         emit_paragraph_into_chain(self, paragraph, pages, total_stats);
         self.paragraph_idx = self.paragraph_idx.saturating_add(1);
+    }
+
+    /// A run's resolved attributes, set at the frame's shrink-to-fit
+    /// (engine ADR 1061) when it has one.
+    pub(super) fn run_attrs(
+        &self,
+        paragraph: &paged_model::Paragraph,
+        run: &paged_model::CharacterRun,
+    ) -> paged_scene::ResolvedRunAttrs {
+        let attrs = self.document.resolved_run_attrs(paragraph, run);
+        match self.text_fit {
+            None => attrs,
+            Some(fit) => {
+                let auto = self
+                    .document
+                    .resolved_paragraph_attrs(paragraph)
+                    .line_setting
+                    .auto_leading
+                    .filter(|p| *p > 0.0)
+                    .unwrap_or(120.0);
+                super::text_fit::fit_run(attrs, fit, self.options.default_point_size, auto)
+            }
+        }
+    }
+
+    /// An explicit leading at the frame's shrink-to-fit.
+    pub(super) fn fit_leading(&self, leading: f32) -> f32 {
+        self.text_fit.map_or(leading, |f| leading * f.line_factor())
     }
 
     /// ADR 028 — whether the line about to be placed must open the next
@@ -6764,7 +6801,12 @@ pub(super) fn emit_paragraph_into_chain(
         let equations = if paragraph.equations.is_empty() {
             Vec::new()
         } else {
-            super::equations::set_equations(em.document, em.font_table, paragraph)
+            super::equations::set_equations(
+                em.document,
+                em.font_table,
+                paragraph,
+                em.text_fit.map_or(1.0, |f| f.font_scale),
+            )
         };
         if let Some((with_objects, objects)) =
             anchored::with_object_placeholders(paragraph, equations)
@@ -6900,15 +6942,17 @@ fn emit_paragraph_lines(
         let run_pt = paragraph
             .runs
             .first()
-            .and_then(|r| em.document.resolved_run_attrs(paragraph, r).point_size);
+            .and_then(|r| em.run_attrs(paragraph, r).point_size);
         let style = em.document.styles.resolve_paragraph(
             paragraph
                 .paragraph_style
                 .as_deref()
                 .unwrap_or("ParagraphStyle/$ID/[No paragraph style]"),
         );
-        let para_pt =
-            run_pt.unwrap_or_else(|| style.point_size.unwrap_or(em.options.default_point_size));
+        let para_pt = run_pt.unwrap_or_else(|| {
+            style.point_size.unwrap_or(em.options.default_point_size)
+                * em.text_fit.map_or(1.0, |f| f.font_scale)
+        });
         let space_before_64 =
             resolved_paragraph.space_before.unwrap_or(0.0) * paged_text::shape::ADVANCE_PRECISION;
         // An empty paragraph advances by its leading too — the explicit
@@ -6919,11 +6963,16 @@ fn emit_paragraph_lines(
         let line_height_exact = paragraph
             .runs
             .first()
-            .and_then(|r| em.document.resolved_run_attrs(paragraph, r).leading)
-            .or(style.leading)
+            .and_then(|r| em.run_attrs(paragraph, r).leading)
+            .or(style.leading.map(|l| em.fit_leading(l)))
             .filter(|l| *l > 0.0)
             .map(|l| l as f64 * paged_text::shape::ADVANCE_PRECISION as f64)
-            .unwrap_or_else(|| para_pt as f64 * 1.2 * paged_text::shape::ADVANCE_PRECISION as f64);
+            .unwrap_or_else(|| {
+                para_pt as f64
+                    * 1.2
+                    * (1.0 - em.text_fit.map_or(0.0, |f| f.line_spacing_reduction)) as f64
+                    * paged_text::shape::ADVANCE_PRECISION as f64
+            });
         let line_height_64 = line_height_exact.round() as i32;
         // Establish the first baseline if we haven't placed any
         // content yet — same convention as the populated branch
@@ -7084,7 +7133,7 @@ fn emit_paragraph_lines(
     let resolved_runs: Vec<paged_scene::ResolvedRunAttrs> = paragraph
         .runs
         .iter()
-        .map(|r| em.document.resolved_run_attrs(paragraph, r))
+        .map(|r| em.run_attrs(paragraph, r))
         .collect();
     let resolved_paragraph = em
         .segment
@@ -7100,6 +7149,18 @@ fn emit_paragraph_lines(
         resolved_runs
             .first()
             .and_then(|head| marker_run_attrs(em.document, &resolved_paragraph, head))
+            .map(|mut m| {
+                // Engine ADR 1061 — a marker style's own size shrinks with
+                // the text (one inherited from run 0 already has).
+                if let Some(fit) = em.text_fit {
+                    let own_size = bullet_marker_character_style(&resolved_paragraph)
+                        .and_then(|id| em.document.styles.resolve_character(id).point_size);
+                    if let Some(size) = own_size {
+                        m.point_size = Some(size * fit.font_scale);
+                    }
+                }
+                m
+            })
     } else {
         None
     };

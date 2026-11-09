@@ -110,6 +110,7 @@ mod table_nested_pipeline;
 mod table_start_row_pipeline;
 mod tables;
 mod tables_rows_pipeline;
+mod text_fit_pipeline;
 mod text_frame_corners;
 mod text_frame_stroke_alignment;
 mod text_glyph_level;

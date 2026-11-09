@@ -28,4 +28,4 @@ Range 700–749.
 | [721](721-transitions-and-shader-effects-are-pure-webgpu-wgsl.md) | Transitions and shader effects are pure WebGPU/WGSL | Accepted 2026-10-25 |
 | [722](722-one-drawingml-paint-and-effect-mapper.md) | One DrawingML paint and effect reader (`paged_ooxml::drawingml`), one mapper onto the engine (`dml-native`) | Accepted 2026-10-25, amended 2026-10-28 |
 | [723](723-effects-parity-and-pictures.md) | Effects parity and pictures: bevels as the engine's bevel, patterns as tile pictures from PowerPoint's own cells, WebP/TGA/ICO/QOI written as PNG, the Format Painter | Accepted 2026-10-30 |
-| [724](724-autofit-and-chart-data-reach-audit.md) | Autofit and chart-data editing: the W7 reach audit (engine has no shrink-to-fit; a shared sheet engine needs a host door) | Accepted 2026-11-08 |
+| [724](724-autofit-and-chart-data-reach-audit.md) | Autofit and chart-data editing: the W7 reach audit (autofit built since on the engine's shrink-to-fit, engine ADR 1061; a shared sheet engine needs a host door) | Accepted 2026-11-08, amended 2026-11-09 |

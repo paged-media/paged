@@ -1303,3 +1303,62 @@ fn a_bevel_reads_as_the_engines_bevel_and_an_edit_writes_its_3d_look__feat__plug
     assert!(!sp_pr.contains("<a:sp3d"), "{sp_pr}");
     keep(&out.bytes, "bevel-removed");
 }
+
+/// The text frame of `page` (0-based) whose story is `key`'s.
+fn frame_mut<'a>(doc: &'a mut Document, page: usize, key: &str) -> &'a mut paged_model::TextFrame {
+    let story = story_of(doc, page, key);
+    doc.spreads[page]
+        .spread
+        .text_frames
+        .iter_mut()
+        .find(|f| f.parent_story.as_deref() == Some(story.as_str()))
+        .unwrap()
+}
+
+/// Engine ADR 1061: slide 3's body is saved shrunk (`normAutofit
+/// fontScale="40000" lnSpcReduction="20000"`). The model keeps the written
+/// 28 pt and the fit on the frame; an edit of its text writes the sizes as
+/// written and keeps the fit, and a changed fit is written back.
+#[test]
+fn a_shrunk_body_keeps_its_written_sizes_and_its_fit() {
+    use paged_model::text_fit::ShrinkToFit;
+    let bytes = fixture("text");
+    let part = resolved(&bytes).slides[2].part.clone();
+    let key = format!("{part}#5");
+    let mut doc = imported(&bytes);
+    assert_eq!(
+        frame_mut(&mut doc, 2, &key).shrink_to_fit,
+        Some(ShrinkToFit::new(0.4, 0.2))
+    );
+    let story = story_of(&doc, 2, &key);
+    {
+        let runs = &story_mut(&mut doc, &story).paragraphs[0].runs;
+        assert_eq!(runs[0].point_size, Some(28.0), "{runs:?}");
+    }
+    story_mut(&mut doc, &story).paragraphs[0].runs[0].text = "Paragraph one, edited".into();
+    let out = export_doc(&bytes, &doc);
+    keep(&out.bytes, "autofit-edit");
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    let xml = part_text(&out.bytes, &part);
+    assert!(xml.contains("<a:t>Paragraph one, edited</a:t>"), "{xml}");
+    assert!(
+        xml.contains(r#"<a:normAutofit fontScale="40000" lnSpcReduction="20000"/>"#),
+        "{xml}"
+    );
+    // The run inherits its size: nothing scaled is written.
+    assert!(!xml.contains(r#"sz="1120""#), "{xml}");
+    // A changed fit is the body's autofit.
+    frame_mut(&mut doc, 2, &key).shrink_to_fit = Some(ShrinkToFit::new(0.325, 0.2));
+    let out = export_doc(&bytes, &doc);
+    let xml = part_text(&out.bytes, &part);
+    assert!(
+        xml.contains(r#"<a:normAutofit fontScale="32500" lnSpcReduction="20000"/>"#),
+        "{xml}"
+    );
+    let back = resolved(&out.bytes);
+    let ItemKind::Shape { text: Some(t), .. } = &item(&back, 2, 5).kind else {
+        panic!()
+    };
+    let shrink = t.shrink.expect("shrink");
+    assert!((shrink.0 - 0.325).abs() < 1e-9 && (shrink.1 - 0.2).abs() < 1e-9);
+}

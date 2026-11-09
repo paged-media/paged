@@ -105,7 +105,10 @@ Read from the code on 2026-10-30.
   (pictures as image blobs); tables; text frames that grow from their anchored edge;
   PowerPoint's first baseline for percentage line spacing; unwrapped text; gradient feathers for
   translucent gradients; radial gradients centred where `a:fillToRect` puts them; slide numbers as
-  page-number markers.
+  page-number markers. A `normAutofit` body is the engine's shrink-to-fit (engine ADR 1061): the
+  text keeps its written sizes, the saved `fontScale` / `lnSpcReduction` is the fit the engine
+  starts from, and text that no longer fits after an edit is set smaller in PowerPoint's steps;
+  export writes the fit back.
 - **Slide state on pages.** Each slide's speaker notes, hidden flag and transition are written
   into its page's plugin metadata at import (`x-paged:media.paged.slide`), so they move,
   duplicate and undo with the slide (engine protocol 70).

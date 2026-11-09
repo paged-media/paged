@@ -444,8 +444,9 @@ Status (draw items, one line each; updated as they land):
   hyperlink (`insertItemHyperlink`; cell links stay sheet's). Open, reported as losses: the text of a
   shape or text box, arrowheads, shapes in groups, the in-frame grid (draws pictures raw and no
   shapes), a rotated `xdr:pic`.
-- **slide:** autofit (stored `fontScale` / `lnSpcReduction` are applied as fixed values, which is what
-  PowerPoint draws on open; the engine has no shrink-to-fit, only frame growth: slide ADR 724). Chart
+- **slide:** autofit DONE 2026-11-09: `normAutofit` is the engine's shrink-to-fit (engine ADR 1061): the
+  text keeps its written sizes, the saved `fontScale` / `lnSpcReduction` is the fit the renderer starts
+  from and it shrinks further when edited text no longer fits; `pptx-export` writes the fit back. Chart
   data editing still carries its second compiled sheet engine (`slide-sheet`); sharing sheet's needs a
   host door that does not exist (PM-0002, slide ADR 724). Done and checked against PowerPoint:
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
