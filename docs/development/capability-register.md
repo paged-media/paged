@@ -361,13 +361,12 @@ Status (draw items, one line each; updated as they land):
   its DOM spec and its `app.pdfVectors.*` strings are gone; `paged.file.importPdfVectors` left through
   the deprecation window. Differences: a panel instead of a modal (it stays open after Place and always
   lists the report; "Start over" replaces Cancel).
-- Slide adjust handles: KEEP for now, with the evidence (2026-11-03). `overlay.handles@1` reports a
-  hit only to the bundle's OWN tools (`hitHandle` on their pointer events, extensions ADR 339), and
-  slide contributes no tool: the selection is the host's Selection tool, which never asks a bundle's
-  handle set. Moving the handles means slide shipping a selection tool of its own (losing the host's
-  move / marquee / resize) or the host's Selection tool routing handle hits to the owning bundle (a
-  contract change, as editor ADR 310 decided for the live-shape widgets). Neither is a safe port, so
-  `adjust-handles.tsx` stays on `contribute.overlay`.
+- Slide adjust handles: DONE 2026-11-09. The handles are a host handle set (`overlay.handles@1`,
+  extensions ADR 339) and the host's Selection tools route a press on one to the bundle
+  (`set.onHostDrag`, `overlay.handles.hostDrag@1`, extensions ADR 1103): the bundle hears start, moves
+  and one end and writes the drag in one mutation (one undo step). The preview outline is an overlay
+  layer. `adjust-handles.tsx`'s `contribute.overlay` contribution, its DOM pointer code and its screen
+  metrics are gone. Difference: the handles take the host's round handle look, not PowerPoint's yellow.
 - Bind from the property field: PARTLY DONE 2026-11-03. The badge's "is this path bound" read no longer
   invokes `media.paged.data.propertyBindings`: `probeBound` asks the data door (`data@1`
   `bindings()`, the target an address or a selector resolved through `host.objects.query`), whichever
@@ -446,8 +445,9 @@ Status (draw items, one line each; updated as they land):
   hyperlink (`insertItemHyperlink`; cell links stay sheet's). Open, reported as losses: the text of a
   shape or text box, arrowheads, shapes in groups, the in-frame grid (draws pictures raw and no
   shapes), a rotated `xdr:pic`.
-- **slide:** autofit (stored `fontScale` / `lnSpcReduction` are applied as fixed values, which is what
-  PowerPoint draws on open; the engine has no shrink-to-fit, only frame growth: slide ADR 724). Chart
+- **slide:** autofit DONE 2026-11-09: `normAutofit` is the engine's shrink-to-fit (engine ADR 1061): the
+  text keeps its written sizes, the saved `fontScale` / `lnSpcReduction` is the fit the renderer starts
+  from and it shrinks further when edited text no longer fits; `pptx-export` writes the fit back. Chart
   data editing: DONE 2026-11-09 on paged.sheet's grid and engine through the workbook door (extensions
   ADR 1102, slide ADR 724 amendment 1); `slide-sheet` stays linked to read, recalculate, draw and write
   chart workbooks, the cell entry left the slide wasm. Done and checked against PowerPoint:

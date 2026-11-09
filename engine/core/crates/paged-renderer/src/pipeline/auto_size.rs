@@ -64,6 +64,7 @@
 
 use super::*;
 
+use paged_model::text_fit::ShrinkToFit;
 use paged_model::{
     AutoSizingReferencePoint as RP, AutoSizingType, Bounds, TextFrame, TextWrapMode,
 };
@@ -83,6 +84,9 @@ pub(super) struct AutoSized {
     /// a `NextColumnTextWrap` obstacle); every line of the story is
     /// overset.
     pub(super) text_dropped: bool,
+    /// Engine ADR 1061 — the shrink-to-fit the frame sets its text at,
+    /// for a frame that has one (`text_fit`).
+    pub(super) fit: Option<paged_model::text_fit::ShrinkToFit>,
 }
 
 /// Convergence for the binary searches, in pt (width / height) — well
@@ -165,7 +169,84 @@ impl<'a> Measurer<'a> {
         out
     }
 
+    /// The frame's fits: its shrink-to-fit first (the text sets smaller
+    /// before the box is sized to it), then its auto-size at that fit.
     fn fit_frame(&self, frame: &TextFrame, obstacles: &[Bounds]) -> Option<AutoSized> {
+        let Some(fit) = self.fit_shrink(frame) else {
+            return self.fit_size(frame, obstacles);
+        };
+        let fitted = super::text_fit::with_fit(frame, fit);
+        let mut sized = self.fit_size(&fitted, obstacles).unwrap_or(AutoSized {
+            bounds: frame.bounds,
+            text_dropped: false,
+            fit: None,
+        });
+        sized.fit = Some(fit);
+        Some(sized)
+    }
+
+    /// Engine ADR 1061 — the step a shrink-to-fit frame sets its text at:
+    /// the one it names while the text fits its box there, else the
+    /// first of the steps below it at which the text fits (the last step
+    /// when none does). The box is tried as it is drawn, at its own size:
+    /// a frame that also grows to its text grows from the shrunk text.
+    /// `None` for a frame without one, a threaded or vertical story and a
+    /// non-rectangular frame.
+    pub(super) fn fit_shrink(&self, frame: &TextFrame) -> Option<ShrinkToFit> {
+        let saved = frame.shrink_to_fit?.clamped();
+        // IDML writes "n" for no next frame.
+        if frame
+            .next_text_frame
+            .as_deref()
+            .is_some_and(|n| !n.is_empty() && n != "n")
+        {
+            return None;
+        }
+        let story_id = frame.parent_story.as_deref()?;
+        let story = self
+            .document
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)?;
+        if matches!(
+            story.story.story_direction,
+            Some(paged_model::StoryDirection::VerticalWritingDirection)
+        ) || super::text_frame::frame_polygon_spread(frame).is_some()
+            || super::text_frame::frame_shape_spread(frame).is_some()
+        {
+            return None;
+        }
+        // A frame continued from another one is not the head of its chain.
+        let continued = self.document.spreads.iter().any(|p| {
+            p.spread
+                .text_frames
+                .iter()
+                .any(|f| f.next_text_frame.as_deref() == frame.self_id.as_deref())
+        });
+        if continued {
+            return None;
+        }
+        let authored = frame.bounds;
+        let (w, h) = (authored.width().max(0.0), authored.height().max(0.0));
+        let fits = |step: ShrinkToFit| {
+            let probe = super::text_fit::with_fit(frame, step);
+            let t = self.trial(&probe, story, authored, w, h);
+            t.lines == 0 || !t.overset
+        };
+        if fits(saved) {
+            return Some(saved);
+        }
+        let mut last = saved;
+        for step in saved.steps_below() {
+            if fits(step) {
+                return Some(step);
+            }
+            last = step;
+        }
+        Some(last)
+    }
+
+    fn fit_size(&self, frame: &TextFrame, obstacles: &[Bounds]) -> Option<AutoSized> {
         let at = frame.auto_sizing?;
         if matches!(at, AutoSizingType::Off) {
             return None;
@@ -324,6 +405,7 @@ impl<'a> Measurer<'a> {
         Some(AutoSized {
             bounds: anchor(authored, grown_w, grown_h, rp),
             text_dropped,
+            fit: None,
         })
     }
 

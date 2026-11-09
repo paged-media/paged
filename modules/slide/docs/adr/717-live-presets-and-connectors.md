@@ -5,7 +5,7 @@
   [ADR 704](704-pptx-export-regenerates-slides.md) (a resized preset).
 - **Scope:** `platform/shared/dml-geom` (was `slide-geom`), `pptx-core`, `pptx-import`,
   `slide-resolve`, `slide-native` (`live`), `pptx-export`, `slide-js` (`live`),
-  `packages/slide-bundle` (`live-presets.ts`, `adjust-handles.tsx`, `shapes.ts`,
+  `packages/slide-bundle` (`live-presets.ts`, `adjust-handles.ts`, `shapes.ts`,
   `panels/shapes-panel.tsx`, the manifest).
 
 ## Context
@@ -161,3 +161,16 @@ Consequences and limits:
   insets or autofit. Export writes the painted fill, line and text as it writes any such
   edit: effect changes the exporter does not yet write stay reported.
 - The slide wasm grew by 95 KB (5.24 → 5.33 MiB).
+
+## Amendment (2026-11-09): the adjust handles on the host's handle door
+
+The adjust handles leave `contribute.overlay`. They are a host handle set
+(`host.overlay.handles("adjust")`, extensions ADR 339): the host draws them at a constant screen size
+and hit-tests them, and its Selection and Direct Selection tools hand a drag on one to the bundle
+(`onHostDrag`, extensions [ADR 1103](../../../../platform/extensions/docs/adr/1103-host-tools-drag-a-bundles-handles.md)).
+The drag's outline preview is an overlay layer (`adjustPreview`, the engine's path as cubic preview
+shapes). What a drag writes is unchanged: the engine's adjust values for every element of the
+shape, in one `document.mutate` on release, so one undo step; a cancelled drag (Escape) writes
+nothing. The handles take the host's round handle look, not PowerPoint's yellow. The bundle shows
+them only when `overlay.handles.hostDrag@1` holds. The overlay contribution, its DOM pointer code
+and its own screen metrics are deleted.

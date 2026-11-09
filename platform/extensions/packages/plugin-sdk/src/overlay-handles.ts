@@ -35,6 +35,9 @@ import type {
   CursorSpec,
   ElementGeometryItem,
   GestureHandler,
+  HostHandleRouter,
+  OverlayHandleDrag,
+  OverlayHandleDragListener,
   OverlayHandleSet,
   OverlayHandleSpace,
   OverlayHandleSpec,
@@ -148,6 +151,11 @@ export function createHandleSets(deps: OverlayDoorDeps) {
     string,
     { handles: ResolvedHandle[]; generation: number; key: string }
   >();
+  // Extensions ADR 1103 — the sets whose handles the HOST's selection
+  // tools drag, and the one router per bundle that answers for them.
+  const dragListeners = new Map<string, OverlayHandleDragListener>();
+  const routerKey = `${deps.manifestId}/handleDrag`;
+  let routed = false;
 
   const draw = (key: string, handles: readonly ResolvedHandle[]) => {
     const sink = layerSink(deps.getEditor());
@@ -185,6 +193,105 @@ export function createHandleSets(deps: OverlayDoorDeps) {
       }
     }
     return null;
+  };
+
+  /** The first handle of a set with a host-drag listener under a point. */
+  const hitDraggable = (pageId: string | null, point: Point | null) => {
+    if (!pageId || !point || dragListeners.size === 0) return null;
+    const found = hit(pageId, point);
+    return found && dragListeners.has(found.set) ? found : null;
+  };
+
+  interface HostDrag {
+    set: string;
+    id: string;
+    pageId: string;
+    start: Point;
+    /** The page's origin in document space (press doc − press page). */
+    origin: Point;
+    listener: OverlayHandleDragListener;
+  }
+  let drag: HostDrag | null = null;
+
+  const moment = (d: HostDrag, e: CanvasPointerEvent): OverlayHandleDrag => ({
+    set: d.set,
+    id: d.id,
+    pageId: d.pageId,
+    // Through the press page's origin, so a drag past the page's edge
+    // (or over the next page) stays in the handle's page space.
+    pagePoint: [e.docPoint[0] - d.origin[0], e.docPoint[1] - d.origin[1]],
+    startPoint: [d.start[0], d.start[1]],
+    modifiers: { ...e.modifiers },
+  });
+
+  const call = (what: string, fn: () => void) => {
+    try {
+      fn();
+    } catch (err) {
+      deps.warn(
+        `host.overlay.handles onHostDrag.${what} threw: ${String(err)}`,
+      );
+    }
+  };
+
+  const router: HostHandleRouter = {
+    hit(pageId, pagePoint) {
+      const found = hitDraggable(pageId, pagePoint);
+      if (!found) return null;
+      return found.handle.cursor ? { cursor: found.handle.cursor } : {};
+    },
+    down(e) {
+      if (e.button !== 0) return false;
+      const found = hitDraggable(e.pageId, e.pagePoint);
+      const listener = found ? dragListeners.get(found.set) : undefined;
+      if (!found || !listener || !e.pagePoint) return false;
+      if (drag) router.cancel();
+      const d: HostDrag = {
+        set: found.set,
+        id: found.handle.id,
+        pageId: found.handle.pageId,
+        start: [e.pagePoint[0], e.pagePoint[1]],
+        origin: [
+          e.docPoint[0] - e.pagePoint[0],
+          e.docPoint[1] - e.pagePoint[1],
+        ],
+        listener,
+      };
+      drag = d;
+      call("onStart", () => d.listener.onStart?.(moment(d, e)));
+      return true;
+    },
+    move(e) {
+      const d = drag;
+      if (d) call("onMove", () => d.listener.onMove(moment(d, e)));
+    },
+    up(e) {
+      const d = drag;
+      if (!d) return;
+      drag = null;
+      call("onEnd", () => d.listener.onEnd(moment(d, e)));
+    },
+    cancel() {
+      const d = drag;
+      if (!d) return;
+      drag = null;
+      call("onCancel", () => d.listener.onCancel?.());
+    },
+  };
+
+  /** Register the router while any set listens, drop it when none does. */
+  const syncRouter = () => {
+    const want = dragListeners.size > 0;
+    if (want === routed) return;
+    const setRouter = deps.getEditor().overlaySignals?.setHandleRouter;
+    if (typeof setRouter !== "function") return;
+    routed = want;
+    if (!want) router.cancel();
+    setRouter.call(
+      deps.getEditor().overlaySignals,
+      routerKey,
+      want ? router : null,
+    );
   };
 
   const handles = (id?: string): OverlayHandleSet => {
@@ -264,9 +371,26 @@ export function createHandleSets(deps: OverlayDoorDeps) {
         const found = hit(pageId, pagePoint);
         return found && found.set === setId ? found.handle.id : null;
       },
+      onHostDrag(listener) {
+        if (!disposed) {
+          dragListeners.set(setId, listener);
+          syncRouter();
+        }
+        return {
+          dispose() {
+            if (dragListeners.get(setId) !== listener) return;
+            if (drag?.set === setId) router.cancel();
+            dragListeners.delete(setId);
+            syncRouter();
+          },
+        };
+      },
       dispose() {
         if (disposed) return;
         disposed = true;
+        if (drag?.set === setId) router.cancel();
+        dragListeners.delete(setId);
+        syncRouter();
         live.delete(setId);
         layerSink(deps.getEditor())?.remove(key);
       },
@@ -274,7 +398,15 @@ export function createHandleSets(deps: OverlayDoorDeps) {
     return set;
   };
 
-  return { handles, hit, disposeAll: () => live.clear() };
+  return {
+    handles,
+    hit,
+    disposeAll: () => {
+      dragListeners.clear();
+      syncRouter();
+      live.clear();
+    },
+  };
 }
 
 // ─────────────────────────── transform box ───────────────────────────

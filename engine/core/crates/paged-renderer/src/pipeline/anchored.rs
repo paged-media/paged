@@ -1776,6 +1776,7 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         corners: Default::default(),
         // Engine ADR 1091 — a Word text box's WordArt warp.
         text_warp: af.text_warp.clone(),
+        shrink_to_fit: None,
     };
     // Sub-emitter borrows from the parent's `'a` so the document /
     // palette / font_table refs share lifetimes with the body pass.

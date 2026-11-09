@@ -21,7 +21,7 @@
 // the page items for the host's paste door (`pasteElements`): the outline
 // and, for a preset with stroke-only details, the detail element, each
 // labelled as a live preset, in one undo step. A resize then draws it
-// again (live-presets.ts), its adjust handles work (adjust-handles.tsx), and
+// again (live-presets.ts), its adjust handles work (adjust-handles.ts), and
 // export writes it as `a:prstGeom`.
 
 import type {

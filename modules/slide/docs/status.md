@@ -21,8 +21,9 @@ Read from the code on 2026-10-30.
   and box in its label. Resized in the editor, it is drawn again for its new box (a rounded
   rectangle keeps its corner radius), with its detail element and text frame. A connector glued
   to two shapes (`a:stCxn` / `a:endCxn`) is routed again when one of them moves. Both are written
-  in the edit's undo step. The selected preset shows its yellow adjust handles; a drag changes
-  the adjust values (one undo step). Insert ▸ Shapes opens a Shapes panel with every preset, and
+  in the edit's undo step. The selected preset shows its adjust handles (a host handle set the
+  host's Selection tool drags, extensions ADR 1103); a drag changes the adjust values (one undo
+  step). Insert ▸ Shapes opens a Shapes panel with every preset, and
   the typed command `media.paged.slide.insertShape` inserts one; either way the shape is a live
   preset. Export writes a live preset as `a:prstGeom` with its `a:avLst`.
 - **Charts** (`slide-chart`). Clustered, stacked and percent bars in both directions, lines
@@ -106,7 +107,10 @@ Read from the code on 2026-10-30.
   (pictures as image blobs); tables; text frames that grow from their anchored edge;
   PowerPoint's first baseline for percentage line spacing; unwrapped text; gradient feathers for
   translucent gradients; radial gradients centred where `a:fillToRect` puts them; slide numbers as
-  page-number markers.
+  page-number markers. A `normAutofit` body is the engine's shrink-to-fit (engine ADR 1061): the
+  text keeps its written sizes, the saved `fontScale` / `lnSpcReduction` is the fit the engine
+  starts from, and text that no longer fits after an edit is set smaller in PowerPoint's steps;
+  export writes the fit back.
 - **Slide state on pages.** Each slide's speaker notes, hidden flag and transition are written
   into its page's plugin metadata at import (`x-paged:media.paged.slide`), so they move,
   duplicate and undo with the slide (engine protocol 70).

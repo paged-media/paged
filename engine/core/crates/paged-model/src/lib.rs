@@ -45,6 +45,7 @@ pub mod pattern;
 pub mod report;
 pub mod review;
 pub mod script;
+pub mod text_fit;
 pub mod text_warp;
 pub mod theme;
 pub mod vector_effect;
@@ -1881,6 +1882,13 @@ pub struct TextFrame {
     /// one keeps its bytes and state hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_warp: Option<text_warp::TextWarp>,
+    /// Engine ADR 1061 — shrink the text to fit (PowerPoint
+    /// `a:normAutofit`): the fit to start from; the renderer sets the text
+    /// smaller when it does not fit at it. `None`: the text is set as
+    /// written. Skipped when unset, so a frame without one keeps its bytes
+    /// and state hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shrink_to_fit: Option<text_fit::ShrinkToFit>,
 }
 
 impl TextFrame {
@@ -1962,6 +1970,7 @@ impl TextFrame {
             corner_option: None,
             corners: Default::default(),
             text_warp: None,
+            shrink_to_fit: None,
         }
     }
 }

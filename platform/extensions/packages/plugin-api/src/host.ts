@@ -53,6 +53,7 @@ import type {
   SvgReport,
 } from "./wire.js";
 import type {
+  CanvasPointerEvent,
   CommandContribution,
   ControlBarGroupContribution,
   StatusItemContribution,
@@ -2500,6 +2501,49 @@ export interface OverlayHandleSet extends Disposable {
    *  `CanvasPointerEvent.pagePoint`), or null. Uses the camera's current
    *  scale for the screen-px radii. */
   hitTest(pageId: string, pagePoint: [number, number]): string | null;
+  /**
+   * Extensions ADR 1103 — hear drags of this set's handles under the
+   * HOST's Selection and Direct Selection tools, for a bundle that
+   * contributes no tool of its own (a preset's adjust handles live on the
+   * host's selection). A press on one of the set's handles is the
+   * bundle's drag: the host does not move, resize or marquee, and calls
+   * `onStart`, then `onMove` per move and `onEnd` once on release, or
+   * `onCancel` when the drag is interrupted (Escape, pointer-capture
+   * loss, a window blur). The host writes nothing; the bundle previews
+   * from `onMove` and writes its change on `onEnd` in ONE
+   * `document.mutate` call, so a drag is one undo step.
+   *
+   * The handles still draw and hit as before; this only adds the host
+   * tools' route. One listener per set (a second call replaces the
+   * first); disposing the returned handle drops it. Probe
+   * `supports("overlay.handles.hostDrag@1")`: without it the listener
+   * is kept but never called.
+   */
+  onHostDrag(listener: OverlayHandleDragListener): Disposable;
+}
+
+/** Extensions ADR 1103 — one moment of a host-tool handle drag. */
+export interface OverlayHandleDrag {
+  /** The set's id and the dragged handle's id. */
+  set: string;
+  id: string;
+  /** The page the press landed on (the handle's page). */
+  pageId: string;
+  /** The pointer now, page-local pt of `pageId` (on `onStart`, the
+   *  press). Off that page the point is still in its space. */
+  pagePoint: [number, number];
+  /** The press, page-local pt. */
+  startPoint: [number, number];
+  modifiers: CanvasPointerEvent["modifiers"];
+}
+
+/** Extensions ADR 1103 — `OverlayHandleSet.onHostDrag`'s listener. */
+export interface OverlayHandleDragListener {
+  onStart?(drag: OverlayHandleDrag): void;
+  onMove(drag: OverlayHandleDrag): void;
+  /** The release: write the change here, in one mutation. */
+  onEnd(drag: OverlayHandleDrag): void;
+  onCancel?(): void;
 }
 
 // --------------------------------------------------------- transformBox

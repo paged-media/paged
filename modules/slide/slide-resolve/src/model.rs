@@ -264,7 +264,9 @@ pub struct TextFrame {
     pub column_gap: f64,
     /// Grow the frame to its text (`spAutoFit`).
     pub grow: bool,
-    /// The shrink PowerPoint computed (`normAutofit`): font and line scale.
+    /// The shrink PowerPoint saved (`normAutofit`): font scale and line
+    /// spacing reduction. The paragraphs keep their written sizes; the
+    /// engine sets them at the fit (engine ADR 1061).
     pub shrink: Option<(f64, f64)>,
     /// 0 / 90 / 270: `vert` text rotation.
     pub rotation: f64,

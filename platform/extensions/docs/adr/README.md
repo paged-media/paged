@@ -74,6 +74,7 @@ and each one names the plugins that follow it and those that do not.
 | [1100](1100-the-ml-doors.md) | The ML doors: seven typed capabilities, two tiers, nothing off the machine | Accepted 2026-10-24 |
 | [1101](1101-the-comments-door.md) | The comments door: `host.comments` over the document door, and `contribute.commentAnchor` | Accepted 2026-11-01 |
 | [1102](1102-the-workbook-door.md) | The workbook door: one bundle edits the workbook another bundle keeps (`host.workbooks`, `contribute.workbookEditor`) | Accepted 2026-11-09 |
+| [1103](1103-host-tools-drag-a-bundles-handles.md) | The host's Selection tools drag a bundle's handles: `onHostDrag`, `overlay.handles.hostDrag@1` | Accepted 2026-11-09 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

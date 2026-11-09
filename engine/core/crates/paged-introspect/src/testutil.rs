@@ -93,6 +93,7 @@ pub fn empty_text_frame(self_id: &str, bounds: Bounds) -> TextFrame {
         corner_option: None,
         corners: Default::default(),
         text_warp: None,
+        shrink_to_fit: None,
     }
 }
 
