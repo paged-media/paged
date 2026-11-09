@@ -23,11 +23,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
 
 import type { HitResult, PageId, SnapLine } from "@paged-media/client";
+import type { HostHandleRouter } from "@paged-media/plugin-api";
 import { useEditorScope } from "./editor-scope";
 import { debugHandlesEnabled, setDebugHandle } from "./debug-handles";
 
@@ -208,6 +210,12 @@ interface OverlaySignalsValue {
   setOverlayLayer: (key: string, shapes: readonly ToolPreviewShape[]) => void;
   /** Drop a layer and its place in the stack. */
   removeOverlayLayer: (key: string) => void;
+  /** Extensions ADR 1102 — register (`null`: drop) a bundle's handle
+   *  router, which the Selection tools ask before their own hit test.
+   *  Not state: registering one re-renders nothing. */
+  setHandleRouter: (key: string, router: HostHandleRouter | null) => void;
+  /** The registered handle routers, in registration order. */
+  handleRouters: () => readonly HostHandleRouter[];
 }
 
 const Context = createContext<OverlaySignalsValue | null>(null);
@@ -275,6 +283,20 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
     [],
   );
 
+  // ADR 1102 — a ref, not state: the canvas reads the routers on each
+  // press, and a bundle (un)registering one must not re-render the shell.
+  const routersRef = useRef(new Map<string, HostHandleRouter>());
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const setHandleRouter = useCallback(
+    (key: string, router: HostHandleRouter | null) => {
+      if (router) routersRef.current.set(key, router);
+      else routersRef.current.delete(key);
+    },
+    [],
+  );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const handleRouters = useCallback(() => [...routersRef.current.values()], []);
+
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<OverlaySignalsValue>(
     () => ({
@@ -290,6 +312,8 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
       overlayLayers,
       setOverlayLayer,
       removeOverlayLayer,
+      setHandleRouter,
+      handleRouters,
     }),
     [
       hitSelection,
@@ -301,6 +325,8 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
       overlayLayers,
       setOverlayLayer,
       removeOverlayLayer,
+      setHandleRouter,
+      handleRouters,
     ],
   );
 

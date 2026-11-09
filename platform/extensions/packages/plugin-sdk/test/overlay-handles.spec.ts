@@ -383,3 +383,122 @@ describe("host.transformBox — tool and edit context [editor-tools.free-transfo
     expect(ctx.isDirty()).toBe(false);
   });
 });
+
+// Extensions ADR 1102 — the host's Selection tools drag a set's handles
+// for a bundle that contributes no tool (`onHostDrag`,
+// `overlay.handles.hostDrag@1`).
+describe("host.overlay.handles — host-tool drags (overlay.handles.hostDrag@1)", () => {
+  function routed() {
+    const fake = makeFakeEditor({
+      overlayLayers: true,
+      multiPreview: true,
+      handleRouters: true,
+    });
+    const handle = createBundleHost(() => fake.editor, manifest(), {
+      console: silent,
+      capabilityMode: "enforce",
+    });
+    return { ...handle, fake };
+  }
+  const router = (h: ReturnType<typeof routed>) => {
+    const r = h.fake.handleRouters().get("media.paged.test/handleDrag");
+    if (!r) throw new Error("no router registered");
+    return r;
+  };
+  /** A pointer event on page p1 whose page origin is at (100, 200). */
+  const on = (p: [number, number]) => ({
+    ...ev(p),
+    docPoint: [p[0] + 100, p[1] + 200] as [number, number],
+  });
+
+  it("registers one router while a set listens and answers hits on its handles only", () => {
+    const h = routed();
+    expect(h.host.supports("overlay.handles.hostDrag@1")).toBe(true);
+    const tools = h.host.overlay.handles("tools");
+    tools.set({ pageId: "p1" }, [{ id: "t", at: [50, 50], kind: "square" }]);
+    expect(h.fake.handleRouters().size).toBe(0);
+    const adj = h.host.overlay.handles("adjust");
+    adj.set({ pageId: "p1" }, [
+      {
+        id: "a0",
+        at: [10, 10],
+        kind: "round",
+        cursor: { kind: "css", token: "pointer" },
+      },
+    ]);
+    const sub = adj.onHostDrag({ onMove() {}, onEnd() {} });
+    expect(h.fake.handleRouters().size).toBe(1);
+    const r = router(h);
+    expect(r.hit("p1", [11, 9])).toEqual({
+      cursor: { kind: "css", token: "pointer" },
+    });
+    // A set without a listener is the bundle's tools' alone.
+    expect(r.hit("p1", [50, 50])).toBeNull();
+    expect(r.hit("p2", [10, 10])).toBeNull();
+    sub.dispose();
+    expect(h.fake.handleRouters().size).toBe(0);
+  });
+
+  it("a press on a handle is the bundle's drag: start, moves in the handle's page space, one end", () => {
+    const h = routed();
+    const adj = h.host.overlay.handles("adjust");
+    adj.set({ pageId: "p1" }, [{ id: "a0", at: [10, 10], kind: "round" }]);
+    const seen: string[] = [];
+    adj.onHostDrag({
+      onStart: (d) => void seen.push(`start ${d.id} ${d.pagePoint.join(",")}`),
+      onMove: (d) => void seen.push(`move ${d.pagePoint.join(",")}`),
+      onEnd: (d) =>
+        void seen.push(
+          `end ${d.set}/${d.id} ${d.pagePoint.join(",")} from ${d.startPoint.join(",")}`,
+        ),
+      onCancel: () => void seen.push("cancel"),
+    });
+    const r = router(h);
+    expect(r.down(on([40, 40]))).toBe(false);
+    expect(r.down({ ...on([10, 10]), button: 2 })).toBe(false);
+    expect(r.down(on([10, 10]))).toBe(true);
+    // Past the page's edge the pointer has another page (or none): the
+    // point stays in p1's space through the press's page origin.
+    r.move({ ...on([20, 10]), pageId: null, pagePoint: null });
+    r.up(on([30, 12]));
+    r.up(on([31, 12]));
+    expect(seen).toEqual([
+      "start a0 10,10",
+      "move 20,10",
+      "end adjust/a0 30,12 from 10,10",
+    ]);
+    seen.length = 0;
+    expect(r.down(on([10, 10]))).toBe(true);
+    r.cancel();
+    r.up(on([30, 12]));
+    expect(seen).toEqual(["start a0 10,10", "cancel"]);
+  });
+
+  it("disposing the set mid-drag cancels the drag and drops the router; a throwing listener is contained", () => {
+    const h = routed();
+    const adj = h.host.overlay.handles("adjust");
+    adj.set({ pageId: "p1" }, [{ id: "a0", at: [10, 10], kind: "round" }]);
+    let cancelled = 0;
+    adj.onHostDrag({
+      onStart() {
+        throw new Error("boom");
+      },
+      onMove() {},
+      onEnd() {},
+      onCancel: () => void cancelled++,
+    });
+    const r = router(h);
+    expect(r.down(on([10, 10]))).toBe(true);
+    adj.dispose();
+    expect(cancelled).toBe(1);
+    expect(h.fake.handleRouters().size).toBe(0);
+  });
+
+  it("is dynamic: an older host keeps the listener and never calls it", () => {
+    const h = makeHost();
+    expect(h.host.supports("overlay.handles.hostDrag@1")).toBe(false);
+    const adj = h.host.overlay.handles("adjust");
+    const sub = adj.onHostDrag({ onMove() {}, onEnd() {} });
+    sub.dispose();
+  });
+});

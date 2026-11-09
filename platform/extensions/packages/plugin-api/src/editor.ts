@@ -1060,6 +1060,34 @@ export interface ToolPreviewText {
 }
 
 /**
+ * Extensions ADR 1102 — what the host's Selection tools ask about a
+ * bundle's handles (`PagedEditor.overlaySignals.setHandleRouter`). The
+ * SDK builds one per bundle from the handle sets that have an
+ * `onHostDrag` listener; the host never sees the sets themselves.
+ *
+ * The host calls `hit` for the cursor while no drag is in flight and
+ * `down` on a primary press of the Selection or Direct Selection tool,
+ * before its own handles, the selection body and the marquee. When
+ * `down` answers true the drag is the router's: every move goes to
+ * `move` and the release to `up` (once), or `cancel` when the drag is
+ * interrupted (Escape, pointer-capture loss, a window blur). Events
+ * carry page-local points as the tools' events do.
+ */
+export interface HostHandleRouter {
+  /** The handle under the pointer and its cursor, or null. */
+  hit(
+    pageId: string | null,
+    pagePoint: [number, number] | null,
+  ): { cursor?: CursorSpec } | null;
+  /** A primary press: true when it landed on a handle and the drag is
+   *  now the bundle's. */
+  down(e: CanvasPointerEvent): boolean;
+  move(e: CanvasPointerEvent): void;
+  up(e: CanvasPointerEvent): void;
+  cancel(): void;
+}
+
+/**
  * Extensions ADR 339 — a HANDLE: a small marker drawn at a constant
  * SCREEN size wherever the camera is, the handle primitive the shapes
  * above lacked (a square drawn in page pt grows and shrinks with the
@@ -1296,6 +1324,14 @@ export interface PagedEditor {
     setOverlayLayer?(key: string, shapes: readonly ToolPreviewShape[]): void;
     /** W-20 — drop a layer and its place in the stack. */
     removeOverlayLayer?(key: string): void;
+    /** Extensions ADR 1102 — register (or, with `null`, drop) the router
+     *  the host's own Selection tools ask before they hit-test the
+     *  selection: a press on a handle the router answers is the
+     *  bundle's drag, not a move or a marquee. `key` is host-wide (the
+     *  SDK passes `<manifest id>/handleDrag`). Optional: on a host
+     *  without it `supports("overlay.handles.hostDrag@1")` is false and
+     *  a handle set's `onHostDrag` listeners never hear a drag. */
+    setHandleRouter?(key: string, router: HostHandleRouter | null): void;
   };
   tool: {
     setBaseTool(id: ToolId): void;

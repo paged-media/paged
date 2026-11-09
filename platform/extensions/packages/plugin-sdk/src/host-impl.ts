@@ -2154,6 +2154,7 @@ export function createBundleHost(
   const handleSets = createHandleSets(overlayDoorDeps);
   const transformBoxes = createTransformBoxes(overlayDoorDeps);
   store.add(toDisposable(() => transformBoxes.disposeAll()));
+  store.add(toDisposable(() => handleSets.disposeAll()));
 
   /** W3.2 — an edit-context / object-type `type` is DECLARED when the
    *  manifest's `contributes.editContexts[]` / `contributes.objectTypes[]`
@@ -6356,6 +6357,11 @@ export function createBundleHost(
     // both still answer hits and route (pure geometry) but draw nothing.
     featureSet.add("overlay.handles@1");
     featureSet.add("host.transformBox@1");
+  }
+  if (typeof getEditor().overlaySignals?.setHandleRouter === "function") {
+    // ADR 1102 — the host's Selection tools ask the bundle's handle sets
+    // before their own hit test, so `onHostDrag` listeners hear drags.
+    featureSet.add("overlay.handles.hostDrag@1");
   }
   if (options?.editContextEnterPoint === true) {
     // W-19 — the host shell vouches that a pointer entry carries the

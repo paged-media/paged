@@ -16,27 +16,26 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Adjust handles (slide ADR 717): PowerPoint's yellow handles on a selected
-// live preset. Dragging one changes the preset's adjust values (a rounded
+// Adjust handles (slide ADR 717): PowerPoint's handles on a selected live
+// preset. Dragging one changes the preset's adjust values (a rounded
 // rectangle's corner radius, an arrow's head, a callout's tip) and draws
 // the shape again, one undo step on release.
 //
-// The handles are an overlay contribution (`contribute.overlay`, rendering
-// "overlay"): the host draws it in document space above the selection
-// chrome, and a handle takes the pointer before the canvas does. Where they
-// are and what a drag writes is the slide engine's (one wasm call each);
-// this file keeps the selection's state and draws it. The PM-0014
-// overlay-handles door (extensions 340) is not on main; once it is, the
-// handles move to it.
+// The handles are a host handle set (`host.overlay.handles`, extensions ADR
+// 339) the host draws and hit-tests at a constant screen size, and the
+// host's own Selection tools hand a drag on one to this bundle
+// (`onHostDrag`, extensions ADR 1102): slide contributes no tool, the
+// selection is the host's. The drag's outline preview is a retained
+// overlay layer. Where the handles are and what a drag writes is the slide
+// engine's (one wasm call each, dml-geom's handles); this file keeps the
+// selection's state and hands it to the host.
 
 import type {
   BundleHost,
   Disposable,
   ElementId,
-  OverlayContribution,
-  OverlayProps,
+  ToolPreviewPath,
 } from "@paged-media/plugin-api";
-import * as React from "react";
 
 import type {
   LiveElement,
@@ -46,9 +45,11 @@ import type {
 } from "./engine.js";
 import { liveElements, writeMutation } from "./live-presets.js";
 
-export const ADJUST_OVERLAY_ID = "media.paged.slide.overlay.adjustHandles";
+/** The handle set's and the preview layer's ids within the bundle. */
+export const ADJUST_HANDLE_SET = "adjust";
+export const ADJUST_PREVIEW_LAYER = "adjustPreview";
 
-/** What the overlay draws: the selected preset's handles, on its page. */
+/** What the handles show: the selected preset's handles, on its page. */
 export interface HandlesState {
   pageId: string | null;
   target: LiveElement | null;
@@ -189,94 +190,130 @@ export class HandlesModel implements Disposable {
   }
 }
 
-/** Handle size on screen, CSS px (PowerPoint's yellow diamond). */
-const HANDLE_PX = 5;
-
-/** The overlay contribution that draws `model`'s handles. */
-export function adjustHandlesOverlay(model: HandlesModel): OverlayContribution {
-  const Render: React.FC<OverlayProps> = ({ camera, pageRects }) => {
-    const s = React.useSyncExternalStore(model.subscribe, model.snapshot);
-    const rect = s.pageId ? pageRects.get(s.pageId) : undefined;
-    if (!rect || s.handles.length === 0)
-      return (
-        <g
-          data-slide-adjust-handles=""
-          data-count={0}
-          data-page={s.pageId ?? ""}
-        />
-      );
-    const inv = 1 / (camera.scale || 1);
-    const onDown = (index: number) => (e: React.PointerEvent<SVGElement>) => {
-      // Win the pointer before the canvas starts a move or a marquee.
-      e.preventDefault();
-      e.stopPropagation();
-      const svg = (e.currentTarget as SVGElement).ownerSVGElement;
-      const box = svg?.getBoundingClientRect();
-      const toPage = (
-        ev: PointerEvent | React.PointerEvent,
-      ): [number, number] => [
-        (ev.clientX - (box?.left ?? 0) - camera.tx) / camera.scale - rect.x,
-        (ev.clientY - (box?.top ?? 0) - camera.ty) / camera.scale - rect.y,
-      ];
-      let last: LiveWrite[] = [];
-      let pending = Promise.resolve();
-      const move = (ev: PointerEvent) => {
-        const p = toPage(ev);
-        pending = pending.then(async () => {
-          last = await model.drag(index, p);
-        });
-      };
-      const up = (ev: PointerEvent) => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-        window.removeEventListener("pointercancel", cancel);
-        move(ev);
-        void pending.then(() =>
-          last.length ? model.commit(last) : model.cancel(),
-        );
-      };
-      const cancel = () => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-        window.removeEventListener("pointercancel", cancel);
-        model.cancel();
-      };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
-      window.addEventListener("pointercancel", cancel);
-    };
-    return (
-      <g
-        data-slide-adjust-handles=""
-        transform={`translate(${rect.x} ${rect.y})`}
-      >
-        {s.preview ? (
-          <path
-            d={s.preview}
-            fill="none"
-            stroke="var(--overlay-selection, #1a73e8)"
-            strokeWidth={1}
-            strokeDasharray="4 3"
-            vectorEffect="non-scaling-stroke"
-            pointerEvents="none"
-          />
-        ) : null}
-        {s.handles.map((h) => (
-          <path
-            key={h.index}
-            data-slide-adjust-handle={h.index}
-            transform={`translate(${h.pos[0]} ${h.pos[1]}) scale(${inv})`}
-            d={`M0 ${-HANDLE_PX} L${HANDLE_PX} 0 L0 ${HANDLE_PX} L${-HANDLE_PX} 0 Z`}
-            fill="#ffd400"
-            stroke="#5c4a00"
-            strokeWidth={1}
-            vectorEffect="non-scaling-stroke"
-            style={{ cursor: "default", pointerEvents: "all" }}
-            onPointerDown={onDown(h.index)}
-          />
-        ))}
-      </g>
-    );
+/** SVG path data as the slide engine writes it (`M x y` then `C` cubics,
+ *  `Z` closing a subpath; slide-native `svg_path`) as the host's cubic
+ *  preview shapes, one per subpath, dashed. */
+export function previewPaths(pageId: string, d: string): ToolPreviewPath[] {
+  const nums = (t: string) =>
+    t
+      .trim()
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .map(Number);
+  type Anchor = {
+    anchor: [number, number];
+    left: [number, number];
+    right: [number, number];
   };
-  return { id: ADJUST_OVERLAY_ID, render: Render, z: 330 };
+  const out: ToolPreviewPath[] = [];
+  let anchors: Anchor[] = [];
+  const flush = (close: boolean) => {
+    if (anchors.length === 0) return;
+    if (close && anchors.length > 1) {
+      // The closing cubic ends on the first anchor: fold it back in.
+      const last = anchors[anchors.length - 1]!;
+      const first = anchors[0]!;
+      if (
+        Math.abs(last.anchor[0] - first.anchor[0]) < 1e-6 &&
+        Math.abs(last.anchor[1] - first.anchor[1]) < 1e-6
+      ) {
+        first.left = last.left;
+        anchors.pop();
+      }
+    }
+    out.push({ pageId, anchors, close, dashed: true });
+    anchors = [];
+  };
+  for (const m of d.matchAll(/([MCZ])([^MCZ]*)/g)) {
+    const v = nums(m[2] ?? "");
+    if (m[1] === "M" && v.length >= 2) {
+      flush(false);
+      const p: [number, number] = [v[0]!, v[1]!];
+      anchors.push({ anchor: p, left: p, right: p });
+    } else if (m[1] === "C") {
+      for (let i = 0; i + 5 < v.length; i += 6) {
+        const prev = anchors[anchors.length - 1];
+        if (!prev) break;
+        prev.right = [v[i]!, v[i + 1]!];
+        const p: [number, number] = [v[i + 4]!, v[i + 5]!];
+        anchors.push({ anchor: p, left: [v[i + 2]!, v[i + 3]!], right: p });
+      }
+    } else if (m[1] === "Z") {
+      flush(true);
+    }
+  }
+  flush(false);
+  return out;
+}
+
+/** Show `model`'s handles as a host handle set and hand the host
+ *  Selection tools' drags on them to the model. The drag's writes land
+ *  in one `document.mutate` on release: one undo step. */
+export function mountAdjustHandles(
+  host: BundleHost,
+  model: HandlesModel,
+): Disposable {
+  const set = host.overlay.handles(ADJUST_HANDLE_SET);
+  const preview = host.overlay.layer(ADJUST_PREVIEW_LAYER);
+  let active: string | null = null;
+  const draw = () => {
+    const s = model.snapshot();
+    if (!s.pageId || s.handles.length === 0) set.clear();
+    else
+      set.set(
+        { pageId: s.pageId },
+        s.handles.map((h) => ({
+          id: String(h.index),
+          at: h.pos,
+          kind: "round" as const,
+          ...(active === String(h.index) ? { active: true } : {}),
+        })),
+      );
+    preview.set(s.pageId && s.preview ? previewPaths(s.pageId, s.preview) : []);
+  };
+  const unsubscribe = model.subscribe(draw);
+  draw();
+
+  // The engine answers each move asynchronously: moves queue behind each
+  // other, and the release (or a cancel) waits for the last.
+  let pending: Promise<void> = Promise.resolve();
+  let last: LiveWrite[] = [];
+  const queue = (index: number, point: [number, number]) => {
+    pending = pending
+      .then(async () => {
+        last = await model.drag(index, point);
+      })
+      .catch((err) =>
+        host.log.warn(`paged.slide adjust handle: ${String(err)}`),
+      );
+  };
+  const drag = set.onHostDrag({
+    onStart(d) {
+      active = d.id;
+      last = [];
+      draw();
+    },
+    onMove(d) {
+      queue(Number(d.id), d.pagePoint);
+    },
+    onEnd(d) {
+      queue(Number(d.id), d.pagePoint);
+      active = null;
+      void pending.then(() =>
+        last.length ? model.commit(last) : model.cancel(),
+      );
+    },
+    onCancel() {
+      active = null;
+      void pending.then(() => model.cancel());
+    },
+  });
+  return {
+    dispose() {
+      drag.dispose();
+      unsubscribe();
+      preview.dispose();
+      set.dispose();
+    },
+  };
 }

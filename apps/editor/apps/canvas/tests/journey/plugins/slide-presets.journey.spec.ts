@@ -165,7 +165,12 @@ test.describe("journey · paged.slide live presets", () => {
     });
     expect(outline).not.toBeNull();
     await designer.selectElement("polygon", outline!);
-    const handle = page.locator('[data-slide-adjust-handle="0"]');
+    // The bundle's handle set, drawn by the host (extensions ADR 1102).
+    const handle = page
+      .locator(
+        '[data-overlay-layer="media.paged.slide/handles:adjust"] [data-preview-handle="round"]',
+      )
+      .first();
     await expect(handle).toBeVisible({ timeout: 15_000 });
 
     // Drag it 40 px to the right.

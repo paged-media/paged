@@ -183,6 +183,9 @@ export type {
   OverlayHandleSet,
   OverlayHandleSpace,
   OverlayHandleSpec,
+  // Extensions ADR 1102 — host-tool drags of a handle set.
+  OverlayHandleDrag,
+  OverlayHandleDragListener,
   ProjectiveMatrix,
   TransformQuad,
   TransformBoxMode,

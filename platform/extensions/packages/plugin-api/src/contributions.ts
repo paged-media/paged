@@ -120,5 +120,7 @@ export type {
   ToolPreviewPath,
   ToolPreviewText,
   ToolPreviewHandle,
+  // Extensions ADR 1102 — the host Selection tools' handle router.
+  HostHandleRouter,
   MarqueeRectPageLocal,
 } from "./editor.js";

@@ -74,5 +74,7 @@ host must not touch them.
 
 ## Related
 
+- [ADR 1102](1102-host-tools-drag-a-bundles-handles.md) — a set's handles dragged by the host's own
+  Selection tools (`onHostDrag`), for a bundle without a tool.
 - [ADR 305](305-doors-always-present.md) — the doors always exist; the flags say whether they draw.
 - Plugin-api §4.5d (`host.overlay.layer`) — the channel the sets and the box draw on.

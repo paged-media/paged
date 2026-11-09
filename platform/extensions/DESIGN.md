@@ -612,6 +612,16 @@ reference?, toolId?, onChange?, onCommit, onCancel? })` draws a box (eight
   when the host renders overlay layers (the handle primitive ships with this
   SDK's host). Without them both doors still hit, route and report, and draw
   nothing. Gate: `capabilities.rendering ∋ "overlay"`.
+- **Host-tool drags (ADR 1102).** `set.onHostDrag({ onStart, onMove, onEnd,
+  onCancel })` hands a press of the HOST's Selection or Direct Selection tool
+  on one of the set's handles to the bundle, for a bundle without a tool of
+  its own (slide's adjust handles on the host's selection). The host does
+  nothing of its own with that press and writes nothing; the bundle writes
+  its change on `onEnd` in one mutation (one undo step). The SDK registers
+  one `HostHandleRouter` per bundle through the optional
+  `overlaySignals.setHandleRouter`; `overlay.handles.hostDrag@1` is true when
+  the editor handle has it. The harness plays the tool
+  (`dragWithSelectionTool`).
 
 ### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
 

@@ -40,6 +40,7 @@ import {
   CANVAS_POINTER,
   OverlayHost,
   pageToContentPoint,
+  resolveCursorCss,
   TEXT_TOOL_ID,
   useContentSelection,
   useEditContextEntry,
@@ -57,6 +58,7 @@ import {
 
 import type { CanvasClient } from "@paged-media/client";
 import { viewportToDoc, type Camera } from "@paged-media/client";
+import type { HostHandleRouter } from "@paged-media/plugin-api";
 import type {
   CanvasPointerEvent,
   ContentPointerEvent,
@@ -264,6 +266,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // active GestureHandler owns the semantics; we only track the
   // pointer + click-vs-drag delta).
   const toolDragRef = useRef<{
+    startPointer: [number, number];
+    maxDelta: number;
+  } | null>(null);
+  // Extensions ADR 1102 — a Selection-tool drag of a bundle's handle: the
+  // router that took the press owns the drag until the release.
+  const handleDragRef = useRef<{
+    router: HostHandleRouter;
     startPointer: [number, number];
     maxDelta: number;
   } | null>(null);
@@ -745,6 +754,30 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       cmd: e.metaKey || e.ctrlKey,
     };
     const tool = props.activeTool ?? "select";
+    // Extensions ADR 1102 — a bundle's handle (a preset's adjust handle)
+    // under a Selection-tool press is the bundle's drag: it wins over the
+    // path session, the resize handles, the body move and the marquee.
+    if (
+      e.button === 0 &&
+      tool === "select" &&
+      !props.forcePan &&
+      !props.zoomClick &&
+      !(props.touchPans && e.pointerType === "touch")
+    ) {
+      const routers = overlaySignals.handleRouters();
+      if (routers.length > 0) {
+        const pointer = buildToolPointer(e, 0);
+        const router = routers.find((r) => r.down(pointer));
+        if (router) {
+          handleDragRef.current = {
+            router,
+            startPointer: [e.clientX, e.clientY],
+            maxDelta: 0,
+          };
+          return;
+        }
+      }
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
@@ -1120,6 +1153,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       props.toolGesture.onMove(buildToolPointer(e, toolDrag.maxDelta));
       return;
     }
+    // ADR 1102 — a bundle's handle drag.
+    const handleDrag = handleDragRef.current;
+    if (handleDrag) {
+      const d = Math.hypot(
+        e.clientX - handleDrag.startPointer[0],
+        e.clientY - handleDrag.startPointer[1],
+      );
+      if (d > handleDrag.maxDelta) handleDrag.maxDelta = d;
+      handleDrag.router.move(buildToolPointer(e, handleDrag.maxDelta));
+      return;
+    }
     // Path-edit mode — the session owns this drag.
     if (pathEditDragRef.current) {
       const pointer = buildPathEditPointer(e);
@@ -1145,6 +1189,26 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         const refined = hover(buildToolPointer(e, 0));
         const el = wrapperRef.current;
         if (el) el.style.cursor = refined ?? props.cursor ?? "grab";
+      } else if ((props.activeTool ?? "select") === "select") {
+        // ADR 1102 — over a bundle's handle the Selection tool shows the
+        // handle's cursor (the pointer is the default).
+        const routers = overlaySignals.handleRouters();
+        const el = wrapperRef.current;
+        if (el && (routers.length > 0 || el.dataset.handleCursor)) {
+          const p = buildToolPointer(e, 0);
+          const over = routers
+            .map((r) => r.hit(p.pageId, p.pagePoint))
+            .find((h) => h !== null);
+          if (over) {
+            el.style.cursor = over.cursor
+              ? resolveCursorCss(over.cursor)
+              : "pointer";
+            el.dataset.handleCursor = "1";
+          } else if (el.dataset.handleCursor) {
+            el.style.cursor = props.cursor ?? "grab";
+            delete el.dataset.handleCursor;
+          }
+        }
       }
       return;
     }
@@ -1272,6 +1336,15 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         dragStateRef.current = null;
         return;
       }
+    }
+    // ADR 1102 — the release of a bundle's handle drag: the bundle
+    // writes its change (one undo step); nothing else runs.
+    const handleDrag = handleDragRef.current;
+    if (handleDrag) {
+      handleDragRef.current = null;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      handleDrag.router.up(buildToolPointer(e, handleDrag.maxDelta));
+      return;
     }
     // Path-edit mode — hand the release to the session. Whatever it
     // did with the gesture (moved anchors, selected some, inserted
@@ -1454,6 +1527,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       toolDragRef.current = null;
       props.toolGesture.onCancel();
     }
+    // A bundle's handle drag (ADR 1102): the bundle writes nothing.
+    const handleDrag = handleDragRef.current;
+    if (handleDrag) {
+      handleDragRef.current = null;
+      handleDrag.router.cancel();
+    }
     // Path-edit drag: the session drops the gesture, nothing is sent.
     if (pathEditDragRef.current) {
       pathEditDragRef.current = false;
@@ -1485,6 +1564,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // wrapper.
   const onEscapeKey = useEffectEvent((e: KeyboardEvent) => {
     if (e.key !== "Escape") return;
+    const handleDrag = handleDragRef.current;
+    if (handleDrag) {
+      // The release that follows finds no drag and does nothing.
+      handleDragRef.current = null;
+      handleDrag.router.cancel();
+      return;
+    }
     const drag = dragStateRef.current;
     if (!drag || drag.mode !== "gesture" || !drag.gestureState) return;
     const handle = drag.gestureState.handle;
