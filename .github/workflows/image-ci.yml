@@ -349,12 +349,13 @@ jobs:
         run: python3 ../../tooling/rust/skip-report.py --lane "${{ github.job }}" --cargo-log "$RUNNER_TEMP/cargo-test.log"
 
   # The same tests on real hardware (Apple silicon, Metal) after every
-  # merge to main and on demand: lavapipe is a conformant Vulkan driver,
+  # merge to main and on demand (macos-latest: macos-14 is no longer offered):
+  # lavapipe is a conformant Vulkan driver,
   # but it is not the class of device the bundle runs on.
   gpu-metal:
     name: rust GPU tests (Metal)
     if: github.event_name != 'pull_request'
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 60
     env:
       WGPU_BACKEND: metal
