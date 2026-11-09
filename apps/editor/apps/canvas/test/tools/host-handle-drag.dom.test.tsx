@@ -54,7 +54,10 @@ const MANIFEST: PluginManifest = {
   name: "handles",
   version: "1.0.0",
   apiVersion: "^0.2",
-  capabilities: { rendering: ["overlay"] },
+  capabilities: {
+    rendering: ["overlay"],
+    document: { read: "broad", write: "broad" },
+  },
 };
 
 /** The handle: on the frame's body (box 100,72 – 172,216), away from
@@ -122,13 +125,17 @@ describe("Selection tool: a bundle's handle (overlay.handles.hostDrag@1)", () =>
     // The host did nothing of its own: no move, the selection kept.
     expect(await m.bounds(T.frame.id)).toEqual(box);
     expect(m.state.elementSelection).toEqual([T.frame.id]);
-    const changed = dumpDiff(before, await m.dump(), 50);
-    expect(changed.length).toBeGreaterThan(0);
-    expect(changed.some((l) => l.includes("Dragged"))).toBe(true);
+    // The bundle's one write landed.
+    const swatches = async () =>
+      (await host.document.collection<{ name?: string }>("swatches")).map(
+        (x) => x.name,
+      );
+    expect(await swatches()).toContain("Dragged");
     await act(async () => {
       await m.client.undo();
     });
     await m.settle();
+    expect(await swatches()).not.toContain("Dragged");
     expect(dumpDiff(before, await m.dump())).toEqual([]);
   });
 
