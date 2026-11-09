@@ -40,8 +40,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use docx_lower::ir::{
-    LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, LoweredTable, PropValue,
-    StyleProp,
+    LoweredBlock, LoweredDoc, LoweredGroup, LoweredParagraph, LoweredPiece, LoweredRun,
+    LoweredStyle, LoweredTable, PropValue, StyleProp,
 };
 use paged_model::equation::Equation;
 use paged_model::script::{CharacterDirection, FontHint};
@@ -600,6 +600,8 @@ struct Minted {
     notes: usize,
     boxes: usize,
     shapes: usize,
+    /// Charts and diagrams (anchored groups).
+    groups: usize,
     /// The invented styles paragraphs keep (see `build_whole`).
     keep: std::collections::BTreeSet<String>,
     /// The stories of inline text boxes, made beside the body's.
@@ -1180,10 +1182,157 @@ fn build_whole(
         if let Some(fx) = &sh.fx {
             paint_frame(&mut frame, fx, &mut minted.looks)?;
         }
+        // Doc ADR 629 — with line ends, a Group of the shape and its arrow
+        // heads (filled in the line's colour, or stroked), placed as the
+        // shape is.
+        if !sh.heads.is_empty() {
+            let id = format!("docx_shape{}", minted.shapes);
+            let mut children = Vec::new();
+            for (k, hd) in sh.heads.iter().enumerate() {
+                let mut head = AnchoredFrame {
+                    frame_kind: AnchoredFrameKind::Rectangle,
+                    self_id: Some(format!("{id}_h{k}")),
+                    bounds: frame.bounds,
+                    anchors: hd
+                        .anchors
+                        .iter()
+                        .map(|a| PathAnchor {
+                            anchor: (a[0], a[1]),
+                            left: (a[2], a[3]),
+                            right: (a[4], a[5]),
+                        })
+                        .collect(),
+                    subpath_starts: vec![0],
+                    subpath_open: vec![hd.open],
+                    ..AnchoredFrame::default()
+                };
+                if let Some(fx) = &hd.fx {
+                    paint_frame(&mut head, fx, &mut minted.looks)?;
+                }
+                children.push(head);
+            }
+            let (setting, layout) = (frame.setting.take(), std::mem::take(&mut frame.layout));
+            let bounds = frame.bounds;
+            frame.self_id = Some(format!("{id}_0"));
+            children.insert(0, frame);
+            frame = AnchoredFrame {
+                frame_kind: AnchoredFrameKind::Group,
+                self_id: Some(id),
+                bounds,
+                setting,
+                layout,
+                children,
+                ..AnchoredFrame::default()
+            };
+        }
         para.anchored_frames.push(frame);
         minted.shapes += 1;
     }
+    // Doc ADR 628 and 629 — a chart or a SmartArt diagram: an anchored Group
+    // of its pieces, outlined Rectangles and text frames with a story each,
+    // in the drawing's box.
+    for (prefix, group) in p
+        .charts
+        .iter()
+        .map(|g| ("docx_chart", g))
+        .chain(p.diagrams.iter().map(|g| ("docx_diagram", g)))
+    {
+        let id = format!("{prefix}{}", minted.groups);
+        let frame = group_frame(doc, styles, &id, group, minted)?;
+        para.anchored_frame_offsets
+            .resize(para.anchored_frames.len(), 0);
+        para.anchored_frame_offsets.push(group.at.min(chars));
+        para.anchored_frames.push(frame);
+        minted.groups += 1;
+    }
     Ok(para)
+}
+
+/// A chart's or a diagram's anchored Group (doc ADR 628, 629): its pieces as
+/// outlined Rectangles and TextFrames whose stories are made beside the
+/// body's, ids `<id>_<k>` (a label's story `<id>_t<k>`).
+fn group_frame(
+    doc: &LoweredDoc,
+    styles: &HashMap<&str, &LoweredStyle>,
+    id: &str,
+    group: &LoweredGroup,
+    minted: &mut Minted,
+) -> Result<AnchoredFrame, String> {
+    let bounds = |b: &[f32; 4]| Bounds {
+        top: b[1],
+        left: b[0],
+        bottom: b[1] + b[3],
+        right: b[0] + b[2],
+    };
+    let mut children = Vec::new();
+    for (k, piece) in group.pieces.iter().enumerate() {
+        match piece {
+            LoweredPiece::Shape {
+                bounds: b,
+                anchors,
+                starts,
+                open,
+                fx,
+            } => {
+                let mut frame = AnchoredFrame {
+                    frame_kind: AnchoredFrameKind::Rectangle,
+                    self_id: Some(format!("{id}_{k}")),
+                    bounds: Some(bounds(b)),
+                    anchors: anchors
+                        .iter()
+                        .map(|a| PathAnchor {
+                            anchor: (a[0], a[1]),
+                            left: (a[2], a[3]),
+                            right: (a[4], a[5]),
+                        })
+                        .collect(),
+                    subpath_starts: starts.clone(),
+                    subpath_open: open.clone(),
+                    ..AnchoredFrame::default()
+                };
+                if let Some(fx) = fx {
+                    paint_frame(&mut frame, fx, &mut minted.looks)?;
+                }
+                children.push(frame);
+            }
+            LoweredPiece::Label {
+                bounds: b,
+                paragraphs,
+                insets,
+                valign,
+            } => {
+                let paragraphs = box_paragraphs(doc, styles, paragraphs, minted)?;
+                let story = format!("{id}_t{k}");
+                minted.extra.push((story.clone(), paragraphs));
+                children.push(AnchoredFrame {
+                    frame_kind: AnchoredFrameKind::TextFrame,
+                    self_id: Some(format!("{id}_{k}")),
+                    bounds: Some(bounds(b)),
+                    parent_story: Some(story),
+                    layout: AnchoredLayout {
+                        inset_spacing: Some(*insets),
+                        vertical_justification: valign.clone(),
+                        ..AnchoredLayout::default()
+                    },
+                    ..AnchoredFrame::default()
+                });
+            }
+        }
+    }
+    Ok(AnchoredFrame {
+        frame_kind: AnchoredFrameKind::Group,
+        self_id: Some(id.to_string()),
+        bounds: Some(Bounds {
+            top: 0.0,
+            left: 0.0,
+            bottom: group.height_pt,
+            right: group.width_pt,
+        }),
+        setting: group.anchor.as_ref().map(anchored_setting),
+        layout: anchored_layout(&group.layout),
+        children,
+        ..AnchoredFrame::default()
+    })
 }
 
 /// InDesign's new-table edges, which `insertTable` stamps on every cell

@@ -24,9 +24,9 @@
 //! in.
 
 use docx_core::{
-    BorderEdge, Borders, CellLook, CustomPath, Float, FloatPosition, FloatWrap, HeightRule,
-    Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape, ShapeGeometry, TableLook,
-    TableStyleProps, TextBox, Theme, WidthKind, WordArt,
+    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, DiagramDrawing, Float, FloatPosition,
+    FloatWrap, HeightRule, Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape,
+    ShapeGeometry, TableLook, TableStyleProps, TextBox, Theme, WidthKind, WordArt,
 };
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_office_word as w10;
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_vml as vml;
@@ -66,6 +66,12 @@ pub(crate) struct PartObjects {
     /// Every shape's outline, transform and completed look by the same id
     /// (doc ADR 627), read for the shapes that hold no text.
     shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
+    /// Every chart's relationship id (`c:chart r:id`) by the same id (doc
+    /// ADR 628).
+    charts: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
+    /// Every SmartArt diagram's data relationship id (`dgm:relIds r:dm`) by
+    /// the same id (doc ADR 629).
+    diagrams: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
     next_ordinal: u32,
 }
 
@@ -83,10 +89,12 @@ struct ShapeRead {
 impl PartObjects {
     /// A fresh part: its shapes' looks.
     pub(crate) fn for_part(part: &[u8]) -> Self {
-        let (looks, shapes) = shape_looks(part);
+        let read = shape_looks(part);
         PartObjects {
-            looks,
-            shapes,
+            looks: read.looks,
+            shapes: read.shapes,
+            charts: read.charts,
+            diagrams: read.diagrams,
             next_ordinal: 0,
         }
     }
@@ -98,26 +106,22 @@ const NS_WP: &[u8] = b"http://schemas.openxmlformats.org/drawingml/2006/wordproc
 /// Every DrawingML shape's (`wps:wsp`) `wps:spPr` look in a part, by its
 /// drawing's `wp:docPr/@id`, in document order; and, for the shapes that hold
 /// no text, their outline and transform with the look completed from the
-/// `wps:style` references (doc ADR 627).
-#[allow(clippy::type_complexity)]
-fn shape_looks(
-    part: &[u8],
-) -> (
-    std::collections::HashMap<u32, std::collections::VecDeque<(PictureLook, Option<WordArt>)>>,
-    std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
-) {
+/// `wps:style` references (doc ADR 627); and every chart's relationship id
+/// (doc ADR 628).
+fn shape_looks(part: &[u8]) -> PartRead {
     use paged_ooxml::drawingml;
     use paged_ooxml::tree::{self, Ns};
-    let mut out: std::collections::HashMap<
-        u32,
-        std::collections::VecDeque<(PictureLook, Option<WordArt>)>,
-    > = Default::default();
-    let mut shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>> =
-        Default::default();
+    let mut read = PartRead::default();
+    let PartRead {
+        looks: out,
+        shapes,
+        charts,
+        diagrams,
+    } = &mut read;
     let Ok(drawings) = tree::subtrees(part, |uri, local| {
         uri == NS_WP && (local == "inline" || local == "anchor")
     }) else {
-        return (out, shapes);
+        return read;
     };
     let no_rels = |_: &str| None;
     for d in &drawings {
@@ -129,10 +133,22 @@ fn shape_looks(
         else {
             continue;
         };
-        let Some(wsp) = d
-            .path(&[(Ns::A, "graphic"), (Ns::A, "graphicData")])
-            .and_then(|g| g.children.iter().find(|c| c.local == "wsp"))
-        else {
+        let data = d.path(&[(Ns::A, "graphic"), (Ns::A, "graphicData")]);
+        if let Some(rid) = data
+            .and_then(|g| g.child(Ns::C, "chart"))
+            .and_then(|c| c.attr_ns(Ns::R, "id"))
+        {
+            charts.entry(id).or_default().push_back(rid.to_string());
+            continue;
+        }
+        if let Some(rid) = data
+            .and_then(|g| g.children.iter().find(|c| c.local == "relIds"))
+            .and_then(|c| c.attr_ns(Ns::R, "dm"))
+        {
+            diagrams.entry(id).or_default().push_back(rid.to_string());
+            continue;
+        }
+        let Some(wsp) = data.and_then(|g| g.children.iter().find(|c| c.local == "wsp")) else {
             continue;
         };
         let sp_pr = wsp.children.iter().find(|c| c.local == "spPr");
@@ -181,7 +197,17 @@ fn shape_looks(
             warp,
         ));
     }
-    (out, shapes)
+    read
+}
+
+/// What [`shape_looks`] reads of a part.
+#[derive(Default)]
+struct PartRead {
+    looks:
+        std::collections::HashMap<u32, std::collections::VecDeque<(PictureLook, Option<WordArt>)>>,
+    shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
+    charts: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
+    diagrams: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
 }
 
 /// Line widths of the theme's line styles `a:lnRef idx` 1, 2 and 3 (Office's
@@ -193,7 +219,7 @@ const LINE_STYLE_WIDTHS: [i64; 3] = [6350, 12700, 19050];
 /// `a:lnRef` carry the colour, `lnRef` also names the theme's line style. The
 /// theme's gradient fill styles (`idx` 2 and 3) are drawn as the solid colour
 /// of the reference.
-fn complete_from_style(
+pub(crate) fn complete_from_style(
     mut props: paged_ooxml::drawingml::ShapeProperties,
     wsp: &paged_ooxml::tree::El,
 ) -> paged_ooxml::drawingml::ShapeProperties {
@@ -225,7 +251,7 @@ fn complete_from_style(
 
 /// A shape's outline: the preset's name and guides, or a custom geometry whose
 /// points are literal numbers.
-fn read_geometry(sp_pr: &paged_ooxml::tree::El) -> ShapeGeometry {
+pub(crate) fn read_geometry(sp_pr: &paged_ooxml::tree::El) -> ShapeGeometry {
     if let Some(p) = sp_pr.children.iter().find(|c| c.local == "prstGeom") {
         let adjust = p
             .children
@@ -521,6 +547,67 @@ pub(crate) fn drawing_shape(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Shape> 
         flip_v: read.flip_v,
         look: Some(Box::new(read.look)).filter(|l| !l.is_plain()),
         line_ends: read.line_ends,
+    })
+}
+
+/// A chart drawn by a `w:drawing` (`c:chart`), read from its chart part
+/// through the shared DrawingML chart reader, or `None` when the drawing is
+/// not one or its part cannot be read (doc ADR 628).
+pub(crate) fn drawing_chart(d: &wml::Drawing, ctx: &ImportCtx) -> Option<ChartDrawing> {
+    let (width_emu, height_emu, float, doc_pr) = drawing_frame(d)?;
+    let rid = ctx
+        .objects
+        .borrow_mut()
+        .charts
+        .get_mut(&doc_pr?)
+        .and_then(|q| q.pop_front())?;
+    let (part, chart) = crate::chart::read(&ctx.images, &rid)?;
+    Some(ChartDrawing {
+        width_emu,
+        height_emu,
+        float,
+        part,
+        chart: Box::new(chart),
+    })
+}
+
+/// A SmartArt diagram drawn by a `w:drawing` (`dgm:relIds`), read from the
+/// drawing Word saved of its layout, or `None` when the drawing is not one or
+/// the diagram has no drawing (doc ADR 629).
+pub(crate) fn drawing_diagram(d: &wml::Drawing, ctx: &ImportCtx) -> Option<DiagramDrawing> {
+    let (width_emu, height_emu, float, doc_pr) = drawing_frame(d)?;
+    let dm = ctx
+        .objects
+        .borrow_mut()
+        .diagrams
+        .get_mut(&doc_pr?)
+        .and_then(|q| q.pop_front())?;
+    let (part, shapes) = crate::diagram::read(&ctx.images, &dm)?;
+    Some(DiagramDrawing {
+        width_emu,
+        height_emu,
+        float,
+        part,
+        shapes,
+    })
+}
+
+/// A drawing's extent, float and `wp:docPr/@id`.
+fn drawing_frame(d: &wml::Drawing) -> Option<(i64, i64, Option<Float>, Option<u32>)> {
+    use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_drawingml_2006_wordprocessing_drawing as wp;
+    Some(match d.drawing_choice.as_ref()? {
+        wml::DrawingChoice::Inline(i) => {
+            (i.extent.cx, i.extent.cy, None, Some(i.doc_properties.id))
+        }
+        wml::DrawingChoice::Anchor(a) => {
+            let a: &wp::Anchor = a;
+            (
+                a.extent.cx,
+                a.extent.cy,
+                Some(map_float(a)),
+                a.doc_properties.as_ref().map(|p| p.id),
+            )
+        }
     })
 }
 
@@ -936,6 +1023,8 @@ pub(crate) fn alternate_content(
     images: &mut Vec<docx_core::Image>,
     text_boxes: &mut Vec<TextBox>,
     shapes: &mut Vec<Shape>,
+    charts: &mut Vec<ChartDrawing>,
+    diagrams: &mut Vec<DiagramDrawing>,
     other_drawings: &mut u32,
 ) {
     use paged_ooxml::ooxmlsdk::schemas::schemas_openxmlformats_org_markup_compatibility_2006::AlternateContentChoice as B;
@@ -969,7 +1058,13 @@ pub(crate) fn alternate_content(
                         }
                         None => match drawing_shape(&d, ctx) {
                             Some(sh) => shapes.push(sh),
-                            None => *other_drawings += 1,
+                            None => match drawing_chart(&d, ctx) {
+                                Some(c) => charts.push(c),
+                                None => match drawing_diagram(&d, ctx) {
+                                    Some(g) => diagrams.push(g),
+                                    None => *other_drawings += 1,
+                                },
+                            },
                         },
                     },
                 },
@@ -1011,7 +1106,7 @@ mod tests {
         let xml = part(
             r#"<wps:bodyPr><a:prstTxWarp prst="textArchUp"><a:avLst><a:gd name="adj" fmla="val 12000000"/></a:avLst></a:prstTxWarp></wps:bodyPr>"#,
         );
-        let (looks, _) = shape_looks(xml.as_bytes());
+        let looks = shape_looks(xml.as_bytes()).looks;
         let (_, warp) = looks[&7].front().expect("the box's look").clone();
         assert_eq!(
             warp,
@@ -1028,7 +1123,7 @@ mod tests {
             "<wps:bodyPr/>",
             r#"<wps:bodyPr><a:prstTxWarp prst="textNoShape"/></wps:bodyPr>"#,
         ] {
-            let (looks, _) = shape_looks(part(body).as_bytes());
+            let looks = shape_looks(part(body).as_bytes()).looks;
             assert_eq!(looks[&7].front().expect("look").1, None, "{body}");
         }
     }

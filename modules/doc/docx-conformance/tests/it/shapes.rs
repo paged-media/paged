@@ -122,7 +122,7 @@ fn the_lowering_draws_the_outlines_it_has_and_tells_the_rest__feat__doc_shapes()
     let doc = docx_import::import_docx(&shapes_docx()).expect("import");
     let ir = docx_lower::lower(&doc);
     let drawn = lowered_shapes(&ir);
-    // Every case but the cloud callout.
+    // Every case: the presets through Annex D's definitions (doc ADR 629).
     assert_eq!(drawn.len(), SHAPE_CASES.iter().filter(|(_, d)| *d).count());
     // The triangle (third case): three anchors on the box, apex at 30 %.
     let tri = drawn[2];
@@ -140,17 +140,32 @@ fn the_lowering_draws_the_outlines_it_has_and_tells_the_rest__feat__doc_shapes()
     assert!(drawn[1].anchor.is_some());
     // The inline rectangle does not.
     assert!(drawn[0].anchor.is_none());
-    // Told: the preset it does not draw, and the shapes it does.
+    // The cloud callout, which the hand port of ADR 627 did not draw, is
+    // drawn: its outline is many curves.
+    assert!(drawn[6].anchors.len() > 10);
+    // The arrow: an oval at its start, a filled triangle at its end, both
+    // in the line's colour; the plain line has none.
+    assert!(drawn[3].heads.is_empty());
+    let heads = &drawn[7].heads;
+    assert_eq!(heads.len(), 2);
+    assert_eq!((heads[0].anchors.len(), heads[1].anchors.len()), (4, 3));
+    assert!(heads
+        .iter()
+        .all(|h| !h.open && h.fx.as_ref().and_then(|f| f.fill.as_deref()) == Some("#7030A0")));
+    // Its tip is the line's end (the box's bottom right corner).
+    assert!((heads[1].anchors[0][0] - drawn[7].width_pt).abs() < 1e-3);
+    // Told: the shapes it draws.
     let messages: Vec<&str> = ir.diagnostics.iter().map(|d| d.message.as_str()).collect();
     assert!(
         messages
             .iter()
-            .any(|m| m.contains("cloudCallout") && m.contains("NOT shown")),
+            .any(|m| m.contains("8 shape(s) without text placed")),
         "{messages:?}"
     );
-    assert!(messages
-        .iter()
-        .any(|m| m.contains("6 shape(s) without text placed")));
+    assert!(
+        !messages.iter().any(|m| m.contains("NOT shown")),
+        "{messages:?}"
+    );
 }
 
 #[test]

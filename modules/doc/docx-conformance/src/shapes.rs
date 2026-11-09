@@ -30,7 +30,8 @@ pub const SHAPE_CASES: &[(&str, bool)] = &[
     ("straightConnector1", true),
     ("roundRect", true),
     ("custGeom", true),
-    ("cloudCallout", false),
+    ("cloudCallout", true),
+    ("straightConnector1", true),
 ];
 
 const WPS: &str =
@@ -71,8 +72,10 @@ const RED_FILL: &str = r#"<a:solidFill><a:srgbClr val="C00000"/></a:solidFill><a
 /// A document with each of [`SHAPE_CASES`], in order: an inline rectangle
 /// with a fill and an outline, an anchored ellipse whose fill and outline
 /// are the theme's (`wps:style`), an anchored triangle, a line, a rounded
-/// rectangle turned a quarter, a freeform, and a preset the lowering does not
-/// draw; each after a line of text.
+/// rectangle turned a quarter, a freeform, and a cloud callout (which ADR 627's
+/// hand port did not draw, Annex D's definitions do, ADR 629), and a line with
+/// an oval at its start and a large triangle at its end (ADR 629); each after a
+/// line of text.
 pub fn shapes_docx() -> Vec<u8> {
     let style = r#"<wps:style><a:lnRef idx="2"><a:schemeClr val="accent1"><a:shade val="50000"/></a:schemeClr></a:lnRef><a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="0"><a:schemeClr val="accent1"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></wps:style>"#;
     let cust = r#"<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="100" h="100"><a:moveTo><a:pt x="0" y="100"/></a:moveTo><a:lnTo><a:pt x="50" y="0"/></a:lnTo><a:cubicBezTo><a:pt x="75" y="25"/><a:pt x="100" y="50"/><a:pt x="100" y="100"/></a:cubicBezTo><a:close/></a:path></a:pathLst></a:custGeom>"#;
@@ -161,6 +164,20 @@ pub fn shapes_docx() -> Vec<u8> {
                 914_400,
                 685_800,
                 &sp_pr("", &prst("cloudCallout", ""), RED_FILL),
+            ),
+        ),
+        (
+            "arrow",
+            drawing(
+                8,
+                None,
+                1_828_800,
+                457_200,
+                &sp_pr(
+                    "",
+                    &prst("straightConnector1", ""),
+                    r#"<a:ln w="28575"><a:solidFill><a:srgbClr val="7030A0"/></a:solidFill><a:headEnd type="oval"/><a:tailEnd type="triangle" w="lg" len="lg"/></a:ln>"#,
+                ),
             ),
         ),
     ];

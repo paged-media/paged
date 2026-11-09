@@ -32,6 +32,8 @@
 //! 0.93 × their size left of it; the value axis runs from 0 to the first
 //! "nice" step (1, 2 or 5 × 10ⁿ) above the largest value plus 5 %.
 
+pub mod outline;
+
 use pptx_core::chart::{Axis, Chart, DataLabels, PlotKind, Series};
 use pptx_core::{Color, ColorBase, Fill, Line, RunProps};
 use serde::{Deserialize, Serialize};

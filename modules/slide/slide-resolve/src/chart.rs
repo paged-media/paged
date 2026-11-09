@@ -79,53 +79,15 @@ pub(super) fn items(prims: Vec<Prim>, t: Affine, w: f64, h: f64, ctx: &Ctx) -> V
                 meta: ItemMeta::default(),
             }
         };
+        let contour = slide_chart::outline::contour(&prim);
         match prim {
-            Prim::Rect {
-                x,
-                y,
-                w: rw,
-                h: rh,
-                fill,
-                line,
-            } => {
-                if rw <= 0.0 || rh <= 0.0 {
-                    continue;
+            Prim::Rect { fill, line, .. }
+            | Prim::Path { fill, line, .. }
+            | Prim::Wedge { fill, line, .. } => {
+                if let Some(c) = contour {
+                    out.push(item(vec![sub_path(c)], fill, line, None));
                 }
-                let pts = [(x, y), (x + rw, y), (x + rw, y + rh), (x, y + rh)];
-                out.push(item(vec![polygon(&pts, true)], fill, line, None));
             }
-            Prim::Path {
-                points,
-                smooth,
-                closed,
-                fill,
-                line,
-            } => {
-                if points.len() < 2 {
-                    continue;
-                }
-                let sp = if smooth {
-                    catmull_rom(&points)
-                } else {
-                    polygon(&points, closed)
-                };
-                out.push(item(vec![sp], fill, line, None));
-            }
-            Prim::Wedge {
-                cx,
-                cy,
-                r,
-                hole,
-                start,
-                sweep,
-                fill,
-                line,
-            } => out.push(item(
-                vec![wedge(cx, cy, r, hole, start, sweep)],
-                fill,
-                line,
-                None,
-            )),
             Prim::Label {
                 x,
                 cy,
@@ -171,109 +133,20 @@ pub(super) fn items(prims: Vec<Prim>, t: Affine, w: f64, h: f64, ctx: &Ctx) -> V
     out
 }
 
-fn corner(p: (f64, f64)) -> PathPoint {
-    PathPoint {
-        anchor: p,
-        left: p,
-        right: p,
-    }
-}
-
-fn polygon(points: &[(f64, f64)], closed: bool) -> SubPath {
+/// A contour of [`slide_chart::outline`] as the deck model's sub-path.
+fn sub_path(c: slide_chart::outline::Contour) -> SubPath {
     SubPath {
-        points: points.iter().copied().map(corner).collect(),
-        closed,
-        filled: closed,
-        stroked: true,
-        fill_mode: None,
-        path: 0,
-    }
-}
-
-/// A Catmull-Rom curve through `points`, as cubic Béziers.
-fn catmull_rom(points: &[(f64, f64)]) -> SubPath {
-    let n = points.len();
-    let at = |i: isize| points[i.clamp(0, n as isize - 1) as usize];
-    let pts = (0..n as isize)
-        .map(|i| {
-            let (p, prev, next) = (at(i), at(i - 1), at(i + 1));
-            let d = ((next.0 - prev.0) / 6.0, (next.1 - prev.1) / 6.0);
-            PathPoint {
-                anchor: p,
-                left: (p.0 - d.0, p.1 - d.1),
-                right: (p.0 + d.0, p.1 + d.1),
-            }
-        })
-        .collect();
-    SubPath {
-        points: pts,
-        closed: false,
-        filled: false,
-        stroked: true,
-        fill_mode: None,
-        path: 0,
-    }
-}
-
-/// A pie slice (or ring segment when `hole` > 0): degrees clockwise from
-/// 12 o'clock, arcs as cubic segments of at most 90°.
-fn wedge(cx: f64, cy: f64, r: f64, hole: f64, start: f64, sweep: f64) -> SubPath {
-    let arc = |radius: f64, a0: f64, a1: f64| -> Vec<PathPoint> {
-        let segs = ((a1 - a0).abs() / 90.0).ceil().max(1.0) as usize;
-        let step = (a1 - a0) / segs as f64;
-        let pt = |a: f64| {
-            let a = a.to_radians();
-            (cx + radius * a.sin(), cy - radius * a.cos())
-        };
-        let tan = |a: f64| {
-            let a = a.to_radians();
-            (a.cos(), a.sin())
-        };
-        let k = 4.0 / 3.0 * (step.to_radians() / 4.0).tan() * radius;
-        let mut out: Vec<PathPoint> = Vec::new();
-        for s in 0..=segs {
-            let a = a0 + step * s as f64;
-            let p = pt(a);
-            let d = tan(a);
-            out.push(PathPoint {
-                anchor: p,
-                left: (p.0 - k * d.0, p.1 - k * d.1),
-                right: (p.0 + k * d.0, p.1 + k * d.1),
-            });
-        }
-        out
-    };
-    let full = sweep >= 359.999;
-    let mut points = arc(r, start, start + sweep);
-    if full && hole <= 0.0 {
-        points.pop();
-    } else if hole > 0.0 {
-        let mut inner = arc(hole, start, start + sweep);
-        inner.reverse();
-        for p in &mut inner {
-            std::mem::swap(&mut p.left, &mut p.right);
-        }
-        // The straight edges between the arcs keep corner handles.
-        if let Some(last) = points.last_mut() {
-            last.right = last.anchor;
-        }
-        if let Some(first) = inner.first_mut() {
-            first.left = first.anchor;
-        }
-        points.extend(inner);
-    } else {
-        if let Some(last) = points.last_mut() {
-            last.right = last.anchor;
-        }
-        if let Some(first) = points.first_mut() {
-            first.left = first.anchor;
-        }
-        points.push(corner((cx, cy)));
-    }
-    SubPath {
-        points,
-        closed: true,
-        filled: true,
+        points: c
+            .points
+            .into_iter()
+            .map(|p| PathPoint {
+                anchor: p.anchor,
+                left: p.left,
+                right: p.right,
+            })
+            .collect(),
+        closed: c.closed,
+        filled: c.closed,
         stroked: true,
         fill_mode: None,
         path: 0,

@@ -1505,6 +1505,7 @@ version = "0.0.0"
 dependencies = [
  "paged-math",
  "paged-ooxml",
+ "pptx-core",
  "serde",
 ]
 
@@ -1525,9 +1526,11 @@ dependencies = [
 name = "docx-import"
 version = "0.0.0"
 dependencies = [
+ "dml-chart",
  "docx-core",
  "paged-math",
  "paged-ooxml",
+ "pptx-core",
 ]
 
 [[package]]
@@ -1554,11 +1557,14 @@ name = "docx-lower"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "dml-geom",
  "dml-native",
  "docx-core",
  "paged-math",
  "paged-ooxml",
+ "pptx-core",
  "serde",
+ "slide-chart",
 ]
 
 [[package]]

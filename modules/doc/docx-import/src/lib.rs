@@ -44,8 +44,10 @@ use paged_ooxml::ooxmlsdk::simple_type::{
 };
 use paged_ooxml::{parse_root, part_dir, rels, resolve_target, OoxmlError, OpcPackage};
 
+mod chart;
 mod comments;
 mod controls;
+mod diagram;
 pub mod fonts;
 mod objects;
 mod theme;
@@ -1071,6 +1073,8 @@ fn run_has_content(r: &Run) -> bool {
     !r.text.is_empty()
         || !r.images.is_empty()
         || !r.shapes.is_empty()
+        || !r.charts.is_empty()
+        || !r.diagrams.is_empty()
         || r.other_drawings > 0
         || r.note_ref.is_some()
 }
@@ -2247,6 +2251,8 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
     let mut symbols = Vec::new();
     let mut text_boxes = Vec::new();
     let mut shapes = Vec::new();
+    let mut charts = Vec::new();
+    let mut diagrams = Vec::new();
     for c in &r.run_choice {
         match c {
             wml::RunChoice::Text(t) => {
@@ -2334,7 +2340,13 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
                     Some(tb) => text_boxes.push(tb),
                     None => match objects::drawing_shape(d, ctx) {
                         Some(sh) => shapes.push(sh),
-                        None => other_drawings += 1,
+                        None => match objects::drawing_chart(d, ctx) {
+                            Some(c) => charts.push(c),
+                            None => match objects::drawing_diagram(d, ctx) {
+                                Some(g) => diagrams.push(g),
+                                None => other_drawings += 1,
+                            },
+                        },
                     },
                 },
             },
@@ -2354,6 +2366,8 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
                 &mut images,
                 &mut text_boxes,
                 &mut shapes,
+                &mut charts,
+                &mut diagrams,
                 &mut other_drawings,
             ),
             // A footnote/endnote reference mark — the run carries no text; the
@@ -2394,6 +2408,8 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
         comments: Vec::new(),
         text_boxes,
         shapes,
+        charts,
+        diagrams,
         control: None,
         math: None,
     }

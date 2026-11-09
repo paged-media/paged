@@ -1064,7 +1064,7 @@ fn shapes_are_anchored_frames_along_their_outline() {
             _ => 0,
         })
         .sum();
-    assert_eq!(drawn, 6);
+    assert_eq!(drawn, 8);
     let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
     let frames: Vec<_> = stories.stories[0]
         .iter()
@@ -1075,11 +1075,23 @@ fn shapes_are_anchored_frames_along_their_outline() {
                 .is_some_and(|i| i.starts_with("docx_shape"))
         })
         .collect();
-    assert_eq!(frames.len(), 6);
-    for f in &frames {
+    assert_eq!(frames.len(), 8);
+    for f in &frames[..7] {
         assert!(!f.anchors.is_empty(), "{:?}", f.self_id);
         assert_eq!(f.subpath_starts.len(), f.subpath_open.len());
     }
+    // Doc ADR 629 — the line with arrow heads is a Group of the line and its
+    // two heads, placed as the shape.
+    let arrow = frames[7];
+    assert!(matches!(
+        arrow.frame_kind,
+        paged_model::AnchoredFrameKind::Group
+    ));
+    assert_eq!(arrow.children.len(), 3);
+    assert_eq!(arrow.children[0].subpath_open, vec![true]);
+    assert!(arrow.children[1..]
+        .iter()
+        .all(|h| h.fill_color.is_some() && h.subpath_open == vec![false]));
     // The triangle's three anchors, closed, filled blue.
     assert_eq!(frames[2].anchors.len(), 3);
     assert_eq!(frames[2].subpath_open, vec![false]);
@@ -1090,4 +1102,115 @@ fn shapes_are_anchored_frames_along_their_outline() {
     // The ellipse floats beside its text with a wrap.
     assert!(frames[1].setting.is_some());
     assert!(frames[1].layout.text_wrap.is_some());
+}
+
+/// Doc ADR 628 — a chart is an anchored Group of its pieces: outlined
+/// Rectangles (bars, gridlines) and text frames whose stories hold the
+/// labels; the whole body stays native.
+#[test]
+fn charts_are_anchored_groups_of_their_pieces() {
+    use paged_model::AnchoredFrameKind;
+    let ir = lowered(&docx_conformance::charts_docx());
+    let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
+    let groups: Vec<_> = stories.stories[0]
+        .iter()
+        .flat_map(|p| p.anchored_frames.iter())
+        .filter(|f| {
+            f.self_id
+                .as_deref()
+                .is_some_and(|i| i.starts_with("docx_chart"))
+        })
+        .collect();
+    assert_eq!(groups.len(), 2);
+    assert_eq!(groups[0].self_id.as_deref(), Some("docx_chart0"));
+    let bar = groups[0];
+    assert!(matches!(bar.frame_kind, AnchoredFrameKind::Group));
+    assert_eq!(
+        bar.bounds.map(|b| (b.width(), b.height())),
+        Some((360.0, 216.0))
+    );
+    assert!(bar.setting.is_none(), "inline: a character of its line");
+    let shapes: Vec<_> = bar
+        .children
+        .iter()
+        .filter(|c| matches!(c.frame_kind, AnchoredFrameKind::Rectangle))
+        .collect();
+    let labels: Vec<_> = bar
+        .children
+        .iter()
+        .filter(|c| matches!(c.frame_kind, AnchoredFrameKind::TextFrame))
+        .collect();
+    assert!(
+        shapes.len() >= 6 && labels.len() >= 6,
+        "{} {}",
+        shapes.len(),
+        labels.len()
+    );
+    for s in &shapes {
+        assert!(!s.anchors.is_empty());
+        assert!(s.fill_color.is_some() || s.stroke_color.is_some());
+    }
+    // Every label's story is one of the stories made beside the body's.
+    for l in &labels {
+        let story = l.parent_story.as_deref().expect("a story");
+        assert!(stories
+            .extra
+            .iter()
+            .any(|(id, ps)| id == story && ps.len() == 1));
+    }
+    // The pie floats with its wrap.
+    assert!(groups[1].setting.is_some() && groups[1].layout.text_wrap.is_some());
+}
+
+/// Doc ADR 629 — a SmartArt diagram is an anchored Group of the shapes Word
+/// saved of its layout: outlined Rectangles (every preset through Annex D's
+/// definitions) and TextFrames over the boxes Word sets the text in.
+#[test]
+fn smartart_is_an_anchored_group_of_its_drawing() {
+    use paged_model::AnchoredFrameKind;
+    let ir = lowered(&docx_conformance::smartart_docx());
+    let stories = docx_skeleton::body::native_stories(&ir).expect("the whole body is native");
+    let groups: Vec<_> = stories.stories[0]
+        .iter()
+        .flat_map(|p| p.anchored_frames.iter())
+        .filter(|f| {
+            f.self_id
+                .as_deref()
+                .is_some_and(|i| i.starts_with("docx_diagram"))
+        })
+        .collect();
+    assert_eq!(
+        groups.len(),
+        1,
+        "the diagram without a drawing is not drawn"
+    );
+    let g = groups[0];
+    assert!(matches!(g.frame_kind, AnchoredFrameKind::Group));
+    let shapes: Vec<_> = g
+        .children
+        .iter()
+        .filter(|c| matches!(c.frame_kind, AnchoredFrameKind::Rectangle))
+        .collect();
+    let texts: Vec<_> = g
+        .children
+        .iter()
+        .filter(|c| matches!(c.frame_kind, AnchoredFrameKind::TextFrame))
+        .collect();
+    assert_eq!((shapes.len(), texts.len()), (4, 3));
+    // The chevron, halved by its group, sits after the arrow.
+    let chevron = shapes[2];
+    assert_eq!(chevron.anchors.len(), 6);
+    let b = chevron.bounds.unwrap();
+    assert!(
+        (b.left - 152.4).abs() < 0.01 && (b.width() - 108.0).abs() < 0.01,
+        "{b:?}"
+    );
+    // Text is centred in its box, as Word anchors it.
+    for t in &texts {
+        assert_eq!(
+            t.layout.vertical_justification.as_deref(),
+            Some("CenterAlign")
+        );
+        assert_eq!(t.layout.inset_spacing, Some([6.0; 4]));
+    }
 }

@@ -122,6 +122,72 @@ pub struct LoweredShape {
     /// The shape's look (fill, outline, effects).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fx: Option<dml_native::native::NativeFx>,
+    /// Its line ends (arrow heads) in the same box, each filled in the
+    /// line's colour or stroked with the line (doc ADR 629).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub heads: Vec<LoweredHead>,
+}
+
+/// One line end of a [`LoweredShape`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredHead {
+    pub anchors: Vec<[f32; 6]>,
+    /// Stroked only (Office's open `arrow`).
+    pub open: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fx: Option<dml_native::native::NativeFx>,
+}
+
+/// A chart (doc ADR 628) or a SmartArt diagram (doc ADR 629) anchored in its
+/// paragraph: an anchored group of pieces in the drawing's own box.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredGroup {
+    /// Where it is anchored, as a shape is.
+    #[serde(default)]
+    pub at: u32,
+    pub width_pt: f32,
+    pub height_pt: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<LoweredAnchor>,
+    #[serde(default)]
+    pub layout: LoweredFloatLayout,
+    /// The part drawn (`word/charts/chart1.xml`, `word/diagrams/drawing1.xml`).
+    pub part: String,
+    /// The pieces in z-order.
+    pub pieces: Vec<LoweredPiece>,
+}
+
+/// One piece of a [`LoweredGroup`], placed by its box in the group's box.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum LoweredPiece {
+    /// A bar, a line, an area, a wedge, a gridline or a diagram's shape:
+    /// its outline in its own box (`[x, y, left x, left y, right x, right
+    /// y]`, pt) and look.
+    Shape {
+        /// Left, top, width, height in the group's box, pt.
+        bounds: [f32; 4],
+        anchors: Vec<[f32; 6]>,
+        starts: Vec<usize>,
+        open: Vec<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fx: Option<Box<dml_native::native::NativeFx>>,
+    },
+    /// A chart's title, legend entry or label, or a diagram shape's text:
+    /// a text frame with a story of its own.
+    Label {
+        bounds: [f32; 4],
+        paragraphs: Vec<LoweredParagraph>,
+        /// Insets, top, left, bottom, right, pt.
+        #[serde(default)]
+        insets: [f32; 4],
+        /// The engine's vertical justification (`CenterAlign`,
+        /// `BottomAlign`); `None` for the top.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        valign: Option<String>,
+    },
 }
 
 /// How text wraps around a page item: the engine's `TextWrap`.

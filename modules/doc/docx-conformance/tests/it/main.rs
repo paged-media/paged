@@ -8,6 +8,7 @@ mod layout;
 
 mod annual_report;
 mod breaks;
+mod charts;
 mod columns;
 mod conformance;
 mod container_bytes;
@@ -40,6 +41,7 @@ mod run_specials;
 mod save_back;
 mod sections;
 mod shapes;
+mod smartart;
 mod structure;
 mod structure_saveback;
 mod symbols;

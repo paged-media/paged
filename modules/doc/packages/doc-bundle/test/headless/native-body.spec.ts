@@ -278,12 +278,17 @@ async function open(name: string, native: boolean): Promise<Opened> {
   const idml = (await h.exportDocument("idml")).bytes;
   // Doc ADR 627 — the shapes without text are drawn by the native open only
   // (the old pour has no frame with an outline): their frames are not part of
-  // the comparison, and `shapes.spec.ts` holds them.
+  // the comparison, and `shapes.spec.ts` holds them. So are the pieces of
+  // charts and SmartArt (doc ADRs 628, 629), which `charts.spec.ts` and
+  // `smartart.spec.ts` hold.
   const looks = zipTexts(idml, "Stories/")
     .flatMap(
       (xml) => xml.match(/<(Rectangle|TextFrame)\b[\s\S]*?<\/\1>/g) ?? [],
     )
-    .filter((xml) => !/\bSelf="docx_shape\d+"/.test(xml))
+    .filter(
+      (xml) =>
+        !/\bSelf="docx_(shape\d+(_h?\d+)?|(chart|diagram)\d+_\d+)"/.test(xml),
+    )
     .map(lookOf);
   return {
     h,
@@ -326,6 +331,8 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     "endnote-body.docx",
     "break-kept-body.docx",
     "shapes.docx",
+    "charts.docx",
+    "smartart.docx",
     "embedded-fonts.docx",
   ];
 

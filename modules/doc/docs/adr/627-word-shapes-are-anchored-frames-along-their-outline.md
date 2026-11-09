@@ -1,6 +1,8 @@
 # ADR 627 — Word's shapes without text are anchored frames drawn along their outline
 
 - **Status:** Accepted 2026-11-08. Presets listed below and literal-point custom geometry; the rest told.
+  Amended 2026-11-08: the doc wasm's ceiling is 9 MiB (see the amendment); the presets are
+  evaluated by `dml-geom` since ADR 629, which removed the hand port.
 - **Scope:** `docx-core` (`Shape`, `ShapeGeometry`), `docx-import` (`objects::drawing_shape`),
   `docx-lower` (`shape_geom`, `LoweredShape`), `docx-skeleton` (`body`), the engine's
   `AnchoredFrame` outline (engine ADR 1050, amendment 2026-11-08).
@@ -49,7 +51,8 @@ drawing that is not a picture and not shown. The capability register asked for t
 
 ## Not done
 
-- Line ends (arrow heads) are not drawn; the lowering says how many shapes have them.
+- Line ends (arrow heads) are not drawn; the lowering says how many shapes have them (drawn since
+  ADR 629).
 - A shape's text wrap is its box (a triangle wraps text as its bounding box); rotation turns the
   outline, not the wrap.
 - IDML export writes the frame's box; moving or resizing a shape on the canvas moves its box and
@@ -78,3 +81,14 @@ ceiling) or a decision on the ceiling. Neither is part of this record.
 - `paged-renderer` `anchored_effects`: an outlined anchored frame leaves the box's corner paper.
 - `test/headless/shapes.spec.ts` (real engine): the triangle fills half of its box, the freeform
   less than its box, the rounded rectangle and the rectangle are painted.
+
+## Amendment (2026-11-08): a 9 MiB ceiling for the doc wasm
+
+The owner decided to raise the ceiling of `docx_js_bg.wasm` for charts and SmartArt rather than
+ship a second wasm artifact, by as much as they need plus headroom and at most to 10 MiB. The
+manifest's `maxBytes` goes from 8,388,608 B to 9,437,184 B (9 MiB), one raise shared with the
+equations' reader (engine ADR 1090), which landed the same value first. Charts (ADR 628) measure
+8,529,596 B on the author's machine (CI's number is in ADR 628); the rest is the headroom for the
+SmartArt drawing part. With SmartArt and `dml-geom` (ADR 629) the editor's `dist/` budget goes to
+74.25 MiB (PM-0013, amendment 6).
+

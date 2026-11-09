@@ -216,6 +216,8 @@ describe.skipIf(!docxPresent)("doc headless — shapes @feat:doc-shapes", () => 
     // The rotated rounded rectangle and the rectangle are painted.
     expect(sum([0x70, 0xad, 0x47]).count).toBeGreaterThan(0);
     expect(sum([0xc0, 0x00, 0x00]).count).toBeGreaterThan(0);
+    // Doc ADR 629 — the arrow (its line and heads) is painted in purple.
+    expect(sum([0x70, 0x30, 0xa0]).count).toBeGreaterThan(0);
 
     const exporter = h
       .exportersContributed()

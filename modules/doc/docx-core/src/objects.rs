@@ -193,6 +193,104 @@ pub enum PathCommand {
     Close,
 }
 
+/// A chart drawn by a `w:drawing` (`a:graphicData` of the chart namespace,
+/// `c:chart r:id`), doc ADR 628: the chart part read by the shared DrawingML
+/// chart reader with the cached values Word draws from. The part itself is
+/// carried by the package and saved as it was.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ChartDrawing {
+    /// The drawing's extent (`wp:extent`).
+    pub width_emu: i64,
+    pub height_emu: i64,
+    /// Where the chart floats; `None` for a chart set inline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub float: Option<Float>,
+    /// The chart part's name (`word/charts/chart1.xml`).
+    pub part: String,
+    /// The chart as read (`c:chartSpace`), with the paints and text
+    /// properties as authored.
+    pub chart: Box<pptx_core::chart::Chart>,
+}
+
+/// A SmartArt diagram drawn by a `w:drawing` (`a:graphicData` of the
+/// diagram namespace), doc ADR 629: the shapes of the drawing Word saves
+/// beside the diagram's data (`word/diagrams/drawingN.xml`, `dsp:drawing`),
+/// which is how Word itself last laid the diagram out. The diagram's parts
+/// are carried by the package and saved as they were.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramDrawing {
+    /// The drawing's extent (`wp:extent`).
+    pub width_emu: i64,
+    pub height_emu: i64,
+    /// Where the diagram floats; `None` for a diagram set inline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub float: Option<Float>,
+    /// The drawing part's name (`word/diagrams/drawing1.xml`).
+    pub part: String,
+    /// The shapes, in z-order, placed in the diagram's box.
+    pub shapes: Vec<DiagramShape>,
+}
+
+/// One shape of a [`DiagramDrawing`].
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramShape {
+    /// The shape's top left in the diagram's box (groups' transforms
+    /// applied), EMU.
+    pub x_emu: i64,
+    pub y_emu: i64,
+    /// Its extent, outline, rotation, flips and look (`float` unused).
+    pub shape: Shape,
+    /// Its text, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<DiagramText>,
+}
+
+/// A diagram shape's text (`dsp:txBody`) and the box Word sets it in
+/// (`dsp:txXfrm`, or the shape's box).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramText {
+    pub x_emu: i64,
+    pub y_emu: i64,
+    pub width_emu: i64,
+    pub height_emu: i64,
+    /// `a:bodyPr` insets: left, top, right, bottom, EMU.
+    pub insets_emu: [i64; 4],
+    /// `a:bodyPr/@anchor`: `t`, `ctr` or `b`.
+    pub anchor: String,
+    pub paragraphs: Vec<DiagramParagraph>,
+}
+
+/// One `a:p` of a diagram shape's text.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramParagraph {
+    /// `a:pPr/@algn` (`l`, `ctr`, `r`, `just`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<String>,
+    /// `a:lnSpc/a:spcPct`, 1 000ths of a percent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_pct: Option<i32>,
+    pub runs: Vec<DiagramRun>,
+}
+
+/// One run (`a:r`, `a:fld`) of a [`DiagramParagraph`].
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DiagramRun {
+    pub text: String,
+    /// `sz`, hundredths of a point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bold: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub italic: Option<bool>,
+    /// The run's fill, or the shape style's font colour (`a:fontRef`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<paged_ooxml::drawingml::Fill>,
+    /// `a:latin/@typeface` (may be `+mn-lt`, `+mj-lt`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latin: Option<String>,
+}
+
 /// One border edge (`w:top`, `w:insideH`, … in `w:tblBorders` /
 /// `w:tcBorders`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

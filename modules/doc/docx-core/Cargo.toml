@@ -17,5 +17,8 @@ serde.workspace = true
 # authored IR a picture keeps (serde derives on), and the HSL arithmetic of
 # Word's theme tint and shade (doc ADR 618).
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
+# The DrawingML chart model with paged.slide's paints and text properties
+# (doc ADR 628): what `slide-chart` lays out, read by `dml-chart`.
+pptx-core.workspace = true
 # The math tree an equation is read into (engine ADR 1090).
 paged-math = { workspace = true, features = ["serde"] }
