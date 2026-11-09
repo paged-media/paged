@@ -613,7 +613,7 @@ reference?, toolId?, onChange?, onCommit, onCancel? })` draws a box (eight
   SDK's host). Without them both doors still hit, route and report, and draw
   nothing. Gate: `capabilities.rendering ∋ "overlay"`.
 - **Host-tool drags (ADR 1102).** `set.onHostDrag({ onStart, onMove, onEnd,
-  onCancel })` hands a press of the HOST's Selection or Direct Selection tool
+onCancel })` hands a press of the HOST's Selection or Direct Selection tool
   on one of the set's handles to the bundle, for a bundle without a tool of
   its own (slide's adjust handles on the host's selection). The host does
   nothing of its own with that press and writes nothing; the bundle writes
