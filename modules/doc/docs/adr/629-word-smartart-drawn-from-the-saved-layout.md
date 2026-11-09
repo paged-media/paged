@@ -49,8 +49,9 @@ block arcs, circular arrows, …). `dml-geom` evaluates all 187 from ECMA-376 An
   stroked with the line, sized as Office sizes them (`sm`, `med`, `lg`: 2, 3 and 5 times the line's
   width, at least 0.75 pt), the tip on the line's end and pointing along it. Such a shape is an
   anchored Group of the shape and its heads (`docx_shapeN_0`, `docx_shapeN_hK`), placed as the
-  shape. A closed outline takes none, as in Office; a kind not listed is told. The line is not
-  shortened under its head.
+  shape. A closed outline takes none, as in Office; a kind not listed is told. The line is
+  shortened under its head since amendment 1, which also corrects the sizes and the `stealth`
+  and `arrow` shapes from PowerPoint's PDF.
 - **Save.** Nothing is written: the drawing, the data, layout, style, colour and drawing parts stay
   as they were, byte for byte.
 
@@ -85,3 +86,43 @@ for it (PM-0013, amendment 6).
   the arrow as a Group of its line and two filled heads.
 - `test/headless/smartart.spec.ts` (real engine): the shapes are painted in the theme's accents; an
   unedited export keeps the diagram's parts.
+
+## Amendment 1 (2026-11-09): the line stops inside its heads, as Office draws it
+
+Office ends the stroke of a line inside its head instead of at the tip, so its corners, a round
+cap and a translucent line do not show around the head. The lowering now does the same: the first
+open contour (the one the heads finish) is shortened at each end by the inset below, along its
+curve, with the engine's kernel (`paged_geom::trim::trim_run`, engine ADR 1093, which also cuts
+the engine's own line ends for IDML and paged.slide). A contour the two insets take whole is not
+stroked. The heads stay where they are drawn.
+
+Measured from PowerPoint 16.114's PDF of straight lines with each `a:tailEnd` kind at 0.5, 1,
+1.5, 2.5, 4, 6 and 10 pt, `sm` / `med` / `lg` and mixed `w` / `len`, flat and round caps (63
+lines in two decks, written into PowerPoint's blank deck by
+`tooling/oracle/office/powerpoint/ppt-line-ends-probe.py` and re-saved by PowerPoint, then exported
+to PDF by `ppt-export-probe.sh`).
+`we` is the sizing width, `len` and `wid` the head's length and width:
+
+| Head              | Office draws                                                                                   | The stroke stops, back from the end                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `triangle`        | its tip on the end                                                                             | `len - we / 2` (exact on every line)                                 |
+| `stealth`         | the same, notched `we`, `2 we`, `3 we` back from the tip for a `sm`, `med`, `lg` length        | at the notch (exact)                                                 |
+| `arrow`           | two strokes of the line's width, round at their free ends, their mitred corner on the end      | where they meet: `(w / 2) / sin a`, `tan a = (wid / 2 + we / 4) / len` (within 0.1 `w`) |
+| `diamond`, `oval` | centred on the end                                                                             | not shortened                                                        |
+
+- **The sizing width** `we` is the line's width, but at least 2 pt: a 0.5, 1 or 1.5 pt line takes
+  the heads of a 2 pt one (`sm`, `med`, `lg`: 2, 3 and 5 times it). It replaces the 0.75 pt
+  minimum this ADR assumed.
+- The cap does not move the cut: a round-capped line stops where a flat one does, its cap
+  reaching half its width further, under the head.
+- `stealth`'s notch was drawn at 0.6 of the length; it is now Office's. `arrow` was drawn with its
+  point on the end, so its mitre ran past it; its strokes now meet back from the end and their
+  outer corner is the end, as in Office.
+- The insets and heads live in `docx-lower`'s `shape_geom` (`inset`, `cut_under_heads`). paged.slide
+  maps DrawingML heads onto the engine's InDesign-shaped ones (sizes not carried) and paged.sheet
+  draws none yet; one Office head geometry for the three is open (engine ADR 1093, "Not done").
+
+Evidence: `docx-lower` `shape_geom::the_line_stops_where_powerpoint_stops_it` (22 measured cases),
+`a_line_is_cut_under_its_heads_and_a_closed_outline_is_not` and the open arrow's corners;
+`docx-conformance` `shapes`: the arrow's line stops 10.125 pt (`5 x 2.25 - 1.125`) short of its
+large triangle's tip and keeps its point under the oval.

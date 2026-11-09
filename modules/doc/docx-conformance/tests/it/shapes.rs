@@ -154,6 +154,16 @@ fn the_lowering_draws_the_outlines_it_has_and_tells_the_rest__feat__doc_shapes()
         .all(|h| !h.open && h.fx.as_ref().and_then(|f| f.fill.as_deref()) == Some("#7030A0")));
     // Its tip is the line's end (the box's bottom right corner).
     assert!((heads[1].anchors[0][0] - drawn[7].width_pt).abs() < 1e-3);
+    // The line stops under its large triangle, half a width short of its
+    // base: 5 x 2.25 - 1.125 pt back from the tip (ADR 629, amendment 1);
+    // the oval sits centred on its start, which keeps its point.
+    let last = drawn[7].anchors.last().expect("line");
+    let tip = &heads[1].anchors[0];
+    let back = (tip[0] - last[0]).hypot(tip[1] - last[1]);
+    assert!((back - 10.125).abs() < 1e-2, "{back}");
+    let first = drawn[7].anchors[0];
+    let centre = (heads[0].anchors[0][0] + heads[0].anchors[2][0]) / 2.0;
+    assert!((first[0] - centre).abs() < 1e-2, "{first:?} {centre}");
     // Told: the shapes it draws.
     let messages: Vec<&str> = ir.diagnostics.iter().map(|d| d.message.as_str()).collect();
     assert!(
