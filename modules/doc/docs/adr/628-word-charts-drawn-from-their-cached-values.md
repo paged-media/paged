@@ -1,6 +1,7 @@
 # ADR 628 — Word's charts are drawn from their cached values as anchored groups
 
-- **Status:** Accepted 2026-11-08.
+- **Status:** Accepted 2026-11-08; amended 2026-11-09 (Amendment 1: a chart in a table cell is
+  placed and drawn).
 - **Scope:** `docx-core` (`ChartDrawing`, `Run::charts`), `docx-import` (`chart`,
   `objects::drawing_chart`), `docx-lower` (`chart`, `LoweredChart`), `docx-skeleton` (`body`),
   `slide-chart` (`outline`, shared with `slide-resolve`), the doc manifest's wasm ceiling.
@@ -46,8 +47,9 @@ is edited.
   outlined anchored Rectangles and anchored TextFrames, each label with a story of its own beside
   the body's (as an anchored text box has). The renderer's anchored pass already places a group's
   children by their bounds.
-- **Not placed.** A chart in a table cell, as a shape there (ADR 627), with a warning on open. An
-  embedded placement (the batch builder) takes no charts and pours the TypeScript way.
+- **Not placed.** An embedded placement (the batch builder) takes no charts and pours the
+  TypeScript way. A chart in a table cell was not placed either, with a warning on open; it is
+  since Amendment 1.
 - **Save.** Nothing is written: the drawing, the chart part, its relationships and the embedded
   workbook stay as they were, byte for byte, on an unedited and on an edited save.
 
@@ -74,3 +76,44 @@ by this change.
   shared contour).
 - `test/headless/charts.spec.ts` (real engine): the bars and slices are painted in the theme's
   accents; an unedited export keeps the chart parts.
+
+## Amendment 1 — a chart in a table cell (2026-11-09)
+
+A chart in a table cell is lowered as a body chart is (`docx-lower` drops the `in_cell` refusal
+and its warning, "chart(s) in table cells are NOT shown"): an inline chart is an anchored group at
+its character of the cell's paragraph, a floating one an anchored group with Word's position. The
+chart's labels are paragraphs of their own frames, not of the cell (`lower_drawing_paragraphs`
+clears `in_cell` while it lowers them). The native builder keeps a cell paragraph that holds only
+a chart (or a picture, an equation, a diagram, a shape or a text box) instead of dropping it as
+an empty cell. The renderer's cell path already places an in-line anchored frame as a character
+of the cell's line and a floating one against the cell (engine ADR 1050); a group is drawn there
+by the same `emit_one_anchored_frame` as in the body, so the engine needed no change for charts.
+
+**Save.** Unchanged: the cell's drawing, the chart part, its relationships and the workbook stay
+byte-identical on an unedited and an edited save (the conformance test's chart parts include the
+part the cell's chart shares with the body's column chart).
+
+**Word.** Compared on 2026-11-09 with Microsoft Word for Mac (16.x), saved as PDF
+(`tooling/oracle/office/word/word-pagination-probe.sh`), against the engine's PDF export of the
+natively opened document with Word's faces. Word does not open the `charts` fixture at all (the
+AppleScript `open` answers nothing, no document appears): its embedded workbook is a 35-byte
+stand-in, not a spreadsheet. The probe therefore used a copy holding only the paragraph before
+the table, the table with its chart and the paragraph after, the chart part without its
+`c:externalData` reference and without the workbook. Both draw the chart in the cell at its
+180 × 108 pt and grow the row with it (Word: the box from 95 to 203 pt, the paragraph after the
+table at 216; the engine: from 89 to 197, the paragraph after at 200). The row is about 10 pt
+shorter in the engine: Word keeps the cell paragraph's spacing after and its line's descent
+below the chart. The chart's own layout differs as in the body (slide-chart's): Word thins the
+value axis of the small plot to 0 and 5, slide-chart labels every 0.5 and the labels overlap; the
+title is Word's Arial 18 pt, slide-chart's 19 pt in the theme face. Those are matters of the chart
+layout (slide ADR 709), not of the placement in the cell.
+
+**Not done.** A floating chart in a cell takes the picture's float path but no fixture holds one;
+`layoutInCell="0"` (a float that leaves its cell) is not read for charts.
+
+**Evidence.** `docx-conformance` `charts`: the cell's chart lowers inline at offset 0 of its
+paragraph, 180 × 108 pt, with the column chart's labels; the diagnostics count three charts drawn
+and no chart left out. `docx-skeleton` `body_native`
+(`a_chart_or_a_diagram_alone_in_a_cell_is_its_anchored_group`): the cell's paragraph holds one
+anchored Group with its pieces at offset 0. `test/headless/charts.spec.ts`: West's accent is
+painted in three bands (the column chart, the pie, the cell's chart).

@@ -197,3 +197,51 @@ Word's rendering. No fixture in the repository carries Word's picture of an equa
 writes no fallback image for `m:oMath` in a `.docx`), and no math face is committed, so the
 public gate sets equations in a text face at TeX's constants; the `MATH`-table path is exercised
 only where a math face is installed.
+
+## Amendment 2 — equations in table cells (2026-11-09)
+
+**Render.** A table cell's paragraph is composed by the cell path (`pipeline/tables.rs`), not by
+the body's `emit_paragraph`, and set no equations: an equation in a cell was neither measured nor
+drawn. `cell_with_objects` now sets the paragraph's equations with `set_equations` (font scale
+1: a cell has no text fit) and passes them to `anchored::with_object_placeholders`, so an
+equation is one more in-line object of the cell's line, as wide as it is set, its rise moving
+the line down by the cell's own rule for objects (`shift_cell_object_lines`, engine ADR 1050).
+`emit_cell_paragraph` draws each equation with `paint_equation` on its character's x and its
+line's baseline, in that character's paint (the cell's paint picker), where the body draws it in
+`emit_inline_objects`. The measurement of the row (`cell_paragraph_layout`) goes through the same
+`cell_with_objects`, so the row grows with the equation. The limits of the body's placement hold
+here too: the equation's descent does not push the next line.
+
+**Doc.** The import and the lowering already read and lowered a cell paragraph's equations (the
+lowering's paragraph code is shared by the body and the cells); the native builder's
+`build_table` dropped a cell whose only paragraph had no text, so a cell holding only a display
+equation lost it. A cell paragraph with an equation (or a picture, a chart, a diagram, a shape
+or a text box) is no longer an empty one (`is_empty_paragraph` also counts equations, so a nested
+table does not take an equation's paragraph). The bytes of the equations' markup are untouched
+on save, as in the body.
+
+**Word.** Compared on 2026-11-09 with Microsoft Word for Mac (16.x) on `equations-in-cells.docx`
+saved as PDF (`tooling/oracle/office/word/word-pagination-probe.sh`), against the engine's PDF
+export of the natively opened document with Word's own faces. Word places both equations where
+the engine does: the inline fraction right after `x = ` on the cell's first line, its numerator
+and denominator at about three quarters of the text size (Word: Cambria Math 9 pt beside 12 pt
+text; the engine: TeX's text-style script size, 70 %); the display equation centred in its cell
+(Word: `y = x²` from 406 to 441 pt, centre 423.5; the engine: 409 to 436, centre 422.5). The
+difference is the row: Word lowers the line by the fraction's depth (the denominator's top at
+85 pt, the paragraph after the table at 102), the engine does not (denominator at 78, the next
+paragraph at 84, so the denominator reaches into the line below). That is the descent this ADR
+already leaves open for the body ("a descent does not push the next line"); it is now visible in
+a cell too and is the next step. The two documents differ in their default face and size (the
+fixture has no styles part: Word takes Aptos 12 pt, the engine its default face), so only
+placement, not metrics, is compared; the cell's text also starts 4 pt further right in the
+engine (Word outdents a table by its cell margin), a table placement matter outside this
+amendment.
+
+**Evidence.** `paged-renderer` `tests/it/tables.rs`
+(`an_equation_in_a_cell_is_a_character_of_its_line`): an inline fraction at offset 0 of a cell
+moves the cell's text right by its width, keeps the line's baseline, draws its bar at the pen on
+the axis and its two letters. `docx-conformance` `equations`
+(`a_cells_equations_lower_to_its_paragraphs_equations`) and `docx-skeleton` `body_native`
+(`a_cells_equations_stand_on_its_paragraphs`) over the new `equations_in_cells_docx` fixture (a
+cell with text and an inline fraction, a cell holding only a display equation; the bundle's
+`equations-in-cells.docx`, which `native-body.spec.ts` must open natively).

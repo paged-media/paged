@@ -1,6 +1,7 @@
 # ADR 629 — SmartArt is drawn from the layout Word saved; shapes take every Annex D preset and their line ends
 
-- **Status:** Accepted 2026-11-08.
+- **Status:** Accepted 2026-11-08; amended 2026-11-09 (Amendment 1: a diagram in a table cell
+  is placed and drawn).
 - **Scope:** `docx-core` (`DiagramDrawing`, `Run::diagrams`), `docx-import` (`diagram`,
   `objects::drawing_diagram`), `docx-lower` (`diagram`, `shape_geom`, `LoweredGroup`),
   `docx-skeleton` (`body::group_frame`), the doc manifest's wasm ceiling (ADR 627 amendment).
@@ -38,8 +39,8 @@ block arcs, circular arrows, …). `dml-geom` evaluates all 187 from ECMA-376 An
   with its look through `dml-native`, each text a text frame over its text box with the insets and
   Word's anchor as the frame's vertical justification, its paragraphs lowered as a chart label's
   (direct formatting, the theme's faces for `+mn-lt` / `+mj-lt`). `docx-skeleton` builds charts and
-  diagrams with one `group_frame` (`docx_chartN`, `docx_diagramN`). A diagram in a table cell is not
-  placed and is told, as a chart is.
+  diagrams with one `group_frame` (`docx_chartN`, `docx_diagramN`). A diagram in a table cell is placed
+  and drawn as a chart there is (Amendment 1).
 - **Every Annex D preset.** `docx_lower::shape_geom` evaluates presets with `dml-geom` (slide's and
   sheet's evaluator) instead of its hand port of fourteen, which is removed: Word's shapes and
   SmartArt's take all 187 presets with their guides. A contour Annex D does not fill (a detail
@@ -85,3 +86,25 @@ for it (PM-0013, amendment 6).
   the arrow as a Group of its line and two filled heads.
 - `test/headless/smartart.spec.ts` (real engine): the shapes are painted in the theme's accents; an
   unedited export keeps the diagram's parts.
+
+## Amendment 1 — a diagram in a table cell (2026-11-09)
+
+As a chart in a cell (ADR 628, Amendment 1): `docx-lower` lowers a diagram in a table cell as a
+body diagram, an anchored group of its shapes and texts at its character of the cell's paragraph
+(inline) or with Word's position (floating), and no longer warns "SmartArt diagram(s) in table
+cells are NOT shown"; the native builder keeps the cell's paragraph that holds only the diagram;
+the renderer's cell path (engine ADR 1050) draws the group as the body's anchored pass does. The
+diagram's parts stay byte-identical on save.
+
+**Word.** Not compared against Word for the diagram in particular: the cell path places a
+diagram's group exactly as a chart's (one `group_frame`, one `emit_one_anchored_frame`), and the
+chart in a cell was compared (ADR 628, Amendment 1). The `smartart` fixture shares its parts
+between the body's and the cell's diagram, which Word does not write.
+
+**Evidence.** The `smartart` fixture holds the three-step diagram a second time, alone in a table
+cell (it shares the first diagram's parts). `docx-conformance` `smartart`: the cell's diagram
+lowers inline at offset 0 with the body's size and pieces; the diagnostics count two diagrams
+drawn and none left out in a cell; an edited save keeps the parts and the three `dgm:relIds`.
+`docx-skeleton` `body_native`: the cell's paragraph holds one anchored Group at offset 0.
+`test/headless/smartart.spec.ts`: the chevron's accent is painted in two bands (the body's
+diagram and the cell's).
