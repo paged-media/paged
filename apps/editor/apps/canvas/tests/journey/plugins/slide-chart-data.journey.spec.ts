@@ -141,6 +141,8 @@ test.describe("paged.slide: live chart data", () => {
     test.setTimeout(120_000);
     const designer = new Designer(page);
     await designer.open();
+    // The full editor opens with no document: mint one, as File ▸ New does.
+    await designer.newDocument();
     await expect.poll(() => pageCount(page), { timeout: 25_000 }).toBe(1);
     const bytes = [...readFileSync(CHARTS_FIXTURE)];
     await page.evaluate(async (bytes) => {
