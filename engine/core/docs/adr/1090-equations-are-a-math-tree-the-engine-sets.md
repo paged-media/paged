@@ -2,8 +2,9 @@
 
 - **Status:** Accepted 2026-11-08; **slice 1 built** (the tree, its layout and the shared OMML
   reader, with tests); **slice 2 built** (Amendment 1: the model, the renderer's metrics and
-  paint, doc and slide import). Open, in this order: the Word-oracle comparison, equations in
-  table cells, a wire door (insert/edit), MathML, write-back. Part of the capability layering
+  paint, doc and slide import); **equations in table cells built** (Amendment 2). Open, in this
+  order: the Word-oracle comparison of a body equation, a wire door (insert/edit), MathML,
+  write-back. Part of the capability layering
   of PM-0014 and PM-0017
   ([capability register](../../../../docs/development/capability-register.md), "Equations").
 - **Scope:** `paged-math` (new leaf crate: `model`, `layout`); `paged-ooxml::omml` (the shared
@@ -157,8 +158,8 @@ the model has no run enum, and the inline-object machinery already does what an 
   leading, as any inline object). It is drawn where its character landed, in that character's
   paint: `Glyphs` through `emit_glyph_slice` (a stretched delimiter as the glyph's `y_scale`),
   `Rule` as a filled path, `Stroke` (the radical sign) as a stroked path.
-- Not yet: equations in table cells (the cell path sets no equations), rotated frames' equations
-  follow the anchored-object path, a descent does not push the next line.
+- Not yet: rotated frames' equations follow the anchored-object path, a descent does not push
+  the next line. (Equations in table cells: Amendment 2.)
 
 **Doc import.** `docx-import` reads each part's equations once through
 `paged_ooxml::omml::in_part` (every `m:oMathPara` as one display equation, its lines an `eqArr`;

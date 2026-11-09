@@ -221,6 +221,9 @@ impl crate::Lowering {
         self.text_width = Some(width.max(1.0));
         self.section_indent = (0.0, 0.0);
         self.section_columns = sections::SectionColumns::Frame;
+        // A label of a chart in a table cell is a paragraph of its own
+        // frame, not of the cell.
+        self.in_cell = false;
         let out = paragraphs
             .iter()
             .map(|p| {

@@ -2201,20 +2201,16 @@ impl Lowering {
                     shapes.push(ls);
                 }
             }
+            // Doc ADR 628: an anchored group of the chart's pieces; in a
+            // table cell too (ADR 628 amendment 1): inline, a
+            // character of the cell's line, floating, placed against the
+            // cell (engine ADR 1050).
             for c in &r.charts {
-                if self.in_cell {
-                    self.w4.unplaced_charts += 1;
-                    continue;
-                }
-                // Doc ADR 628: an anchored group of the chart's pieces.
                 charts.push(self.lower_chart(c, anchor_at(before, total)));
             }
+            // Doc ADR 629: an anchored group of the diagram's shapes, in a
+            // cell as a chart is.
             for d in &r.diagrams {
-                if self.in_cell {
-                    self.w4.unplaced_diagrams += 1;
-                    continue;
-                }
-                // Doc ADR 629: an anchored group of the diagram's shapes.
                 diagrams.push(self.lower_diagram(d, anchor_at(before, total)));
             }
             before += r.text.chars().count() as u32;

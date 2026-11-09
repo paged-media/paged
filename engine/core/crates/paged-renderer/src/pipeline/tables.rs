@@ -2853,7 +2853,7 @@ fn cell_paragraph_layout(
     first_baseline: CellFirstBaseline,
 ) -> Option<(paged_text::layout::LaidOutParagraph, String)> {
     // Engine ADR 1050 — a picture in the cell is a character of its line.
-    let with_objects = cell_with_objects(paragraph);
+    let with_objects = cell_with_objects(em, paragraph);
     let paragraph = with_objects.as_ref().map_or(paragraph, |(p, _, _)| p);
     // A cell paragraph takes its nested styles as a body one does.
     let paragraph = &*with_nested_styles(em.document, paragraph);
@@ -3102,7 +3102,7 @@ pub(super) fn emit_cell_paragraph(
         );
     }
     // Engine ADR 1050 — a picture in the cell is a character of its line.
-    let with_objects = cell_with_objects(paragraph);
+    let with_objects = cell_with_objects(em, paragraph);
     let source_paragraph = paragraph;
     let paragraph = with_objects.as_ref().map_or(paragraph, |(p, _, _)| p);
     // A cell paragraph takes its nested styles as a body one does.
@@ -3374,6 +3374,9 @@ pub(super) fn emit_cell_paragraph(
         })
         .count();
     let mut placed_objects: Vec<(usize, f32, f32)> = Vec::new();
+    // Engine ADR 1090 — an equation: its index among the set ones, its
+    // character's x and baseline, and that character's byte (its paint).
+    let mut placed_equations: Vec<(usize, f32, f32, u32)> = Vec::new();
     let placeholder_bytes: &[u32] = with_objects.as_ref().map_or(&[], |(_, _, b)| b);
     if let Some((_, objects, bytes)) = &with_objects {
         for line in laid_out.lines.iter_mut().take(fitting).skip(skip) {
@@ -3384,6 +3387,10 @@ pub(super) fn emit_cell_paragraph(
                     };
                     let x = g.x as f32 / paged_text::shape::ADVANCE_PRECISION;
                     let baseline = line.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION;
+                    if let Some(e) = o.equation {
+                        placed_equations.push((e, x, baseline, *b));
+                        continue;
+                    }
                     placed_objects.push((
                         o.frame,
                         x + o.stroke_half,
@@ -3505,6 +3512,19 @@ pub(super) fn emit_cell_paragraph(
         }
     }
 
+    if let Some((_, objects, _)) = &with_objects {
+        for &(k, x, baseline, byte) in &placed_equations {
+            if let Some(set) = objects.equations.get(k) {
+                super::equations::paint_equation(
+                    set,
+                    em.font_table,
+                    (cell_origin.0 + x, cell_origin.1 + baseline),
+                    picker.pick(byte),
+                    &mut pages[target_page].list,
+                );
+            }
+        }
+    }
     for &(frame, x, y) in &placed_objects {
         if let Some(af) = source_paragraph.anchored_frames.get(frame) {
             anchored::emit_one_anchored_frame(
@@ -3730,14 +3750,20 @@ fn cell_paragraph_widths(
 }
 
 /// Engine ADR 1050 — a cell paragraph with one placeholder character per
-/// in-line object (a picture in a table cell), the objects, and each
+/// in-line object (a picture or an equation in a table cell), the objects, and each
 /// placeholder's byte in the placeholder text. `None` without one.
 fn cell_with_objects(
+    em: &StoryEmitter,
     paragraph: &paged_model::Paragraph,
 ) -> Option<(paged_model::Paragraph, anchored::InlineObjects, Vec<u32>)> {
-    // A cell's equations are not set yet (engine ADR 1090): its objects
-    // are its pictures.
-    let (with, objects) = anchored::with_object_placeholders(paragraph, Vec::new())?;
+    // Engine ADR 1090 amendment 2 — a cell's equations are set
+    // as a body paragraph's are, each an in-line object as wide as it is set.
+    let equations = if paragraph.equations.is_empty() {
+        Vec::new()
+    } else {
+        super::equations::set_equations(em.document, em.font_table, paragraph, 1.0)
+    };
+    let (with, objects) = anchored::with_object_placeholders(paragraph, equations)?;
     let mut bytes = Vec::with_capacity(objects.objects.len());
     let mut at = 0u32;
     for run in &with.runs {

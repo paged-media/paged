@@ -173,18 +173,49 @@ fn a_chart_lowers_to_an_anchored_group_of_its_pieces__feat__doc_charts() {
         })
         .collect();
     assert_eq!(wedges.len(), 3, "{wedges:?}");
-    // Told: the charts drawn, and the one in a table cell that is not.
+    // Told: the charts drawn, the one in a table cell among them.
     let messages: Vec<&str> = ir.diagnostics.iter().map(|d| d.message.as_str()).collect();
     assert!(
-        messages.iter().any(|m| m.contains("2 chart(s) drawn")),
+        messages.iter().any(|m| m.contains("3 chart(s) drawn")),
         "{messages:?}"
     );
     assert!(
-        messages
-            .iter()
-            .any(|m| m.contains("1 chart(s) in table cells are NOT shown")),
+        !messages.iter().any(|m| m.contains("in table cells")),
         "{messages:?}"
     );
+}
+
+/// The charts of the table cells' paragraphs.
+fn cell_charts(ir: &docx_lower::ir::LoweredDoc) -> Vec<&LoweredGroup> {
+    ir.story
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            LoweredBlock::Table(t) => Some(t),
+            _ => None,
+        })
+        .flat_map(|t| t.cells.iter().flat_map(|c| c.paragraphs.iter()))
+        .flat_map(|p| p.charts.iter())
+        .collect()
+}
+
+#[test]
+fn a_chart_in_a_table_cell_is_a_character_of_the_cells_line__feat__doc_charts() {
+    // Doc ADR 628 amendment 1: the cell's chart lowers as a body chart
+    // does, an inline group at offset 0 of the cell's paragraph.
+    let doc = docx_import::import_docx(&charts_docx()).expect("import");
+    let ir = docx_lower::lower(&doc);
+    let cell = cell_charts(&ir);
+    assert_eq!(cell.len(), 1);
+    let c = cell[0];
+    assert_eq!((c.width_pt, c.height_pt), (180.0, 108.0));
+    assert!(c.anchor.is_none(), "inline in its cell");
+    assert_eq!(c.at, 0);
+    assert_eq!(c.part, "word/charts/chart1.xml");
+    // Its labels are the bar chart's, lowered as the frame's paragraphs
+    // (not the cell's).
+    let text = labels(c);
+    assert!(text.iter().any(|t| t == CHART_TITLE), "{text:?}");
 }
 
 #[test]

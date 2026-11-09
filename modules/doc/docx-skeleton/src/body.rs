@@ -1375,6 +1375,7 @@ fn new_table_cell(col: u32, row: u32) -> TableCell {
 fn is_empty_paragraph(p: &Paragraph) -> bool {
     p.table.is_none()
         && p.anchored_frames.is_empty()
+        && p.equations.is_empty()
         && p.footnotes.is_empty()
         && p.runs.iter().all(|r| r.text.is_empty())
 }
@@ -1457,11 +1458,17 @@ fn build_table(
                 cell.fill_color = Some(f.clone());
             }
         }
-        let text_empty = lc
-            .paragraphs
-            .iter()
-            .all(|p| p.runs.iter().all(|r| r.text.is_empty()))
-            && lc.paragraphs.len() <= 1;
+        // A paragraph holding only a picture, an equation, a chart or a
+        // diagram is not empty: it is made with what it holds.
+        let text_empty = lc.paragraphs.iter().all(|p| {
+            p.runs.iter().all(|r| r.text.is_empty())
+                && p.images.is_empty()
+                && p.equations.is_empty()
+                && p.charts.is_empty()
+                && p.diagrams.is_empty()
+                && p.shapes.is_empty()
+                && p.text_boxes.is_empty()
+        }) && lc.paragraphs.len() <= 1;
         let styled_empty = lc.paragraphs.iter().any(|p| p.para_style_id.is_some());
         if !(text_empty && !styled_empty) {
             for p in &lc.paragraphs {

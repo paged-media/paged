@@ -77,6 +77,7 @@ fn main() {
         "shapes" => docx_conformance::shapes_docx(),
         "charts" => docx_conformance::charts_docx(),
         "smartart" => docx_conformance::smartart_docx(),
+        "equations-in-cells" => docx_conformance::equations_in_cells_docx(),
         "embedded-fonts" => {
             // The font is read from the path in PAGED_FIXTURE_FONT (an OFL
             // face from the engine's corpus).

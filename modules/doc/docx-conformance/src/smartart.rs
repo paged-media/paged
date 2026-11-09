@@ -133,14 +133,15 @@ fn data_xml(drawing: Option<&str>) -> String {
     )
 }
 
-/// A document with a three-step process diagram (its drawing saved), and a
+/// A document with a three-step process diagram (its drawing saved), a
 /// diagram whose drawing Word did not save (only its data), which is not
-/// drawn.
+/// drawn, and the first diagram again, alone in a table cell.
 pub fn smartart_docx() -> Vec<u8> {
     let diagram = graphic(1, ["rDm", "rLo", "rQs", "rCs"], 4_389_120, 914_400);
     let bare = graphic(2, ["rDm2", "rLo", "rQs", "rCs"], 4_389_120, 914_400);
+    let cell = graphic(3, ["rDm", "rLo", "rQs", "rCs"], 4_389_120, 914_400);
     let body = format!(
-        r#"<w:p><w:r><w:t>SmartArt process</w:t></w:r></w:p><w:p>{diagram}</w:p><w:p><w:r><w:t>Without its drawing</w:t></w:r></w:p><w:p>{bare}</w:p><w:p><w:r><w:t>the end</w:t></w:r></w:p>"#
+        r#"<w:p><w:r><w:t>SmartArt process</w:t></w:r></w:p><w:p>{diagram}</w:p><w:p><w:r><w:t>Without its drawing</w:t></w:r></w:p><w:p>{bare}</w:p><w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/></w:tblPr><w:tblGrid><w:gridCol w:w="9360"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="9360" w:type="dxa"/></w:tcPr><w:p>{cell}</w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:t>the end</w:t></w:r></w:p>"#
     );
     let document = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

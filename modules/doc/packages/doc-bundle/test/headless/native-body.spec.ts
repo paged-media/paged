@@ -333,6 +333,7 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
     "shapes.docx",
     "charts.docx",
     "smartart.docx",
+    "equations-in-cells.docx",
     "embedded-fonts.docx",
   ];
 
