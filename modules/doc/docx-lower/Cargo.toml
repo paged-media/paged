@@ -30,3 +30,7 @@ slide-chart.workspace = true
 pptx-core.workspace = true
 # DrawingML preset geometry (Annex D's 187 presets, doc ADR 629).
 dml-geom = { path = "../../../platform/shared/dml-geom" }
+# A line shortened under its heads (doc ADR 629, amendment 1): the
+# engine's trim along the curve, on its path anchors.
+paged-geom = { path = "../../../engine/core/crates/paged-geom" }
+paged-model = { path = "../../../engine/core/crates/paged-model" }

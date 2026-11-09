@@ -196,6 +196,7 @@ is not written yet.
 | [1090](1090-equations-are-a-math-tree-the-engine-sets.md) | Equations are a math tree the engine sets: `paged-math` (tree and TeX-rule layout over a metrics seam), the shared OMML reader in `paged-ooxml`; slice 1 built | Accepted 2026-11-08 |
 | [1091](1091-a-text-warp-is-an-envelope-over-the-outlines.md) | A text warp is an envelope over the text's outlines: the shared `prstTxWarp` reader (41 presets, families, adjusts) built, guide curves and the model next | Accepted 2026-11-08 |
 | [1092](1092-paged-barcode-the-encoder-without-a-binding.md) | `paged.barcode`: the barcode encoder is reachable from the engine through the script surface, without a binding; the editor draws the symbol | Accepted 2026-11-08 |
+| [1093](1093-a-line-stops-inside-its-line-ends.md) | A line stops inside its line ends: `paged_geom::trim` shortens the stroke along its curve under each head (IDML, slide, and doc's Office heads); InDesign's cut per head measured | Accepted 2026-11-09 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

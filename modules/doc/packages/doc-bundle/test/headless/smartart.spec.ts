@@ -293,7 +293,7 @@ describe.skipIf(!docxPresent)(
         .map((img) => turnedInk(img, [0xa5, 0xa5, 0xa5]))
         .find((b) => b !== null);
       expect(ink).toBeDefined();
-      expect(ink!.h).toBeGreaterThan(1.5 * ink!.w);
+      expect(ink!.h).toBeGreaterThan(1.15 * ink!.w);
 
       const exporter = h
         .exportersContributed()
