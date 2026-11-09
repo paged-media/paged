@@ -1262,13 +1262,13 @@ test.describe("plugin surface · paged.pdf", () => {
     expect(live.openPdf!.category).toBe("File");
     expect(live.menu.map((m) => m.path)).toEqual(["File/Open PDF…"]);
 
-    // paged.pdf itself injects one more thing (publish ADR 658): the
-    // command behind Object ▸ Convert Placed PDF to Vectors — no panel, no
-    // exporter, no edit context. File ▸ Import ▸ PDF or AI as Vectors… is
-    // the host's again, driving the bundle's typed commands.
+    // paged.pdf itself injects the rest (publish ADR 658): the command
+    // behind Object ▸ Convert Placed PDF to Vectors, and File ▸ Import ▸ PDF
+    // or AI as Vectors… with its command and its panel, the bundle's since
+    // 377878985 moved them out of the host — no exporter, no edit context.
     expect(live.pdfOther).toEqual({
-      panels: 0,
-      commands: 1,
+      panels: 1,
+      commands: 2,
       exporters: 0,
       editContexts: 0,
     });

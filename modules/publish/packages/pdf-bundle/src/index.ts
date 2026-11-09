@@ -37,6 +37,15 @@ export {
   IMPORT_PDF_RESULT_TYPE,
 } from "./commands";
 export type { PdfImportArgs } from "./commands";
+// File ▸ Import ▸ PDF or AI as Vectors… (publish ADR 658): the panel, its
+// command and its menu row.
+export {
+  contributeImportVectors,
+  makeImportVectorsPanel,
+  IMPORT_VECTORS_COMMAND,
+  IMPORT_VECTORS_MENU_PATH,
+  IMPORT_VECTORS_PANEL,
+} from "./vectors/import-panel";
 export { buildIdmlFromRasters } from "./idml-fallback";
 export type { PdfPageRaster } from "./idml-fallback";
 // The PDFium reader engine — editable reconstruction + the raster fallback.

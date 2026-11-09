@@ -187,18 +187,15 @@ test.describe("journey · Word inside paged", () => {
     await expect(status.locator('[data-word-status="page"]')).toContainText(
       /Page 1 of \d+/,
     );
-    await expect(status.locator('[data-word-status="words"]')).toContainText(
-      /\d+ words/,
-    );
+    // The word count left the status bar for the host's Info panel (Text
+    // section, c9d3e8111): one count for every module, not doc's own.
+    await expect(status.locator('[data-word-status="words"]')).toHaveCount(0);
 
     // KEYS — Cmd+B on "Plain" makes a bold run in the engine.
     await select(page, 0, 5);
     await expect(
       page.locator('[data-control-bar="contributed"] [data-word-home]'),
     ).toBeVisible({ timeout: 10_000 });
-    await expect(status.locator('[data-word-status="words"]')).toContainText(
-      /^1 of \d+ words/,
-    );
     await page.keyboard.press("Meta+b");
     await expect
       .poll(async () => {
