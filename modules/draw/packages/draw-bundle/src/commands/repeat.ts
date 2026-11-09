@@ -29,7 +29,7 @@
 // container part, per-leaf links, real inserted artwork) and share
 // nothing else: pattern translates tiles on a lattice, a repeat ROTATES
 // and REFLECTS, which is why the placement algebra is a full AFFINE per
-// instance and lives in `draw-geometry/src/repeat.ts`.
+// instance and lives in `vector-geometry/src/repeat.ts`.
 //
 // ---------------------------------------------- ONE BATCH. ONE UNDO.
 // Repeats were the FIRST bake in this repo to build in one undo step
@@ -188,7 +188,7 @@ import {
   type RepeatKind,
   type RepeatPlacement,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { stampDrawMetadata } from "./appearance-bake";
 import {

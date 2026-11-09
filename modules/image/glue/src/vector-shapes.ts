@@ -1,6 +1,6 @@
 // The SHAPE TOOLS' geometry (image ADR 476, WP5.11): Rectangle, Ellipse,
 // Polygon, Line and Custom Shape, drawn by a drag in image px. Pure
-// functions over draw's geometry (`@paged-media/draw-geometry`: the
+// functions over draw's geometry (`@paged-media/vector-geometry`: the
 // same rectangle, ellipse, polygon and SVG path code the draw module
 // draws with), so nothing here is a second copy of a shape.
 //
@@ -15,7 +15,7 @@ import {
   regularPolygonPath,
   starPath,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { geometryOf, type Geometry } from "./vector-engine";
 

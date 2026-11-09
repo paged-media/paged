@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Brush tools v0 — three gesture handlers over draw-tools' BrushMachine
+// Brush tools v0 — three gesture handlers over vector-tools' BrushMachine
 // (the pencil handler's shape: samples in, polyline preview, one async
 // commit flow on lift), composed ENTIRELY from existing engine ops (no
 // new offset geometry):
@@ -59,12 +59,12 @@ import type {
   MutationOutcome,
 } from "@paged-media/plugin-api";
 
-import type { NibProfile } from "@paged-media/draw-geometry";
+import type { NibProfile } from "@paged-media/vector-geometry";
 import {
   BrushMachine,
   type BrushCommit,
   type BrushSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import { insertPathMutationFor } from "./insert-path";
 import { createStrokePreview } from "./stroke-preview";

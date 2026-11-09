@@ -78,7 +78,7 @@ import {
   type EnvelopeBox,
   type EnvelopeNet,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 import { defineMessages } from "@paged-media/strings";
 
 import { registerCommand } from "../command-registry";

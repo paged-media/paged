@@ -1,0 +1,31 @@
+{
+  "name": "@paged-media/vector-tools",
+  "private": true,
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "description": "Internal host-agnostic vector tool state machines (pen, pencil, direct select, knife, scissors, width, reshape, distortion and more) over vector-geometry: points in, snapshots and plans out. Never published (docs/adr/PM-0002).",
+  "version": "0.1.0-canary.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --timeout 30000 --parallel --preload ../../../tooling/js/bun-test-setup.ts",
+    "bench": "bun ./test/region-machines.bench.ts"
+  },
+  "dependencies": {
+    "@paged-media/vector-geometry": "workspace:*",
+    "@paged-media/plugin-api": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "^4.10.2",
+    "typescript": "catalog:",
+    "@types/bun": "catalog:",
+    "mitata": "^1.0.34"
+  },
+  "files": [
+    "dist"
+  ]
+}

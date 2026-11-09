@@ -30,7 +30,7 @@
 //     stroke that live width profile (Uniform takes it off).
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
-import { WIDTH_PROFILE_PRESETS } from "@paged-media/draw-geometry";
+import { WIDTH_PROFILE_PRESETS } from "@paged-media/vector-geometry";
 import {
   About,
   font,
@@ -121,7 +121,7 @@ const OPTIONS_OF: Record<
   bristle: ["scalePct", "bristles", "bristleThicknessPct", "seed"],
 };
 
-/** The width profile library's names (draw-geometry's presets). */
+/** The width profile library's names (vector-geometry's presets). */
 const PROFILE_NAMES: Record<string, string> = defineMessages(
   "draw.widthProfiles",
   {

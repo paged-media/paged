@@ -126,7 +126,7 @@ import type {
   PluginMetadataEnvelope,
   SceneTreeNode,
 } from "@paged-media/plugin-api";
-import { applyAffine } from "@paged-media/draw-geometry";
+import { applyAffine } from "@paged-media/vector-geometry";
 import { labelKey } from "@paged-media/helpers";
 
 import manifest from "../../manifest.json";

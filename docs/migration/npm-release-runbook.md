@@ -213,7 +213,7 @@ again right before unpublishing:
 node tooling/release/retire-precheck.mjs          # or --json
 # the organization's grants per package (the owner's login, read-only):
 for p in data draw image pdf publish sheet web data-bundle draw-bundle image-glue sheet-bundle web-bundle \
-         data-host-model draw-geometry draw-tools image-manifest sheet-host-model web-model; do
+         data-host-model vector-geometry vector-tools image-manifest sheet-host-model web-model; do
   echo "== @paged-media/$p"; npm view "@paged-media/$p" maintainers; npm access list collaborators "@paged-media/$p"
 done
 ```
@@ -235,9 +235,9 @@ the scope, in any published version):
 | `image-glue` | 1 | 0 | dietz | — | allowed |
 | `sheet-bundle` | 1 | 0 | dietz | — | allowed |
 | `web-bundle` | 1 | 1 | dietz | — | allowed |
-| `draw-tools` | 1 | 4 | dietz | `draw-bundle` | after `draw-bundle` |
+| `vector-tools` | 1 | 4 | dietz | `draw-bundle` | after `draw-bundle` |
 | `data-host-model` | 1 | 0 | dietz | `data-bundle` | after `data-bundle` |
-| `draw-geometry` | 1 | 4 | dietz | `draw-bundle`, `draw-tools` | after both |
+| `vector-geometry` | 1 | 4 | dietz | `draw-bundle`, `vector-tools` | after both |
 | `image-manifest` | 1 | 1 | dietz | `image-glue` | after `image-glue` |
 | `sheet-host-model` | 1 | 1 | dietz | `sheet-bundle` | after `sheet-bundle` |
 | `web-model` | 1 | 1 | dietz | `web-bundle` | after `web-bundle` |
@@ -258,14 +258,14 @@ for p in draw image pdf publish data-bundle draw-bundle image-glue sheet-bundle 
   npm unpublish "@paged-media/$p" --force
 done
 # 2. what only the bundles depended on
-npm unpublish @paged-media/draw-tools --force
-for p in data-host-model draw-geometry image-manifest sheet-host-model web-model; do
+npm unpublish @paged-media/vector-tools --force
+for p in data-host-model vector-geometry image-manifest sheet-host-model web-model; do
   npm unpublish "@paged-media/$p" --force
 done
 # 3. data, sheet and web, only when the pre-check says their downloads allow it
 #    (otherwise: the fallback below)
 for p in draw image pdf publish data-bundle draw-bundle image-glue sheet-bundle web-bundle \
-         draw-tools data-host-model draw-geometry image-manifest sheet-host-model web-model; do
+         vector-tools data-host-model vector-geometry image-manifest sheet-host-model web-model; do
   printf '%s: ' "$p"; npm view "@paged-media/$p" version 2>&1 | tail -1
 done   # each: a 404
 ```
@@ -283,7 +283,7 @@ for p in data draw image pdf publish sheet web; do
   npm deprecate "@paged-media/$p" "$moved"
 done
 for p in data-bundle draw-bundle image-glue sheet-bundle web-bundle \
-         data-host-model draw-geometry draw-tools image-manifest sheet-host-model web-model; do
+         data-host-model vector-geometry vector-tools image-manifest sheet-host-model web-model; do
   npm deprecate "@paged-media/$p" "$moved"
 done
 ```

@@ -18,7 +18,7 @@
 
 //! visioncortex geometry → the engine's ANCHOR TRIPLE table.
 //!
-//! The engine (and draw-geometry's `AnchorTable`) speaks IDML
+//! The engine (and vector-geometry's `AnchorTable`) speaks IDML
 //! `PathPointType`: one on-curve `anchor` with an incoming `left` and an
 //! outgoing `right` handle, a corner being the case where both handles
 //! collapse onto the anchor. visioncortex speaks two other dialects —
@@ -63,7 +63,7 @@ pub struct Contour {
     /// Shoelace signed area over a flattened sampling of the contour, in
     /// px². SIGN = winding direction. Reported, not relied upon: the
     /// authoritative hole orientation is applied on the TS side by
-    /// draw-geometry's `orientForNonZeroHoles`, which re-winds by nesting
+    /// vector-geometry's `orientForNonZeroHoles`, which re-winds by nesting
     /// depth because the engine fills NON-ZERO.
     pub area: f64,
 }

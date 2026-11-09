@@ -28,7 +28,7 @@
 // heaviest colour" means to the reduction and the harmony assignment.
 // `None`, `Registration` and an unreadable ref are not colours to change.
 //
-// FOUR WAYS TO CHOOSE THE NEW COLOURS, all pure (`draw-geometry`'s
+// FOUR WAYS TO CHOOSE THE NEW COLOURS, all pure (`vector-geometry`'s
 // `color-harmony.ts`) and all deterministic:
 //   · HARMONY — a rule (complementary … tints) on the base colour (the
 //     payload's, else the group's heaviest chromatic colour), turned by
@@ -79,7 +79,7 @@ import {
   type HarmonyRule,
   type Rgb,
   type WeightedColor,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 import { defineMessages } from "@paged-media/strings";
 
 import { registerCommand } from "../command-registry";

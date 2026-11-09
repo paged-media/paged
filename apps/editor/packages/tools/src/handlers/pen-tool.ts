@@ -60,7 +60,7 @@ import type {
 } from "@paged-media/shell";
 import type { ElementId, PathAnchorsResult } from "@paged-media/client";
 
-import type { AnchorTable, Vec2 } from "@paged-media/draw/geometry";
+import type { AnchorTable, Vec2 } from "@paged-media/vector-geometry";
 import {
   PenMachine,
   penPlanMutation,
@@ -71,7 +71,7 @@ import {
   type PenPath,
   type PenPlan,
   type PenSnapshot,
-} from "@paged-media/draw/machines";
+} from "@paged-media/vector-tools";
 import { createHostSnapper } from "./snapper";
 
 import {

@@ -17,7 +17,7 @@
  */
 
 // THE LIQUIFY TOOLS — Warp, Twirl, Pucker, Bloat, Scallop, Crystallize
-// and Wrinkle: one host-routed shim over draw-tools' `LiquifyMachine`,
+// and Wrinkle: one host-routed shim over vector-tools' `LiquifyMachine`,
 // the kernel fixed per tool and every other option read from the tool's
 // own options (Illustrator's per-tool dialog: double-click the rail slot).
 //
@@ -42,12 +42,12 @@ import type {
   GestureHandler,
   ToolPreviewShape,
 } from "@paged-media/plugin-api";
-import type { LiquifyKind } from "@paged-media/draw-geometry";
+import type { LiquifyKind } from "@paged-media/vector-geometry";
 import {
   LiquifyMachine,
   type LiquifySnapshot,
   type LiquifyToolOptions,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   distortTargetsOn,

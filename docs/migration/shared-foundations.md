@@ -164,9 +164,9 @@ main at `4be5f0eba`:
 
 - **Commits:**
   - `f39c8bc43` one snapper for the Pen and Curvature: +533 / −432;
-  - `b14ba47f2` one Pencil, the host's, over draw-tools' `PencilMachine`: +878 / −873;
+  - `b14ba47f2` one Pencil, the host's, over vector-tools' `PencilMachine`: +878 / −873;
   - `12ae7e02c` comment only.
-- **Snapper.** `createSnapper(query)` in draw-tools is the only code that asks the engine to
+- **Snapper.** `createSnapper(query)` in vector-tools is the only code that asks the engine to
   snap; the editor's snapper and draw's Curvature are adapters over it.
   - Both TypeScript fallback resolvers are gone: the engine owns snapping (engine ADR 125,
     amended), and the tools and engine ship at one revision.
@@ -183,8 +183,8 @@ main at `4be5f0eba`:
   | Suite                    | Before | After | Why                                        |
   | ------------------------ | -----: | ----: | ------------------------------------------ |
   | editor tools             |    133 |   144 | option, closing and snapper tests added    |
-  | draw-tools               |    337 |   342 | new snapper spec                           |
-  | draw-geometry            |    681 |   680 | `pageTargets` removed                      |
+  | vector-tools               |    337 |   342 | new snapper spec                           |
+  | vector-geometry            |    681 |   680 | `pageTargets` removed                      |
   | draw-bundle              |   1816 |  1801 | the Pencil's tests moved to the host       |
   | headless `pencil.test.ts` |      — |     7 | new, against the real engine               |
 
@@ -201,7 +201,7 @@ main at `4be5f0eba`:
   | `sha256Hex` / `sha256HexPrefix`                          | slide, image, doc, sheet, data                                                                    |
   | base64, base64url and `data:` URLs                        | 13 functions in 10 files: web ×3, pdf ×2, data, image, the canvas live bridge, the repository sign-in, ai (moved in C12) |
   | `PT_PER_UNIT` / `parseLength`, `PX_PER_PT` / `PT_PER_PX` | the shell's copy of the SDK table, the length inputs' table, web's six constants                  |
-  | `hexToRgb` / `rgbToHex` / naive CMYK                      | ui's colour space, draw-geometry, image's colour state                                            |
+  | `hexToRgb` / `rgbToHex` / naive CMYK                      | ui's colour space, vector-geometry, image's colour state                                            |
   | `labelKey`, `asciiJson`, the `{ v, data }` envelope       | see below                                                                                         |
 
   - **sha256.** paged.data's persisted 128-bit content address stays the 32-digit prefix of the
@@ -227,7 +227,7 @@ main at `4be5f0eba`:
 
   | Suite                  | Tests     |
   | ---------------------- | --------- |
-  | draw-geometry          | 681       |
+  | vector-geometry          | 681       |
   | web-model              | 299       |
   | data-host-model        | 53        |
   | shell                  | 196 + 95  |

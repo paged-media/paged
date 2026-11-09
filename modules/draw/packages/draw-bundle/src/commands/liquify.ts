@@ -19,7 +19,7 @@
 // THE LIQUIFY FAMILY as a command — `liquifyStroke { kind, path, … }`:
 // the tool's gesture as data (a press at `path[0]`, a move per point, a
 // release at the last), run through the SAME machine the tool drives
-// (draw-tools `LiquifyMachine`) over the same targets (the selection's
+// (vector-tools `LiquifyMachine`) over the same targets (the selection's
 // paths on the page, or every path on it when nothing is selected), and
 // written the same way: every path the brush changed, re-fitted, in ONE
 // batch — one undo step. This is what the CLI, scripting and the
@@ -27,12 +27,12 @@
 // live preview, the dwell timer and the pointer.
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
-import { LIQUIFY_KINDS, type LiquifyKind } from "@paged-media/draw-geometry";
+import { LIQUIFY_KINDS, type LiquifyKind } from "@paged-media/vector-geometry";
 import {
   LIQUIFY_DEFAULTS,
   LiquifyMachine,
   type LiquifyToolOptions,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 import { defineMessages } from "@paged-media/strings";
 
 import { registerCommand } from "../command-registry";

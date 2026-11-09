@@ -41,7 +41,7 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { CanvasPointerEvent } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { planAnchorAdd } from "@paged-media/draw-tools";
+import { planAnchorAdd } from "@paged-media/vector-tools";
 
 import { createAnchorEditHandler } from "../../src/handlers/anchors";
 import { mutationFor } from "../../src";

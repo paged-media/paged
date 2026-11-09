@@ -61,7 +61,7 @@ import {
   type HarmonyRule,
   type Rgb,
   type WeightedColor,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { bootInterchange } from "./interchange-wasm";
 import { decodeRasterBytes } from "./io/raster-decode";

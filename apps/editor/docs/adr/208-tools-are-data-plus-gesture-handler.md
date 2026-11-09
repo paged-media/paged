@@ -33,7 +33,7 @@ draws its own preview and writes to the document only through the client.
 - The built-in tool set is its own package, `packages/tools`. The app passes it to
   `PagedShell` as a prop, and the shell registers each entry with `ToolRegistry.register`,
   the call a bundle's tool also ends in.
-- The pen and pencil handlers take their geometry from `@paged-media/draw/geometry`, the
+- The pen and pencil handlers take their geometry from `@paged-media/vector-geometry`, the
   published package of the drawing plugin.
 
 ## Evidence

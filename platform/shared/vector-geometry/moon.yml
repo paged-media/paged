@@ -1,0 +1,18 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# @paged-media/vector-geometry: the vector geometry of draw, image and the
+# editor's path tools (docs/adr/PM-0002), a private package of the root Bun
+# workspace. js-check and js-test are the inherited `bun run typecheck` and
+# `bun run test`.
+language: "typescript"
+layer: "library"
+stack: "frontend"
+tags: ["node", "shared"]
+
+project:
+  title: "platform/shared/vector-geometry"
+  description: "Beziers, compound paths, polygons, snapping, width and brush profiles, envelope, warp, repeat and the SVG readers; never published."
+
+dependsOn:
+  - id: "helpers"
+    scope: "production"

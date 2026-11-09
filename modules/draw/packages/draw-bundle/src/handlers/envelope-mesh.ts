@@ -31,7 +31,7 @@
 //
 // Each release is ONE write of the item's object stack: one undo step.
 // The overlay draws the mesh as the engine bends the box (the same patch
-// map, draw-geometry's `envelopePoint`), the nodes as squares and the
+// map, vector-geometry's `envelopePoint`), the nodes as squares and the
 // handles as dots on their lines.
 
 import type {
@@ -53,7 +53,7 @@ import {
   type Affine,
   type EnvelopeNet,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import {
   envelopeIndexOf,

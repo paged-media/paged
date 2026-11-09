@@ -41,7 +41,7 @@ import {
   nineSliceGuides,
   symbolismQuad,
   type NineSliceGuide,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import {
   engineSymbolOptions,

@@ -22,7 +22,7 @@
 // importer, which no longer lowers anything itself: draw ADR 364.)
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
-import type { AnchorTable } from "@paged-media/draw-geometry";
+import type { AnchorTable } from "@paged-media/vector-geometry";
 
 /** One `insertPath` per contour of `table` (the EXACT shape the
  *  pen/pencil commit emits): the engine's `insertPath` takes a single

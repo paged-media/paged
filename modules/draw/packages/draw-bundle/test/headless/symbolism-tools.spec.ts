@@ -35,7 +35,7 @@ import {
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { covers } from "@paged-media/test-kit";
-import type { Vec2 } from "@paged-media/draw-geometry";
+import type { Vec2 } from "@paged-media/vector-geometry";
 
 import {
   applyDefineSymbol,

@@ -9,9 +9,9 @@
 // it joins the shape (the PSD length record's operation and fill rule)
 // and its anchors in image px. `tableOf` / `geometryOf` turn it into
 // draw's `AnchorTable` and back, so the Pen and Direct Selection machines
-// (`@paged-media/draw-tools`) edit it unchanged.
+// (`@paged-media/vector-tools`) edit it unchanged.
 
-import type { AnchorTable, AnchorTriple } from "@paged-media/draw-geometry";
+import type { AnchorTable, AnchorTriple } from "@paged-media/vector-geometry";
 
 /** The engine's decoded-handle shape (engine.ts `DecodedHandleWasm`). */
 interface HandleWasm {

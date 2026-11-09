@@ -55,7 +55,7 @@
 //   same inputs are selected front to back.
 //
 //   FIXED DEFECT (parity) — nesting three levels deep. The bundle used to
-//   re-wind by nesting depth, alternating (draw-geometry's
+//   re-wind by nesting depth, alternating (vector-geometry's
 //   `makeCompoundTable`), which reproduces EVEN-ODD: its four-deep
 //   compound painted 31200 pt² where Illustrator's paints 31600 pt² — the
 //   20 x 20 core a hole here and solid there. This case was `it.failing`.

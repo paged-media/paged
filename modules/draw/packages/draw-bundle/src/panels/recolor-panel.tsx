@@ -40,7 +40,7 @@ import {
   wheelPoint,
   type HarmonyRule,
   type Rgb,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 import {
   About,
   color,

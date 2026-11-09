@@ -8,8 +8,6 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./geometry": "./src/geometry.ts",
-    "./machines": "./src/machines.ts",
     "./trace-worker": "./src/trace-worker.ts",
     "./manifest.json": "./manifest.json"
   },
@@ -21,8 +19,6 @@
   },
   "devDependencies": {
     "@paged-media/canvas-wasm": "workspace:*",
-    "@paged-media/draw-geometry": "workspace:*",
-    "@paged-media/draw-tools": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
     "@testing-library/dom": "catalog:",
@@ -50,9 +46,11 @@
     "directory": "modules/draw/packages/draw-bundle"
   },
   "dependencies": {
-    "@paged-media/strings": "workspace:*",
     "@paged-media/helpers": "workspace:*",
     "@paged-media/panel-kit": "workspace:*",
+    "@paged-media/strings": "workspace:*",
+    "@paged-media/vector-geometry": "workspace:*",
+    "@paged-media/vector-tools": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {

@@ -41,7 +41,7 @@
 //      OUTPUT endpoint the pointer spine drives).
 // The middle — buildToolPointer copying the fields, the kit forwarding
 // the event, the PenMachine recording pressure — is covered by green
-// unit tests (plugin-sdk gestures.spec.ts, draw-tools pen-machine
+// unit tests (plugin-sdk gestures.spec.ts, vector-tools pen-machine
 // .spec.ts). A live-drag pressure assertion needs the React UI load
 // path (or a virtual-pen WebDriver profile) and stays a manual check.
 

@@ -56,7 +56,7 @@ import type {
 import {
   LivePaintMachine,
   type LivePaintSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   BIND_LIVE_PAINT_FACE,

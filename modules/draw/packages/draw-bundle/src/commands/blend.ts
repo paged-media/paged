@@ -119,7 +119,7 @@
 //
 // ------------------------------------- CONSTRUCT DEPTH (WP6.6, three rows)
 // · DIFFERENT ANCHOR COUNTS BLEND. The keys are brought to ONE structure
-//   first (`draw-geometry`'s `matchContourSets`): the run with fewer
+//   first (`vector-geometry`'s `matchContourSets`): the run with fewer
 //   anchors gets more, split on its longest segments, so neither key's
 //   SHAPE changes; a closed run's start and direction are aligned to the
 //   other's; a key with fewer contours gets collapsed ones that grow out
@@ -185,7 +185,7 @@ import {
   type PathMetric,
   type Rgb,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { stampDrawMetadata } from "./appearance-bake";
 import { compoundPaintOf, type CompoundPaint } from "./compound-path";

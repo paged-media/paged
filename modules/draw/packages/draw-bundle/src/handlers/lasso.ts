@@ -25,7 +25,7 @@
 //   · "intersect" — THE DEFAULT. An element is selected when the lasso
 //     region touches its OUTLINE: some point of the outline lies inside
 //     the lasso, or some segment of it crosses a lasso edge
-//     (draw-geometry `polylineTouchesPolygon`). For the four path-bearing
+//     (vector-geometry `polylineTouchesPolygon`). For the four path-bearing
 //     kinds the outline is the element's real path — its anchor table,
 //     every contour flattened (`flattenAnchorRun`, open contours left
 //     open) and mapped through its item transform; for any other kind,
@@ -74,7 +74,7 @@ import {
   polylineTouchesPolygon,
   type Affine,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { leafIdsOf } from "../commands/select-same";
 import { supportsPathOps } from "../commands/path-ops";

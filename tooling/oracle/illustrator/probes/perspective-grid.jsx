@@ -22,7 +22,7 @@
 //     tooling/oracle/illustrator/probes/perspective-grid.jsx \
 //     packages/draw-bundle/test/fixtures/oracle/perspective-grid.illustrator.json
 //
-// The thing under test on our side is draw-geometry's perspective grid
+// The thing under test on our side is vector-geometry's perspective grid
 // (`src/warp/perspective-grid.ts`, `src/warp/homography.ts`): a plane of a
 // two-point grid is a HOMOGRAPHY, its ground lines run to a vanishing
 // point on one horizontal horizon shared by the left and right planes, and

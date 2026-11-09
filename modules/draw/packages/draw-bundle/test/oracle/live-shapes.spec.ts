@@ -44,7 +44,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { regularPolygonPath } from "@paged-media/draw-geometry";
+import { regularPolygonPath } from "@paged-media/vector-geometry";
 import { starAnchors } from "@paged-media/helpers";
 
 import { loadOracle, type Vec2 } from "./oracle";

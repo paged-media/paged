@@ -14,12 +14,13 @@
   },
   "dependencies": {
     "@paged-media/client": "workspace:*",
-    "@paged-media/draw": "workspace:*",
     "@paged-media/helpers": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
     "@paged-media/shell": "workspace:*",
-    "@paged-media/strings": "workspace:*"
+    "@paged-media/strings": "workspace:*",
+    "@paged-media/vector-geometry": "workspace:*",
+    "@paged-media/vector-tools": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=19.3",

@@ -22,7 +22,7 @@
 //     tooling/oracle/illustrator/probes/nine-slice.jsx \
 //     packages/draw-bundle/test/fixtures/oracle/nine-slice.illustrator.json
 //
-// The thing under test on our side is draw-geometry's `nineSlicePoint`
+// The thing under test on our side is vector-geometry's `nineSlicePoint`
 // (`src/nine-slice.ts`), the mapping the engine's renderer applies to a
 // scaled instance with guides (engine ADR 1039): corners keep their size,
 // edges stretch along their axis, the centre in both. Replayed by

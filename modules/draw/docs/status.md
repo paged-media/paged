@@ -55,8 +55,8 @@ canary added is under [Releases](#releases).
   between two open ends joins them with a straight segment, over one path's two ends closes
   it, over the overhangs of two crossing paths trims both at the crossing and joins them
   there). In the Shape flyout: **Flare** (two drags: size, then the rings' end; centre, halo, rays and rings
-  as one group). Each is one undo step. The pure halves are draw-geometry (`simplify-fit`,
-  `path-locate`, `path-erase`, `reshape`, `shaper`) and draw-tools (`ScrubMachine`,
+  as one group). Each is one undo step. The pure halves are vector-geometry (`simplify-fit`,
+  `path-locate`, `path-erase`, `reshape`, `shaper`) and vector-tools (`ScrubMachine`,
   `ReshapeMachine`, `FlareMachine`).
 - **Tool options.** Paintbrush, Blob Brush, Eraser, Width, Lasso Select, Reshape (falloff
   radius) publish their settings to the host's
@@ -64,9 +64,9 @@ canary added is under [Releases](#releases).
 - **Snapping.** Curvature asks the engine through `host.document.snapPoint`: the point
   snaps against every visible element's anchors, centres and outlines, the page, ruler
   guides and the grid, with the session's tolerance. It uses the snapper the host's Pen
-  uses (`createSnapper` in `draw-tools`), so both tools snap alike. Cmd turns snapping off.
+  uses (`createSnapper` in `vector-tools`), so both tools snap alike. Cmd turns snapping off.
   An engine that does not answer leaves the point unsnapped; there is no TypeScript
-  fallback resolver (ADR 358). `snapPoint` in `draw-geometry` stays for the editor's
+  fallback resolver (ADR 358). `snapPoint` in `vector-geometry` stays for the editor's
   Direct Selection, which snaps a dragged anchor locally before the engine answers.
 - **Stroke and fill.** Weight, colour, cap, dashes, arrowheads, corner radii, fill colour,
   tint, gradient angle and length are core frame properties, edited in the host's Stroke,
@@ -143,7 +143,7 @@ canary added is under [Releases](#releases).
   re-pointed; an object's tint is kept, so a tint of a spot stays a tint. The Color Guide
   is the host's since 2026-11-02 (a section of its Color Wheel panel: the fill's harmony and
   its shades / tints, warm / cool and vivid / muted variations; a click fills the selection,
-  Alt-click strokes). The colour math stays draw-geometry's `color-harmony.ts`, shared with
+  Alt-click strokes). The colour math stays vector-geometry's `color-harmony.ts`, shared with
   Recolor Artwork.
 - **Interchange** ([ADR 364](adr/364-interchange-rides-the-engines-doors.md)). SVG in
   (`.svg`) and out (the selection) through the engine's `paged-svg`; DXF in (`.dxf`) and
@@ -503,7 +503,7 @@ Recolouring a raster is pixel work and is not registered.
 - A Pen tool, Direct Selection, Group and Ungroup, Delete, Nudge, clipping masks and a
   Layers panel: these are the host's
   ([ADR 352](adr/352-basic-operations-belong-to-the-host.md)). The host's Pen and Direct
-  Selection drive `PenMachine` and `DirectSelectMachine` from `packages/draw-tools`.
+  Selection drive `PenMachine` and `DirectSelectMachine` from `packages/vector-tools`.
 - A content type or rendering of its own ([ADR 351](adr/351-shapes-are-native-page-items.md)).
 - A pattern as a paint (a swatch), and a clipping mask over a group of items. Nesting into
   a container is used only for a repeat's clipping.
@@ -527,4 +527,4 @@ leaves the version unchanged publishes nothing.
 | 0.1.0-canary.17 | 2026-10-11 | The panel pass: one-sentence intros, "About" sections, own icons, a second click to delete a style or symbol, refusals shown in the panel. The Stroke and Fill panels are no longer contributed; the host's panels carry their rows.                                                                                                        |
 | 0.1.0-canary.16 | 2026-10-11 | The object model (ten kinds, 97 typed command twins) and a schema panel of its property rows (named Draw settings since canary.17); engine protocol 71 (canvas-wasm 0.71.1). Peers `>=0.2.45-canary.0`.                                                                                                                                     |
 | 0.1.0-canary.15 | 2026-10-05 | Curvature snaps through the engine (`document.snapPoint`, protocol 67), the plugin-side snapper as the fallback.                                                                                                                                                                                                                            |
-| 0.1.0-canary.14 | 2026-10-05 | The published type declarations inline `draw-geometry` and `draw-tools`.                                                                                                                                                                                                                                                                    |
+| 0.1.0-canary.14 | 2026-10-05 | The published type declarations inline `vector-geometry` and `vector-tools`.                                                                                                                                                                                                                                                                |

@@ -19,7 +19,7 @@
 
 // Editor-ops — the Pencil tool's gesture handler: THE one Pencil
 // (modules/draw ADR 359). paged.draw's own Pencil was retired into this
-// one; the stroke logic is draw-tools' `PencilMachine`, the same tested
+// one; the stroke logic is vector-tools' `PencilMachine`, the same tested
 // machine the bundle's brushes compose, so this file is a thin shim
 // (the Pen / `PenMachine` division of labour, draw ADR 350).
 //
@@ -56,8 +56,8 @@ import type {
   ToolOptionField,
 } from "@paged-media/shell";
 
-import { strokeWidthFromPressure } from "@paged-media/draw/geometry";
-import { PencilMachine, type PencilSnapshot } from "@paged-media/draw/machines";
+import { strokeWidthFromPressure } from "@paged-media/vector-geometry";
+import { PencilMachine, type PencilSnapshot } from "@paged-media/vector-tools";
 
 import {
   beginPageDrag,

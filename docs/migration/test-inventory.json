@@ -11802,7 +11802,7 @@
      "once per file": 1
     },
     {
-     "file": "modules/draw/packages/draw-geometry/test/svg-path.property.spec.ts",
+     "file": "platform/shared/vector-geometry/test/svg-path.property.spec.ts",
      "kinds": [
       "core engine"
      ],
@@ -11810,7 +11810,7 @@
      "once per file": 2
     },
     {
-     "file": "modules/draw/packages/draw-tools/test/pen-machine-existing-paths.spec.ts",
+     "file": "platform/shared/vector-tools/test/pen-machine-existing-paths.spec.ts",
      "kinds": [
       "core engine"
      ],
