@@ -143,17 +143,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
       // ── the pointer lane: marquee, then quick selection ──────────
       await fitPageForGesture(ctx, page);
-      // A gesture that lands no coverage is driven once more before the
-      // page falls back: on a loaded runner the first one can arrive
-      // while the tool is still arming.
+      // A gesture that lands no coverage is driven again before the page
+      // falls back: on a loaded runner (a build seen at 81 s against the
+      // usual 26 s) two attempts of 10 s each were not enough, the page
+      // took the select-all fallback and dropped its three mask rows, so
+      // two identical builds claimed 194 and 191 rows. Each retry re-fits
+      // the camera, which a slow frame can have left mid-flight.
       const gesture = async (
         tool: string,
         points: Array<[number, number]>,
       ): Promise<number | null> => {
-        for (let attempt = 0; attempt < 2; attempt++) {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (attempt > 0) await fitPageForGesture(ctx, page);
           await armTool(ctx, tool);
           await strokeOnPage(ctx, page, points);
-          const cov = await awaitCoverage(ctx, 10_000);
+          const cov = await awaitCoverage(ctx, 20_000);
           if (cov !== null) return cov;
         }
         return null;
