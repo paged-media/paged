@@ -19,7 +19,9 @@
 // source, so it is rendered here, in the editor's DOM lanes (plain and
 // compiled): the first view, a host without a file picker, a cancelled pick.
 // Reading and placing a real PDF is the e2e (tests/e2e/pdf-vectors.spec.ts)
-// and the bundle's headless specs (place-vectors.spec.ts).
+// and the bundle's headless specs (place-vectors.spec.ts). Not under
+// test/panels: that folder is the host's built-in panels (registry.dom.test
+// holds it to BUILT_IN_PANELS), and this panel is the bundle's.
 
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
