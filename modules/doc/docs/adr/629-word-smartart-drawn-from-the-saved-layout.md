@@ -126,3 +126,6 @@ Evidence: `docx-lower` `shape_geom::the_line_stops_where_powerpoint_stops_it` (2
 `a_line_is_cut_under_its_heads_and_a_closed_outline_is_not` and the open arrow's corners;
 `docx-conformance` `shapes`: the arrow's line stops 10.125 pt (`5 x 2.25 - 1.125`) short of its
 large triangle's tip and keeps its point under the oval.
+
+Word 16 agrees: the `shapes` fixture opened in Word and exported to PDF draws that arrow's line
+ending 10.12 pt short of the triangle's tip (10.125 predicted) and starting at the oval's centre.
