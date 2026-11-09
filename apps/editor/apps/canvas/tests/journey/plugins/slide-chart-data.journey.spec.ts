@@ -141,7 +141,21 @@ test.describe("paged.slide: live chart data", () => {
     test.setTimeout(120_000);
     const designer = new Designer(page);
     await designer.open();
-    await expect.poll(() => pageCount(page), { timeout: 25_000 }).toBe(1);
+    // The full editor boots with no document (the slide profile opened a
+    // blank deck, which is what a wait for one page measured until
+    // 0e64bf4ce left that profile): ready is paged.slide's importer.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              !!(
+                globalThis as unknown as Canvas
+              ).__canvas.registries.importers?.resolve("charts.pptx"),
+          ),
+        { timeout: 25_000 },
+      )
+      .toBe(true);
     const bytes = [...readFileSync(CHARTS_FIXTURE)];
     await page.evaluate(async (bytes) => {
       const reg = (globalThis as unknown as Canvas).__canvas.registries
