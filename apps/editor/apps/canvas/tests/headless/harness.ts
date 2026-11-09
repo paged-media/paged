@@ -152,6 +152,12 @@ import {
   CORNER_DIAGNOSTIC_SOURCE,
 } from "../../src/corner-commands";
 import {
+  buildTextFormatCommands,
+  TEXT_FORMAT_DIAGNOSTIC_SOURCE,
+  TEXT_FORMAT_KEYBINDINGS,
+  TEXT_FORMAT_MENU_ITEMS,
+} from "../../src/text-format-commands";
+import {
   buildPathfinderCommands,
   PATHFINDER_DIAGNOSTIC_SOURCE,
 } from "../../src/pathfinder-commands";
@@ -1011,6 +1017,18 @@ export async function createHeadlessEditor(
       ]),
     () => problemsSink.clear(CORNER_DIAGNOSTIC_SOURCE),
   );
+  // `paged.text.*` on the live text selection, as mount.tsx registers them.
+  const textFormatCommands = buildTextFormatCommands(
+    {
+      client,
+      getSelection: () => state.contentSelection.contentSelection,
+    },
+    (message) =>
+      problemsSink.publish(TEXT_FORMAT_DIAGNOSTIC_SOURCE, "text", [
+        { severity: "error", message, source: "text" },
+      ]),
+    () => problemsSink.clear(TEXT_FORMAT_DIAGNOSTIC_SOURCE),
+  );
   const appearanceCommands = buildAppearanceCommands(
     { client: objectDeps.client, getSelection: objectDeps.getSelection },
     (message) =>
@@ -1118,6 +1136,7 @@ export async function createHeadlessEditor(
       ...objectCommands,
       ...pathfinderCommands,
       ...cornerCommands,
+      ...textFormatCommands,
       ...appearanceCommands,
       ...strokeDashCommands,
       ...insertCommands,
@@ -1152,6 +1171,7 @@ export async function createHeadlessEditor(
       ...REFLECT_MENU_ITEMS,
       ...BATCH_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
+      ...TEXT_FORMAT_MENU_ITEMS,
     ].map((m) => registries.menus.register(m)),
     ...[
       ...APP_KEYBINDINGS,
@@ -1160,6 +1180,7 @@ export async function createHeadlessEditor(
       ...CLIPBOARD_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,
+      ...TEXT_FORMAT_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k)),
   ];
 

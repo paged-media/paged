@@ -220,6 +220,17 @@ test.describe("WP4.10 — colour for the raster context", () => {
     await expect(panel).toBeVisible();
     await panel.locator('[data-mixer-space="RGB"]').click();
     const hex = panel.locator("[data-mixer-hex]");
+    // The hex field is keyed by the engine's computed colour, which answers
+    // asynchronously: typed before that answer lands, the field remounts
+    // under the typing and Enter commits the old colour (a flake seen on CI,
+    // #000000). Type once the field shows the computed colour.
+    const preview = panel.locator("[data-mixer-preview]");
+    await expect
+      .poll(async () => {
+        const title = (await preview.getAttribute("title")) ?? "";
+        return title !== "" && (await hex.inputValue()) === title.slice(1);
+      })
+      .toBe(true);
     await hex.fill("00ff00");
     await hex.press("Enter");
     // The verdict is the engine's, against the document's CMYK working

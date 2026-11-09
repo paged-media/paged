@@ -701,7 +701,7 @@ function PluginBundles() {
     // Extensions ADR 1101: the comment pins ask the registry where a module's
     // address (a sheet's cell) points.
     if (hostOptions.shared.commentAnchors)
-      setCommentAnchorLookup(hostOptions.shared.commentAnchors);
+      setCommentAnchorLookup(scope, hostOptions.shared.commentAnchors);
     // Editor ADR 290: the ML service registers its providers into the ML
     // backend every bundle shares (ml.*@1), Settings ▸ Models reads it, and
     // scripts reach generation through paged.ml.generate / paged.ml.edit.

@@ -19,6 +19,8 @@
 
 import { describe, expect, test } from "bun:test";
 
+import { covers } from "@paged-media/test-kit";
+
 import {
   TEXT_FORMAT_MENU_ITEMS,
   TEXT_FORMAT_VERBS,
@@ -164,5 +166,93 @@ describe("the host text-format verbs", () => {
     expect(
       TEXT_FORMAT_MENU_ITEMS.every((m) => m.path.startsWith("Type/Format/")),
     ).toBe(true);
+  });
+
+  test("every command writes its verb's property over the selection", async () => {
+    covers(
+      "command:paged.text.bold",
+      "command:paged.text.italic",
+      "command:paged.text.underline",
+      "command:paged.text.strikethrough",
+      "command:paged.text.subscript",
+      "command:paged.text.superscript",
+      "command:paged.text.allCaps",
+      "command:paged.text.smallCaps",
+      "command:paged.text.growFont",
+      "command:paged.text.shrinkFont",
+      "command:paged.text.alignLeft",
+      "command:paged.text.alignCenter",
+      "command:paged.text.alignRight",
+      "command:paged.text.justify",
+      "command:paged.text.increaseIndent",
+      "command:paged.text.decreaseIndent",
+      "command:paged.text.lineSpacing1",
+      "command:paged.text.lineSpacing15",
+      "command:paged.text.lineSpacing2",
+    );
+    // What each command writes, from a plain 10 pt left-aligned paragraph.
+    const expected: Record<string, [string, unknown]> = {
+      bold: ["characterFontStyle", { type: "text", value: "Bold" }],
+      italic: ["characterFontStyle", { type: "text", value: "Italic" }],
+      underline: ["characterUnderline", { type: "bool", value: true }],
+      strikethrough: ["characterStrikethru", { type: "bool", value: true }],
+      subscript: ["characterPosition", { type: "text", value: "Subscript" }],
+      superscript: [
+        "characterPosition",
+        { type: "text", value: "Superscript" },
+      ],
+      allCaps: ["characterCase", { type: "text", value: "AllCaps" }],
+      smallCaps: ["characterCase", { type: "text", value: "SmallCaps" }],
+      growFont: ["characterFontSize", { type: "length", value: 10.5 }],
+      shrinkFont: ["characterFontSize", { type: "length", value: 9 }],
+      alignLeft: [
+        "paragraphJustification",
+        { type: "text", value: "LeftAlign" },
+      ],
+      alignCenter: [
+        "paragraphJustification",
+        { type: "text", value: "CenterAlign" },
+      ],
+      alignRight: [
+        "paragraphJustification",
+        { type: "text", value: "RightAlign" },
+      ],
+      justify: [
+        "paragraphJustification",
+        { type: "text", value: "LeftJustified" },
+      ],
+      increaseIndent: ["paragraphLeftIndent", { type: "length", value: 36 }],
+      decreaseIndent: ["paragraphLeftIndent", { type: "length", value: 0 }],
+      lineSpacing1: ["characterLeading", { type: "length", value: 12 }],
+      lineSpacing15: ["characterLeading", { type: "length", value: 18 }],
+      lineSpacing2: ["characterLeading", { type: "length", value: 24 }],
+    };
+    for (const verb of TEXT_FORMAT_VERBS) {
+      const { deps, mutations } = fake(
+        { storyId: "u1", start: 0, end: 5 },
+        {
+          characterFontStyle: "Regular",
+          characterUnderline: false,
+          characterStrikethru: false,
+          characterPosition: "Normal",
+          characterCase: "Normal",
+          characterFontSize: 10,
+          paragraphJustification: "LeftAlign",
+          paragraphLeftIndent: 0,
+        },
+      );
+      const reported: string[] = [];
+      const command = buildTextFormatCommands(
+        deps,
+        (m) => reported.push(m),
+        () => {},
+      ).find((c) => c.id === `paged.text.${verb}`)!;
+      await command.handler(undefined as never);
+      expect({ verb, reported }).toEqual({ verb, reported: [] });
+      expect({
+        verb,
+        writes: mutations.map((m) => [m.args.path, m.args.value]),
+      }).toEqual({ verb, writes: [expected[verb]!] });
+    }
   });
 });

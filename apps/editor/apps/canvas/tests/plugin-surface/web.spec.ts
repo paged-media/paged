@@ -643,12 +643,16 @@ test.describe("plugin surface · paged.web", () => {
     // type narrowing its AUTHORING tools has no business hiding how you
     // look at things, and Direct Selection in particular is what Cmd-hold
     // spring-loads — hiding it would activate a tool with no slot.
-    for (const t of ["paged.tool.type", "paged.tool.pen"]) {
-      await expect(
-        page.locator(`[data-tool-rail="ready"] [data-tool="${t}"]`),
-        `${t} should be hidden inside the webFrame context, not dimmed`,
-      ).toHaveCount(0);
-    }
+    await expect(
+      page.locator(`[data-tool-rail="ready"] [data-tool="paged.tool.type"]`),
+      `paged.tool.type should be hidden inside the webFrame context, not dimmed`,
+    ).toHaveCount(0);
+    // The context-shared host tools stay (editor ADR 311, amended in
+    // 91ef5dcf8): the Pen draws page paths beside any module's content.
+    await expect(
+      page.locator(`[data-tool-rail="ready"] [data-tool="paged.tool.pen"]`),
+      "the Pen is shared with every context",
+    ).toHaveAttribute("data-applies", "here");
     for (const t of ["paged.tool.select", "paged.tool.hand"]) {
       await expect(
         page.locator(`[data-tool-rail="ready"] [data-tool="${t}"]`),

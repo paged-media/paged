@@ -173,7 +173,7 @@ export function CommentsPanel() {
       contentSelection,
       elementSelection as readonly { kind?: string; id?: string }[],
       meta?.activePage ?? null,
-      selectedCommentAddress,
+      (item) => selectedCommentAddress(scope, item),
     );
     if (!at) return;
     void write(
