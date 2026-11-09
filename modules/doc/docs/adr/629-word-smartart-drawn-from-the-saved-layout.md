@@ -106,3 +106,12 @@ reader kept the box and dropped both turns, so the text of every turned shape st
   degrees, read and lowered); `docx-skeleton` `body_native` (the ellipse's text frame carries the
   quarter turn, the others none); `test/headless/smartart.spec.ts` (real engine: the turned
   ellipse's white text ink stands taller than it is wide); `docx-conformance` `wordart`.
+- **Oracle (Word 16, 2026-11-09).** A document of three diagrams seeded with data models and
+  Word's own layout definitions (horizontal multi-level hierarchy, manual-operation list,
+  vertical chevron list), laid out and saved by Word and exported as PDF: Word's saved drawing
+  states the turns as read here (the hierarchy's root `rot="16200000"` and a text box without
+  `rot`; the manual-operation shapes `rot="16200000"` with text boxes `rot="5400000"`; the chevrons
+  `rot="5400000"` with text boxes `rot="-5400000"`), and its PDF draws the root's text turned and
+  the others upright, as PowerPoint does (slide's `rotated-text` fixture). The `wordart` fixture in
+  Word: both boxes and their bent text turned by their `rot` about the box's centre. The seed is
+  not kept (it copies Word's layout definitions); the comparison was by eye on the PDFs.

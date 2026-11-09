@@ -154,4 +154,5 @@ turned 30 degrees, a wave turned -20 degrees, authored by
 on the turn of both boxes and their bent text; the wave matches closely. The arch follows the box's
 turn, but PowerPoint sets the text along part of the arc at its own length while ours stretches it
 over the whole half ellipse: the preset's form, not the turn (still the open "measured match").
-Word: see doc ADR 629's amendment for the probe of the `wordart` fixture.
+Word 16 (the `wordart` fixture of `docx-conformance`, exported as PDF): both boxes turned about
+their centre with their bent text, as here (doc ADR 629, amendment 2026-11-09).
