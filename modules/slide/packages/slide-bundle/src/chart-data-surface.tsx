@@ -66,8 +66,14 @@ export function makeChartDataSurface(
     React.useEffect(() => {
       if (small && presentation === "frame" && canFullScreen())
         requestPresentation("fullscreen");
-      rootRef.current?.focus();
     }, [small, presentation, requestPresentation]);
+    // Keys go to the sheet from the start. Focused once per presentation,
+    // not on every render: a host that hands a new `requestPresentation`
+    // each render would otherwise pull focus out of the grid's cell editor
+    // (its blur commits and closes it).
+    React.useEffect(() => {
+      rootRef.current?.focus();
+    }, [presentation]);
     // Esc the grid did not take leaves full screen, then the chart (its
     // edits kept, as PowerPoint keeps them when its sheet closes).
     const onKey = (e: React.KeyboardEvent) => {

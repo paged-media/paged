@@ -132,6 +132,12 @@ describe("[plugin-slide.charts] the chart data sheet", () => {
     const view = render(<Surface {...p} />);
     expect(view.container.querySelector("[data-test-grid]")).not.toBeNull();
     expect(seen.at(-1)).toEqual({ width: 400, height: 216 });
+    // A re-render with a new requestPresentation (hosts hand a new one)
+    // leaves the focus in the grid's cell editor.
+    const cellEditor = view.getByLabelText("B2");
+    cellEditor.focus();
+    view.rerender(<Surface {...p} requestPresentation={() => {}} />);
+    expect(document.activeElement).toBe(cellEditor);
     // An Esc the grid took (its cell editor) does not leave the chart.
     fireEvent.keyDown(view.getByLabelText("B2"), { key: "Escape" });
     expect(calls).toEqual([]);
