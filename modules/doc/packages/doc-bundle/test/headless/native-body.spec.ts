@@ -357,8 +357,15 @@ describe.skipIf(!docxPresent)("doc headless — native body (ADR 625)", () => {
       expect(native.endnotes).toEqual(old.endnotes);
       // Where nothing keeps one, no paragraph names a style the lowering
       // invented for direct formatting.
-      // (A picture's line keeps the style made for its pitch, ADR 625.)
-      if (MUST_OPEN.includes(name) && name !== "picture-effects.docx") {
+      // (A picture's line keeps the style made for its pitch, ADR 625; so
+      // does the line of an inline chart or SmartArt, doc ADR 627
+      // amendment 3.)
+      const objectLines = [
+        "picture-effects.docx",
+        "charts.docx",
+        "smartart.docx",
+      ];
+      if (MUST_OPEN.includes(name) && !objectLines.includes(name)) {
         expect(native.paras.some((p) => p.style?.includes("docx-auto"))).toBe(
           false,
         );
