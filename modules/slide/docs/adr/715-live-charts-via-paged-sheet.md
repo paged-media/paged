@@ -86,3 +86,10 @@ a chart model bound to cells by the series' `c:f` formulas, and chart geometry (
   loaded for it.
 - Office's default chart style now strokes a line series that has no line of its own (2.25 pt,
   its automatic colour, round caps); before, such a line was not drawn.
+
+## Note (2026-11-09)
+
+The chart data sheet's grid (`chart-surface.tsx`) and the slide wasm's cell entry are replaced by
+paged.sheet's grid and engine, opened through the workbook door (extensions ADR 1102); the
+linked sheet crates stay for reading, recalculating, drawing and writing chart workbooks. See
+ADR 724 amendment 1.

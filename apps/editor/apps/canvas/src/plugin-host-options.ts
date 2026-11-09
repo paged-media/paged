@@ -54,6 +54,7 @@ import type {
 } from "@paged-media/plugin-sdk";
 import {
   createActionRegistry,
+  createWorkbookEditorRegistry,
   createDataProviderRegistry,
   createDataRegistry,
   createCommentAnchorRegistry,
@@ -293,6 +294,11 @@ export function createEditorHostOptions(
   // canvas's comment pins ask it where a module's address (a sheet's cell)
   // points, and every bundle host contributes into it.
   const commentAnchors = createCommentAnchorRegistry();
+  // Extensions ADR 1102: the ONE workbook editor registry. paged.sheet
+  // offers its grid there; paged.slide opens a chart's workbook in it (the
+  // chart data sheet), so a chart's data is edited on the sheet's own grid
+  // and engine.
+  const workbookEditors = createWorkbookEditorRegistry();
 
   const shared: Omit<CreateBundleHostOptions, "console"> = {
     shell,
@@ -320,6 +326,8 @@ export function createEditorHostOptions(
     ml,
     // Flips supports("contribute.commentAnchor@1").
     commentAnchors,
+    // Flips supports("workbooks@1") and supports("contribute.workbookEditor@1").
+    workbookEditors,
     // ADR 023 phase A/C — the app's ONE binding-provider registry (host
     // panels read the same instance).
     bindingProviders: deps.bindingProviders,

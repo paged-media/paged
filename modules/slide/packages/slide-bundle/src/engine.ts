@@ -225,15 +225,6 @@ export interface LiveCharts {
     origin: "embedded" | "synthesized",
   ): string;
   grid(part: string): string;
-  /** Enter a cell (`=…` a formula); answers the grid. Throws when the
-   *  workbook refuses the input. */
-  enter(
-    part: string,
-    sheet: string,
-    row: number,
-    col: number,
-    input: string,
-  ): string;
   /** The workbook as an `.xlsx`. */
   workbook(part: string): Uint8Array;
   /** The frame `shapeId` of `slidePart` redrawn in the box x, y, w, h (pt). */

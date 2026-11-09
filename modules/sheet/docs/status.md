@@ -488,6 +488,11 @@ cli-sheet.spec.ts` runs placement, a view and chart delete through `paged-node i
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.
+- **The workbook editor of other bundles** (extensions ADR 1102). The grid and engine edit a
+  workbook another bundle keeps (a chart's data in paged.slide) through the workbook door: each
+  open is a detached session (nothing is persisted, the document's changes, saves and comments are
+  not followed), shown as the grid panel's view at the consumer's size with sheet tabs and the
+  consumer's ranges tinted; the consumer takes the edited workbook back as XLSX bytes.
 
 ### Function coverage
 

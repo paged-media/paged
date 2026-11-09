@@ -514,28 +514,14 @@ impl LiveCharts {
             .ok_or_else(|| JsError::new(&format!("chart {part} is not live")))
     }
 
-    /// The chart's workbook as the data grid shows it (JSON
-    /// `{ sheets: GridSheet[], origin }`).
+    /// The chart's workbook and the cells its series read (JSON
+    /// `{ sheets: GridSheet[], origin }`). The cells are edited in
+    /// paged.sheet's grid through the workbook door (extensions ADR 1102);
+    /// `open` takes the edited bytes back.
     pub fn grid(&mut self, part: &str) -> Result<String, JsError> {
         let book = self.book(part)?;
         let v = serde_json::json!({ "sheets": book.grid(), "origin": book.origin() });
         Ok(v.to_string())
-    }
-
-    /// Enter `input` into a cell of the chart's workbook (`=…` a formula).
-    /// Answers the grid.
-    pub fn enter(
-        &mut self,
-        part: &str,
-        sheet: &str,
-        row: u32,
-        col: u32,
-        input: &str,
-    ) -> Result<String, JsError> {
-        self.book(part)?
-            .enter(sheet, row, col, input)
-            .map_err(|e| JsError::new(&e))?;
-        self.grid(part)
     }
 
     /// The chart's workbook as an `.xlsx`.

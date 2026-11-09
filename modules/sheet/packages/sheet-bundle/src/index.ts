@@ -142,5 +142,10 @@ export {
   touchesSelection,
 } from "./binding-provider/invalidation";
 export { makeWorkbookPanel } from "./panels/workbook-panel";
-export { makeGridPanel } from "./panels/grid-panel";
+export { makeGridPanel, makeWorkbookGrid } from "./panels/grid-panel";
+export {
+  WORKBOOK_EDITOR_ID,
+  contributeWorkbookEditor,
+  workbookEditor,
+} from "./workbook-editor";
 export { makeDatasetsPanel } from "./panels/datasets-panel";

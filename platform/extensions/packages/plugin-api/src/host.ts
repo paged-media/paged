@@ -87,6 +87,10 @@ import type {
 import type { ClipboardSurface } from "./clipboard.js";
 import type { MlSurface } from "./ml.js";
 import type { CommentAnchorContribution, CommentsSurface } from "./comments.js";
+import type {
+  WorkbookEditorContribution,
+  WorkbooksSurface,
+} from "./workbooks.js";
 import type { MutationInput } from "./mutations.js";
 import type { PluginManifest, WasmArtifact } from "./manifest.js";
 import type { SchemaPanelContribution } from "./panel-schema.js";
@@ -516,6 +520,10 @@ export interface ContributionSurface {
    *  `supports("contribute.commentAnchor@1")`: true when the host reads
    *  the resolvers; otherwise a no-op. */
   commentAnchor(contribution: CommentAnchorContribution): Disposable;
+  /** Offer a surface that edits a workbook other bundles hand over
+   *  (extensions ADR 1102). Probe `supports("contribute.workbookEditor@1")`:
+   *  true when the host shares the registry; otherwise a no-op. */
+  workbookEditor(contribution: WorkbookEditorContribution): Disposable;
   /**
    * Register an EDIT CONTEXT (W3.2, closes B-02): a double-click (or
    * programmatic) entry on a content type that pushes a scoped context
@@ -3847,6 +3855,12 @@ export interface BundleHost {
    *  `capabilities.document.read`; a write without
    *  `capabilities.document.write` answers `{ ok: false, reason }`. */
   readonly comments: CommentsSurface;
+  /** The WORKBOOK door (extensions ADR 1102): open a workbook's bytes in
+   *  the editor another bundle offers (paged.sheet's grid), mount its
+   *  surface, take the edited bytes back. Always present;
+   *  `supports("workbooks@1")` says the host shares the registry and
+   *  `available()` whether an editor is registered now. */
+  readonly workbooks: WorkbooksSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** ADR 025 — the local flight recorder. Probe `supports("journal@1")`
    *  before relying on it reaching a buffer; calling it is always safe. */

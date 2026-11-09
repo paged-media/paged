@@ -144,6 +144,10 @@ import {
   createCommentAnchorRegistry,
   type CommentAnchorBackend,
 } from "./doors-comments.js";
+import {
+  createWorkbookEditorRegistry,
+  type WorkbookEditorBackend,
+} from "./doors-workbooks.js";
 import { satisfiesApiVersion, API_VERSION } from "./version.js";
 import { mapBacking } from "./testing.js";
 import { createCoreObjects } from "./core-objects.js";
@@ -220,6 +224,7 @@ export interface HarnessOptions
       | "actions"
       | "ml"
       | "commentAnchors"
+      | "workbookEditors"
       | "objects"
       | "willSave"
       | "toolSettings"
@@ -548,6 +553,11 @@ export interface HeadlessHost {
    *  extensions ADR 1101): a bundle's resolvers land here; `resolve(item,
    *  address)` is what the host panel asks. */
   readonly commentAnchors: CommentAnchorBackend;
+  /** The SHARED workbook editor registry (`workbooks@1`, extensions ADR
+   *  1102): every bundle host here registers into and opens from it, so a
+   *  provider bundle and a consumer bundle loaded together meet; a test with
+   *  no provider registers `fakeWorkbookEditor()`. */
+  readonly workbookEditors: WorkbookEditorBackend;
   /** The will-save registry this host injected: `fire()` runs every
    *  bundle's `document.onWillSave` listener and awaits them, as a save
    *  would. */
@@ -1220,6 +1230,8 @@ export async function createHeadlessHost(
   const ml = options.ml ?? createMlRegistry();
   const commentAnchors =
     options.commentAnchors ?? createCommentAnchorRegistry();
+  const workbookEditors =
+    options.workbookEditors ?? createWorkbookEditorRegistry();
   const objects =
     options.objects ??
     createObjectRegistry({
@@ -1255,6 +1267,7 @@ export async function createHeadlessHost(
       actions,
       ml,
       commentAnchors,
+      workbookEditors,
       objects,
       willSave: options.willSave ?? willSave,
       toolSettings: options.toolSettings ?? toolSettings,
@@ -1490,6 +1503,7 @@ export async function createHeadlessHost(
     actions,
     ml,
     commentAnchors,
+    workbookEditors,
     willSave,
     toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {
