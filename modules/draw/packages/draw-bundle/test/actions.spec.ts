@@ -42,7 +42,7 @@ import {
   mapBacking,
   silentConsole as silent,
 } from "@paged-media/plugin-sdk";
-import { parseCssColor, parsePathData } from "@paged-media/draw-geometry";
+import { parseCssColor, parsePathData } from "@paged-media/vector-geometry";
 
 import { drawBundle } from "../src";
 import { DRAW_ACTION_IDS, recolorSvg } from "../src/actions";

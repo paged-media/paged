@@ -56,7 +56,7 @@ import {
   fitAffine,
   splitCompound,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { resolveTargetPage } from "../target-page";

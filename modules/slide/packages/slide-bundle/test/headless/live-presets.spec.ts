@@ -270,6 +270,99 @@ describe("[plugin-slide.live-presets] live presets and connectors", () => {
     );
   }, 120_000);
 
+  it("the host's Selection tool drags an adjust handle of the host handle set: one undo step", async () => {
+    const bytes = fixture("connectors");
+    const { h, host, exporter } = await open(bytes, "connectors");
+    expect(host.supports("overlay.handles.hostDrag@1")).toBe(true);
+    const { list } = await page0(host);
+    const rr = polygonOf(list, 2);
+    await host.selection.set([rr.id]);
+    // The handles are the bundle's handle set, drawn by the host.
+    const layer = () =>
+      h
+        .overlayLayers()
+        .find((l) => l.key === "media.paged.slide/handles:adjust")?.shapes ??
+      [];
+    await until(async () => layer().length === 1);
+    const handle = layer()[0] as {
+      kind: string;
+      pageId: string;
+      x: number;
+      y: number;
+    };
+    expect(handle.kind).toBe("handle");
+    expect(
+      h.selectionToolHandleAt(handle.pageId, [handle.x, handle.y]),
+    ).not.toBeNull();
+    expect(
+      h.dragWithSelectionTool(
+        handle.pageId,
+        [handle.x, handle.y],
+        [handle.x + 10, handle.y],
+      ),
+    ).toBe(true);
+    await until(async () =>
+      polygonOf((await page0(host)).list, 2).element.label.includes(
+        '"val 39259"',
+      ),
+    );
+    expect(radius(polygonOf((await page0(host)).list, 2).element)).toBeCloseTo(
+      42.4,
+      1,
+    );
+    const xml = zipText(
+      (await exporter.export())!.bytes,
+      "ppt/slides/slide1.xml",
+    );
+    expect(xml).toContain('<a:gd name="adj" fmla="val 39259"/>');
+    // The preview is gone once the drag is written.
+    await until(
+      async () =>
+        (h
+          .overlayLayers()
+          .find((l) => l.key === "media.paged.slide/adjustPreview")?.shapes
+          .length ?? 0) === 0,
+    );
+    await host.document.undo();
+    expect(radius(polygonOf((await page0(host)).list, 2).element)).toBeCloseTo(
+      32.4,
+      1,
+    );
+  }, 120_000);
+
+  it("a press off the handles is the host's, and a cancelled drag writes nothing", async () => {
+    const bytes = fixture("connectors");
+    const { h, host } = await open(bytes, "connectors");
+    const { list } = await page0(host);
+    const rr = polygonOf(list, 2);
+    await host.selection.set([rr.id]);
+    const layer = () =>
+      h
+        .overlayLayers()
+        .find((l) => l.key === "media.paged.slide/handles:adjust")?.shapes ??
+      [];
+    await until(async () => layer().length === 1);
+    const handle = layer()[0] as { pageId: string; x: number; y: number };
+    expect(
+      h.dragWithSelectionTool(
+        handle.pageId,
+        [handle.x + 40, handle.y + 40],
+        [handle.x + 50, handle.y + 40],
+      ),
+    ).toBe(false);
+    const before = polygonOf((await page0(host)).list, 2).element.label;
+    expect(
+      h.dragWithSelectionTool(
+        handle.pageId,
+        [handle.x, handle.y],
+        [handle.x + 10, handle.y],
+        { cancel: true },
+      ),
+    ).toBe(true);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(polygonOf((await page0(host)).list, 2).element.label).toBe(before);
+  }, 120_000);
+
   it("an unedited deck exports its own bytes, and nothing follows on open", async () => {
     const bytes = fixture("connectors");
     const { host, exporter } = await open(bytes, "connectors");

@@ -47,7 +47,7 @@
 // Layers panel binds to instead of shipping a second one.
 //
 // Phase 4c adds the PRO TOOLSET: four tools, three of them still here
-// (Curvature — a pure machine over draw-geometry committing one
+// (Curvature — a pure machine over vector-geometry committing one
 // insertPath; the Pencil beside it was retired into the host's, ADR 359;
 // Gradient
 // Annotator — axis display + drag steering the B-03 angle/length lane;
@@ -470,7 +470,7 @@ export function activate(host: BundleHost): BundleHandle {
   // `framePath` replaces a whole anchor table (contour boundaries
   // included) and is the same door core's own `apply_pathfinder` uses.
   // The winding re-orientation that turns a nested contour into a HOLE
-  // under the engine's NON-ZERO fill lives in draw-geometry — see
+  // under the engine's NON-ZERO fill lives in vector-geometry — see
   // commands/compound-path.ts for the undo shape + the honest scope.
   const compoundPathCommandsSub = contributeCompoundPathCommands(host);
   // Illustrator Phase 2 — PATTERN EDITING v1 (bake / re-plan / select /
@@ -618,7 +618,7 @@ export function activate(host: BundleHost): BundleHandle {
   // objects on the path ARE the selected objects — element ids survive,
   // text frames are not refused, and Release writes each object's
   // remembered home transform straight back. It shares §16.2's
-  // arc-length placement kernel (`draw-geometry/src/along-path.ts`) and
+  // arc-length placement kernel (`vector-geometry/src/along-path.ts`) and
   // nothing above it.
   const objectsOnPathCommandsSub = contributeObjectsOnPathCommands(host);
   // Illustrator Phase 2 (last row) — IMAGE TRACE v0. The one capability
@@ -627,7 +627,7 @@ export function activate(host: BundleHost): BundleHandle {
   // (crates/draw-trace + crates/trace-js over `visioncortex`, declared in
   // the manifest under capabilities.wasm[]). Pixels arrive through the
   // C-5 placed-asset door; holes come out as COMPOUND paths through
-  // draw-geometry's `makeCompoundTable`, because the engine fills
+  // vector-geometry's `makeCompoundTable`, because the engine fills
   // non-zero. One-shot, fills only, main-thread — commands/image-trace.ts
   // states the whole honest scope, and the command TITLE carries it.
   const imageTraceCommandSub = contributeImageTraceCommand(host);

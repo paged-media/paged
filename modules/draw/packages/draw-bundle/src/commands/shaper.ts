@@ -18,7 +18,7 @@
 
 // THE SHAPER — a freehand gesture becomes a clean shape, or a SCRIBBLE
 // over overlapping shapes merges or punches them (Illustrator's Shaper).
-// What the gesture IS is draw-geometry's `recogniseShape` (pure,
+// What the gesture IS is vector-geometry's `recogniseShape` (pure,
 // deterministic); this module says what it does to the document, and is
 // the typed `shaperStroke { page, path }` command the tool also runs.
 //
@@ -54,7 +54,7 @@ import {
   type Affine,
   type ShaperKind,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { knifeCandidates } from "./knife";
 import { orderTopToBottom, paintOrderLeaves } from "./pathfinder-region";

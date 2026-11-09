@@ -19,7 +19,7 @@
 // GLOBAL EDIT — select every object whose GEOMETRY matches the selected
 // one's (Illustrator's Start Global Edit, its selection half).
 //
-// WHAT "MATCHES" MEANS is draw-geometry's `sameShape`: the same contour
+// WHAT "MATCHES" MEANS is vector-geometry's `sameShape`: the same contour
 // structure (anchor count, contour boundaries, open flags) and every
 // anchor and handle within `tolerance` pt of its partner, POSITION
 // ignored. Size counts unless the payload says `anySize: true`, which
@@ -57,7 +57,7 @@ import {
   SAME_SHAPE_TOLERANCE,
   type Affine,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { leafIdsOf, linkIndex } from "../link-index";
 import { registerCommand } from "../command-registry";

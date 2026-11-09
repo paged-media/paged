@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// ORACLE — Illustrator's 9-SLICE SCALING against draw-geometry's
+// ORACLE — Illustrator's 9-SLICE SCALING against vector-geometry's
 // `nineSlicePoint` (`src/nine-slice.ts`), the mapping the engine's
 // renderer applies to a scaled symbol instance with guides (engine ADR
 // 1039, draw ADR 365).
@@ -42,7 +42,7 @@ import {
   nineSlicePoint,
   type Affine,
   type NineSliceInsets,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { loadOracle, pathBounds, type Vec2 } from "./oracle";
 

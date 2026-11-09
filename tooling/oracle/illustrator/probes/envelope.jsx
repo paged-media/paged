@@ -27,7 +27,7 @@
 // Top Object (`Make Envelope`), then Object > Envelope Distort > Expand
 // (`Expand Envelope`), and records the expanded contents. Replayed by
 // `packages/draw-bundle/test/oracle/envelope.spec.ts` against
-// draw-geometry's `outlinePatch` / `restrictPatch` / `envelopePoint` (the
+// vector-geometry's `outlinePatch` / `restrictPatch` / `envelopePoint` (the
 // engine's envelope map).
 //
 // Make with Warp (`Make Warp`) and Make with Mesh (`Create Envelope

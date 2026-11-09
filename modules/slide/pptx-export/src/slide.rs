@@ -408,6 +408,53 @@ fn hash_bytes(b: &[u8]) -> u64 {
     h.finish()
 }
 
+/// Engine ADR 1061 — a frame's `shrink_to_fit` as `a:normAutofit` (the
+/// defaults, 100 % and no reduction, left out as PowerPoint leaves them);
+/// `None` when the frame has none.
+pub(crate) fn norm_autofit(v: Option<&Value>) -> Option<String> {
+    let v = v.filter(|v| v.is_object())?;
+    let per = |k: &str, d: f64| {
+        (v.get(k).and_then(Value::as_f64).unwrap_or(d) * 100_000.0).round() as i64
+    };
+    let (font, line) = (per("font_scale", 1.0), per("line_spacing_reduction", 0.0));
+    let mut attrs = String::new();
+    if font != 100_000 {
+        attrs.push_str(&format!(r#" fontScale="{font}""#));
+    }
+    if line != 0 {
+        attrs.push_str(&format!(r#" lnSpcReduction="{line}""#));
+    }
+    Some(format!("<a:normAutofit{attrs}/>"))
+}
+
+/// `x` with the autofit of body properties `bp` replaced by `fit` (`""`
+/// drops it). A new one stands after a text warp, where the schema puts it.
+fn set_autofit(x: &str, bp: &xml::El, fit: &str) -> String {
+    let kids = bp.children(x);
+    if let Some(old) = kids.iter().find(|c| {
+        matches!(
+            c.name.as_str(),
+            "a:noAutofit" | "a:normAutofit" | "a:spAutoFit"
+        )
+    }) {
+        return xml::splice(x, old.start, old.end, fit);
+    }
+    if fit.is_empty() {
+        return x.to_string();
+    }
+    let open = bp.open(x);
+    if open.len() == bp.end - bp.start {
+        // `<a:bodyPr …/>`: open it up.
+        let head = open.trim_end_matches("/>").trim_end();
+        return xml::splice(x, bp.start, bp.end, &format!("{head}>{fit}</a:bodyPr>"));
+    }
+    let at = kids
+        .iter()
+        .find(|c| c.name == "a:prstTxWarp")
+        .map_or(bp.inner.0, |w| w.end);
+    xml::splice(x, at, at, fit)
+}
+
 /// Keys of two model values whose values differ.
 fn changed_keys(a: &Value, b: &Value) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
@@ -1487,6 +1534,14 @@ impl<'a> Writer<'a, '_> {
             };
             x = xml::splice(&x, a, z, &written);
         }
+        // Engine ADR 1061 — a changed shrink-to-fit is the body's autofit.
+        if keys.contains("shrink_to_fit") {
+            let root = xml::root(&x).ok_or("unreadable shape")?;
+            if let Some(bp) = root.path(&x, &["p:txBody", "a:bodyPr"]) {
+                let fit = norm_autofit(fc.v.get("shrink_to_fit")).unwrap_or_default();
+                x = set_autofit(&x, &bp, &fit);
+            }
+        }
         if keys.contains("inset_spacing") || keys.contains("vertical_justification") {
             let root = xml::root(&x).ok_or("unreadable shape")?;
             if let Some(bp) = root.path(&x, &["p:txBody", "a:bodyPr"]) {
@@ -1522,10 +1577,7 @@ impl<'a> Writer<'a, '_> {
             .and_then(|id| self.probed.text.get(id))
             .or_else(|| self.probed.text.get(&TEXT_BOX_PROBE))
             .cloned()
-            .unwrap_or(Defaults {
-                levels: Vec::new(),
-                font_scale: 1.0,
-            })
+            .unwrap_or(Defaults { levels: Vec::new() })
     }
 
     fn paragraphs(
@@ -2477,8 +2529,12 @@ impl<'a> Writer<'a, '_> {
                     Some("Bottom") | Some("BottomAlign") => "b",
                     _ => "t",
                 };
+                // A new text box grows to its text, unless the frame shrinks
+                // its text to fit (engine ADR 1061).
+                let autofit = norm_autofit(e.v.get("shrink_to_fit"))
+                    .unwrap_or_else(|| "<a:spAutoFit/>".to_string());
                 Ok(format!(
-                    r#"<p:sp><p:nvSpPr>{cnv}<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>{xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>{}</p:spPr><p:txBody><a:bodyPr wrap="square" lIns="{}" tIns="{}" rIns="{}" bIns="{}" rtlCol="0" anchor="{anchor}"><a:spAutoFit/></a:bodyPr><a:lstStyle/>{paras}</p:txBody></p:sp>"#,
+                    r#"<p:sp><p:nvSpPr>{cnv}<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>{xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>{}</p:spPr><p:txBody><a:bodyPr wrap="square" lIns="{}" tIns="{}" rIns="{}" bIns="{}" rtlCol="0" anchor="{anchor}">{autofit}</a:bodyPr><a:lstStyle/>{paras}</p:txBody></p:sp>"#,
                     self.fill_of(e),
                     emu(g(1)),
                     emu(g(0)),

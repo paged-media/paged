@@ -17,7 +17,7 @@
  */
 
 // THE JOIN TOOL, THE PATH ERASER and THE SHAPER — three host-routed
-// shims over draw-tools' `ScrubMachine`. Each previews the gesture as a
+// shims over vector-tools' `ScrubMachine`. Each previews the gesture as a
 // polyline while it is drawn and hands the finished polyline to its
 // command (`commands/path-tools.ts`, `commands/shaper.ts`), which says
 // what it does to the document. A gesture that leaves its page is
@@ -32,9 +32,9 @@ import type {
   CanvasPointerEvent,
   GestureHandler,
 } from "@paged-media/plugin-api";
-import type { Vec2Mut } from "@paged-media/draw-geometry";
+import type { Vec2Mut } from "@paged-media/vector-geometry";
 
-import { ScrubMachine, type ScrubSnapshot } from "@paged-media/draw-tools";
+import { ScrubMachine, type ScrubSnapshot } from "@paged-media/vector-tools";
 
 import {
   applyJoinScrub,

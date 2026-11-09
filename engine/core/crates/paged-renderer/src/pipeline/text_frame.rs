@@ -1479,7 +1479,7 @@ pub(super) fn first_baseline_for_frame(
     let em_fraction_to_64 = |frac: f32| pt_to_64(point_size * frac);
     let policy_offset_64 = first_baseline_offset_64(
         frame.first_baseline_offset,
-        frame.minimum_first_baseline_offset,
+        super::text_fit::minimum_first_baseline(frame),
         point_size,
         default_64,
         metrics,

@@ -39,7 +39,7 @@ import {
   rectToPath,
   type Affine,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { leafIdsOf } from "../link-index";
 import { batchMutationFor } from "./batch-handles";

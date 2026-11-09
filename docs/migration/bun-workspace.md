@@ -206,8 +206,8 @@ test pass.
 
 ### (b) An undeclared import fails
 
-Scratch file `modules/draw/packages/draw-geometry/src/__undeclared_probe.ts`
-importing `react` and `vite` (draw-geometry declares neither; both are
+Scratch file `platform/shared/vector-geometry/src/__undeclared_probe.ts`
+importing `react` and `vite` (vector-geometry declares neither; both are
 installed for other packages), then removed:
 
 - `tsc --noEmit -p tsconfig.json`: exit 2, `TS2307: Cannot find module 'react'`
@@ -235,7 +235,7 @@ have (gitignored wasm and DuckDB artifacts, a committed image wasm whose
 | modules/doc | `pnpm run typecheck` → `bun run typecheck` | 0 → 0 | — |
 | modules/doc | `pnpm run test` → `bun run test` | 0 → 0 | doc-bundle: files 7 passed \| 2 skipped (9); tests 29 passed \| 12 skipped (41)<br>doc-host-model: files 5 passed (5); tests 44 passed (44) |
 | modules/draw | `pnpm run typecheck` → `bun run typecheck` | 0 → 0 | — |
-| modules/draw | `pnpm run test` → `bun run test` | 0 → 0 | draw-bundle: files 98 passed \| 2 skipped (100); tests 1650 passed \| 34 skipped (1684)<br>draw-geometry: files 41 passed (41); tests 681 passed (681)<br>draw-tools: files 19 passed (19); tests 337 passed (337) |
+| modules/draw | `pnpm run test` → `bun run test` | 0 → 0 | draw-bundle: files 98 passed \| 2 skipped (100); tests 1650 passed \| 34 skipped (1684)<br>vector-geometry: files 41 passed (41); tests 681 passed (681)<br>vector-tools: files 19 passed (19); tests 337 passed (337) |
 | modules/image | `pnpm run typecheck` → `bun run typecheck` | 0 → 0 | — |
 | modules/image | `pnpm run test` → `bun run test` | 1 → 1 | glue: files 1 failed \| 39 passed \| 1 skipped (41); tests 1 failed \| 349 passed \| 3 skipped (353) |
 | modules/sheet | `pnpm run typecheck` → `bun run typecheck` | 2 → 2 | sheet-bundle: TS errors: 1 |

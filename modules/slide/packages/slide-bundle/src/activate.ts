@@ -94,7 +94,7 @@ import {
   masterTypedCommands,
   type MasterDeps,
 } from "./masters-commands.js";
-import { adjustHandlesOverlay, HandlesModel } from "./adjust-handles.js";
+import { HandlesModel, mountAdjustHandles } from "./adjust-handles.js";
 import { LiveFollower } from "./live-presets.js";
 import { makeShapesPanel } from "./panels/shapes-panel.js";
 import { makeIconsPanel } from "./panels/icons-panel.js";
@@ -643,19 +643,19 @@ export function activate(host: BundleHost): BundleHandle {
   // active slide.
   // Live presets and connectors (ADR 717): a resized preset is drawn
   // again, a connector follows the shapes it is glued to, in the edit's
-  // undo step; the selected preset's adjust handles are drawn on the
-  // canvas.
+  // undo step; the selected preset's adjust handles are a host handle set
+  // the host's Selection tools drag (extensions ADR 1103).
   // The follow-up write needs the amend door; without it a redraw would be
   // an undo step of its own, so nothing follows.
   const follower = new LiveFollower(host, slideEngine, () =>
     store ? store.isDeck() : true,
   );
   disposers.push(() => follower.dispose());
-  if (host.supports("contribute.overlay@1") && renders(host, "overlay")) {
+  if (host.supports("overlay.handles.hostDrag@1") && renders(host, "overlay")) {
     const handles = new HandlesModel(host, slideEngine);
-    const overlay = host.contribute.overlay(adjustHandlesOverlay(handles));
+    const mounted = mountAdjustHandles(host, handles);
     disposers.push(
-      () => overlay.dispose(),
+      () => mounted.dispose(),
       () => handles.dispose(),
     );
   }

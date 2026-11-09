@@ -27,7 +27,7 @@
 //   · a RECTANGLE or TEXT FRAME is a BOX — four corners, a radius per
 //     corner (`cornerRadiiMutationFor`, two writes);
 //   · a POLYGON has a handle at EVERY corner anchor the renderer rounds
-//     (straight edges both sides, closed contour — draw-tools
+//     (straight edges both sides, closed contour — vector-tools
 //     `polygonCorners`), and the drag reads the renderer's own
 //     inscribed-circle rule. A polygon has ONE radius: the renderer reads
 //     only the top-left slot for an N-gon (core `uniform_corner`), so any
@@ -36,7 +36,7 @@
 //
 // ROTATED AND SCALED FRAMES WORK, because the whole gesture happens in
 // the element's OWN space: the pointer is mapped through the INVERSE item
-// transform (draw-geometry `inverseApplyAffine`) before the hit-test and
+// transform (vector-geometry `inverseApplyAffine`) before the hit-test and
 // the drag, the hit tolerance is scaled into that space so it stays a
 // constant 8 px on screen, and the preview is mapped back through the
 // transform. The radius written is an own-space length, which is what
@@ -56,7 +56,7 @@ import {
   inverseApplyAffine,
   type Affine,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 import {
   cornerAt,
   cornerPreview,
@@ -68,7 +68,7 @@ import {
   type Bounds,
   type CornerIndex,
   type PolygonCorner,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   cornerRadiiMutationFor,

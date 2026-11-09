@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The KNIFE tool's gesture handler — a host-routed shim over draw-tools'
+// The KNIFE tool's gesture handler — a host-routed shim over vector-tools'
 // `KnifeMachine`: pointer samples feed the machine, the line being drawn
 // previews as a polyline (the freehand samples, or the Alt straight
 // line), and the pointer-up cut goes to `applyKnife`
@@ -34,7 +34,7 @@ import type {
   GestureHandler,
 } from "@paged-media/plugin-api";
 
-import { KnifeMachine, type KnifeSnapshot } from "@paged-media/draw-tools";
+import { KnifeMachine, type KnifeSnapshot } from "@paged-media/vector-tools";
 
 import { applyKnife, type KnifeResult } from "../commands/knife";
 

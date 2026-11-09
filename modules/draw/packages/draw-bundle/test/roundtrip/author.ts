@@ -57,7 +57,7 @@ import {
   PenMachine,
   penPlanMutation,
   type PenPlan,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   applyAttachTextToPath,
@@ -94,7 +94,7 @@ export interface Refusal {
 
 export interface AuthorContext {
   h: HeadlessHost;
-  /** Draw one path with the Pen MACHINE (draw-tools `PenMachine`, the
+  /** Draw one path with the Pen MACHINE (vector-tools `PenMachine`, the
    *  machine the editor's Pen tool wraps): a click per point, a drag
    *  where `drag` is given (it pulls the outgoing handle and mirrors the
    *  incoming one), then Enter — or a click back on the first anchor to

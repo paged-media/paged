@@ -188,6 +188,10 @@ import {
   type CommentAnchorBackend,
 } from "./doors-comments.js";
 import {
+  createWorkbooksSurface,
+  type WorkbookEditorBackend,
+} from "./doors-workbooks.js";
+import {
   createActionsSurface,
   createDataSurface,
   type ActionBackend,
@@ -1664,6 +1668,13 @@ export interface CreateBundleHostOptions {
    *  where a `cell` anchor points. Absent: `contribute.commentAnchor` is a
    *  no-op and the flag is false. */
   commentAnchors?: CommentAnchorBackend;
+  /** The shared workbook editor registry (`workbooks@1`,
+   *  `contribute.workbookEditor@1`, extensions ADR 1102): the editor builds
+   *  ONE (`createWorkbookEditorRegistry`) and injects it into every host, so
+   *  paged.sheet's grid edits the workbook paged.slide hands over. Absent:
+   *  `contribute.workbookEditor` is a no-op, `workbooks.open` rejects and
+   *  both flags are false. */
+  workbookEditors?: WorkbookEditorBackend;
   /** Host-provided SHARED BINDING-PROVIDER registry (ADR-023 phase A): the
    *  editor creates ONE (`createBindingProviderRegistry`) and injects the SAME
    *  instance into every plugin host, so its own panels can ask "who resolves
@@ -2154,6 +2165,7 @@ export function createBundleHost(
   const handleSets = createHandleSets(overlayDoorDeps);
   const transformBoxes = createTransformBoxes(overlayDoorDeps);
   store.add(toDisposable(() => transformBoxes.disposeAll()));
+  store.add(toDisposable(() => handleSets.disposeAll()));
 
   /** W3.2 — an edit-context / object-type `type` is DECLARED when the
    *  manifest's `contributes.editContexts[]` / `contributes.objectTypes[]`
@@ -2513,6 +2525,13 @@ export function createBundleHost(
       const anchors = options?.commentAnchors;
       return anchors
         ? store.add(anchors.register(manifest.id, c))
+        : toDisposable(() => {});
+    },
+    workbookEditor(c) {
+      assertNamespaced(c.id, "workbookEditor");
+      const editors = options?.workbookEditors;
+      return editors
+        ? store.add(editors.register(manifest.id, c))
         : toDisposable(() => {});
     },
     overlay(c) {
@@ -4916,6 +4935,10 @@ export function createBundleHost(
   );
   // ------------------------------------------------ comments (ADR 1101)
   const comments = createCommentsSurface(document, (d) => store.add(d));
+  // ----------------------------------------------- workbooks (ADR 1102)
+  const workbooks = createWorkbooksSurface(options?.workbookEditors, (d) =>
+    store.add(d),
+  );
   const dataProviders: DataProvidersSurface = {
     register(registration) {
       requireDeclared(
@@ -6357,6 +6380,11 @@ export function createBundleHost(
     featureSet.add("overlay.handles@1");
     featureSet.add("host.transformBox@1");
   }
+  if (typeof getEditor().overlaySignals?.setHandleRouter === "function") {
+    // ADR 1103 — the host's Selection tools ask the bundle's handle sets
+    // before their own hit test, so `onHostDrag` listeners hear drags.
+    featureSet.add("overlay.handles.hostDrag@1");
+  }
   if (options?.editContextEnterPoint === true) {
     // W-19 — the host shell vouches that a pointer entry carries the
     // entering point (see the option).
@@ -6507,6 +6535,12 @@ export function createBundleHost(
   if (options?.actions) {
     // The shared action registry is wired (extensions ADR 344).
     featureSet.add("actions@1");
+  }
+  if (options?.workbookEditors) {
+    // The shared workbook editor registry is wired (extensions ADR 1102):
+    // a bundle may offer an editor and any may open one.
+    featureSet.add("workbooks@1");
+    featureSet.add("contribute.workbookEditor@1");
   }
   if (options?.bindingProviders) {
     // ADR-023 — the door always exists (see the static flag above); this
@@ -6697,6 +6731,7 @@ export function createBundleHost(
     actions,
     ml,
     comments,
+    workbooks,
     diagnostics,
     journal,
     bindings,

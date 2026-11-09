@@ -46,7 +46,7 @@ import {
   transformAnchorTable,
   type Affine,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 /** A page's origin inside its spread, `[x, y]` in spread coordinates. */
 export type PageOrigin = readonly [number, number];

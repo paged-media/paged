@@ -99,7 +99,7 @@ import {
   UPDATE_OBJECTS_ON_PATH_COMMAND_ID,
   type OnPathObject,
 } from "../../src";
-import { IDENTITY_AFFINE, measureSegment } from "@paged-media/draw-geometry";
+import { IDENTITY_AFFINE, measureSegment } from "@paged-media/vector-geometry";
 import { F6_RING_PAIR } from "../fixtures/corpus";
 import { openHost } from "./host";
 

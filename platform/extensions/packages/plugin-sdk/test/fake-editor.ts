@@ -20,7 +20,7 @@
 // registries with the real register()->Disposable contract, a client
 // that scripts mutate/subscribe replies, and plain state slices.
 
-import type { PagedEditor } from "@paged-media/plugin-api";
+import type { HostHandleRouter, PagedEditor } from "@paged-media/plugin-api";
 
 type Listener = (msg: unknown) => void;
 
@@ -181,6 +181,9 @@ export function makeFakeEditor(opts?: {
   /** W-20 — wire the retained overlay-layer sink
    *  (`setOverlayLayer` + `removeOverlayLayer`). Off = an older host. */
   overlayLayers?: boolean;
+  /** Extensions ADR 1103 — wire `setHandleRouter` (the host Selection
+   *  tools' route to a bundle's handle sets). Off = an older host. */
+  handleRouters?: boolean;
 }) {
   const wireContextRegistries = opts?.wireContextRegistries ?? true;
   const listeners = new Set<Listener>();
@@ -200,6 +203,8 @@ export function makeFakeEditor(opts?: {
   let toolPreviews: unknown = null;
   // W-20 — key → shapes, in first-set (stack) order.
   const overlayLayers = new Map<string, unknown[]>();
+  // ADR 1103 — key → the router a bundle registered.
+  const handleRouters = new Map<string, HostHandleRouter>();
   // C-16 — the scriptable `requestSceneTree` reply (the parentage
   // source). Empty roots by default, as before.
   let sceneTreeRoots: unknown[] = [];
@@ -346,6 +351,14 @@ export function makeFakeEditor(opts?: {
             },
           }
         : {}),
+      ...(opts?.handleRouters
+        ? {
+            setHandleRouter: (key: string, r: HostHandleRouter | null) => {
+              if (r) handleRouters.set(key, r);
+              else handleRouters.delete(key);
+            },
+          }
+        : {}),
     },
     ...(opts?.images ? { images: opts.images } : {}),
   };
@@ -400,6 +413,8 @@ export function makeFakeEditor(opts?: {
     /** W-20 — the live layers in stack order. */
     getOverlayLayers: () =>
       [...overlayLayers].map(([key, shapes]) => ({ key, shapes })),
+    /** ADR 1103 — the registered handle routers, by key. */
+    handleRouters: () => new Map(handleRouters),
     /** C-16 — script the scene tree the parentage read derives from.
      *  Counts the `requestSceneTree` sends via `sent`, which is how the
      *  memoization is asserted. */

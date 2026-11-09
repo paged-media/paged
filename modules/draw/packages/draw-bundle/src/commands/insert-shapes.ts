@@ -18,7 +18,7 @@
 
 // Parametric shape INSERT commands (wave 2) — Arc / Spiral /
 // Rectangular grid / Polar grid, lowered through the SAME
-// `insertPath` lane every authoring tool uses (draw-geometry
+// `insertPath` lane every authoring tool uses (vector-geometry
 // generators → one insertPath per contour, ONE `batch` = one undo
 // step).
 //
@@ -57,7 +57,7 @@ import {
   rectGridPaths,
   polarGridPaths,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { insertPathMutationsForShape, resolveTargetPage } from "../target-page";
 

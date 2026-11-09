@@ -429,7 +429,7 @@ pub fn paragraph(
         if r.text.is_empty() {
             continue;
         }
-        let rpr = run_props(r, d, defaults.font_scale, ctx, link, lost);
+        let rpr = run_props(r, d, ctx, link, lost);
         // A date or time field follows the clock in PowerPoint too: written
         // back as its `a:fld`, with the text it shows now as the result.
         if let Some(field_type) = r.field.as_ref().and_then(slide_native::datetime_type_of) {
@@ -477,12 +477,7 @@ pub fn paragraph(
         .and_then(|r| r.point_size)
         .map(|s| s as f64)
         .filter(|s| !wrote && differs(*s, d.empty_size, 0.01))
-        .map(|s| {
-            format!(
-                r#" sz="{}""#,
-                (s / defaults.font_scale * 100.0).round() as i64
-            )
-        })
+        .map(|s| format!(r#" sz="{}""#, (s * 100.0).round() as i64))
         .unwrap_or_default();
     out.push_str(&format!(
         r#"<a:endParaRPr lang="{}"{end_size} dirty="0"/>"#,
@@ -510,7 +505,6 @@ fn clean(s: &str) -> String {
 fn run_props(
     r: &CharacterRun,
     d: &Para,
-    scale: f64,
     ctx: &TextCtx,
     link: &mut dyn FnMut(&str) -> Option<String>,
     lost: &mut Vec<String>,
@@ -519,10 +513,7 @@ fn run_props(
     let mut attrs = format!(r#" lang="{}""#, esc(&ctx.lang));
     if let Some(s) = r.point_size {
         if differs(s as f64, dr.size, 0.01) {
-            attrs.push_str(&format!(
-                r#" sz="{}""#,
-                (s as f64 / scale * 100.0).round() as i64
-            ));
+            attrs.push_str(&format!(r#" sz="{}""#, (s as f64 * 100.0).round() as i64));
         }
     }
     let style = r.font_style.as_deref().unwrap_or("Regular");

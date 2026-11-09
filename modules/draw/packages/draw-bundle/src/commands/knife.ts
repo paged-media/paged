@@ -109,7 +109,7 @@ import {
   type AnchorTable,
   type AnchorTriple,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import {
   compoundPaintOf,

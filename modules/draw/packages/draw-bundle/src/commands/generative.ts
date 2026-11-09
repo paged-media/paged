@@ -52,7 +52,7 @@ import type {
   Disposable,
   ElementId,
 } from "@paged-media/plugin-api";
-import { parseCssColor, rgbToHex } from "@paged-media/draw-geometry";
+import { parseCssColor, rgbToHex } from "@paged-media/vector-geometry";
 import { bytesToBase64, encodePng } from "@paged-media/helpers";
 import { defineMessages } from "@paged-media/strings";
 

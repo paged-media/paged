@@ -26,7 +26,7 @@
 //     "the renderer joins contours into one polyline and silently
 //     mis-renders holes");
 //   · `PathAnchorsResult` REPORTS `subpathStarts` / `subpathOpen`, which
-//     is why draw-geometry's `AnchorTable` has been compound-aware since
+//     is why vector-geometry's `AnchorTable` has been compound-aware since
 //     the SVG importer landed (`io/svg.ts` already lowers multi-contour
 //     shapes);
 //   · `setElementProperty{ path: "framePath", value: { type: "framePath",
@@ -55,7 +55,7 @@
 // Compound Path keeps the fill rule NON-ZERO — it is NOT even-odd, as
 // this note used to claim — and rewrites direction by PAINT ORDER, the
 // backmost path one way and every other path the other.
-// draw-geometry's `orientByPaintOrder` is that step. What it paints,
+// vector-geometry's `orientByPaintOrder` is that step. What it paints,
 // against the EVEN-ODD region a nesting-depth re-wind paints:
 //   · a hole in a shape, an island in that hole, and two shapes that
 //     merely OVERLAP with the overlap knocked out (12 800 pt² in the
@@ -147,7 +147,7 @@ import {
   type Affine,
   type AnchorTable,
   type AnchorTriple,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import { pageOriginOf, type PageOrigin } from "../page-origin";
 import { closePathMutationFor } from "./join-average";

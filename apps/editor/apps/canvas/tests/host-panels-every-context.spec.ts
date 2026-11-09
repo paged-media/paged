@@ -287,16 +287,31 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
       expect(Math.abs(moved[0] - start[0] - 30)).toBeLessThan(2);
       await stillHere();
 
-      // PEN, DIRECT SELECTION AND THE SHAPE TOOLS — shared the same way:
-      // each one is on the rail inside the context, and picking it stays.
-      for (const tool of [
-        "paged.tool.pen",
-        "paged.tool.directSelect",
-        "paged.tool.rectangle",
-      ]) {
-        const item = page.locator(`[data-tool="${tool}"]`).first();
-        await expect(item, tool).toBeVisible();
-        await item.click();
+      // PEN, DIRECT SELECTION AND THE SHAPE TOOLS — shared the same way
+      // (91ef5dcf8): each one is in its slot on the rail inside the context,
+      // and picking it stays. A slot shows one face: inside draw's
+      // vectorGraphic the pen slot's face is draw's Add Anchor Point (the
+      // context focuses it on enter, and it shares the pen slot), so there
+      // the Pen is picked from the slot's flyout, as a user would.
+      for (const [tool, group] of [
+        ["paged.tool.pen", "pen"],
+        ["paged.tool.directSelect", "directSelect"],
+        ["paged.tool.rectangle", "shape"],
+      ] as const) {
+        const slot = page.locator(`[data-tool-slot="${group}"]`).first();
+        await expect(slot, tool).toBeVisible();
+        if ((await slot.getAttribute("data-tool")) === tool) {
+          await slot.click();
+        } else {
+          await slot.click({ button: "right" });
+          const flyout = page.locator(`[data-tool-flyout="${group}"]`);
+          await expect(flyout, `${tool} in its slot's flyout`).toBeVisible();
+          await flyout.locator(`[data-tool="${tool}"]`).click();
+        }
+        await expect(
+          page.locator(`[data-tool-slot="${group}"][data-tool="${tool}"]`),
+          tool,
+        ).toHaveAttribute("data-active", "true");
         await stillHere();
       }
 

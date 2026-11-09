@@ -1159,7 +1159,7 @@ test.describe("E2E path editing — the Pen on existing paths", () => {
   });
 });
 
-// SNAPPING (RFI C-68) — the host half of draw-geometry's `snapPoint`. The
+// SNAPPING (RFI C-68) — the host half of vector-geometry's `snapPoint`. The
 // tolerance is 6 SCREEN px, so every offset below is a fraction of a
 // point at the fitted zoom: inside it, and still a visible miss without
 // snapping. Cmd turns it off for the gesture's samples.

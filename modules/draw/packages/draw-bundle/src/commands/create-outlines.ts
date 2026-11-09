@@ -61,7 +61,7 @@ import type {
   ElementId,
   MutationInput,
 } from "@paged-media/plugin-api";
-import { rgbToHex, type AnchorTable } from "@paged-media/draw-geometry";
+import { rgbToHex, type AnchorTable } from "@paged-media/vector-geometry";
 
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { framePathMutationFor } from "./compound-path";
@@ -144,7 +144,7 @@ export function outlineSwatchFor(
   return { ref: "", create: { selfId: mintSwatchId(), name: hex, rgb } };
 }
 
-/** A run's anchors as a draw-geometry table. */
+/** A run's anchors as a vector-geometry table. */
 export function outlineTableOf(
   run: TextOutlinesWire["runs"][number],
 ): AnchorTable {

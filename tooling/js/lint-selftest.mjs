@@ -145,15 +145,14 @@ const MODULES = [
   {
     name: "draw",
     dir: "modules/draw/packages/draw-bundle",
-    own: ["@paged-media/draw-geometry", "@paged-media/draw-tools"],
+    own: [],
     extra: [],
   },
   {
     name: "image",
     dir: "modules/image/glue",
     own: ["@paged-media/image-manifest"],
-    // draw's geometry and tool machines (image ADR 476).
-    extra: ["@paged-media/draw-geometry", "@paged-media/draw-tools"],
+    extra: [],
   },
   {
     name: "publish",
@@ -294,7 +293,7 @@ for (const path of EXTENSIONS) {
   for (const spec of [
     "@paged-media/shell",
     "@paged-media/client",
-    "@paged-media/draw-geometry",
+    "@paged-media/vector-geometry",
     "@paged-media/sheet",
     "@paged-media/web-model",
     // First-party apps and shared code that lived here until wave C
@@ -365,7 +364,7 @@ add(
 );
 add(
   "correctness: a debugger statement in a module",
-  "modules/draw/packages/draw-tools/src/__fixture__.ts",
+  "platform/shared/vector-tools/src/__fixture__.ts",
   "export function f() {\n  debugger;\n}\n",
   true,
   "no-debugger",

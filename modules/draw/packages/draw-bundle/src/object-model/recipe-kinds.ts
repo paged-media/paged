@@ -49,7 +49,7 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-import { EASE_KINDS } from "@paged-media/draw-geometry";
+import { EASE_KINDS } from "@paged-media/vector-geometry";
 
 import {
   rebuildInStep,

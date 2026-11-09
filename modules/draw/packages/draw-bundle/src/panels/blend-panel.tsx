@@ -35,8 +35,8 @@
 // panel's scalar binding ceiling.
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
-import type { EaseKind } from "@paged-media/draw-geometry";
-import { EASE_KINDS } from "@paged-media/draw-geometry";
+import type { EaseKind } from "@paged-media/vector-geometry";
+import { EASE_KINDS } from "@paged-media/vector-geometry";
 import * as React from "react";
 
 import {

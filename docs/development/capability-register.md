@@ -131,7 +131,7 @@ pattern would need the slide-grid phase through `pattern_transform` per frame an
 goldens); a translucent pattern has no swatch (a tile item paints a colour without alpha). `a:clrChange`
 stays a recorded loss: the filter stack (`RasterOp`) has no colour-replace op.
 `a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3: examined, left open, they are not copies of one another: `slide-chart`'s `outline` (slide-resolve's and doc's charts, doc ADR 628) builds clockwise-from-12-o'clock `SubPath`s with arcs split at 90° by `ceil(|sweep|/90)`, `sheet-chart` emits a `Primitive::Wedge` that its renderer draws, and the engine's `pie_anchors` is f32, counter-clockwise from 3 o'clock with a `ceil(sweep/(pi/2) - 1e-9)` split; a shared primitive would move anchors in the last bits and the slide goldens with them. Chart label width ×2: also left open, `sheet-chart` counts characters at one advance (`ADVANCE_EM`), `slide-chart` weighs digits, separators and letters apart, so they measure differently on purpose (neither goes through `paged-text`). Default Office palette and theme readers: `pptx-import` and `slide-resolve` re-examined 2026-11-08 (see the OOXML foundation row): fonts and `SLOTS` shared, the colour reader kept for the unresolved `Color` the goldens rest on.
-The host `tools` package still imports `@paged-media/draw/geometry` and `/machines`.
+Draw's TS geometry and vector-tool machines moved to `platform/shared/vector-geometry` and `platform/shared/vector-tools` (C15), so the host `tools` package and draw both import shared packages; draw keeps only its Illustrator workflows in `draw-bundle`.
 
 ### Text and fonts
 
@@ -197,8 +197,9 @@ data each have their own lowering. Sheet and data each have their own lowering.
 
 Doc's charts (doc ADR 628) are read by `dml-chart` into slide's chart model and drawn from their cached values by
 `slide-chart` (one layout for PowerPoint and Word), as anchored groups; the sheet engine is not linked (doc edits no chart
-data yet). The doc wasm's ceiling went to 9 MiB for charts and SmartArt (doc ADR 627 amendment); it links `dml-geom` (doc ADR 629). Slide's chart data editing carries a
-second compiled sheet engine (blocked on a host door: slide ADR 724). `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
+data yet). The doc wasm's ceiling went to 9 MiB for charts and SmartArt (doc ADR 627 amendment); it links `dml-geom` (doc ADR 629). Slide edits chart data on paged.sheet's
+grid and engine through the workbook door (extensions ADR 1102, slide ADR 724 amendment 1; slide's own grid is deleted); the
+sheet crates linked into the slide wasm (`slide-sheet`) remain only as the reader, recalculator and writer of chart workbooks. `paged-data-xlsx` reads through `sheet-xlsx` (calamine deleted, W5); CSV ×2 (open: `paged-data-store` links turso and parquet, which `sheet-js` must not; the owner has to be a small leaf crate, and the two readers differ on blank lines, delimiter sniffing and `|`, so it is not a bit-identical swap); two Boa
 sandboxes; `data-script` and `data-cli` are folded (W9, engine ADR 1059): `paged-action`'s `js::sandbox_context` is the one Boa sandbox (paged-script uses it too), the script surface and the batch runner are modules of `paged-data-session`, and `paged data batch` replaces the `paged-data-batch` binary. PDF read: the two hayro devices (placed PDF, pdf-import) stay two (different targets) and share `paged-pdf-page` for page box geometry and blend modes (engine ADR 1058, W9); blank IDML / OCF zip writers ×5.
 
 ### Host tools and panels (TS)
@@ -237,7 +238,7 @@ Status (draw items, one line each; updated as they land):
   the axis drag as before, Esc cancels. The line is drawn from the frame's centre and the gradient
   is a swatch (every object using it changes), as draw's note said. Draw's tool, handler, specs and
   the axis builder are gone (tool id left through the deprecation window). The stop machine stays
-  in `@paged-media/draw/machines`. The annotation's gesture tests run on the fake client; the
+  in `@paged-media/vector-tools`. The annotation's gesture tests run on the fake client; the
   canvas behaviour is covered by the gradient e2e (now on the host tool).
 - Appearance stack: MERGED 2026-11-01. The host declares `paged.appearance.*` (Add fill, Add
   stroke, Clear, Remove layer, Move layer; `appearance-commands.ts`) over the panel's own list
@@ -294,7 +295,7 @@ Status (draw items, one line each; updated as they land):
   selection's fill as the base (as the document shows it), a harmony rule menu, the harmony chips,
   and a row of variations per harmony colour (shades and tints, warm and cool, vivid and muted);
   a click paints the selection's fill through a swatch named for the hex (found or created, one
-  batch), Alt-click its stroke. The maths is `@paged-media/draw/geometry`'s, shared with Recolor
+  batch), Alt-click its stroke. The maths is `@paged-media/vector-geometry`'s, shared with Recolor
   Artwork. Draw's panel and its `applyGuideColor` command are gone (ids left through the
   deprecation window; draw ADR 362 amended). Not verified locally: the section's DOM behaviour
   (no DOM test could run without wasm); the reads and the write are unit-tested.
@@ -302,7 +303,7 @@ Status (draw items, one line each; updated as they land):
   `handlers/measure-tool.ts`, `shift+m`): drag to read a distance and an angle, the segment and its
   label as one preview that stays after the release, Esc clears, Shift snaps to 45 degrees, and the
   origin snaps to the nearest point on the path under the press (the hit-test's transform is reused,
-  so no anchor table is read). It drives `MeasureMachine` from `@paged-media/draw/machines`. Draw's
+  so no anchor table is read). It drives `MeasureMachine` from `@paged-media/vector-tools`. Draw's
   tool, handler, the raw nearest-point read, its readout binding (nothing read it) and specs are
   gone; the tool id leaves through the deprecation window.
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
@@ -360,13 +361,12 @@ Status (draw items, one line each; updated as they land):
   its DOM spec and its `app.pdfVectors.*` strings are gone; `paged.file.importPdfVectors` left through
   the deprecation window. Differences: a panel instead of a modal (it stays open after Place and always
   lists the report; "Start over" replaces Cancel).
-- Slide adjust handles: KEEP for now, with the evidence (2026-11-03). `overlay.handles@1` reports a
-  hit only to the bundle's OWN tools (`hitHandle` on their pointer events, extensions ADR 339), and
-  slide contributes no tool: the selection is the host's Selection tool, which never asks a bundle's
-  handle set. Moving the handles means slide shipping a selection tool of its own (losing the host's
-  move / marquee / resize) or the host's Selection tool routing handle hits to the owning bundle (a
-  contract change, as editor ADR 310 decided for the live-shape widgets). Neither is a safe port, so
-  `adjust-handles.tsx` stays on `contribute.overlay`.
+- Slide adjust handles: DONE 2026-11-09. The handles are a host handle set (`overlay.handles@1`,
+  extensions ADR 339) and the host's Selection tools route a press on one to the bundle
+  (`set.onHostDrag`, `overlay.handles.hostDrag@1`, extensions ADR 1103): the bundle hears start, moves
+  and one end and writes the drag in one mutation (one undo step). The preview outline is an overlay
+  layer. `adjust-handles.tsx`'s `contribute.overlay` contribution, its DOM pointer code and its screen
+  metrics are gone. Difference: the handles take the host's round handle look, not PowerPoint's yellow.
 - Bind from the property field: PARTLY DONE 2026-11-03. The badge's "is this path bound" read no longer
   invokes `media.paged.data.propertyBindings`: `probeBound` asks the data door (`data@1`
   `bindings()`, the target an address or a selector resolved through `host.objects.query`), whichever
@@ -423,7 +423,7 @@ Status (draw items, one line each; updated as they land):
 ### Reach (gaps between modules)
 
 - **doc:** recolour, chart data editing, SmartArt editing, OpenType features, equations. Charts: DONE from the cached values
-  (doc ADR 628, `slide-chart`'s layout, anchored groups; chart data editing through the sheet engine is open). SmartArt:
+  (doc ADR 628, `slide-chart`'s layout, anchored groups; chart data editing is open; the workbook door, extensions ADR 1102, is the way slide took). SmartArt:
   DONE as drawn (doc ADR 629: the `dsp:drawing` Word saved, as an anchored group of shapes and text frames; editing the
   diagram is open). Shapes: PARTLY DONE (doc ADR 627: non-text `wps:wsp` as anchored Rectangle frames drawn along their
   outline, every Annex D preset through `dml-geom` since doc ADR 629 and literal custom geometry, `wps:style` completing
@@ -445,10 +445,12 @@ Status (draw items, one line each; updated as they land):
   hyperlink (`insertItemHyperlink`; cell links stay sheet's). Open, reported as losses: the text of a
   shape or text box, arrowheads, shapes in groups, the in-frame grid (draws pictures raw and no
   shapes), a rotated `xdr:pic`.
-- **slide:** autofit (stored `fontScale` / `lnSpcReduction` are applied as fixed values, which is what
-  PowerPoint draws on open; the engine has no shrink-to-fit, only frame growth: slide ADR 724). Chart
-  data editing still carries its second compiled sheet engine (`slide-sheet`); sharing sheet's needs a
-  host door that does not exist (PM-0002, slide ADR 724). Done and checked against PowerPoint:
+- **slide:** autofit DONE 2026-11-09: `normAutofit` is the engine's shrink-to-fit (engine ADR 1061): the
+  text keeps its written sizes, the saved `fontScale` / `lnSpcReduction` is the fit the renderer starts
+  from and it shrinks further when edited text no longer fits; `pptx-export` writes the fit back. Chart
+  data editing: DONE 2026-11-09 on paged.sheet's grid and engine through the workbook door (extensions
+  ADR 1102, slide ADR 724 amendment 1); `slide-sheet` stays linked to read, recalculate, draw and write
+  chart workbooks, the cell entry left the slide wasm. Done and checked against PowerPoint:
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
   font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
   right: PowerPoint does not hyphenate.

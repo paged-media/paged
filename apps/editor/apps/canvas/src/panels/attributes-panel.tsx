@@ -47,7 +47,7 @@
 //
 // REVERSE PATH DIRECTION sits beside it because, under non-zero, the
 // direction of each contour is what makes a hole. The engine has no
-// reversal op; the reversal is paged.draw's command (draw-geometry's
+// reversal op; the reversal is paged.draw's command (vector-geometry's
 // `reverseContour`, written through `framePath`), so the button invokes
 // that command by id and is disabled when no bundle registered it (an
 // editor without draw) or nothing is selected.

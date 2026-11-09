@@ -31,7 +31,6 @@ import { richScene } from "./fixtures";
 import { mountPanel, unmountAll } from "./harness";
 
 afterEach(() => {
-  setCommentAnchorLookup(null);
   unmountAll();
 });
 
@@ -175,7 +174,7 @@ describe("Comments panel", () => {
     // The registry the canvas shares with every bundle, with a resolver
     // that says what the sheet module's does: the active cell of its frame.
     const anchors = createCommentAnchorRegistry();
-    setCommentAnchorLookup(anchors);
+    setCommentAnchorLookup(h.scope, anchors);
     let active = "Sheet1!B3";
     const sub = anchors.register("media.paged.sheet", {
       id: "media.paged.sheet.commentAnchor.cell",

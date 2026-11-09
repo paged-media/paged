@@ -116,8 +116,8 @@ model carries the outlines it draws, while the preset programs, adjust handles a
 sites are DrawingML's. So the lowest layer every consumer reaches is the shared platform code,
 not L2. It is its own Cargo workspace, a path dependency of the modules, and it keeps its old
 name in the slide workspace through a `package = "dml-geom"` alias, as this record asks of a
-moved crate. Adjust handles use `contribute.overlay` until the overlay-handles door (extensions
-340) lands.
+moved crate. Adjust handles are a host handle set (extensions ADR 339) that the host's Selection
+tools drag (extensions ADR 1103, 2026-11-09).
 
 ## Amendment (2026-11-01): the built-ins are part of the core
 

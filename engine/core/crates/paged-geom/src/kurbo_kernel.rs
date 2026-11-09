@@ -303,7 +303,7 @@ pub fn outline_stroke(
 
 /// Variable-width stroke outline (B-08, §13.12): `widths[i]` is the FULL
 /// stroke width sampled at width-stop `i` (the editor's Pen maps its
-/// per-anchor pressure profile through `draw-tools`
+/// per-anchor pressure profile through `vector-tools`
 /// `strokeWidthFromPressure`), spread over each subpath's normalised arc
 /// length.
 ///

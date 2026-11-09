@@ -52,12 +52,17 @@ import {
 } from "@paged-media/panel-kit";
 import { useStrings } from "@paged-media/strings";
 
-import type { BundleHost } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  WorkbookEditorProps,
+  WorkbookRange,
+} from "@paged-media/plugin-api";
 import {
   DEFAULT_GRID_SVG_OPTIONS,
   applyCompletion,
   arityHint,
   cellEditorRect,
+  cellRect,
   completionTokenAt,
   gridSceneToSvg,
   hitCell,
@@ -183,13 +188,55 @@ interface EditorState {
   value: string;
 }
 
+/** What the grid shows when another bundle's workbook is edited in it
+ *  (extensions ADR 1102): the cells the consumer reads, tinted. */
+interface EmbeddedGrid {
+  ranges: readonly WorkbookRange[];
+}
+
+/** The grid panel: the workbook's grid in a dock panel. */
 export function makeGridPanel(
   _host: BundleHost,
   session: WorkbookSession,
 ): () => ReactElement {
+  const View = makeGridView(session, null);
+  // A declaration, so the React Compiler sees the component (editor ADR 229).
+  function GridPanel(): ReactElement {
+    return <View />;
+  }
+  return GridPanel;
+}
+
+/** The grid as the workbook editor's surface (extensions ADR 1102): the
+ *  formula bar, the grid sized to the box the consumer gives, sheet tabs,
+ *  and the consumer's ranges tinted. Find, the empty state's "New
+ *  workbook" and the panel's notes are left out. */
+export function makeWorkbookGrid(
+  session: WorkbookSession,
+  ranges: readonly WorkbookRange[] = [],
+): (props: WorkbookEditorProps) => ReactElement {
+  return makeGridView(session, { ranges });
+}
+
+/** The chrome of the embedded grid above and below the cells (px): the
+ *  formula bar, the scroll row, the sheet tabs and the gaps. */
+const EMBEDDED_CHROME_PX = 120;
+
+/** Office's tints for what a chart reads: names red, categories purple,
+ *  values blue. */
+const ROLE_TINT: Record<NonNullable<WorkbookRange["role"]>, string> = {
+  name: "rgba(220, 60, 60, 0.18)",
+  category: "rgba(140, 80, 200, 0.18)",
+  value: "rgba(50, 110, 220, 0.16)",
+};
+
+function makeGridView(
+  session: WorkbookSession,
+  embedded: EmbeddedGrid | null,
+): (props: Partial<WorkbookEditorProps>) => ReactElement {
   // A declaration, so the React Compiler sees the component (it cannot
   // see `return function GridPanel()`, editor ADR 229).
-  function GridPanel(): ReactElement {
+  function GridPanel(props: Partial<WorkbookEditorProps>): ReactElement {
     // Re-render on session changes (selection set, cell committed, import).
     // The session as a render value (react-live, editor ADR 229): a new
     // view after every change, so what is read from it is read again.
@@ -427,9 +474,16 @@ export function makeGridPanel(
 
     // The engine-windowed scene for the current origin (null before import
     // or when windowing fails — the panel says so).
+    const viewH =
+      embedded && props.height
+        ? Math.max(
+            60,
+            Math.floor(props.height / PX_PER_PT) - EMBEDDED_CHROME_PX,
+          )
+        : VIEWPORT_H_PT;
     const scene: GridScene | null =
       st.activeSheet !== null
-        ? live.gridScene(firstRow, firstCol, viewW, VIEWPORT_H_PT)
+        ? live.gridScene(firstRow, firstCol, viewW, viewH)
         : null;
 
     // Keep the editor focused while open.
@@ -448,15 +502,8 @@ export function makeGridPanel(
     const selectDrag = useRef(false);
     const lastDragCell = useRef("");
     const pressed = useRef(false);
-    const toPt = (e: React.MouseEvent<SVGSVGElement>): [number, number] => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      // Pixel → content-space pt (the SVG viewBox is pt; it renders at
-      // PX_PER_PT, so divide back out).
-      return [
-        (e.clientX - rect.left) / PX_PER_PT,
-        (e.clientY - rect.top) / PX_PER_PT,
-      ];
-    };
+    const toPt = (e: React.MouseEvent<SVGSVGElement>): [number, number] =>
+      svgPoint(e);
 
     // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
     const onSvgMouseDown = useCallback(
@@ -533,7 +580,7 @@ export function makeGridPanel(
       if (!active || !scene) return;
       const next = scrollToShow(
         { firstRow, firstCol },
-        fullyVisible(scene, viewW, VIEWPORT_H_PT),
+        fullyVisible(scene, viewW, viewH),
         active,
       );
       if (next.firstRow !== firstRow) setFirstRow(next.firstRow);
@@ -578,9 +625,7 @@ export function makeGridPanel(
     const onSvgDoubleClick = useCallback(
       (e: React.MouseEvent<SVGSVGElement>) => {
         if (!scene || st.activeSheet === null) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const xPt = (e.clientX - rect.left) / PX_PER_PT;
-        const yPt = (e.clientY - rect.top) / PX_PER_PT;
+        const [xPt, yPt] = svgPoint(e);
         const hit = hitCell(scene, xPt, yPt);
         if (!hit) return;
         session.setGridSelection(hit.row, hit.col, 1, 1);
@@ -652,7 +697,7 @@ export function makeGridPanel(
               ? t(M.bootError, { error: st.bootError })
               : t(M.empty)}
           </p>
-          {!st.bootError && (
+          {!st.bootError && !embedded && (
             <button
               type="button"
               data-grid-new
@@ -677,6 +722,32 @@ export function makeGridPanel(
       ? cellEditorRect(scene, editor.row, editor.col)
       : null;
 
+    // The embedded grid's sheet tabs, and the consumer's ranges on the
+    // active sheet as one tinted rect per visible cell.
+    const sheetTabs = embedded
+      ? live.sheets().filter((x) => (x.state ?? "visible") === "visible")
+      : [];
+    const activeName = sheetTabs.find((x) => x.id === st.activeSheet)?.name;
+    const tints: [number, number, number, number, string][] = [];
+    for (const r of embedded?.ranges ?? []) {
+      if (r.sheet !== activeName) continue;
+      const vp = scene.viewport;
+      const rows =
+        vp.rowIndices ??
+        Array.from({ length: vp.rows }, (_, i) => vp.firstRow + i);
+      const cols =
+        vp.colIndices ??
+        Array.from({ length: vp.cols }, (_, i) => vp.firstCol + i);
+      for (const row of rows) {
+        if (row < r.startRow || row > r.endRow) continue;
+        for (const col of cols) {
+          if (col < r.startCol || col > r.endCol) continue;
+          const rect = cellRect(vp, row, col);
+          if (rect) tints.push([...rect, ROLE_TINT[r.role ?? "value"]]);
+        }
+      }
+    }
+
     return (
       <div
         ref={rootRef}
@@ -688,7 +759,7 @@ export function makeGridPanel(
           gap: space[2],
         }}
       >
-        <div style={kicker}>{t(M.kicker)}</div>
+        {!embedded && <div style={kicker}>{t(M.kicker)}</div>}
 
         {/* Formula bar (S-04) — bound to the selected cell; autocompletes
             engine-registry function names. Disabled until a cell is selected. */}
@@ -754,223 +825,227 @@ export function makeGridPanel(
         </div>
 
         {/* Find and replace in the sheet (Wave 5; the one home for find). */}
-        <div
-          data-grid-find
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: space[1],
-          }}
-        >
-          <input
-            ref={findInputRef}
-            data-find-input
-            data-sheet-find-needle
-            type="text"
-            value={findText}
-            placeholder={t(M.findPlaceholder)}
-            aria-label={t(M.findPlaceholder)}
-            onChange={(e) => {
-              setFindText(e.target.value);
-              setFindStatus(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                runFind(e.shiftKey);
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                surfaceRef.current?.focus();
-              }
-            }}
-            style={{ ...formulaInput, flex: "1 1 120px", minWidth: 0 }}
-          />
-          <button
-            type="button"
-            data-find-prev
-            disabled={!findText}
-            title={findText ? t(M.prevTitle) : t(M.typeFirst)}
-            onClick={() => runFind(true)}
-            style={scrollBtn}
-          >
-            {t(M.prev)}
-          </button>
-          <button
-            type="button"
-            data-find-next
-            disabled={!findText}
-            title={findText ? t(M.nextTitle) : t(M.typeFirst)}
-            onClick={() => runFind(false)}
-            style={scrollBtn}
-          >
-            {t(M.next)}
-          </button>
-          <button
-            type="button"
-            data-sheet-find
-            disabled={!findText}
-            title={findText ? t(M.findAllTitle) : t(M.typeFirst)}
-            onClick={onFindAll}
-            style={scrollBtn}
-          >
-            {t(M.findAll)}
-          </button>
-          {findStatus && (
-            <span
-              data-find-status
+        {!embedded && (
+          <>
+            <div
+              data-grid-find
               style={{
-                alignSelf: "center",
-                font: `11px ${font.sans}`,
-                color: "var(--pg-muted-fg)",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: space[1],
               }}
             >
-              {findStatus}
-            </span>
-          )}
-        </div>
-        <Disclosure
-          summary={t(M.replaceOptions)}
-          data-sheet-replace-section
-          style={{ font: `12px ${font.sans}` }}
-          summaryStyle={{ color: color.mutedFg }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: space[1],
-              marginTop: space[1],
-            }}
-          >
-            <input
-              data-sheet-find-replacement
-              type="text"
-              value={replacement}
-              onChange={(e) => setReplacement(e.target.value)}
-              placeholder={t(M.replaceWith)}
-              aria-label={t(M.replaceWith)}
-              style={{ ...formulaInput, flex: "1 1 120px", minWidth: 0 }}
-            />
-            <button
-              type="button"
-              data-sheet-replace-all
-              disabled={!findText}
-              title={findText ? t(M.replaceAllTitle) : t(M.typeFirst)}
-              onClick={onReplaceAll}
-              style={scrollBtn}
+              <input
+                ref={findInputRef}
+                data-find-input
+                data-sheet-find-needle
+                type="text"
+                value={findText}
+                placeholder={t(M.findPlaceholder)}
+                aria-label={t(M.findPlaceholder)}
+                onChange={(e) => {
+                  setFindText(e.target.value);
+                  setFindStatus(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    runFind(e.shiftKey);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    surfaceRef.current?.focus();
+                  }
+                }}
+                style={{ ...formulaInput, flex: "1 1 120px", minWidth: 0 }}
+              />
+              <button
+                type="button"
+                data-find-prev
+                disabled={!findText}
+                title={findText ? t(M.prevTitle) : t(M.typeFirst)}
+                onClick={() => runFind(true)}
+                style={scrollBtn}
+              >
+                {t(M.prev)}
+              </button>
+              <button
+                type="button"
+                data-find-next
+                disabled={!findText}
+                title={findText ? t(M.nextTitle) : t(M.typeFirst)}
+                onClick={() => runFind(false)}
+                style={scrollBtn}
+              >
+                {t(M.next)}
+              </button>
+              <button
+                type="button"
+                data-sheet-find
+                disabled={!findText}
+                title={findText ? t(M.findAllTitle) : t(M.typeFirst)}
+                onClick={onFindAll}
+                style={scrollBtn}
+              >
+                {t(M.findAll)}
+              </button>
+              {findStatus && (
+                <span
+                  data-find-status
+                  style={{
+                    alignSelf: "center",
+                    font: `11px ${font.sans}`,
+                    color: "var(--pg-muted-fg)",
+                  }}
+                >
+                  {findStatus}
+                </span>
+              )}
+            </div>
+            <Disclosure
+              summary={t(M.replaceOptions)}
+              data-sheet-replace-section
+              style={{ font: `12px ${font.sans}` }}
+              summaryStyle={{ color: color.mutedFg }}
             >
-              {t(M.replaceAll)}
-            </button>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: space[2],
-              marginTop: space[1],
-            }}
-          >
-            {(
-              [
-                [
-                  "data-sheet-find-case",
-                  t(M.matchCase),
-                  matchCase,
-                  setMatchCase,
-                ],
-                [
-                  "data-sheet-find-entire",
-                  t(M.entireCell),
-                  entireCell,
-                  setEntireCell,
-                ],
-                [
-                  "data-sheet-find-formulas",
-                  t(M.inFormulas),
-                  inFormulas,
-                  setInFormulas,
-                ],
-              ] as const
-            ).map(([attr, label, checked, set]) => (
-              <label
-                key={attr}
+              <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  color: "var(--pg-fg)",
+                  flexWrap: "wrap",
+                  gap: space[1],
+                  marginTop: space[1],
                 }}
               >
                 <input
-                  {...{ [attr]: true }}
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => set(e.target.checked)}
+                  data-sheet-find-replacement
+                  type="text"
+                  value={replacement}
+                  onChange={(e) => setReplacement(e.target.value)}
+                  placeholder={t(M.replaceWith)}
+                  aria-label={t(M.replaceWith)}
+                  style={{ ...formulaInput, flex: "1 1 120px", minWidth: 0 }}
                 />
-                {label}
-              </label>
-            ))}
-          </div>
-        </Disclosure>
-        {findMsg && (
-          <p
-            data-sheet-find-msg
-            role="status"
-            style={{
-              ...note,
-              marginTop: 0,
-              color: "var(--pg-fg)",
-              fontSize: 12,
-            }}
-          >
-            {findMsg}
-          </p>
-        )}
-        {hits && hits.length > 0 && (
-          <ul
-            data-sheet-find-hits
-            style={{
-              listStyle: "none",
-              margin: 0,
-              padding: 0,
-              maxHeight: 160,
-              overflowY: "auto",
-              border: "1px solid var(--pg-border)",
-              borderRadius: radius.sm,
-            }}
-          >
-            {hits.map((h, i) => (
-              <li key={`${h.sheet}:${h.row}:${h.col}:${i}`}>
                 <button
                   type="button"
-                  data-sheet-find-hit={`${h.row}:${h.col}`}
-                  onClick={() => session.goToCell(h.sheet, h.row, h.col)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    font: `12px ${font.sans}`,
-                    color: "var(--pg-fg)",
-                    background: "none",
-                    border: "none",
-                    padding: "3px 6px",
-                    cursor: "pointer",
-                  }}
+                  data-sheet-replace-all
+                  disabled={!findText}
+                  title={findText ? t(M.replaceAllTitle) : t(M.typeFirst)}
+                  onClick={onReplaceAll}
+                  style={scrollBtn}
                 >
-                  <span
+                  {t(M.replaceAll)}
+                </button>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: space[2],
+                  marginTop: space[1],
+                }}
+              >
+                {(
+                  [
+                    [
+                      "data-sheet-find-case",
+                      t(M.matchCase),
+                      matchCase,
+                      setMatchCase,
+                    ],
+                    [
+                      "data-sheet-find-entire",
+                      t(M.entireCell),
+                      entireCell,
+                      setEntireCell,
+                    ],
+                    [
+                      "data-sheet-find-formulas",
+                      t(M.inFormulas),
+                      inFormulas,
+                      setInFormulas,
+                    ],
+                  ] as const
+                ).map(([attr, label, checked, set]) => (
+                  <label
+                    key={attr}
                     style={{
-                      fontFamily: font.mono,
-                      fontSize: 11,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      color: "var(--pg-fg)",
                     }}
                   >
-                    {columnLabel(h.col)}
-                    {h.row + 1}
-                  </span>{" "}
-                  {h.excerpt}
-                </button>
-              </li>
-            ))}
-          </ul>
+                    <input
+                      {...{ [attr]: true }}
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => set(e.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </Disclosure>
+            {findMsg && (
+              <p
+                data-sheet-find-msg
+                role="status"
+                style={{
+                  ...note,
+                  marginTop: 0,
+                  color: "var(--pg-fg)",
+                  fontSize: 12,
+                }}
+              >
+                {findMsg}
+              </p>
+            )}
+            {hits && hits.length > 0 && (
+              <ul
+                data-sheet-find-hits
+                style={{
+                  listStyle: "none",
+                  margin: 0,
+                  padding: 0,
+                  maxHeight: 160,
+                  overflowY: "auto",
+                  border: "1px solid var(--pg-border)",
+                  borderRadius: radius.sm,
+                }}
+              >
+                {hits.map((h, i) => (
+                  <li key={`${h.sheet}:${h.row}:${h.col}:${i}`}>
+                    <button
+                      type="button"
+                      data-sheet-find-hit={`${h.row}:${h.col}`}
+                      onClick={() => session.goToCell(h.sheet, h.row, h.col)}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        font: `12px ${font.sans}`,
+                        color: "var(--pg-fg)",
+                        background: "none",
+                        border: "none",
+                        padding: "3px 6px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: font.mono,
+                          fontSize: 11,
+                        }}
+                      >
+                        {columnLabel(h.col)}
+                        {h.row + 1}
+                      </span>{" "}
+                      {h.excerpt}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
 
         {/* Scroll controls — one row/col per step; the engine re-windows. */}
@@ -1114,6 +1189,31 @@ export function makeGridPanel(
               __html: trustedHtml("paged-sheet-grid", innerOf, svg),
             }}
           />
+          {tints.length > 0 && (
+            <svg
+              data-grid-ranges
+              aria-hidden
+              width={wPx}
+              height={hPx}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                pointerEvents: "none",
+              }}
+            >
+              {tints.map(([x, y, w, h, fill], i) => (
+                <rect
+                  key={i}
+                  x={x * PX_PER_PT}
+                  y={y * PX_PER_PT}
+                  width={w * PX_PER_PT}
+                  height={h * PX_PER_PT}
+                  fill={fill}
+                />
+              ))}
+            </svg>
+          )}
           {editor && edRect && (
             <input
               ref={editorRef}
@@ -1138,16 +1238,54 @@ export function makeGridPanel(
           )}
         </div>
 
+        {embedded && sheetTabs.length > 1 && (
+          <div data-grid-sheet-tabs style={{ display: "flex", gap: space[1] }}>
+            {sheetTabs.map((sh) => (
+              <button
+                key={sh.id}
+                type="button"
+                data-grid-sheet-tab={sh.name}
+                aria-pressed={sh.id === st.activeSheet}
+                onClick={() => session.setActiveSheet(sh.id)}
+                style={{
+                  ...scrollBtn,
+                  fontWeight: sh.id === st.activeSheet ? 600 : 400,
+                }}
+              >
+                {sh.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* S-01/S-02 honesty: this is the interim panel grid, not the
             in-frame sheets-mode surface (still SDK-blocked). */}
-        <p data-grid-honesty style={{ ...note, marginTop: 0 }}>
-          {t(M.honesty)}
-        </p>
-        <About style={{ marginTop: 0 }}>{t(M.about)}</About>
+        {!embedded && (
+          <>
+            <p data-grid-honesty style={{ ...note, marginTop: 0 }}>
+              {t(M.honesty)}
+            </p>
+            <About style={{ marginTop: 0 }}>{t(M.about)}</About>
+          </>
+        )}
       </div>
     );
   }
   return GridPanel;
+}
+
+/** A pointer position over the grid's SVG in content-space pt. The SVG
+ *  renders at PX_PER_PT; when an ancestor scales it (the workbook editor
+ *  inside a frame surface, which the host transforms by the zoom), the
+ *  rendered width over the CSS width undoes that scale too. */
+function svgPoint(e: React.MouseEvent<SVGSVGElement>): [number, number] {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const css = Number(e.currentTarget.getAttribute?.("width"));
+  const scale = rect.width > 0 && css > 0 ? css / rect.width : 1;
+  return [
+    ((e.clientX - rect.left) * scale) / PX_PER_PT,
+    ((e.clientY - rect.top) * scale) / PX_PER_PT,
+  ];
 }
 
 const scrollBtn: CSSProperties = {
@@ -1189,5 +1327,9 @@ function innerOf(svg: string): string {
   const start = svg.indexOf(">");
   const end = svg.lastIndexOf("</svg>");
   if (start < 0 || end < 0 || end <= start) return "";
-  return svg.slice(start + 1, end);
+  // The body takes no pointer events: the outer <svg> is the target of
+  // every press. The body is rebuilt on each selection change, and a
+  // browser counts a double-click only when both presses hit the same
+  // node, so a press on a cell's replaced <rect> never made a dblclick.
+  return `<g pointer-events="none">${svg.slice(start + 1, end)}</g>`;
 }

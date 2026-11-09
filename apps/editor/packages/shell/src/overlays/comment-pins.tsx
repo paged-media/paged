@@ -36,7 +36,11 @@ import {
   getFocusedThread,
   subscribeFocusedThread,
 } from "../state/comment-focus";
-import { useEditorScope } from "../state/editor-scope";
+import {
+  scoped,
+  useEditorScope,
+  type EditorScope,
+} from "../state/editor-scope";
 import { useSyncExternalStore } from "react";
 
 /** The Comments panel's id. */
@@ -64,40 +68,52 @@ export interface CommentAnchorLookup {
   onDidChange(listener: () => void): { dispose(): void };
 }
 
-let lookup: CommentAnchorLookup | null = null;
-let lookupVersion = 0;
-const lookupListeners = new Set<() => void>();
-let lookupSubscription: { dispose(): void } | null = null;
+// The registry and its listeners live in the editor's scope: two editors on
+// one page each read their own bundle hosts' registry.
+// `current` is replaced on every change, so it is the render's snapshot.
+const LOOKUP = scoped("commentAnchorLookup", () => ({
+  current: { lookup: null as CommentAnchorLookup | null },
+  listeners: new Set<() => void>(),
+  subscription: null as { dispose(): void } | null,
+}));
 
 /** The canvas hands over the registry once, at mount. */
-export function setCommentAnchorLookup(next: CommentAnchorLookup | null) {
-  lookupSubscription?.dispose();
-  lookup = next;
-  lookupSubscription =
-    next?.onDidChange(() => {
-      lookupVersion += 1;
-      for (const l of [...lookupListeners]) l();
-    }) ?? null;
-  lookupVersion += 1;
-  for (const l of [...lookupListeners]) l();
+export function setCommentAnchorLookup(
+  scope: EditorScope,
+  next: CommentAnchorLookup | null,
+) {
+  const state = scope.get(LOOKUP);
+  const bump = () => {
+    state.current = { lookup: next };
+    for (const l of [...state.listeners]) l();
+  };
+  state.subscription?.dispose();
+  state.subscription = next?.onDidChange(bump) ?? null;
+  bump();
 }
 
 /** The address the owning module has selected in `item` (a sheet frame's
  *  active cell, `Sheet1!B3`), for the Comments panel's "New comment"; null
  *  when no module has one. Read at the moment of the click: a module's cell
  *  selection moves without a document change. */
-export function selectedCommentAddress(item: string): string | null {
+export function selectedCommentAddress(
+  scope: EditorScope,
+  item: string,
+): string | null {
   try {
-    return lookup?.selected?.(item) ?? null;
+    return scope.get(LOOKUP).current.lookup?.selected?.(item) ?? null;
   } catch {
     return null;
   }
 }
 
-const subscribeLookup = (l: () => void) => {
-  lookupListeners.add(l);
-  return () => void lookupListeners.delete(l);
-};
+const NO_LOOKUP = { lookup: null } as const;
+
+function subscribeLookup(scope: EditorScope, l: () => void): () => void {
+  const { listeners } = scope.get(LOOKUP);
+  listeners.add(l);
+  return () => void listeners.delete(l);
+}
 
 /** The pins of a `comments` collection: one per document thread that stands
  *  on a page, in the engine's order. A `cell` thread stands at its cell when
@@ -154,14 +170,14 @@ function CommentPinsRender(props: OverlayProps) {
     () => getFocusedThread(scope),
     () => null,
   );
-  useSyncExternalStore(
-    subscribeLookup,
-    () => lookupVersion,
-    () => 0,
+  const { lookup } = useSyncExternalStore(
+    (l) => subscribeLookup(scope, l),
+    () => scope.get(LOOKUP).current,
+    () => NO_LOOKUP,
   );
   const pins = pinsOf(
     rows ?? [],
-    lookup ? (i, a) => lookup!.resolve(i, a) : null,
+    lookup ? (i, a) => lookup.resolve(i, a) : null,
   );
   const inv = 1 / props.camera.scale;
 

@@ -266,7 +266,7 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     order: 0,
     isGroupDefault: true,
     // THE Pencil (paged.draw retired its own into this one, draw ADR
-    // 359): freehand → draw-tools' PencilMachine (RDP, close-on-lift) →
+    // 359): freehand → vector-tools' PencilMachine (RDP, close-on-lift) →
     // `insertPath{smooth}`, the engine fitting the curve (v24).
     gesture: createPencilHandler,
     options: { toolId: PENCIL_TOOL_ID, fields: PENCIL_OPTION_FIELDS },

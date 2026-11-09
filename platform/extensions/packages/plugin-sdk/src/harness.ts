@@ -71,7 +71,9 @@
 
 import type {
   BundleHost,
+  CanvasPointerEvent,
   EnteredEditContext,
+  HostHandleRouter,
   PluginLogger,
   ToolSettingValue,
   WillSaveEvent,
@@ -144,6 +146,10 @@ import {
   createCommentAnchorRegistry,
   type CommentAnchorBackend,
 } from "./doors-comments.js";
+import {
+  createWorkbookEditorRegistry,
+  type WorkbookEditorBackend,
+} from "./doors-workbooks.js";
 import { satisfiesApiVersion, API_VERSION } from "./version.js";
 import { mapBacking } from "./testing.js";
 import { createCoreObjects } from "./core-objects.js";
@@ -220,6 +226,7 @@ export interface HarnessOptions
       | "actions"
       | "ml"
       | "commentAnchors"
+      | "workbookEditors"
       | "objects"
       | "willSave"
       | "toolSettings"
@@ -503,6 +510,31 @@ export interface HeadlessHost {
     key: string;
     shapes: readonly ToolPreviewShape[];
   }>;
+  /** Extensions ADR 1103 — play the host's Selection tool on a drag from
+   *  `from` to `to` (page-local pt of `pageId`; the harness camera is at
+   *  1x and a page's origin at 0). The press goes first to the bundles'
+   *  handle routers, as the editor's tool does: when a handle set with an
+   *  `onHostDrag` listener answers it, the listener hears `onStart`,
+   *  `steps` moves (default 4) along the line, then `onEnd`, or
+   *  `onCancel` with `cancel: true`. Returns true when a handle took the
+   *  press; false when the press would have been the host's own (a move
+   *  or a marquee, which the harness does not play). */
+  dragWithSelectionTool(
+    pageId: string,
+    from: [number, number],
+    to: [number, number],
+    options?: {
+      steps?: number;
+      modifiers?: Partial<CanvasPointerEvent["modifiers"]>;
+      cancel?: boolean;
+    },
+  ): boolean;
+  /** Extensions ADR 1103 — what a host Selection tool press at a point
+   *  lands on among the bundles' handles (with its cursor), or `null`. */
+  selectionToolHandleAt(
+    pageId: string,
+    pagePoint: [number, number],
+  ): { cursor?: unknown } | null;
   /** W-19 — play the SHELL's part on a pointer entry: call the registered
    *  edit context's `onEnter` with `ctx` (which may carry `pageId` /
    *  `pagePoint` / `contentPoint`, as the editor fills them). The harness
@@ -548,6 +580,11 @@ export interface HeadlessHost {
    *  extensions ADR 1101): a bundle's resolvers land here; `resolve(item,
    *  address)` is what the host panel asks. */
   readonly commentAnchors: CommentAnchorBackend;
+  /** The SHARED workbook editor registry (`workbooks@1`, extensions ADR
+   *  1102): every bundle host here registers into and opens from it, so a
+   *  provider bundle and a consumer bundle loaded together meet; a test with
+   *  no provider registers `fakeWorkbookEditor()`. */
+  readonly workbookEditors: WorkbookEditorBackend;
   /** The will-save registry this host injected: `fire()` runs every
    *  bundle's `document.onWillSave` listener and awaits them, as a save
    *  would. */
@@ -1022,6 +1059,14 @@ export async function createHeadlessHost(
     overlayLayerMap,
     options.engineShaper === true,
   );
+  // Extensions ADR 1103 — the host Selection tools' route to the bundles'
+  // handle sets. Wired, so `supports("overlay.handles.hostDrag@1")` is
+  // true headlessly and `dragWithSelectionTool` plays the tool.
+  const handleRouters = new Map<string, HostHandleRouter>();
+  editor.overlaySignals.setHandleRouter = (key, router) => {
+    if (router) handleRouters.set(key, router);
+    else handleRouters.delete(key);
+  };
 
   const subContexts =
     editor.registries.subContexts ?? createHeadlessSubContexts();
@@ -1220,6 +1265,8 @@ export async function createHeadlessHost(
   const ml = options.ml ?? createMlRegistry();
   const commentAnchors =
     options.commentAnchors ?? createCommentAnchorRegistry();
+  const workbookEditors =
+    options.workbookEditors ?? createWorkbookEditorRegistry();
   const objects =
     options.objects ??
     createObjectRegistry({
@@ -1255,6 +1302,7 @@ export async function createHeadlessHost(
       actions,
       ml,
       commentAnchors,
+      workbookEditors,
       objects,
       willSave: options.willSave ?? willSave,
       toolSettings: options.toolSettings ?? toolSettings,
@@ -1467,6 +1515,56 @@ export async function createHeadlessHost(
     overlayLayers() {
       return [...overlayLayerMap].map(([key, shapes]) => ({ key, shapes }));
     },
+    dragWithSelectionTool(pageId, from, to, opts) {
+      const mods = {
+        shift: false,
+        alt: false,
+        cmd: false,
+        ctrl: false,
+        ...opts?.modifiers,
+      };
+      const at = (
+        p: [number, number],
+        maxDelta: number,
+      ): CanvasPointerEvent => ({
+        pageId,
+        pagePoint: [p[0], p[1]],
+        docPoint: [p[0], p[1]],
+        modifiers: mods,
+        maxDelta,
+        button: 0,
+        target: null,
+        pressure: 0.5,
+        tiltX: 0,
+        tiltY: 0,
+        pointerType: "mouse",
+      });
+      const router = [...handleRouters.values()].find((r) =>
+        r.down(at(from, 0)),
+      );
+      if (!router) return false;
+      const steps = Math.max(1, opts?.steps ?? 4);
+      const dist = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        router.move(
+          at(
+            [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t],
+            dist * t,
+          ),
+        );
+      }
+      if (opts?.cancel) router.cancel();
+      else router.up(at(to, dist));
+      return true;
+    },
+    selectionToolHandleAt(pageId, pagePoint) {
+      for (const r of handleRouters.values()) {
+        const hit = r.hit(pageId, pagePoint);
+        if (hit) return hit;
+      }
+      return null;
+    },
     enterEditContext(ctx: EnteredEditContext): boolean {
       const entry = contributions.find(
         (c) => c.kind === "editContext" && c.id === ctx.type,
@@ -1490,6 +1588,7 @@ export async function createHeadlessHost(
     actions,
     ml,
     commentAnchors,
+    workbookEditors,
     willSave,
     toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {

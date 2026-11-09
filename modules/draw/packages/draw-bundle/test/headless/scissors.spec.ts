@@ -41,7 +41,7 @@ import {
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { evalCubic } from "@paged-media/draw-geometry";
+import { evalCubic } from "@paged-media/vector-geometry";
 
 import {
   applyScissorsAt,

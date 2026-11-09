@@ -1666,6 +1666,12 @@ impl Builder<'_> {
             }
             let (il, it_, ir, ib) = tf.inset;
             f.inset_spacing = Some([n(it_), n(il), n(ib), n(ir)]);
+            // Engine ADR 1061 — `normAutofit`: the text keeps its written
+            // sizes and the engine sets it at the saved fit, smaller when it
+            // no longer fits. (`spAutoFit` is the height auto-sizing above.)
+            f.shrink_to_fit = tf.shrink.map(|(font, line)| {
+                paged_model::text_fit::ShrinkToFit::new(font as f32, line as f32)
+            });
             // Engine ADR 1091 — WordArt bends the frame's text.
             f.text_warp = tf.warp.as_ref().map(|w| paged_model::text_warp::TextWarp {
                 preset: w.preset.clone(),

@@ -17,11 +17,13 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// A deck's chart is live (slide ADR 715): double-click a chart in the
-// slide profile and its data sheet opens over it (the chart context's
-// frame surface); a value typed into a cell and Done redraws the chart on
-// the slide, and the exported .pptx carries the new value in the chart
-// part and its workbook.
+// A deck's chart is live (slide ADR 715): double-click a chart and its
+// data sheet opens over it (the chart context's frame surface around
+// paged.sheet's grid, reached through the workbook door: extensions ADR
+// 1102, slide ADR 724 amendment 1); a value typed into a cell and Done
+// redraws the chart on the slide, and the exported .pptx carries the new
+// value in the chart part and its workbook. The full editor: the slide
+// profile alone loads no workbook editor.
 
 import { expect, test, type Page } from "@playwright/test";
 import { dirname, resolve as pathResolve } from "node:path";
@@ -138,8 +140,22 @@ test.describe("paged.slide: live chart data", () => {
   }) => {
     test.setTimeout(120_000);
     const designer = new Designer(page);
-    await designer.open({ search: "?solo=paged.slide" });
-    await expect.poll(() => pageCount(page), { timeout: 25_000 }).toBe(1);
+    await designer.open();
+    // The full editor boots with no document (the slide profile opened a
+    // blank deck, which is what a wait for one page measured until
+    // 0e64bf4ce left that profile): ready is paged.slide's importer.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              !!(
+                globalThis as unknown as Canvas
+              ).__canvas.registries.importers?.resolve("charts.pptx"),
+          ),
+        { timeout: 25_000 },
+      )
+      .toBe(true);
     const bytes = [...readFileSync(CHARTS_FIXTURE)];
     await page.evaluate(async (bytes) => {
       const reg = (globalThis as unknown as Canvas).__canvas.registries
@@ -159,12 +175,31 @@ test.describe("paged.slide: live chart data", () => {
     await page.mouse.dblclick(before!.x, before!.y);
     const surface = page.locator("[data-slide-chart-surface]");
     await expect(surface).toBeVisible({ timeout: 10_000 });
-    await expect(surface.locator('[data-cell="B1"]')).toHaveText("North");
+    const grid = surface.locator("[data-grid-svg-root]");
+    await expect(grid).toBeVisible({ timeout: 10_000 });
+    await expect.poll(() => grid.innerHTML()).toContain(">North</text>");
 
-    await surface.locator('[data-cell="B3"]').click();
-    await page.keyboard.type("9.25");
-    await page.keyboard.press("Enter");
-    await expect(surface.locator('[data-cell="B3"]')).toHaveText("9.25");
+    // B3: two rows under the first series name (the leftmost red tint, B1).
+    const b3 = await surface.evaluate((root) => {
+      const svg = root.querySelector("[data-grid-svg-root]")!;
+      const names = Array.from(
+        root.querySelectorAll("[data-grid-ranges] rect"),
+      ).filter((r) => r.getAttribute("fill")!.startsWith("rgba(220"));
+      const n = (r: Element, a: string) => Number(r.getAttribute(a));
+      const b1 = names.sort((a, b) => n(a, "x") - n(b, "x"))[0]!;
+      const box = svg.getBoundingClientRect();
+      const k = box.width / Number(svg.getAttribute("width"));
+      return {
+        x: box.left + (n(b1, "x") + n(b1, "width") / 2) * k,
+        y: box.top + (n(b1, "y") + n(b1, "height") * 2.5) * k,
+      };
+    });
+    await page.mouse.dblclick(b3.x, b3.y);
+    const editor = surface.locator("[data-grid-editor]");
+    await expect(editor).toBeVisible();
+    await editor.fill("9.25");
+    await editor.press("Enter");
+    await expect.poll(() => grid.innerHTML()).toContain(">9.25</text>");
     if (process.env.PAGED_SHOT)
       await page.screenshot({ path: process.env.PAGED_SHOT });
     await surface.locator("[data-slide-chart-done]").click();

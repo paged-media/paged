@@ -25,7 +25,7 @@ next to the code you change. This file holds only what crosses components.
   `canvas-wasm` and the bundled CLI (its `paged` bin); see npm packages below.
 - `platform/shared/*` — internal code of the built-ins and the editor (PM-0002):
   `ai`, `fmt`, `helpers`, `panel-kit`, `react-live`, `test-kit`, `test-resources`,
-  `wasm-boot`, and the Rust crates `ooxml` (`paged-ooxml`, the OOXML foundation of
+  `vector-geometry`, `vector-tools`, `wasm-boot`, and the Rust crates `ooxml` (`paged-ooxml`, the OOXML foundation of
   doc, slide and sheet, with the DrawingML paint reader and the units), `dml-chart`
   (the DrawingML chart reader of sheet and slide), `dml-geom` (DrawingML preset
   geometry, handles and connection sites of slide and doc's shapes) and
@@ -41,7 +41,7 @@ from anywhere in the repository. One project per Cargo workspace and JS componen
 `core`, `core-idml-viewer`, `publish`, `image`, `draw`, `sheet`, `data`, `doc`,
 `slide`, `web`, `web-render`, `extensions`, `editor`, `server`, `ml-host`, `cli`, and the
 shared packages (`ai`, `dml-chart`, `dml-geom`, `dml-native`, `fmt`, `helpers`, `ooxml`, `panel-kit`,
-`react-live`, `test-kit`, `test-resources`, `wasm-boot`).
+`react-live`, `test-kit`, `test-resources`, `vector-geometry`, `vector-tools`, `wasm-boot`).
 
 - `moon run <project>:test` — also `:fmt`, `:check`, `:lint`, `:build`, and
   `:wasm` where the component ships a wasm artifact. `moon run :lint` runs it

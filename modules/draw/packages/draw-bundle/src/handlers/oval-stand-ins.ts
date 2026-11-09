@@ -72,7 +72,7 @@ import type {
   ElementId,
   MutationInput,
 } from "@paged-media/plugin-api";
-import { ovalToPath, type Affine } from "@paged-media/draw-geometry";
+import { ovalToPath, type Affine } from "@paged-media/vector-geometry";
 
 import { bindMinted, mutateMinting } from "../commands/minted";
 import { insertRawPathOps } from "../commands/shape-build";

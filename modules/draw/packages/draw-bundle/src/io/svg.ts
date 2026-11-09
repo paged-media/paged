@@ -31,7 +31,7 @@
 //   · EXPORT claims `.svg` and asks `document.exportSvg` for what the
 //     selection draws.
 //
-// The module's own TypeScript reader and writer (draw-geometry's
+// The module's own TypeScript reader and writer (vector-geometry's
 // `svg-doc.ts`) are gone, and with them the bug they carried: a compound
 // shape the reader could not land whole was split into one path per
 // contour, its holes painted. On a host without the doors (an engine

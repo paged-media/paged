@@ -18,7 +18,7 @@ right-hand column below says where each package ends up now.
 | `@paged-media/plugin-cli` | 7 | latest 0.1.2-canary.0, canary 0.1.6 | deprecate → the `paged-plugin` bin of `@paged-media/plugin-sdk` |
 | `@paged-media/data`, `draw`, `image`, `pdf`, `publish`, `sheet`, `web` | 1–22 each | | retire: unpublish where npm allows it, else deprecate (built into the editor) |
 | `@paged-media/data-bundle`, `draw-bundle`, `image-glue`, `sheet-bundle`, `web-bundle` | | | retire (earlier names of the bundles) |
-| `@paged-media/data-host-model`, `draw-geometry`, `draw-tools`, `image-manifest`, `sheet-host-model`, `web-model` | 1 each | | retire (internal packages) |
+| `@paged-media/data-host-model`, `vector-geometry`, `vector-tools`, `image-manifest`, `sheet-host-model`, `web-model` | 1 each | | retire (internal packages) |
 
 `@paged-media/repo-wasm` 0.74.0 was never published. `doc`, `slide`, `client`, `ai` and `cli`
 were never on npm, and stay private workspace packages.

@@ -1,0 +1,20 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# @paged-media/vector-tools: the host-agnostic vector tool state machines the
+# editor's path tools and draw stand on (docs/adr/PM-0002), a private package
+# of the root Bun workspace. js-check and js-test are the inherited
+# `bun run typecheck` and `bun run test`.
+language: "typescript"
+layer: "library"
+stack: "frontend"
+tags: ["node", "shared"]
+
+project:
+  title: "platform/shared/vector-tools"
+  description: "Pen, pencil, direct select, knife, scissors, width, reshape and distortion machines over vector-geometry; never published."
+
+dependsOn:
+  - id: "vector-geometry"
+    scope: "production"
+  - id: "extensions"
+    scope: "production"

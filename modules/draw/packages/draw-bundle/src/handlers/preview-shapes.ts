@@ -17,7 +17,7 @@
  */
 
 // The overlay vocabulary the distortion tools draw with, as pure
-// builders over draw-geometry's own shape tables (svg-shapes' `polyToPath`
+// builders over vector-geometry's own shape tables (svg-shapes' `polyToPath`
 // / `ellipseToPath` / `mapTable` — nothing is flattened or re-derived
 // here): straight runs and outlines as DASHABLE `ToolPreviewPath`s, an
 // ellipse (the liquify brush, a pin's rotation ring) as real cubics, a
@@ -31,7 +31,7 @@ import {
   polyToPath,
   type AnchorTable,
   type Vec2,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 type P = [number, number];
 
