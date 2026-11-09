@@ -18,7 +18,7 @@
 
 // THE SYMBOLISM TOOLS — the Symbol Sprayer, Shifter, Scruncher, Sizer,
 // Spinner, Stainer and Screener (WP6.8, draw ADR 365): one host-routed
-// shim over draw-tools' `SymbolismMachine`, the kind fixed per tool and
+// shim over vector-tools' `SymbolismMachine`, the kind fixed per tool and
 // the brush read from the tool's own options (Illustrator's Symbolism
 // Tools Options: double-click the rail slot).
 //
@@ -50,7 +50,7 @@ import {
   type SymbolismSnapshot,
   type SymbolismToolKind,
   type SymbolismToolOptions,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   symbolBox,

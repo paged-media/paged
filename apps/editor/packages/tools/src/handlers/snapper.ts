@@ -45,12 +45,12 @@ import {
   type EditorScope,
   type PagedEditor,
 } from "@paged-media/shell";
-import type { Vec2 } from "@paged-media/draw/geometry";
+import type { Vec2 } from "@paged-media/vector-geometry";
 import {
   createSnapper,
   snapAnswered,
   type Snapper,
-} from "@paged-media/draw/machines";
+} from "@paged-media/vector-tools";
 
 /** Screen pixels within which Direct Selection's LOCAL snap pulls a
  *  dragged anchor before the engine answers (the engine path uses the

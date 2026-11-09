@@ -52,13 +52,13 @@ import type {
   CanvasPointerEvent,
   GestureHandler,
 } from "@paged-media/plugin-api";
-import { boundsCenter, type Vec2 } from "@paged-media/draw-geometry";
+import { boundsCenter, type Vec2 } from "@paged-media/vector-geometry";
 import {
   repeatGuide,
   repeatSteer,
   type RepeatGuideSpec,
   type RepeatSteer,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   applyUpdateRepeat,

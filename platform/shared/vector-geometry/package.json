@@ -1,0 +1,30 @@
+{
+  "name": "@paged-media/vector-geometry",
+  "private": true,
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "description": "Internal vector geometry of the built-ins and the editor, one implementation each: beziers, compound paths, polygons, snapping, width and brush profiles, envelope, warp, repeat and the SVG path, arc, colour and shape readers. Never published (docs/adr/PM-0002).",
+  "version": "0.1.0-canary.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --timeout 30000 --parallel --preload ../../../tooling/js/bun-test-setup.ts",
+    "bench": "bun ./test/bezier.bench.ts && bun ./test/compound.bench.ts && bun ./test/polygon.bench.ts && bun ./test/rdp.bench.ts"
+  },
+  "dependencies": {
+    "@paged-media/helpers": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "^4.10.2",
+    "typescript": "catalog:",
+    "@types/bun": "catalog:",
+    "mitata": "^1.0.34"
+  },
+  "files": [
+    "dist"
+  ]
+}

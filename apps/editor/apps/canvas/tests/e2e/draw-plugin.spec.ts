@@ -21,7 +21,7 @@
 // viewport). Drives the Pen + anchor tools exactly as a user would:
 // activate from the rail / shortcut, click & drag on the canvas,
 // commit with Enter or by closing on the first anchor — proving the
-// pointer events → @paged-media/draw-tools machine → Mutation chain
+// pointer events → @paged-media/vector-tools machine → Mutation chain
 // end-to-end (insertPath, then pathPointInsert / pathPointRemove /
 // pathPointCurveType through the anchor planners), undoable on the
 // shared history.

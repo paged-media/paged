@@ -35,7 +35,7 @@ import {
   type HarmonyRule,
   type Rgb,
   type VariationKind,
-} from "@paged-media/draw/geometry";
+} from "@paged-media/vector-geometry";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { applyGuideColor, readGuideBase } from "../color-guide";

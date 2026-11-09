@@ -73,7 +73,7 @@ import type {
   Mutation,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { contourSignedArea, rgbToHex } from "@paged-media/draw-geometry";
+import { contourSignedArea, rgbToHex } from "@paged-media/vector-geometry";
 
 import {
   drawBundle,
@@ -341,7 +341,7 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       // The walk gives the hole the opposite winding already
       // (`image_to_paths` passes `i == 0` as its clockwise flag). The
       // document lowering does NOT rely on that — it re-winds by nesting
-      // depth through draw-geometry — but if upstream ever stopped doing
+      // depth through vector-geometry — but if upstream ever stopped doing
       // it, this is where it shows.
       expect(Math.sign(region.contours[0].area)).toBe(
         -Math.sign(region.contours[1].area),
@@ -518,7 +518,7 @@ describe("draw conformance — IMAGE TRACE v0", () => {
         table.anchors.slice(table.subpathStarts[1]) as never,
       );
       // Opposite windings — the non-zero hole condition. This is
-      // draw-geometry's `orientForNonZeroHoles` (via `makeCompoundTable`)
+      // vector-geometry's `orientForNonZeroHoles` (via `makeCompoundTable`)
       // doing it, not code in this repo's trace lane.
       expect(Math.sign(outer)).toBe(-Math.sign(hole));
       // …at 5 pt per pixel, so 25× the pixel areas.

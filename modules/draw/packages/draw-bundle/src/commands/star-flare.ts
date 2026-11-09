@@ -19,7 +19,7 @@
 // FLARE — Illustrator's Flare shape tool's insert, as a command
 // (`insertFlare`) with its full parameters as the payload, the Path Options
 // panel's section, and what the tool's drags and clicks commit. Geometry:
-// draw-geometry `flareParts`. (Star is the host's: `paged.insert.star`.)
+// vector-geometry `flareParts`. (Star is the host's: `paged.insert.star`.)
 //
 // A FLARE is Illustrator's four parts as separate paths, GROUPED, in one
 // batch (each insert named by `bindCreated`, the group made of the
@@ -50,7 +50,7 @@ import {
   FLARE_MAX_RAYS,
   FLARE_MAX_RINGS,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
+} from "@paged-media/vector-geometry";
 
 import {
   batchMutationFor,

@@ -34,7 +34,10 @@ import type {
   Mutation,
   MutationInput,
 } from "@paged-media/plugin-api";
-import type { SymbolismCommit, SymbolismTarget } from "@paged-media/draw-tools";
+import type {
+  SymbolismCommit,
+  SymbolismTarget,
+} from "@paged-media/vector-tools";
 
 import { batchMutationFor } from "./batch-handles";
 import {

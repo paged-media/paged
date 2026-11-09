@@ -25,7 +25,7 @@
 //   selection → undo
 // end-to-end. This is the editor-native counterpart to the paged.draw
 // BUNDLE pen suite (draw-plugin.spec.ts AC-DRAW-*): same modifier
-// matrix and geometry helpers (@paged-media/draw-geometry), but the
+// matrix and geometry helpers (@paged-media/vector-geometry), but the
 // authoring loop lives in the editor's own tool catalog rather than the
 // plugin. The plan IDs are gestures.md DR-08…DR-11 (§4.6 E2E-03).
 //

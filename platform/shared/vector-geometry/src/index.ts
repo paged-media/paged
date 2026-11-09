@@ -1,0 +1,341 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// @paged-media/vector-geometry — pure path math, zero dependencies,
+// host-free. The distillation target for geometry that previously
+// lived inline in the editor (pencil RDP, path-edit overlay Bezier
+// math); the editor re-imports it from here (D1 seam proof).
+
+export {
+  vec,
+  clone,
+  dist,
+  type Vec2,
+  type Vec2Mut,
+  type AnchorTriple,
+  type AnchorTable,
+} from "./types";
+export { segmentDistance, simplifyRdp, simplifyRdpIndices } from "./rdp";
+export {
+  anchorTargets,
+  closestOnSegment,
+  snapPoint,
+  type SnapResult,
+  type SnapTarget,
+} from "./snap";
+export { smoothAnchorsThrough } from "./spline";
+export {
+  splitSegmentDeCasteljau,
+  evalCubic,
+  closestTOnCubic,
+  flattenAnchorRun,
+  reshapeSegmentByDrag,
+  segmentDragWeight,
+  SEGMENT_DRAG_T_MIN,
+  type SegmentSplit,
+  type SegmentReshape,
+} from "./bezier";
+export { constrainAngle } from "./constrain";
+export { cornerAnchor, mirrorHandle, smoothAnchorFromDrag } from "./handles";
+export { isCornerAnchor, isSmoothAnchor } from "./classify";
+export {
+  applyAffine,
+  inverseApplyAffine,
+  invertAffine,
+  affineScale,
+  composeAffine,
+  fitAffine,
+  IDENTITY_AFFINE,
+  type Affine,
+} from "./affine";
+// SVG path data and the basic shapes as anchor tables (SVG DOCUMENTS are
+// the engine's: paged-svg, draw ADR 364).
+export { parsePathData, serializePathData, quadToCubic } from "./svg-path";
+export { arcToCubics, type ArcCubic } from "./svg-arc";
+export {
+  rectToPath,
+  ellipseToPath,
+  circleToPath,
+  lineToPath,
+  mapTable,
+  ovalToPath,
+  polyToPath,
+} from "./svg-shapes";
+export { parseCssColor, rgbToHex, cmykToRgb, type Rgb } from "./svg-color";
+export {
+  NEUTRAL_PRESSURE,
+  clampPressure,
+  strokeWidthFromPressure,
+  type StrokeWidthProfile,
+} from "./pressure";
+// Brush tools v0 — the calligraphic nib width model (tangent angle ×
+// nib × pressure → per-anchor width stops for outlineStrokeVariable).
+export {
+  calligraphicWidth,
+  anchorTangentAngle,
+  MIN_BRUSH_WIDTH_RATIO,
+  type NibProfile,
+} from "./brush";
+// Wave 2 — parametric shape generators (insert-shape commands).
+export {
+  arcPath,
+  spiralPath,
+  rectGridPaths,
+  polarGridPaths,
+} from "./parametric";
+// Wave 2 — the width tool's peaked per-anchor profile
+// (outlineStrokeVariable stops).
+export { peakedWidthProfile } from "./width";
+// WP6.4 — live width points and the width profile library (engine ADR
+// 1053's `widthProfile` stroke style).
+export {
+  MAX_WIDTH_POINTS,
+  WIDTH_POINT_MERGE,
+  WIDTH_PROFILE_IDS,
+  WIDTH_PROFILE_PRESETS,
+  nearestOnRun,
+  normalizeWidthPoints,
+  widthFactorAt,
+  widthOutlinePolyline,
+  withWidthPoint,
+  withoutWidthPoint,
+  type RunLocation,
+  type WidthPoint,
+  type WidthProfilePreset,
+} from "./width-points";
+// Wave 2 — blend interpolation (anchor-run lerp + sRGB colour mix).
+export { interpolateAnchors, mixRgb } from "./blend";
+// WP6.6 — blend STRUCTURE matching: keys with different anchor or contour
+// counts are brought to one structure without changing either shape, and
+// gradient ramps are resampled to shared stop locations.
+export {
+  subdivideRun,
+  reverseRun,
+  alignClosedRun,
+  collapsedRun,
+  matchContourSets,
+  rampColorAt,
+  solidRamp,
+  matchRamps,
+  interpolateRamps,
+  type ContourSet,
+  type MatchResult,
+  type RampStop,
+} from "./blend-match";
+// WP6.5 — colour harmony: HSB wheel, Lab distance, the harmony rules, the
+// Color Guide variations, deterministic Lab k-means, reduce / map /
+// recolour (Recolor Artwork's pure half).
+export {
+  wrapHue,
+  hueDelta,
+  rgbToHsb,
+  hsbToRgb,
+  rgbToLab,
+  labToRgb,
+  deltaE,
+  sameRgb,
+  HARMONY_RULES,
+  harmonyOf,
+  rotateHues,
+  wheelPoint,
+  wheelColor,
+  wheelDragDelta,
+  VARIATION_KINDS,
+  variationsOf,
+  kMeansLab,
+  reduceColors,
+  nearestColorIndex,
+  NEUTRAL_SATURATION,
+  isNeutral,
+  recolorToHarmony,
+  type Hsb,
+  type Lab,
+  type HarmonyRule,
+  type VariationKind,
+  type WeightedColor,
+  type LabClusters,
+} from "./color-harmony";
+// Wave 2 — the lasso-select region test.
+export {
+  pointInPolygon,
+  pointInAnchorPath,
+  flattenAnchorPath,
+  pointInFlatPath,
+  segmentsTouch,
+  polylineTouchesPolygon,
+  type FlatAnchorPath,
+} from "./polygon";
+// Illustrator Phase 2 — compound paths: the contour algebra (merge /
+// split) plus the two NON-ZERO winding re-orientations — by nesting
+// depth (Image Trace) and by paint order (Make Compound Path, the rule
+// Illustrator applies) — and the choice a fill rule makes between the
+// depth rule and none (SVG import).
+export {
+  contourRanges,
+  contourSignedArea,
+  reverseContour,
+  contourDepths,
+  orientForNonZeroHoles,
+  orientByPaintOrder,
+  mergeCompound,
+  makeCompoundTable,
+  splitCompound,
+} from "./compound";
+// The KNIFE's pure half — the closed strip a cut polyline becomes (the
+// engine's planar arrangement only divides by closed regions), the
+// snap that closes the strip's gap again, and the carrier-bounds hull.
+export {
+  sliverAround,
+  nearestOnPolyline,
+  snapOntoPolyline,
+  tableBounds,
+  boundsOverlap,
+  MITRE_LIMIT,
+  SNAP_SLIDE_LIMIT,
+} from "./knife";
+// Illustrator Phase 3 (§12.4) — REPEATS: the placement algebra for
+// radial / grid / mirror repeat objects. One AFFINE per instance (a
+// repeat rotates and reflects, so a pattern-style translation offset is
+// not enough), plus the artboard fit that keeps an instance from
+// landing where the page-keyed reads answer nothing (RFI C-23).
+export {
+  affineTranslate,
+  affineRotate,
+  affineReflect,
+  transformAnchorTable,
+  transformBounds,
+  boundsCenter,
+  radialStepDeg,
+  radialPointAt,
+  radialCenterFor,
+  radialPlacements,
+  gridPlacements,
+  mirrorAxisNormal,
+  mirrorOriginFor,
+  mirrorPlacements,
+  fitPlacementsToPage,
+  repeatExtent,
+  rectAnchorTable,
+  type RepeatKind,
+  type RepeatBounds,
+  type RepeatPlacement,
+  type RadialSpec,
+  type GridSpec,
+  type MirrorSpec,
+} from "./repeat";
+// Illustrator Phase 3 (§16.2 + §16.3) — ALONG-PATH PLACEMENT: the ONE
+// arc-length kernel both the blend SPINE and objects-on-a-path need
+// (flatten → cumulative length → point + tangent at a fraction), plus
+// the count/spacing distribution rule on top of it and the easing curves
+// §16.2 asks for. Everything ABOVE the slot list stays in the two
+// commands, because there they need different facts — see the module
+// header for the decision.
+export {
+  measureAnchorRun,
+  measureSegment,
+  pointAtLength,
+  pointAtFraction,
+  distributeAlongPath,
+  wrapOrClamp,
+  ease,
+  EASE_KINDS,
+  type PathStation,
+  type PathMetric,
+  type PathPoint,
+  type PathSlot,
+  type SlotMode,
+  type SlotEndpoints,
+  type DistributeArgs,
+  type EaseKind,
+} from "./along-path";
+// Global Edit — two anchor tables describe the same shape (position
+// never matters; size only without `anySize`).
+export {
+  sameShape,
+  shapeStructureKey,
+  SAME_SHAPE_TOLERANCE,
+  SAME_SHAPE_SHIFT_LIMIT,
+  type SameShapeOptions,
+} from "./shape-match";
+// WP6.1 part 2 — locations on a contour (the Path Eraser, the Join tool
+// and the Shaper share them), the corner-aware Simplify fit behind the
+// live preview, the Reshape falloff, Star / Flare geometry and the
+// Shaper's recogniser.
+export {
+  locatedSamples,
+  locationScalar,
+  locationAlongSamples,
+  pointAtLocation,
+  segmentCubic,
+  segmentCount,
+  subCubic,
+  subRun,
+  polylineDistance,
+  polylineIntersections,
+  polylineLength,
+  type PathLocation,
+  type LocatedSample,
+  type PolylineCrossing,
+} from "./path-locate";
+export {
+  simplifyAnchorTable,
+  simplifyContour,
+  interiorAngleAt,
+  fitCubics,
+  type SimplifyFitOptions,
+} from "./simplify-fit";
+export {
+  planPathErase,
+  planJoinScrub,
+  ERASE_MIN_PIECE_PT,
+  type ErasePlan,
+  type JoinCandidate,
+  type JoinPlan,
+} from "./path-erase";
+export { reshapeTable, reshapeWeight, pathDistancesFrom } from "./reshape";
+export {
+  starPath,
+  regularPolygonPath,
+  flareParts,
+  STAR_MIN_POINTS,
+  STAR_MAX_POINTS,
+  FLARE_MAX_RAYS,
+  FLARE_MAX_RINGS,
+  type StarSpec,
+  type FlareSpec,
+  type FlareParts,
+} from "./star";
+export {
+  recogniseShape,
+  SCRIBBLE_TURN_DEG,
+  SCRIBBLE_MIN_REVERSALS,
+  LINE_SNAP_DEG,
+  type ShaperKind,
+  type ShaperRecognition,
+  type ShaperOptions,
+} from "./shaper";
+// WP6.7 — the distortion tools' kernels (the future `paged-warp` crate's
+// vector half): the liquify family, the constrained puppet mesh and its
+// ARAP solve, homographies and the perspective grid.
+export * from "./warp";
+// WP6.8 — the Symbolism tools' kernels (draw ADR 365) and 9-slice scaling.
+export * from "./symbolism";
+export * from "./nine-slice";
+// Draw ADR 367 — Envelope Distort: the engine's envelope mesh map, the
+// net edits of the Envelope Mesh tool, and Make with Top Object's patch.
+export * from "./envelope";

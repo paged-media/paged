@@ -35,7 +35,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { CanvasPointerEvent, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { pointInAnchorPath } from "@paged-media/draw-geometry";
+import { pointInAnchorPath } from "@paged-media/vector-geometry";
 
 import { createShapeBuilderHandler, drawBundle } from "../../src";
 import { packageWithSpread } from "../fixtures/build-idml";

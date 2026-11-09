@@ -157,8 +157,8 @@ import {
   splitCompound,
   type Affine,
   type AnchorTable,
-} from "@paged-media/draw-geometry";
-import type { RegionFace } from "@paged-media/draw-tools";
+} from "@paged-media/vector-geometry";
+import type { RegionFace } from "@paged-media/vector-tools";
 
 import { stampDrawMetadata } from "./appearance-bake";
 import { framePathMutationFor } from "./compound-path";

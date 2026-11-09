@@ -29,7 +29,7 @@
 // `__overlaySignals`, since PagedShell builds `__canvas` ABOVE the
 // OverlaySignalsProvider) and assert a single <path> appears in the
 // overlay SVG with cubic `C` commands. The plugin-draw side (the pen
-// machine emitting the cubic preview) is unit-proven in draw-tools
+// machine emitting the cubic preview) is unit-proven in vector-tools
 // (penPreview), and the headless host records the variant in plugin-sdk.
 
 import { expect, test, type Page } from "@playwright/test";

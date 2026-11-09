@@ -92,7 +92,7 @@ use visioncortex::{Color, ColorImage, PathSimplifyMode};
 /// `contours[0]` is the OUTER boundary; `contours[1..]` are holes. The
 /// bundle merges them into one compound path — holes must be re-wound
 /// against the outer or the engine's NON-ZERO fill paints a coin instead
-/// of a ring — via draw-geometry's `mergeCompound` +
+/// of a ring — via vector-geometry's `mergeCompound` +
 /// `orientForNonZeroHoles`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// THE PUPPET WARP TOOL — a host-routed shim over draw-tools'
+// THE PUPPET WARP TOOL — a host-routed shim over vector-tools'
 // `PuppetWarpMachine`, in the host's Free Transform flyout (where
 // Illustrator keeps it).
 //
@@ -45,7 +45,7 @@ import type {
 import {
   PuppetWarpMachine,
   type PuppetWarpSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import {
   readDistortTargets,

@@ -36,7 +36,7 @@ import {
 
 import type { CanvasPointerEvent, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { pointInPolygon } from "@paged-media/draw-geometry";
+import { pointInPolygon } from "@paged-media/vector-geometry";
 
 import {
   drawBundle,

@@ -42,7 +42,7 @@ nothing. Static probes were removed only where they were part of a deleted seam 
 | `4474bf1` | image | `glue/src/host66.ts` (136) and `glue/test/host66.spec.ts` (167); menu fallback; `typeof` probes; the `undoLabel`/`redoLabel` cast; `test/sdk-pin.spec.ts` | +94 −482 |
 | `0612e7d` | data | `src/doors.ts` (81), `src/module-door.ts` (63); the per-document engine-label probe and the pre-69 "session part alone" lane; the raw-broadcast open lane; menu fallback; `typeof` probes; `test/sdk-pin.spec.ts` | +202 −513 |
 | `04883ba` | sheet | `src/protocol66.ts` (208), `src/binding-provider/adr023-seam.ts` (184); the `minted` tree-diff lane, `tableHandlesLikely`, the `deleteTable` memory, the frame-to-story walk, the frame-chain read-back; the raw-broadcast open lane; menu fallback; `typeof` probes; three host simulators in `test/perf/workload.ts`; `test/sdk-pin.spec.ts` | +370 −1188 |
-| `848dc64` | draw-tools | `src/wire-compat.ts` (144): the machines' `*Wire` shapes are now the contract's `Mutation` variants | +22 −223 |
+| `848dc64` | vector-tools | `src/wire-compat.ts` (144): the machines' `*Wire` shapes are now the contract's `Mutation` variants | +22 −223 |
 | `8bb65c8` | draw | `src/binding-provider/adr023-seam.ts` (172), `src/commands/v58-wire.ts` (234), `src/commands/v59-wire.ts` (223); `minted.ts`'s reply and diff lanes; four probes; menu fallback; casts; four host views in `test/conformance/one-batch.ts` | +517 −1731 |
 | `e8d5df4` | editor (+ bundle menu comments) | the four courtesy `Object ▸ Insert …` entries and `MenuRegistry`'s `fallbackFor`; two `as unknown as PluginBundle` casts; local copies of `ModulesBackend` / `DocumentsBackend` / `OpenDocumentResult`; `tests/menu-fallback.spec.ts` | +61 −422 |
 | `a8a1753` | platform/extensions | prose only (a contract comment and ADR 305 named deleted files); plugin-api and plugin-sdk 0.2.67-canary.0 | +9 −11 |
@@ -71,7 +71,7 @@ browser lane), before (B3a, `b3/workspace-deps`) → after.
 | data-bundle | 401 + 2 skipped | 386 + 2 skipped | 15 |
 | sheet-bundle | 348 + 1 skipped | 335 + 1 skipped | 13 |
 | draw-bundle | 1650 + 34 skipped | 1645 + 34 skipped | 5 |
-| draw-tools | 337 | 337 | 0 (`wire-compat.ts` was types only) |
+| vector-tools | 337 | 337 | 0 (`wire-compat.ts` was types only) |
 | editor Playwright | — | — | 4 (`tests/menu-fallback.spec.ts`) |
 
 Every other package is unchanged (plugin-sdk 713, ai 31, cli 54 + 1 skipped, idml-viewer 27,

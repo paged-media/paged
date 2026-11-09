@@ -17,7 +17,7 @@
  */
 
 // The Curvature tool's gesture handler — a thin, host-routed shim over
-// draw-tools' CurvatureMachine (the pen-machine division of labor):
+// vector-tools' CurvatureMachine (the pen-machine division of labor):
 // pointer/key events feed the machine, the snapshot's rubber curve goes
 // out through `host.overlay.setToolPreview` as the cubic
 // `ToolPreviewPath` (B-07), and the commit becomes ONE `insertPath`
@@ -35,7 +35,7 @@ import {
   createSnapper,
   curvaturePreview,
   type CurvatureSnapshot,
-} from "@paged-media/draw-tools";
+} from "@paged-media/vector-tools";
 
 import { graphicPaintFor, withGraphicPaint } from "./graphic-default";
 import { insertPathMutationFor } from "./insert-path";
@@ -96,7 +96,7 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
 
   // C-68 — points snap through the engine (engine ADR 125: every visible
   // element, guides, the page, this run's own placed points), with the
-  // snapper the host's Pen uses too (draw-tools' `createSnapper`). Cmd
+  // snapper the host's Pen uses too (vector-tools' `createSnapper`). Cmd
   // held bypasses. The engine answer is asynchronous, so pointer and key
   // events run IN ORDER on one chain — a machine must never see an up
   // before the down it follows.

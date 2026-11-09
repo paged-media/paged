@@ -29,7 +29,7 @@
 // redrawing it. (An arrowhead is direction too: a GraphicLine's start
 // and end arrowheads swap ends, as they do in Illustrator.)
 //
-// THE MATH IS NOT HERE. `reverseContour` (draw-geometry `compound.ts`) is
+// THE MATH IS NOT HERE. `reverseContour` (vector-geometry `compound.ts`) is
 // the one reversal in this repo — the compound path re-winds holes with
 // it — and it is exact: each anchor's handles swap (`left` ⇄ `right`,
 // because the outgoing handle becomes the incoming one), an OPEN contour
@@ -59,7 +59,7 @@ import type {
   Mutation,
   PathAnchorsResult,
 } from "@paged-media/plugin-api";
-import { reverseContour, type AnchorTable } from "@paged-media/draw-geometry";
+import { reverseContour, type AnchorTable } from "@paged-media/vector-geometry";
 
 import { framePathMutationFor } from "./compound-path";
 import { supportsPathOps } from "./path-ops";
@@ -105,7 +105,7 @@ export function reverseTable(table: AnchorTable): AnchorTable {
   };
 }
 
-/** The table `pathAnchors` answered, as draw-geometry's `AnchorTable`. */
+/** The table `pathAnchors` answered, as vector-geometry's `AnchorTable`. */
 export function tableOf(read: PathAnchorsResult): AnchorTable {
   return {
     anchors: read.anchors.map((a) => ({

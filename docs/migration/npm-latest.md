@@ -196,8 +196,8 @@ same before and after.
 | modules/doc/packages/doc-host-model | 44 | 44 |
 | modules/draw/packages/draw-bundle | 1 774 + 34 skipped, 8 failed (main: the InDesign round-trip and Illustrator outline-stroke lanes) | the same (re-run) |
 | modules/draw/packages/draw-bundle (DOM) | 168 | 168 |
-| modules/draw/packages/draw-geometry | 681 | 681 |
-| modules/draw/packages/draw-tools | 337 | 337 |
+| platform/shared/vector-geometry | 681 | 681 |
+| platform/shared/vector-tools | 337 | 337 |
 | modules/image/glue, (DOM) | 477, 5 | 477, 5 (the DOM lane needed a React 19 fix, below) |
 | modules/publish/packages/pdf-bundle | 36 | 36 |
 | modules/publish/packages/publish-bundle | 31 | 31 |
