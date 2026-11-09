@@ -1327,5 +1327,9 @@ function innerOf(svg: string): string {
   const start = svg.indexOf(">");
   const end = svg.lastIndexOf("</svg>");
   if (start < 0 || end < 0 || end <= start) return "";
-  return svg.slice(start + 1, end);
+  // The body takes no pointer events: the outer <svg> is the target of
+  // every press. The body is rebuilt on each selection change, and a
+  // browser counts a double-click only when both presses hit the same
+  // node, so a press on a cell's replaced <rect> never made a dblclick.
+  return `<g pointer-events="none">${svg.slice(start + 1, end)}</g>`;
 }
