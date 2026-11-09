@@ -2,7 +2,8 @@
 
 - **Status:** Accepted 2026-11-08. Presets listed below and literal-point custom geometry; the rest told.
   Amended 2026-11-08: the doc wasm's ceiling is 9 MiB (see the amendment); the presets are
-  evaluated by `dml-geom` since ADR 629, which removed the hand port.
+  evaluated by `dml-geom` since ADR 629, which removed the hand port. Amended 2026-11-09: no
+  fixed upper bound on later raises (amendment 2).
 - **Scope:** `docx-core` (`Shape`, `ShapeGeometry`), `docx-import` (`objects::drawing_shape`),
   `docx-lower` (`shape_geom`, `LoweredShape`), `docx-skeleton` (`body`), the engine's
   `AnchoredFrame` outline (engine ADR 1050, amendment 2026-11-08).
@@ -91,4 +92,12 @@ equations' reader (engine ADR 1090), which landed the same value first. Charts (
 8,529,596 B on the author's machine (CI's number is in ADR 628); the rest is the headroom for the
 SmartArt drawing part. With SmartArt and `dml-geom` (ADR 629) the editor's `dist/` budget goes to
 74.25 MiB (PM-0013, amendment 6).
+
+## Amendment 2 (2026-11-09): no fixed upper bound
+
+The owner removed the 10 MiB bound of the first amendment. The manifest's `maxBytes` stays the
+ceiling the build enforces (9,437,184 B today), and a feature that needs more raises it in its own
+commit by what it measures plus headroom, recorded in the ADR that needs it. What still bounds it
+is the plugin wasm limit of `scripts/build-wasm.sh` (100 MB) and the editor's `dist/` budget
+(PM-0013).
 
