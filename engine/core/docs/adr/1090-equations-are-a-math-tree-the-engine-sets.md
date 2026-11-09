@@ -196,3 +196,38 @@ Word's rendering. No fixture in the repository carries Word's picture of an equa
 writes no fallback image for `m:oMath` in a `.docx`), and no math face is committed, so the
 public gate sets equations in a text face at TeX's constants; the `MATH`-table path is exercised
 only where a math face is installed.
+
+## Amendment 2 — the Word oracle (2026-11-09)
+
+The comparison of slice "Word oracle" was run: generated `.docx` files (the fixture equations, an
+inline nested fraction, an `m:oMathPara` with and without break runs; a styles part with Calibri
+11 pt and single spacing) saved as PDF by Microsoft Word 16 for macOS
+(`tooling/oracle/office/word/word-pagination-probe.sh`) and drawn by the doc bundle on the real
+engine with Word's own Cambria Math face. Findings and what changed:
+
+- **Size and shape match.** With the math face and the same base size, the quadratic formula is
+  102 pt wide in Word and 97 pt in paged; the inline fraction, radical, scripts, matrix and
+  delimiters have Word's proportions. (An earlier difference of 20 % came from the probe, not the
+  engine: a package without a styles part, and Cambria Math registered from `Cambria.ttc`, whose
+  face 0 is Cambria; see the open items.)
+- **Lines of a display paragraph (fixed).** Word sets the `m:oMath` children of one
+  `m:oMathPara` on ONE line when no break run stands between them (`y = 1z = 2`), and starts a
+  new line at a break run (`m:r/w:br`), between them or inside one. `paged_ooxml::omml::read_para`
+  now splits lines at break runs only (`tests/omml.rs`
+  `a_display_paragraph_breaks_its_lines_where_word_does`); the doc fixture's two-line paragraph
+  has the break run Word writes.
+- **The line holds the equation (fixed).** The doc lowering kept a paragraph holding an equation
+  at Word's fixed pitch, so a display fraction overlapped the lines around it. Such a paragraph
+  now takes auto leading as a picture's does (`docx-lower`; `docx-conformance`
+  `an_equation_paragraph_takes_auto_leading`), and under Word's first-fit an equation's depth
+  below the baseline pushes the next line (`anchored::line_object_depth`; Word sets the line after
+  a display fraction below its denominator). InDesign's rule is unchanged: only the rise moves a
+  line (`equations_pipeline`
+  `under_word_first_fit_an_equations_depth_pushes_the_next_line`).
+- **Open: display n-ary operators.** Word draws a display `∑` and `∫` about twice the text's
+  height (the face's display variant); paged scales the base glyph by 1.4, so a display sum or
+  integral is shorter and its paragraph about 4 pt lower than Word's. Needs the `MATH` table's
+  glyph variants (`MathVariants`).
+- **Open: a math face inside a collection.** The renderer opens a face at index 0; Cambria Math is
+  face 1 of `Cambria.ttc` (Windows and Office), so registering that file gives Cambria, without a
+  `MATH` table. Font registration has no face index for a collection.

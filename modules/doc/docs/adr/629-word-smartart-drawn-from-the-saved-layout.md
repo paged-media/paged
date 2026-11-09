@@ -85,3 +85,16 @@ for it (PM-0013, amendment 6).
   the arrow as a Group of its line and two filled heads.
 - `test/headless/smartart.spec.ts` (real engine): the shapes are painted in the theme's accents; an
   unedited export keeps the diagram's parts.
+
+## Amendment (2026-11-09): the Word oracle
+
+- **Word lays SmartArt out again on open.** Word 16 for macOS draws the `smartart` fixture's first
+  diagram from its data and layout parts, not from the saved drawing (the fixture's drawing does
+  not match its layout part), and draws the diagram without a drawing part as well (a basic
+  process: three rounded boxes and two arrows). Re-saved by Word, the package carries Word's own
+  drawing for both, and paged draws that file's diagrams as Word does: the same boxes, arrows,
+  colours and text.
+- **The line holds the diagram (fixed).** An inline diagram's paragraph takes auto leading
+  (ADR 627 amendment 3); before, the diagram rose over the paragraph above it.
+- **Open (as decided):** a diagram without a saved drawing is not drawn; Word draws it from its
+  data and layout.

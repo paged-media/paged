@@ -74,3 +74,20 @@ by this change.
   shared contour).
 - `test/headless/charts.spec.ts` (real engine): the bars and slices are painted in the theme's
   accents; an unedited export keeps the chart parts.
+
+## Amendment (2026-11-09): the Word oracle
+
+- **Word refuses the fixture.** Word 16 for macOS does not open the `charts` fixture: its embedded
+  workbook is a placeholder that is not a zip (`CHART_WORKBOOK`), and Word rejects the package for
+  it (the same file without the embedding opens). A real document always embeds a workbook; the
+  fixture stays as it is for the carry tests, and the comparison used copies.
+- **The line holds the chart (fixed).** An inline chart's paragraph takes auto leading
+  (ADR 627 amendment 3), so the chart no longer rises over the text above it.
+- **Matches:** with a chart part PowerPoint wrote, Word and paged draw the same bars, values,
+  categories, axis scale and legend.
+- **Open: defaults of a part without shape properties.** For an axis, gridline or chart area
+  without `c:spPr`, Word (and PowerPoint, the `charts` fixture's PDF in slide-conformance) draw
+  black gridlines, the axis lines with their `cross` tick marks and a chart border; `slide-chart`
+  draws light grey gridlines (`tx1` at 15 %) and no axis line or tick marks. Charts Office wrote
+  since 2013 state their shape properties, so this shows only in generated parts. A change moves the
+  slide chart goldens.

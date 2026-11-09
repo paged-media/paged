@@ -150,6 +150,12 @@ fn replies_and_a_resolved_state_are_annotations_in_reply() {
     }];
     c.resolved = true;
     let pdf = export(vec![c], None);
+    // Kept for a PDF reader's open-check when PAGED_PDF_COMMENTS_DIR names
+    // a folder (engine ADR 1055 amendment: the reader oracle).
+    if let Ok(dir) = std::env::var("PAGED_PDF_COMMENTS_DIR") {
+        std::fs::write(std::path::Path::new(&dir).join("comments-thread.pdf"), &pdf)
+            .expect("keep the PDF");
+    }
     let doc = Document::load_mem(&pdf).expect("re-parse");
     let annots = text_annots(&doc, 1);
     assert_eq!(annots.len(), 3, "the note, its reply and its state");

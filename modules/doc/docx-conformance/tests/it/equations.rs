@@ -96,6 +96,52 @@ fn equations_lower_to_the_paragraphs_equations_at_their_offsets() {
     assert!(ps[3].equations.is_empty());
 }
 
+/// Word grows a line to the equation it holds (measured: a display
+/// fraction's line is about twice the text's), so an equation's paragraph
+/// takes auto leading as a picture's does; a fixed leading would let the
+/// formula overlap the lines around it.
+#[test]
+fn an_equation_paragraph_takes_auto_leading() {
+    let doc = docx_import::import_docx(&equations_docx()).expect("import");
+    let lowered = docx_lower::lower(&doc);
+    let leading = |style_id: Option<&str>| {
+        let mut next = style_id.map(str::to_string);
+        for _ in 0..32 {
+            let style = lowered
+                .styles
+                .iter()
+                .find(|s| Some(&s.id) == next.as_ref())?;
+            if let Some(docx_lower::ir::PropValue::Length(pt)) = style
+                .props
+                .iter()
+                .find(|p| p.path == "characterLeading")
+                .map(|p| &p.value)
+            {
+                return Some(*pt);
+            }
+            next = style.based_on.clone();
+        }
+        None
+    };
+    let paragraphs = lowered.story.blocks.iter().filter_map(|b| match b {
+        LoweredBlock::Paragraph(p) => Some(p),
+        _ => None,
+    });
+    let mut with_equation = 0;
+    for p in paragraphs.filter(|p| !p.equations.is_empty()) {
+        with_equation += 1;
+        assert_eq!(
+            leading(p.para_style_id.as_deref()),
+            Some(0.0),
+            "auto leading"
+        );
+    }
+    assert_eq!(
+        with_equation, 3,
+        "the inline, the display and the two-line paragraph"
+    );
+}
+
 #[test]
 fn editing_the_text_beside_an_equation_keeps_its_markup() {
     let bytes = equations_docx();

@@ -116,3 +116,23 @@ move the guides, a circle closes, every preset name maps), the renderer (`text_w
 the text inside the area's ellipse and above its centre), doc and slide readers (the warp and its
 adjusts are kept, `textNoShape` is none). **Not verified:** any match to Word's or PowerPoint's
 drawing of a preset; the forms are the guides' shapes, not measured ones.
+
+## Amendment 2 — the Word oracle (2026-11-09)
+
+Generated `.docx` files with WordArt text boxes (ten presets in fixed 200 × 80 pt boxes with
+`noAutofit`; five per page in 360 × 90 pt boxes with `spAutoFit` and `wrap="none"`) were saved as
+PDF by Word 16 for macOS and drawn by the doc bundle on the real engine.
+
+- **Matches:** `textWave1`, `textInflate`, `textDeflate`, `textCurveUp`, `textTriangle`,
+  `textChevron`, `textCanUp` and `textSlantUp` fill the box with the same envelope as Word's
+  (side by side at 1 pt per pixel, the outlines agree within a few points).
+- **`textPlain` (fixed).** Word stretches a `textPlain` line onto the whole box, as it does any
+  warp; `TextWarp::is_active` treated it as no warp, so doc drew the text unbent. Only
+  `textNoShape` is inactive now.
+- **Open: arches and circles.** Word keeps the text at its own size along the arc (`textArchUp`
+  in a 200 × 80 pt box: a 20 pt line on the top of the ellipse, spanning about half of it, centred
+  as its paragraph is); paged stretches the text over the whole 180-degree arc, letter-spaced.
+  The arch and circle families need a mapping by arc length, not by the box's width.
+- **Open: a WordArt box that fits its text.** With `spAutoFit` and `wrap="none"` Word first sizes
+  the box to the text and warps into that box; paged warps into the box as saved (twice as wide in
+  the probe), so the warped text is larger than Word's.

@@ -512,6 +512,38 @@ pub(super) fn line_object_shift(
     }
 }
 
+/// How far the line after a line holding `on_line` moves down for what its
+/// equations reach below the baseline, 1/64 pt. Under **Word's first-fit**
+/// a line holds its equations whole: Word 16 sets the line after a display
+/// fraction below the fraction's denominator (measured on a generated
+/// `.docx`, engine ADR 1090 amendment 2), so the depth past the part of the
+/// auto-leaded line below the baseline (`auto leading − ascent`) pushes the
+/// next line. Outside first-fit (InDesign's rule) and for anchored frames,
+/// nothing below the baseline moves the next line.
+pub(super) fn line_object_depth(
+    objects: &InlineObjects,
+    on_line: &[LineObject],
+    word: Option<WordLine>,
+) -> i32 {
+    let Some(w) = word else {
+        return 0;
+    };
+    let to_64 = |pt: f32| (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+    on_line
+        .iter()
+        .filter_map(|lo| {
+            let o = objects.objects.get(lo.object)?;
+            if o.above_line || o.equation.is_none() {
+                return None;
+            }
+            let depth = (-o.y_offset).max(0.0);
+            let below = (w.auto_leading - w.ascent) * lo.point_size;
+            Some(to_64(depth - below).max(0))
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 /// Draw the paragraph's in-line objects where their characters landed.
 /// An object whose character went overset is not drawn, as in InDesign.
 pub(super) fn emit_inline_objects(

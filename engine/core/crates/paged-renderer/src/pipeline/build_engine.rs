@@ -8913,6 +8913,10 @@ fn emit_paragraph_lines(
         }
     }
     let mut line_object_shifts_64: Vec<i32> = vec![0; line_objects.len()];
+    // How far each line's equations reach below it under Word's first-fit
+    // (`anchored::line_object_depth`): the lines after it, and the cursor
+    // the next paragraph starts from, move down by it.
+    let mut line_depths_64: Vec<i32> = vec![0; laid_out.lines.len()];
     // Word's first-fit sets a picture's line by Word's rule (ADR 1016).
     let word_line = lopts
         .compose
@@ -8948,6 +8952,11 @@ fn emit_paragraph_lines(
                     g.y += shift_64;
                 }
             }
+            if let Some(on_line) = line_objects.get(k).filter(|v| !v.is_empty()) {
+                let depth = anchored::line_object_depth(objs, on_line, word_line);
+                line_depths_64[k] = depth;
+                shift_64 += depth;
+            }
         }
     }
     // No line sits beside a jump-object wrap: lines meeting one move
@@ -8963,7 +8972,7 @@ fn emit_paragraph_lines(
     // line being placed, for its slug.
     let mut slug_above_64: Option<(usize, i32)> = None;
     let mut chain_shift_64: i32 = 0;
-    for mut line in laid_out.lines.into_iter() {
+    for (line_k, mut line) in laid_out.lines.into_iter().enumerate() {
         if chain_shift_64 != 0 {
             line.baseline_y += chain_shift_64;
             for g in &mut line.glyphs {
@@ -9822,7 +9831,8 @@ fn emit_paragraph_lines(
         let line_h_exact = paged_text::layout::line_leading_exact(&line.glyphs, &lopts)
             .filter(|e| e.round() as i32 == line_h)
             .unwrap_or(line_h as f64);
-        em.set_y_exact(baseline_exact + line_h_exact);
+        let depth_64 = line_depths_64.get(line_k).copied().unwrap_or(0);
+        em.set_y_exact(baseline_exact + line_h_exact + f64::from(depth_64));
         em.set_prev_line_height(line_h_exact);
         slug_above_64 = Some((em.frame_idx, line.baseline_y));
 

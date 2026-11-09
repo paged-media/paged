@@ -1864,8 +1864,8 @@ impl Lowering {
         if !self.auto_hyphenation && p.runs.iter().any(|r| r.text.contains('\u{00AD}')) {
             props.push(boolean("paragraphHyphenation", true));
         }
-        // A line holding an inline picture is as tall as the picture in
-        // Word, unless the paragraph's line spacing is EXACT (Word then
+        // A line holding an inline picture (or equation) is as tall as the
+        // picture in Word, unless the paragraph's line spacing is EXACT (Word then
         // clips the picture). The engine (InDesign's rule, core `17d3d3d`)
         // grows a line for its object only under AUTO leading; under a fixed
         // one the object overlaps the lines above. So a body paragraph with
@@ -1877,8 +1877,21 @@ impl Lowering {
                 .map(|ls| ls.rule)
         };
         let exact = spacing_rule == Some(LineRule::Exact);
-        let grows_for_picture =
-            can_carry.is_some() && !exact && p.runs.iter().any(|r| !r.images.is_empty());
+        // An equation (engine ADR 1090) and an inline shape, chart, SmartArt
+        // or text box (doc ADRs 614, 627-629) are inline objects too: Word
+        // grows their line to them (measured: a display fraction's line is
+        // about twice the text's; an inline diagram's line is its height),
+        // so their paragraph takes the same auto leading.
+        let grows_for_picture = can_carry.is_some()
+            && !exact
+            && p.runs.iter().any(|r| {
+                !r.images.is_empty()
+                    || r.math.is_some()
+                    || r.shapes.iter().any(|o| o.float.is_none())
+                    || r.charts.iter().any(|o| o.float.is_none())
+                    || r.diagrams.iter().any(|o| o.float.is_none())
+                    || r.text_boxes.iter().any(|o| o.float.is_none())
+            });
         // Under at-least spacing above the face's single line, the pitch
         // the picture paragraph's text runs carry (below).
         let mut picture_run_pitch: Option<f32> = None;

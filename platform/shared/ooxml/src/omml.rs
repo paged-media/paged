@@ -80,8 +80,9 @@ pub fn in_part(bytes: &[u8]) -> Result<Vec<Math>, String> {
 }
 
 /// The equations of one `m:oMathPara` as one display equation: a single
-/// one as itself, several as the rows of an equation array (Word sets each
-/// on a line of its own, the group centred).
+/// one as itself, several (the lines [`read_para`] split at breaks) as the
+/// rows of an equation array (Word sets each on a line of its own, the
+/// group centred).
 pub fn as_one(mut lines: Vec<Math>) -> Math {
     if lines.len() == 1 {
         return lines.remove(0);
@@ -99,11 +100,42 @@ pub fn parse_all(xml: &str) -> Result<Vec<Math>, String> {
     Ok(read_all(&crate::tree::parse(xml.as_bytes())?))
 }
 
-/// An `m:oMathPara`: one display equation per `m:oMath` child.
+/// An `m:oMathPara`: one display equation per line. A line ends at a run
+/// holding a break (`m:r/w:br`), between the `m:oMath` children or inside
+/// one; `m:oMath` children with no break between them share a line, as
+/// Word sets them (measured: Word 16 for macOS draws `<m:oMath>y=1</m:oMath>
+/// <m:oMath>z=2</m:oMath>` as one line, "y = 1z = 2").
 pub fn read_para(el: &El) -> Vec<Math> {
-    el.children_named(Ns::M, "oMath")
-        .map(|m| read_math(m, true))
-        .collect()
+    let mut lines = Vec::new();
+    let mut line: Row = Vec::new();
+    let mut end_line = |line: &mut Row| {
+        if !line.is_empty() {
+            lines.push(Math {
+                display: true,
+                body: std::mem::take(line),
+            });
+        }
+    };
+    for c in &el.children {
+        if c.is(Ns::M, "oMath") {
+            for n in &c.children {
+                if is_break(n) {
+                    end_line(&mut line);
+                } else if n.ns == Ns::M {
+                    line.extend(node(n));
+                }
+            }
+        } else if is_break(c) {
+            end_line(&mut line);
+        }
+    }
+    end_line(&mut line);
+    lines
+}
+
+/// An `m:r` that holds a line break (`w:br`).
+fn is_break(el: &El) -> bool {
+    el.is(Ns::M, "r") && el.children.iter().any(|c| c.local == "br")
 }
 
 /// An `m:oMath`.

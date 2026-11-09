@@ -208,3 +208,61 @@ fn a_display_equation_rises_its_line() {
     // line moves down to clear it (auto leading).
     assert!(b1 > b0 + 1.0, "the line grew: {b0} -> {b1}");
 }
+
+/// The baseline of paragraph `idx`'s first line.
+fn baseline_of(built: &pipeline::BuiltDocument, idx: u32) -> f32 {
+    built
+        .story_layout(&story_id(0))
+        .iter()
+        .find(|l| l.paragraph_idx == idx)
+        .map(|l| l.baseline_y_pt)
+        .expect("the paragraph's line")
+}
+
+#[test]
+fn under_word_first_fit_an_equations_depth_pushes_the_next_line() {
+    // `a / (b / c)`: a display fraction whose denominator reaches far
+    // below the baseline. Word 16 sets the line after it below the
+    // denominator (engine ADR 1090 amendment 2); InDesign's rule does not.
+    let deep = || Math {
+        display: true,
+        body: vec![Node::Frac {
+            num: vec![Node::run("a")],
+            den: fraction().body,
+            kind: FracKind::Bar,
+        }],
+    };
+    let with = |composer: Option<paged_model::Composer>| {
+        let mut doc = document();
+        let story = doc
+            .stories
+            .iter_mut()
+            .find(|s| s.self_id == story_id(0))
+            .expect("story 0");
+        story.story.paragraphs[0].composer = composer.clone();
+        story.story.paragraphs[1].composer = composer.clone();
+        let plain = build(&doc);
+        let story = doc
+            .stories
+            .iter_mut()
+            .find(|s| s.self_id == story_id(0))
+            .expect("story 0");
+        story.story.paragraphs[0].equations.push(Equation {
+            offset: 1,
+            math: deep(),
+            point_size: None,
+        });
+        let built = build(&doc);
+        // How much further down B starts than A does, the equation in A.
+        let a = baseline_of(&built, 0) - baseline_of(&plain, 0);
+        let b = baseline_of(&built, 1) - baseline_of(&plain, 1);
+        b - a
+    };
+    let word = with(Some(paged_model::Composer::WordFirstFit));
+    assert!(word > 1.0, "Word: the next line clears the depth, {word}");
+    let indesign = with(None);
+    assert!(
+        indesign.abs() < 0.01,
+        "InDesign: only the rise moves, {indesign}"
+    );
+}

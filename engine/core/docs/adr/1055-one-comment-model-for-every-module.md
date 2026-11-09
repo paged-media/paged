@@ -278,3 +278,19 @@ of the new file. Acrobat itself has not opened the result (no oracle run).
   annotations and states; InDesign opens the IDML with its notes.
 - Goldens for unchanged threads (byte identity) and for edited ones (re-render keeps markers).
 - The SDK harness covers `comments@1`; the CLI verbs have goldens.
+
+## Amendment 2026-11-09 — oracle runs
+
+- **PowerPoint:** a deck with a modern-comment thread added, replied to and another resolved in
+  paged (`placeholders` fixture, headless on the real engine) opens in PowerPoint 16 for macOS
+  without a repair prompt; its re-save keeps both threads, the reply and `status="resolved"`.
+- **Excel:** the six threaded-comment packages of slide-less `sheet-xlsx`
+  (`write_oracle_packages`: add, reply, edit, resolve, delete a reply, delete a root) open in Excel
+  16 for macOS and re-save with the same threads, `parentId`, `done="1"`, notes and persons, as on
+  2026-11-01 (sheet ADR 528).
+- **PDF:** Adobe Acrobat is not installed on the oracle machine, so the Acrobat check is still open.
+  Apple's PDFKit (macOS 26) reads the thread `paged-export-pdf` writes
+  (`replies_and_a_resolved_state_are_annotations_in_reply`, kept with `PAGED_PDF_COMMENTS_DIR`) as
+  three Text annotations with their pop-ups: the note (author, text), the reply (author, text) and
+  the `Completed` review state. PDFKit does not surface `/IRT`, so the thread itself is not checked
+  by it.

@@ -55,8 +55,10 @@ pub fn equations_document_xml() -> String {
         mr("−4ac"),
         mr("2a")
     );
+    // Two lines: Word breaks a display paragraph at a break run (without
+    // one its `m:oMath` children share a line).
     let two_lines = format!(
-        "<m:oMathPara><m:oMath>{}</m:oMath><m:oMath>{}</m:oMath></m:oMathPara>",
+        "<m:oMathPara><m:oMath>{}</m:oMath><m:r><w:br/></m:r><m:oMath>{}</m:oMath></m:oMathPara>",
         mr("y=1"),
         mr("z=2")
     );

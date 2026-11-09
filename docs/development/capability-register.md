@@ -167,10 +167,20 @@ through a `MathMetrics` seam; `paged_ooxml::omml` is the one OMML reader for doc
 inline object of its paragraph (`Paragraph.equations`); the renderer's one metrics adapter and paint are
 `paged-renderer` `pipeline/equations.rs` (math face, OpenType `MATH` constants, the math alphabet
 `paged_math::alphabet`); doc imports through the native builder, slide through `pptx-import` (the choice of an
-equation's alternate content) and `slide-native`. Open: equations in table cells, a wire door, the Word-oracle
-comparison. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
+equation's alternate content) and `slide-native`. Compared with Word (ADR 1090 amendment 2): sizes and shapes
+match. Open: equations in table cells, a wire door, display n-ary operators (Word uses the face's display
+variant, about twice the text's height), a math face that is not face 0 of a font collection. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
 adjusts) for doc, slide and sheet; `paged_warp::textshape` is the one set of preset guides; the frame's `text_warp` is bent by the
-renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. Open: a measured match, write-back, handles.
+renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. Compared with Word (ADR 1091
+amendment 2): the filling presets match. Open: arches and circles (Word keeps the text's size along the arc), a box that fits its
+text (`spAutoFit`) before the warp, write-back, handles.
+
+Oracle comparisons of 2026-11-09 (Word, PowerPoint and Excel 16 for macOS), open items they left: an inline object after a
+paragraph's last character is anchored before it (doc ADR 627 amendment 3); Word's 10 pt space after for a styles part without
+`w:pPrDefault` (same); chart parts without `c:spPr` draw light grey gridlines and no axis lines or tick marks where Office draws
+black ones with tick marks (doc ADR 628 amendment); a SmartArt without a saved drawing is not drawn (doc ADR 629); `pptx-export`
+writes a shrunk body's stored fit, not the one the renderer chose after an edit, and PowerPoint draws the stored one (slide ADR 724
+amendment 2); Acrobat was not available for the PDF comment check (engine ADR 1055, amendment 2026-11-09).
 ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
 provider); `apps/ml-host` runs a user-installed matting runner (`matting` job, Amendment 2), which `mlHostProvider` serves as
 `ml.matting@1` while the host's health lists it. Tier-A matting models are open.

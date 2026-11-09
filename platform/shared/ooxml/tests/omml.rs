@@ -157,9 +157,9 @@ fn run_styles_and_unknown_elements() {
 
 #[test]
 fn several_equations_read_in_document_order() {
-    let ns = r#"xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math""#;
+    let ns = r#"xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main""#;
     let m = parse_all(&format!(
-        r#"<root {ns}><m:oMath><m:r><m:t>a</m:t></m:r></m:oMath><m:oMathPara><m:oMath><m:r><m:t>b</m:t></m:r></m:oMath><m:oMath><m:r><m:t>c</m:t></m:r></m:oMath></m:oMathPara></root>"#
+        r#"<root {ns}><m:oMath><m:r><m:t>a</m:t></m:r></m:oMath><m:oMathPara><m:oMath><m:r><m:t>b</m:t></m:r></m:oMath><m:r><w:br/></m:r><m:oMath><m:r><m:t>c</m:t></m:r></m:oMath></m:oMathPara></root>"#
     ))
     .unwrap();
     let flags: Vec<_> = m.iter().map(|m| (text(&m.body), m.display)).collect();
@@ -202,7 +202,7 @@ fn a_part_gives_one_equation_per_element_and_skips_the_fallback() {
         r#"<w:document {ns}><w:body>
 <w:p><w:r><w:t>x</w:t></w:r><m:oMath><m:r><m:t>a</m:t></m:r></m:oMath></w:p>
 <w:p><mc:AlternateContent><mc:Choice Requires="wps"><m:oMath><m:r><m:t>b</m:t></m:r></m:oMath></mc:Choice><mc:Fallback><m:oMath><m:r><m:t>b</m:t></m:r></m:oMath></mc:Fallback></mc:AlternateContent></w:p>
-<w:p><m:oMathPara><m:oMath><m:r><m:t>c</m:t></m:r></m:oMath><m:oMath><m:r><m:t>d</m:t></m:r></m:oMath></m:oMathPara></w:p>
+<w:p><m:oMathPara><m:oMath><m:r><m:t>c</m:t></m:r></m:oMath><m:r><w:br/></m:r><m:oMath><m:r><m:t>d</m:t></m:r></m:oMath></m:oMathPara></w:p>
 <w:p><m:oMathPara><m:oMath><m:r><m:t>e</m:t></m:r></m:oMath></m:oMathPara></w:p>
 </w:body></w:document>"#
     );
@@ -220,4 +220,38 @@ fn a_part_gives_one_equation_per_element_and_skips_the_fallback() {
         other => panic!("an equation array: {other:?}"),
     }
     assert_eq!((text(&m[3].body), m[3].display), ("e".into(), true));
+}
+
+/// Word's lines of a display paragraph (measured, Word 16 for macOS): two
+/// `m:oMath` with no break between them share one line ("y = 1z = 2"); a
+/// break run, between them or inside one, starts a new line.
+#[test]
+fn a_display_paragraph_breaks_its_lines_where_word_does() {
+    let ns = r#"xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main""#;
+    let r = |t: &str| format!("<m:r><m:t>{t}</m:t></m:r>");
+    let br = "<m:r><w:br/></m:r>";
+    let lines = |inner: String| {
+        let m = paged_ooxml::omml::in_part(
+            format!("<w:p {ns}><m:oMathPara>{inner}</m:oMathPara></w:p>").as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(m.len(), 1, "one display equation");
+        match &m[0].body[..] {
+            [Node::EqArr { rows }] => rows.iter().map(|r| text(r)).collect::<Vec<_>>(),
+            body => vec![text(body)],
+        }
+    };
+    let (y, z) = (r("y=1"), r("z=2"));
+    assert_eq!(
+        lines(format!("<m:oMath>{y}</m:oMath><m:oMath>{z}</m:oMath>")),
+        ["y=1z=2"]
+    );
+    assert_eq!(
+        lines(format!("<m:oMath>{y}</m:oMath>{br}<m:oMath>{z}</m:oMath>")),
+        ["y=1", "z=2"]
+    );
+    assert_eq!(
+        lines(format!("<m:oMath>{y}{br}{z}</m:oMath>")),
+        ["y=1", "z=2"]
+    );
 }

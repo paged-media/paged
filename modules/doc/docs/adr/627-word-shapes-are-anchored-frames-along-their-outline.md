@@ -101,3 +101,26 @@ commit by what it measures plus headroom, recorded in the ADR that needs it. Wha
 is the plugin wasm limit of `scripts/build-wasm.sh` (100 MB) and the editor's `dist/` budget
 (PM-0013).
 
+
+## Amendment 3 (2026-11-09): the Word oracle
+
+The `shapes` fixture (`dump-fixture <out> shapes`) was saved as PDF by Word 16 for macOS and drawn
+by the doc bundle on the real engine. The fixture's styles part has no `w:pPrDefault`; Word then
+spaces paragraphs 10 pt apart (23.5 pt from line to line at 11 pt Calibri, 13.5 pt with an explicit
+`w:spacing w:after="0"`), so the comparison was made on a copy with that default written out.
+
+- **Matches:** every preset's outline (rectangle, ellipse, the triangle's adjust, the line, the
+  rounded rectangle turned a quarter, the freeform, the cloud callout, the line with an oval head
+  and a large triangle tail), the theme-styled ellipse's fill and outline, and the floating shapes'
+  positions and square wrap.
+- **Fixed: an inline shape's line.** Word makes a line holding an inline shape (or chart, SmartArt
+  or text box) as tall as the object; the lowering kept such a paragraph at Word's fixed pitch, so
+  the object rose over the lines above. It now takes auto leading as a picture's paragraph does
+  (`docx-lower`, the same rule as engine ADR 1090 amendment 2).
+- **Open: an object after the paragraph's last character** is anchored one character earlier
+  (`anchor_at`: the engine cannot address the paragraph's end), so the last character stands after
+  the object (paged draws "Shape rec", the object, "t" where Word draws "Shape rect" and the
+  object). Counted in the import's losses.
+- **Open: no `w:pPrDefault`.** Word's 10 pt space after for a styles part without paragraph
+  defaults is not applied (paged reads the absent default as 0). Word itself always writes the
+  element; other writers may not.

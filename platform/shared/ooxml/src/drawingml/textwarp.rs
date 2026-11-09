@@ -141,9 +141,12 @@ impl TextWarp {
         f.strip_prefix("val ")?.trim().parse().ok()
     }
 
-    /// Does the warp change the text at all?
+    /// Does the warp change the text at all? Only `textNoShape` leaves it
+    /// as set: `textPlain` stretches the text onto the box (measured: Word
+    /// 16 for macOS draws a 20 pt `textPlain` line as tall and as wide as
+    /// its 200 x 80 pt box, engine ADR 1091 amendment 2).
     pub fn is_active(&self) -> bool {
-        !matches!(self.preset, Preset::NoShape | Preset::Plain)
+        !matches!(self.preset, Preset::NoShape)
     }
 }
 
@@ -204,11 +207,14 @@ mod tests {
     }
 
     #[test]
-    fn plain_and_absent_and_unknown_are_not_warps() {
+    fn no_shape_and_absent_and_unknown_are_not_warps() {
         let plain = read(&body(
             r#"<a:prstTxWarp prst="textNoShape"><a:avLst/></a:prstTxWarp>"#,
         ));
         assert!(!plain.unwrap().is_active());
+        // `textPlain` is a warp: the text stretched onto the box.
+        let stretch = read(&body(r#"<a:prstTxWarp prst="textPlain"/>"#));
+        assert!(stretch.unwrap().is_active());
         assert!(read(&body("")).is_none());
         assert!(read(&body(r#"<a:prstTxWarp prst="textFuture"/>"#)).is_none());
     }

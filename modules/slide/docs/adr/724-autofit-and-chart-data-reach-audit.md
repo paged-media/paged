@@ -115,3 +115,18 @@ edited bytes back.
   surface and engine through the door; the "second compiled sheet engine" remains as the reader and
   writer of chart workbooks, not as an editor. Doc's charts can use the same door when doc edits
   chart data.
+
+## Amendment 2 (2026-11-09): the PowerPoint oracle
+
+Decks written by the bundle on the real engine (headless) were opened in PowerPoint 16 for macOS,
+saved as PDF and saved again as `.pptx`:
+
+- **Chart data through the workbook door.** The `charts` fixture with B3 of the first chart's
+  workbook set to 9.25 through the door: opens without a repair prompt; the chart part's cache and
+  PowerPoint's re-saved part hold 9.25.
+- **Autofit after an edit: open.** PowerPoint does not recompute a fit when it opens a file: the
+  `text` fixture's shrunk body (40 %, 20 %) with twelve sentences added in paged opens at 40 %
+  and runs past the slide's bottom, and PowerPoint's re-save keeps `fontScale="40000"`. The engine
+  draws the edited body at a deeper fit (ADR 1061), but `pptx-export` writes the stored fit back
+  for an edited body, so paged's page and PowerPoint's differ for such a deck. Writing the fit the
+  renderer chose needs that fit read back from the layout at export.
