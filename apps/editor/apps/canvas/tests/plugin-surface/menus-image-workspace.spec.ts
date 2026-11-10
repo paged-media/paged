@@ -122,18 +122,20 @@ async function run(page: Page, path: string, command: string) {
   }
 }
 
-/** Wait until two digests 500 ms apart agree: every write already started
- *  has landed. */
+/** Wait until the digest has not changed over three samples 500 ms apart:
+ *  every write already started has landed (on a loaded runner a late write
+ *  can trail the first quiet half second). */
 async function settleDocument(page: Page): Promise<void> {
   let last = "";
+  let quiet = 0;
   await expect
     .poll(
       async () => {
         const now = await documentDigest(page);
-        const settled = now === last;
+        quiet = now === last ? quiet + 1 : 0;
         last = now;
         await page.waitForTimeout(500);
-        return settled;
+        return quiet >= 2;
       },
       { timeout: 30_000 },
     )
@@ -159,6 +161,11 @@ test.describe.serial(
       await installMenuProbe(page);
       // Entering writes the frame's ownership marker; let every write the
       // entry started land before the rows' "document unchanged" checks.
+      await settleDocument(page);
+    });
+    // Every row compares the document before and after its click: start
+    // each from a document no earlier write is still changing.
+    test.beforeEach(async () => {
       await settleDocument(page);
     });
     test.afterAll(async () => {
@@ -192,9 +199,6 @@ test.describe.serial(
         "menu:View/Rulers/Pixels",
       );
       const ruler = page.locator("[data-h-ruler]");
-      // The previous row's guide is drawn before its write lands: settle,
-      // so the first unit's "document unchanged" compares after that write.
-      await settleDocument(page);
       for (const [leaf, suffix, unit] of [
         ["Inches", "rulerUnitIn", "in"],
         ["Centimetres", "rulerUnitCm", "cm"],
