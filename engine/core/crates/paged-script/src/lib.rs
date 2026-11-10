@@ -3084,14 +3084,17 @@ fn paged_insert_oval(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
 
 /// `paged.insertPath(pageId, anchors, open, smooth?)` — insert an
 /// arbitrary path (`Mutation::InsertPath`). `anchors` is a JS array of
-/// `{ anchor:[x,y], left:[x,y], right:[x,y] }`. Returns the new address.
+/// `[x, y]` corners or `{ anchor:[x,y], left?:[x,y], right?:[x,y] }`.
+/// Returns the new address.
 fn paged_insert_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let page = args
         .get_or_undefined(0)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let Some(anchors) =
-        from_js::<Vec<paged_mutate::operation::PathAnchorSpec>>(args.get_or_undefined(1), ctx)
+    // The anchors take the spellings `frame_path_from_json` takes: `[x, y]`
+    // or `{ anchor, left?, right? }`, a missing handle on its anchor.
+    let Some(anchors) = from_js::<Vec<serde_json::Value>>(args.get_or_undefined(1), ctx)
+        .and_then(|a| a.iter().map(json_anchor).collect::<Option<Vec<_>>>())
     else {
         return Ok(JsValue::null());
     };
@@ -7037,39 +7040,44 @@ fn js_to_value_by_schema(
     paged_introspect::schema::from_json(schema, &json).ok()
 }
 
+/// One point `[x, y]` of a path in its script spelling.
+fn json_point(v: &serde_json::Value) -> Option<[f32; 2]> {
+    let a = v.as_array()?;
+    if a.len() != 2 {
+        return None;
+    }
+    Some([a[0].as_f64()? as f32, a[1].as_f64()? as f32])
+}
+
+/// One anchor in its script spellings: `[x, y]` (a corner) or
+/// `{ anchor, left?, right? }` (a missing handle sits on the anchor).
+fn json_anchor(v: &serde_json::Value) -> Option<paged_mutate::operation::PathAnchorSpec> {
+    if v.is_array() {
+        let p = json_point(v)?;
+        return Some(paged_mutate::operation::PathAnchorSpec {
+            anchor: p,
+            left: p,
+            right: p,
+        });
+    }
+    let at = json_point(v.get("anchor")?)?;
+    let handle = |key: &str| match v.get(key) {
+        None | Some(serde_json::Value::Null) => Some(at),
+        Some(h) => json_point(h),
+    };
+    Some(paged_mutate::operation::PathAnchorSpec {
+        anchor: at,
+        left: handle("left")?,
+        right: handle("right")?,
+    })
+}
+
 /// A whole path in its script spellings: an anchor array, or
 /// `{ anchors, subpathStarts? }`. An anchor is `[x, y]` (a corner — both
 /// handles on the anchor) or `{ anchor, left?, right? }` (a missing
 /// handle sits on the anchor). `subpathStarts` defaults to `[0]`, one
 /// contour.
 fn frame_path_from_json(json: &serde_json::Value) -> Option<paged_mutate::Value> {
-    fn point(v: &serde_json::Value) -> Option<[f32; 2]> {
-        let a = v.as_array()?;
-        if a.len() != 2 {
-            return None;
-        }
-        Some([a[0].as_f64()? as f32, a[1].as_f64()? as f32])
-    }
-    fn anchor(v: &serde_json::Value) -> Option<paged_mutate::operation::PathAnchorSpec> {
-        if v.is_array() {
-            let p = point(v)?;
-            return Some(paged_mutate::operation::PathAnchorSpec {
-                anchor: p,
-                left: p,
-                right: p,
-            });
-        }
-        let at = point(v.get("anchor")?)?;
-        let handle = |key: &str| match v.get(key) {
-            None | Some(serde_json::Value::Null) => Some(at),
-            Some(h) => point(h),
-        };
-        Some(paged_mutate::operation::PathAnchorSpec {
-            anchor: at,
-            left: handle("left")?,
-            right: handle("right")?,
-        })
-    }
     let (anchors, starts) = match json {
         serde_json::Value::Array(_) => (json, None),
         serde_json::Value::Object(o) => (o.get("anchors")?, o.get("subpathStarts")),
@@ -7078,7 +7086,7 @@ fn frame_path_from_json(json: &serde_json::Value) -> Option<paged_mutate::Value>
     let anchors = anchors
         .as_array()?
         .iter()
-        .map(anchor)
+        .map(json_anchor)
         .collect::<Option<Vec<_>>>()?;
     let subpath_starts = match starts {
         None | Some(serde_json::Value::Null) => vec![0],

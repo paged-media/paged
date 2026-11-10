@@ -147,7 +147,7 @@ fn insert_path() {
     refuses(&mut m, &format!("paged.insertPath({pid:?})"), "null");
     refuses(
         &mut m,
-        &format!("paged.insertPath({pid:?}, [[0, 0], [1, 1]], true)"),
+        &format!("paged.insertPath({pid:?}, [[0, 0], [1]], true)"),
         "null",
     );
     refuses(
@@ -164,6 +164,13 @@ fn insert_path() {
         &mut m,
         &format!(
             "{A} paged.insertPath({pid:?}, [A(100, 600), A(200, 600), A(200, 660)], true, false)"
+        ),
+        |s| s.contains(':'),
+    ); // A corner may be spelled `[x, y]`, and a missing handle sits on its anchor.
+    mints(
+        &mut m,
+        &format!(
+            "paged.insertPath({pid:?}, [[100, 700], {{ anchor: [200, 700], right: [250, 650] }}, [300, 700]], true)"
         ),
         |s| s.contains(':'),
     );

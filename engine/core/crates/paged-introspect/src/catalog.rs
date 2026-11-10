@@ -399,7 +399,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.insertLine", "(pageId, [x1,y1], [x2,y2])", "string | null", "author", "Insert a two-anchor open GraphicLine."),
         f!("paged.insertOval", "(pageId, [t,l,b,r])", "string | null", "author", "Insert an Oval."),
         f!("paged.insertPath", "(pageId, anchors, open, smooth?)", "string | null", "author",
-           "Insert an arbitrary path; anchors = [{anchor:[x,y],left:[x,y],right:[x,y]}, …]."),
+           "Insert an arbitrary path; anchors = [[x,y] | {anchor:[x,y],left?:[x,y],right?:[x,y]}, …] (a missing handle sits on its anchor)."),
         // --- path-point editing ---
         f!("paged.pathPointInsert", "(elemId, index, anchor, subpathStarts?)", "bool", "author", "Insert an anchor into a path's flat PathPointArray at index."),
         f!("paged.pathPointRemove", "(elemId, index)", "bool", "author", "Remove the anchor at flat index."),
