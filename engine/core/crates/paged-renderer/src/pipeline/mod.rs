@@ -319,6 +319,10 @@ pub struct PipelineOptions<'a> {
     /// Link annotations for hyperlinks / cross-references. Default
     /// `false`: the live canvas build never pays for it.
     pub collect_link_regions: bool,
+    /// Engine ADR 1095 — leave out page items marked non-printing, as
+    /// print output does (PDF export). Default `false`: the canvas and
+    /// `paged render` show them, as InDesign's normal view does.
+    pub omit_nonprinting: bool,
     /// Synthetic drop shadow applied to every TextFrame and
     /// Rectangle. Useful for tooling demos and as a stopgap until
     /// `<TransparencySetting>` parsing lands and per-frame effects
@@ -670,6 +674,7 @@ impl Default for PipelineOptions<'_> {
             use_standard_lab_for_spots: false,
             collect_glyph_runs: false,
             collect_link_regions: false,
+            omit_nonprinting: false,
             frame_drop_shadow: None,
             font_metrics_overrides: &[],
             missing_image_placeholder: true,
@@ -1450,6 +1455,14 @@ pub fn build_document(
     document: &Document,
     options: &PipelineOptions,
 ) -> anyhow::Result<BuiltDocument> {
+    if options.omit_nonprinting && document.has_nonprinting() {
+        let printed = document.without_nonprinting();
+        let options = PipelineOptions {
+            omit_nonprinting: false,
+            ..options.clone()
+        };
+        return build_document(&printed, &options);
+    }
     let growing = document.growing_stories();
     if growing.is_empty() {
         return build_document_fixed(document, options, true);

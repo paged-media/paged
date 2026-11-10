@@ -198,6 +198,7 @@ is not written yet.
 | [1092](1092-paged-barcode-the-encoder-without-a-binding.md) | `paged.barcode`: the barcode encoder is reachable from the engine through the script surface, without a binding; the editor draws the symbol | Accepted 2026-11-08 |
 | [1093](1093-a-line-stops-inside-its-line-ends.md) | A line stops inside its line ends: `paged_geom::trim` shortens the stroke along its curve under each head (IDML, slide, and doc's Office heads); InDesign's cut per head measured | Accepted 2026-11-09 |
 | [1094](1094-a-page-over-200-inches-is-written-in-a-larger-user-unit.md) | A page over 200 inches is written in a larger user unit: `/UserUnit` (the smallest whole number), boxes, base CTM, marks and annotations scaled by it | Accepted 2026-11-10 |
+| [1095](1095-a-non-printing-item-is-left-out-of-pdf-export.md) | A non-printing item is left out of PDF export: `PipelineOptions::omit_nonprinting`, set by the export build, hides `Nonprinting` items as hidden ones are hidden | Accepted 2026-11-10 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

@@ -137,6 +137,69 @@ pub struct ParsedStory {
     pub story: Story,
 }
 
+/// Engine ADR 1095 — every page item of `spread` that can be marked
+/// non-printing (`Nonprinting` on a text frame, rectangle, oval, graphic
+/// line or polygon), as its `(nonprinting, &mut visible)` pair.
+fn nonprinting_flags(spread: &mut Spread) -> impl Iterator<Item = (bool, &mut bool)> {
+    let Spread {
+        text_frames,
+        rectangles,
+        ovals,
+        graphic_lines,
+        polygons,
+        ..
+    } = spread;
+    text_frames
+        .iter_mut()
+        .map(|f| (f.nonprinting, &mut f.visible))
+        .chain(
+            rectangles
+                .iter_mut()
+                .map(|f| (f.nonprinting, &mut f.visible)),
+        )
+        .chain(ovals.iter_mut().map(|f| (f.nonprinting, &mut f.visible)))
+        .chain(
+            graphic_lines
+                .iter_mut()
+                .map(|f| (f.nonprinting, &mut f.visible)),
+        )
+        .chain(polygons.iter_mut().map(|f| (f.nonprinting, &mut f.visible)))
+}
+
+impl Document {
+    /// Engine ADR 1095 — whether any page item, on a spread or a master,
+    /// is marked non-printing.
+    pub fn has_nonprinting(&self) -> bool {
+        let any = |s: &Spread| {
+            s.text_frames.iter().any(|f| f.nonprinting)
+                || s.rectangles.iter().any(|f| f.nonprinting)
+                || s.ovals.iter().any(|f| f.nonprinting)
+                || s.graphic_lines.iter().any(|f| f.nonprinting)
+                || s.polygons.iter().any(|f| f.nonprinting)
+        };
+        self.spreads.iter().any(|s| any(&s.spread))
+            || self.master_spreads.values().any(|m| any(&m.spread))
+    }
+
+    /// Engine ADR 1095 — the document as print output sees it: every
+    /// non-printing page item hidden, so the build skips it as it skips a
+    /// hidden one (InDesign leaves them out of PDF export and print).
+    pub fn without_nonprinting(&self) -> Document {
+        let mut doc = self.clone();
+        let spreads = doc.spreads.iter_mut().map(|s| &mut s.spread);
+        let masters = doc.master_spreads.values_mut().map(|m| &mut m.spread);
+        for spread in spreads.chain(masters) {
+            for (nonprinting, visible) in nonprinting_flags(spread) {
+                if nonprinting {
+                    *visible = false;
+                }
+            }
+        }
+        doc.rebuild_indexes();
+        doc
+    }
+}
+
 /// A master spread plus the `Self` id pages reference it by. The
 /// XML schema is identical to a regular `<Spread>`, so we reuse
 /// `Spread` for the geometry payload.
