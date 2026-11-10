@@ -160,18 +160,43 @@ function turnedInk(
       [0, 3],
       [0, -3],
     ].every(([dx, dy]) => near(((y + dy!) * img.w + x + dx!) * 4, rgb));
-  let [x0, y0, x1, y1] = [img.w, img.h, -1, -1];
-  for (let y = 0; y < img.h; y++)
+  // The first such shape only: the fixture draws the diagram twice (the
+  // body's and the table cell's, doc ADR 629 amendment 2), so the box is
+  // that of the `rgb` region connected to the first fill pixel.
+  let seed = -1;
+  for (let y = 0; y < img.h && seed < 0; y++)
     for (let x = 0; x < img.w; x++)
       if (fill(x, y)) {
-        [x0, y0, x1, y1] = [
-          Math.min(x0, x),
-          Math.min(y0, y),
-          Math.max(x1, x),
-          Math.max(y1, y),
-        ];
+        seed = y * img.w + x;
+        break;
       }
-  if (x1 < 0) return null;
+  if (seed < 0) return null;
+  let [x0, y0, x1, y1] = [img.w, img.h, -1, -1];
+  const seen = new Uint8Array(img.w * img.h);
+  const stack = [seed];
+  seen[seed] = 1;
+  while (stack.length > 0) {
+    const p = stack.pop()!;
+    const [x, y] = [p % img.w, Math.floor(p / img.w)];
+    [x0, y0, x1, y1] = [
+      Math.min(x0, x),
+      Math.min(y0, y),
+      Math.max(x1, x),
+      Math.max(y1, y),
+    ];
+    for (const [nx, ny] of [
+      [x + 1, y],
+      [x - 1, y],
+      [x, y + 1],
+      [x, y - 1],
+    ] as const) {
+      if (nx < 0 || ny < 0 || nx >= img.w || ny >= img.h) continue;
+      const q = ny * img.w + nx;
+      if (seen[q] || !near(q * 4, rgb)) continue;
+      seen[q] = 1;
+      stack.push(q);
+    }
+  }
   const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2];
   const r = 0.9 * Math.min(x1 - x0, y1 - y0) * 0.5;
   let [a0, b0, a1, b1] = [img.w, img.h, -1, -1];
