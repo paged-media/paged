@@ -26,6 +26,11 @@
 //! map's unit square, the frame's text area its target, so the text fills
 //! the shape as WordArt's does. A bent glyph is a path, no longer a glyph:
 //! its glyph-run record goes, and a PDF draws it as an outline.
+//!
+//! A turned frame (rotated, sheared) is bent in its own upright space: the
+//! points are turned back by the frame's linear part about the pivot its
+//! lines were turned about, bent there, and turned again, so the warp
+//! follows the frame as its text does.
 
 use paged_compose::{DisplayCommand, DisplayList, PathData, PathId, PathSegment, Transform};
 use paged_model::text_warp::TextWarp;
@@ -74,10 +79,11 @@ fn set_path(cmd: &mut DisplayCommand, id: PathId) {
 /// A flattened contour: its points and whether it is closed.
 type Contour = (Vec<(f64, f64)>, bool);
 
-/// `path` through `t`, flattened: one polyline per contour (closed or not).
-fn flatten(path: &PathData, t: &Transform) -> Vec<Contour> {
+/// `path` through `t`, then `then`, flattened: one polyline per contour
+/// (closed or not).
+fn flatten(path: &PathData, t: &Transform, then: kurbo::Affine) -> Vec<Contour> {
     let [a, b, c, d, e, f] = t.0.map(f64::from);
-    let affine = kurbo::Affine::new([a, b, c, d, e, f]);
+    let affine = then * kurbo::Affine::new([a, b, c, d, e, f]);
     let bez = affine * path.to_bez();
     let mut out: Vec<Contour> = Vec::new();
     kurbo::flatten(
@@ -101,14 +107,52 @@ fn flatten(path: &PathData, t: &Transform) -> Vec<Contour> {
     out
 }
 
+/// How a frame's lines were turned: the frame's linear part (`[a, b, c,
+/// d]`, `x' = a x + c y`) about a pivot, page pt. The identity for an
+/// upright frame.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Turn {
+    pub linear: [f32; 4],
+    pub pivot: (f32, f32),
+}
+
+impl Turn {
+    #[cfg(test)]
+    pub(super) const UPRIGHT: Turn = Turn {
+        linear: [1.0, 0.0, 0.0, 1.0],
+        pivot: (0.0, 0.0),
+    };
+
+    pub(super) fn is_upright(&self) -> bool {
+        let [a, b, c, d] = self.linear;
+        (a - 1.0).abs() < 1e-5 && b.abs() < 1e-5 && c.abs() < 1e-5 && (d - 1.0).abs() < 1e-5
+    }
+
+    /// Upright space to page space.
+    fn affine(&self) -> kurbo::Affine {
+        let [a, b, c, d] = self.linear.map(f64::from);
+        let (px, py) = (f64::from(self.pivot.0), f64::from(self.pivot.1));
+        kurbo::Affine::translate((px, py))
+            * kurbo::Affine::new([a, b, c, d, 0.0, 0.0])
+            * kurbo::Affine::translate((-px, -py))
+    }
+}
+
 /// Bend the paths of `list.commands[range]` onto `warp`'s shape in `area`
-/// (the frame's text area, page pt).
+/// (the frame's text area in its upright space, page pt; `turn` takes that
+/// space onto the page).
 pub(super) fn warp_range(
     list: &mut DisplayList,
     range: std::ops::Range<usize>,
     warp: &TextWarp,
     area: Box2,
+    turn: Turn,
 ) {
+    let to_page = turn.affine();
+    if to_page.determinant().abs() < 1e-9 {
+        return;
+    }
+    let to_upright = to_page.inverse();
     let end = range.end.min(list.commands.len());
     let start = range.start.min(end);
     let mut contours: Vec<(usize, Vec<Contour>, paged_compose::FillRule)> = Vec::new();
@@ -119,7 +163,7 @@ pub(super) fn warp_range(
         let Some(path) = list.paths.get(id) else {
             continue;
         };
-        contours.push((i, flatten(path, &t), path.fill_rule));
+        contours.push((i, flatten(path, &t, to_upright), path.fill_rule));
     }
     // The text's ink box: the map's unit square.
     let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
@@ -145,8 +189,8 @@ pub(super) fn warp_range(
         let mut segments = Vec::new();
         for (pts, closed) in cs {
             let mut put = |(x, y): (f64, f64), first: bool| {
-                let (mx, my) = shape.map(area, ((x - x0) / w, (y - y0) / h));
-                let (x, y) = (mx as f32, my as f32);
+                let m = to_page * kurbo::Point::from(shape.map(area, ((x - x0) / w, (y - y0) / h)));
+                let (x, y) = (m.x as f32, m.y as f32);
                 segments.push(if first {
                     PathSegment::MoveTo { x, y }
                 } else {
@@ -244,10 +288,43 @@ mod tests {
             w: 40.0,
             h: 20.0,
         };
-        warp_range(&mut list, 0..1, &warp, area);
+        warp_range(&mut list, 0..1, &warp, area, Turn::UPRIGHT);
         let pts = points(&list);
         assert_eq!(pts.first(), Some(&(100.0, 50.0)));
         assert!(pts.contains(&(140.0, 70.0)), "{pts:?}");
+    }
+
+    #[test]
+    fn a_turned_frame_is_bent_in_its_upright_space() {
+        // The text was laid out upright and turned a quarter clockwise
+        // about the page's origin, as a turned frame's lines are.
+        let mut list = rect_list();
+        if let DisplayCommand::FillPath { transform, .. } = &mut list.commands[0] {
+            *transform = Transform([0.0, 1.0, -1.0, 0.0, -5.0, 5.0]);
+        }
+        let warp = TextWarp {
+            preset: "textPlain".into(),
+            adjusts: Vec::new(),
+        };
+        let area = Box2 {
+            x: 100.0,
+            y: 50.0,
+            w: 40.0,
+            h: 20.0,
+        };
+        let turn = Turn {
+            linear: [0.0, 1.0, -1.0, 0.0],
+            pivot: (0.0, 0.0),
+        };
+        warp_range(&mut list, 0..1, &warp, area, turn);
+        let pts = points(&list);
+        let near = |p: (f32, f32)| {
+            pts.iter()
+                .any(|q| (q.0 - p.0).abs() < 1e-3 && (q.1 - p.1).abs() < 1e-3)
+        };
+        // The area's corners, turned: (100, 50) and (140, 70).
+        assert!(near((-50.0, 100.0)), "{pts:?}");
+        assert!(near((-70.0, 140.0)), "{pts:?}");
     }
 
     #[test]
@@ -263,7 +340,7 @@ mod tests {
             w: 100.0,
             h: 100.0,
         };
-        warp_range(&mut list, 0..1, &warp, area);
+        warp_range(&mut list, 0..1, &warp, area, Turn::UPRIGHT);
         let pts = points(&list);
         // The rectangle's top edge became the arc: its corners are at the
         // sides of the box, half way down; nothing is above the box.

@@ -266,3 +266,43 @@ fn under_word_first_fit_an_equations_depth_pushes_the_next_line() {
         "InDesign: only the rise moves, {indesign}"
     );
 }
+
+/// Engine ADR 1090, amendment — an equation in a turned frame turns with its
+/// line: in a frame turned a quarter, the fraction's bar stands upright, as
+/// tall as the fraction is wide.
+#[test]
+fn an_equation_in_a_turned_frame_turns_with_its_line() {
+    let mut doc = document();
+    let story = story_id(0);
+    for s in &mut doc.spreads {
+        for f in &mut s.spread.text_frames {
+            if f.parent_story.as_deref() != Some(story.as_str()) {
+                continue;
+            }
+            let m = f.item_transform.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+            // A quarter clockwise: the inner x axis runs down the page.
+            f.item_transform = Some([-m[1], m[0], -m[3], m[2], -m[5], m[4]]);
+        }
+    }
+    let s0 = doc
+        .stories
+        .iter_mut()
+        .find(|s| s.self_id == story)
+        .expect("story 0");
+    s0.story.paragraphs[0].equations.push(Equation {
+        offset: 0,
+        math: fraction(),
+        point_size: None,
+    });
+    let built = build(&doc);
+    let bars: Vec<_> = rects(&built)
+        .into_iter()
+        .filter(|r| (r.2 - 0.5).abs() < 0.01 && (2.0..10.0).contains(&r.3))
+        .collect();
+    assert_eq!(
+        bars.len(),
+        1,
+        "one upright fraction bar: {:?}",
+        rects(&built)
+    );
+}

@@ -334,7 +334,8 @@ pub(super) fn emit_polygon_body(
     // W1.5 — Inside/Outside StrokeAlignment on the polygon outline:
     // offset each closed contour inward / outward by weight/2 and
     // stroke that offset path instead of the centred `path_id`. Centre
-    // alignment (or an open / anchorless polygon) keeps `path_id`.
+    // alignment (or an open / anchorless polygon) keeps `path_id`, unless
+    // line ends shorten an open contour's stroke.
     let poly_weight = resolved.effective_stroke_weight();
     let aligned_poly_id = if let Geometry::Polygon {
         anchors,
@@ -343,17 +344,30 @@ pub(super) fn emit_polygon_body(
         ..
     } = &resolved.geometry
     {
-        let base = polygon_outline_path(anchors, subpath_starts, subpath_open, corner);
-        super::shapes::aligned_outline_path(&base, resolved.stroke_alignment, poly_weight).map(
-            |p| {
-                let seed = resolved
-                    .self_id
-                    .map(|id| fnv_1a_u64(id.as_bytes()))
-                    .unwrap_or(0xC0DE)
-                    ^ 0xA11A_0000;
-                page.list.paths.intern(seed, p).0
-            },
-        )
+        let seed = resolved
+            .self_id
+            .map(|id| fnv_1a_u64(id.as_bytes()))
+            .unwrap_or(0xC0DE);
+        // Engine ADR 1093 — each open contour's stroke stops inside its
+        // line ends (the fill keeps the whole outline).
+        let cut = super::shapes::stroke_under_line_ends(
+            anchors,
+            subpath_starts,
+            subpath_open,
+            super::shapes::LineEnds::of_polygon(poly),
+            true,
+            poly_weight,
+            resolved.end_cap,
+        );
+        let base = match &cut {
+            Some((a, s, o)) => polygon_outline_path(a, s, o, corner),
+            None => polygon_outline_path(anchors, subpath_starts, subpath_open, corner),
+        };
+        match super::shapes::aligned_outline_path(&base, resolved.stroke_alignment, poly_weight) {
+            Some(p) => Some(page.list.paths.intern(seed ^ 0xA11A_0000, p).0),
+            None if cut.is_some() => Some(page.list.paths.intern(seed ^ 0xA44E_0000, base).0),
+            None => None,
+        }
     } else {
         None
     };

@@ -95,6 +95,10 @@ pub struct TextBox {
     /// text is bent to; `None` for unbent text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warp: Option<WordArt>,
+    /// `a:xfrm/@rot`, 60 000ths of a degree clockwise: Word turns the box
+    /// and its text about the box's centre (0 for a VML box).
+    #[serde(default, skip_serializing_if = "is_zero_i32")]
+    pub rotation: i32,
 }
 
 /// A text warp as the box states it: the `ST_TextShapeType` preset's name
@@ -258,6 +262,12 @@ pub struct DiagramText {
     /// `a:bodyPr/@anchor`: `t`, `ctr` or `b`.
     pub anchor: String,
     pub paragraphs: Vec<DiagramParagraph>,
+    /// 60 000ths of a degree clockwise the box turns about its centre: the
+    /// shape's `a:xfrm/@rot` plus the text box's own `dsp:txXfrm/@rot`
+    /// (Word turns a shape's text with it; a turned layout shape whose text
+    /// stands upright says so with the opposite `rot` on its text box).
+    #[serde(default, skip_serializing_if = "is_zero_i32")]
+    pub rotation: i32,
 }
 
 /// One `a:p` of a diagram shape's text.

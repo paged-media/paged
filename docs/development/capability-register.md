@@ -131,6 +131,7 @@ pattern would need the slide-grid phase through `pattern_transform` per frame an
 goldens); a translucent pattern has no swatch (a tile item paints a colour without alpha). `a:clrChange`
 stays a recorded loss: the filter stack (`RasterOp`) has no colour-replace op.
 `a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3: examined, left open, they are not copies of one another: `slide-chart`'s `outline` (slide-resolve's and doc's charts, doc ADR 628) builds clockwise-from-12-o'clock `SubPath`s with arcs split at 90° by `ceil(|sweep|/90)`, `sheet-chart` emits a `Primitive::Wedge` that its renderer draws, and the engine's `pie_anchors` is f32, counter-clockwise from 3 o'clock with a `ceil(sweep/(pi/2) - 1e-9)` split; a shared primitive would move anchors in the last bits and the slide goldens with them. Chart label width ×2: also left open, `sheet-chart` counts characters at one advance (`ADVANCE_EM`), `slide-chart` weighs digits, separators and letters apart, so they measure differently on purpose (neither goes through `paged-text`). Default Office palette and theme readers: `pptx-import` and `slide-resolve` re-examined 2026-11-08 (see the OOXML foundation row): fonts and `SLOTS` shared, the colour reader kept for the unresolved `Color` the goldens rest on.
+Line ends (2026-11-09): a stroke shortened under its heads, along its curve, is `paged_geom::trim::trim_run` (engine ADR 1093): the renderer cuts the engine's own line ends with it (IDML, and paged.slide's DrawingML heads through `dml-native`), paged.doc the Office heads it draws (doc ADR 629, amendment 1). Open: Office's head geometry (the `sm` / `med` / `lg` sizes, the 2 pt sizing minimum, the `stealth` notch, the `arrow`'s two strokes) lives only in `docx-lower`'s `shape_geom`; slide draws DrawingML heads in the engine's InDesign proportions and sheet draws none. Its owner is the engine model (a per-end Office head) or `dml-geom` (the heads as paths).
 Draw's TS geometry and vector-tool machines moved to `platform/shared/vector-geometry` and `platform/shared/vector-tools` (C15), so the host `tools` package and draw both import shared packages; draw keeps only its Illustrator workflows in `draw-bundle`.
 
 ### Text and fonts
@@ -171,8 +172,10 @@ equation's alternate content) and `slide-native`. Compared with Word (ADR 1090 a
 match. Open: equations in table cells, a wire door, display n-ary operators (Word uses the face's display
 variant, about twice the text's height), a math face that is not face 0 of a font collection. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
 adjusts) for doc, slide and sheet; `paged_warp::textshape` is the one set of preset guides; the frame's `text_warp` is bent by the
-renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. Compared with Word (ADR 1091
-amendment 2): the filling presets match. Open: arches and circles (Word keeps the text's size along the arc), a box that fits its
+renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. A turned frame bends in its own upright space and
+turns its text with it, an anchored frame (a Word text box, SmartArt text) included (engine ADR 1091 amendment 2, ADR 1050 amendment 2026-11-09;
+equations turn with their line, ADR 1090 amendment 3). Compared with Word (ADR 1091
+amendment 3): the filling presets match. Open: arches and circles (Word keeps the text's size along the arc), a box that fits its
 text (`spAutoFit`) before the warp, write-back, handles.
 
 Oracle comparisons of 2026-11-09 (Word, PowerPoint and Excel 16 for macOS), open items they left: an inline object after a
@@ -434,7 +437,8 @@ Status (draw items, one line each; updated as they land):
 
 - **doc:** recolour, chart data editing, SmartArt editing, OpenType features, equations. Charts: DONE from the cached values
   (doc ADR 628, `slide-chart`'s layout, anchored groups; chart data editing is open; the workbook door, extensions ADR 1102, is the way slide took). SmartArt:
-  DONE as drawn (doc ADR 629: the `dsp:drawing` Word saved, as an anchored group of shapes and text frames; editing the
+  DONE as drawn (doc ADR 629: the `dsp:drawing` Word saved, as an anchored group of shapes and text frames, a text box
+  turned with its shape and by its own `dsp:txXfrm/@rot`, as in slide (slide ADR 717 amendment 2026-11-09); editing the
   diagram is open). Shapes: PARTLY DONE (doc ADR 627: non-text `wps:wsp` as anchored Rectangle frames drawn along their
   outline, every Annex D preset through `dml-geom` since doc ADR 629 and literal custom geometry, `wps:style` completing
   the look; a shape's own text wrap is open). Embedded fonts: DONE (doc ADR 626: Word's obfuscated `.odttf` faces are unlocked, held to

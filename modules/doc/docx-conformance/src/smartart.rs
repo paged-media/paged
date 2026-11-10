@@ -71,7 +71,8 @@ fn solid(scheme: &str) -> String {
 }
 
 /// The drawing: a rounded rectangle "Plan", an arrow, a chevron "Do" in a
-/// group that halves its children, an ellipse "Check".
+/// group that halves its children (the chevron turned a quarter, its text
+/// turned back upright), an ellipse "Check" turned a quarter with its text.
 pub fn smartart_drawing_xml() -> String {
     let plan = sp(
         &off_ext(0, 0, 1_371_600, 914_400),
@@ -88,17 +89,20 @@ pub fn smartart_drawing_xml() -> String {
         &solid("accent1"),
         None,
     );
+    // Turned a quarter, its text turned back upright by its text box, as
+    // the vertical chevron list lays its chevrons out.
     let chevron = sp(
-        &off_ext(0, 0, 2_743_200, 1_828_800),
+        r#"<a:xfrm rot="5400000"><a:off x="457200" y="-457200"/><a:ext cx="1828800" cy="2743200"/></a:xfrm>"#,
         "chevron",
         &solid("accent2"),
         Some((
             SMARTART_TEXTS[1],
-            r#"<dsp:txXfrm><a:off x="914400" y="0"/><a:ext cx="914400" cy="1828800"/></dsp:txXfrm>"#,
+            r#"<dsp:txXfrm rot="-5400000"><a:off x="914400" y="0"/><a:ext cx="914400" cy="1828800"/></dsp:txXfrm>"#,
         )),
     );
+    // Turned a quarter with no text box: its text turns with it.
     let check = sp(
-        &off_ext(3_444_240, 0, 914_400, 914_400),
+        r#"<a:xfrm rot="5400000"><a:off x="3444240" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>"#,
         "ellipse",
         &solid("accent3"),
         Some((SMARTART_TEXTS[2], "")),

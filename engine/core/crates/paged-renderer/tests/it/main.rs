@@ -5,6 +5,7 @@
 
 mod anchored_custom;
 mod anchored_effects;
+mod anchored_turn_pipeline;
 mod anchors_in_text;
 mod appearance;
 mod appearance_illustrator;

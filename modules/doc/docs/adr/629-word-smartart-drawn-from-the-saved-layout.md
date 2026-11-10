@@ -1,6 +1,6 @@
 # ADR 629 — SmartArt is drawn from the layout Word saved; shapes take every Annex D preset and their line ends
 
-- **Status:** Accepted 2026-11-08.
+- **Status:** Accepted 2026-11-08; amended 2026-11-09 (amendment 1: the line stops inside its heads; amendment 2: turned text boxes; amendment 3: the Word oracle).
 - **Scope:** `docx-core` (`DiagramDrawing`, `Run::diagrams`), `docx-import` (`diagram`,
   `objects::drawing_diagram`), `docx-lower` (`diagram`, `shape_geom`, `LoweredGroup`),
   `docx-skeleton` (`body::group_frame`), the doc manifest's wasm ceiling (ADR 627 amendment).
@@ -49,8 +49,9 @@ block arcs, circular arrows, …). `dml-geom` evaluates all 187 from ECMA-376 An
   stroked with the line, sized as Office sizes them (`sm`, `med`, `lg`: 2, 3 and 5 times the line's
   width, at least 0.75 pt), the tip on the line's end and pointing along it. Such a shape is an
   anchored Group of the shape and its heads (`docx_shapeN_0`, `docx_shapeN_hK`), placed as the
-  shape. A closed outline takes none, as in Office; a kind not listed is told. The line is not
-  shortened under its head.
+  shape. A closed outline takes none, as in Office; a kind not listed is told. The line is
+  shortened under its head since amendment 1, which also corrects the sizes and the `stealth`
+  and `arrow` shapes from PowerPoint's PDF.
 - **Save.** Nothing is written: the drawing, the data, layout, style, colour and drawing parts stay
   as they were, byte for byte.
 
@@ -58,7 +59,6 @@ block arcs, circular arrows, …). `dml-geom` evaluates all 187 from ECMA-376 An
 
 - A diagram is not edited as a diagram (adding a node, retyping its text in the data model): it
   is drawn, and its parts round-trip.
-- Rotated text boxes (`dsp:txXfrm/@rot`) are set unrotated.
 
 ## Size
 
@@ -86,7 +86,72 @@ for it (PM-0013, amendment 6).
 - `test/headless/smartart.spec.ts` (real engine): the shapes are painted in the theme's accents; an
   unedited export keeps the diagram's parts.
 
-## Amendment (2026-11-09): the Word oracle
+## Amendment 1 (2026-11-09): the line stops inside its heads, as Office draws it
+
+Office ends the stroke of a line inside its head instead of at the tip, so its corners, a round
+cap and a translucent line do not show around the head. The lowering now does the same: the first
+open contour (the one the heads finish) is shortened at each end by the inset below, along its
+curve, with the engine's kernel (`paged_geom::trim::trim_run`, engine ADR 1093, which also cuts
+the engine's own line ends for IDML and paged.slide). A contour the two insets take whole is not
+stroked. The heads stay where they are drawn.
+
+Measured from PowerPoint 16.114's PDF of straight lines with each `a:tailEnd` kind at 0.5, 1,
+1.5, 2.5, 4, 6 and 10 pt, `sm` / `med` / `lg` and mixed `w` / `len`, flat and round caps (63
+lines in two decks, written into PowerPoint's blank deck by
+`tooling/oracle/office/powerpoint/ppt-line-ends-probe.py` and re-saved by PowerPoint, then exported
+to PDF by `ppt-export-probe.sh`).
+`we` is the sizing width, `len` and `wid` the head's length and width:
+
+| Head              | Office draws                                                                                   | The stroke stops, back from the end                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `triangle`        | its tip on the end                                                                             | `len - we / 2` (exact on every line)                                 |
+| `stealth`         | the same, notched `we`, `2 we`, `3 we` back from the tip for a `sm`, `med`, `lg` length        | at the notch (exact)                                                 |
+| `arrow`           | two strokes of the line's width, round at their free ends, their mitred corner on the end      | where they meet: `(w / 2) / sin a`, `tan a = (wid / 2 + we / 4) / len` (within 0.1 `w`) |
+| `diamond`, `oval` | centred on the end                                                                             | not shortened                                                        |
+
+- **The sizing width** `we` is the line's width, but at least 2 pt: a 0.5, 1 or 1.5 pt line takes
+  the heads of a 2 pt one (`sm`, `med`, `lg`: 2, 3 and 5 times it). It replaces the 0.75 pt
+  minimum this ADR assumed.
+- The cap does not move the cut: a round-capped line stops where a flat one does, its cap
+  reaching half its width further, under the head.
+- `stealth`'s notch was drawn at 0.6 of the length; it is now Office's. `arrow` was drawn with its
+  point on the end, so its mitre ran past it; its strokes now meet back from the end and their
+  outer corner is the end, as in Office.
+- The insets and heads live in `docx-lower`'s `shape_geom` (`inset`, `cut_under_heads`). paged.slide
+  maps DrawingML heads onto the engine's InDesign-shaped ones (sizes not carried) and paged.sheet
+  draws none yet; one Office head geometry for the three is open (engine ADR 1093, "Not done").
+
+Evidence: `docx-lower` `shape_geom::the_line_stops_where_powerpoint_stops_it` (22 measured cases),
+`a_line_is_cut_under_its_heads_and_a_closed_outline_is_not` and the open arrow's corners;
+`docx-conformance` `shapes`: the arrow's line stops 10.125 pt (`5 x 2.25 - 1.125`) short of its
+large triangle's tip and keeps its point under the oval.
+
+Word 16 agrees: the `shapes` fixture opened in Word and exported to PDF draws that arrow's line
+ending 10.12 pt short of the triangle's tip (10.125 predicted) and starting at the oval's centre.
+
+## Amendment 2 (2026-11-09): a shape's text turns
+
+Word, like PowerPoint (slide ADR 717, amendment 2026-11-09), states a diagram shape's text box
+(`dsp:txXfrm`) in the drawing's space, unturned, and turns it about its centre by the shape's
+`a:xfrm/@rot` plus the box's own `rot`: a turned layout shape whose text stands upright says so
+with the opposite `rot`, a turned shape with no text box of its own turns its text with it. The
+reader kept the box and dropped both turns, so the text of every turned shape stood upright.
+
+- **Read.** `DiagramText.rotation` (60 000ths of a degree): the shape's `rot` plus the text box's,
+  modulo a full turn.
+- **Lower.** `LoweredPiece::Label.rotation` (degrees), onto the text frame of the group as the
+  linear part of its `item_transform`; the renderer turns an anchored frame about the centre of
+  its placed box (engine ADR 1050, amendment 2026-11-09).
+- **Text boxes.** A Word text box (WordArt or not) turned by its `a:xfrm/@rot` turns too
+  (engine ADR 1091, amendment 2): `TextBox.rotation`, `LoweredTextBox.rotation`,
+  `LoweredItemKind::TextBox.rotation`.
+- **Evidence.** `docx-conformance` `smartart` (the fixture's chevron is now turned a quarter with
+  its text box turned back, its ellipse turned a quarter with no text box: turns 0, 0 and 90
+  degrees, read and lowered); `docx-skeleton` `body_native` (the ellipse's text frame carries the
+  quarter turn, the others none); `test/headless/smartart.spec.ts` (real engine: the turned
+  ellipse's white text ink stands taller than it is wide); `docx-conformance` `wordart`.
+
+## Amendment 3 (2026-11-09): the Word oracle
 
 - **Word lays SmartArt out again on open.** Word 16 for macOS draws the `smartart` fixture's first
   diagram from its data and layout parts, not from the saved drawing (the fixture's drawing does

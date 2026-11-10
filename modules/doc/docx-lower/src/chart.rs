@@ -162,6 +162,7 @@ impl crate::Lowering {
             paragraphs: lowered,
             insets: [0.0; 4],
             valign: None,
+            rotation: 0.0,
         })
     }
 

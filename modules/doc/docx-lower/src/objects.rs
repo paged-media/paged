@@ -554,6 +554,8 @@ struct Made {
     text_box: Option<([f32; 4], u32, bool, bool)>,
     /// A text box's WordArt warp (engine ADR 1091).
     warp: Option<docx_core::WordArt>,
+    /// A text box's turn, degrees clockwise about its centre.
+    rotation: f32,
 }
 
 impl Made {
@@ -572,6 +574,7 @@ impl Made {
                     paragraphs: Vec::new(),
                     insets_pt,
                     warp: self.warp,
+                    rotation: self.rotation,
                 },
                 LoweredItemSource {
                     part: part.to_string(),
@@ -630,6 +633,7 @@ fn run_items(
                 picture: Some(lower_image(img).uri),
                 text_box: None,
                 warp: None,
+                rotation: 0.0,
             },
         ));
     }
@@ -665,10 +669,16 @@ fn run_items(
                 picture: None,
                 text_box: Some((box_insets(tb), tb.ordinal, tb.vml, tb.held)),
                 warp: tb.warp.clone(),
+                rotation: box_rotation(tb),
             },
         ));
     }
     out
+}
+
+/// A text box's turn, degrees clockwise about its centre (`a:xfrm/@rot`).
+pub fn box_rotation(tb: &TextBox) -> f32 {
+    tb.rotation as f32 / 60_000.0
 }
 
 /// A text box's internal margins in points, top, left, bottom, right.
@@ -928,6 +938,7 @@ impl crate::Lowering {
             paragraphs,
             fx,
             warp: tb.warp.clone(),
+            rotation: box_rotation(tb),
         }
     }
 
@@ -980,7 +991,7 @@ impl crate::Lowering {
     ) -> Option<crate::ir::LoweredShape> {
         let w = emu_to_pt(sh.width_emu);
         let h = emu_to_pt(sh.height_emu);
-        let outline = match crate::shape_geom::outline(sh, w, h) {
+        let mut outline = match crate::shape_geom::outline(sh, w, h) {
             Ok(o) => o,
             Err(reason) => {
                 if !self.w4.undrawn_shapes.contains(&reason) {
@@ -1006,9 +1017,23 @@ impl crate::Lowering {
                 if !undrawn.is_empty() {
                     self.w4.shape_line_ends += 1;
                 }
+                // The line stops inside its heads (amendment 1); the heads
+                // were placed on its ends above.
+                crate::shape_geom::cut_under_heads(
+                    &mut outline,
+                    line.head.as_ref(),
+                    line.tail.as_ref(),
+                    width,
+                );
+                // An `arrow`'s strokes: solid, mitred where they meet,
+                // round at their free ends, as Office draws them.
                 let bare = paged_ooxml::drawingml::Line {
                     head: None,
                     tail: None,
+                    dash: None,
+                    custom_dash: Vec::new(),
+                    cap: Some("rnd".into()),
+                    join: Some("miter".into()),
                     ..line.clone()
                 };
                 heads

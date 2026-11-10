@@ -144,7 +144,7 @@ impl TextWarp {
     /// Does the warp change the text at all? Only `textNoShape` leaves it
     /// as set: `textPlain` stretches the text onto the box (measured: Word
     /// 16 for macOS draws a 20 pt `textPlain` line as tall and as wide as
-    /// its 200 x 80 pt box, engine ADR 1091 amendment 2).
+    /// its 200 x 80 pt box, engine ADR 1091 amendment 3).
     pub fn is_active(&self) -> bool {
         !matches!(self.preset, Preset::NoShape)
     }

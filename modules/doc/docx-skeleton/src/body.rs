@@ -1139,6 +1139,8 @@ fn build_whole(
                 preset: w.preset.clone(),
                 adjusts: w.adjusts.clone(),
             }),
+            // A turned box turns about its centre, text and all.
+            item_transform: turn(tb.rotation),
             ..AnchoredFrame::default()
         };
         // The box's look (fill, outline, opacity, effects).
@@ -1248,6 +1250,17 @@ fn build_whole(
     Ok(para)
 }
 
+/// An anchored frame's turn by `deg` degrees clockwise, as its
+/// `item_transform`: the linear part only, the engine turning the placed
+/// box about its centre (engine ADR 1050); `None` upright.
+fn turn(deg: f32) -> Option<[f32; 6]> {
+    if deg.rem_euclid(360.0) == 0.0 {
+        return None;
+    }
+    let (s, c) = deg.to_radians().sin_cos();
+    Some([c, s, -s, c, 0.0, 0.0])
+}
+
 /// A chart's or a diagram's anchored Group (doc ADR 628, 629): its pieces as
 /// outlined Rectangles and TextFrames whose stories are made beside the
 /// body's, ids `<id>_<k>` (a label's story `<id>_t<k>`).
@@ -1300,6 +1313,7 @@ fn group_frame(
                 paragraphs,
                 insets,
                 valign,
+                rotation,
             } => {
                 let paragraphs = box_paragraphs(doc, styles, paragraphs, minted)?;
                 let story = format!("{id}_t{k}");
@@ -1314,6 +1328,7 @@ fn group_frame(
                         vertical_justification: valign.clone(),
                         ..AnchoredLayout::default()
                     },
+                    item_transform: turn(*rotation),
                     ..AnchoredFrame::default()
                 });
             }

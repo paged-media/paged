@@ -33,6 +33,12 @@ fn inter_font() -> Vec<u8> {
 }
 
 fn document(warp: Option<&str>) -> paged_scene::Document {
+    turned_document(warp, 0.0)
+}
+
+/// The fixture with its first frame turned `deg` degrees clockwise about
+/// its centre.
+fn turned_document(warp: Option<&str>, deg: f32) -> paged_scene::Document {
     let bytes =
         paged_gen::write_idml(&paged_gen::samples::blank_paragraphs::build()).expect("idml");
     let mut doc = idml_import::import_idml_doc(&bytes).expect("import");
@@ -44,6 +50,27 @@ fn document(warp: Option<&str>) -> paged_scene::Document {
                     preset: p.into(),
                     adjusts: Vec::new(),
                 });
+                if deg != 0.0 {
+                    let m = f.item_transform.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+                    let (cx, cy) = centre(f);
+                    let (sn, cs) = deg.to_radians().sin_cos();
+                    let r = [
+                        cs,
+                        sn,
+                        -sn,
+                        cs,
+                        cx - cs * cx + sn * cy,
+                        cy - sn * cx - cs * cy,
+                    ];
+                    f.item_transform = Some([
+                        r[0] * m[0] + r[2] * m[1],
+                        r[1] * m[0] + r[3] * m[1],
+                        r[0] * m[2] + r[2] * m[3],
+                        r[1] * m[2] + r[3] * m[3],
+                        r[0] * m[4] + r[2] * m[5] + r[4],
+                        r[1] * m[4] + r[3] * m[5] + r[5],
+                    ]);
+                }
             }
         }
     }
@@ -97,6 +124,18 @@ fn bent_extent(built: &pipeline::BuiltDocument) -> Option<(f32, f32, f32, f32)> 
     any.then_some((x0, y0, x1, y1))
 }
 
+/// A frame's centre, spread pt.
+fn centre(f: &paged_model::TextFrame) -> (f32, f32) {
+    let (x, y) = (
+        (f.bounds.left + f.bounds.right) / 2.0,
+        (f.bounds.top + f.bounds.bottom) / 2.0,
+    );
+    match f.item_transform {
+        Some(m) => (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]),
+        None => (x, y),
+    }
+}
+
 /// The first frame's text area, page pt: its box less its insets.
 fn text_area(doc: &paged_scene::Document) -> (f32, f32, f32, f32) {
     let story = story_id(0);
@@ -139,7 +178,12 @@ fn the_plain_warp_stretches_the_text_onto_its_area() {
 
 /// Every point of the bent glyphs.
 fn bent_points(built: &pipeline::BuiltDocument) -> Vec<(f32, f32)> {
-    let before = plain_paths(&build(&document(None)));
+    bent_points_turned(built, 0.0)
+}
+
+/// [`bent_points`] of a frame turned `deg` degrees.
+fn bent_points_turned(built: &pipeline::BuiltDocument, deg: f32) -> Vec<(f32, f32)> {
+    let before = plain_paths(&build(&turned_document(None, deg)));
     plain_paths(built)
         .into_iter()
         .filter(|p| !before.contains(p))
@@ -174,4 +218,40 @@ fn an_arch_bends_the_text_inside_the_areas_ellipse() {
         .iter()
         .fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.0), b.max(p.0)));
     assert!(x1 - x0 > rx, "{x0}..{x1}");
+}
+
+/// Engine ADR 1091, amendment 2 — a turned frame's warp turns with it: the
+/// arch of a frame turned a quarter clockwise, turned back about the frame's
+/// centre, is the upright frame's arch.
+#[test]
+fn a_turned_frames_arch_turns_with_the_frame() {
+    let upright = turned_document(Some("textArchUp"), 0.0);
+    let turned = turned_document(Some("textArchUp"), 90.0);
+    let built = build(&turned);
+    let pts = bent_points_turned(&built, 90.0);
+    assert!(!pts.is_empty(), "bent glyphs");
+    let origin = built.pages[0].spread_origin;
+    let story = story_id(0);
+    let frame = turned
+        .spreads
+        .iter()
+        .flat_map(|s| &s.spread.text_frames)
+        .find(|f| f.parent_story.as_deref() == Some(story.as_str()))
+        .expect("frame");
+    let (fx, fy) = centre(frame);
+    let (fx, fy) = (fx - origin.0, fy - origin.1);
+    let (ax0, ay0, ax1, ay1) = text_area(&upright);
+    let (cx, cy) = ((ax0 + ax1) / 2.0 - origin.0, (ay0 + ay1) / 2.0 - origin.1);
+    let (rx, ry) = ((ax1 - ax0) / 2.0, (ay1 - ay0) / 2.0);
+    let mut x_span = (f32::MAX, f32::MIN);
+    for &(x, y) in &pts {
+        // A quarter back (anticlockwise) about the frame's centre.
+        let (dx, dy) = (x - fx, y - fy);
+        let (ux, uy) = (fx + dy, fy - dx);
+        let d = ((ux - cx) / rx).powi(2) + ((uy - cy) / ry).powi(2);
+        assert!(d <= 1.002, "({ux}, {uy}) is outside the ellipse: {d}");
+        assert!(uy <= cy + 0.02, "({ux}, {uy}) is below the centre {cy}");
+        x_span = (x_span.0.min(ux), x_span.1.max(ux));
+    }
+    assert!(x_span.1 - x_span.0 > rx, "{x_span:?}");
 }

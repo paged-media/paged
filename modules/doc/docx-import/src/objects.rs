@@ -61,8 +61,7 @@ pub(crate) fn language(l: &wml::Languages) -> Language {
 /// pictures' are), and the running `w:txbxContent` ordinal.
 #[derive(Default)]
 pub(crate) struct PartObjects {
-    looks:
-        std::collections::HashMap<u32, std::collections::VecDeque<(PictureLook, Option<WordArt>)>>,
+    looks: std::collections::HashMap<u32, std::collections::VecDeque<BoxLook>>,
     /// Every shape's outline, transform and completed look by the same id
     /// (doc ADR 627), read for the shapes that hold no text.
     shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
@@ -74,6 +73,10 @@ pub(crate) struct PartObjects {
     diagrams: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
     next_ordinal: u32,
 }
+
+/// What the shapes pass reads of a text box's `wps:wsp`: its look, its
+/// WordArt warp and its `a:xfrm/@rot`.
+type BoxLook = (PictureLook, Option<WordArt>, i32);
 
 /// What the shapes pass reads of one `wps:wsp`.
 struct ShapeRead {
@@ -189,12 +192,17 @@ fn shape_looks(part: &[u8]) -> PartRead {
                     .filter_map(|(n, _)| Some((n.clone(), w.adjust(n)?)))
                     .collect(),
             });
+        let rotation = sp_pr
+            .and_then(|sp| sp.children.iter().find(|c| c.local == "xfrm"))
+            .and_then(|x| x.attr_i32("rot"))
+            .unwrap_or(0);
         out.entry(id).or_default().push_back((
             PictureLook {
                 shape,
                 blip: Default::default(),
             },
             warp,
+            rotation,
         ));
     }
     read
@@ -203,8 +211,7 @@ fn shape_looks(part: &[u8]) -> PartRead {
 /// What [`shape_looks`] reads of a part.
 #[derive(Default)]
 struct PartRead {
-    looks:
-        std::collections::HashMap<u32, std::collections::VecDeque<(PictureLook, Option<WordArt>)>>,
+    looks: std::collections::HashMap<u32, std::collections::VecDeque<BoxLook>>,
     shapes: std::collections::HashMap<u32, std::collections::VecDeque<ShapeRead>>,
     charts: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
     diagrams: std::collections::HashMap<u32, std::collections::VecDeque<String>>,
@@ -450,7 +457,7 @@ pub(crate) fn drawing_text_box(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Text
         }
         _ => return None,
     };
-    let (look, warp) = doc_pr
+    let (look, warp, rotation) = doc_pr
         .and_then(|id| {
             ctx.objects
                 .borrow_mut()
@@ -458,7 +465,9 @@ pub(crate) fn drawing_text_box(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Text
                 .get_mut(&id)
                 .and_then(|q| q.pop_front())
         })
-        .map_or((None, None), |(look, warp)| (Some(look), warp));
+        .map_or((None, None, 0), |(look, warp, rotation)| {
+            (Some(look), warp, rotation)
+        });
     let ordinal = next_ordinal(ctx);
     let (paragraphs, held) = content_paragraphs(content, ctx);
     let mut insets = DEFAULT_INSETS;
@@ -487,6 +496,7 @@ pub(crate) fn drawing_text_box(d: &wml::Drawing, ctx: &ImportCtx) -> Option<Text
         vml: false,
         held,
         warp,
+        rotation,
     })
 }
 
@@ -681,6 +691,7 @@ pub(crate) fn vml_text_box(p: &wml::Picture, ctx: &ImportCtx) -> Option<TextBox>
             vml: true,
             held,
             warp: None,
+            rotation: 0,
         });
     }
     None
@@ -1107,7 +1118,7 @@ mod tests {
             r#"<wps:bodyPr><a:prstTxWarp prst="textArchUp"><a:avLst><a:gd name="adj" fmla="val 12000000"/></a:avLst></a:prstTxWarp></wps:bodyPr>"#,
         );
         let looks = shape_looks(xml.as_bytes()).looks;
-        let (_, warp) = looks[&7].front().expect("the box's look").clone();
+        let (_, warp, _) = looks[&7].front().expect("the box's look").clone();
         assert_eq!(
             warp,
             Some(WordArt {
@@ -1126,5 +1137,17 @@ mod tests {
             let looks = shape_looks(part(body).as_bytes()).looks;
             assert_eq!(looks[&7].front().expect("look").1, None, "{body}");
         }
+    }
+
+    #[test]
+    fn a_turned_text_box_keeps_its_rotation() {
+        let xml = part("<wps:bodyPr/>").replace(
+            "<wps:spPr/>",
+            r#"<wps:spPr><a:xfrm rot="1800000"><a:off x="0" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm></wps:spPr>"#,
+        );
+        let looks = shape_looks(xml.as_bytes()).looks;
+        assert_eq!(looks[&7].front().expect("look").2, 1_800_000);
+        let plain = shape_looks(part("<wps:bodyPr/>").as_bytes()).looks;
+        assert_eq!(plain[&7].front().expect("look").2, 0);
     }
 }

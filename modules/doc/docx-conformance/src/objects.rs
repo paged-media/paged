@@ -484,3 +484,48 @@ pub fn objects_languages_docx() -> Vec<u8> {
     );
     package(&document, &[("word/settings.xml", &settings)], "", "")
 }
+
+/// A WordArt box (`wps:wsp` with `wps:txbx`) of `w` x `h` pt turned `rot`
+/// (60 000ths of a degree clockwise), its text bent to `warp`: no fill, a
+/// thin grey outline so the box shows, `text` in 36 pt bold Arial, centred.
+fn wordart_box(id: u32, pos: &str, w: i64, h: i64, rot: i32, warp: &str, text: &str) -> String {
+    let (cx, cy) = (w * 12700, h * 12700);
+    format!(
+        r#"<w:drawing><wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="{z}" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">{pos}<wp:extent cx="{cx}" cy="{cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>{NONE}<wp:docPr id="{id}" name="WordArt {id}"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:xfrm rot="{rot}"><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln w="6350"><a:solidFill><a:srgbClr val="808080"/></a:solidFill></a:ln></wps:spPr><wps:txbx><w:txbxContent><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:color w:val="C00000"/><w:sz w:val="72"/></w:rPr><w:t>{text}</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr rot="0" vert="horz" wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr" anchorCtr="0"><a:prstTxWarp prst="{warp}"><a:avLst/></a:prstTxWarp><a:noAutofit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>"#,
+        z = 251690000 + id,
+    )
+}
+
+/// Engine ADR 1091 amendment 2, doc ADR 629 amendment — turned WordArt: in
+/// the first paragraph a page-relative box turned 30 degrees whose text is
+/// an arch (a page item), in the third a paragraph-relative box turned -20
+/// degrees whose text waves (an anchored frame).
+pub fn wordart_docx() -> Vec<u8> {
+    let emu = |pt: i64| offset(pt * 12700);
+    let arch = wordart_box(
+        30,
+        &pos("page", &emu(144), "page", &emu(144)),
+        288,
+        108,
+        1_800_000,
+        "textArchUp",
+        "Rotated arch",
+    );
+    let wave = wordart_box(
+        31,
+        &pos("column", &emu(72), "paragraph", &emu(36)),
+        252,
+        72,
+        20_400_000,
+        "textWave1",
+        "Waving text",
+    );
+    let body = format!(
+        r#"<w:p><w:r>{arch}</w:r><w:r><w:t>WordArt turned with its box.</w:t></w:r></w:p><w:p/><w:p><w:r>{wave}</w:r><w:r><w:t>A wave turned the other way.</w:t></w:r></w:p>"#
+    );
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {NS}><w:body>{body}<w:sectPr>{SECT}</w:sectPr></w:body></w:document>"#
+    );
+    package(&document, &[], "", "")
+}

@@ -226,6 +226,97 @@ fn factor(size: Option<&str>) -> f32 {
     }
 }
 
+/// The width Office sizes a line's heads by: a line under 2 pt takes the
+/// heads of a 2 pt line (doc ADR 629, amendment 1: PowerPoint's PDF).
+fn sizing_width(width_pt: f32) -> f32 {
+    width_pt.max(2.0)
+}
+
+/// A `stealth` head's notch, back from its tip, in sizing widths: 1, 2
+/// and 3 for a `sm`, `med` and `lg` length (2, 3 and 5 long).
+fn stealth_notch(len: Option<&str>) -> f32 {
+    match len {
+        Some("sm") => 1.0,
+        Some("lg") => 3.0,
+        _ => 2.0,
+    }
+}
+
+/// An `arrow` head's two strokes: how far across the line each wing's end
+/// sits, and how far back from the line's end their meeting point sits,
+/// so the outer corner of the mitred stroke lands on the end.
+fn arrow_wings(width_pt: f32, we: f32, len: f32, wid: f32) -> (f32, f32) {
+    let half = wid / 2.0 + we / 4.0;
+    let sin = half / half.hypot(len);
+    (half, width_pt / 2.0 / sin.max(1e-3))
+}
+
+/// How far the stroke of a line stops short of its end under the line end
+/// `e`, along the line (doc ADR 629, amendment 1, from PowerPoint's PDF):
+/// half a sizing width short of a `triangle`'s base, at a `stealth`'s
+/// notch, at the point an `arrow`'s two strokes meet; a `diamond` and an
+/// `oval` sit centred on the end and take none.
+pub fn inset(e: &paged_ooxml::drawingml::LineEnd, width_pt: f32) -> f32 {
+    let we = sizing_width(width_pt);
+    let (len, wid) = (we * factor(e.len.as_deref()), we * factor(e.w.as_deref()));
+    match e.kind.as_str() {
+        "triangle" => len - we / 2.0,
+        "stealth" => we * stealth_notch(e.len.as_deref()),
+        "arrow" => arrow_wings(width_pt, we, len, wid).1,
+        _ => 0.0,
+    }
+}
+
+/// `o`'s first open contour, the one [`heads`] finishes, shortened under
+/// its heads (doc ADR 629, amendment 1), by the engine's trim along the
+/// curve. A contour its two insets take whole is removed.
+pub fn cut_under_heads(
+    o: &mut Outline,
+    head: Option<&paged_ooxml::drawingml::LineEnd>,
+    tail: Option<&paged_ooxml::drawingml::LineEnd>,
+    width_pt: f32,
+) {
+    let Some(c) = o.open.iter().position(|open| *open) else {
+        return;
+    };
+    let (a, b) = (
+        head.map_or(0.0, |e| inset(e, width_pt)),
+        tail.map_or(0.0, |e| inset(e, width_pt)),
+    );
+    if a <= 0.0 && b <= 0.0 {
+        return;
+    }
+    let start = o.starts[c];
+    let end = o.starts.get(c + 1).copied().unwrap_or(o.anchors.len());
+    let run: Vec<paged_model::PathAnchor> = o.anchors[start..end]
+        .iter()
+        .map(|p| paged_model::PathAnchor {
+            anchor: (p[0], p[1]),
+            left: (p[2], p[3]),
+            right: (p[4], p[5]),
+        })
+        .collect();
+    let cut: Vec<[f32; 6]> = paged_geom::trim::trim_run(&run, a, b)
+        .unwrap_or_default()
+        .iter()
+        .map(|p| {
+            [
+                p.anchor.0, p.anchor.1, p.left.0, p.left.1, p.right.0, p.right.1,
+            ]
+        })
+        .collect();
+    let shift = cut.len() as isize - (end - start) as isize;
+    let removed = cut.is_empty();
+    o.anchors.splice(start..end, cut);
+    for s in o.starts.iter_mut().skip(c + 1) {
+        *s = (*s as isize + shift) as usize;
+    }
+    if removed {
+        o.starts.remove(c);
+        o.open.remove(c);
+    }
+}
+
 /// The line ends of the first open contour of `o` (a line, a connector, an
 /// arc): `a:headEnd` at its start, `a:tailEnd` at its end, sized by the
 /// line's width `width_pt`, each pointing along the line. Closed outlines
@@ -272,10 +363,10 @@ pub fn heads(
             from(pt(last), (last[2], last[3]), pt(&o.anchors[end - 2])),
         ),
     ];
-    let lw = width_pt.max(0.75);
+    let we = sizing_width(width_pt);
     for (end, tip, (dx, dy)) in ends {
         let Some(e) = end else { continue };
-        let (len, wid) = (lw * factor(e.len.as_deref()), lw * factor(e.w.as_deref()));
+        let (len, wid) = (we * factor(e.len.as_deref()), we * factor(e.w.as_deref()));
         // Along the line (back from the tip) and across it.
         let at =
             |back: f32, side: f32| (tip.0 - dx * back - dy * side, tip.1 - dy * back + dx * side);
@@ -292,19 +383,22 @@ pub fn heads(
                 [
                     at(0.0, 0.0),
                     at(len, wid / 2.0),
-                    at(len * 0.6, 0.0),
+                    at(we * stealth_notch(e.len.as_deref()), 0.0),
                     at(len, -wid / 2.0),
                 ]
                 .map(corner)
                 .to_vec(),
                 false,
             ),
-            "arrow" => (
-                [at(len, wid / 2.0), at(0.0, 0.0), at(len, -wid / 2.0)]
-                    .map(corner)
-                    .to_vec(),
-                true,
-            ),
+            "arrow" => {
+                let (half, back) = arrow_wings(width_pt, we, len, wid);
+                (
+                    [at(back + len, half), at(back, 0.0), at(back + len, -half)]
+                        .map(corner)
+                        .to_vec(),
+                    true,
+                )
+            }
             "diamond" => (
                 [
                     at(-len / 2.0, 0.0),
@@ -441,6 +535,69 @@ mod tests {
         assert!((x0 - 40.0).abs() < 1e-3 && y0.abs() < 1e-3, "{x0} {y0}");
     }
 
+    /// Doc ADR 629, amendment 1: where PowerPoint's PDF ends the stroke
+    /// of a straight line under each head, back from the line's end.
+    #[test]
+    fn the_line_stops_where_powerpoint_stops_it() {
+        let e = |kind: &str, w: &str, len: &str| paged_ooxml::drawingml::LineEnd {
+            kind: kind.into(),
+            w: Some(w.into()),
+            len: Some(len.into()),
+        };
+        let near = |got: f32, want: f32, tol: f32| {
+            assert!((got - want).abs() <= tol, "{got} vs {want}");
+        };
+        // (kind, w, len, line width, measured)
+        for (kind, w, len, width, measured, tol) in [
+            ("triangle", "med", "med", 1.0, 5.0, 1e-3),
+            ("triangle", "med", "med", 4.0, 10.0, 1e-3),
+            ("triangle", "med", "med", 10.0, 25.0, 1e-3),
+            ("triangle", "med", "med", 0.5, 5.0, 1e-3),
+            ("triangle", "med", "med", 2.5, 6.25, 1e-3),
+            ("triangle", "sm", "sm", 4.0, 6.0, 1e-3),
+            ("triangle", "lg", "lg", 10.0, 45.0, 1e-3),
+            ("triangle", "sm", "lg", 6.0, 27.0, 1e-3),
+            ("triangle", "lg", "sm", 6.0, 9.0, 1e-3),
+            ("stealth", "med", "med", 1.0, 4.0, 1e-3),
+            ("stealth", "med", "med", 10.0, 20.0, 1e-3),
+            ("stealth", "sm", "sm", 6.0, 6.0, 1e-3),
+            ("stealth", "lg", "lg", 6.0, 18.0, 1e-3),
+            ("stealth", "sm", "lg", 0.5, 6.0, 1e-3),
+            ("diamond", "med", "med", 4.0, 0.0, 0.0),
+            ("oval", "med", "med", 4.0, 0.0, 0.0),
+            // The `arrow`'s point is fitted: within a tenth of the width.
+            ("arrow", "med", "med", 1.0, 0.987, 0.1),
+            ("arrow", "med", "med", 10.0, 9.900, 1.0),
+            ("arrow", "sm", "sm", 6.0, 5.640, 0.6),
+            ("arrow", "lg", "lg", 6.0, 6.180, 0.6),
+            ("arrow", "lg", "sm", 6.0, 3.840, 0.6),
+            ("arrow", "sm", "sm", 0.5, 0.470, 0.05),
+        ] {
+            near(inset(&e(kind, w, len), width), measured, tol);
+        }
+    }
+
+    #[test]
+    fn a_line_is_cut_under_its_heads_and_a_closed_outline_is_not() {
+        let tri = paged_ooxml::drawingml::LineEnd {
+            kind: "triangle".into(),
+            w: None,
+            len: None,
+        };
+        let mut o = outline(&shape("line", &[]), 100.0, 0.0).unwrap();
+        cut_under_heads(&mut o, Some(&tri), Some(&tri), 4.0);
+        let p = pos(&o);
+        assert!(p.len() == 2 && (p[0].0 - 10.0).abs() < 1e-2 && (p[1].0 - 90.0).abs() < 1e-2);
+        // Shorter than its two heads: nothing of the stroke is left.
+        let mut o = outline(&shape("line", &[]), 15.0, 0.0).unwrap();
+        cut_under_heads(&mut o, Some(&tri), Some(&tri), 4.0);
+        assert!(o.anchors.is_empty() && o.starts.is_empty() && o.open.is_empty());
+        let rect = outline(&shape("rect", &[]), 10.0, 10.0).unwrap();
+        let mut cut = rect.clone();
+        cut_under_heads(&mut cut, Some(&tri), Some(&tri), 4.0);
+        assert_eq!(cut, rect);
+    }
+
     #[test]
     fn a_line_takes_a_triangle_at_its_end_and_an_open_arrow_at_its_start() {
         let o = outline(&shape("line", &[]), 100.0, 0.0).unwrap();
@@ -452,15 +609,24 @@ mod tests {
         let (h, undrawn) = heads(&o, Some(&end("arrow")), Some(&end("triangle")), 2.0);
         assert!(undrawn.is_empty());
         assert_eq!(h.len(), 2);
-        // The open arrow at (0, 0) points left: its wings 6 pt to the right.
+        // The open arrow at (0, 0) points left: its strokes meet 1.985 pt
+        // in, so their mitred corner is the line's end, and reach 6 pt
+        // further, 3.5 pt to either side.
         assert!(h[0].open);
-        assert_eq!(
-            pos(&Outline {
-                anchors: h[0].anchors.clone(),
-                ..Default::default()
-            }),
-            vec![(6.0, -3.0), (0.0, 0.0), (6.0, 3.0)]
-        );
+        let wings = pos(&Outline {
+            anchors: h[0].anchors.clone(),
+            ..Default::default()
+        });
+        let back = 1.0 / (3.5 / 3.5_f32.hypot(6.0));
+        for (got, want) in wings
+            .iter()
+            .zip([(back + 6.0, -3.5), (back, 0.0), (back + 6.0, 3.5)])
+        {
+            assert!(
+                (got.0 - want.0).abs() < 1e-4 && (got.1 - want.1).abs() < 1e-4,
+                "{wings:?}"
+            );
+        }
         // The triangle's tip is the line's end, its base 6 pt back.
         assert!(!h[1].open);
         assert_eq!(h[1].anchors[0][0], 100.0);

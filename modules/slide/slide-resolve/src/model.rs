@@ -270,6 +270,12 @@ pub struct TextFrame {
     pub shrink: Option<(f64, f64)>,
     /// 0 / 90 / 270: `vert` text rotation.
     pub rotation: f64,
+    /// Degrees clockwise the text box itself is turned about its centre
+    /// within the item's box, its extent unchanged (a SmartArt shape's
+    /// `dsp:txXfrm/@rot`, which adds to the shape's own turn); applied on
+    /// top of `rotation`.
+    #[serde(default)]
+    pub turn: f64,
     pub paragraphs: Vec<Para>,
     /// WordArt (engine ADR 1091): the preset the text is bent to.
     #[serde(default, skip_serializing_if = "Option::is_none")]

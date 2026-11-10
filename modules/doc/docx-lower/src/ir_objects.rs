@@ -94,6 +94,14 @@ pub struct LoweredTextBox {
     /// Engine ADR 1091 — WordArt: the preset its text is bent to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warp: Option<docx_core::WordArt>,
+    /// Degrees clockwise the box and its text turn about its centre
+    /// (`a:xfrm/@rot`); its extent and place are the unturned box's.
+    #[serde(default, skip_serializing_if = "is_upright")]
+    pub rotation: f32,
+}
+
+fn is_upright(deg: &f32) -> bool {
+    *deg == 0.0
 }
 
 /// A shape that holds no text, anchored in its paragraph (doc ADR 627): an
@@ -187,6 +195,10 @@ pub enum LoweredPiece {
         /// `BottomAlign`); `None` for the top.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         valign: Option<String>,
+        /// Degrees clockwise the frame and its text turn about its centre
+        /// (a diagram shape's text turned with its shape, doc ADR 629).
+        #[serde(default, skip_serializing_if = "is_upright")]
+        rotation: f32,
     },
 }
 
@@ -247,6 +259,9 @@ pub enum LoweredItemKind {
         /// Engine ADR 1091 — WordArt: the preset its text is bent to.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         warp: Option<docx_core::WordArt>,
+        /// Degrees clockwise the box turns about its centre.
+        #[serde(default, skip_serializing_if = "is_upright")]
+        rotation: f32,
     },
 }
 

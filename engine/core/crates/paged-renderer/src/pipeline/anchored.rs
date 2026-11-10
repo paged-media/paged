@@ -163,6 +163,8 @@ pub(super) struct PlacedObject {
     pub cap_height: f32,
     /// The paint of the anchor character's text: an equation's.
     pub paint: Option<Paint>,
+    /// How the line's frame turned its lines: an equation turns with them.
+    pub turn: super::text_warp::Turn,
 }
 
 /// The in-line objects of the paragraph being emitted: what its lines
@@ -558,6 +560,7 @@ pub(super) fn emit_inline_objects(
         if let (Some(k), Some(at)) = (obj.equation, placed) {
             if let (Some(set), Some(page)) = (objects.equations.get(k), pages.get_mut(at.page)) {
                 let paint = at.paint.unwrap_or(em.options.fallback_text_paint);
+                let before = page.list.commands.len();
                 super::equations::paint_equation(
                     set,
                     em.font_table,
@@ -565,6 +568,15 @@ pub(super) fn emit_inline_objects(
                     paint,
                     &mut page.list,
                 );
+                // In a turned frame the equation turns with its line.
+                if !at.turn.is_upright() {
+                    let end = page.list.commands.len();
+                    let (super::text_warp::Turn { linear, pivot }, list) =
+                        (at.turn, &mut page.list);
+                    list.map_transforms(before..end, |xf| {
+                        super::text_frame::rotate_transform_around(xf, linear, pivot.0, pivot.1)
+                    });
+                }
             }
             continue;
         }
@@ -1556,6 +1568,31 @@ pub(super) fn paints_with_picture(af: &paged_model::AnchoredFrame) -> bool {
 /// The rectangle an anchored frame paints as, its bounds in spread
 /// coordinates: the anchored frame's own paint and look (engine ADR 1045:
 /// the free frames' fields, copied), and its picture when `with_image`.
+/// An anchored frame's turn, as its placed frame's `item_transform`: the
+/// linear part of the frame's own `item_transform` (a rotation, a shear, a
+/// flip) about the centre of `bounds`, the box it was placed in (spread
+/// pt). The placement put the unturned box; Word and Office turn a shape
+/// about its centre, its extent and position being the unturned box's.
+/// `None` for an upright frame. The translation of the frame's own
+/// `item_transform` is not used: placement is the anchor's.
+pub(super) fn anchored_turn(
+    af: &paged_model::AnchoredFrame,
+    bounds: paged_model::Bounds,
+) -> Option<[f32; 6]> {
+    let m = af.item_transform?;
+    let [a, b, c, d] = [m[0], m[1], m[2], m[3]];
+    let upright =
+        (a - 1.0).abs() < 1e-5 && b.abs() < 1e-5 && c.abs() < 1e-5 && (d - 1.0).abs() < 1e-5;
+    if upright {
+        return None;
+    }
+    let (cx, cy) = (
+        (bounds.left + bounds.right) * 0.5,
+        (bounds.top + bounds.bottom) * 0.5,
+    );
+    Some([a, b, c, d, cx - a * cx - c * cy, cy - b * cx - d * cy])
+}
+
 fn synthetic_rectangle(
     af: &paged_model::AnchoredFrame,
     bounds: paged_model::Bounds,
@@ -1564,7 +1601,7 @@ fn synthetic_rectangle(
     Rectangle {
         self_id: af.self_id.clone(),
         bounds,
-        item_transform: None,
+        item_transform: anchored_turn(af, bounds),
         fill_color: af.fill_color.clone(),
         fill_tint: af.fill_tint,
         stroke_color: af.stroke_color.clone(),
@@ -1733,7 +1770,8 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         self_id: af.self_id.clone(),
         parent_story: Some(story_id.to_string()),
         bounds,
-        item_transform: None,
+        // A turned box turns its text with it, about the box's centre.
+        item_transform: anchored_turn(af, bounds),
         fill_color: None,
         fill_tint: None,
         stroke_color: None,
