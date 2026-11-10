@@ -31,6 +31,27 @@ On such a page:
   `1/u` scale;
 - link annotations and comment positions are divided by `u`.
 
+### What the reference says
+
+PDF Reference 1.6 (Adobe, 2004):
+
+- Table 3.27: `UserUnit` is an optional page-dictionary number, PDF 1.6, "the size of default
+  user space units, in multiples of 1⁄72 inch", default 1.0.
+- §4.2.1: the entry sets the length of a unit along both axes of default user space; where it is
+  "not present or supported", 1⁄72 inch is used.
+- §5.2: glyph sizes scale with it as well. The exporter scales through the CTM, so a font size is
+  the same number either way.
+- Appendix H, note 171: Acrobat 5+ limits a page to 14,400 × 14,400 units (and at least 3 × 3).
+  Acrobat 7 accepts `UserUnit` from 1.0 (the minimum) to 75,000.
+
+So `u` is never below 1, and a whole number in this range covers any real page. Both headers the
+exporter writes (1.7, and 1.6 for PDF/X-4) are at least the version that defines the entry.
+
+**Open:** it is not settled here whether a PDF/X-4 preflight accepts a page with `UserUnit`. This
+is checked against Acrobat's PDF/X-4 profile before the large-format files go to print. If the
+answer is no, the X-4 route falls back to a stated scale such as 1:10, a decision recorded in an
+amendment.
+
 ## Consequences
 
 - A banner or mural is exported at real size and reads at its real size in Acrobat (which applies
