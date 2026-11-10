@@ -41,45 +41,22 @@
 //! new wire kind, no new resolver, no protocol change — the engine's
 //! vocabulary is unchanged and `Session::send` is still the only door
 //! this crate mutates through.
+//!
+//! An `.svg` is not a picture for a frame but drawing: it goes through
+//! the engine's SVG import (`RequestSvgImport`) as native, editable page
+//! items fitted into the frame's box, and replaces the frame. `paged
+//! script` does the same for every link `paged.placeImage` names
+//! (`crate::link`).
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
-use paged_canvas::channel::{MainToWorkerKind, Mutation, WorkerToMainKind};
-use paged_mutate::{PropertyPath, Value};
 use paged_wire::ElementId;
 
 use crate::engine::Session;
 use crate::export::PdfOptions;
+use crate::link::{check_placeable, is_svg, place_bytes, place_svg};
 use crate::options::DocumentOptions;
-
-/// Formats the engine decodes, from the workspace `image` features.
-/// JPEG 2000 is deliberately absent — it is not in that feature list,
-/// so a `.jp2` would be accepted here and render nothing. Better to say
-/// so at the door than to leave an empty frame and no reason.
-const DECODABLE: &[&str] = &["png", "jpg", "jpeg", "webp", "tif", "tiff", "gif", "bmp"];
-
-fn check_decodable(image: &Path) -> Result<()> {
-    let ext = image
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase)
-        .unwrap_or_default();
-    if DECODABLE.contains(&ext.as_str()) {
-        return Ok(());
-    }
-    bail!(
-        "the engine decodes {} — {} is {}. Transcode it first; \
-         placing bytes it cannot decode leaves the frame blank.",
-        DECODABLE.join(" / "),
-        image.display(),
-        if ext.is_empty() {
-            "unnamed".to_string()
-        } else {
-            format!("a .{ext}")
-        }
-    )
-}
 
 /// `a,b,c,d,tx,ty` — the placed image's own transform, in the same
 /// order IDML writes an `ItemTransform`.
@@ -97,46 +74,6 @@ fn parse_transform(spec: &str) -> Result<[f32; 6]> {
     Ok(out)
 }
 
-/// The inner image transform `fit` resolves to for the Rectangle
-/// `self_id` holding `bytes`, per [`paged_model::fitting`]. `None` when
-/// `fit` names no content fit (`None`, `FrameToContent`) or the frame is
-/// not a Rectangle (only Rectangles carry a fitting).
-fn fitted_transform(
-    session: &Session,
-    self_id: &str,
-    fit: &str,
-    bytes: &[u8],
-) -> Result<Option<[f32; 6]>> {
-    use paged_model::fitting::{fit_transform, FitMode};
-    let Some(mode) = FitMode::from_idml(fit) else {
-        return Ok(None);
-    };
-    let info = paged_raster::probe(bytes).context("read the image's pixel size")?;
-    let (w, h) = (info.width, info.height);
-    let model = session.model()?;
-    let rect = model
-        .scene()
-        .spreads
-        .iter()
-        .flat_map(|parsed| &parsed.spread.rectangles)
-        .find(|r| r.self_id.as_deref() == Some(self_id));
-    Ok(rect.and_then(|r| {
-        let reference = r
-            .frame_fitting
-            .as_ref()
-            .and_then(|f| f.reference_point.as_deref());
-        fit_transform(mode, reference, r.bounds, w as f32, h as f32)
-    }))
-}
-
-fn applied(reply: WorkerToMainKind, what: &str) -> Result<()> {
-    match reply {
-        WorkerToMainKind::MutationApplied { .. } => Ok(()),
-        WorkerToMainKind::MutationFailed { error } => Err(anyhow!("{what}: {error}")),
-        other => Err(anyhow!("{what}: the engine answered {other:?}")),
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     doc: &Path,
@@ -148,56 +85,30 @@ pub fn run(
     out: Option<&PathBuf>,
     pdf: &PdfOptions,
 ) -> Result<()> {
-    check_decodable(image)?;
+    check_placeable(image)?;
     let bytes = std::fs::read(image).with_context(|| format!("read {}", image.display()))?;
     // Parsed before the session opens: a typo in the address should
     // cost a message, not a document load.
-    let element_id = ElementId::parse(frame)
+    ElementId::parse(frame)
         .ok_or_else(|| anyhow!("{frame:?} is not an element address — try `rectangle:<id>`"))?;
     let transform = transform.map(parse_transform).transpose()?;
 
     let mut session = Session::new();
     assets.open(&mut session, doc)?;
 
-    // The typed frame mutations take the `kind:id` address as it was
-    // given (`CanvasModel::resolve_frame_node_id` reads it with the one
-    // address parser), so a missing frame is answered by its address.
-    let reply = session.send(MainToWorkerKind::Mutate(Mutation::ReplaceImageBytes {
-        element_id: frame.to_string(),
-        bytes: Some(bytes.clone().into()),
-    }))?;
-    applied(reply, "place the image")?;
-
-    // Fit and transform are ordinary properties; they ride the same
-    // `SetElementProperty` a script would use, so `place` adds no
-    // vocabulary of its own.
-    if let Some(fit) = fit {
-        let reply = session.send(MainToWorkerKind::Mutate(Mutation::SetElementProperty {
-            element_id: element_id.clone(),
-            path: PropertyPath::FrameFittingType,
-            value: Value::Text(fit.to_string()),
-        }))?;
-        applied(reply, "set the fitting")?;
-    }
-    // A fit is not a flag the picture remembers: InDesign RESOLVES it on
-    // place, into the inner `<Image>`'s `ItemTransform`, and writes that
-    // transform out. Do the same, so the model, the render and the
-    // exported IDML all carry the fitted placement — a uniform cover for
-    // FillProportionally, never the frame-box stretch a missing transform
-    // used to stand for. An explicit `--transform` still wins.
-    let transform = match (transform, fit) {
-        (Some(t), _) => Some(t),
-        (None, Some(fit)) => fitted_transform(&session, element_id.raw_id(), fit, &bytes)?,
-        (None, None) => None,
+    let n = bytes.len();
+    let what = if is_svg(image) {
+        // An SVG becomes native page items in the frame's box; the
+        // frame it stood in for goes (`link::place_svg`).
+        let done = place_svg(&mut session, frame, bytes)?;
+        for note in &done.notes {
+            eprintln!("svg: {note}");
+        }
+        format!("SVG, {} items", done.items)
+    } else {
+        place_bytes(&mut session, frame, bytes, fit, transform)?;
+        format!("{n} bytes")
     };
-    if let Some(t) = transform {
-        let reply = session.send(MainToWorkerKind::Mutate(Mutation::SetElementProperty {
-            element_id,
-            path: PropertyPath::ImageContentTransform,
-            value: Value::Transform(Some(t)),
-        }))?;
-        applied(reply, "set the image transform")?;
-    }
 
     match out {
         // The mutation landed in the loaded model and the process is
@@ -205,9 +116,8 @@ pub fn run(
         // reporting a success the file will not show.
         None => {
             eprintln!(
-                "{frame}: {} bytes placed in the loaded document. \
-                 Nothing saved — pass -o to write the result.",
-                bytes.len()
+                "{frame}: {what} placed in the loaded document. \
+                 Nothing saved — pass -o to write the result."
             );
             Ok(())
         }
@@ -217,9 +127,8 @@ pub fn run(
             std::fs::write(dest, &out_bytes)
                 .with_context(|| format!("write {}", dest.display()))?;
             println!(
-                "{frame} ← {} ({} bytes) → {} — {format}, {} bytes",
+                "{frame} ← {} ({what}) → {} — {format}, {} bytes",
                 image.display(),
-                bytes.len(),
                 dest.display(),
                 out_bytes.len()
             );
@@ -240,14 +149,5 @@ mod tests {
         );
         assert!(parse_transform("1,0,0,1,0").is_err());
         assert!(parse_transform("1,0,0,1,0,x").is_err());
-    }
-
-    #[test]
-    fn jpeg_2000_is_refused_at_the_door() {
-        // The workspace `image` crate is built without a jpeg2000
-        // feature, so these bytes would place and render nothing.
-        let err = check_decodable(Path::new("/tmp/photo.jp2")).expect_err("refused");
-        assert!(err.to_string().contains("Transcode"), "{err}");
-        check_decodable(Path::new("/tmp/photo.JPG")).expect("case-insensitive");
     }
 }

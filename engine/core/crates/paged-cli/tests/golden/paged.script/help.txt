@@ -1,7 +1,9 @@
 $ paged script --help
 --- exit: 0
 --- stdout
-Author a document by running a `.js` file against it
+Author a document by running a `.js` file against it.
+
+Every image link the script makes with `paged.placeImage(frame, uri)` is then embedded from disk — the uri absolute, `file://`, or relative to the script's folder, the document's folder, then the working directory — an `.svg` as native page items in the frame's box. A link no file serves stays a link, with a warning.
 
 Usage: paged script [OPTIONS] <DOC> <SCRIPT>
 

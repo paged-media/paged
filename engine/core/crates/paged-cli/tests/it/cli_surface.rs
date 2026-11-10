@@ -45,8 +45,9 @@
 //! ADR 1021's `RequestFindText`, the editor's results list; 42 of 83 with
 //! v77's six undo-timeline kinds, engine ADR 1030, which only a live session sends; 42 of 85
 //! with v77's two SVG kinds, engine ADR 1031, which the CLI has no subcommand for yet; 42 of 86
-//! with v77's `SetViewSettings`, which only a live canvas has a use for); what
-//! remains is almost entirely the first kind.
+//! with v77's `SetViewSettings`, which only a live canvas has a use for); 43
+//! of 86 once `paged place` and `paged script` import SVG through
+//! `RequestSvgImport`; what remains is almost entirely the first kind.
 //!
 //! **What this gate cannot see.** It counts message KINDS, and
 //! `Mutate` has been one of them since the colour-profile activation in
@@ -168,16 +169,14 @@ const UNREACHED: &[(&str, &str)] = &[
      "the History panel's timeline (engine ADR 1030): it names, reads and moves through a live session's undo steps; a subcommand is one write and exits, so it has no timeline to read or move"),
     ("SetHistoryDepth",
      "the History panel's timeline (engine ADR 1030): it names, reads and moves through a live session's undo steps; a subcommand is one write and exits, so it has no timeline to read or move"),
-    ("RequestSvgImport",
-     "the SVG door (engine ADR 1031): `document.importSvg@1` / `document.exportSvg@1` of a live session and the editor's File menu; the CLI has no `paged import svg` / `paged export svg` subcommand yet, so it never plans an import or writes a page as SVG"),
     ("ExportSvg",
-     "the SVG door (engine ADR 1031): `document.importSvg@1` / `document.exportSvg@1` of a live session and the editor's File menu; the CLI has no `paged import svg` / `paged export svg` subcommand yet, so it never plans an import or writes a page as SVG"),
+     "the SVG door's write half (engine ADR 1031): `document.exportSvg@1` of a live session and the editor's File menu; the CLI has no `paged export svg` subcommand yet, so it never writes a page as SVG (its import half is `paged place`'s)"),
     ("SetViewSettings",
      "the screen's view mode (editor ADR 287) changes only how a live canvas draws: every render the CLI makes is an export, a snapshot or a separation, which draw the document as built and never see a view"),
 ];
 
 /// Pinned so the list cannot grow quietly.
-const UNREACHED_COUNT: usize = 44;
+const UNREACHED_COUNT: usize = 43;
 
 /// Every `kind` the wire accepts, read out of serde's own error rather
 /// than kept as a list here — the same trick `wire_vocabulary.rs` uses
@@ -311,8 +310,8 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_42_of_86() {
-    assert_eq!(kinds_the_cli_sends().len(), 42);
+fn the_cli_reaches_43_of_86() {
+    assert_eq!(kinds_the_cli_sends().len(), 43);
     assert_eq!(every_kind().len(), 86);
 }
 

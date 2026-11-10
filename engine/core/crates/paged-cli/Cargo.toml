@@ -30,6 +30,7 @@ paged-mutate = { path = "../paged-mutate" }
 # (`paged_raster::probe`).
 paged-model = { path = "../paged-model" }
 paged-raster = { path = "../paged-raster" }
+paged-svg = { path = "../paged-svg" }
 # `ElementId::parse` — the address grammar `paged describe` publishes.
 paged-wire = { path = "../paged-wire" }
 # ADR 132 — `paged set` / `paged get` coerce by the property schemas.

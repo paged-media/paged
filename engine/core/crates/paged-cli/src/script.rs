@@ -166,6 +166,27 @@ pub fn run(
         }
     }
 
+    // `paged.placeImage(frame, uri)` only writes a link, and this CLI's
+    // documents resolve none: embed every one the disk can serve (an SVG
+    // as native items), looked up next to the script, the document, then
+    // in the working directory (`crate::link`).
+    let mut bases: Vec<PathBuf> = Vec::new();
+    for base in [script.parent(), doc.parent()].into_iter().flatten() {
+        bases.push(if base.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            base.to_path_buf()
+        });
+    }
+    bases.push(std::env::current_dir()?);
+    let (placed, unresolved) = crate::link::embed_links(&mut session, &bases)?;
+    for line in &placed {
+        println!("placed {line}");
+    }
+    for line in &unresolved {
+        eprintln!("warning: link not embedded: {line}");
+    }
+
     // The document was blank when it loaded, so the load-time check
     // had no runs to look at; the script has just made some.
     if let Ok(model) = session.model() {

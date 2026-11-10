@@ -38,6 +38,7 @@ pub mod gen;
 pub mod inspect;
 pub mod invoke;
 pub mod library;
+pub mod link;
 pub mod mcp;
 pub mod new;
 pub mod object;

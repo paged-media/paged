@@ -836,7 +836,7 @@
           ]
         }
       ],
-      "longAbout": null,
+      "longAbout": "Author a document by running a `.js` file against it.\n\nEvery image link the script makes with `paged.placeImage(frame, uri)` is then embedded from disk — the uri absolute, `file://`, or relative to the script's folder, the document's folder, then the working directory — an `.svg` as native page items in the frame's box. A link no file serves stays a link, with a warning.",
       "name": "script",
       "subcommands": []
     },
@@ -3934,7 +3934,7 @@
       ]
     },
     {
-      "about": "Put an image file into a graphic frame",
+      "about": "Put an image file into a graphic frame, or an SVG in its place",
       "args": [
         {
           "defaults": [],
@@ -3966,7 +3966,7 @@
         },
         {
           "defaults": [],
-          "help": "Image file. PNG / JPEG / WebP / TIFF / GIF / BMP — the formats the engine decodes",
+          "help": "Image file. PNG / JPEG / WebP / TIFF / GIF / BMP — the formats the engine decodes — or an SVG",
           "long": null,
           "name": "image",
           "positional": true,
@@ -4205,7 +4205,7 @@
           ]
         }
       ],
-      "longAbout": "Put an image file into a graphic frame.\n\nThe engine's only image lane through this door is inline bytes — a `placeImage` link resolves against a resolver the CLI never populates — and from a script those bytes are a JS array literal per pixel row. This is the same `Mutation::ReplaceImageBytes`, handed a file.",
+      "longAbout": "Put an image file into a graphic frame, or an SVG in its place.\n\nThe engine's only image lane through this door is inline bytes — a `placeImage` link resolves against a resolver the CLI never populates. This is the same `Mutation::ReplaceImageBytes`, handed a file. An `.svg` goes through the engine's SVG import instead: native, editable page items fitted proportionally and centred in the frame's box, which they replace.",
       "name": "place",
       "subcommands": []
     },

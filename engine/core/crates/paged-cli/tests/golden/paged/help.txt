@@ -15,7 +15,7 @@ Commands:
   gen           Emit the built-in corpus fixtures
   diff          Compare two PNGs — ΔE2000 and SSIM. Exits 1 when they differ beyond the budget
   read          Ask the engine one of its diagnostic questions
-  place         Put an image file into a graphic frame
+  place         Put an image file into a graphic frame, or an SVG in its place
   set           Set one property of any object (ADR 132, `Mutation::Set`)
   get           Read one property of any object, as its wire value JSON (`RequestGet`, the read twin of `set`)
   invoke        Apply one wire operation to a document (`Mutation`, by its tag)

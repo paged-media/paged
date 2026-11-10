@@ -1,9 +1,9 @@
 $ paged place --help
 --- exit: 0
 --- stdout
-Put an image file into a graphic frame.
+Put an image file into a graphic frame, or an SVG in its place.
 
-The engine's only image lane through this door is inline bytes — a `placeImage` link resolves against a resolver the CLI never populates — and from a script those bytes are a JS array literal per pixel row. This is the same `Mutation::ReplaceImageBytes`, handed a file.
+The engine's only image lane through this door is inline bytes — a `placeImage` link resolves against a resolver the CLI never populates. This is the same `Mutation::ReplaceImageBytes`, handed a file. An `.svg` goes through the engine's SVG import instead: native, editable page items fitted proportionally and centred in the frame's box, which they replace.
 
 Usage: paged place [OPTIONS] <DOC> <FRAME> <IMAGE>
 
@@ -15,7 +15,7 @@ Arguments:
           The graphic frame, as `rectangle:<id>` (also oval:/polygon:)
 
   <IMAGE>
-          Image file. PNG / JPEG / WebP / TIFF / GIF / BMP — the formats the engine decodes
+          Image file. PNG / JPEG / WebP / TIFF / GIF / BMP — the formats the engine decodes — or an SVG
 
 Options:
       --fit <FIT>

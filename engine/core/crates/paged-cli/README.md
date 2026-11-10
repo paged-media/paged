@@ -32,6 +32,7 @@ paged inspect <doc> [--json]
 paged script  <doc> <script.js> [-o out.paged|.idml|.pdf] [--render p.png]
 paged export  <doc> --format idml|paged|pdf -o <file>
 paged new     [--size letter|a4|WxH] [--format paged|idml] -o <file>
+paged place   <doc> <frame> <image|.svg> [--fit MODE] -o <file>   # bytes in; SVG as native items
 paged diff    <reference.png> <candidate.png> [--json] [--heatmap f.png]
 paged gen     emit --sample NAME | emit-all [--out DIR]
 paged read    <question> <doc> [args]     # the engine's diagnostic reads
@@ -117,6 +118,33 @@ instead:
 
 ```bash
 paged script doc.paged build.js -o out.pdf --render p1.png
+```
+
+### Images and SVG from a script
+
+A document opened here has one image lane, inline bytes: the canvas
+installs no link resolver, so `paged.placeImage(frame, uri)` alone writes
+a link that renders nothing. After the script, `paged script` therefore
+embeds every link it can find on disk — the uri absolute, `file://`, or
+relative to the script's folder, the document's folder, then the working
+directory — with the fitting the call asked for. A link no file serves
+stays a link and is reported.
+
+An `.svg`, there or through `paged place`, is drawing rather than a
+picture: it goes through the engine's SVG import (`RequestSvgImport`,
+engine ADR 1031) as native, editable page items, fitted proportionally
+and centred in the frame's box, and the frame is removed. Its colours
+become swatches; anything the import approximates is reported.
+
+```js
+// build.js — beside photo.jpg and logo.svg
+const page = JSON.parse(paged.pages())[0].selfId;
+paged.placeImage(
+  paged.insertFrame(page, [36, 36, 300, 400]),
+  "photo.jpg",
+  "FillProportionally",
+);
+paged.placeImage(paged.insertFrame(page, [320, 36, 380, 236]), "logo.svg");
 ```
 
 ## `paged read` — the diagnostic questions

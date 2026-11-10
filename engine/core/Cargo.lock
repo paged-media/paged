@@ -4159,6 +4159,7 @@ dependencies = [
  "paged-raster",
  "paged-repo",
  "paged-script",
+ "paged-svg",
  "paged-template",
  "paged-test-resources",
  "paged-wire",

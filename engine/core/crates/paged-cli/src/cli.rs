@@ -97,6 +97,12 @@ pub enum Command {
         assets: DocumentOptions,
     },
     /// Author a document by running a `.js` file against it.
+    ///
+    /// Every image link the script makes with `paged.placeImage(frame,
+    /// uri)` is then embedded from disk — the uri absolute, `file://`, or
+    /// relative to the script's folder, the document's folder, then the
+    /// working directory — an `.svg` as native page items in the frame's
+    /// box. A link no file serves stays a link, with a warning.
     Script {
         /// IDML or `.paged` document to author into.
         doc: PathBuf,
@@ -181,20 +187,21 @@ pub enum Command {
         #[command(subcommand)]
         what: crate::read::ReadCommand,
     },
-    /// Put an image file into a graphic frame.
+    /// Put an image file into a graphic frame, or an SVG in its place.
     ///
     /// The engine's only image lane through this door is inline bytes
     /// — a `placeImage` link resolves against a resolver the CLI never
-    /// populates — and from a script those bytes are a JS array
-    /// literal per pixel row. This is the same
-    /// `Mutation::ReplaceImageBytes`, handed a file.
+    /// populates. This is the same `Mutation::ReplaceImageBytes`, handed
+    /// a file. An `.svg` goes through the engine's SVG import instead:
+    /// native, editable page items fitted proportionally and centred in
+    /// the frame's box, which they replace.
     Place {
         /// IDML or `.paged` document.
         doc: PathBuf,
         /// The graphic frame, as `rectangle:<id>` (also oval:/polygon:).
         frame: String,
         /// Image file. PNG / JPEG / WebP / TIFF / GIF / BMP — the
-        /// formats the engine decodes.
+        /// formats the engine decodes — or an SVG.
         image: PathBuf,
         /// `<FrameFittingOption>` fitting mode, e.g. FillProportionally.
         #[arg(long)]

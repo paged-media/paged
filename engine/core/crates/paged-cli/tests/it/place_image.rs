@@ -283,3 +283,137 @@ fn center_content_keeps_the_native_size() {
     assert!(close(t[4], 60.0 + (240.0 - 3.0) / 2.0), "{t:?}");
     assert!(close(t[5], 60.0 + (150.0 - 4.0) / 2.0), "{t:?}");
 }
+
+/// A script's `paged.placeImage(frame, "red.png")` writes a link this CLI
+/// resolves nothing for; `paged script` embeds it from next to the script,
+/// so the SAVED file carries the picture and reports its link as ok.
+#[test]
+fn a_script_s_image_link_is_embedded_from_beside_the_script() {
+    let d = dir("script-link");
+    let (blank, js, placed) = (
+        d.join("blank.paged"),
+        d.join("place.js"),
+        d.join("placed.paged"),
+    );
+    std::fs::write(d.join("red.png"), a_png()).unwrap();
+    std::fs::write(
+        &js,
+        r#"const pid = JSON.parse(paged.pages())[0].selfId;
+const f = paged.insertFrame(pid, [60, 60, 300, 300]);
+if (!paged.placeImage(f, "red.png", "FillProportionally")) throw new Error("placeImage refused");"#,
+    )
+    .unwrap();
+    let s = |p: &PathBuf| p.to_str().unwrap().to_string();
+    paged(&["new", "--size", "a5", "-o", &s(&blank)]);
+    let out = paged(&["script", &s(&blank), &s(&js), "-o", &s(&placed)]);
+    let log = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        log.contains("placed rectangle:"),
+        "no embed reported: {log}"
+    );
+
+    // Reopened, from a folder with no red.png beside it: the bytes are in the file.
+    let probe = d.join("links.js");
+    std::fs::write(&probe, "console.log('LINKS ' + paged.links());").unwrap();
+    let elsewhere = dir("script-link-elsewhere").join("placed.paged");
+    std::fs::copy(&placed, &elsewhere).unwrap();
+    let out = paged(&["script", &s(&elsewhere), &s(&probe)]);
+    let log = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        log.contains(r#""status":"ok""#),
+        "the link is not served: {log}"
+    );
+}
+
+/// A link to a file that is not there stays a link, and the run says so.
+#[test]
+fn a_link_the_disk_cannot_serve_is_reported_not_dropped() {
+    let d = dir("script-link-missing");
+    let (blank, js) = (d.join("blank.paged"), d.join("place.js"));
+    std::fs::write(
+        &js,
+        r#"const pid = JSON.parse(paged.pages())[0].selfId;
+paged.placeImage(paged.insertFrame(pid, [60, 60, 300, 300]), "nowhere.png");"#,
+    )
+    .unwrap();
+    let s = |p: &PathBuf| p.to_str().unwrap().to_string();
+    paged(&["new", "--size", "a5", "-o", &s(&blank)]);
+    let out = paged(&["script", &s(&blank), &s(&js)]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("link not embedded") && err.contains("nowhere.png"),
+        "{err}"
+    );
+}
+
+/// `paged place` of an SVG: native page items fitted proportionally and
+/// centred in the frame's box, the frame itself gone.
+#[test]
+fn an_svg_is_placed_as_native_items_fitted_into_the_frame() {
+    let d = dir("place-svg");
+    let (blank, framed, placed) = (
+        d.join("blank.paged"),
+        d.join("framed.paged"),
+        d.join("placed.paged"),
+    );
+    let (js, svg) = (d.join("frame.js"), d.join("bar.svg"));
+    // A 100 × 50 drawing into a 200 × 200 box: scale 2, so 200 × 100,
+    // centred vertically (50 pt above and below).
+    std::fs::write(
+        &svg,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" viewBox="0 0 100 50"><rect width="100" height="50" fill="#6428B4"/></svg>"##,
+    )
+    .unwrap();
+    std::fs::write(
+        &js,
+        r#"const pid = JSON.parse(paged.pages())[0].selfId;
+console.log('FRAME ' + paged.insertFrame(pid, [100, 100, 300, 300]));"#,
+    )
+    .unwrap();
+    let s = |p: &PathBuf| p.to_str().unwrap().to_string();
+    paged(&["new", "--size", "a4", "-o", &s(&blank)]);
+    let out = paged(&["script", &s(&blank), &s(&js), "-o", &s(&framed)]);
+    let log = String::from_utf8_lossy(&out.stdout);
+    let frame = log
+        .lines()
+        .find_map(|l| l.split("FRAME ").nth(1))
+        .expect("frame")
+        .trim()
+        .to_string();
+
+    let out = paged(&["place", &s(&framed), &frame, &s(&svg), "-o", &s(&placed)]);
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("SVG, 1 items"),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+
+    let probe = d.join("probe.js");
+    std::fs::write(
+        &probe,
+        r#"const items = JSON.parse(paged.query("rectangle")).concat(JSON.parse(paged.query("polygon")));
+console.log('ITEMS ' + JSON.stringify(items));
+for (const a of items) console.log('BOUNDS ' + JSON.stringify(paged.get(a, "frameBounds")));"#,
+    )
+    .unwrap();
+    let out = paged(&["script", &s(&placed), &s(&probe)]);
+    let log = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !log.contains(&format!("\"{frame}\"")),
+        "the frame is still there: {log}"
+    );
+    let bounds = log
+        .lines()
+        .find_map(|l| l.split("BOUNDS ").nth(1))
+        .unwrap_or_else(|| panic!("no item: {log}"));
+    let nums: Vec<f64> = bounds
+        .split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+        .filter_map(|t| t.parse::<f64>().ok())
+        .collect();
+    assert!(nums.len() >= 4, "{bounds}");
+    let [t, l, b, r] = [nums[0], nums[1], nums[2], nums[3]];
+    assert!(
+        close(t, 150.0) && close(b, 250.0) && close(l, 100.0) && close(r, 300.0),
+        "fitted box {t} {l} {b} {r}"
+    );
+}
