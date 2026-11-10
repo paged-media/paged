@@ -191,7 +191,7 @@ fn shape(sp: &El, place: Place) -> Option<DiagramShape> {
         .find(|c| c.local == "txBody")
         .and_then(|body| {
             // The text's own box, or the shape's; it turns with the shape
-            // and by its own `rot` (doc ADR 629, amendment).
+            // and by its own `rot` (doc ADR 629 amendment 3).
             let (tx, ty, tw, th, turn) = match sp.children.iter().find(|c| c.local == "txXfrm") {
                 Some(t) => {
                     let ((ox, oy), (cx, cy)) = xfrm(t);

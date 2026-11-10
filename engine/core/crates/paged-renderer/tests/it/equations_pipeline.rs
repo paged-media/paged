@@ -223,7 +223,7 @@ fn baseline_of(built: &pipeline::BuiltDocument, idx: u32) -> f32 {
 fn under_word_first_fit_an_equations_depth_pushes_the_next_line() {
     // `a / (b / c)`: a display fraction whose denominator reaches far
     // below the baseline. Word 16 sets the line after it below the
-    // denominator (engine ADR 1090 amendment 2); InDesign's rule does not.
+    // denominator (engine ADR 1090 amendment 3); InDesign's rule does not.
     let deep = || Math {
         display: true,
         body: vec![Node::Frac {
@@ -267,7 +267,7 @@ fn under_word_first_fit_an_equations_depth_pushes_the_next_line() {
     );
 }
 
-/// Engine ADR 1090, amendment — an equation in a turned frame turns with its
+/// Engine ADR 1090 amendment 4 — an equation in a turned frame turns with its
 /// line: in a frame turned a quarter, the fraction's bar stands upright, as
 /// tall as the fraction is wide.
 #[test]

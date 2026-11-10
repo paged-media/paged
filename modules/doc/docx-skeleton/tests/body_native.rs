@@ -1206,7 +1206,7 @@ fn smartart_is_an_anchored_group_of_its_drawing() {
         (b.left - 170.4).abs() < 0.01 && (b.width() - 72.0).abs() < 0.01,
         "{b:?}"
     );
-    // Doc ADR 629, amendment: the ellipse's text turns a quarter with it,
+    // Doc ADR 629 amendment 3: the ellipse's text turns a quarter with it,
     // about its box's centre; the others stand.
     let turns: Vec<_> = texts.iter().map(|t| t.item_transform).collect();
     assert_eq!(turns[..2], [None, None]);
@@ -1223,5 +1223,77 @@ fn smartart_is_an_anchored_group_of_its_drawing() {
             Some("CenterAlign")
         );
         assert_eq!(t.layout.inset_spacing, Some([6.0; 4]));
+    }
+}
+
+/// The paragraphs of the first table's cells, in the cells' order.
+fn cell_paragraphs(docx: &[u8]) -> Vec<paged_model::Paragraph> {
+    let model = docx_import::import_docx(docx).expect("import");
+    let ir = docx_lower::lower(&model);
+    let why: Vec<_> = native_body(&ir)
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            NativeBlock::Deferred { reason } => Some(reason.clone()),
+            _ => None,
+        })
+        .collect();
+    let stories = docx_skeleton::body::native_stories(&ir)
+        .unwrap_or_else(|| panic!("the whole body is native; deferred: {why:?}"))
+        .stories;
+    let table = stories[0]
+        .iter()
+        .find_map(|p| p.table.as_ref())
+        .expect("a table");
+    let mut cells: Vec<_> = table.cells.iter().collect();
+    cells.sort_by_key(|c| c.coords().map(|(c, r)| (r, c)));
+    cells
+        .into_iter()
+        .flat_map(|c| c.paragraphs.clone())
+        .collect()
+}
+
+#[test]
+fn a_cells_equations_stand_on_its_paragraphs() {
+    // Engine ADR 1090 amendment 2: a cell's equations are built as a body
+    // paragraph's, a display one alone in its paragraph centred.
+    let ps = cell_paragraphs(&docx_conformance::equations_in_cells_docx());
+    assert_eq!(ps.len(), 2);
+    let lead = docx_conformance::CELL_EQUATION_LEAD;
+    let text: String = ps[0].runs.iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(text, lead);
+    assert_eq!(ps[0].equations.len(), 1);
+    assert_eq!(ps[0].equations[0].offset, lead.chars().count() as u32);
+    assert!(!ps[0].equations[0].math.display);
+    assert_eq!(ps[1].equations.len(), 1);
+    assert!(ps[1].equations[0].math.display);
+    assert_eq!(
+        ps[1].justification,
+        Some(paged_model::Justification::CenterAlign)
+    );
+}
+
+#[test]
+fn a_chart_or_a_diagram_alone_in_a_cell_is_its_anchored_group() {
+    // Doc ADR 628 amendment 1 and 629 amendment 2: the cell's paragraph is kept and
+    // holds the group, in line at offset 0.
+    for (docx, prefix) in [
+        (docx_conformance::charts_docx(), "docx_chart"),
+        (docx_conformance::smartart_docx(), "docx_diagram"),
+    ] {
+        let ps = cell_paragraphs(&docx);
+        assert_eq!(ps.len(), 1, "{prefix}");
+        let frames = &ps[0].anchored_frames;
+        assert_eq!(frames.len(), 1, "{prefix}");
+        assert!(
+            frames[0]
+                .self_id
+                .as_deref()
+                .is_some_and(|id| id.starts_with(prefix)),
+            "{prefix}: {:?}",
+            frames[0].self_id
+        );
+        assert_eq!(ps[0].anchored_frame_offsets, [0], "{prefix}");
+        assert!(!frames[0].children.is_empty(), "{prefix}: its pieces");
     }
 }

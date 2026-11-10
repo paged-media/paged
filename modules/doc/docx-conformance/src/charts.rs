@@ -116,7 +116,7 @@ pub fn pie_chart_xml() -> String {
 }
 
 /// A document with an inline column chart, an anchored pie chart and a
-/// chart in a table cell (which is not placed), each after a line of text.
+/// chart alone in a table cell, the body's each after a line of text.
 /// The two body charts share no part; the cell's chart reuses the bar
 /// chart's part.
 pub fn charts_docx() -> Vec<u8> {

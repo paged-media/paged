@@ -134,6 +134,32 @@ function paint(
   return { count, box: (x1 - x0 + 1) * (y1 - y0 + 1) };
 }
 
+/** The bands of rows `rgb` (within 6 per channel) is painted on, a gap of
+ *  at least 6 rows apart: one per object drawn in that colour, stacked. */
+function bands(
+  img: { w: number; h: number; rgba: Uint8Array },
+  rgb: [number, number, number],
+): number {
+  let n = 0;
+  let gap = Infinity;
+  for (let y = 0; y < img.h; y++) {
+    let hits = 0;
+    for (let x = 0; x < img.w; x++) {
+      const i = (y * img.w + x) * 4;
+      if (
+        rgb.every((v, k) => Math.abs(img.rgba[i + k]! - v) <= 6) &&
+        img.rgba[i + 3]! > 200
+      )
+        hits++;
+    }
+    if (hits >= 3) {
+      if (gap >= 6) n++;
+      gap = 0;
+    } else gap++;
+  }
+  return n;
+}
+
 /** One entry of a ZIP, decompressed. */
 function inflatedPart(bytes: Uint8Array, name: string): Uint8Array {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -230,6 +256,14 @@ describe.skipIf(!docxPresent)("doc headless — charts @feat:doc-charts", () => 
     expect(count([0x44, 0x72, 0xc4])).toBeGreaterThan(500);
     expect(count([0xed, 0x7d, 0x31])).toBeGreaterThan(500);
     expect(count([0xa5, 0xa5, 0xa5])).toBeGreaterThan(500);
+    // Doc ADR 628 amendment 1 — the chart in the table cell is drawn too:
+    // West's accent stands in three bands, the column chart's, the pie's
+    // and the cell chart's.
+    const westBands = renders.reduce(
+      (n, img) => n + bands(img, [0xed, 0x7d, 0x31]),
+      0,
+    );
+    expect(westBands).toBeGreaterThanOrEqual(3);
 
     const exporter = h
       .exportersContributed()

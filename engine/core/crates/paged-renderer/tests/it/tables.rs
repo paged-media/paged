@@ -721,6 +721,142 @@ fn edited_cell_paragraphs_relayout_into_more_lines() {
     );
 }
 
+// ── Engine ADR 1090 amendment 2 — an equation in a table cell ────────
+
+/// Every filled rectangle of page 0, `(x, y, w, h)` page-local pt.
+fn filled_rects(built: &paged_renderer::BuiltDocument) -> Vec<(f32, f32, f32, f32)> {
+    use paged_compose::PathSegment;
+    let list = &built.pages[0].list;
+    let mut out = Vec::new();
+    for c in &list.commands {
+        let DisplayCommand::FillPath {
+            path_id, transform, ..
+        } = c
+        else {
+            continue;
+        };
+        let Some(path) = list.paths.get(*path_id) else {
+            continue;
+        };
+        let pts: Vec<(f32, f32)> = path
+            .segments
+            .iter()
+            .filter_map(|s| match *s {
+                PathSegment::MoveTo { x, y } | PathSegment::LineTo { x, y } => {
+                    Some(transform.apply(x, y))
+                }
+                _ => None,
+            })
+            .collect();
+        if pts.len() != 4 || !matches!(path.segments.last(), Some(PathSegment::Close)) {
+            continue;
+        }
+        let x0 = pts.iter().map(|p| p.0).fold(f32::MAX, f32::min);
+        let x1 = pts.iter().map(|p| p.0).fold(f32::MIN, f32::max);
+        let y0 = pts.iter().map(|p| p.1).fold(f32::MAX, f32::min);
+        let y1 = pts.iter().map(|p| p.1).fold(f32::MIN, f32::max);
+        out.push((x0, y0, x1 - x0, y1 - y0));
+    }
+    out
+}
+
+/// The top cell's first character's x and its line's baseline.
+fn top_cell_first(built: &paged_renderer::BuiltDocument) -> (f32, f32) {
+    let addr = paged_renderer::CellAddr {
+        table_id: "tbl1".into(),
+        row: 0,
+        col: 0,
+    };
+    let lines = built.cell_layout("u10", &addr);
+    let line = lines.first().expect("the top cell's line");
+    // The equation's placeholder is no character of the cell's text: were
+    // it listed, it would be at byte 0 too, left of "t".
+    let x = line
+        .clusters
+        .iter()
+        .filter(|c| c.byte == 0)
+        .map(|c| c.x_pt)
+        .fold(f32::MIN, f32::max);
+    (x, line.baseline_y_pt)
+}
+
+#[test]
+fn an_equation_in_a_cell_is_a_character_of_its_line() {
+    use paged_model::equation::math::{FracKind, Math, Node};
+    let plain = build_cell_doc();
+    let before = build_with_fonts(&plain);
+    let (x_before, baseline) = top_cell_first(&before);
+
+    let mut document = plain.clone();
+    {
+        let table = document.stories[0]
+            .story
+            .paragraphs
+            .iter_mut()
+            .find_map(|p| p.table.as_mut())
+            .unwrap();
+        let c = table
+            .cells
+            .iter_mut()
+            .find(|c| c.coords() == Some((0, 0)))
+            .unwrap();
+        c.paragraphs[0]
+            .equations
+            .push(paged_model::equation::Equation {
+                offset: 0,
+                math: Math {
+                    display: false,
+                    body: vec![Node::Frac {
+                        num: vec![Node::run("a")],
+                        den: vec![Node::run("b")],
+                        kind: FracKind::Bar,
+                    }],
+                },
+                point_size: None,
+            });
+    }
+    let after = build_with_fonts(&document);
+    let (x_after, baseline_after) = top_cell_first(&after);
+    // "top" moves right by the fraction's width, and the cell's text bytes
+    // are unchanged (the first cluster is still byte 0).
+    let width = x_after - x_before;
+    assert!(
+        (2.0..12.0).contains(&width),
+        "the cell's text moved by the fraction's width: {width}"
+    );
+    // A text-style fraction fits the line: the baseline holds.
+    assert!(
+        (baseline_after - baseline).abs() < 0.01,
+        "{baseline} -> {baseline_after}"
+    );
+    // The bar: one rule as wide as the fraction, at the cell line's pen,
+    // above the baseline.
+    let bars: Vec<_> = filled_rects(&after)
+        .into_iter()
+        .filter(|r| r.3 > 0.1 && r.3 < 1.5 && (r.2 - width).abs() < 0.01)
+        .collect();
+    assert_eq!(bars.len(), 1, "one fraction bar: {bars:?}");
+    let (bx, by, _, bh) = bars[0];
+    assert!(
+        (bx - x_before).abs() < 0.01,
+        "bar at the pen: {bx} vs {x_before}"
+    );
+    assert!(
+        by + bh < baseline && by > baseline - 12.0,
+        "bar on the axis: {by}"
+    );
+    // Its letters are drawn too: two more glyph fills and the bar.
+    let fills = |b: &paged_renderer::BuiltDocument| {
+        b.pages[0]
+            .list
+            .commands
+            .iter()
+            .filter(|c| matches!(c, DisplayCommand::FillPath { .. }))
+            .count()
+    };
+    assert_eq!(fills(&after), fills(&before) + 3, "a, b and the bar");
+}
+
 // ── W4.11 — generated tables fixture: v2 JustifyAlign multi-paragraph ──
 
 /// The `tables.idml` v2 variant carries a 3-paragraph JustifyAlign cell

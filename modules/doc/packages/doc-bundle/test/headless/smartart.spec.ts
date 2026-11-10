@@ -189,6 +189,32 @@ function turnedInk(
   return a1 < 0 ? null : { w: a1 - a0 + 1, h: b1 - b0 + 1 };
 }
 
+/** The bands of rows `rgb` (within 6 per channel) is painted on, a gap of
+ *  at least 6 rows apart: one per object drawn in that colour, stacked. */
+function bands(
+  img: { w: number; h: number; rgba: Uint8Array },
+  rgb: [number, number, number],
+): number {
+  let n = 0;
+  let gap = Infinity;
+  for (let y = 0; y < img.h; y++) {
+    let hits = 0;
+    for (let x = 0; x < img.w; x++) {
+      const i = (y * img.w + x) * 4;
+      if (
+        rgb.every((v, k) => Math.abs(img.rgba[i + k]! - v) <= 6) &&
+        img.rgba[i + 3]! > 200
+      )
+        hits++;
+    }
+    if (hits >= 3) {
+      if (gap >= 6) n++;
+      gap = 0;
+    } else gap++;
+  }
+  return n;
+}
+
 /** One entry of a ZIP, decompressed. */
 function inflatedPart(bytes: Uint8Array, name: string): Uint8Array {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -287,13 +313,21 @@ describe.skipIf(!docxPresent)(
       expect(count([0x44, 0x72, 0xc4])).toBeGreaterThan(500);
       expect(count([0xed, 0x7d, 0x31])).toBeGreaterThan(500);
       expect(count([0xa5, 0xa5, 0xa5])).toBeGreaterThan(500);
-      // Doc ADR 629, amendment: the ellipse is turned a quarter and its
+      // Doc ADR 629 amendment 3 — the ellipse is turned a quarter and its
       // text turns with it, so its white ink stands taller than it is wide.
       const ink = renders
         .map((img) => turnedInk(img, [0xa5, 0xa5, 0xa5]))
         .find((b) => b !== null);
       expect(ink).toBeDefined();
       expect(ink!.h).toBeGreaterThan(1.15 * ink!.w);
+      // Doc ADR 629 amendment 2 — the diagram in the table cell is drawn
+      // too: the chevron's accent stands in two bands, the body's and the
+      // cell's.
+      const chevronBands = renders.reduce(
+        (n, img) => n + bands(img, [0xed, 0x7d, 0x31]),
+        0,
+      );
+      expect(chevronBands).toBeGreaterThanOrEqual(2);
 
       const exporter = h
         .exportersContributed()

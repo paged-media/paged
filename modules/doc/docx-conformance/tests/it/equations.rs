@@ -177,3 +177,36 @@ fn editing_the_text_beside_an_equation_keeps_its_markup() {
     let tail = |xml: &str| xml[xml.find("</w:p>").unwrap()..].to_string();
     assert_eq!(tail(&after), tail(&before), "the paragraphs after it too");
 }
+
+#[test]
+fn a_cells_equations_lower_to_its_paragraphs_equations() {
+    // Engine ADR 1090 amendment 2: a cell paragraph's equations are read
+    // and lowered as a body paragraph's.
+    let doc =
+        docx_import::import_docx(&docx_conformance::equations_in_cells_docx()).expect("import");
+    let ir = docx_lower::lower(&doc);
+    let table = ir
+        .story
+        .blocks
+        .iter()
+        .find_map(|b| match b {
+            LoweredBlock::Table(t) => Some(t),
+            _ => None,
+        })
+        .expect("the table");
+    assert_eq!(table.cells.len(), 2);
+    let first = &table.cells[0].paragraphs[0];
+    assert_eq!(first.equations.len(), 1);
+    assert_eq!(
+        first.equations[0].at,
+        docx_conformance::CELL_EQUATION_LEAD.chars().count() as u32
+    );
+    assert!(matches!(
+        first.equations[0].math.body[..],
+        [Node::Frac { .. }]
+    ));
+    let second = &table.cells[1].paragraphs[0];
+    assert_eq!(second.equations.len(), 1);
+    assert!(second.equations[0].math.display);
+    assert!(second.runs.iter().all(|r| r.text.is_empty()));
+}

@@ -518,7 +518,7 @@ pub(super) fn line_object_shift(
 /// equations reach below the baseline, 1/64 pt. Under **Word's first-fit**
 /// a line holds its equations whole: Word 16 sets the line after a display
 /// fraction below the fraction's denominator (measured on a generated
-/// `.docx`, engine ADR 1090 amendment 2), so the depth past the part of the
+/// `.docx`, engine ADR 1090 amendment 3), so the depth past the part of the
 /// auto-leaded line below the baseline (`auto leading − ascent`) pushes the
 /// next line. Outside first-fit (InDesign's rule) and for anchored frames,
 /// nothing below the baseline moves the next line.

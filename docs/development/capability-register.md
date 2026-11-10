@@ -168,9 +168,10 @@ through a `MathMetrics` seam; `paged_ooxml::omml` is the one OMML reader for doc
 inline object of its paragraph (`Paragraph.equations`); the renderer's one metrics adapter and paint are
 `paged-renderer` `pipeline/equations.rs` (math face, OpenType `MATH` constants, the math alphabet
 `paged_math::alphabet`); doc imports through the native builder, slide through `pptx-import` (the choice of an
-equation's alternate content) and `slide-native`. Compared with Word (ADR 1090 amendment 2): sizes and shapes
-match. Open: equations in table cells, a wire door, display n-ary operators (Word uses the face's display
-variant, about twice the text's height), a math face that is not face 0 of a font collection. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
+equation's alternate content) and `slide-native`. Table cells set and draw their equations as the body does
+(ADR 1090 amendment 2). Compared with Word (ADR 1090 amendment 3): sizes and shapes match. Open: a wire door, display
+n-ary operators (Word uses the face's display variant, about twice the text's height), a math face that is not face 0 of
+a font collection, an equation's depth in a table cell. Text envelope (engine ADR 1091, slices 1 and 2 built): `paged_ooxml::drawingml::textwarp` reads `a:bodyPr/a:prstTxWarp` (41 presets, families,
 adjusts) for doc, slide and sheet; `paged_warp::textshape` is the one set of preset guides; the frame's `text_warp` is bent by the
 renderer's one pass (`pipeline/text_warp.rs`) over the text's outlines; doc and slide import it. A turned frame bends in its own upright space and
 turns its text with it, an anchored frame (a Word text box, SmartArt text) included (engine ADR 1091 amendment 2, ADR 1050 amendment 2026-11-09;
@@ -181,7 +182,7 @@ text (`spAutoFit`) before the warp, write-back, handles.
 Oracle comparisons of 2026-11-09 (Word, PowerPoint and Excel 16 for macOS), open items they left: an inline object after a
 paragraph's last character is anchored before it (doc ADR 627 amendment 3); Word's 10 pt space after for a styles part without
 `w:pPrDefault` (same); chart parts without `c:spPr` draw light grey gridlines and no axis lines or tick marks where Office draws
-black ones with tick marks (doc ADR 628 amendment); a SmartArt without a saved drawing is not drawn (doc ADR 629); `pptx-export`
+black ones with tick marks (doc ADR 628 amendment 2); a SmartArt without a saved drawing is not drawn (doc ADR 629); `pptx-export`
 writes a shrunk body's stored fit, not the one the renderer chose after an edit, and PowerPoint draws the stored one (slide ADR 724
 amendment 2); Acrobat was not available for the PDF comment check (engine ADR 1055, amendment 2026-11-09).
 ML: the first action over the ML doors is `media.paged.image/remove-background` (extensions ADR 1100, Amendment 1; tested on the fake
@@ -436,8 +437,8 @@ Status (draw items, one line each; updated as they land):
 ### Reach (gaps between modules)
 
 - **doc:** recolour, chart data editing, SmartArt editing, OpenType features, equations. Charts: DONE from the cached values
-  (doc ADR 628, `slide-chart`'s layout, anchored groups; chart data editing is open; the workbook door, extensions ADR 1102, is the way slide took). SmartArt:
-  DONE as drawn (doc ADR 629: the `dsp:drawing` Word saved, as an anchored group of shapes and text frames, a text box
+  (doc ADR 628, `slide-chart`'s layout, anchored groups, in table cells too since its amendment 1; chart data editing is open; the workbook door, extensions ADR 1102, is the way slide took). SmartArt:
+  DONE as drawn (doc ADR 629: the `dsp:drawing` Word saved, as an anchored group of shapes and text frames, in table cells too, a text box
   turned with its shape and by its own `dsp:txXfrm/@rot`, as in slide (slide ADR 717 amendment 2026-11-09); editing the
   diagram is open). Shapes: PARTLY DONE (doc ADR 627: non-text `wps:wsp` as anchored Rectangle frames drawn along their
   outline, every Annex D preset through `dml-geom` since doc ADR 629 and literal custom geometry, `wps:style` completing

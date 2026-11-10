@@ -810,14 +810,11 @@ pub(crate) struct W4 {
     pub unplaced_shapes: usize,
     pub undrawn_shapes: Vec<String>,
     pub shape_line_ends: usize,
-    /// Charts drawn as anchored groups (doc ADR 628), and charts in table
-    /// cells (not placed).
+    /// Charts drawn as anchored groups (doc ADR 628), in table cells too.
     pub charts: usize,
-    pub unplaced_charts: usize,
-    /// SmartArt diagrams drawn as anchored groups (doc ADR 629), and
-    /// diagrams in table cells (not placed).
+    /// SmartArt diagrams drawn as anchored groups (doc ADR 629), in table
+    /// cells too.
     pub diagrams: usize,
-    pub unplaced_diagrams: usize,
     /// Nested tables shown as their paragraphs.
     pub nested_tables: usize,
     /// Rows Word holds at an exact height, and tables with an indent or a
@@ -1454,26 +1451,6 @@ impl crate::Lowering {
                     "{} SmartArt diagram(s) drawn from the layout Word saved as anchored groups; \
                      the diagram parts round-trip unchanged",
                     w.diagrams
-                ),
-                2,
-            ));
-        }
-        if w.unplaced_diagrams > 0 {
-            out.push(Diagnostic::warning(
-                format!(
-                    "{} SmartArt diagram(s) in table cells are NOT shown; they are kept in the \
-                     .docx and round-trip on save",
-                    w.unplaced_diagrams
-                ),
-                2,
-            ));
-        }
-        if w.unplaced_charts > 0 {
-            out.push(Diagnostic::warning(
-                format!(
-                    "{} chart(s) in table cells are NOT shown; they are kept in the .docx and \
-                     round-trip on save",
-                    w.unplaced_charts
                 ),
                 2,
             ));

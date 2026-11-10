@@ -94,7 +94,7 @@ fn a_diagram_is_read_from_the_drawing_word_saved__feat__doc_smartart() {
     );
     let text = chevron.text.as_ref().expect("text");
     assert_eq!((text.x_emu, text.width_emu), (1_935_480 + 457_200, 457_200));
-    // Doc ADR 629, amendment: a text box turns with its shape and by its own
+    // Doc ADR 629 amendment 3: a text box turns with its shape and by its own
     // `rot`. The chevron's quarter turn is undone by its text box's; the
     // ellipse's text turns with it; the rounded rectangle's stands.
     assert_eq!(chevron.shape.rotation, 5_400_000);
@@ -173,9 +173,39 @@ fn a_diagram_lowers_to_an_anchored_group_of_shapes_and_texts__feat__doc_smartart
     assert!(
         messages
             .iter()
-            .any(|m| m.contains("1 SmartArt diagram(s) drawn")),
+            .any(|m| m.contains("2 SmartArt diagram(s) drawn")),
         "{messages:?}"
     );
+    assert!(
+        !messages.iter().any(|m| m.contains("in table cells")),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn a_diagram_in_a_table_cell_lowers_as_a_body_one__feat__doc_smartart() {
+    // Doc ADR 629 amendment 2: the cell's diagram is the body's first one
+    // again, an inline group of the cell's paragraph.
+    let doc = docx_import::import_docx(&smartart_docx()).expect("import");
+    let ir = docx_lower::lower(&doc);
+    let body = lowered(&ir)[0];
+    let cell: Vec<&LoweredGroup> = ir
+        .story
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            LoweredBlock::Table(t) => Some(t),
+            _ => None,
+        })
+        .flat_map(|t| t.cells.iter().flat_map(|c| c.paragraphs.iter()))
+        .flat_map(|p| p.diagrams.iter())
+        .collect();
+    assert_eq!(cell.len(), 1);
+    let g = cell[0];
+    assert!(g.anchor.is_none(), "inline in its cell");
+    assert_eq!(g.at, 0);
+    assert_eq!((g.width_pt, g.height_pt), (body.width_pt, body.height_pt));
+    assert_eq!(g.pieces.len(), body.pieces.len());
 }
 
 #[test]
@@ -196,5 +226,5 @@ fn the_diagram_parts_are_byte_identical_on_save__feat__doc_smartart() {
         assert_eq!(after.part(part), before.part(part), "{part}");
     }
     let doc = String::from_utf8(after.part("word/document.xml").unwrap().to_vec()).unwrap();
-    assert_eq!(doc.matches("<dgm:relIds ").count(), 2);
+    assert_eq!(doc.matches("<dgm:relIds ").count(), 3);
 }

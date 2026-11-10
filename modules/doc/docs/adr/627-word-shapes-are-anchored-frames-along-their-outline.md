@@ -116,7 +116,7 @@ spaces paragraphs 10 pt apart (23.5 pt from line to line at 11 pt Calibri, 13.5 
 - **Fixed: an inline shape's line.** Word makes a line holding an inline shape (or chart, SmartArt
   or text box) as tall as the object; the lowering kept such a paragraph at Word's fixed pitch, so
   the object rose over the lines above. It now takes auto leading as a picture's paragraph does
-  (`docx-lower`, the same rule as engine ADR 1090 amendment 2).
+  (`docx-lower`, the same rule as engine ADR 1090 amendment 3).
 - **Open: an object after the paragraph's last character** is anchored one character earlier
   (`anchor_at`: the engine cannot address the paragraph's end), so the last character stands after
   the object (paged draws "Shape rec", the object, "t" where Word draws "Shape rect" and the

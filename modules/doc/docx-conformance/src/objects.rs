@@ -496,7 +496,7 @@ fn wordart_box(id: u32, pos: &str, w: i64, h: i64, rot: i32, warp: &str, text: &
     )
 }
 
-/// Engine ADR 1091 amendment 2, doc ADR 629 amendment — turned WordArt: in
+/// Engine ADR 1091 amendment 2, doc ADR 629 amendment 3 — turned WordArt: in
 /// the first paragraph a page-relative box turned 30 degrees whose text is
 /// an arch (a page item), in the third a paragraph-relative box turned -20
 /// degrees whose text waves (an anchored frame).
