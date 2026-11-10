@@ -1264,7 +1264,7 @@ fn a_cells_equations_stand_on_its_paragraphs() {
 
 #[test]
 fn a_chart_or_a_diagram_alone_in_a_cell_is_its_anchored_group() {
-    // Doc ADR 628 and 629 amendments 1: the cell's paragraph is kept and
+    // Doc ADR 628 amendment 1 and 629 amendment 2: the cell's paragraph is kept and
     // holds the group, in line at offset 0.
     for (docx, prefix) in [
         (docx_conformance::charts_docx(), "docx_chart"),

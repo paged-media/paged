@@ -977,7 +977,7 @@ impl crate::Lowering {
     ) -> Option<crate::ir::LoweredShape> {
         let w = emu_to_pt(sh.width_emu);
         let h = emu_to_pt(sh.height_emu);
-        let outline = match crate::shape_geom::outline(sh, w, h) {
+        let mut outline = match crate::shape_geom::outline(sh, w, h) {
             Ok(o) => o,
             Err(reason) => {
                 if !self.w4.undrawn_shapes.contains(&reason) {
@@ -1003,9 +1003,23 @@ impl crate::Lowering {
                 if !undrawn.is_empty() {
                     self.w4.shape_line_ends += 1;
                 }
+                // The line stops inside its heads (amendment 1); the heads
+                // were placed on its ends above.
+                crate::shape_geom::cut_under_heads(
+                    &mut outline,
+                    line.head.as_ref(),
+                    line.tail.as_ref(),
+                    width,
+                );
+                // An `arrow`'s strokes: solid, mitred where they meet,
+                // round at their free ends, as Office draws them.
                 let bare = paged_ooxml::drawingml::Line {
                     head: None,
                     tail: None,
+                    dash: None,
+                    custom_dash: Vec::new(),
+                    cap: Some("rnd".into()),
+                    join: Some("miter".into()),
                     ..line.clone()
                 };
                 heads

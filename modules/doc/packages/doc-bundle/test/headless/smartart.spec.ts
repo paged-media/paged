@@ -259,7 +259,7 @@ describe.skipIf(!docxPresent)(
       expect(count([0x44, 0x72, 0xc4])).toBeGreaterThan(500);
       expect(count([0xed, 0x7d, 0x31])).toBeGreaterThan(500);
       expect(count([0xa5, 0xa5, 0xa5])).toBeGreaterThan(500);
-      // Doc ADR 629 amendment 1 — the diagram in the table cell is drawn
+      // Doc ADR 629 amendment 2 — the diagram in the table cell is drawn
       // too: the chevron's accent stands in two bands, the body's and the
       // cell's.
       const chevronBands = renders.reduce(

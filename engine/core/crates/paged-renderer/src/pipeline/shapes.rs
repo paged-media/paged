@@ -397,6 +397,51 @@ fn push_circle_contour(
     segs.push(Close);
 }
 
+/// An arrowhead's size (a triangle's length, a circle's diameter): it
+/// scales off the stroke weight, InDesign-like.
+fn arrowhead_size(stroke_width: f32, scale_pct: f32) -> f32 {
+    stroke_width * 4.0 * (scale_pct / 100.0).max(0.05)
+}
+
+/// How far back from its end the stroke of a line stops under a line end
+/// of `kind` (engine ADR 1093), measured along the line, for the heads
+/// `emit_arrowhead` draws. InDesign ends the stroke inside the head: in
+/// the `line-ends` reference a triangle's stroke stops 0.6 of the head's
+/// length back from the tip, a barbed head's at its notch (0.6 too), a
+/// solid circle's at its centre, and a hollow square's at its far side,
+/// so nothing of the line shows inside it. A round or projecting cap
+/// reaches half the weight past the cut, which a hollow head pushes the
+/// cut back by, and which a small triangle must still cover (never past
+/// its base, which would open a gap between the line and its head).
+fn arrowhead_inset(
+    kind: paged_model::ArrowheadType,
+    stroke_width: f32,
+    scale_pct: f32,
+    cap: Option<&str>,
+) -> f32 {
+    use paged_model::ArrowheadType as A;
+    if stroke_width <= 0.0 {
+        return 0.0;
+    }
+    let s = arrowhead_size(stroke_width, scale_pct);
+    let cap_reach = match cap {
+        Some("RoundEndCap") | Some("ProjectingEndCap") => stroke_width * 0.5,
+        _ => 0.0,
+    };
+    match kind {
+        A::Triangle
+        | A::TriangleWide
+        | A::Simple
+        | A::SimpleWide
+        | A::Curved
+        | A::Other
+        | A::Barbed => (s * 0.6).max((stroke_width + cap_reach).min(s)),
+        A::SquareSolid | A::CircleSolid => s * 0.5,
+        A::Square | A::Circle => s + cap_reach,
+        A::Bar | A::None => 0.0,
+    }
+}
+
 /// Emit a filled arrowhead of `kind` at `tip`, pointing along the
 /// outward direction `dir` at that line end. Size derives from the
 /// stroke weight × `scale_pct`, matching InDesign's stroke-relative
@@ -426,9 +471,7 @@ fn emit_arrowhead(
     }
     let (dx, dy) = (dir.0 / len, dir.1 / len); // unit outward
     let (px, py) = (-dy, dx); // unit perpendicular
-    let scale = (scale_pct / 100.0).max(0.05);
-    // Arrowheads scale off the stroke weight (InDesign-like).
-    let s = stroke_width * 4.0 * scale;
+    let s = arrowhead_size(stroke_width, scale_pct);
     let mut segs: Vec<paged_compose::PathSegment> = Vec::new();
     match kind {
         // `Curved` sweeps its barbs in InDesign; the plain triangle is
@@ -572,6 +615,59 @@ impl LineEnds {
     pub(super) fn draws(&self) -> bool {
         self.start.draws() || self.end.draws()
     }
+
+    /// How far the stroke stops short of its first and its last anchor
+    /// under these line ends (engine ADR 1093).
+    fn insets(&self, stroke_width: f32, cap: Option<&str>) -> (f32, f32) {
+        (
+            arrowhead_inset(self.start, stroke_width, self.start_scale, cap),
+            arrowhead_inset(self.end, stroke_width, self.end_scale, cap),
+        )
+    }
+}
+
+/// The contours of a stroke shortened under its line ends (engine ADR
+/// 1093): `anchors` split at `starts`, each contour open or not by `open`.
+/// With `each_run`, every open contour is cut at both ends, as a pen
+/// path's line ends sit on each (C-62); without it, only the first
+/// contour's start and the last contour's end, where a `<GraphicLine>`
+/// draws its two. A contour cut away entirely is dropped. `None` when
+/// nothing is cut, so the caller keeps the path it already has.
+pub(super) fn stroke_under_line_ends(
+    anchors: &[paged_model::PathAnchor],
+    starts: &[usize],
+    open: &[bool],
+    ends: LineEnds,
+    each_run: bool,
+    stroke_width: f32,
+    cap: Option<&str>,
+) -> Option<(Vec<paged_model::PathAnchor>, Vec<usize>, Vec<bool>)> {
+    let (start_in, end_in) = ends.insets(stroke_width, cap);
+    if start_in <= 0.0 && end_in <= 0.0 {
+        return None;
+    }
+    let ranges = super::text_path::contour_ranges(anchors.len(), starts);
+    let last = ranges.len().checked_sub(1)?;
+    let (mut out, mut out_starts, mut out_open) = (Vec::new(), Vec::new(), Vec::new());
+    for (i, (lo, hi)) in ranges.iter().copied().enumerate() {
+        let run = &anchors[lo..hi];
+        let is_open = open.get(i).copied().unwrap_or(false);
+        let (a, b) = match (is_open, each_run) {
+            (false, _) => (0.0, 0.0),
+            (true, true) => (start_in, end_in),
+            (true, false) => (
+                if i == 0 { start_in } else { 0.0 },
+                if i == last { end_in } else { 0.0 },
+            ),
+        };
+        let Some(cut) = paged_geom::trim::trim_run(run, a, b) else {
+            continue;
+        };
+        out_starts.push(out.len());
+        out_open.push(is_open);
+        out.extend(cut);
+    }
+    Some((out, out_starts, out_open))
 }
 
 /// The line ends of one open run of anchors: `start` at its first
@@ -737,8 +833,26 @@ fn emit_line_body(
         let open_flags: Vec<bool> = (0..line.anchors.len())
             .map(|i| line.subpath_open.get(i).copied().unwrap_or(true))
             .collect();
-        let path =
-            polygon_path_from_anchors_with_open(&line.anchors, &line.subpath_starts, &open_flags);
+        // Engine ADR 1093 — the stroke stops inside its line ends; the
+        // heads below still sit on the line's own end anchors.
+        let path = match stroke_under_line_ends(
+            &line.anchors,
+            &line.subpath_starts,
+            &open_flags,
+            LineEnds::of_line(line),
+            false,
+            stroke_width,
+            resolved.end_cap,
+        ) {
+            Some((anchors, starts, open)) => {
+                polygon_path_from_anchors_with_open(&anchors, &starts, &open)
+            }
+            None => polygon_path_from_anchors_with_open(
+                &line.anchors,
+                &line.subpath_starts,
+                &open_flags,
+            ),
+        };
         let cache_key = match resolved.self_id {
             Some(id) => fnv_1a_u64(id.as_bytes()),
             None => path_signature(&line.anchors),
@@ -2975,6 +3089,86 @@ pub(super) fn emit_unrenderable_content_ghost_cross(
 #[cfg(test)]
 mod tests {
     use super::path_end_outward_dir;
+
+    fn corner(x: f32, y: f32) -> paged_model::PathAnchor {
+        paged_model::PathAnchor {
+            anchor: (x, y),
+            left: (x, y),
+            right: (x, y),
+        }
+    }
+
+    fn ends(start: paged_model::ArrowheadType, end: paged_model::ArrowheadType) -> super::LineEnds {
+        super::LineEnds {
+            start,
+            end,
+            start_scale: 100.0,
+            end_scale: 100.0,
+        }
+    }
+
+    /// Engine ADR 1093: the stroke stops inside its heads, at 0.6 of a
+    /// triangle's length, at a solid circle's centre and at a hollow
+    /// square's far side (pushed back by a round cap's reach).
+    #[test]
+    fn the_stroke_stops_inside_its_line_ends() {
+        use paged_model::ArrowheadType as A;
+        // 3 pt: the heads are 12 pt.
+        assert!((super::arrowhead_inset(A::Triangle, 3.0, 100.0, None) - 7.2).abs() < 1e-4);
+        assert!((super::arrowhead_inset(A::Barbed, 3.0, 100.0, None) - 7.2).abs() < 1e-4);
+        assert!((super::arrowhead_inset(A::CircleSolid, 3.0, 100.0, None) - 6.0).abs() < 1e-4);
+        assert!((super::arrowhead_inset(A::Square, 3.0, 100.0, None) - 12.0).abs() < 1e-4);
+        let round = Some("RoundEndCap");
+        assert!((super::arrowhead_inset(A::Circle, 3.0, 100.0, round) - 13.5).abs() < 1e-4);
+        assert_eq!(super::arrowhead_inset(A::Bar, 3.0, 100.0, None), 0.0);
+        assert_eq!(super::arrowhead_inset(A::None, 3.0, 100.0, None), 0.0);
+        // A tiny head is cut at most to its base: no gap behind it.
+        let tiny = super::arrowhead_inset(A::Triangle, 3.0, 10.0, None);
+        assert!((tiny - 1.2).abs() < 1e-4, "{tiny}");
+    }
+
+    /// A `<GraphicLine>` is cut at its first and last end only; a pen
+    /// path's every open contour at both, and never a closed one.
+    #[test]
+    fn line_ends_cut_the_open_contours() {
+        use paged_model::ArrowheadType as A;
+        let anchors = [
+            corner(0.0, 0.0),
+            corner(100.0, 0.0),
+            corner(0.0, 40.0),
+            corner(100.0, 40.0),
+            corner(0.0, 80.0),
+            corner(50.0, 80.0),
+            corner(0.0, 90.0),
+        ];
+        let starts = [0, 2, 4];
+        let open = [true, true, false];
+        let e = ends(A::Triangle, A::CircleSolid);
+        let (a, s, o) =
+            super::stroke_under_line_ends(&anchors, &starts, &open, e, false, 3.0, None)
+                .expect("cut");
+        assert_eq!(s, vec![0, 2, 4]);
+        assert_eq!(o, vec![true, true, false]);
+        assert!((a[0].anchor.0 - 7.2).abs() < 1e-3 && (a[1].anchor.0 - 100.0).abs() < 1e-3);
+        // The middle contour is neither the first nor the last.
+        assert!(a[2].anchor.0.abs() < 1e-3 && (a[3].anchor.0 - 100.0).abs() < 1e-3);
+        assert_eq!(a[4].anchor, (0.0, 80.0));
+        let (a, ..) = super::stroke_under_line_ends(&anchors, &starts, &open, e, true, 3.0, None)
+            .expect("cut");
+        assert!((a[0].anchor.0 - 7.2).abs() < 1e-3 && (a[1].anchor.0 - 94.0).abs() < 1e-3);
+        assert!((a[2].anchor.0 - 7.2).abs() < 1e-3 && (a[3].anchor.0 - 94.0).abs() < 1e-3);
+        // No heads, no cut: the caller keeps its path.
+        let none = ends(A::None, A::Bar);
+        assert!(
+            super::stroke_under_line_ends(&anchors, &starts, &open, none, true, 3.0, None)
+                .is_none()
+        );
+        // A contour shorter than its two cuts is not stroked at all.
+        let short = [corner(0.0, 0.0), corner(10.0, 0.0)];
+        let (a, s, _) =
+            super::stroke_under_line_ends(&short, &[0], &[true], e, true, 3.0, None).expect("cut");
+        assert!(a.is_empty() && s.is_empty());
+    }
 
     /// W1.1: on a straight terminal segment (IDML serialises straight
     /// segments with the handle coincident with its anchor), the

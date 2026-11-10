@@ -161,7 +161,7 @@ fn a_diagram_lowers_to_an_anchored_group_of_shapes_and_texts__feat__doc_smartart
 
 #[test]
 fn a_diagram_in_a_table_cell_lowers_as_a_body_one__feat__doc_smartart() {
-    // Doc ADR 629 amendment 1: the cell's diagram is the body's first one
+    // Doc ADR 629 amendment 2: the cell's diagram is the body's first one
     // again, an inline group of the cell's paragraph.
     let doc = docx_import::import_docx(&smartart_docx()).expect("import");
     let ir = docx_lower::lower(&doc);

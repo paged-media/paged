@@ -45,6 +45,7 @@ pub mod pathfinder;
 pub mod planar;
 mod planar_dcel;
 pub mod stroke_kernel;
+pub mod trim;
 
 #[cfg(test)]
 mod tests {
