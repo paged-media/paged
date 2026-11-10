@@ -25,6 +25,8 @@ $ paged-node mcp --library <TMP>/mcp-library --no-plugins
       "run_script",
       "render_page",
       "save_document",
+      "create_document",
+      "export_document",
       "lookup_api"
     ]
   },

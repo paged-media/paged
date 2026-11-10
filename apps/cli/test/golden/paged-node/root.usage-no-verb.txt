@@ -28,7 +28,7 @@ verbs:
   describe [doc]                                                                               kinds × schemas × typed commands × verbs, as one JSON document (for agents and the docs)
   template fields <doc> | kinds | fill <template> | check <template> <filled> | ingest <doc>   template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields, ingest a document tagged for XML as a template
   ml <health|generate|edit> [prompt]                                                           the local image model (paged-ml-host on this machine, extensions ADR 1100): its health, text to image, and an image edited by a prompt (mask, references); nothing leaves the machine
-  mcp                                                                                          serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document)
+  mcp                                                                                          serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document, create_document, export_document)
 
 options (every verb):
   --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them

@@ -77,6 +77,11 @@ impl DiskLibrary {
         Ok(self.root.join("repos").join(name))
     }
 
+    /// Whether the library holds a document named `name`.
+    pub fn exists(&self, name: &str) -> bool {
+        self.dir(name).is_ok_and(|d| d.join("meta.json").exists())
+    }
+
     pub fn list(&self) -> Result<Vec<Value>> {
         let mut out = Vec::new();
         let Ok(entries) = fs::read_dir(self.root.join("repos")) else {

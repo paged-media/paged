@@ -438,6 +438,88 @@ $ paged mcp --library lib
         "annotations": {
           "destructiveHint": false,
           "openWorldHint": false,
+          "readOnlyHint": false
+        },
+        "description": "Creates a document in the library with one blank page of the given size in points (1 cm = 28.3465 pt) as its first version on main, and opens it in the engine. Build it with run_script, keep it with save_document.",
+        "inputSchema": {
+          "additionalProperties": false,
+          "properties": {
+            "height": {
+              "description": "Page height in points.",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "name": {
+              "description": "The new document's name: lowercase letters, digits, '-'.",
+              "type": "string"
+            },
+            "width": {
+              "description": "Page width in points.",
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "name",
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        "name": "create_document",
+        "title": "Create a document"
+      },
+      {
+        "annotations": {
+          "destructiveHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        },
+        "description": "Writes the open document, as it is now, to a file in the library's exports folder: PDF (PDF 1.7 or PDF/X-4, with printer's marks if asked), IDML or .paged. Returns the file's path.",
+        "inputSchema": {
+          "additionalProperties": false,
+          "properties": {
+            "file": {
+              "description": "The file's name without extension: lowercase letters, digits, '-'. Default: the document's name.",
+              "type": "string"
+            },
+            "format": {
+              "enum": [
+                "pdf",
+                "idml",
+                "paged"
+              ],
+              "type": "string"
+            },
+            "marks": {
+              "description": "PDF only: crop and registration marks, colour bars and page info, outside the bleed.",
+              "type": "boolean"
+            },
+            "output_intent": {
+              "description": "PDF only: the output-intent profile's name. Default: the document's working CMYK space.",
+              "type": "string"
+            },
+            "standard": {
+              "description": "PDF only. Default: pdf17. PDF/X-4 needs an output intent.",
+              "enum": [
+                "pdf17",
+                "pdfx4"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        },
+        "name": "export_document",
+        "title": "Export a file"
+      },
+      {
+        "annotations": {
+          "destructiveHint": false,
+          "openWorldHint": false,
           "readOnlyHint": true
         },
         "description": "Searches the engine's capability catalog: paged.* functions, address grammar, settable properties and their types, constraints.",

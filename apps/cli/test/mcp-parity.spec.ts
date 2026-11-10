@@ -25,7 +25,8 @@
 //   golden test writes); the whole catalog against tool-catalog.txt.
 // - The protocol core answers as the Rust one: version negotiation, no
 //   answer to a notification, the error codes.
-// - A stdio session through the bin: every store tool, the engine tools and
+// - A stdio session through the bin: every store tool, the engine tools, a
+//   document made from nothing and exported, and
 //   lookup_api, against a library on disk.
 
 import { spawnSync } from "node:child_process";
@@ -45,6 +46,7 @@ import { DiskLibrary, loadRepositoryWasm } from "../src/mcp/library";
 import {
   catalog,
   ENGINE,
+  LOCAL,
   REFERENCE,
   select,
   STORE,
@@ -76,11 +78,14 @@ describe("paged mcp — the tools are the Rust CLI's", () => {
     const rust = JSON.parse(goldenStdout("tools-list.txt")) as {
       result: { tools: Array<{ name: string }> };
     };
-    const ours = sortKeys(select(STORE, REFERENCE, ENGINE).map(toolJson));
+    const ours = sortKeys(
+      select(STORE, REFERENCE, ENGINE, LOCAL).map(toolJson),
+    );
     expect(ours).toEqual(rust.result.tools);
     expect(rust.result.tools.map((t) => t.name)).toEqual([
       ...STORE.slice(0, 10),
       ...ENGINE,
+      ...LOCAL,
       ...REFERENCE,
     ]);
   });
@@ -230,6 +235,25 @@ describe("paged mcp — a stdio session over a library", () => {
         }),
         call(16, "list_changes", { document: "brochure" }),
         call(17, "download_link", { document: "brochure", ref: branch }),
+        call(18, "export_document", { format: "pdf" }),
+        call(19, "create_document", {
+          name: "poster",
+          width: 400,
+          height: 600,
+        }),
+        call(20, "run_script", {
+          source:
+            "const p = paged.pages(); const l = typeof p === 'string' ? JSON.parse(p) : p; paged.insertFrame(l[0].selfId, [50, 50, 300, 300]);",
+        }),
+        call(21, "save_document", { message: "a frame" }),
+        call(22, "export_document", {
+          format: "pdf",
+          file: "poster-print",
+          marks: true,
+        }),
+        call(23, "export_document", { format: "idml" }),
+        call(24, "export_document", { format: "png" }),
+        call(25, "create_document", { name: "poster", width: 10, height: 10 }),
       ]),
     );
   }, 180_000);
@@ -279,6 +303,23 @@ describe("paged mcp — a stdio session over a library", () => {
     expect(structured(15).change_request.status).toBe("open");
     expect(structured(16)).toHaveLength(1);
     expect(structured(17).url).toMatch(/^file:\/\/.*\.paged$/);
+  });
+
+  it("makes a document from nothing and exports it as files", () => {
+    covers("cli:paged-node mcp");
+    expect(reply(18).result.content[0].text).toContain("open a document first");
+    expect(structured(19).pages).toBe(1);
+    expect(reply(20).result.isError).toBe(false);
+    expect(structured(21).ref).toMatch(/^agent\/local-[0-9a-f]+\/edit-/);
+    const pdf = structured(22);
+    expect(pdf.path).toBe(join(tmp.dir, "lib", "exports", "poster-print.pdf"));
+    const bytes = readFileSync(pdf.path);
+    expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pdf.bytes).toBe(bytes.length);
+    expect(bytes.toString("latin1")).toContain("/TrimBox");
+    expect(structured(23).path).toMatch(/exports\/poster\.idml$/);
+    expect(reply(24).result.isError).toBe(true);
+    expect(reply(25).result.content[0].text).toContain("exists");
   });
 
   it("looks up the API, and errors as the Rust CLI does", () => {

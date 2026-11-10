@@ -49,7 +49,7 @@ import {
   type WasmRepository,
 } from "./library";
 import { error, json, type Host, type Outcome } from "./protocol";
-import { ENGINE, REFERENCE, select, STORE, type Tool } from "./tools";
+import { ENGINE, LOCAL, REFERENCE, select, STORE, type Tool } from "./tools";
 
 const AGENT = "agent:local";
 const CLIENT = "paged mcp";
@@ -115,13 +115,16 @@ export class LocalHost implements Host {
     return cliVersion();
   }
   tools(): Tool[] {
-    return select(STORE, REFERENCE, ENGINE);
+    return select(STORE, REFERENCE, ENGINE, LOCAL);
   }
 
   async call(tool: string, args: Record<string, unknown>): Promise<Outcome> {
     if (tool === "lookup_api")
       return json(lookup(this.catalog, str(args, "query"), 12));
-    if ((ENGINE as readonly string[]).includes(tool))
+    if (
+      (ENGINE as readonly string[]).includes(tool) ||
+      (LOCAL as readonly string[]).includes(tool)
+    )
       return this.engineTool(tool, args);
     return this.storeTool(tool, args);
   }
@@ -422,6 +425,10 @@ export class LocalHost implements Host {
         }
         case "save_document":
           return json(await this.saveDocument(args));
+        case "create_document":
+          return json(await this.createDocument(args));
+        case "export_document":
+          return json(await this.exportDocument(args));
         default:
           throw new Error(`no tool ${tool}`);
       }
@@ -479,6 +486,93 @@ export class LocalHost implements Host {
       pageSizesPt: sizes,
     };
     return { document: name, version, loaded: { pages: pageIds.length } };
+  }
+
+  private async createDocument(
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const name = str(args, "name");
+    if (!validName(name))
+      throw new Error("a document name is lowercase letters, digits and '-'");
+    if (this.lib.exists(name))
+      throw new Error(
+        `a document named \`${name}\` exists: open_document opens it`,
+      );
+    const size = (k: string): number | null => {
+      const v = args[k];
+      return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+    };
+    const width = size("width");
+    const height = size("height");
+    if (width === null || height === null)
+      throw new Error("width and height are page sizes in points, above 0");
+    this.opened?.session.dispose();
+    this.opened = null;
+    const session = await openSession(null, {
+      ...this.options,
+      cwd: this.options.cwd ?? process.cwd(),
+    });
+    try {
+      const pageIds = await session.h.newBlank(width, height);
+      const { bytes } = await session.exportBytes("paged");
+      const head = this.lib.import(name, bytes, `${name}.paged`);
+      this.opened = {
+        document: name,
+        version: head,
+        ref: "main",
+        branch: null,
+        session,
+        pageIds,
+        pageSizesPt: pageIds.map(() => [width, height]),
+      };
+      return {
+        document: name,
+        version: head,
+        pages: 1,
+        next: "It is open: build it with run_script, keep it with save_document.",
+      };
+    } catch (e) {
+      session.dispose();
+      throw e;
+    }
+  }
+
+  private async exportDocument(
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const o = this.requireOpen();
+    const format = str(args, "format");
+    if (!["pdf", "idml", "paged"].includes(format))
+      throw new Error("format is pdf, idml or paged");
+    const file = str(args, "file") || o.document;
+    if (!validName(file))
+      throw new Error("a file name is lowercase letters, digits and '-'");
+    const marks = args["marks"] === true;
+    const intent = str(args, "output_intent");
+    // Core's PDF door, as the Rust host writes it; `marks` is the full set
+    // `paged export --marks` writes.
+    const pdf = {
+      standard: str(args, "standard") || "pdf17",
+      cropMarks: marks,
+      registrationMarks: marks,
+      colorBars: marks,
+      pageInfo: marks,
+      ...(intent ? { outputIntentProfile: intent } : {}),
+    };
+    const { bytes } = await o.session.exportBytes(
+      format,
+      format === "pdf" ? { pdf, via: "core" } : {},
+    );
+    const dir = join(this.lib.root, "exports");
+    mkdirSync(dir, { recursive: true });
+    const out = resolve(dir, `${file}.${format}`);
+    writeFileSync(out, bytes);
+    return {
+      path: out,
+      url: pathToFileURL(out).href,
+      format,
+      bytes: bytes.length,
+    };
   }
 
   private async saveDocument(args: Record<string, unknown>): Promise<unknown> {

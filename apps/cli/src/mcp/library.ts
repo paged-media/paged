@@ -166,6 +166,11 @@ export class DiskLibrary {
     return join(this.root, "repos", name);
   }
 
+  /** Whether the library holds a document named `name`. */
+  exists(name: string): boolean {
+    return validName(name) && existsSync(join(this.dir(name), "meta.json"));
+  }
+
   list(): Record<string, unknown>[] {
     const repos = join(this.root, "repos");
     if (!existsSync(repos)) return [];

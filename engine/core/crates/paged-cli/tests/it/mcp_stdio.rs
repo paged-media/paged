@@ -19,6 +19,7 @@
 //! `paged mcp` end to end: the real binary over stdio, a library on disk, the
 //! engine run natively. What Claude Desktop or Claude Code would do with no
 //! server: list, open, script, render, save as an agent's version, propose.
+//! And with no file at all: create a document, build it, export the PDF.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -185,6 +186,91 @@ fn a_model_works_on_a_local_document_with_no_server() {
         .tool("lookup_api", json!({ "query": "insertTextFrame" }))
         .unwrap();
     assert!(api["matches"].as_u64().unwrap() > 0);
+    drop(mcp);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_model_makes_a_document_from_nothing_and_exports_it() {
+    let dir = std::env::temp_dir().join(format!("paged-mcp-create-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let lib = dir.join("library");
+    let mut mcp = Mcp::spawn(&lib);
+    mcp.rpc(
+        "initialize",
+        json!({ "protocolVersion": "2025-06-18", "capabilities": {} }),
+    );
+
+    assert!(mcp
+        .tool("export_document", json!({ "format": "pdf" }))
+        .unwrap_err()
+        .contains("open a document first"));
+    assert!(mcp
+        .tool(
+            "create_document",
+            json!({ "name": "Poster", "width": 100, "height": 100 })
+        )
+        .is_err());
+    // A2 portrait.
+    let made = mcp
+        .tool(
+            "create_document",
+            json!({ "name": "poster", "width": 1190.55, "height": 1683.78 }),
+        )
+        .unwrap();
+    assert_eq!(made["pages"], 1);
+    assert!(mcp
+        .tool(
+            "create_document",
+            json!({ "name": "poster", "width": 10, "height": 10 })
+        )
+        .unwrap_err()
+        .contains("exists"));
+
+    let script = r#"
+        const pages = paged.pages();
+        const list = typeof pages === "string" ? JSON.parse(pages) : pages;
+        paged.insertFrame(list[0].selfId, [100, 100, 600, 600]);
+    "#;
+    let ran = mcp.tool("run_script", json!({ "source": script })).unwrap();
+    assert!(ran["result"]["error"].is_null(), "{ran}");
+    let saved = mcp
+        .tool("save_document", json!({ "message": "A frame" }))
+        .unwrap();
+    assert!(saved["ref"].as_str().unwrap().starts_with("agent/local-"));
+    let main = mcp
+        .tool("history", json!({ "document": "poster" }))
+        .unwrap();
+    assert_eq!(
+        main["versions"].as_array().unwrap().len(),
+        1,
+        "main is the blank page"
+    );
+
+    let pdf = mcp
+        .tool(
+            "export_document",
+            json!({ "format": "pdf", "file": "poster-a2", "marks": true }),
+        )
+        .unwrap();
+    let path = std::path::PathBuf::from(pdf["path"].as_str().unwrap());
+    assert_eq!(path, lib.join("exports").join("poster-a2.pdf"));
+    let bytes = std::fs::read(&path).unwrap();
+    assert!(bytes.starts_with(b"%PDF-"));
+    assert_eq!(pdf["bytes"], bytes.len());
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.contains("/TrimBox"), "marks give the page a trim box");
+
+    let idml = mcp
+        .tool("export_document", json!({ "format": "idml" }))
+        .unwrap();
+    assert!(idml["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("exports/poster.idml"));
+    assert!(mcp
+        .tool("export_document", json!({ "format": "png" }))
+        .is_err());
     drop(mcp);
     let _ = std::fs::remove_dir_all(&dir);
 }

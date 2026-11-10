@@ -69,8 +69,10 @@ library of documents on disk (`--library <dir>`, default `$PAGED_LIBRARY`, else
 versions and branches (`list_documents`, `describe_document`, `read_part`, `history`,
 `diff`, `create_branch`, `commit_parts`, `propose_change`, `list_changes`,
 `download_link`); the engine run here (`open_document`, `run_script` with `paged.*`
-scripts, `render_page` as a PNG, `save_document`); and `lookup_api` over the capability
-catalog. An agent's writes land on `agent/<run>/…` branches with provenance, for the
+scripts, `render_page` as a PNG, `save_document`); a new document with a blank page of a
+given size (`create_document`) and the open document written to a PDF, IDML or `.paged`
+file in the library's `exports/` folder (`export_document`); and `lookup_api` over the
+capability catalog. An agent's writes land on `agent/<run>/…` branches with provenance, for the
 library's owner to merge.
 
 Plugin bundles are found where the command runs: `--plugins <a,b>` loads those, otherwise

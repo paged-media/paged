@@ -103,6 +103,9 @@ export const ENGINE = [
   "render_page",
   "save_document",
 ] as const;
+/** Tools of the local hosts (`paged mcp`, Rust and Node): a new document in
+ *  the library, and the open document written out as a file on disk. */
+export const LOCAL = ["create_document", "export_document"] as const;
 /** Tools that need no document. */
 export const REFERENCE = ["lookup_api"] as const;
 /** Tools that reach the user's open editor tabs (paged.server only). */
@@ -303,6 +306,69 @@ export function catalog(): Tool[] {
       title: "Save as a version",
       description: "Keeps the open document as a new version on your branch.",
       inputSchema: schema({ message: { type: "string" } }, ["message"]),
+      readOnly: false,
+      view: false,
+    },
+    {
+      name: "create_document",
+      title: "Create a document",
+      description:
+        "Creates a document in the library with one blank page of the given size in points (1 cm = 28.3465 pt) as its first version on main, and opens it in the engine. Build it with run_script, keep it with save_document.",
+      inputSchema: schema(
+        {
+          name: {
+            type: "string",
+            description:
+              "The new document's name: lowercase letters, digits, '-'.",
+          },
+          width: {
+            type: "number",
+            exclusiveMinimum: 0,
+            description: "Page width in points.",
+          },
+          height: {
+            type: "number",
+            exclusiveMinimum: 0,
+            description: "Page height in points.",
+          },
+        },
+        ["name", "width", "height"],
+      ),
+      readOnly: false,
+      view: false,
+    },
+    {
+      name: "export_document",
+      title: "Export a file",
+      description:
+        "Writes the open document, as it is now, to a file in the library's exports folder: PDF (PDF 1.7 or PDF/X-4, with printer's marks if asked), IDML or .paged. Returns the file's path.",
+      inputSchema: schema(
+        {
+          format: { type: "string", enum: ["pdf", "idml", "paged"] },
+          file: {
+            type: "string",
+            description:
+              "The file's name without extension: lowercase letters, digits, '-'. Default: the document's name.",
+          },
+          standard: {
+            type: "string",
+            enum: ["pdf17", "pdfx4"],
+            description:
+              "PDF only. Default: pdf17. PDF/X-4 needs an output intent.",
+          },
+          output_intent: {
+            type: "string",
+            description:
+              "PDF only: the output-intent profile's name. Default: the document's working CMYK space.",
+          },
+          marks: {
+            type: "boolean",
+            description:
+              "PDF only: crop and registration marks, colour bars and page info, outside the bleed.",
+          },
+        },
+        ["format"],
+      ),
       readOnly: false,
       view: false,
     },

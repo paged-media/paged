@@ -19,7 +19,9 @@
 //! `paged mcp`: the paged MCP tools over stdio, for Claude Desktop and Claude
 //! Code, with nothing deployed. Store tools work on the disk library
 //! (`paged library`); engine tools run the engine here, natively, through the
-//! same session door `paged session` uses.
+//! same session door `paged session` uses. Two tools are the local hosts'
+//! own: `create_document` starts a document in the library, and
+//! `export_document` writes the open one to a PDF, IDML or .paged file.
 //!
 //! Writes are an agent's, as on paged.server: `agent:local` acting for
 //! `user:local`, on `agent/<run>/…` branches, with provenance; the local
@@ -396,11 +398,83 @@ impl LocalHost {
                     Ok(Outcome::json(json!({ "ref": branch, "at": at.to_hex(),
                         "next": "On your branch; propose_change asks for it to reach main." })))
                 }
+                "create_document" => {
+                    let name = args["name"].as_str().unwrap_or("");
+                    if !valid_name(name) {
+                        anyhow::bail!("a document name is lowercase letters, digits and '-'");
+                    }
+                    if self.lib.exists(name) {
+                        anyhow::bail!("a document named `{name}` exists: open_document opens it");
+                    }
+                    let size = |k: &str| args[k].as_f64().filter(|v| v.is_finite() && *v > 0.0);
+                    let (Some(width), Some(height)) = (size("width"), size("height")) else {
+                        anyhow::bail!("width and height are page sizes in points, above 0");
+                    };
+                    // The engine now holds the blank page, whatever was open before.
+                    *self.opened.borrow_mut() = None;
+                    engine
+                        .request(json!({ "cmd": "new-blank", "width": width, "height": height }))?;
+                    let path = self.file("paged");
+                    engine.request(json!({ "cmd": "export", "format": "paged", "out": path }))?;
+                    let head =
+                        self.lib
+                            .import(name, &std::fs::read(&path)?, &format!("{name}.paged"))?;
+                    let version = Hash::from_hex(&head)
+                        .ok_or_else(|| anyhow::anyhow!("bad version {head}"))?;
+                    *self.opened.borrow_mut() = Some(Opened {
+                        document: name.to_string(),
+                        version,
+                        branch: None,
+                    });
+                    Ok(Outcome::json(
+                        json!({ "document": name, "version": head, "pages": 1,
+                        "next": "It is open: build it with run_script, keep it with save_document." }),
+                    ))
+                }
+                "export_document" => {
+                    let opened = self.opened.borrow();
+                    let o = opened
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("open a document first"))?;
+                    let format = args["format"].as_str().unwrap_or("");
+                    if !["pdf", "idml", "paged"].contains(&format) {
+                        anyhow::bail!("format is pdf, idml or paged");
+                    }
+                    let file = args["file"].as_str().unwrap_or(&o.document);
+                    if !valid_name(file) {
+                        anyhow::bail!("a file name is lowercase letters, digits and '-'");
+                    }
+                    let dir = self.lib.root().join("exports");
+                    std::fs::create_dir_all(&dir)?;
+                    let out = dir.join(format!("{file}.{format}"));
+                    let options = (format == "pdf").then(|| pdf_options(args));
+                    let r = engine.request(
+                        json!({ "cmd": "export", "format": format, "out": out, "options": options }),
+                    )?;
+                    Ok(Outcome::json(
+                        json!({ "path": out, "url": format!("file://{}", out.display()),
+                        "format": format, "bytes": r["bytes"] }),
+                    ))
+                }
                 other => anyhow::bail!("no tool {other}"),
             }
         })();
         out.unwrap_or_else(fail)
     }
+}
+
+/// The `export_document` arguments as the engine's PDF options; `marks`
+/// is the full set `paged export --marks` writes.
+fn pdf_options(args: &Value) -> Value {
+    let marks = args["marks"] == true;
+    let mut o = json!({
+        "standard": args["standard"].as_str().unwrap_or("pdf17"),
+        "cropMarks": marks, "registrationMarks": marks, "colorBars": marks, "pageInfo": marks,
+    });
+    if let Some(p) = args["output_intent"].as_str() {
+        o["outputIntentProfile"] = json!(p);
+    }
+    o
 }
 
 impl Host for LocalHost {
@@ -409,14 +483,14 @@ impl Host for LocalHost {
     }
 
     fn tools(&self) -> Vec<tools::Tool> {
-        tools::select(&[tools::STORE, tools::REFERENCE, tools::ENGINE])
+        tools::select(&[tools::STORE, tools::REFERENCE, tools::ENGINE, tools::LOCAL])
     }
 
     async fn call(&self, tool: &str, args: Value) -> Outcome {
         if tool == "lookup_api" {
             return Outcome::json(paged_mcp::lookup(args["query"].as_str().unwrap_or(""), 12));
         }
-        if tools::ENGINE.contains(&tool) {
+        if tools::ENGINE.contains(&tool) || tools::LOCAL.contains(&tool) {
             return self.engine_tool(tool, &args);
         }
         self.store_tool(tool, &args)

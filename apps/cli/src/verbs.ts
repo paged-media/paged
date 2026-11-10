@@ -1764,7 +1764,7 @@ const mcp: Verb = {
   name: "mcp",
   usage: "",
   summary:
-    "serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document)",
+    "serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document, create_document, export_document)",
   min: 0,
   max: 0,
   options: [
