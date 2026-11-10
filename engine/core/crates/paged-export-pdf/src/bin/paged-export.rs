@@ -86,6 +86,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut opts = PipelineOptions {
         collect_glyph_runs: true,
+        omit_nonprinting: true,
         ..Default::default()
     };
     opts.font = font.as_deref();

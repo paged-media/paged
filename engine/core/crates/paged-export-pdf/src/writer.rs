@@ -74,6 +74,9 @@ pub struct FinishedPage {
     /// ADR 182 — the page's marked content by MCID: the paragraph each
     /// marked text object belongs to. Empty unless the export is tagged.
     pub mcids: Vec<paged_compose::StructKey>,
+    /// Engine ADR 1094 — the page's `/UserUnit` (1.0 for a page within
+    /// PDF's 14,400-unit limit). The boxes above are already in it.
+    pub user_unit: f32,
 }
 
 /// W1.4 — one resolved Link annotation, in PDF y-up media coords.
@@ -291,6 +294,9 @@ impl DocState {
             p.trim_box(page.trim_box);
             p.bleed_box(page.bleed_box);
             p.crop_box(page.media_box);
+            if page.user_unit != 1.0 {
+                p.user_unit(page.user_unit);
+            }
             p.contents(page.content_ref);
             p.pair(Name(b"Resources"), page.resources_ref);
             if structure.is_some() {

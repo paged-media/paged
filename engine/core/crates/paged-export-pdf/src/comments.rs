@@ -113,8 +113,9 @@ pub(crate) fn write_comments(
             continue;
         };
         // The page's own coordinate space starts at the trim box's top-left.
-        let left = page.trim_box.x1 + c.at[0];
-        let top = page.trim_box.y2 - c.at[1];
+        // (In the page's user unit, engine ADR 1094.)
+        let left = page.trim_box.x1 + c.at[0] / page.user_unit;
+        let top = page.trim_box.y2 - c.at[1] / page.user_unit;
         let rect = Rect::new(left, top - SIZE, left + SIZE, top);
         let root = refs.alloc();
         let annots = &mut annots_per_page[page_idx];

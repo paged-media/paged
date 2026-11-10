@@ -29,4 +29,5 @@ mod symbols;
 mod tagged_styles;
 mod tagged_tables;
 mod transparency_groups;
+mod user_unit;
 mod vector_effects;

@@ -14413,6 +14413,7 @@ impl CanvasModel {
                 cmyk_bpc: self.color_settings.bpc,
                 collect_glyph_runs: true,
                 render_scale: 1.0,
+                omit_nonprinting: true,
                 ..base
             },
         }

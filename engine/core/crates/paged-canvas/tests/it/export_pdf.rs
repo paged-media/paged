@@ -30,6 +30,11 @@ use paged_canvas::export::CanvasExportSession;
 use paged_canvas::{CanvasModel, CanvasOptions, ColorProfileEntry};
 
 fn small_idml() -> Vec<u8> {
+    small_idml_with(false)
+}
+
+/// The fixture; `r2_nonprinting` marks the spot-orange rectangle non-printing.
+fn small_idml_with(r2_nonprinting: bool) -> Vec<u8> {
     let mut buf = Vec::new();
     {
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
@@ -67,13 +72,22 @@ fn small_idml() -> Vec<u8> {
         .unwrap();
         zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
         zip.write_all(
-            br#"<?xml version="1.0" encoding="UTF-8"?>
+            String::from_utf8_lossy(br#"<?xml version="1.0" encoding="UTF-8"?>
 <idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
 <Spread Self="s1" PageCount="1">
 <Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
 <Rectangle Self="r1" FillColor="Color/cyan" StrokeColor="Swatch/None" StrokeWeight="0" ItemTransform="1 0 0 1 50 50" Visible="true"><Properties><PathGeometry><GeometryPathType PathOpen="false"><PathPointArray><PathPointType Anchor="0 0" LeftDirection="0 0" RightDirection="0 0"/><PathPointType Anchor="0 150" LeftDirection="0 150" RightDirection="0 150"/><PathPointType Anchor="150 150" LeftDirection="150 150" RightDirection="150 150"/><PathPointType Anchor="150 0" LeftDirection="150 0" RightDirection="150 0"/></PathPointArray></GeometryPathType></PathGeometry></Properties></Rectangle>
 <Rectangle Self="r2" FillColor="Color/spotorange" StrokeColor="Swatch/None" StrokeWeight="0" ItemTransform="1 0 0 1 50 250" Visible="true"><Properties><PathGeometry><GeometryPathType PathOpen="false"><PathPointArray><PathPointType Anchor="0 0" LeftDirection="0 0" RightDirection="0 0"/><PathPointType Anchor="0 150" LeftDirection="0 150" RightDirection="0 150"/><PathPointType Anchor="150 150" LeftDirection="150 150" RightDirection="150 150"/><PathPointType Anchor="150 0" LeftDirection="150 0" RightDirection="150 0"/></PathPointArray></GeometryPathType></PathGeometry></Properties></Rectangle>
-</Spread></idPkg:Spread>"#,
+</Spread></idPkg:Spread>"#)
+                .replace(
+                    r#"Self="r2" FillColor="Color/spotorange""#,
+                    if r2_nonprinting {
+                        r#"Self="r2" FillColor="Color/spotorange" Nonprinting="true""#
+                    } else {
+                        r#"Self="r2" FillColor="Color/spotorange""#
+                    },
+                )
+                .as_bytes(),
         )
         .unwrap();
         zip.start_file("Spreads/Spread_s2.xml", opts).unwrap();
@@ -282,4 +296,32 @@ fn text_in_a_registered_face_is_embedded_not_outlined() {
         "no embedded font program: the text was exported as outlines"
     );
     assert!(has(b"/ToUnicode"), "an embedded font must map back to text");
+}
+
+/// Engine ADR 1095 — a page item marked non-printing stays on the canvas
+/// and is left out of the export build (and so out of the PDF), as
+/// InDesign leaves it out of PDF export.
+#[test]
+fn nonprinting_items_are_left_out_of_the_export() {
+    let plain = small_idml();
+    let marked = small_idml_with(true);
+    let commands = |bytes: &[u8]| {
+        let model = CanvasModel::load("doc1", bytes, CanvasOptions::default()).expect("load");
+        let live = model.built().pages[0].list.commands.len();
+        let export = model.build_for_export().expect("export build").pages[0]
+            .list
+            .commands
+            .len();
+        (live, export)
+    };
+    let (plain_live, plain_export) = commands(&plain);
+    let (marked_live, marked_export) = commands(&marked);
+    assert_eq!(
+        marked_live, plain_live,
+        "the canvas still shows a non-printing item"
+    );
+    assert!(
+        marked_export < plain_export,
+        "the export build leaves it out ({marked_export} vs {plain_export} commands)"
+    );
 }

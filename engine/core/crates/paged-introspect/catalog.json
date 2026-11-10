@@ -481,7 +481,7 @@
       "params": "(pageId, anchors, open, smooth?)",
       "returns": "string | null",
       "kind": "author",
-      "summary": "Insert an arbitrary path; anchors = [{anchor:[x,y],left:[x,y],right:[x,y]}, …]."
+      "summary": "Insert an arbitrary path; anchors = [[x,y] | {anchor:[x,y],left?:[x,y],right?:[x,y]}, …] (a missing handle sits on its anchor)."
     },
     {
       "name": "paged.pathPointInsert",
