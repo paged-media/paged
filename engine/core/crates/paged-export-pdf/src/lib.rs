@@ -484,6 +484,23 @@ pub struct ExportResult {
 }
 
 /// One-shot export over every page in range.
+/// PDF's largest page side in default user space units (ISO 32000-1
+/// Annex C: 14,400 units, 200 in).
+pub const MAX_PAGE_UNITS: f32 = 14_400.0;
+
+/// Engine ADR 1094 — the `/UserUnit` a page of `media_w × media_h` pt is
+/// written in: 1 while both sides fit [`MAX_PAGE_UNITS`], otherwise the
+/// smallest whole number that brings the longer side within it (whole
+/// numbers keep the page's numbers exact for RIPs that read them).
+pub fn user_unit_for(media_w: f32, media_h: f32) -> f32 {
+    let longest = media_w.max(media_h);
+    if !longest.is_finite() || longest <= MAX_PAGE_UNITS {
+        1.0
+    } else {
+        (longest / MAX_PAGE_UNITS).ceil()
+    }
+}
+
 pub fn export_pdf(input: ExportInput<'_>) -> Result<ExportResult, ExportError> {
     let mut session = ExportSession::begin(&input)?;
     while session.pages_remaining() > 0 {
@@ -659,6 +676,25 @@ pub(crate) fn paint_is_cmyk(paint: &Paint) -> bool {
 #[allow(unused)]
 pub(crate) fn glyph_table_of(list: &paged_compose::DisplayList) -> Option<&GlyphRunTable> {
     list.glyph_runs.as_ref()
+}
+
+#[cfg(test)]
+mod user_unit_tests {
+    use super::user_unit_for;
+
+    #[test]
+    fn pages_within_the_limit_keep_unit_one() {
+        assert_eq!(user_unit_for(595.0, 842.0), 1.0);
+        assert_eq!(user_unit_for(14_400.0, 100.0), 1.0);
+    }
+
+    #[test]
+    fn longer_pages_take_the_smallest_whole_unit() {
+        // 787 cm and 898 cm are 22,309 pt and 25,455 pt.
+        assert_eq!(user_unit_for(22_309.0, 5_783.0), 2.0);
+        assert_eq!(user_unit_for(425.0, 25_455.0), 2.0);
+        assert_eq!(user_unit_for(43_201.0, 10.0), 4.0);
+    }
 }
 
 #[cfg(test)]

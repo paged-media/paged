@@ -83,6 +83,28 @@ pub fn export_page(
     );
     let media_box = pdf_writer::Rect::new(0.0, 0.0, media_w, media_h);
 
+    // Engine ADR 1094 — a page side over PDF's 14,400-unit limit (200 in,
+    // 508 cm: fence banners, wall murals) is written in a larger user unit.
+    // The boxes are divided by it and the page's base CTM scales the content
+    // down by it, so every shading and tiling pattern (whose matrix maps to
+    // the page's default space through the base CTM) and every form stays
+    // right; marks and annotations are scaled the same way.
+    let user_unit = crate::user_unit_for(media_w, media_h);
+    let inv_unit = 1.0 / user_unit;
+    let scale_rect = |r: pdf_writer::Rect| {
+        pdf_writer::Rect::new(
+            r.x1 * inv_unit,
+            r.y1 * inv_unit,
+            r.x2 * inv_unit,
+            r.y2 * inv_unit,
+        )
+    };
+    let (media_box, trim_box, bleed_box) = (
+        scale_rect(media_box),
+        scale_rect(trim_box),
+        scale_rect(bleed_box),
+    );
+
     // The media box mapped into the content's y-down local space —
     // the universal /BBox for transparency-group forms (their content
     // draws under the live page CTM).
@@ -124,7 +146,14 @@ pub fn export_page(
         pending_forms: Vec::new(),
         content_bbox,
         diagnostics,
-        base_ctm: [1.0, 0.0, 0.0, -1.0, off_left, off_bottom + trim_h],
+        base_ctm: [
+            inv_unit,
+            0.0,
+            0.0,
+            -inv_unit,
+            off_left * inv_unit,
+            (off_bottom + trim_h) * inv_unit,
+        ],
         mcids: Vec::new(),
         form_depth: 0,
         blend_bakes: None,
@@ -151,8 +180,13 @@ pub fn export_page(
         ..
     } = walker;
 
-    // Marks live OUTSIDE the flipped content space (media coords).
+    // Marks live OUTSIDE the flipped content space (media coords, scaled
+    // into the user unit like the content).
     if marks_on {
+        if user_unit != 1.0 {
+            content.save_state();
+            content.transform([inv_unit, 0.0, 0.0, inv_unit, 0.0, 0.0]);
+        }
         let geo = crate::marks::MarkGeometry {
             media_w,
             media_h,
@@ -171,6 +205,9 @@ pub fn export_page(
             &geo,
             &input.options.marks,
         );
+        if user_unit != 1.0 {
+            content.restore_state();
+        }
     }
 
     // Captured transparency groups / luminosity masks, written once
@@ -208,7 +245,7 @@ pub fn export_page(
             let y_top = off_bottom + trim_h - r.y;
             let y_bottom = off_bottom + trim_h - r.y - r.h;
             link_annots.push(crate::writer::LinkAnnot {
-                rect: pdf_writer::Rect::new(x0, y_bottom, x1, y_top),
+                rect: scale_rect(pdf_writer::Rect::new(x0, y_bottom, x1, y_top)),
                 target,
             });
         }
@@ -225,6 +262,7 @@ pub fn export_page(
         resources_ref,
         link_annots,
         mcids,
+        user_unit,
     });
     Ok(())
 }
