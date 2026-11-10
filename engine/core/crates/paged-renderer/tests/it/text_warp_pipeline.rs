@@ -62,14 +62,7 @@ fn turned_document(warp: Option<&str>, deg: f32) -> paged_scene::Document {
                         cx - cs * cx + sn * cy,
                         cy - sn * cx - cs * cy,
                     ];
-                    f.item_transform = Some([
-                        r[0] * m[0] + r[2] * m[1],
-                        r[1] * m[0] + r[3] * m[1],
-                        r[0] * m[2] + r[2] * m[3],
-                        r[1] * m[2] + r[3] * m[3],
-                        r[0] * m[4] + r[2] * m[5] + r[4],
-                        r[1] * m[4] + r[3] * m[5] + r[5],
-                    ]);
+                    f.item_transform = Some(paged_geom::affine::multiply(r, m));
                 }
             }
         }
