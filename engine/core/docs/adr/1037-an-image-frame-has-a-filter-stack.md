@@ -169,7 +169,7 @@ replaces the pixels within `tolerance` of `from` by `to`, their alpha multiplied
 Office's `a:clrChange` (PowerPoint's "Set Transparent Color" is `alpha` 0). Its twin is
 `paged_kernels::cpu::color_replace`, which has no WGSL kernel yet (the filter stack evaluates on
 the CPU). Both are additive on the wire (an older engine refuses an op it does not know, as it
-refuses an unknown path); plugin-sdk 0.74.3-canary.85.
+refuses an unknown path); plugin-sdk 0.74.3-canary.86.
 
 **An anchored picture carries the stack.** `AnchoredFrame::image_adjustments` is a free
 frame's `image_adjustments` on the picture of an anchored frame (paged.doc's pictures, doc ADR
