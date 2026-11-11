@@ -159,9 +159,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.selectRepeatInstances",
       "media.paged.draw.command.expandRepeat",
       "media.paged.draw.command.releaseRepeat",
-      // B-24 — the group bake + its inverse.
-      "media.paged.draw.command.bakeAppearance",
-      "media.paged.draw.command.releaseAppearance",
       // Illustrator Phase 2 — graphic styles (the named, LINKED complete
       // appearance; library = a `.paged` container part).
       "media.paged.draw.command.saveGraphicStyle",

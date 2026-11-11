@@ -21,7 +21,7 @@
 
 //! The Excel oracle's ENTRY lane (ruling `sheet.edit.typed-entry`).
 //!
-//! `oracle/excel/drive.sh --entry <locale>` typed every raw text of
+//! `tooling/oracle/office/excel/drive.sh --entry <locale>` typed every raw text of
 //! `entry_cases.py` into a cell of real Excel and read back the stored value,
 //! its type, the cell's number format and the quote prefix
 //! (`recorded/entry.tsv` en-US, `entry-{de,fr,es,it}.tsv` under those

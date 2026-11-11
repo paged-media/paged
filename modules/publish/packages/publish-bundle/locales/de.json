@@ -6,6 +6,7 @@
   "publish.commands.exportIdml": "IDML exportieren",
   "publish.commands.exportPdf": "PDF exportieren",
   "publish.commands.hostCannotOpen": "diese Umgebung kann kein Dokument öffnen",
+  "publish.commands.hostCannotExportPdf": "diese Umgebung kann kein PDF exportieren",
   "publish.commands.hostDeclined": "die Umgebung hat das Öffnen von {name} abgelehnt",
   "publish.commands.marksOffsetRange": "Der Versatz der Druckmarken liegt zwischen 0 und 72 pt",
   "publish.commands.openIdml": "IDML öffnen",

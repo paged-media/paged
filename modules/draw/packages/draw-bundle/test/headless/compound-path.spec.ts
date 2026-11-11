@@ -144,35 +144,13 @@ async function readProp(
 }
 
 // ------------------------------------------------------- export helper
-// Rides `host.editor.client` — the MARKED escape hatch (DESIGN.md §4.9):
-// a conformance spec may reach an engine query the plugin contract does
-// not expose (export); the bundle's own source never does.
-
-interface PdfClient {
-  send(m: { kind: string; payload: unknown }): Promise<{
-    kind: string;
-    payload: Record<string, unknown>;
-  }>;
-}
+// The headless host's PDF export (`exportDocument("pdf")`, the loop the
+// documents door runs).
 
 /** The page-1 PDF content stream, inflated. */
 async function pdfContentStream(h: HeadlessHost): Promise<string> {
-  const client = (h.host as unknown as { editor: { client: PdfClient } }).editor
-    .client;
-  const begun = await client.send({
-    kind: "exportPdfBegin",
-    payload: { options: {} },
-  });
-  const session = begun.payload.session as number;
-  const pages = begun.payload.pageCount as number;
-  for (let i = 0; i < pages; i++) {
-    await client.send({ kind: "exportPdfPage", payload: { session } });
-  }
-  const fin = await client.send({
-    kind: "exportPdfFinish",
-    payload: { session },
-  });
-  const bytes = new Uint8Array(fin.payload.pdfBytes as number[]);
+  // The host's PDF export door (`exportPdfSession`, the one loop).
+  const { bytes } = await h.exportDocument("pdf");
   const text = new TextDecoder("latin1").decode(bytes);
   const length = Number(/\/Length (\d+)/.exec(text)![1]);
   const start = text.indexOf("stream\n") + "stream\n".length;

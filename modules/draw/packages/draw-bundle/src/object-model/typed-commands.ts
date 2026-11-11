@@ -74,7 +74,8 @@ import { TRACE_PRESET_IDS } from "../commands/trace-presets";
 import { RECOLOR_MODES } from "../commands/recolor";
 import { GENERATIVE_ROUTES } from "../commands/generative";
 import { WARP_STYLES } from "../commands/envelope";
-import { HARMONY_RULES, LIQUIFY_KINDS } from "@paged-media/vector-geometry";
+import { HARMONY_RULES } from "@paged-media/vector-geometry";
+import { LIQUIFY_KINDS } from "@paged-media/vector-tools";
 import {
   BOOL,
   COLOR,
@@ -249,8 +250,6 @@ export const TWINS: readonly TwinSpec[] = [
   ].map(sel),
   // Compound paths (Pathfinder is the host's).
   ...["makeCompoundPath", "releaseCompoundPath"].map(sel),
-  // Appearance.
-  ...["bakeAppearance", "releaseAppearance"].map(sel),
   // Graphic styles.
   twin("saveGraphicStyle", { ...T, name: TEXT }),
   recipeVerb("applyGraphicStyle", "style", "graphicStyle", "styleId", T),

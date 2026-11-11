@@ -5,14 +5,15 @@ as a committed fixture. CI never needs the application: the tests read the recor
 runner is **windowless and scripted** (AppleScript / ExtendScript / `osascript`, headless export).
 Nothing here is driven interactively, and a runner that needs a click is a bug.
 
-| Directory             | Oracle               | Runner                                                 | Records into                                         |
-| --------------------- | -------------------- | ------------------------------------------------------ | ---------------------------------------------------- |
-| `indesign/`           | Adobe InDesign       | `*-probe.sh`, `lane.sh`, `run-export.sh`               | `engine/core` fixtures and corpus                    |
-| `indesign/roundtrip/` | Adobe InDesign       | `run-roundtrip.sh`                                     | `modules/draw` roundtrip fixtures                    |
-| `illustrator/`        | Adobe Illustrator    | `run-probe.sh`, `run-clipboard-probe.sh`               | `*.illustrator.json` beside the tests                |
-| `photoshop/`          | Adobe Photoshop      | `run-probe.sh`                                         | `modules/image/image-conformance/fixtures/photoshop` |
-| `office/word/`        | Microsoft Word       | `word-*-probe.sh`, `real-docx-acceptance.sh`           | `modules/doc` conformance fixtures                   |
-| `office/powerpoint/`  | Microsoft PowerPoint | `ppt-*-probe.*`, `ppt-author-fixtures.sh`, `fixtures/` | `modules/slide/slide-conformance/fixtures`           |
+| Directory             | Oracle               | Runner                                                  | Records into                                         |
+| --------------------- | -------------------- | ------------------------------------------------------- | ---------------------------------------------------- |
+| `indesign/`           | Adobe InDesign       | `*-probe.sh`, `lane.sh`, `run-export.sh`                | `engine/core` fixtures and corpus                    |
+| `indesign/roundtrip/` | Adobe InDesign       | `run-roundtrip.sh`                                      | `modules/draw` roundtrip fixtures                    |
+| `illustrator/`        | Adobe Illustrator    | `run-probe.sh`, `run-clipboard-probe.sh`                | `*.illustrator.json` beside the tests                |
+| `photoshop/`          | Adobe Photoshop      | `run-probe.sh`                                          | `modules/image/image-conformance/fixtures/photoshop` |
+| `office/word/`        | Microsoft Word       | `word-*-probe.sh`, `real-docx-acceptance.sh`            | `modules/doc` conformance fixtures                   |
+| `office/powerpoint/`  | Microsoft PowerPoint | `ppt-*-probe.*`, `ppt-author-fixtures.sh`, `fixtures/`  | `modules/slide/slide-conformance/fixtures`           |
+| `office/excel/`       | Microsoft Excel      | `drive.sh` with `generate.py` / `read.py` and the lanes | `modules/sheet/sheet-conformance/oracle/excel`       |
 
 Each directory keeps its own README (where it has one) with the probe-specific traps.
 

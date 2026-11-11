@@ -27,7 +27,7 @@
 //            rests (the host's timer): Twirl keeps turning, Pucker keeps
 //            pulling. Warp has no motion to apply and ignores it
 //   up     → COMMIT: every target the drag changed, re-fitted
-//            (vector-geometry `liquifyRefit` at the Simplify tolerance) —
+//            (`liquifyRefit` at the Simplify tolerance) —
 //            the host writes them as ONE batch, so one drag is one undo
 //            step. A drag that changed nothing commits nothing
 //   Escape → cancel; nothing is written
@@ -37,20 +37,23 @@
 // (an affine map is exact on Béziers). The snapshot carries the DENSE
 // preview (no refit per sample — the fit runs once, on release) and the
 // brush, so the overlay can draw both.
+//
+// Each step is the engine's `paged-warp` Liquify, through the injected
+// `WarpKernel` (`warp-kernel.ts`; paged.draw passes its wasm).
+
+import type { AnchorTable, Vec2 } from "@paged-media/vector-geometry";
 
 import {
   liquifyChanged,
   liquifyRefit,
   liquifyStart,
-  liquifyStep,
   simplifyTolerance,
-  type AnchorTable,
   type LiquifyBrush,
   type LiquifyKind,
   type LiquifyParams,
   type LiquifyState,
-  type Vec2,
-} from "@paged-media/vector-geometry";
+  type WarpKernel,
+} from "./warp-kernel";
 
 export type LiquifyEvent =
   | { type: "down"; point: Vec2; pressure?: number; pen?: boolean }
@@ -116,6 +119,8 @@ export interface LiquifyOptions {
   options: LiquifyToolOptions;
   /** The tables the brush may distort, page space. */
   targets: readonly AnchorTable[];
+  /** The warp kernel (paged-warp). */
+  kernel: WarpKernel;
 }
 
 export interface LiquifySnapshot {
@@ -176,7 +181,7 @@ export class LiquifyMachine {
       return;
     const p = this.params(delta);
     this.states = this.states.map((s) =>
-      liquifyStep(s, this.brush!, p, this.opts.options.detail),
+      this.opts.kernel.liquifyStep(s, this.brush!, p, this.opts.options.detail),
     );
   }
 

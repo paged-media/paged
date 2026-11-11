@@ -65,3 +65,29 @@ needs an engine construct: every one of them ends in new path geometry.
 - Grid edits do not undo and, with no container writer, last for the session only.
 - When `paged-warp` lands, `src/warp/` is its specification: the specs in
   `packages/draw-geometry/test/warp/` are the cross-implementation fixtures.
+
+## Amendment 2026-11-11 — the kernels are `paged-warp`'s
+
+Status: Accepted, amended (consolidation pass 2: one implementation per capability). Puppet
+Warp's mesh and Liquify's step moved into the engine crate `paged-warp`, and the TypeScript
+kernels (`vector-geometry/src/warp/{liquify,triangulate,arap}.ts`) are deleted:
+
+- **One ARAP solve.** The vector Puppet Warp bends its outline mesh with `puppet::solve_with`,
+  the Sorkine–Alexa local/global solve that bends paged.image's layers (image ADR 483), in Rigid
+  mode, started from the pins' best similarity and run 32 rounds with a direct banded solve (`VECTOR_SOLVE`; the raster
+  keeps its harmonic start and 12 rounds, bit for bit). Igarashi's two-step solve is gone, so the
+  bend of a dragged pin differs slightly from before (hard pins rather than soft constraints of
+  weight 10⁴); a turned pin still holds its farthest one-ring neighbour (`vertex_pins`). Each
+  drag sample solves the whole pin set (no factorisation is kept).
+- **The mesh and Liquify are ports.** `mesh::triangulate_rings` (resampling, the staggered
+  lattice, Bowyer–Watson on jittered predicates, Sloan's flips, even-odd interior), `locate`,
+  `auto_pins`, and `liquify::step` (densify, the four point maps, the three detail kernels with
+  the same hash and ids) reproduce the TypeScript output (meshes identical, coordinates within
+  1e-13 pt); a crystallize is pinned in the crate's tests. The point maps (drag, turn, scale
+  about a centre) are `point_map`, shared with the raster Liquify tools.
+- **The boundary is the draw wasm.** `crates/trace-js` exports `puppetMesh`, `puppetLocate`,
+  `puppetSolve` and `liquifyStep` over flat `Float64Array`s; `draw-bundle/src/warp-kernel.ts`
+  wraps them as vector-tools' `WarpKernel`, which `LiquifyMachine` and `PuppetWarpMachine` take
+  as an option. The end-of-drag refit (`liquifyRefit`) is curve fitting and stays TypeScript,
+  in vector-tools, on vector-geometry's Simplify. The machine specs boot the wasm
+  (`draw-bundle/test/warp-machines.spec.ts`).

@@ -550,34 +550,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
     expect(out.after, "the selection holds no pattern field").toBe(out.before);
   });
 
-  test("Draw/Appearance/Bake — runs bakeAppearance; the rectangles carry no appearance stack, so it changes nothing", async () => {
-    covers("menu:Draw/Appearance/Bake");
-    await expectGreyedAndInert(bare, "Draw/Appearance/Bake");
-    const out = await clickEntry(
-      live,
-      "Draw/Appearance/Bake",
-      "media.paged.draw.command.bakeAppearance",
-    );
-    expect(out.shell).toEqual([]);
-    expect(out.after, "the rectangles carry no appearance stack").toBe(
-      out.before,
-    );
-  });
-
-  test("Draw/Appearance/Release — runs releaseAppearance; the rectangles carry no appearance stack, so it changes nothing", async () => {
-    covers("menu:Draw/Appearance/Release");
-    await expectGreyedAndInert(bare, "Draw/Appearance/Release");
-    const out = await clickEntry(
-      live,
-      "Draw/Appearance/Release",
-      "media.paged.draw.command.releaseAppearance",
-    );
-    expect(out.shell).toEqual([]);
-    expect(out.after, "the rectangles carry no appearance stack").toBe(
-      out.before,
-    );
-  });
-
   test("Draw/Graphic style/Save from selection — saves the selection's look as a graphic style", async () => {
     covers("menu:Draw/Graphic style/Save from selection");
     await expectGreyedAndInert(bare, "Draw/Graphic style/Save from selection");

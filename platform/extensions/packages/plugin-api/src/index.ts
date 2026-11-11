@@ -213,6 +213,8 @@ export type {
   DocumentsSurface,
   OpenDocumentOptions,
   OpenDocumentResult,
+  PdfExportHooks,
+  PdfExportResult,
   NetworkSurface,
   ConsentResult,
   DataProvidersSurface,
@@ -404,6 +406,8 @@ export type SvgNoteSeverity = LossSeverity;
 // One element a mutation minted (`MutationOutcome.minted`): the element,
 // the `bindCreated` handle that named it, and the story minted with it.
 export type { MintedElement } from "./wire.js";
+// `host.documents.exportPdf`'s options and its structured findings.
+export type { ExportPdfWireOptions, PreflightFinding } from "./wire.js";
 export type { CommentSummary } from "./wire.js";
 
 export type {

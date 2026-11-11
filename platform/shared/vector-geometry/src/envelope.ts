@@ -80,7 +80,9 @@ export function isNet(
 }
 
 /** The engine's map: `(u, v)` of the box's unit square to where the
- *  envelope sends it, in the unit square. */
+ *  envelope sends it, in the unit square. The preview twin of
+ *  `paged_vector_fx::envelope::envelope_point`, held to its numbers by
+ *  `test/vector-fx-parity.spec.ts`. */
 export function envelopePoint(
   net: readonly Vec2[],
   rows: number,

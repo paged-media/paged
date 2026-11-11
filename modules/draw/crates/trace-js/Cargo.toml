@@ -6,7 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.draw wasm-bindgen surface (image trace, DXF interchange, SVG recolour) — the artifact the bundle declares under capabilities.wasm[] and loads in the bundle realm."
+description = "paged.draw wasm-bindgen surface (image trace, DXF interchange, SVG recolour, vector Puppet Warp and Liquify) — the artifact the bundle declares under capabilities.wasm[] and loads in the bundle realm."
 
 [lib]
 name = "trace_js"
@@ -20,6 +20,9 @@ draw-trace = { path = "../draw-trace" }
 # DXF interchange and the SVG paint reader (draw ADR 364).
 draw-dxf = { path = "../draw-dxf" }
 paged-svg = { workspace = true }
+# Puppet Warp and Liquify for the vector tools (one implementation with the
+# raster warps).
+paged-warp = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

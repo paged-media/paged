@@ -60,7 +60,10 @@ engine ADR 199), still identical: InDesign reads the full-precision
 handles; and on 2026-10-25 `pathfinder-exclude`, whose IDML the engine's
 face-walk booleans (engine ADR 1019) export with the circle's crossings
 computed on the arrangement (x 200.00066 for 200, handles a few thousandths
-of a point apart), still identical. Each
+of a point apart), still identical. On 2026-11-11 the `appearance-bake` case
+left the lane with the group bake itself (draw ADR 354 amendment): its IDML
+stays as `test/fixtures/legacy/appearance-bake.idml`, the older document
+the appearance migration is tested on. Each
 recording's `produced_by` is the authority: app, version, locale, the
 reader's sha256 and the IDML's sha256 — the replay refuses a recording
 made by another reader or from another IDML.
@@ -81,7 +84,6 @@ made by another reader or from another IDML.
 | `gradient-radial`                                   | radial gradient fill                         | gradient and stops survive; CONVENTION: an unset length, which InDesign derives from the item                                     |
 | `opacity-blend`                                     | opacity 50 + Multiply via a Graphic Style    | identical                                                                                                                         |
 | `group`                                             | a group                                      | identical                                                                                                                         |
-| `appearance-bake`                                   | bake: a group of stacked items               | identical since 0.70.0 (Color/Paper declared)                                                                                     |
 | `repeat-expanded`, `blend-expanded`                 | expanded repeat / blend                      | identical (the blend's duplicate stroke swatches were fixed in draw and the case re-recorded)                                     |
 | `svg-import`                                        | SVG import                                   | identical                                                                                                                         |
 | `text-on-path`                                      | Type on a Path                               | identical since 0.71.1 (`EndBracket` exported; re-recorded 2026-10-11, and on 0.71.8 for the `TextAlignment` spelling 2026-10-13) |

@@ -80,6 +80,7 @@ import type {
 } from "./editor.js";
 import type { SceneLayer } from "./wire.js";
 import type { MediaItem, MediaKind, MediaSource } from "./wire.js";
+import type { ExportPdfWireOptions, PreflightFinding } from "./wire.js";
 
 import type { AssetSurface } from "./assets.js";
 import type {
@@ -3062,7 +3063,39 @@ export interface OpenDocumentOptions {
 export type OpenDocumentResult =
   { opened: true; pageIds: string[] } | { opened: false; reason: "declined" };
 
+/** What {@link DocumentsSurface.exportPdf} answers. */
+export interface PdfExportResult {
+  /** The PDF file. */
+  bytes: Uint8Array;
+  /** Pages written. */
+  pageCount: number;
+  /** The exporter's structured findings (code, severity, message, page). */
+  findings: PreflightFinding[];
+  /** The flat diagnostic lines (the findings as text, plus the exporter's
+   *  notes). */
+  diagnostics: string[];
+}
+
+/** Progress and cancellation for {@link DocumentsSurface.exportPdf}. */
+export interface PdfExportHooks {
+  /** Pages done of the total, after the start and after every page. */
+  onProgress?: (done: number, total: number) => void;
+  /** Checked at every page boundary; an abort rejects with an
+   *  `AbortError` and drops the engine's export session. */
+  signal?: AbortSignal;
+}
+
 export interface DocumentsSurface {
+  /** Export the ACTIVE document to PDF: the host's one export door over
+   *  the engine's session (begin, one page per call, finish; the session
+   *  is cancelled on a failure or an abort). `options` are the engine's
+   *  `ExportPdfWireOptions`. Gated on `capabilities.documents.export`.
+   *  Rejects with the engine's error, or when the host wired no export
+   *  (`supports("documents.exportPdf@1")` is false). */
+  exportPdf(
+    options: ExportPdfWireOptions,
+    hooks?: PdfExportHooks,
+  ): Promise<PdfExportResult>;
   /** Serialize the ACTIVE document to `.paged` bytes (the same container
    *  File > Save writes: the IDML entries plus the core model and every
    *  plugin's `paged/<id>/` parts). Feed the bytes to `open` to work on a

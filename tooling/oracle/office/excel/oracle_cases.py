@@ -21,7 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parents[2]  # oracle/excel -> oracle -> sheet-conformance -> repo
+# The runner lives in tooling/oracle/office/excel; what it reads and records
+# belongs to paged.sheet: the module (its corpus) and the recorded answers
+# beside the conformance tests that replay them.
+REPO = HERE.parents[3] / "modules" / "sheet"  # the sheet module root
+DATA = REPO / "sheet-conformance" / "oracle" / "excel"
 FN_CORPUS = REPO / "corpus" / "fn-corpus"
 
 # `coerce/` is a 3-column unit-fixture schema, not formula cases.
@@ -324,7 +328,7 @@ LOCALE_PROBE_EXPECTED = "TRUE|1.5|1,234.50|R2C3"
 def rejected_keys() -> set[str]:
     """`file<TAB>id` of every case Excel refuses to enter (excel-rejects.tsv)."""
     out = set()
-    for line in (HERE / "excel-rejects.tsv").read_text(encoding="utf-8").splitlines():
+    for line in (DATA / "excel-rejects.tsv").read_text(encoding="utf-8").splitlines():
         if line.strip() and not line.startswith("#"):
             f, i = line.split("\t")[:2]
             out.add(f"{f}\t{i}")
@@ -345,7 +349,8 @@ def unrepresentable(case: Case) -> str | None:
 
 
 def oracle_dir() -> Path:
-    return HERE
+    """Where the recorded answers live (`recorded/`, the divergence lists)."""
+    return DATA
 
 
 def build_dir() -> Path:

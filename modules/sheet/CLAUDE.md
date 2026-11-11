@@ -225,7 +225,8 @@ bun run validate:manifest
 
 # Excel differential oracle — CI compares against the committed recordings:
 cargo test -p sheet-conformance --test it excel_oracle::
-# re-record (maintainer, macOS + Excel): sheet-conformance/oracle/excel/
+# re-record (maintainer, macOS + Excel): tooling/oracle/office/excel/ (the recordings
+# and divergence lists stay in sheet-conformance/oracle/excel/)
 #   python3 generate.py && ./drive.sh && python3 read.py
 # the calculation-model lane (spill shapes, @, 3D, LAMBDA, cycles, 15 digits):
 #   python3 calcmodel.py generate && ./drive.sh calcmodel && python3 calcmodel.py read
