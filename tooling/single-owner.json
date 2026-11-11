@@ -352,6 +352,18 @@
       "extensions": [".ts", ".tsx", ".mjs"],
       "patterns": ["kind: \"exportPdfPage\",", "send\\(\"exportPdfPage\""],
       "baseline": []
+    },
+    {
+      "name": "warp-kernels",
+      "description": "Puppet Warp's outline mesh and ARAP solve and the vector Liquify step are paged-warp's (mesh, puppet::solve_with, liquify, point_map); the vector tools reach them through draw's wasm as vector-tools' WarpKernel",
+      "owner": ["engine/core/crates/paged-warp/"],
+      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "patterns": [
+        "function (triangulateRings|liquifyStep|liquifyDensify|liquifyDisplace)\\s*\\(",
+        "class ArapSolver",
+        "fn (triangulate_rings|vertex_pins)\\s*\\("
+      ],
+      "baseline": []
     }
   ]
 }

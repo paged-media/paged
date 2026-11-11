@@ -27,10 +27,11 @@
 // live preview, the dwell timer and the pointer.
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
-import { LIQUIFY_KINDS, type LiquifyKind } from "@paged-media/vector-geometry";
 import {
   LIQUIFY_DEFAULTS,
+  LIQUIFY_KINDS,
   LiquifyMachine,
+  type LiquifyKind,
   type LiquifyToolOptions,
 } from "@paged-media/vector-tools";
 import { defineMessages } from "@paged-media/strings";
@@ -47,6 +48,7 @@ import {
   type Pt,
 } from "./distort-shared";
 import { resolveTargetPage } from "../target-page";
+import { bootWarpKernel } from "../warp-kernel";
 
 const M = defineMessages("draw.liquify", {
   stroke: "Liquify along a path",
@@ -75,6 +77,7 @@ export async function applyLiquifyStroke(
   const machine = new LiquifyMachine({
     options,
     targets: targets.map((t) => t.page),
+    kernel: await bootWarpKernel(),
   });
   machine.handle({ type: "down", point: path[0]! });
   for (const p of path.slice(1, -1)) machine.handle({ type: "move", point: p });

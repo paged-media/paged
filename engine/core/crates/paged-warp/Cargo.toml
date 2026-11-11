@@ -11,3 +11,7 @@ description = "Warp maths shared by the engine and the modules: the 3x3 homograp
 workspace = true
 
 [dependencies]
+
+[dev-dependencies]
+# The tests' circles take the one kappa.
+paged-geom = { path = "../paged-geom" }

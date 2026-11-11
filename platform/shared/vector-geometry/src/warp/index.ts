@@ -16,41 +16,26 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// THE WARP KERNELS — the vector half of the master plan's `paged-warp`
-// crate, written here first (zero-dependency TypeScript) so the draw
-// tools can ship before the crate exists. Every function is PURE over
-// points: plain `[x, y]` tuples and anchor tables in, new ones out, no
-// host types, no randomness (the "random" kernels hash a stable id and a
-// seed), no globals. That is the porting contract: each module below maps
-// one-for-one to a Rust module, with the same names in snake_case, and
-// the specs in `test/warp/` are the cross-implementation fixtures.
+// THE WARP KERNELS of the vector tools that stay in TypeScript: the
+// projective maps and the perspective grid. Every function is PURE over
+// points: plain `[x, y]` tuples and anchor tables in, new ones out.
 //
-//   liquify.ts           brush field + densify / step / refit
-//     liquifyStart(table) → state; liquifyStep(state, brush, params,
-//     detail) → state; liquifyRefit(state, tolerance) → table.
-//     liquifyDisplace(brush, params, p) is the point map of the four
-//     smooth kernels (the pixel half samples its inverse).
-//   triangulate.ts       constrained Delaunay mesh of outline rings
-//     triangulateRings(rings, { spacing, inside?, maxVertices? }) → mesh;
-//     locateInMesh(mesh, p) → { triangle, weights }.
-//   arap.ts              Igarashi 2005 two-step as-rigid-as-possible
-//     new ArapSolver(mesh, pins).solve(targets, angles?) → vertices;
-//     mapLocated(triangles, deformed, located) → point; autoPins(mesh).
+// Puppet Warp's mesh and solve and the Liquify brushes are the engine's
+// `paged-warp` crate (one implementation for vectors and pixels); the
+// vector tools reach them through the injected `WarpKernel` of
+// `@paged-media/vector-tools`.
+//
 //   homography.ts        3 × 3 projective maps
 //     homographyFromQuads(from, to); applyHomography(h, p);
 //     invertHomography(h); composeHomography(a, b);
 //     mapTableProjective(table, h, tolerance) — subdividing curves.
+//     Held to `paged_warp::from_quads` by a parity test.
 //   perspective-grid.ts  1/2/3-point grids, plane homographies, handles
 //     planeHomography(grid, plane); pageToPlane / planeToPage;
 //     attachToPlane / moveOnPlane / projectOntoPlane; gridHandles /
 //     moveGridHandle; planeGridLines / planeQuad.
 //
-// Units are page pt (y down) throughout; angles are radians in arap.ts
-// and degrees where they mirror an Illustrator option (the liquify
-// brush's angle, the twirl rate).
+// Units are page pt (y down) throughout.
 
-export * from "./liquify";
-export * from "./triangulate";
-export * from "./arap";
 export * from "./homography";
 export * from "./perspective-grid";
