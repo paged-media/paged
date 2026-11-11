@@ -30,7 +30,7 @@
 //
 // CONTRIBUTION COUNT (honesty note): the bundle registers TWENTY
 // tools (three anchor-editing + the pro set: Curvature,
-// Shape Builder, Corner Radius (the Gradient annotation and Measure are the host's) + the v0
+// Shape Builder (the Gradient annotation, Measure and the corner widgets are the host's) + the v0
 // brushes: Paintbrush, Blob Brush, Eraser + the wave-2 trio:
 // Eyedropper, Width, Lasso Select + the Live Paint pair: Bucket, Face
 // Selection + Type on a Path) AND TWO declarative SCHEMA panels
@@ -81,8 +81,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const handle = harness.loadBundle(drawBundle);
     try {
       // Every tool is captured, namespaced + in registration order —
-      // the three anchor editors, the pro set (incl. the §13.2 corner
-      // widget), the v0 brushes, the wave-2 trio, the Live Paint pair,
+      // the three anchor editors, the pro set (the corner widgets are
+      // the host's live-shape widgets), the v0 brushes, the wave-2 trio, the Live Paint pair,
       // then Type on a Path.
       expect(harness.toolsContributed().map((t) => t.id)).toEqual([
         "media.paged.draw.tool.addAnchor",
@@ -90,7 +90,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.convertAnchor",
         "media.paged.draw.tool.curvature",
         "media.paged.draw.tool.shapeBuilder",
-        "media.paged.draw.tool.cornerRadius",
         "media.paged.draw.tool.paintbrush",
         "media.paged.draw.tool.blobBrush",
         "media.paged.draw.tool.eraserBrush",
@@ -147,14 +146,14 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
         // Three anchor editors + the pro set (Curvature,
-        // Shape Builder, Corner Radius (the Gradient annotation and Measure are the host's)) +
+        // Shape Builder; the Gradient annotation, Measure and the corner
+        // widgets are the host's) +
         // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
         // wave-2 pair (Width, Lasso Select; the Eyedropper is the host's) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
         // (C-29) + the Repeat steering widget (§12.4, the one tool
         // with no shortcut — see tools.ts) + the Knife (keyless too) —
-        // sixteen tools (the Pencil and Scissors are the host's, ADR 359).
-        "tool",
+        // fifteen tools (the Pencil and Scissors are the host's, ADR 359).
         "tool",
         "tool",
         "tool",
@@ -691,7 +690,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(40);
+    expect(harness.toolsContributed()).toHaveLength(39);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

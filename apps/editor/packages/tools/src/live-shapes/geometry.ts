@@ -30,6 +30,18 @@
 import { apply, invert, type Affine } from "@paged-media/helpers";
 import { unitLivePolygon } from "@paged-media/vector-geometry";
 
+// A polygon's corner widgets read the renderer's rounding rule, which
+// `@paged-media/vector-tools` owns (one widget per rounded anchor).
+export {
+  polygonCornerAt,
+  polygonCornerMaxRadius,
+  polygonCornerPreview,
+  polygonCornerWidgetPoint,
+  polygonCorners,
+  polygonRadiusFromDrag,
+  type PolygonCorner,
+} from "@paged-media/vector-tools";
+
 /** `[top, left, bottom, right]`, the wire's bounds order. */
 export type Box = readonly [number, number, number, number];
 export type Pt = readonly [number, number];

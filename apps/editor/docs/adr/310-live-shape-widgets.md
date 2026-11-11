@@ -76,3 +76,25 @@ nothing edited sides or pies at all.
 - paged.draw's Corner Radius tool stays (it rounds a polygon's corners too, which these widgets do
   not); the rectangle widgets overlap its rectangle case.
 - A polygon edited point by point stops being live (engine ADR 1047), and its widgets go away.
+
+## Amendment (2026-11-11): polygon corners; one corner tool
+
+The widgets now round a polygon's corners too, so paged.draw's Corner Radius tool and its
+handler are gone (its id leaves through the deprecation window, replacement the Selection tool;
+draw ADR 359 amended).
+
+- A **polygon** (live or not: any closed path) shows a widget inside each corner the renderer
+  rounds: both edges straight, a closed contour, a real turn (`@paged-media/vector-tools`
+  `polygonCorners`, the renderer's rule). The widget sits on the corner's bisector at the centre of
+  the arc (`polygonCornerWidgetPoint`; at 90° that is the rectangle's place), or 14 px in when the
+  corner is square. A drag reads the tangent distance along the two edges and answers
+  `r = d · tan(θ/2)` (`polygonRadiusFromDrag`); the polygon has ONE radius (the renderer reads the
+  top-left slot for an N-gon), so the commit is the Corners presets' eight writes
+  (`@paged-media/helpers` `cornerPresetOps`), one undo step. Alt-click gives every corner the next
+  type. A corner too short on screen, or a path with more than 48 corners, gets no widget.
+- A **text frame** has the rectangle's four corner widgets (the engine renders its corners).
+- The box rule (`cornerRadiusAt`, `cornerWidgetPoint`) stays this ADR's; draw's box twins in
+  vector-tools (`cornerAt`, `radiusFromDrag`, `cornerPreview`) are deleted with the tool.
+
+The consequence above that "a polygon edited point by point … its widgets go away" now holds for
+the side and star widgets only; the corner widgets stay on any closed polygon.

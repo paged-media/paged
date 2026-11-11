@@ -311,10 +311,15 @@ Status (draw items, one line each; updated as they land):
   angle and point; a tool would need the host's tools to run a command.
 - Live corners: MERGED 2026-11-01. The host declares `paged.corners.*` (Rounded, Inverse rounded,
   Bevel, Fancy, None; `corner-commands.ts`) with Object > Corners entries; the eight writes are
-  one shared builder in `platform/shared/helpers` (`cornerPresetOps`) that draw's Corner Radius
-  tool also uses. Draw's five commands and Draw > Corners menu are gone (ids left through the
+  one shared builder in `platform/shared/helpers` (`cornerPresetOps`) that the host's polygon
+  corner widgets also use. Draw's five commands and Draw > Corners menu are gone (ids left through the
   deprecation window). The `liveCorners` metadata marker the commands stamped was never read;
   a stale one is inert (the InDesign round-trip recordings still echo it, see the case).
+- Corner radius: DONE 2026-11-11. One on-canvas corner control, the host's live-shape widgets
+  (`live-shape-handles.tsx`, editor ADR 310 amended): a rectangle's and a text frame's corners one by
+  one, any closed polygon's corners together (the renderer's rule, `@paged-media/vector-tools`
+  `polygon-corners.ts`). Draw's Corner Radius tool, handler and the box half of its machine are gone
+  (id through the deprecation window; draw ADR 359 amended).
 - Star: MERGED 2026-11-02. The host declares `paged.insert.star` (`star-commands.ts`,
   `panels/star-dialog.tsx`): bare it opens a dialog (radius 1, radius 2, points, rotation), with a
   payload it inserts, centred on the page. The write is one implementation in

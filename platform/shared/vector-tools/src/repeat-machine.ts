@@ -17,7 +17,7 @@
  */
 
 // The on-canvas REPEAT widget's math (§12.4 "live on-canvas controls").
-// Host-free pure geometry, the `corner-radius-machine.ts` shape: a drag
+// Host-free pure geometry, the `polygon-corners.ts` shape: a drag
 // from the source's centre in, the steered parameter and the guide
 // polyline out. The gesture handler in draw-bundle owns the host wiring
 // and the commit.
@@ -36,7 +36,7 @@
 
 import type { Vec2 } from "@paged-media/vector-geometry";
 
-import type { Bounds } from "./corner-radius-machine";
+import type { Bounds } from "./polygon-corners";
 
 /** Which repeat the drag is steering. */
 export type RepeatSteerKind = "radial" | "grid" | "mirror";

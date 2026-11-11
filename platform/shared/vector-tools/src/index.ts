@@ -142,23 +142,19 @@ export {
   type WidthCommit,
   type WidthSnapshot,
 } from "./width-machine";
-// §13.2 on-canvas corner widgets — pure math for the corner-radius
-// gesture tool (the bundle owns the host wiring).
+// Polygon corners — the anchors the renderer rounds and the radius a
+// drag at one implies (the host's live-shape corner widgets).
 export {
-  cornerAt,
-  cornerPoints,
-  cornerPreview,
-  maxRadius,
-  radiusFromDrag,
   polygonCorners,
   polygonCornerAt,
+  polygonCornerMaxRadius,
   polygonCornerPreview,
+  polygonCornerWidgetPoint,
   polygonRadiusFromDrag,
   polygonTangentFromDrag,
   type Bounds,
-  type CornerIndex,
   type PolygonCorner,
-} from "./corner-radius-machine";
+} from "./polygon-corners";
 
 // ON-CANVAS GRADIENT STOPS — the Gradient Annotator's stop markers:
 // grab the nearest, slide it along the axis between its neighbours, one

@@ -7,7 +7,7 @@
     "keybinding": 201,
     "menu": 665,
     "panel": 151,
-    "tool": 125
+    "tool": 124
   },
   "features": [
     {
@@ -9741,11 +9741,6 @@
       "owner": "media.paged.draw"
     },
     {
-      "id": "tool:media.paged.draw.tool.cornerRadius",
-      "kind": "tool",
-      "owner": "media.paged.draw"
-    },
-    {
       "id": "tool:media.paged.draw.tool.crystallize",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -10722,6 +10717,12 @@
     {
       "id": "panel:media.paged.slide.panel.comments",
       "replacement": "panel:paged.comments",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.cornerRadius",
+      "replacement": "tool:paged.tool.select",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     },

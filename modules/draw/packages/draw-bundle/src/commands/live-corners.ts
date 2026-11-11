@@ -16,8 +16,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Live Corners — the corner builders the Corner Radius tool and the Stroke
-// panel's corner section use. The corner PRESET commands (Rounded / Inverse
+// Live Corners — the corner builder this bundle's scripts and specs use.
+// The on-canvas corner widgets (a rectangle's, a text frame's, a
+// polygon's) are the host's live-shape widgets (editor ADR 310). The corner PRESET commands (Rounded / Inverse
 // rounded / Bevel / Fancy / None) are the host's (`paged.corners.*`,
 // PM-0017) and build through the same shared writes
 // (`@paged-media/helpers`' `cornerPresetOps`). The `liveCorners` metadata
@@ -45,20 +46,6 @@ export function supportsLiveCorners(id: ElementId): boolean {
   return supportsLiveCornerKind(id.kind);
 }
 
-const CORNER_OPTION_PATHS = [
-  "frameCornerOptionTopLeft",
-  "frameCornerOptionTopRight",
-  "frameCornerOptionBottomRight",
-  "frameCornerOptionBottomLeft",
-] as const;
-
-const CORNER_RADIUS_PATHS = [
-  "frameCornerRadiusTopLeft",
-  "frameCornerRadiusTopRight",
-  "frameCornerRadiusBottomRight",
-  "frameCornerRadiusBottomLeft",
-] as const;
-
 /** The eight writes of one style at one uniform radius, in ONE `batch` =
  *  one undo step. */
 export function cornerStyleMutationFor(
@@ -73,40 +60,6 @@ export function cornerStyleMutationFor(
         preset.style,
         preset.radius,
       ) as Mutation[],
-    },
-  };
-}
-
-/** Set ONE corner's option + radius (the on-canvas-handle path). `corner`
- *  is 0..3 in IDML order [topLeft, topRight, bottomRight, bottomLeft]. */
-export function cornerRadiiMutationFor(
-  elementId: ElementId,
-  corner: 0 | 1 | 2 | 3,
-  style: CornerStyleToken,
-  radius: number,
-): Mutation {
-  const optionText = style === "None" ? "" : style;
-  return {
-    op: "batch",
-    args: {
-      ops: [
-        {
-          op: "setElementProperty",
-          args: {
-            elementId,
-            path: CORNER_OPTION_PATHS[corner],
-            value: { type: "text", value: optionText },
-          },
-        },
-        {
-          op: "setElementProperty",
-          args: {
-            elementId,
-            path: CORNER_RADIUS_PATHS[corner],
-            value: { type: "length", value: radius },
-          },
-        },
-      ],
     },
   };
 }

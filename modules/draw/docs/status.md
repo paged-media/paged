@@ -39,7 +39,7 @@ canary added is under [Releases](#releases).
   When the document has creation defaults of its own, the engine applies them and the tools
   add nothing (`handlers/graphic-default.ts`). The brushes paint their own sweep.
 - **Other tools.** Gradient Annotator (with on-canvas gradient stops), Measure, Shape
-  Builder, Corner Radius (on rotated and transformed shapes too), Eyedropper, Lasso Select
+  Builder, Eyedropper, Lasso Select
   (by intersection, or by centre), Live Paint Bucket and Live Paint Selection, Type on a
   Path, Repeat, Knife, and Scissors at any point on a path.
 - **WP6.1 tools (keyless, in the host's flyouts).** In the Transform flyout: **Reshape**

@@ -22,7 +22,7 @@ and an SVG reader and writer with its own XML scanner (`svg-doc.ts`, `svg-path.t
 
 **`packages/vector-tools`** — private. Eleven tool modules that take page-local points and
 return snapshots, plans or commits: anchor editing, pen, pencil, curvature, brush, width,
-measure, shape builder, live paint, corner radius, repeat. It imports `vector-geometry` and,
+measure, shape builder, live paint, polygon corners (the host's corner widgets), repeat. It imports `vector-geometry` and,
 as types only, `@paged-media/plugin-api`. The machines' wire shapes are the contract's own
 `Mutation` variants, so a protocol change that breaks them fails the typecheck here.
 

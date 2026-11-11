@@ -16,120 +16,29 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The on-canvas CORNER-RADIUS math (concept §13.2 "drag corner widgets" —
-// the future the live-corners command module reserved via its exported
-// per-corner builder). Host-free pure geometry: which corner a press
-// hits, the radius a drag implies, and the preview polyline the overlay
-// draws. The gesture handler in draw-bundle owns the host wiring.
+// POLYGON CORNERS — which anchors of a path the renderer rounds and the
+// radius a drag at one implies. Host-free pure geometry; the host's
+// live-shape widgets (editor ADR 310, `live-shape-handles.tsx`) draw a
+// widget at each corner and write the result. A rectangle's four corners
+// are the widgets' own box rule (`@paged-media/tools` live-shapes).
 //
-// EVERYTHING HERE IS IN THE ELEMENT'S OWN (INNER) SPACE. The box
-// functions read the frame's `bounds` exactly as `elementGeometry`
-// reports them — its own space, before the item transform — and the
-// handler maps the pointer through the INVERSE transform before asking,
-// and the preview back through the transform after. That is what makes a
-// ROTATED rectangle work: its corners are the box's corners in its own
-// frame, wherever they land on the page, and "top left" means the
-// element's own top left, as it does in InDesign.
+// EVERYTHING HERE IS IN THE ELEMENT'S OWN (INNER) SPACE: the anchors as
+// `pathAnchors` reports them, before the item transform.
 //
-// TWO SHAPES OF CORNER:
-//   · a BOX (rectangle, text frame): four corners in IDML order, a
-//     radius per corner — the drag reads the smaller of the two inward
-//     distances, clamped to half the short side;
-//   · a POLYGON: a corner at every anchor the renderer actually rounds —
-//     one whose BOTH segments are straight, on a CLOSED contour, with a
-//     real turn (core `resolve_poly_corner`). The renderer's rounding is
-//     the inscribed circle: the arc meets each edge `r / tan(θ/2)` back
-//     from the vertex, θ the interior angle, clamped to half of either
-//     edge. So the drag reads that TANGENT distance (the smaller of the
-//     two projections onto the edges) and answers `r = d · tan(θ/2)` —
-//     at 90° exactly the box rule. ONE radius per polygon: the renderer
-//     reads only the top-left slot for an N-gon, so every corner's
-//     handle drives the same, uniform radius.
+// A corner sits at every anchor the renderer actually rounds — one whose
+// BOTH segments are straight, on a CLOSED contour, with a real turn (core
+// `resolve_poly_corner`). The renderer's rounding is the inscribed
+// circle: the arc meets each edge `r / tan(θ/2)` back from the vertex, θ
+// the interior angle, clamped to half of either edge. So the drag reads
+// that TANGENT distance (the smaller of the two projections onto the
+// edges) and answers `r = d · tan(θ/2)` — at 90° exactly the box rule.
+// ONE radius per polygon: the renderer reads only the top-left slot for
+// an N-gon, so every corner's widget drives the same, uniform radius.
 
 import type { AnchorTable, Vec2 } from "@paged-media/vector-geometry";
 
 /** Page bounds as the engine reports them: [top, left, bottom, right]. */
 export type Bounds = readonly [number, number, number, number];
-
-/** IDML corner order — 0 topLeft · 1 topRight · 2 bottomRight · 3 bottomLeft
- *  (the order `cornerRadiiMutationFor` addresses). */
-export type CornerIndex = 0 | 1 | 2 | 3;
-
-/** The corner points of `bounds` in IDML order. */
-export function cornerPoints(bounds: Bounds): [Vec2, Vec2, Vec2, Vec2] {
-  const [top, left, bottom, right] = bounds;
-  return [
-    [left, top],
-    [right, top],
-    [right, bottom],
-    [left, bottom],
-  ];
-}
-
-/** The corner within `tol` of `point`, nearest first, or null. */
-export function cornerAt(
-  bounds: Bounds,
-  point: Vec2,
-  tol: number,
-): CornerIndex | null {
-  let best: CornerIndex | null = null;
-  let bestD = tol;
-  cornerPoints(bounds).forEach((c, i) => {
-    const d = Math.hypot(point[0] - c[0], point[1] - c[1]);
-    if (d <= bestD) {
-      bestD = d;
-      best = i as CornerIndex;
-    }
-  });
-  return best;
-}
-
-/** The largest radius the rectangle admits (half the short side). */
-export function maxRadius(bounds: Bounds): number {
-  const [top, left, bottom, right] = bounds;
-  return Math.max(0, Math.min(right - left, bottom - top) / 2);
-}
-
-/**
- * The radius a drag to `point` implies for `corner`: the smaller of the
- * two INWARD distances from the corner (dragging along either edge or
- * the diagonal all read naturally), clamped to [0, maxRadius]. A drag
- * that leaves the rectangle on both axes reads 0.
- */
-export function radiusFromDrag(
-  bounds: Bounds,
-  corner: CornerIndex,
-  point: Vec2,
-): number {
-  const [cx, cy] = cornerPoints(bounds)[corner];
-  const [top, left, bottom, right] = bounds;
-  const inX = corner === 0 || corner === 3 ? point[0] - cx : cx - point[0];
-  const inY = corner === 0 || corner === 1 ? point[1] - cy : cy - point[1];
-  void top;
-  void left;
-  void bottom;
-  void right;
-  const r = Math.min(Math.max(inX, 0), Math.max(inY, 0));
-  return Math.min(r, maxRadius(bounds));
-}
-
-/** The overlay preview polyline for a corner radius: the two edge points
- *  the arc would meet, through the corner — the radius extent made
- *  visible without needing an arc primitive. */
-export function cornerPreview(
-  bounds: Bounds,
-  corner: CornerIndex,
-  radius: number,
-): Vec2[] {
-  const [cx, cy] = cornerPoints(bounds)[corner];
-  const dirX = corner === 0 || corner === 3 ? 1 : -1;
-  const dirY = corner === 0 || corner === 1 ? 1 : -1;
-  return [
-    [cx + dirX * radius, cy],
-    [cx, cy],
-    [cx, cy + dirY * radius],
-  ];
-}
 
 // ------------------------------------------------------------- polygons
 
@@ -262,4 +171,32 @@ export function polygonCornerPreview(
     [cx, cy],
     [cx + corner.outDir[0] * d, cy + corner.outDir[1] * d],
   ];
+}
+
+/** The largest radius `corner` takes: the tangent point at half the
+ *  shorter edge (the renderer's clamp). */
+export function polygonCornerMaxRadius(corner: PolygonCorner): number {
+  return (
+    (Math.min(corner.inLen, corner.outLen) / 2) * Math.tan(corner.halfAngle)
+  );
+}
+
+/** Where a corner's widget sits: on the corner's bisector at the centre
+ *  of the arc a `radius` rounding draws (`r / sin(θ/2)` in from the
+ *  vertex), or `minOffset` in when the corner is square or tighter than
+ *  that — the rectangle widget's rule on a real angle (at 90° the two
+ *  agree). Dragging the widget to this point reads `radius` back through
+ *  {@link polygonRadiusFromDrag}. */
+export function polygonCornerWidgetPoint(
+  corner: PolygonCorner,
+  radius: number,
+  minOffset: number,
+): Vec2 {
+  const bx = corner.inDir[0] + corner.outDir[0];
+  const by = corner.inDir[1] + corner.outDir[1];
+  const bl = Math.hypot(bx, by) || 1;
+  const s = Math.sin(corner.halfAngle) || 1;
+  const r = Math.min(radius, polygonCornerMaxRadius(corner));
+  const d = Math.max(r / s, minOffset);
+  return [corner.point[0] + (bx / bl) * d, corner.point[1] + (by / bl) * d];
 }
