@@ -381,7 +381,7 @@ Status (draw items, one line each; updated as they land):
   Sample size option (Photoshop's point and N×N averages; the window and the premultiplied mean are
   `@paged-media/helpers` `sampleWindow` / `averageRgba8`, which paged.image's layers use too) and a
   target door: the binding provider's eyedropper lane (`takeEyedropperSample`, extensions ADR 1104,
-  contract canary 86). paged.image's colour provider is the first target (its foreground, Alt the
+  contract canary 87). paged.image's colour provider is the first target (its foreground, Alt the
   background, sampled from its own layers); its Eyedropper tool, gesture and options are gone (id
   through the deprecation window) and the Color Sampler, Ruler, Count and Note sit in the host
   Eyedropper's flyout.
