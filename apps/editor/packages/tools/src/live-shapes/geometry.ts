@@ -27,6 +27,9 @@
 // exactly (the first point at twelve o'clock, clockwise on the page; a
 // pie counter-clockwise from three o'clock), which the specs pin.
 
+import { apply, invert, type Affine } from "@paged-media/helpers";
+import { unitLivePolygon } from "@paged-media/vector-geometry";
+
 /** `[top, left, bottom, right]`, the wire's bounds order. */
 export type Box = readonly [number, number, number, number];
 export type Pt = readonly [number, number];
@@ -56,16 +59,7 @@ export function clampShape(sides: number, starInset: number): PolygonShape {
  *  clockwise on a y-down page, a star's inner points between them. */
 export function unitPolygon(shape: PolygonShape): Pt[] {
   const { sides, starInset } = clampShape(shape.sides, shape.starInset);
-  const star = starInset > 0;
-  const count = star ? sides * 2 : sides;
-  const inner = 1 - starInset / 100;
-  const out: Pt[] = [];
-  for (let i = 0; i < count; i++) {
-    const t = -Math.PI / 2 + (i * 2 * Math.PI) / count;
-    const r = star && i % 2 === 1 ? inner : 1;
-    out.push([r * Math.cos(t), r * Math.sin(t)]);
-  }
-  return out;
+  return unitLivePolygon(sides, starInset);
 }
 
 /** The shape inscribed in the ellipse of `circle` (its outer points on
@@ -296,11 +290,7 @@ export function applyAffine(
   m: readonly number[] | null | undefined,
   p: Pt,
 ): Pt {
-  if (!m) return p;
-  return [
-    m[0]! * p[0] + m[2]! * p[1] + m[4]!,
-    m[1]! * p[0] + m[3]! * p[1] + m[5]!,
-  ];
+  return m ? apply(m as Affine, p[0], p[1]) : p;
 }
 
 /** The inverse of {@link applyAffine}; the identity for a singular one. */
@@ -308,12 +298,8 @@ export function inverseAffine(
   m: readonly number[] | null | undefined,
   p: Pt,
 ): Pt {
-  if (!m) return p;
-  const det = m[0]! * m[3]! - m[1]! * m[2]!;
-  if (Math.abs(det) < 1e-12) return p;
-  const x = p[0] - m[4]!;
-  const y = p[1] - m[5]!;
-  return [(m[3]! * x - m[2]! * y) / det, (-m[1]! * x + m[0]! * y) / det];
+  const inv = m ? invert(m as Affine) : null;
+  return inv ? apply(inv, p[0], p[1]) : p;
 }
 
 /** The scale an affine applies to lengths (the square root of its

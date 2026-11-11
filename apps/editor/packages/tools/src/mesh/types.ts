@@ -25,6 +25,13 @@
 // engine's camelCase JSON). Every point is in the FRAME'S INNER
 // coordinates — the space of the element's `bounds`.
 
+import {
+  IDENTITY,
+  apply,
+  invert,
+  type Affine as HelpersAffine,
+} from "@paged-media/helpers";
+
 export type Vec2 = [number, number];
 
 export type MeshColorSpace = "RGB" | "CMYK" | "LAB" | "Gray";
@@ -114,27 +121,15 @@ export type HandleSlot = 0 | 1 | 2 | 3;
 export type InnerBox = [number, number, number, number];
 
 /** `[a, b, c, d, tx, ty]` — inner → page-local pt (null = identity). */
-export type Affine = readonly [number, number, number, number, number, number];
+export type Affine = HelpersAffine;
 
 export function applyAffine(m: Affine | null, p: Vec2): Vec2 {
-  if (!m) return [p[0], p[1]];
-  return [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]];
+  return m ? apply(m, p[0], p[1]) : [p[0], p[1]];
 }
 
 /** The inverse map (page-local → inner); null for a singular matrix. */
 export function invertAffine(m: Affine | null): Affine | null {
-  if (!m) return [1, 0, 0, 1, 0, 0];
-  const [a, b, c, d, e, f] = m;
-  const det = a * d - b * c;
-  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
-  return [
-    d / det,
-    -b / det,
-    -c / det,
-    a / det,
-    (c * f - d * e) / det,
-    (b * e - a * f) / det,
-  ];
+  return m ? invert(m) : IDENTITY;
 }
 
 /** Interpolate two colours at `t`: channel-wise when they share a space,

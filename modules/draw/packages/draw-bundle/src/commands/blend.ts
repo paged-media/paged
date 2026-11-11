@@ -956,10 +956,8 @@ function gradientStepFor(
 }
 
 function mapTriple(p: AnchorTriple, m: Affine): AnchorTriple {
-  const at = (v: readonly [number, number]): [number, number] => [
-    m[0] * v[0] + m[2] * v[1] + m[4],
-    m[1] * v[0] + m[3] * v[1] + m[5],
-  ];
+  const at = (v: readonly [number, number]): [number, number] =>
+    applyAffine(m, v[0], v[1]);
   return { anchor: at(p.anchor), left: at(p.left), right: at(p.right) };
 }
 

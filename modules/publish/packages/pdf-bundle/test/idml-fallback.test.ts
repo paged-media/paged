@@ -19,7 +19,7 @@
 import { writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 
-import JSZip from "jszip";
+import { unzip } from "@paged-media/helpers";
 import { describe, it, expect } from "bun:test";
 
 import { buildIdmlFromRasters, type PdfPageRaster } from "../src/idml-fallback";
@@ -81,13 +81,12 @@ describe("buildIdmlFromRasters", () => {
 
   it("designmap lists one spread per page; one Spreads/*.xml per page", async () => {
     const idml = await buildIdmlFromRasters(PAGES);
-    const zip = await JSZip.loadAsync(idml);
-
-    const designmap = await zip.file("designmap.xml")!.async("string");
+    const zip = new Map(await unzip(idml));
+    const designmap = new TextDecoder().decode(zip.get("designmap.xml")!);
     const spreadRefs = designmap.match(/<idPkg:Spread src="/g) ?? [];
     expect(spreadRefs.length).toBe(PAGES.length);
 
-    const spreadEntries = Object.keys(zip.files).filter((n) =>
+    const spreadEntries = [...zip.keys()].filter((n) =>
       /^Spreads\/.*\.xml$/.test(n),
     );
     expect(spreadEntries.length).toBe(PAGES.length);
@@ -95,12 +94,12 @@ describe("buildIdmlFromRasters", () => {
 
   it("each spread carries a Rectangle > Image > Contents that decodes to the page PNG", async () => {
     const idml = await buildIdmlFromRasters(PAGES);
-    const zip = await JSZip.loadAsync(idml);
+    const zip = new Map(await unzip(idml));
 
     for (let i = 0; i < PAGES.length; i++) {
-      const spreadXml = await zip
-        .file(`Spreads/Spread_p${i}.xml`)!
-        .async("string");
+      const spreadXml = new TextDecoder().decode(
+        zip.get(`Spreads/Spread_p${i}.xml`)!,
+      );
       expect(spreadXml).toContain("<Rectangle");
       expect(spreadXml).toContain("<Image");
 

@@ -51,6 +51,7 @@ import type {
 import { refusalText } from "@paged-media/panel-kit";
 import { defineMessages, t } from "@paged-media/strings";
 import { sha256Hex } from "@paged-media/helpers";
+import { evalCubic } from "@paged-media/vector-geometry";
 
 import { latestWins } from "./coalesce";
 import type {
@@ -2202,25 +2203,6 @@ const errText = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
 
 const CURVE_STEPS = 16;
-
-/** A cubic bezier at `t`. */
-function cubicAt(
-  p0: readonly [number, number],
-  p1: readonly [number, number],
-  p2: readonly [number, number],
-  p3: readonly [number, number],
-  t: number,
-): [number, number] {
-  const u = 1 - t;
-  const a = u * u * u;
-  const b = 3 * u * u * t;
-  const c = 3 * u * t * t;
-  const d = t * t * t;
-  return [
-    a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
-    a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
-  ];
-}
 
 export function createImageSession(host: BundleHost): ImageSession {
   const listeners = new Set<() => void>();
@@ -6704,7 +6686,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           flat.push(
             pageToImage(
               fit,
-              cubicAt(cur.anchor, cur.right, nxt.left, nxt.anchor, t),
+              evalCubic(cur.anchor, cur.right, nxt.left, nxt.anchor, t),
             ),
           );
         }

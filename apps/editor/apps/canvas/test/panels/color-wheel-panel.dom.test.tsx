@@ -56,7 +56,7 @@ describe("Color Wheel panel: states", () => {
     ).toBe("true");
     expect(
       h.root
-        .querySelector('[data-wheel-harmony="Triadic"]')
+        .querySelector('[data-wheel-harmony="triadic"]')
         ?.getAttribute("data-active"),
     ).toBe("true");
     expect(palette(h)).toHaveLength(3);
@@ -102,10 +102,10 @@ describe("Color Wheel panel: controls", () => {
     covers("panel:paged.color-wheel");
     const h = await mount();
     await h.click(
-      h.root.querySelector('[data-wheel-harmony="Complementary"]')!,
+      h.root.querySelector('[data-wheel-harmony="complementary"]')!,
     );
     expect(palette(h)).toHaveLength(2);
-    await h.click(h.root.querySelector('[data-wheel-harmony="Tetradic"]')!);
+    await h.click(h.root.querySelector('[data-wheel-harmony="tetradic"]')!);
     expect(palette(h)).toHaveLength(4);
   });
 

@@ -29,7 +29,7 @@
 //     dialog; run with a payload (`radius1`, `radius2`, `points`,
 //     `rotationDeg`, optionally `cx`, `cy` page-local pt and a `page` id) it
 //     inserts. The dialog's OK runs the same command.
-//  2. THE WRITE IS `starMutationFor` (`@paged-media/helpers`): a LIVE star
+//  2. THE WRITE IS `starMutationFor` (`@paged-media/vector-geometry`): a LIVE star
 //     (one batch: the polygon on Radius 1, its points, its inset) where the
 //     engine draws it, a plain closed path otherwise (turned, or Radius 2
 //     the larger). It wears the drawing tools' graphic default and is
@@ -42,7 +42,7 @@ import {
   type PagedEditor,
 } from "@paged-media/shell";
 import type { Mutation } from "@paged-media/client";
-import { starMutationFor, starParamsFrom } from "@paged-media/helpers";
+import { starMutationFor, starParamsFrom } from "@paged-media/vector-geometry";
 import { mutateGraphicAndSelect } from "@paged-media/tools";
 import { defineMessages, t } from "@paged-media/strings";
 

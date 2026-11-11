@@ -14,6 +14,7 @@
 //     brush ring follows the drag and frozen strokes are outlined.
 
 import type { ToolPreviewShape } from "@paged-media/plugin-api";
+import { bernstein } from "@paged-media/vector-geometry";
 
 import type { FilterValue, FilterValues } from "./filters-schema";
 import { STYLE_CUSTOM } from "./filters-warp";
@@ -60,16 +61,11 @@ export const grabRadius = (w: number, h: number) => {
   return Math.max(Math.min(4, span * 0.1), span * 0.015);
 };
 
-function bern(t: number): [number, number, number, number] {
-  const s = 1 - t;
-  return [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
-}
-
 /** A point of the bicubic Bézier patch `m` (paged-warp's envelope, drawn
  *  here only; the warp itself is the engine's). */
 export function patchPoint(m: readonly number[], u: number, v: number): Pt {
-  const bu = bern(u);
-  const bv = bern(v);
+  const bu = bernstein(u);
+  const bv = bernstein(v);
   let x = 0;
   let y = 0;
   for (let r = 0; r < 4; r++)

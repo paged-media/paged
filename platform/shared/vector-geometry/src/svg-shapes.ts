@@ -22,6 +22,7 @@
 // the pipeline only ever sees cubic anchors. Circles/ellipses use the
 // classic 4-arc κ = 4/3·(√2−1) Bézier approximation. Pure, host-free.
 
+import { applyAffine } from "./affine";
 import type { AnchorTriple, AnchorTable, Vec2, Vec2Mut } from "./types";
 
 /** Bézier circle constant: handle length = κ·radius for a 90° arc. */
@@ -196,10 +197,7 @@ export function mapTable(
   m: readonly [number, number, number, number, number, number] | null,
 ): AnchorTable {
   if (!m) return table;
-  const at = (p: Vec2): Vec2Mut => [
-    m[0] * p[0] + m[2] * p[1] + m[4],
-    m[1] * p[0] + m[3] * p[1] + m[5],
-  ];
+  const at = (p: Vec2): Vec2Mut => applyAffine(m, p[0], p[1]);
   return {
     anchors: table.anchors.map((a) => ({
       anchor: at(a.anchor),

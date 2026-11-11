@@ -18,6 +18,7 @@
 // carries the processed picture itself. A reference that cannot be had is
 // reported with its reason and placed as nothing, never skipped silently.
 
+import { dataUrl, sha256Hex } from "@paged-media/helpers";
 import type { ActionStep, BundleHost } from "@paged-media/plugin-api";
 
 import { pixelSize } from "./issues";
@@ -69,22 +70,10 @@ export function mediaTypeOf(bytes: Uint8Array, name: string): string {
   return (ext && MEDIA_TYPES[ext]) || "application/octet-stream";
 }
 
-async function sha256(bytes: Uint8Array): Promise<string> {
-  const d = await globalThis.crypto.subtle.digest(
-    "SHA-256",
-    bytes as BufferSource,
-  );
-  return Array.from(new Uint8Array(d), (x) =>
-    x.toString(16).padStart(2, "0"),
-  ).join("");
-}
+const sha256 = sha256Hex;
 
-function dataUri(bytes: Uint8Array, mediaType: string): string {
-  let s = "";
-  for (let i = 0; i < bytes.length; i += 0x8000)
-    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return `data:${mediaType};base64,${btoa(s)}`;
-}
+const dataUri = (bytes: Uint8Array, mediaType: string): string =>
+  dataUrl(mediaType, bytes);
 
 /** What the pipeline needs of the session. */
 export interface AssetDeps {

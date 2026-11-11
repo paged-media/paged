@@ -40,6 +40,14 @@
 // and stay straight — which is how a rectangle on the grid stays four
 // anchors.
 
+import {
+  homographyFromQuads as sdkHomography,
+  invert3,
+  multiply3,
+  type BoxQuad as Matrix3Quad,
+  type Matrix3,
+} from "@paged-media/plugin-sdk";
+
 import type { AnchorTable, AnchorTriple, Vec2, Vec2Mut } from "../types";
 import { evalCubic, splitSegmentDeCasteljau } from "../bezier";
 
@@ -68,74 +76,28 @@ export function applyHomography(h: Homography, p: Vec2): Vec2Mut | null {
   ];
 }
 
-/** Solve A x = b in place (n × n, row-major). Null when singular. */
-function solveLinear(a: number[][], b: number[]): number[] | null {
-  const n = b.length;
-  for (let c = 0; c < n; c++) {
-    let piv = c;
-    for (let r = c + 1; r < n; r++)
-      if (Math.abs(a[r]![c]!) > Math.abs(a[piv]![c]!)) piv = r;
-    if (Math.abs(a[piv]![c]!) < 1e-12) return null;
-    [a[c], a[piv]] = [a[piv]!, a[c]!];
-    [b[c], b[piv]] = [b[piv]!, b[c]!];
-    for (let r = c + 1; r < n; r++) {
-      const f = a[r]![c]! / a[c]![c]!;
-      if (f === 0) continue;
-      for (let k = c; k < n; k++) a[r]![k]! -= f * a[c]![k]!;
-      b[r]! -= f * b[c]!;
-    }
-  }
-  const x = new Array<number>(n).fill(0);
-  for (let r = n - 1; r >= 0; r--) {
-    let s = b[r]!;
-    for (let k = r + 1; k < n; k++) s -= a[r]![k]! * x[k]!;
-    x[r] = s / a[r]![r]!;
-  }
-  return x;
-}
-
 /** The homography taking `from[i]` to `to[i]` for four points. Null when
- *  three of either four are collinear. */
-export function homographyFromQuads(
+ *  three of either four are collinear. The solve is the extension SDK's
+ *  (`transform-box`, the one implementation: the transform box, Perspective
+ *  Crop and the perspective grid all fit through it). */
+export const homographyFromQuads = (
   from: readonly [Vec2, Vec2, Vec2, Vec2],
   to: readonly [Vec2, Vec2, Vec2, Vec2],
-): Homography | null {
-  const a: number[][] = [];
-  const b: number[] = [];
-  for (let i = 0; i < 4; i++) {
-    const [x, y] = from[i]!;
-    const [u, v] = to[i]!;
-    a.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
-    b.push(u);
-    a.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
-    b.push(v);
-  }
-  const h = solveLinear(a, b);
-  if (!h || h.some((x) => !Number.isFinite(x))) return null;
-  return [h[0]!, h[1]!, h[2]!, h[3]!, h[4]!, h[5]!, h[6]!, h[7]!, 1];
-}
+): Homography | null => sdkHomography(asQuad(from), asQuad(to));
+
+const asQuad = (q: readonly [Vec2, Vec2, Vec2, Vec2]): Matrix3Quad =>
+  q.map((p) => [p[0], p[1]]) as unknown as Matrix3Quad;
+
+/** `m` scaled so its last entry is 1 (when it is not 0). */
+const normalised = (m: readonly number[]): Homography => {
+  const s = Math.abs(m[8]!) > 1e-12 ? m[8]! : 1;
+  return m.map((x) => x / s) as unknown as Homography;
+};
 
 /** The inverse map. Null when singular. */
 export function invertHomography(h: Homography): Homography | null {
-  const [a, b, c, d, e, f, g, k, l] = h;
-  const A = e * l - f * k;
-  const B = -(d * l - f * g);
-  const C = d * k - e * g;
-  const det = a * A + b * B + c * C;
-  if (Math.abs(det) < 1e-15) return null;
-  const inv = [
-    A,
-    -(b * l - c * k),
-    b * f - c * e,
-    B,
-    a * l - c * g,
-    -(a * f - c * d),
-    C,
-    -(a * k - b * g),
-    a * e - b * d,
-  ].map((x) => x / det);
-  const s = Math.abs(inv[8]!) > 1e-12 ? inv[8]! : 1;
-  return inv.map((x) => x / s) as unknown as Homography;
+  const inv = invert3([...h] as Matrix3);
+  return inv ? normalised(inv) : null;
 }
 
 /** `outer ∘ inner`. */
@@ -143,18 +105,7 @@ export function composeHomography(
   outer: Homography,
   inner: Homography,
 ): Homography {
-  const o = outer;
-  const i = inner;
-  const m: number[] = [];
-  for (let r = 0; r < 3; r++)
-    for (let c = 0; c < 3; c++)
-      m.push(
-        o[r * 3]! * i[c]! +
-          o[r * 3 + 1]! * i[3 + c]! +
-          o[r * 3 + 2]! * i[6 + c]!,
-      );
-  const s = Math.abs(m[8]!) > 1e-12 ? m[8]! : 1;
-  return m.map((x) => x / s) as unknown as Homography;
+  return normalised(multiply3([...outer] as Matrix3, [...inner] as Matrix3));
 }
 
 /** Is the segment a straight line — both inner handles on the chord

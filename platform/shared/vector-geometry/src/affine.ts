@@ -21,13 +21,22 @@
 // live in the path's local frame; click points arrive page-local, so
 // anchor-edit planning inverse-applies the element's transform first.
 
+// The algebra itself is `@paged-media/helpers`' `transform` (one
+// implementation, PM-0017); these are its null-tolerant spellings.
+
+import {
+  apply,
+  compose,
+  invert,
+  type Affine as HelpersAffine,
+} from "@paged-media/helpers";
+
 import type { Vec2, Vec2Mut } from "./types";
 
-export type Affine = readonly [number, number, number, number, number, number];
+export type Affine = HelpersAffine;
 
 export function applyAffine(m: Affine | null, x: number, y: number): Vec2Mut {
-  if (!m) return [x, y];
-  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+  return m ? apply(m, x, y) : [x, y];
 }
 
 /** Inverse-apply; returns null when the matrix is singular. */
@@ -37,40 +46,17 @@ export function inverseApplyAffine(
   y: number,
 ): Vec2Mut | null {
   if (!m) return [x, y];
-  const det = m[0] * m[3] - m[1] * m[2];
-  if (Math.abs(det) < 1e-12) return null;
-  const px = x - m[4];
-  const py = y - m[5];
-  return [(m[3] * px - m[2] * py) / det, (-m[1] * px + m[0] * py) / det];
+  const inv = invert(m);
+  return inv ? apply(inv, x, y) : null;
 }
 
 /** Compose two affines (`outer ∘ inner` — apply `inner` first, then
  *  `outer`). Both in the `[a, b, c, d, tx, ty]` column-pair convention. */
-export function composeAffine(outer: Affine, inner: Affine): Affine {
-  const [a1, b1, c1, d1, e1, f1] = outer;
-  const [a2, b2, c2, d2, e2, f2] = inner;
-  return [
-    a1 * a2 + c1 * b2,
-    b1 * a2 + d1 * b2,
-    a1 * c2 + c1 * d2,
-    b1 * c2 + d1 * d2,
-    a1 * e2 + c1 * f2 + e1,
-    b1 * e2 + d1 * f2 + f1,
-  ];
-}
+export const composeAffine: (outer: Affine, inner: Affine) => Affine = compose;
 
 /** The inverse matrix (`composeAffine(invertAffine(m), m)` is the
- *  identity); null when `m` is singular or not finite — the same rule as
- *  `inverseApplyAffine`. */
-export function invertAffine(m: Affine): Affine | null {
-  const det = m[0] * m[3] - m[1] * m[2];
-  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
-  const a = m[3] / det;
-  const b = -m[1] / det;
-  const c = -m[2] / det;
-  const d = m[0] / det;
-  return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
-}
+ *  identity); null when `m` is singular or not finite. */
+export const invertAffine: (m: Affine) => Affine | null = invert;
 
 /** The identity affine. */
 export const IDENTITY_AFFINE: Affine = [1, 0, 0, 1, 0, 0];

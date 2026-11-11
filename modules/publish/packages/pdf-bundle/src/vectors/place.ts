@@ -27,6 +27,7 @@
 // placement under the frame's own transform, clipped to the frame, with
 // the frame deleted in the same batch.
 
+import { apply, compose } from "@paged-media/helpers";
 import { defineMessages, t } from "@paged-media/strings";
 
 import type {
@@ -339,21 +340,9 @@ export interface ConvertPlacedArgs {
   text?: TextChoice;
 }
 
+/** A mutable affine (the place request's wire shape); the algebra is
+ *  `@paged-media/helpers`' `transform`. */
 type Affine = [number, number, number, number, number, number];
-
-const compose = (a: Affine, b: Affine): Affine => [
-  a[0] * b[0] + a[2] * b[1],
-  a[1] * b[0] + a[3] * b[1],
-  a[0] * b[2] + a[2] * b[3],
-  a[1] * b[2] + a[3] * b[3],
-  a[0] * b[4] + a[2] * b[5] + a[4],
-  a[1] * b[4] + a[3] * b[5] + a[5],
-];
-
-const apply = (m: Affine, x: number, y: number): [number, number] => [
-  m[0] * x + m[2] * y + m[4],
-  m[1] * x + m[3] * y + m[5],
-];
 
 /**
  * Where a placed PDF's page box sits on the page: the frame's
@@ -387,7 +376,7 @@ export function placedPdfPlacement(
       ? ([...itemTransform] as Affine)
       : [1, 0, 0, 1, 0, 0];
   const toPage: Affine = [1, 0, 0, 1, -origin[0], -origin[1]];
-  return compose(toPage, compose(item, inner));
+  return [...compose(toPage, compose(item, inner))] as Affine;
 }
 
 /** The frame's outline on the page (its bounds' corners under its

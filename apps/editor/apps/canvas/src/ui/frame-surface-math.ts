@@ -24,33 +24,12 @@ import type { Camera, ElementGeometryItem } from "@paged-media/client";
 
 import type { PageRect } from "./layout";
 
-export type Mat = [number, number, number, number, number, number];
+import { compose, invert, type Affine } from "@paged-media/helpers";
 
-/** `a ∘ b`: apply `b` first, then `a` (2-D affine, `[a b c d e f]`). */
-export function compose(a: Mat, b: Mat): Mat {
-  return [
-    a[0] * b[0] + a[2] * b[1],
-    a[1] * b[0] + a[3] * b[1],
-    a[0] * b[2] + a[2] * b[3],
-    a[1] * b[2] + a[3] * b[3],
-    a[0] * b[4] + a[2] * b[5] + a[4],
-    a[1] * b[4] + a[3] * b[5] + a[5],
-  ];
-}
+export { compose, invert };
 
-/** The inverse affine, or null when singular. */
-export function invert(m: Mat): Mat | null {
-  const det = m[0] * m[3] - m[1] * m[2];
-  if (Math.abs(det) < 1e-12) return null;
-  return [
-    m[3] / det,
-    -m[1] / det,
-    -m[2] / det,
-    m[0] / det,
-    (m[2] * m[5] - m[3] * m[4]) / det,
-    (m[1] * m[4] - m[0] * m[5]) / det,
-  ];
-}
+/** A 2-D affine, `[a b c d e f]` (helpers' `transform`). */
+export type Mat = Affine;
 
 /** Host-pixel ← frame-content-point transform for a frame's geometry:
  *  camera ∘ translate(page origin) ∘ ItemTransform ∘ translate(content

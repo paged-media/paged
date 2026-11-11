@@ -12,7 +12,12 @@
         "replace\\(\\s*/&/g\\s*,\\s*[\"']&amp;[\"']",
         "'&'\\s*=>.*&amp;"
       ],
-      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx",
+        ".mjs"
+      ],
       "baseline": [
         "engine/core/crates/idml-export/src/rewrite.rs",
         "engine/core/crates/paged-data-dataset/src/xml.rs",
@@ -26,9 +31,15 @@
     {
       "name": "content-types-by-hand",
       "description": "write and patch [Content_Types].xml with paged_ooxml::content_types",
-      "owner": ["platform/shared/ooxml/src/content_types.rs"],
-      "patterns": ["<Override PartName="],
-      "extensions": [".rs"],
+      "owner": [
+        "platform/shared/ooxml/src/content_types.rs"
+      ],
+      "patterns": [
+        "<Override PartName="
+      ],
+      "extensions": [
+        ".rs"
+      ],
       "baseline": [
         "modules/doc/docx-conformance/src/first_fit.rs",
         "modules/doc/docx-conformance/src/lib.rs",
@@ -50,10 +61,18 @@
     {
       "name": "roman-numerals",
       "description": "number with paged_model::roman (InDesign's forms, past 3999)",
-      "owner": ["engine/core/crates/paged-model/src/lib.rs"],
-      "patterns": ["\\(1000,\\s*\"[Mm]\"\\)"],
-      "extensions": [".rs"],
-      "baseline": ["modules/doc/docx-core/src/lib.rs"]
+      "owner": [
+        "engine/core/crates/paged-model/src/lib.rs"
+      ],
+      "patterns": [
+        "\\(1000,\\s*\"[Mm]\"\\)"
+      ],
+      "extensions": [
+        ".rs"
+      ],
+      "baseline": [
+        "modules/doc/docx-core/src/lib.rs"
+      ]
     },
     {
       "name": "srgb-transfer",
@@ -69,8 +88,15 @@
         "engine/core/crates/paged-colour-math/",
         "platform/shared/helpers/src/colour.ts"
       ],
-      "patterns": ["0\\.040_?45", "0\\.003_?130_?8"],
-      "extensions": [".rs", ".ts", ".tsx"],
+      "patterns": [
+        "0\\.040_?45",
+        "0\\.003_?130_?8"
+      ],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx"
+      ],
       "baseline": [
         "engine/core/crates/paged-canvas/src/model.rs",
         "engine/core/crates/paged-color/src/lab.rs",
@@ -103,9 +129,15 @@
         "modules/web/packages/web-render/src/display_list.rs",
         "modules/web/packages/web-render/src/wire.rs"
       ],
-      "owner": ["engine/core/crates/paged-blend/"],
-      "patterns": ["enum\\s+\\w*Blend\\w*\\s*\\{"],
-      "extensions": [".rs"],
+      "owner": [
+        "engine/core/crates/paged-blend/"
+      ],
+      "patterns": [
+        "enum\\s+\\w*Blend\\w*\\s*\\{"
+      ],
+      "extensions": [
+        ".rs"
+      ],
       "baseline": []
     },
     {
@@ -134,7 +166,12 @@
         "\\b16_?777_?619\\b",
         "(?i)0x0100_?0193\\b"
       ],
-      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx",
+        ".mjs"
+      ],
       "baseline": [
         "engine/core/crates/idml-export/src/paged.rs",
         "engine/core/crates/idml-export/tests/it/zip_layout.rs",
@@ -169,9 +206,18 @@
     {
       "name": "crc32-polynomial",
       "description": "use crc32 from @paged-media/helpers in TypeScript and the crc32fast crate in Rust",
-      "owner": ["platform/shared/helpers/"],
-      "patterns": ["(?i)0xedb8_?8320"],
-      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "owner": [
+        "platform/shared/helpers/"
+      ],
+      "patterns": [
+        "(?i)0xedb8_?8320"
+      ],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx",
+        ".mjs"
+      ],
       "baseline": [
         "apps/ml-host/crates/paged-ml-host/tests/it/support.rs",
         "engine/core/crates/paged-cli/tests/it/data_cli.rs",
@@ -184,15 +230,21 @@
     {
       "name": "base64-alphabet",
       "description": "use the base64 crate in Rust and platform/shared/helpers in TypeScript",
-      "owner": ["platform/shared/helpers/"],
+      "owner": [
+        "platform/shared/helpers/"
+      ],
       "patterns": [
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\\+/",
         "\\bbtoa\\(",
         "b'\\+'\\s*=>\\s*(Some\\()?62"
       ],
-      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx",
+        ".mjs"
+      ],
       "baseline": [
-        "apps/editor/apps/canvas/src/clipboard-commands.ts",
         "apps/editor/apps/canvas/test/unit/commands/edit-commands.test.ts",
         "apps/editor/apps/canvas/tests/fidelity/canvas-driver.ts",
         "apps/editor/apps/canvas/tests/journey/driver/designer.ts",
@@ -200,8 +252,6 @@
         "apps/editor/apps/canvas/tests/showcase/chapters/900-assemble.spec.ts",
         "apps/editor/apps/canvas/tests/showcase/driver.ts",
         "modules/data/packages/data-bundle/src/__tests__/assets.test.ts",
-        "modules/data/packages/data-bundle/src/assets.ts",
-        "modules/draw/packages/draw-bundle/src/commands/rasterize.ts",
         "modules/sheet/sheet-js/src/core/annotations.rs",
         "modules/web/packages/web-bundle/test/engine-inputs.spec.ts",
         "platform/extensions/packages/plugin-sdk/src/bytes.ts",
@@ -222,8 +272,12 @@
         "engine/core/crates/paged-geom/src/flatten.rs",
         "engine/core/crates/paged-geom/src/planar_dcel.rs"
       ],
-      "patterns": ["3\\.0 \\* (mt|u|inv) \\* (mt|u|inv) \\* (t|s)\\b"],
-      "extensions": [".rs"],
+      "patterns": [
+        "3\\.0 \\* (mt|u|inv) \\* (mt|u|inv) \\* (t|s)\\b"
+      ],
+      "extensions": [
+        ".rs"
+      ],
       "baseline": []
     },
     {
@@ -240,8 +294,14 @@
         "engine/core/crates/paged-geom/src/lib.rs",
         "platform/shared/helpers/src/geometry.ts"
       ],
-      "patterns": ["0?\\.552_?28"],
-      "extensions": [".rs", ".ts", ".tsx"],
+      "patterns": [
+        "0?\\.552_?28"
+      ],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx"
+      ],
       "baseline": [
         "engine/core/crates/idml-export/src/rewrite.rs",
         "engine/core/crates/paged-canvas/src/snap_point.rs",
@@ -268,9 +328,18 @@
       "name": "sha2-constants",
       "description": "hash with the sha2 crate in Rust and Web Crypto / platform/shared/helpers in TypeScript",
       "owner": [],
-      "patterns": ["0x428a2f98"],
-      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": ["modules/image/image-conformance/src/abr_corpus/sha256.rs"]
+      "patterns": [
+        "0x428a2f98"
+      ],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx",
+        ".mjs"
+      ],
+      "baseline": [
+        "modules/image/image-conformance/src/abr_corpus/sha256.rs"
+      ]
     },
     {
       "name": "office-theme-palette",
@@ -279,8 +348,15 @@
         "platform/shared/ooxml/src/drawingml/theme.rs",
         "engine/core/crates/paged-model/src/theme.rs"
       ],
-      "patterns": ["0xE7E6E6"],
-      "extensions": [".rs", ".ts", ".tsx", ".mjs"],
+      "patterns": [
+        "0xE7E6E6"
+      ],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx",
+        ".mjs"
+      ],
       "baseline": []
     },
     {
@@ -301,7 +377,9 @@
         "\\b\\w+\\[0\\] \\* \\w+\\[0\\] \\+ \\w+\\[2\\] \\* \\w+\\[1\\]",
         "\\ba1 \\* a2 \\+ c1 \\* b2\\b"
       ],
-      "extensions": [".rs"],
+      "extensions": [
+        ".rs"
+      ],
       "baseline": [
         "engine/core/crates/idml-export/src/clip_groups.rs",
         "engine/core/crates/idml-export/src/rewrite.rs",
@@ -315,23 +393,61 @@
         "engine/core/crates/paged-geom/src/affine.rs",
         "engine/core/crates/paged-geom/src/affine64.rs"
       ],
-      "patterns": ["-\\w+ \\* inv_det"],
-      "extensions": [".rs"],
+      "patterns": [
+        "-\\w+ \\* inv_det"
+      ],
+      "extensions": [
+        ".rs"
+      ],
       "baseline": []
+    },
+    {
+      "name": "affine-ts",
+      "description": "multiply and apply 2x3 affines with @paged-media/helpers' transform (compose, invert, apply; vector-geometry's applyAffine / composeAffine are its null-tolerant spellings); the patterns are the first term of a product and of an application",
+      "owner": [
+        "platform/shared/helpers/src/transform.ts"
+      ],
+      "patterns": [
+        "(\\w+)\\[0\\]!? \\* (\\w+)\\[0\\]!? \\+ \\1\\[2\\]!? \\* \\2\\[1\\]!?(,| \\+ \\1\\[4\\])",
+        "\\ba1 \\* a2 \\+ c1 \\* b2\\b"
+      ],
+      "extensions": [
+        ".ts",
+        ".tsx",
+        ".mjs"
+      ],
+      "baseline": [
+        "apps/editor/apps/canvas/tests/e2e/gesture-width.spec.ts",
+        "apps/editor/apps/canvas/tests/e2e/mesh-tool.spec.ts",
+        "modules/draw/packages/draw-bundle/test/headless/shape-builder-regions.spec.ts",
+        "modules/draw/packages/draw-bundle/test/page-space/fake-engine.ts",
+        "modules/draw/packages/draw-bundle/test/roundtrip/view.ts",
+        "modules/slide/packages/slide-bundle/test/headless/live-presets.spec.ts"
+      ]
     },
     {
       "name": "polygon-coverage-scan",
       "description": "fill polygons into 8-bit coverage with paged_kernels::coverage::polygons; the pattern is its sub-scanline position",
-      "owner": ["engine/core/crates/paged-kernels/src/coverage.rs"],
-      "patterns": ["\\(sub as f32 \\* 2\\.0 \\+ 1\\.0\\) / 8\\.0"],
-      "extensions": [".rs"],
+      "owner": [
+        "engine/core/crates/paged-kernels/src/coverage.rs"
+      ],
+      "patterns": [
+        "\\(sub as f32 \\* 2\\.0 \\+ 1\\.0\\) / 8\\.0"
+      ],
+      "extensions": [
+        ".rs"
+      ],
       "baseline": []
     },
     {
       "name": "arc-to-cubic",
       "description": "approximate a circular arc with cubics (4/3·tan(θ/4)) through paged_geom, not a local formula",
-      "owner": ["engine/core/crates/paged-geom/"],
-      "extensions": [".rs"],
+      "owner": [
+        "engine/core/crates/paged-geom/"
+      ],
+      "extensions": [
+        ".rs"
+      ],
       "patterns": [
         "4\\.0\\s*/\\s*3\\.0\\)?\\s*\\*\\s*\\(?[\\w.]*\\s*\\(?[\\w. /*]*\\)?\\.tan\\(\\)",
         "4\\.0\\s*/\\s*3\\.0\\s*\\*\\s*\\(.*\\)\\.tan\\("
@@ -347,9 +463,15 @@
     {
       "name": "png-encode",
       "description": "encode PNG with paged_raster::encode, not image::PngEncoder",
-      "owner": ["engine/core/crates/paged-raster/"],
-      "extensions": [".rs"],
-      "patterns": ["PngEncoder"],
+      "owner": [
+        "engine/core/crates/paged-raster/"
+      ],
+      "extensions": [
+        ".rs"
+      ],
+      "patterns": [
+        "PngEncoder"
+      ],
       "baseline": [
         "engine/core/crates/paged-canvas/src/snapshot.rs",
         "engine/core/crates/paged-gpu/src/surface.rs",
@@ -363,8 +485,12 @@
     {
       "name": "resample-imageops",
       "description": "resample pixels with paged-resample (premultiplied), not image::imageops on straight alpha",
-      "owner": ["engine/core/crates/paged-resample/"],
-      "extensions": [".rs"],
+      "owner": [
+        "engine/core/crates/paged-resample/"
+      ],
+      "extensions": [
+        ".rs"
+      ],
       "patterns": [
         "imageops::(resize|thumbnail)",
         "\\.resize(_exact)?\\([^)]*FilterType::"
@@ -381,8 +507,12 @@
         "platform/extensions/packages/plugin-sdk/src/widgets-fallback.tsx",
         "modules/image/glue/src/panels/sections/color-input.tsx"
       ],
-      "extensions": [".tsx"],
-      "patterns": ["type=\"color\""],
+      "extensions": [
+        ".tsx"
+      ],
+      "patterns": [
+        "type=\"color\""
+      ],
       "baseline": [
         "apps/editor/apps/canvas/src/panels/gradient-editor.tsx",
         "apps/editor/apps/canvas/src/panels/picture-adjustments-panel.tsx",
@@ -399,26 +529,39 @@
         "platform/shared/vector-geometry/src/star.ts",
         "engine/core/crates/paged-model/src/live_shape.rs"
       ],
-      "extensions": [".ts", ".tsx"],
-      "patterns": ["i % 2 === 0 \\? r1 : r2"],
-      "baseline": ["platform/shared/helpers/src/star.ts"]
+      "extensions": [
+        ".ts",
+        ".tsx"
+      ],
+      "patterns": [
+        "i % 2 === 0 \\? r1 : r2",
+        "i % 2 === 1 \\? inner : 1",
+        "-Math\\.PI / 2 \\+ \\(i \\* 2 \\* Math\\.PI\\)"
+      ],
+      "baseline": [
+        "apps/editor/apps/canvas/test/panels/live-shape-handles.dom.test.tsx",
+        "apps/editor/apps/canvas/test/panels/object-transform-panel.dom.test.tsx"
+      ]
     },
     {
       "name": "homography",
-      "description": "solve a four-point homography with platform/shared/vector-geometry (TS) or paged_warp (Rust)",
+      "description": "solve a four-point homography with the extension SDK's transform-box (TS; @paged-media/vector-geometry delegates to it) or paged_warp::from_quads (Rust); a parity test holds the two to the same numbers",
       "owner": [
-        "platform/shared/vector-geometry/src/warp/homography.ts",
+        "platform/extensions/packages/plugin-sdk/src/transform-box.ts",
         "engine/core/crates/paged-warp/"
       ],
-      "extensions": [".rs", ".ts", ".tsx"],
+      "extensions": [
+        ".rs",
+        ".ts",
+        ".tsx"
+      ],
       "patterns": [
         "function (homographyFromQuads|squareToQuad|quadToSquare|homography\\w*)\\s*\\(",
         "fn (homography\\w*|square_to_quad)\\s*\\("
       ],
       "baseline": [
         "modules/image/image-conformance/tests/it/family_geom.rs",
-        "modules/image/image-js/src/smart.rs",
-        "platform/extensions/packages/plugin-sdk/src/transform-box.ts"
+        "modules/image/image-js/src/smart.rs"
       ]
     }
   ]

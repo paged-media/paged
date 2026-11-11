@@ -42,7 +42,7 @@
 // relative winding is what non-zero reads, and `orientForNonZeroHoles`
 // (compound.ts) is deliberately NOT re-run on a mirrored instance.
 
-import { composeAffine, type Affine } from "./affine";
+import { applyAffine, composeAffine, type Affine } from "./affine";
 import type { AnchorTable, Vec2 } from "./types";
 
 /** Which placement algebra a repeat uses. */
@@ -116,10 +116,8 @@ export function transformAnchorTable(
   table: AnchorTable,
   m: Affine,
 ): AnchorTable {
-  const p = (v: readonly [number, number]): [number, number] => [
-    m[0] * v[0] + m[2] * v[1] + m[4],
-    m[1] * v[0] + m[3] * v[1] + m[5],
-  ];
+  const p = (v: readonly [number, number]): [number, number] =>
+    applyAffine(m, v[0], v[1]);
   return {
     anchors: table.anchors.map((a) => ({
       anchor: p(a.anchor),

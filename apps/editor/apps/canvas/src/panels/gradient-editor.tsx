@@ -38,6 +38,7 @@
 //     (`frameGradientStrokeMode`). Each is one object-model write — one
 //     batch over a multi-selection, one undo step.
 
+import { hexToRgb, rgbToHex } from "@paged-media/helpers";
 import {
   useCallback,
   useEffect,
@@ -118,20 +119,11 @@ const APPLY_BINDINGS = {
   strokeMode: { scope: "element" as const, path: "frameGradientStrokeMode" },
 };
 
-/** `#rrggbb` → its RGB 0..255 channels. */
-function hexChannels(hex: string): [number, number, number] {
-  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
-  if (!m) return [0, 0, 0];
-  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
-}
+/** `#rrggbb` → its RGB 0..255 channels (black when unreadable). */
+const hexChannels = (hex: string): [number, number, number] =>
+  hexToRgb(hex) ?? [0, 0, 0];
 
-function channelsHex([r, g, b]: readonly number[]): string {
-  const h = (v: number) =>
-    Math.max(0, Math.min(255, Math.round(v)))
-      .toString(16)
-      .padStart(2, "0");
-  return `#${h(r ?? 0)}${h(g ?? 0)}${h(b ?? 0)}`;
-}
+const channelsHex = rgbToHex;
 
 function wireKind(kind: string): string {
   return KINDS.find((k) => k.kind === kind)?.wire ?? "Linear";

@@ -96,7 +96,12 @@ export function valueToSwatchSpec(v: MixerValue, name?: string): SwatchSpec {
 // (`@paged-media/helpers`): one implementation for the editor and the
 // built-ins. `hexToRgb` also reads the `#rgb` shorthand.
 export { cmykToRgb, hexToRgb, rgbToCmyk, rgbToHex } from "@paged-media/helpers";
-import { rgbToCmyk as naiveCmyk, srgbToLinear } from "@paged-media/helpers";
+import {
+  rgbToCmyk as naiveCmyk,
+  rgbToHsl as rgbToHslUnit,
+  rgbToLab as rgbToLabAt,
+  srgbToLinear,
+} from "@paged-media/helpers";
 
 /** The channels of an RGB colour in `space` (see `rgbToLab`): what the
  *  mixer's CMYK / Lab / K fields show for a colour authored in RGB.
@@ -124,25 +129,9 @@ export function rgbInSpace(
 // stays `useColorCompute` / the engine's colorCompute and these
 // never cross the wire as authoritative values.
 
-/** RGB (0..255) → HSL (H 0..360, S/L 0..100). */
-export function rgbToHsl(rgb: number[]): [number, number, number] {
-  const r = (rgb[0] ?? 0) / 255;
-  const g = (rgb[1] ?? 0) / 255;
-  const b = (rgb[2] ?? 0) / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  const d = max - min;
-  let h = 0;
-  let s = 0;
-  if (d !== 0) {
-    s = d / (1 - Math.abs(2 * l - 1));
-    if (max === r) h = ((g - b) / d) % 6;
-    else if (max === g) h = (b - r) / d + 2;
-    else h = (r - g) / d + 4;
-    h *= 60;
-    if (h < 0) h += 360;
-  }
+/** RGB (0..255) → HSL (H 0..360, S/L 0..100), rounded. */
+export function rgbToHsl(rgb: readonly number[]): [number, number, number] {
+  const { h, s, l } = rgbToHslUnit([rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0]);
   return [Math.round(h), Math.round(s * 100), Math.round(l * 100)];
 }
 
@@ -175,23 +164,15 @@ const linear = (v: number): number => {
 
 /** sRGB (0..255) → CIE Lab (D50): L 0..100, a/b about −128..127. */
 export function rgbToLab(rgb: readonly number[]): [number, number, number] {
-  const r = linear(rgb[0] ?? 0);
-  const g = linear(rgb[1] ?? 0);
-  const b = linear(rgb[2] ?? 0);
-  // sRGB → XYZ (D50, Bradford-adapted; the ICC sRGB matrix).
-  const x = 0.4360747 * r + 0.3850649 * g + 0.1430804 * b;
-  const y = 0.2225045 * r + 0.7168786 * g + 0.0606169 * b;
-  const z = 0.0139322 * r + 0.0971045 * g + 0.7141733 * b;
-  const f = (t: number) =>
-    t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116;
-  const fx = f(x / 0.96422);
-  const fy = f(y / 1.0);
-  const fz = f(z / 0.82521);
-  return [
-    Math.round(116 * fy - 16),
-    Math.round(500 * (fx - fy)),
-    Math.round(200 * (fy - fz)),
-  ];
+  const lab = rgbToLabAt(
+    [
+      Math.min(255, Math.max(0, rgb[0] ?? 0)),
+      Math.min(255, Math.max(0, rgb[1] ?? 0)),
+      Math.min(255, Math.max(0, rgb[2] ?? 0)),
+    ],
+    "D50",
+  );
+  return [Math.round(lab.l), Math.round(lab.a), Math.round(lab.b)];
 }
 
 /** sRGB (0..255) → a gray ink percentage (0 white … 100 black). */

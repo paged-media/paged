@@ -19,7 +19,13 @@
 import { describe, expect, it } from "bun:test";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 
-import { crc32, zip } from "../src/index.ts";
+import {
+  crc32,
+  deflateRaw,
+  unzip as readZip,
+  zip,
+  zipAsync,
+} from "../src/index.ts";
 
 /** The entries of a ZIP, read back through its central directory. */
 function unzip(bytes: Uint8Array): Array<[string, Uint8Array, number]> {
@@ -94,5 +100,28 @@ describe("zip", () => {
 
   it("an empty archive is just the end record", () => {
     expect(zip([]).byteLength).toBe(22);
+  });
+
+  it("an OCF package writes mimetype first and stored; unzip reads it back", async () => {
+    const text = "x".repeat(400);
+    const bytes = await zipAsync(
+      [
+        ["designmap.xml", new TextEncoder().encode(text)],
+        [
+          "mimetype",
+          new TextEncoder().encode(
+            "application/vnd.adobe.indesign-idml-package",
+          ),
+        ],
+      ],
+      { ocf: true, deflate: deflateRaw },
+    );
+    const raw = unzip(bytes);
+    expect(raw.map(([n]) => n)).toEqual(["mimetype", "designmap.xml"]);
+    expect(raw[0]![2]).toBe(0);
+    expect(raw[1]![2]).toBe(8);
+    const back = await readZip(bytes);
+    expect(back.map(([n]) => n)).toEqual(["mimetype", "designmap.xml"]);
+    expect(new TextDecoder().decode(back[1]![1])).toBe(text);
   });
 });

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Phase 0 — build a minimal IDML/OCF package (in TypeScript, with JSZip)
+// Phase 0 — build a minimal IDML/OCF package (in TypeScript, with the shared ZIP writer)
 // carrying ONE inline-image `<Rectangle>` per PDF page. Handed to
 // `host.nativeDocument.open`, it routes through the engine's EXISTING IDML
 // importer + inline-image path — no Rust/wasm involved.
@@ -36,7 +36,7 @@
 // Q-03): `<Contents>` is base64 of the raw PNG bytes, decoded onto
 // `Rectangle.image_bytes`; the `<Image>` element flips `has_image_element`.
 
-import JSZip from "jszip";
+import { deflateRaw, zipAsync } from "@paged-media/helpers";
 import { bytesToBase64 } from "@paged-media/helpers";
 
 /** One rasterized PDF page: its point size + the PNG-encoded pixels. */
@@ -220,8 +220,8 @@ function spread(page: PdfPageRaster, index: number): string {
  * convention), every other entry deflated — identical to blank.rs's `zip`
  * assembly. The result parses through the engine's `import_idml_archive`.
  *
- * Async because JSZip v3 offers no synchronous buffer output
- * (`generate()` was removed in v3 — only `generateAsync` exists).
+ * Async because the browser's deflate is a stream (`@paged-media/helpers`'
+ * `zipAsync`, the one ZIP writer).
  */
 export async function buildIdmlFromRasters(
   pages: PdfPageRaster[],
@@ -229,41 +229,26 @@ export async function buildIdmlFromRasters(
   if (pages.length === 0) {
     throw new Error("buildIdmlFromRasters: no pages to build");
   }
-  const zip = new JSZip();
-
-  // mimetype first + STORED (OCF convention). JSZip preserves insertion
-  // order, and `compression: "STORE"` leaves the bytes uncompressed.
-  zip.file("mimetype", MIME, { compression: "STORE" });
-
   const spreadSrcs = pages.map((_, i) => `Spreads/Spread_p${i}.xml`);
-
-  zip.file("designmap.xml", designmap(spreadSrcs), { compression: "DEFLATE" });
-  zip.file("META-INF/container.xml", container(), { compression: "DEFLATE" });
-  zip.file("Resources/Graphic.xml", graphic(), { compression: "DEFLATE" });
-  zip.file("Resources/Fonts.xml", emptyPkg("Fonts"), {
-    compression: "DEFLATE",
-  });
-  zip.file("Resources/Styles.xml", styles(), { compression: "DEFLATE" });
-  zip.file("Resources/Preferences.xml", emptyPkg("Preferences"), {
-    compression: "DEFLATE",
-  });
-  zip.file(
-    "MasterSpreads/MasterSpread_um.xml",
-    masterSpread(pages[0].widthPt, pages[0].heightPt),
-    { compression: "DEFLATE" },
+  const text = (name: string, xml: string) =>
+    [name, new TextEncoder().encode(xml)] as const;
+  // An OCF package: `mimetype` first and STORED, the rest deflated.
+  return zipAsync(
+    [
+      text("mimetype", MIME),
+      text("designmap.xml", designmap(spreadSrcs)),
+      text("META-INF/container.xml", container()),
+      text("Resources/Graphic.xml", graphic()),
+      text("Resources/Fonts.xml", emptyPkg("Fonts")),
+      text("Resources/Styles.xml", styles()),
+      text("Resources/Preferences.xml", emptyPkg("Preferences")),
+      text(
+        "MasterSpreads/MasterSpread_um.xml",
+        masterSpread(pages[0].widthPt, pages[0].heightPt),
+      ),
+      ...pages.map((page, i) => text(spreadSrcs[i], spread(page, i))),
+      text("XML/BackingStory.xml", backing()),
+    ],
+    { ocf: true, deflate: deflateRaw },
   );
-  pages.forEach((page, i) => {
-    zip.file(spreadSrcs[i], spread(page, i), { compression: "DEFLATE" });
-  });
-  zip.file("XML/BackingStory.xml", backing(), { compression: "DEFLATE" });
-
-  // `streamFiles: false` (the default) writes real sizes into each local
-  // header rather than a trailing data descriptor — so the STORED mimetype's
-  // header is the exact shape an OCF consumer expects. Per-file `compression`
-  // wins over this generate-level default, so mimetype stays STORED.
-  return zip.generateAsync({
-    type: "uint8array",
-    compression: "DEFLATE",
-    streamFiles: false,
-  });
 }

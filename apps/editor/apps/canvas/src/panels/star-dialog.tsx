@@ -44,7 +44,7 @@ import {
   STAR_DEFAULTS,
   STAR_MAX_POINTS,
   STAR_MIN_POINTS,
-} from "@paged-media/helpers";
+} from "@paged-media/vector-geometry";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.starDialog", {

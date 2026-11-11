@@ -23,7 +23,7 @@
 // display pixel allows (sRGB → hex and CIE L*a*b*, D50 as ICC's PCS).
 
 import type { ElementGeometryItem } from "@paged-media/client";
-import { srgbToLinear } from "@paged-media/helpers";
+import { rgbToLab } from "@paged-media/helpers";
 
 export interface SelectionReadout {
   /** Top-left of the selection's axis-aligned box, page space, pt. */
@@ -150,35 +150,20 @@ export function rgbHex(r: number, g: number, b: number): string {
   return `#${h(r)}${h(g)}${h(b)}`;
 }
 
-/** sRGB (0–255) → CIE L*a*b* under D50, through the Bradford-adapted
- *  sRGB matrix ICC profiles use. Rounded to one decimal. */
+/** sRGB (0–255) → CIE L*a*b* under D50 (ICC's connection space; the
+ *  conversion is `@paged-media/helpers`' `rgbToLab`). Rounded to one
+ *  decimal. */
 export function srgbToLab(
   r: number,
   g: number,
   b: number,
 ): [number, number, number] {
-  const lin = (v: number) => {
-    const c = v / 255;
-    return srgbToLinear(c);
-  };
-  const R = lin(r);
-  const G = lin(g);
-  const B = lin(b);
-  // sRGB → XYZ (D50), Bradford-adapted (the sRGB ICC profile's colorants).
-  const X = 0.4360747 * R + 0.3850649 * G + 0.1430804 * B;
-  const Y = 0.2225045 * R + 0.7168786 * G + 0.0606169 * B;
-  const Z = 0.0139322 * R + 0.0971045 * G + 0.7141733 * B;
-  const [Xn, Yn, Zn] = [0.96422, 1, 0.82521];
-  const f = (t: number) =>
-    t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116;
-  const fx = f(X / Xn);
-  const fy = f(Y / Yn);
-  const fz = f(Z / Zn);
+  const lab = rgbToLab([r, g, b], "D50");
   const r1 = (v: number) => {
     const n = Math.round(v * 10) / 10;
     return Object.is(n, -0) ? 0 : n;
   };
-  return [r1(116 * fy - 16), r1(500 * (fx - fy)), r1(200 * (fy - fz))];
+  return [r1(lab.l), r1(lab.a), r1(lab.b)];
 }
 
 // ---- Text statistics (the Info panel's Text section) ----------------------

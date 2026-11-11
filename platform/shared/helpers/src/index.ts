@@ -46,12 +46,29 @@ export {
 } from "./base64.ts";
 export { PT_PER_PX, PT_PER_UNIT, PX_PER_PT, parseLength } from "./units.ts";
 export {
+  HARMONY_RULES,
   cmykToRgb,
+  deltaE,
+  harmonyOf,
   hexToRgb,
+  hsbToRgb,
+  hueDelta,
+  labToRgb,
   linearToSrgb,
   rgbToCmyk,
   rgbToHex,
+  rgbToHsb,
+  rgbToHsl,
+  rgbToLab,
+  rotateHues,
+  sameRgb,
   srgbToLinear,
+  wrapHue,
+  type HarmonyRule,
+  type Hsb,
+  type Lab,
+  type LabWhite,
+  type Rgb,
 } from "./colour.ts";
 export {
   LABEL_PREFIX,
@@ -117,22 +134,16 @@ export {
   type TransformMemory,
   type TransformRecord,
 } from "./transform.ts";
-export {
-  MAX_LIVE_STAR_INSET,
-  STAR_DEFAULTS,
-  STAR_MAX_POINTS,
-  STAR_MIN_POINTS,
-  liveStarInset,
-  liveStarMutationFor,
-  polygonAnchors,
-  starAnchors,
-  starMutationFor,
-  starParamsFrom,
-  type StarAnchor,
-  type StarParams,
-} from "./star.ts";
 export { escapeXmlAttr, escapeXmlText } from "./escape.ts";
-export { zip, type ZipOptions } from "./zip.ts";
+export {
+  deflateRaw,
+  inflateRaw,
+  unzip,
+  zip,
+  zipAsync,
+  type ZipAsyncOptions,
+  type ZipOptions,
+} from "./zip.ts";
 export {
   isApprovedScript,
   trustedHtml,
