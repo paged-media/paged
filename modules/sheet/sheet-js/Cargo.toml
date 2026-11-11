@@ -26,6 +26,10 @@ sheet-format = { path = "../sheet-format" }
 sheet-xlsx = { path = "../sheet-xlsx", default-features = false }
 # The workbook theme on the wire (`setTheme`'s argument, engine ADR 1056).
 dml-native = { path = "../../../platform/shared/dml-native" }
+# Engine ADR 1037 — the filter stack the grid draws a picture through, the
+# engine's one evaluator, and its op type.
+paged-image-adjust = { path = "../../../engine/core/crates/paged-image-adjust" }
+paged-model = { path = "../../../engine/core/crates/paged-model" }
 paged-ooxml = { path = "../../../platform/shared/ooxml" }
 # A drawing shape's outline (the 187 presets and custom geometry, sheet ADR 530).
 dml-geom = { path = "../../../platform/shared/dml-geom" }

@@ -341,6 +341,18 @@
         "modules/image/image-conformance/tests/it/family_geom.rs",
         "modules/image/image-js/src/smart.rs"
       ]
+    },
+    {
+      "name": "drawingml-crop",
+      "description": "map a picture's a:srcRect onto its placement and back with dml_native::crop",
+      "owner": ["platform/shared/dml-native/src/crop.rs"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "patterns": ["1\\.0 - (l|cl) - (r|cr)\\b", "1\\.0 - (t|ct) - (b|cb)\\b"],
+      "baseline": [
+        "engine/core/crates/paged-canvas/tests/it/anchored_picture_crop.rs",
+        "modules/doc/docx-conformance/tests/it/crop_saveback.rs",
+        "modules/doc/docx-export/src/crop.rs"
+      ]
     }
   ]
 }

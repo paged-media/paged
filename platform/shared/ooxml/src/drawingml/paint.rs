@@ -31,6 +31,21 @@ use crate::tree::{El, Ns};
 /// `a:tileRect`, `a:fillRect`).
 pub type RelRect = (i32, i32, i32, i32);
 
+/// A [`RelRect`]'s unit: 1 000ths of a percent.
+pub const REL_RECT_UNIT: f64 = 100_000.0;
+
+/// A [`RelRect`]'s sides (left, top, right, bottom) as fractions.
+pub fn rel_rect_fractions(r: RelRect) -> [f64; 4] {
+    let f = |v: i32| f64::from(v) / REL_RECT_UNIT;
+    [f(r.0), f(r.1), f(r.2), f(r.3)]
+}
+
+/// Fractions back as a [`RelRect`], rounded to its unit.
+pub fn rel_rect_of(sides: [f64; 4]) -> RelRect {
+    let u = |v: f64| (v * REL_RECT_UNIT).round() as i32;
+    (u(sides[0]), u(sides[1]), u(sides[2]), u(sides[3]))
+}
+
 /// A relationship resolver: an `r:embed` / `r:link` id to the part (or
 /// URL) it names. A reader without relationships passes `&|_| None`.
 pub type Rels<'a> = &'a dyn Fn(&str) -> Option<String>;

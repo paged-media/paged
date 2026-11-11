@@ -1487,6 +1487,7 @@ dependencies = [
 name = "docx-conformance"
 version = "0.0.0"
 dependencies = [
+ "dml-native",
  "docx-core",
  "docx-export",
  "docx-import",
@@ -1517,6 +1518,7 @@ dependencies = [
 name = "docx-export"
 version = "0.0.0"
 dependencies = [
+ "dml-native",
  "docx-core",
  "docx-lower",
  "flate2",
@@ -2815,7 +2817,9 @@ dependencies = [
  "js-sys",
  "paged-blend",
  "paged-color",
+ "paged-image-adjust",
  "paged-kernels",
+ "paged-model",
  "paged-pixel",
  "paged-psd",
  "paged-raster",
@@ -4500,6 +4504,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-image-adjust"
+version = "0.0.0"
+dependencies = [
+ "paged-kernels",
+ "paged-model",
+ "paged-pixel",
+]
+
+[[package]]
 name = "paged-introspect"
 version = "0.0.0"
 dependencies = [
@@ -4751,7 +4764,7 @@ dependencies = [
  "paged-gen",
  "paged-geom",
  "paged-gpu",
- "paged-kernels",
+ "paged-image-adjust",
  "paged-math",
  "paged-model",
  "paged-mutate",
@@ -6480,6 +6493,8 @@ dependencies = [
  "dml-geom",
  "dml-native",
  "paged-fmt",
+ "paged-image-adjust",
+ "paged-model",
  "paged-ooxml",
  "serde",
  "serde-wasm-bindgen",

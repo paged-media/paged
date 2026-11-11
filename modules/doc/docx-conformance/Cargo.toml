@@ -29,3 +29,5 @@ docx-skeleton.workspace = true
 serde_json.workspace = true
 # The math tree the equation tests look into (engine ADR 1090).
 paged-math.workspace = true
+# The picture filter stack the save-back tests set (engine ADR 1037).
+dml-native.workspace = true

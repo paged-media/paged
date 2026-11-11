@@ -79,6 +79,7 @@ fn read(image: &LoweredImage, edit: &dyn Fn(u32) -> Option<Option<[f32; 6]>>) ->
         frame_id: "frame".into(),
         offset: image.at,
         placement: image.drawing.and_then(edit).unwrap_or(placed),
+        adjustments: Some(image.adjustments.clone()),
     }
 }
 
@@ -204,6 +205,70 @@ fn an_unedited_cropped_document_saves_every_part_byte_identical() {
         assert!(skips.is_empty(), "{skips:?}");
         identical_except(&original, &saved, &[]);
     }
+}
+
+#[test]
+fn picture_adjustments_set_in_the_editor_are_saved_as_blip_effects__feat__images_graphics_image_filter_stack(
+) {
+    // Engine ADR 1037, amendment 2026-11-11: a threshold set on drawing 1
+    // is its blip's `a:biLevel`, and the import reads it back as the op.
+    let original = picture_crop_docx();
+    let session = DocSession::load(&original).unwrap();
+    let base = session.lowered();
+    let mut read = pictures(&base, &none);
+    let op = dml_native::RasterOp::Threshold { level: 0.4 };
+    // `pictures` lists one entry per lowered paragraph block, its pictures
+    // in the lowering's order.
+    let paragraphs = base.story.blocks.iter().filter_map(|b| match b {
+        LoweredBlock::Paragraph(p) => Some(p),
+        LoweredBlock::Table(_) => None,
+    });
+    for (p, read_back) in paragraphs.zip(read.body.iter_mut()) {
+        for (image, r) in p.images.iter().zip(read_back.iter_mut()) {
+            if image.drawing == Some(1) {
+                r.adjustments = Some(vec![op.clone()]);
+            }
+        }
+    }
+    let (saved, skips) = session
+        .save_edited_structure(
+            &body(&base),
+            &[],
+            &[],
+            &Default::default(),
+            &[],
+            TableParagraphs::Joined,
+            &StructureIn {
+                pictures: read,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    // For the Word oracle (`PAGED_DOC_EXPORT_DIR`).
+    if let Ok(dir) = std::env::var("PAGED_DOC_EXPORT_DIR") {
+        std::fs::write(
+            std::path::Path::new(&dir).join("picture-filter-stack.docx"),
+            &saved,
+        )
+        .unwrap();
+    }
+    assert!(text(&saved, MAIN).contains("<a:biLevel thresh=\"40000\"/>"));
+    identical_except(&original, &saved, &[MAIN]);
+    let again = DocSession::load(&saved).unwrap().lowered();
+    let ops: Vec<_> = again
+        .story
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            LoweredBlock::Paragraph(p) => Some(p.images.iter()),
+            LoweredBlock::Table(_) => None,
+        })
+        .flatten()
+        .filter(|i| i.drawing == Some(1))
+        .map(|i| i.adjustments.clone())
+        .collect();
+    assert_eq!(ops, vec![vec![op]]);
 }
 
 #[test]

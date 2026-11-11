@@ -55,6 +55,7 @@ import type {
   MutationInput,
   PageId,
   PathAnchorSpec,
+  RasterOp,
 } from "@paged-media/plugin-api";
 import type {
   SceneEffectGroup,
@@ -64,6 +65,8 @@ import type {
   SceneLayerEffects,
   ScenePathSeg,
 } from "@paged-media/web-model";
+
+import { cssFilterOps } from "./css-filter-ops.js";
 
 /** A process RGB swatch to create (channels 0..255), keyed by a deterministic
  *  `Color/wb-RRGGBB` self-id so the plan can reference it without a read-back.
@@ -225,6 +228,9 @@ export interface BakeImage {
   opacity?: number;
   shadow?: BakeShadow;
   blend?: string;
+  /** A CSS `filter:`'s colour functions and blur as the engine's image
+   *  filter stack (engine ADR 1037), set as `frameImageAdjustments`. */
+  adjustments?: RasterOp[];
 }
 
 /** The native-content plan for one rendered web frame — pure data. */
@@ -864,9 +870,10 @@ function mulOpacity(
  * opacity multiplied in, its blend mode, drop shadow and mask set on it); any
  * other becomes a native group of its members (a clip group when it has a
  * `clip-path`). What has no native twin is deferred by key, never faked:
- * `filter.blur`, `filter.<colour function>` (the image-adjustment stack is
- * not on this engine), `filter.url`, a drop shadow or mask a group or text
- * would have to carry, a second drop shadow.
+ * `filter.blur` and `filter.<colour function>` on anything but one picture
+ * (on a picture they become its image filter stack, engine ADR 1037),
+ * `filter.url`, a drop shadow or mask a group or text would have to carry, a
+ * second drop shadow.
  */
 export function planEffects(
   plan: BakePlan,
@@ -921,19 +928,23 @@ export function planEffects(
     members.sort((a, b) => a.at - b.at);
     if (members.length === 0) continue;
 
-    // The filter list: opacity() multiplies in, a drop shadow maps, the rest
-    // has no native twin.
+    // The filter list: opacity() multiplies in, a drop shadow maps, the
+    // colour functions and blur become a picture's filter stack (below),
+    // `url()` has no native twin.
     let opacity = g.opacity;
     const dropShadows: Extract<
       NonNullable<SceneEffectGroup["filters"]>[number],
       { kind: "dropShadow" }
     >[] = [];
+    const pictureFilters: Extract<
+      NonNullable<SceneEffectGroup["filters"]>[number],
+      { kind: "blur" | "color" }
+    >[] = [];
     for (const f of g.filters ?? []) {
       if (f.kind === "opacity") opacity *= f.amount;
       else if (f.kind === "dropShadow") dropShadows.push(f);
-      else if (f.kind === "blur") h.defer("filter.blur");
       else if (f.kind === "url") h.defer("filter.url");
-      else h.defer(`filter.${f.function}`);
+      else pictureFilters.push(f);
     }
 
     let clip: PathAnchorSpec[][] | undefined;
@@ -980,6 +991,24 @@ export function planEffects(
       t.opacity = mulOpacity(t.opacity, opacity);
     }
     if (g.isolate && ref.kind === "group") groupsOut[ref.index].isolate = true;
+
+    // Engine ADR 1037 — on one picture, the colour functions and blur are
+    // its filter stack (an inner element's first, as CSS applies them);
+    // anything else has no native twin.
+    if (pictureFilters.length > 0) {
+      if (ref.kind === "image") {
+        const img = plan.images[ref.index];
+        const ptW = img.bounds[3] - img.bounds[1];
+        const pxPerPt = ptW > 0 ? img.width / ptW : 1;
+        const { ops, losses } = cssFilterOps(pictureFilters, pxPerPt);
+        if (ops.length > 0)
+          img.adjustments = [...(img.adjustments ?? []), ...ops];
+        for (const key of losses) h.defer(key);
+      } else {
+        for (const f of pictureFilters)
+          h.defer(f.kind === "blur" ? "filter.blur" : `filter.${f.function}`);
+      }
+    }
 
     for (const [i, f] of dropShadows.entries()) {
       const t = target();
@@ -1411,6 +1440,13 @@ export function bakeBatchOps(
           setProp(el, "frameOpacity", { type: "length", value: img.opacity }),
         );
       if (img.shadow) ops.push(...shadowOps(el, img.shadow));
+      if (img.adjustments?.length)
+        ops.push(
+          setProp(el, "frameImageAdjustments", {
+            type: "imageAdjustments",
+            value: img.adjustments,
+          }),
+        );
       ops.push(...effectOps(el, img));
     });
     plan.texts.forEach((t, i) => {

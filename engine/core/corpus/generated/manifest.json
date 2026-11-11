@@ -5,7 +5,7 @@
       "idml": "anchored.idml",
       "pdf": "anchored.pdf",
       "pages": 12,
-      "passing": 0,
+      "passing": 12,
       "diff_dir": "/tmp/idml-generated-diff/anchored",
       "report": "/tmp/idml-generated-diff/anchored/report.json"
     },
@@ -14,9 +14,27 @@
       "idml": "annual-base.idml",
       "pdf": "annual-base.pdf",
       "pages": 134,
-      "passing": 129,
+      "passing": 134,
       "diff_dir": "/tmp/idml-generated-diff/annual-base",
       "report": "/tmp/idml-generated-diff/annual-base/report.json"
+    },
+    {
+      "name": "baseline-grid",
+      "idml": "baseline-grid.idml",
+      "pdf": "baseline-grid.pdf",
+      "pages": 2,
+      "passing": 2,
+      "diff_dir": "/tmp/idml-generated-diff/baseline-grid",
+      "report": "/tmp/idml-generated-diff/baseline-grid/report.json"
+    },
+    {
+      "name": "baseline-grid-margin",
+      "idml": "baseline-grid-margin.idml",
+      "pdf": "baseline-grid-margin.pdf",
+      "pages": 2,
+      "passing": 2,
+      "diff_dir": "/tmp/idml-generated-diff/baseline-grid-margin",
+      "report": "/tmp/idml-generated-diff/baseline-grid-margin/report.json"
     },
     {
       "name": "blank-paragraphs",
@@ -28,11 +46,29 @@
       "report": "/tmp/idml-generated-diff/blank-paragraphs/report.json"
     },
     {
+      "name": "chain-widths",
+      "idml": "chain-widths.idml",
+      "pdf": "chain-widths.pdf",
+      "pages": 2,
+      "passing": 2,
+      "diff_dir": "/tmp/idml-generated-diff/chain-widths",
+      "report": "/tmp/idml-generated-diff/chain-widths/report.json"
+    },
+    {
+      "name": "column-rules",
+      "idml": "column-rules.idml",
+      "pdf": "column-rules.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/column-rules",
+      "report": "/tmp/idml-generated-diff/column-rules/report.json"
+    },
+    {
       "name": "composer",
       "idml": "composer.idml",
       "pdf": "composer.pdf",
       "pages": 8,
-      "passing": 0,
+      "passing": 4,
       "diff_dir": "/tmp/idml-generated-diff/composer",
       "report": "/tmp/idml-generated-diff/composer/report.json"
     },
@@ -50,7 +86,7 @@
       "idml": "corners.idml",
       "pdf": "corners.pdf",
       "pages": 5,
-      "passing": 0,
+      "passing": 5,
       "diff_dir": "/tmp/idml-generated-diff/corners",
       "report": "/tmp/idml-generated-diff/corners/report.json"
     },
@@ -64,11 +100,119 @@
       "report": "/tmp/idml-generated-diff/effects/report.json"
     },
     {
+      "name": "effects-attrs",
+      "idml": "effects-attrs.idml",
+      "pdf": "effects-attrs.pdf",
+      "pages": 2,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/effects-attrs",
+      "report": "/tmp/idml-generated-diff/effects-attrs/report.json"
+    },
+    {
+      "name": "endnotes",
+      "idml": "endnotes.idml",
+      "pdf": "endnotes.pdf",
+      "pages": 2,
+      "passing": 2,
+      "diff_dir": "/tmp/idml-generated-diff/endnotes",
+      "report": "/tmp/idml-generated-diff/endnotes/report.json"
+    },
+    {
+      "name": "feather-strokes",
+      "idml": "feather-strokes.idml",
+      "pdf": "feather-strokes.pdf",
+      "pages": 1,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/feather-strokes",
+      "report": "/tmp/idml-generated-diff/feather-strokes/report.json"
+    },
+    {
+      "name": "footnote-columns",
+      "idml": "footnote-columns.idml",
+      "pdf": "footnote-columns.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-columns",
+      "report": "/tmp/idml-generated-diff/footnote-columns/report.json"
+    },
+    {
+      "name": "footnote-keeps",
+      "idml": "footnote-keeps.idml",
+      "pdf": "footnote-keeps.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-keeps",
+      "report": "/tmp/idml-generated-diff/footnote-keeps/report.json"
+    },
+    {
+      "name": "footnote-nosplit",
+      "idml": "footnote-nosplit.idml",
+      "pdf": "footnote-nosplit.pdf",
+      "pages": 1,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-nosplit",
+      "report": "/tmp/idml-generated-diff/footnote-nosplit/report.json"
+    },
+    {
+      "name": "footnote-numbering",
+      "idml": "footnote-numbering.idml",
+      "pdf": "footnote-numbering.pdf",
+      "pages": 2,
+      "passing": 2,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-numbering",
+      "report": "/tmp/idml-generated-diff/footnote-numbering/report.json"
+    },
+    {
+      "name": "footnote-references",
+      "idml": "footnote-references.idml",
+      "pdf": "footnote-references.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-references",
+      "report": "/tmp/idml-generated-diff/footnote-references/report.json"
+    },
+    {
+      "name": "footnote-restart",
+      "idml": "footnote-restart.idml",
+      "pdf": "footnote-restart.pdf",
+      "pages": 2,
+      "passing": 2,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-restart",
+      "report": "/tmp/idml-generated-diff/footnote-restart/report.json"
+    },
+    {
+      "name": "footnote-split",
+      "idml": "footnote-split.idml",
+      "pdf": "footnote-split.pdf",
+      "pages": 1,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-split",
+      "report": "/tmp/idml-generated-diff/footnote-split/report.json"
+    },
+    {
+      "name": "footnote-split-narrow",
+      "idml": "footnote-split-narrow.idml",
+      "pdf": "footnote-split-narrow.pdf",
+      "pages": 1,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-split-narrow",
+      "report": "/tmp/idml-generated-diff/footnote-split-narrow/report.json"
+    },
+    {
+      "name": "footnote-straddle",
+      "idml": "footnote-straddle.idml",
+      "pdf": "footnote-straddle.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/footnote-straddle",
+      "report": "/tmp/idml-generated-diff/footnote-straddle/report.json"
+    },
+    {
       "name": "footnotes",
       "idml": "footnotes.idml",
       "pdf": "footnotes.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/footnotes",
       "report": "/tmp/idml-generated-diff/footnotes/report.json"
     },
@@ -77,7 +221,7 @@
       "idml": "forced-line-break.idml",
       "pdf": "forced-line-break.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/forced-line-break",
       "report": "/tmp/idml-generated-diff/forced-line-break/report.json"
     },
@@ -95,7 +239,7 @@
       "idml": "geometry-groups.idml",
       "pdf": "geometry-groups.pdf",
       "pages": 6,
-      "passing": 4,
+      "passing": 6,
       "diff_dir": "/tmp/idml-generated-diff/geometry-groups",
       "report": "/tmp/idml-generated-diff/geometry-groups/report.json"
     },
@@ -104,7 +248,7 @@
       "idml": "gradient-geometry.idml",
       "pdf": "gradient-geometry.pdf",
       "pages": 2,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/gradient-geometry",
       "report": "/tmp/idml-generated-diff/gradient-geometry/report.json"
     },
@@ -145,11 +289,20 @@
       "report": "/tmp/idml-generated-diff/images/report.json"
     },
     {
+      "name": "index",
+      "idml": "index.idml",
+      "pdf": "index.pdf",
+      "pages": 4,
+      "passing": 4,
+      "diff_dir": "/tmp/idml-generated-diff/index",
+      "report": "/tmp/idml-generated-diff/index/report.json"
+    },
+    {
       "name": "inline-objects",
       "idml": "inline-objects.idml",
       "pdf": "inline-objects.pdf",
       "pages": 7,
-      "passing": 1,
+      "passing": 7,
       "diff_dir": "/tmp/idml-generated-diff/inline-objects",
       "report": "/tmp/idml-generated-diff/inline-objects/report.json"
     },
@@ -163,11 +316,20 @@
       "report": "/tmp/idml-generated-diff/justification/report.json"
     },
     {
+      "name": "justified-breaks",
+      "idml": "justified-breaks.idml",
+      "pdf": "justified-breaks.pdf",
+      "pages": 2,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/justified-breaks",
+      "report": "/tmp/idml-generated-diff/justified-breaks/report.json"
+    },
+    {
       "name": "keeps",
       "idml": "keeps.idml",
       "pdf": "keeps.pdf",
       "pages": 8,
-      "passing": 0,
+      "passing": 8,
       "diff_dir": "/tmp/idml-generated-diff/keeps",
       "report": "/tmp/idml-generated-diff/keeps/report.json"
     },
@@ -176,7 +338,7 @@
       "idml": "keeps-reflow.idml",
       "pdf": "keeps-reflow.pdf",
       "pages": 9,
-      "passing": 1,
+      "passing": 7,
       "diff_dir": "/tmp/idml-generated-diff/keeps-reflow",
       "report": "/tmp/idml-generated-diff/keeps-reflow/report.json"
     },
@@ -203,7 +365,7 @@
       "idml": "layout.idml",
       "pdf": "layout.pdf",
       "pages": 11,
-      "passing": 4,
+      "passing": 5,
       "diff_dir": "/tmp/idml-generated-diff/layout",
       "report": "/tmp/idml-generated-diff/layout/report.json"
     },
@@ -212,7 +374,7 @@
       "idml": "line-ends.idml",
       "pdf": "line-ends.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/line-ends",
       "report": "/tmp/idml-generated-diff/line-ends/report.json"
     },
@@ -230,7 +392,7 @@
       "idml": "links-broken.idml",
       "pdf": "links-broken.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/links-broken",
       "report": "/tmp/idml-generated-diff/links-broken/report.json"
     },
@@ -239,7 +401,7 @@
       "idml": "links-ok.idml",
       "pdf": "links-ok.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/links-ok",
       "report": "/tmp/idml-generated-diff/links-ok/report.json"
     },
@@ -248,7 +410,7 @@
       "idml": "list-marker-styles.idml",
       "pdf": "list-marker-styles.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/list-marker-styles",
       "report": "/tmp/idml-generated-diff/list-marker-styles/report.json"
     },
@@ -257,7 +419,7 @@
       "idml": "list-markers.idml",
       "pdf": "list-markers.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/list-markers",
       "report": "/tmp/idml-generated-diff/list-markers/report.json"
     },
@@ -266,7 +428,7 @@
       "idml": "list-overrides.idml",
       "pdf": "list-overrides.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/list-overrides",
       "report": "/tmp/idml-generated-diff/list-overrides/report.json"
     },
@@ -275,7 +437,7 @@
       "idml": "markers.idml",
       "pdf": "markers.pdf",
       "pages": 2,
-      "passing": 1,
+      "passing": 2,
       "diff_dir": "/tmp/idml-generated-diff/markers",
       "report": "/tmp/idml-generated-diff/markers/report.json"
     },
@@ -302,7 +464,7 @@
       "idml": "navigation.idml",
       "pdf": "navigation.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/navigation",
       "report": "/tmp/idml-generated-diff/navigation/report.json"
     },
@@ -320,9 +482,18 @@
       "idml": "nested-styles.idml",
       "pdf": "nested-styles.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/nested-styles",
       "report": "/tmp/idml-generated-diff/nested-styles/report.json"
+    },
+    {
+      "name": "notes",
+      "idml": "notes.idml",
+      "pdf": "notes.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/notes",
+      "report": "/tmp/idml-generated-diff/notes/report.json"
     },
     {
       "name": "numbering",
@@ -334,29 +505,74 @@
       "report": "/tmp/idml-generated-diff/numbering/report.json"
     },
     {
+      "name": "numbering-multilevel",
+      "idml": "numbering-multilevel.idml",
+      "pdf": "numbering-multilevel.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/numbering-multilevel",
+      "report": "/tmp/idml-generated-diff/numbering-multilevel/report.json"
+    },
+    {
+      "name": "object-style-frames",
+      "idml": "object-style-frames.idml",
+      "pdf": "object-style-frames.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/object-style-frames",
+      "report": "/tmp/idml-generated-diff/object-style-frames/report.json"
+    },
+    {
+      "name": "object-style-options",
+      "idml": "object-style-options.idml",
+      "pdf": "object-style-options.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/object-style-options",
+      "report": "/tmp/idml-generated-diff/object-style-options/report.json"
+    },
+    {
       "name": "opentype",
       "idml": "opentype.idml",
       "pdf": "opentype.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/opentype",
       "report": "/tmp/idml-generated-diff/opentype/report.json"
+    },
+    {
+      "name": "paragraph-attrs",
+      "idml": "paragraph-attrs.idml",
+      "pdf": "paragraph-attrs.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/paragraph-attrs",
+      "report": "/tmp/idml-generated-diff/paragraph-attrs/report.json"
     },
     {
       "name": "paste-into",
       "idml": "paste-into.idml",
       "pdf": "paste-into.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/paste-into",
       "report": "/tmp/idml-generated-diff/paste-into/report.json"
+    },
+    {
+      "name": "placed-pdf",
+      "idml": "placed-pdf.idml",
+      "pdf": "placed-pdf.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/placed-pdf",
+      "report": "/tmp/idml-generated-diff/placed-pdf/report.json"
     },
     {
       "name": "preflight",
       "idml": "preflight.idml",
       "pdf": "preflight.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/preflight",
       "report": "/tmp/idml-generated-diff/preflight/report.json"
     },
@@ -374,7 +590,7 @@
       "idml": "reflow.idml",
       "pdf": "reflow.pdf",
       "pages": 3,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/reflow",
       "report": "/tmp/idml-generated-diff/reflow/report.json"
     },
@@ -401,7 +617,7 @@
       "idml": "soft-hyphens.idml",
       "pdf": "soft-hyphens.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/soft-hyphens",
       "report": "/tmp/idml-generated-diff/soft-hyphens/report.json"
     },
@@ -410,7 +626,7 @@
       "idml": "span-columns.idml",
       "pdf": "span-columns.pdf",
       "pages": 17,
-      "passing": 0,
+      "passing": 17,
       "diff_dir": "/tmp/idml-generated-diff/span-columns",
       "report": "/tmp/idml-generated-diff/span-columns/report.json"
     },
@@ -419,7 +635,7 @@
       "idml": "split-boundaries.idml",
       "pdf": "split-boundaries.pdf",
       "pages": 24,
-      "passing": 0,
+      "passing": 24,
       "diff_dir": "/tmp/idml-generated-diff/split-boundaries",
       "report": "/tmp/idml-generated-diff/split-boundaries/report.json"
     },
@@ -428,7 +644,7 @@
       "idml": "start-paragraph.idml",
       "pdf": "start-paragraph.pdf",
       "pages": 40,
-      "passing": 30,
+      "passing": 40,
       "diff_dir": "/tmp/idml-generated-diff/start-paragraph",
       "report": "/tmp/idml-generated-diff/start-paragraph/report.json"
     },
@@ -437,16 +653,25 @@
       "idml": "stroke-inset.idml",
       "pdf": "stroke-inset.pdf",
       "pages": 2,
-      "passing": 0,
+      "passing": 2,
       "diff_dir": "/tmp/idml-generated-diff/stroke-inset",
       "report": "/tmp/idml-generated-diff/stroke-inset/report.json"
+    },
+    {
+      "name": "stroke-styles",
+      "idml": "stroke-styles.idml",
+      "pdf": "stroke-styles.pdf",
+      "pages": 1,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/stroke-styles",
+      "report": "/tmp/idml-generated-diff/stroke-styles/report.json"
     },
     {
       "name": "strokes-fills",
       "idml": "strokes-fills.idml",
       "pdf": "strokes-fills.pdf",
       "pages": 25,
-      "passing": 24,
+      "passing": 25,
       "diff_dir": "/tmp/idml-generated-diff/strokes-fills",
       "report": "/tmp/idml-generated-diff/strokes-fills/report.json"
     },
@@ -455,7 +680,7 @@
       "idml": "styles-cascade.idml",
       "pdf": "styles-cascade.pdf",
       "pages": 5,
-      "passing": 2,
+      "passing": 4,
       "diff_dir": "/tmp/idml-generated-diff/styles-cascade",
       "report": "/tmp/idml-generated-diff/styles-cascade/report.json"
     },
@@ -473,7 +698,7 @@
       "idml": "tab-breaks.idml",
       "pdf": "tab-breaks.pdf",
       "pages": 2,
-      "passing": 0,
+      "passing": 2,
       "diff_dir": "/tmp/idml-generated-diff/tab-breaks",
       "report": "/tmp/idml-generated-diff/tab-breaks/report.json"
     },
@@ -482,9 +707,45 @@
       "idml": "table-cell-baseline.idml",
       "pdf": "table-cell-baseline.pdf",
       "pages": 2,
-      "passing": 0,
+      "passing": 2,
       "diff_dir": "/tmp/idml-generated-diff/table-cell-baseline",
       "report": "/tmp/idml-generated-diff/table-cell-baseline/report.json"
+    },
+    {
+      "name": "table-cell-tints",
+      "idml": "table-cell-tints.idml",
+      "pdf": "table-cell-tints.pdf",
+      "pages": 1,
+      "passing": 1,
+      "diff_dir": "/tmp/idml-generated-diff/table-cell-tints",
+      "report": "/tmp/idml-generated-diff/table-cell-tints/report.json"
+    },
+    {
+      "name": "table-fit",
+      "idml": "table-fit.idml",
+      "pdf": "table-fit.pdf",
+      "pages": 6,
+      "passing": 6,
+      "diff_dir": "/tmp/idml-generated-diff/table-fit",
+      "report": "/tmp/idml-generated-diff/table-fit/report.json"
+    },
+    {
+      "name": "table-inline-text",
+      "idml": "table-inline-text.idml",
+      "pdf": "table-inline-text.pdf",
+      "pages": 1,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/table-inline-text",
+      "report": "/tmp/idml-generated-diff/table-inline-text/report.json"
+    },
+    {
+      "name": "table-nested",
+      "idml": "table-nested.idml",
+      "pdf": "table-nested.pdf",
+      "pages": 6,
+      "passing": 6,
+      "diff_dir": "/tmp/idml-generated-diff/table-nested",
+      "report": "/tmp/idml-generated-diff/table-nested/report.json"
     },
     {
       "name": "table-start-row",
@@ -518,7 +779,7 @@
       "idml": "tables-rows.idml",
       "pdf": "tables-rows.pdf",
       "pages": 12,
-      "passing": 11,
+      "passing": 12,
       "diff_dir": "/tmp/idml-generated-diff/tables-rows",
       "report": "/tmp/idml-generated-diff/tables-rows/report.json"
     },
@@ -536,7 +797,7 @@
       "idml": "text-advanced.idml",
       "pdf": "text-advanced.pdf",
       "pages": 17,
-      "passing": 11,
+      "passing": 14,
       "diff_dir": "/tmp/idml-generated-diff/text-advanced",
       "report": "/tmp/idml-generated-diff/text-advanced/report.json"
     },
@@ -545,7 +806,7 @@
       "idml": "text-autosize.idml",
       "pdf": "text-autosize.pdf",
       "pages": 1,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/text-autosize",
       "report": "/tmp/idml-generated-diff/text-autosize/report.json"
     },
@@ -554,7 +815,7 @@
       "idml": "text-in-shape.idml",
       "pdf": "text-in-shape.pdf",
       "pages": 3,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/text-in-shape",
       "report": "/tmp/idml-generated-diff/text-in-shape/report.json"
     },
@@ -563,7 +824,7 @@
       "idml": "text-letterspacing.idml",
       "pdf": "text-letterspacing.pdf",
       "pages": 2,
-      "passing": 0,
+      "passing": 2,
       "diff_dir": "/tmp/idml-generated-diff/text-letterspacing",
       "report": "/tmp/idml-generated-diff/text-letterspacing/report.json"
     },
@@ -572,7 +833,7 @@
       "idml": "text-on-path.idml",
       "pdf": "text-on-path.pdf",
       "pages": 6,
-      "passing": 5,
+      "passing": 6,
       "diff_dir": "/tmp/idml-generated-diff/text-on-path",
       "report": "/tmp/idml-generated-diff/text-on-path/report.json"
     },
@@ -581,7 +842,7 @@
       "idml": "text-overset.idml",
       "pdf": "text-overset.pdf",
       "pages": 2,
-      "passing": 0,
+      "passing": 2,
       "diff_dir": "/tmp/idml-generated-diff/text-overset",
       "report": "/tmp/idml-generated-diff/text-overset/report.json"
     },
@@ -590,9 +851,18 @@
       "idml": "text-wrap.idml",
       "pdf": "text-wrap.pdf",
       "pages": 6,
-      "passing": 0,
+      "passing": 1,
       "diff_dir": "/tmp/idml-generated-diff/text-wrap",
       "report": "/tmp/idml-generated-diff/text-wrap/report.json"
+    },
+    {
+      "name": "text-wrap-sides",
+      "idml": "text-wrap-sides.idml",
+      "pdf": "text-wrap-sides.pdf",
+      "pages": 15,
+      "passing": 0,
+      "diff_dir": "/tmp/idml-generated-diff/text-wrap-sides",
+      "report": "/tmp/idml-generated-diff/text-wrap-sides/report.json"
     },
     {
       "name": "tints",
@@ -604,6 +874,15 @@
       "report": "/tmp/idml-generated-diff/tints/report.json"
     },
     {
+      "name": "toc",
+      "idml": "toc.idml",
+      "pdf": "toc.pdf",
+      "pages": 4,
+      "passing": 4,
+      "diff_dir": "/tmp/idml-generated-diff/toc",
+      "report": "/tmp/idml-generated-diff/toc/report.json"
+    },
+    {
       "name": "transparency",
       "idml": "transparency.idml",
       "pdf": "transparency.pdf",
@@ -613,13 +892,31 @@
       "report": "/tmp/idml-generated-diff/transparency/report.json"
     },
     {
+      "name": "transparency-targets",
+      "idml": "transparency-targets.idml",
+      "pdf": "transparency-targets.pdf",
+      "pages": 4,
+      "passing": 3,
+      "diff_dir": "/tmp/idml-generated-diff/transparency-targets",
+      "report": "/tmp/idml-generated-diff/transparency-targets/report.json"
+    },
+    {
       "name": "variables",
       "idml": "variables.idml",
       "pdf": "variables.pdf",
       "pages": 5,
-      "passing": 4,
+      "passing": 5,
       "diff_dir": "/tmp/idml-generated-diff/variables",
       "report": "/tmp/idml-generated-diff/variables/report.json"
+    },
+    {
+      "name": "xref",
+      "idml": "xref.idml",
+      "pdf": "xref.pdf",
+      "pages": 3,
+      "passing": 3,
+      "diff_dir": "/tmp/idml-generated-diff/xref",
+      "report": "/tmp/idml-generated-diff/xref/report.json"
     }
   ]
 }

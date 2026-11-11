@@ -440,3 +440,38 @@ pub fn unsharp(a: Px, b: Px, p: &ConvUnsharpParams) -> Px {
     }
     Px(out)
 }
+
+/// Colour replace (engine ADR 1037, amendment 2026-11-11; Office's
+/// `a:clrChange`): a pixel whose straight colour is within `tolerance` of
+/// `from` on every channel becomes `to`, its alpha multiplied by `alpha`;
+/// any other pixel is kept. It has no WGSL kernel yet: the engine's filter
+/// stack is the only caller, and it evaluates on the CPU.
+pub fn color_replace(a: Px, from: [f32; 3], to: [f32; 3], alpha: f32, tolerance: f32) -> Px {
+    let al = a.0[3];
+    if al == 0.0 {
+        return a;
+    }
+    let c = unpremul_rgb(a);
+    let near = c.iter().zip(&from).all(|(x, f)| (x - f).abs() <= tolerance);
+    if !near {
+        return a;
+    }
+    repremul(to, al * alpha)
+}
+
+#[cfg(test)]
+mod color_replace_tests {
+    use super::*;
+
+    #[test]
+    fn a_matching_colour_is_replaced_and_its_alpha_scaled() {
+        let white = Px([1.0, 1.0, 1.0, 1.0]);
+        let out = color_replace(white, [1.0; 3], [0.0, 0.0, 1.0], 0.0, 0.0);
+        assert_eq!(out.0, [0.0, 0.0, 0.0, 0.0]);
+        let out = color_replace(white, [1.0; 3], [0.0, 0.0, 1.0], 1.0, 0.0);
+        assert_eq!(out.0, [0.0, 0.0, 1.0, 1.0]);
+        let grey = Px([0.5, 0.5, 0.5, 1.0]);
+        assert_eq!(color_replace(grey, [1.0; 3], [0.0; 3], 0.0, 0.1).0, grey.0);
+        assert_eq!(color_replace(grey, [0.55; 3], [0.0; 3], 0.0, 0.1).0[3], 0.0);
+    }
+}

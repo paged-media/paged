@@ -107,6 +107,25 @@ pub enum RasterOp {
     Threshold { level: f32 },
     /// A negative (alpha kept).
     Invert,
+    /// Photoshop's Channel Mixer: each output channel (`red`, `green`,
+    /// `blue`) is `[from red, from green, from blue, constant]` applied to
+    /// the input, as fractions (1 = 100 %), the result clamped.
+    /// `adjust.channel_mixer`. A CSS colour filter (`grayscale`, `sepia`,
+    /// `saturate`, `hue-rotate`) is one exactly (amendment 2026-11-11).
+    ChannelMixer {
+        red: [f32; 4],
+        green: [f32; 4],
+        blue: [f32; 4],
+    },
+    /// Replace a colour: a pixel within `tolerance` (per channel, 0..=1) of
+    /// `from` becomes `to`, its alpha multiplied by `alpha` (0 makes the
+    /// colour transparent). Office's `a:clrChange` (amendment 2026-11-11).
+    ColorReplace {
+        from: [f32; 3],
+        to: [f32; 3],
+        alpha: f32,
+        tolerance: f32,
+    },
 }
 
 impl RasterOp {
@@ -126,6 +145,8 @@ impl RasterOp {
             RasterOp::Posterize { .. } => "posterize",
             RasterOp::Threshold { .. } => "threshold",
             RasterOp::Invert => "invert",
+            RasterOp::ChannelMixer { .. } => "channelMixer",
+            RasterOp::ColorReplace { .. } => "colorReplace",
         }
     }
 
@@ -208,6 +229,22 @@ impl RasterOp {
             RasterOp::Posterize { levels } => fin(&[levels]) && (2.0..=255.0).contains(&levels),
             RasterOp::Threshold { level } => fin(&[level]) && unit(level),
             RasterOp::Invert => true,
+            RasterOp::ChannelMixer { red, green, blue } => [red, green, blue].iter().all(|row| {
+                fin(row) && row[..3].iter().all(|x| (-2.0..=2.0).contains(x)) && signed(row[3])
+            }),
+            RasterOp::ColorReplace {
+                from,
+                to,
+                alpha,
+                tolerance,
+            } => {
+                fin(&from)
+                    && fin(&to)
+                    && fin(&[alpha, tolerance])
+                    && from.iter().chain(&to).all(|&c| unit(c))
+                    && unit(alpha)
+                    && unit(tolerance)
+            }
         }
     }
 }

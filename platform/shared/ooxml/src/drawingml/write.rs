@@ -21,7 +21,7 @@
 //! written by the caller ([`ColorXml`]), so a module that knows its theme
 //! can write `a:schemeClr` where the colour still is a theme slot.
 
-use super::resolved::{BevelSide, Effects, Paint, Rgb, Shadow, ThreeD};
+use super::resolved::{BevelSide, Effects, ImageEffect, Paint, Rgb, Shadow, ThreeD};
 use crate::units::{deg_to_angle, fraction_to_pct, pt_to_emu};
 use crate::xml::escape_attr;
 
@@ -205,12 +205,116 @@ pub fn three_d(t: &ThreeD) -> String {
     )
 }
 
+/// A picture's effects as the children of its `a:blip`, in order (the
+/// inverse of [`resolved::picture`](super::resolved::picture)): `a:lum`,
+/// `a:clrChange`, `a:duotone`, `a:grayscl`, `a:biLevel`, `a:clrRepl`,
+/// `a:hsl`, `a:tint` and `a:blur`. An alpha effect, an Office 2010 effect
+/// and an unknown one have no form of their own here and are skipped (a
+/// writer keeps such children from the source instead).
+pub fn blip_effects(effects: &[ImageEffect]) -> String {
+    let pct = |v: f64| fraction_to_pct(v);
+    let mut out = String::new();
+    for e in effects {
+        match e {
+            ImageEffect::Luminance { bright, contrast } => out.push_str(&format!(
+                r#"<a:lum bright="{}" contrast="{}"/>"#,
+                pct(*bright),
+                pct(*contrast)
+            )),
+            ImageEffect::ColorChange {
+                from,
+                to,
+                to_alpha,
+                use_alpha,
+            } => out.push_str(&format!(
+                "<a:clrChange{}><a:clrFrom>{}</a:clrFrom><a:clrTo>{}</a:clrTo></a:clrChange>",
+                // `useA` is on unless written off.
+                if *use_alpha { "" } else { r#" useA="0""# },
+                srgb(*from, 1.0),
+                srgb(*to, *to_alpha)
+            )),
+            ImageEffect::Duotone { dark, light } => out.push_str(&format!(
+                "<a:duotone>{}{}</a:duotone>",
+                srgb(*dark, 1.0),
+                srgb(*light, 1.0)
+            )),
+            ImageEffect::Grayscale => out.push_str("<a:grayscl/>"),
+            ImageEffect::BiLevel { threshold } => {
+                out.push_str(&format!(r#"<a:biLevel thresh="{}"/>"#, pct(*threshold)))
+            }
+            ImageEffect::ColorReplace { rgb, alpha } => {
+                out.push_str(&format!("<a:clrRepl>{}</a:clrRepl>", srgb(*rgb, *alpha)))
+            }
+            ImageEffect::Hsl { hue, sat, lum } => out.push_str(&format!(
+                r#"<a:hsl hue="{}" sat="{}" lum="{}"/>"#,
+                deg_to_angle(hue.rem_euclid(360.0)),
+                pct(*sat),
+                pct(*lum)
+            )),
+            ImageEffect::Tint { hue, amount } => out.push_str(&format!(
+                r#"<a:tint hue="{}" amt="{}"/>"#,
+                deg_to_angle(hue.rem_euclid(360.0)),
+                pct(*amount)
+            )),
+            ImageEffect::Blur { radius, grow } => out.push_str(&format!(
+                r#"<a:blur rad="{}"{}/>"#,
+                pt_to_emu(*radius),
+                if *grow { "" } else { r#" grow="0""# }
+            )),
+            ImageEffect::Alpha(_) | ImageEffect::Office2010 { .. } | ImageEffect::Other(_) => {}
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::drawingml::effect;
     use crate::drawingml::resolved::{self, Blur, Glow, Reflection};
     use crate::tree::parse;
+
+    #[test]
+    fn written_picture_effects_read_back_to_the_same_values() {
+        let effects = vec![
+            ImageEffect::Luminance {
+                bright: 0.2,
+                contrast: -0.3,
+            },
+            ImageEffect::ColorChange {
+                from: [255, 255, 255],
+                to: [255, 255, 255],
+                to_alpha: 0.0,
+                use_alpha: false,
+            },
+            ImageEffect::Duotone {
+                dark: [10, 20, 30],
+                light: [250, 240, 200],
+            },
+            ImageEffect::Grayscale,
+            ImageEffect::BiLevel { threshold: 0.5 },
+            ImageEffect::ColorReplace {
+                rgb: [255, 128, 0],
+                alpha: 1.0,
+            },
+            ImageEffect::Hsl {
+                hue: 30.0,
+                sat: 0.25,
+                lum: -0.1,
+            },
+            ImageEffect::Blur {
+                radius: 3.0,
+                grow: true,
+            },
+        ];
+        let xml = format!(
+            r#"<a:blipFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="r"><a:blip r:embed="r1">{}</a:blip></a:blipFill>"#,
+            blip_effects(&effects)
+        );
+        let el = parse(xml.as_bytes()).unwrap();
+        let back = resolved::picture(&super::super::blip(&el, &|_| None), &());
+        assert_eq!(back.effects, effects);
+    }
 
     #[test]
     fn written_effects_read_back_to_the_same_values() {

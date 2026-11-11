@@ -1137,6 +1137,37 @@ pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
             check("polygon", p.self_id.as_deref(), &p.image_adjustments);
         }
     }
+    // Amendment 2026-11-11 — an anchored picture's stack (a Word picture's
+    // corrections) has no label in the story's XML: it is not written.
+    fn anchored<'a>(
+        frames: &'a [paged_model::AnchoredFrame],
+        out: &mut Vec<&'a paged_model::AnchoredFrame>,
+    ) {
+        for f in frames {
+            out.push(f);
+            anchored(&f.children, out);
+        }
+    }
+    let mut frames = Vec::new();
+    for parsed in &scene.stories {
+        for p in &parsed.story.paragraphs {
+            anchored(&p.anchored_frames, &mut frames);
+        }
+    }
+    for f in frames
+        .into_iter()
+        .filter(|f| !f.image_adjustments.is_empty())
+    {
+        let names: Vec<&str> = f.image_adjustments.iter().map(|op| op.name()).collect();
+        out.push(format!(
+            "image filter stack on anchored frame `{}` ({}) is a paged-native construct — \
+             IDML has no adjustment on a placed picture and the anchored frame keeps no label \
+             for it, so InDesign shows the picture unadjusted and the stack is not written. \
+             Save as `.paged` to keep it.",
+            f.self_id.as_deref().unwrap_or("?"),
+            names.join(", "),
+        ));
+    }
     out
 }
 

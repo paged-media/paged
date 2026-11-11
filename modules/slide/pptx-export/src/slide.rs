@@ -519,7 +519,12 @@ const BEFORE_EFFECTS: &[&str] = &[
     "a:grpFill",
     "a:ln",
 ];
-const IMAGE: &[&str] = &["image_item_transform", "image_bytes", "image_link"];
+const IMAGE: &[&str] = &[
+    "image_item_transform",
+    "image_bytes",
+    "image_link",
+    "image_adjustments",
+];
 const IGNORE: &[&str] = &[
     "self_id",
     "parent_story",
@@ -1856,16 +1861,23 @@ impl<'a> Writer<'a, '_> {
             let (cb, cc) = (crop_of(eb), crop_of(ec));
             if let (Some(cb), Some(cc)) = (cb, cc) {
                 if (0..4).any(|i| (cb[i] - cc[i]).abs() > 0.001) {
-                    let src = format!(
-                        r#"<a:srcRect l="{}" t="{}" r="{}" b="{}"/>"#,
-                        (cc[0] * 100_000.0).round() as i64,
-                        (cc[1] * 100_000.0).round() as i64,
-                        (cc[2] * 100_000.0).round() as i64,
-                        (cc[3] * 100_000.0).round() as i64
-                    );
+                    let src = src_rect_xml(cc);
                     x = set_child(&x, &["p:blipFill"], &["a:srcRect"], Some(&src), &["a:blip"])?;
                 }
             }
+        }
+        // Engine ADR 1037, amendment 2026-11-11: a changed filter stack is
+        // the blip's picture effects (`dml_native::picture`); a PNG of the
+        // frame already holds it.
+        if !baked && keys.contains("image_adjustments") {
+            let root = xml::root(&x).ok_or("unreadable picture")?;
+            let blip = root.path(&x, &["p:blipFill", "a:blip"]).ok_or("no blip")?;
+            let (tag, lost) =
+                dml_native::picture::splice_blip(blip.text(&x), &adjustments_of(ec), px_per_pt(ec));
+            for l in lost {
+                self.note(name, l);
+            }
+            x = xml::splice(&x, blip.start, blip.end, &tag);
         }
         if keys.iter().any(|k| EFFECTS.contains(&k.as_str())) {
             x = set_sppr(
@@ -2469,19 +2481,26 @@ impl<'a> Writer<'a, '_> {
                 let crop = crop_of(e)
                     .filter(|_| !blip.baked)
                     .filter(|c| c.iter().any(|v| v.abs() > 0.001))
-                    .map(|c| {
-                        format!(
-                            r#"<a:srcRect l="{}" t="{}" r="{}" b="{}"/>"#,
-                            (c[0] * 100_000.0).round() as i64,
-                            (c[1] * 100_000.0).round() as i64,
-                            (c[2] * 100_000.0).round() as i64,
-                            (c[3] * 100_000.0).round() as i64
-                        )
-                    })
+                    .map(src_rect_xml)
                     .unwrap_or_default();
+                // Engine ADR 1037, amendment 2026-11-11: the filter stack as
+                // the blip's picture effects (a baked PNG holds it).
+                let blip_xml = if blip.baked {
+                    blip.xml()
+                } else {
+                    let (tag, lost) = dml_native::picture::splice_blip(
+                        &blip.xml(),
+                        &adjustments_of(e),
+                        px_per_pt(e),
+                    );
+                    for l in lost {
+                        self.note(&name, l);
+                    }
+                    tag
+                };
                 Ok(format!(
                     r#"<p:pic><p:nvPicPr>{cnv}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>{nv_pr}</p:nvPicPr><p:blipFill>{}{crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>{xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>{}</p:spPr></p:pic>"#,
-                    blip.xml(),
+                    blip_xml,
                     self.line_of(e)
                 ))
             }
@@ -2695,14 +2714,34 @@ fn crop_of(e: &Elem) -> Option<[f64; 4]> {
     let m = native::arr6(e.v.get("image_item_transform"))?;
     let (pw, ph) = image_size(&image_bytes(e)?)?;
     let (l, t, r, b) = e.bounds();
-    let dw = m[0] * pw as f64;
-    let dh = m[3] * ph as f64;
-    if dw.abs() < 1e-9 || dh.abs() < 1e-9 {
-        return None;
-    }
-    let cl = (l - m[4]) / dw;
-    let ct = (t - m[5]) / dh;
-    Some([cl, ct, 1.0 - cl - (r - l) / dw, 1.0 - ct - (b - t) / dh])
+    dml_native::crop::of_placement(m, [l, t, r, b], (pw, ph))
+}
+
+/// A picture frame's filter stack (engine ADR 1037).
+fn adjustments_of(e: &Elem) -> Vec<paged_model::RasterOp> {
+    e.v.get("image_adjustments")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default()
+}
+
+/// The picture's own pixels per point as its frame shows it: a picture
+/// blur's radius is in the picture's pixels.
+fn px_per_pt(e: &Elem) -> Option<f64> {
+    let (pw, ph) = image_size(&image_bytes(e)?)?;
+    let display = match native::arr6(e.v.get("image_item_transform")) {
+        Some(m) => (m[0].abs() * f64::from(pw), m[3].abs() * f64::from(ph)),
+        None => {
+            let (l, t, r, b) = e.bounds();
+            ((r - l).abs(), (b - t).abs())
+        }
+    };
+    dml_native::crop::px_per_pt((pw, ph), display)
+}
+
+/// A crop (fractions) as the `a:srcRect` element.
+fn src_rect_xml(c: [f64; 4]) -> String {
+    let (l, t, r, b) = dml_native::crop::src_rect(c);
+    format!(r#"<a:srcRect l="{l}" t="{t}" r="{r}" b="{b}"/>"#)
 }
 
 /// The shape element with its `cNvPr id` replaced.

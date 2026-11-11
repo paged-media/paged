@@ -41,6 +41,8 @@ fileGroups:
     - "/engine/core/crates/paged-psd/Cargo.toml"
     - "/engine/core/crates/paged-resample/**/*.rs"
     - "/engine/core/crates/paged-resample/Cargo.toml"
+    - "/engine/core/crates/paged-image-adjust/**/*.rs"
+    - "/engine/core/crates/paged-image-adjust/Cargo.toml"
   rust-tests:
     - "**/*"
     - "!docs/**"
@@ -50,6 +52,7 @@ fileGroups:
     - "/engine/core/crates/paged-pixel/**/*"
     - "/engine/core/crates/paged-psd/**/*"
     - "/engine/core/crates/paged-resample/**/*"
+    - "/engine/core/crates/paged-image-adjust/**/*"
 
 # The image crates are members of the engine's Cargo workspace (one Cargo
 # workspace, docs/development/one-workspace.md): this directory has no

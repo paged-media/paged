@@ -4796,6 +4796,11 @@ pub struct PictureContent {
     /// picture fills its frame.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub placement: Option<[f32; 6]>,
+    /// Engine ADR 1037 (amendment 2026-11-11) — the picture's filter stack
+    /// (`frameImageAdjustments`), always listed, so a save path tells a
+    /// cleared stack from a host that does not read one.
+    #[serde(default)]
+    pub adjustments: Vec<paged_model::RasterOp>,
 }
 
 /// Engine ADR 1051 — a run's own script slots and direction, as the

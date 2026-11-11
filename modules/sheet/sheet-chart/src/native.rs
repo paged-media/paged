@@ -225,9 +225,9 @@ pub fn picture_placed(
         (None, Some(_)) => Some((w, h)),
         _ => None,
     };
-    let density = px.zip(shown).and_then(|(px, (dw, dh))| {
-        (dw > 0.0 && dh > 0.0).then(|| (f64::from(px.0) / dw + f64::from(px.1) / dh) / 2.0)
-    });
+    let density = px
+        .zip(shown)
+        .and_then(|(px, shown)| dml_native::crop::px_per_pt(px, shown));
     (picture_look(theme, blip, effects, density), placement)
 }
 
@@ -250,40 +250,19 @@ pub fn shape_look(
 /// inner image transform `[a, b, c, d, e, f]` (natural pixels to points, in
 /// the frame's own box) for an image of `px` pixels shown in a `w` × `h` pt
 /// frame with the `a:srcRect` sides `crop` (1 000ths of a percent, left, top,
-/// right, bottom) left out. The image is shown at `w / (1 - l - r)` by
-/// `h / (1 - t - b)` with its top-left corner `l` and `t` of that outside the
-/// frame (the mapping slide's pictures and doc's use). `None` for no crop, a
-/// crop that pads (negative sides) or leaves no picture.
+/// right, bottom) left out: `dml_native::crop`, the mapping slide's pictures
+/// and doc's use. `None` for no crop, a crop that pads (negative sides) or
+/// leaves no picture.
 pub fn crop_placement(
     crop: paged_ooxml::drawingml::RelRect,
     px: (u32, u32),
     w: f64,
     h: f64,
 ) -> Option<[f64; 6]> {
-    let f = |v: i32| f64::from(v) / 100_000.0;
-    let (l, t, r, b) = (f(crop.0), f(crop.1), f(crop.2), f(crop.3));
-    if (l == 0.0 && t == 0.0 && r == 0.0 && b == 0.0)
-        || l < 0.0
-        || t < 0.0
-        || r < 0.0
-        || b < 0.0
-        || l + r >= 1.0
-        || t + b >= 1.0
-        || px.0 == 0
-        || px.1 == 0
-    {
-        return None;
-    }
-    let disp_w = w / (1.0 - l - r);
-    let disp_h = h / (1.0 - t - b);
-    Some([
-        disp_w / f64::from(px.0),
-        0.0,
-        0.0,
-        disp_h / f64::from(px.1),
-        -l * disp_w,
-        -t * disp_h,
-    ])
+    let sides = dml_native::crop::fractions(crop);
+    dml_native::crop::is_plain(sides)
+        .then(|| dml_native::crop::placement(sides, (w, h), px))
+        .flatten()
 }
 
 /// The bounding box `(x, y, w, h)` of a point list.
