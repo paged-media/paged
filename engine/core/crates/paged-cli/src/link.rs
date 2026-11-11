@@ -318,9 +318,9 @@ pub fn place_svg(session: &mut Session, frame: &str, bytes: Vec<u8>) -> Result<S
         items: fitted.report.items,
         notes: fitted
             .report
-            .notes
+            .losses
             .iter()
-            .map(|n| format!("{n:?}"))
+            .map(ToString::to_string)
             .collect(),
     })
 }
