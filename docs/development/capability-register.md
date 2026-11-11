@@ -376,6 +376,9 @@ Status (draw items, one line each; updated as they land):
   background, sampled from its own layers); its Eyedropper tool, gesture and options are gone (id
   through the deprecation window) and the Color Sampler, Ruler, Count and Note sit in the host
   Eyedropper's flyout.
+- Slide motion path: DONE 2026-11-11. The motion-path editor's presses go through the host's
+  `DirectSelectMachine` (`@paged-media/vector-tools`) over the path as an anchor table; its own
+  move-handle code is gone. The storage stays slide's (slide ADR 714 amended).
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
   and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
   opacity land on the selection in one batch, each target written only what its own snapshot

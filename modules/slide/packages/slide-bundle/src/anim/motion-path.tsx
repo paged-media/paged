@@ -27,9 +27,16 @@
 // path adds a point there; on an anchor it deletes the point.
 //
 // The path is the timing's, not a page item, so it is drawn on the overlay
-// channel (`contribute.overlay`, the adjust handles' door) rather than
-// through draw's tools; what a path is and how it is written are the slide
-// engine's (`pathSegments`, `pathWrite`).
+// channel (`contribute.overlay`, the adjust handles' door); what a path is
+// and how it is written are the slide engine's (`pathSegments`,
+// `pathWrite`). The EDITING is the host's Direct Selection: the path is an
+// anchor table (`tableOfSegs`) and every press, drag and release goes
+// through `@paged-media/vector-tools`' `DirectSelectMachine` (an anchor
+// moves with its handles and the other selected anchors, Shift adds to the
+// selection, a smooth anchor keeps its handles in line unless Alt, a
+// segment drag reshapes the curve), whose plan is applied to the table
+// (`applyPathOps`) and written back as segments (`segsOfTable`). Only the
+// storage is slide's.
 
 import type {
   BundleHost,
@@ -40,7 +47,15 @@ import type {
 import {
   evalCubic,
   splitSegmentDeCasteljau,
+  type AnchorTable,
+  type AnchorTriple,
 } from "@paged-media/vector-geometry";
+import {
+  applyPathOps,
+  DirectSelectMachine,
+  type DirectSelectHit,
+  type DirectSelectModifiers,
+} from "@paged-media/vector-tools";
 import * as React from "react";
 
 import type { SlideEngine } from "../engine.js";
@@ -66,6 +81,8 @@ export interface MotionPathState {
   /** The slide's size, pt: the path's units. */
   slide: [number, number];
   locked: boolean;
+  /** The selected anchors (the machine's, flat indices). */
+  selected?: readonly number[];
 }
 
 const EMPTY: MotionPathState = {
@@ -79,28 +96,98 @@ const EMPTY: MotionPathState = {
 
 type Pt = [number, number];
 
-/** `seg`'s points that the handle names, moved by `d` (slide fractions);
- *  an anchor drags its handles with it. */
-export function moveHandle(
+const same = (a: Pt, b: Pt) =>
+  Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+
+/** The path as an anchor table (slide fractions): an anchor per end
+ *  point, a curve's controls as the handles of its two ends, a contour per
+ *  `move`, closed where a `close` ends it. `anchorOf[seg]` is the anchor a
+ *  segment ends at (-1 for a close). */
+export function tableOfSegs(segs: readonly PathSeg[]): {
+  table: AnchorTable;
+  anchorOf: number[];
+} {
+  const anchors: AnchorTriple[] = [];
+  const subpathStarts: number[] = [];
+  const subpathOpen: boolean[] = [];
+  const anchorOf: number[] = [];
+  segs.forEach((s, i) => {
+    if (s.kind === "close") {
+      anchorOf.push(-1);
+      if (subpathOpen.length > 0) subpathOpen[subpathOpen.length - 1] = false;
+      return;
+    }
+    if (s.kind === "move" || anchors.length === 0) {
+      subpathStarts.push(anchors.length);
+      subpathOpen.push(true);
+    }
+    const to: Pt = [s.to[0], s.to[1]];
+    const left: Pt = s.kind === "curve" ? [s.c2[0], s.c2[1]] : [...to];
+    const next = segs[i + 1];
+    const right: Pt =
+      next?.kind === "curve" ? [next.c1[0], next.c1[1]] : [...to];
+    anchorOf.push(anchors.length);
+    anchors.push({ anchor: to, left, right });
+  });
+  return { table: { anchors, subpathStarts, subpathOpen }, anchorOf };
+}
+
+/** The segments an anchor table makes: a `move` per contour, a `line`
+ *  where both ends' handles sit on their anchors, else a `curve`, and a
+ *  `close` after a closed contour (its closing segment straight, as
+ *  PowerPoint's `Z` is). */
+export function segsOfTable(table: AnchorTable): PathSeg[] {
+  const out: PathSeg[] = [];
+  const n = table.anchors.length;
+  const starts = table.subpathStarts.length > 0 ? table.subpathStarts : [0];
+  starts.forEach((from, k) => {
+    const to = starts[k + 1] ?? n;
+    for (let i = from; i < to; i++) {
+      const a = table.anchors[i]!;
+      const p: Pt = [a.anchor[0], a.anchor[1]];
+      if (i === from) {
+        out.push({ kind: "move", to: p });
+        continue;
+      }
+      const prev = table.anchors[i - 1]!;
+      const c1: Pt = [prev.right[0], prev.right[1]];
+      const c2: Pt = [a.left[0], a.left[1]];
+      out.push(
+        same(c1, prev.anchor as Pt) && same(c2, p)
+          ? { kind: "line", to: p }
+          : { kind: "curve", c1, c2, to: p },
+      );
+    }
+    if (table.subpathOpen?.[k] === false) out.push({ kind: "close" });
+  });
+  return out;
+}
+
+/** What a press on handle `h` hits, for the Direct Selection machine: an
+ *  end point is its anchor, a curve's first control the right handle of
+ *  the anchor before it, its second the left handle of its own end. */
+export function hitOf(
   segs: readonly PathSeg[],
   h: PathHandle,
-  to: Pt,
-): PathSeg[] {
-  const out = segs.map((s) => ({ ...s })) as PathSeg[];
-  const s = out[h.seg];
-  if (!s || s.kind === "close") return out;
-  if (h.which === "to") {
-    const from = s.to;
-    const d: Pt = [to[0] - from[0], to[1] - from[1]];
-    const shift = (p: Pt): Pt => [p[0] + d[0], p[1] + d[1]];
-    s.to = to;
-    if (s.kind === "curve") s.c2 = shift(s.c2);
-    const next = out[h.seg + 1];
-    if (next?.kind === "curve") next.c1 = shift(next.c1);
-  } else if (s.kind === "curve") {
-    s[h.which] = to;
-  }
-  return out;
+): DirectSelectHit {
+  const { anchorOf } = tableOfSegs(segs);
+  const own = anchorOf[h.seg] ?? -1;
+  if (h.which === "to") return { kind: "anchor", index: own };
+  if (h.which === "c2") return { kind: "handle", index: own, side: "left" };
+  return { kind: "handle", index: own - 1, side: "right" };
+}
+
+/** `table` with every point taken through `f`. */
+function mapTable(table: AnchorTable, f: (p: Pt) => Pt): AnchorTable {
+  return {
+    anchors: table.anchors.map((a) => ({
+      anchor: f(a.anchor as Pt),
+      left: f(a.left as Pt),
+      right: f(a.right as Pt),
+    })),
+    subpathStarts: [...table.subpathStarts],
+    ...(table.subpathOpen ? { subpathOpen: [...table.subpathOpen] } : {}),
+  };
 }
 
 /** The handles a path shows: every end point, and a curve's controls. */
@@ -307,6 +394,7 @@ export class MotionPathModel implements Disposable {
       this.set(EMPTY);
       return;
     }
+    this.machine = null;
     this.set({
       pageId,
       index: effect.index,
@@ -317,13 +405,85 @@ export class MotionPathModel implements Disposable {
     });
   }
 
-  /** A drag of `h` to the page point `p`: the path it would make. */
-  drag(h: PathHandle, p: Pt): PathSeg[] {
-    this.dragging = true;
-    const segs = moveHandle(this.state.segs, h, fromPage(this.state, p));
-    this.set({ ...this.state, segs });
-    return segs;
+  /** The path's machine: the host's Direct Selection over the path in
+   *  slide fractions, mapped onto the page from where the shape stands.
+   *  Kept across presses so the selection holds (Shift adds). */
+  private machine: DirectSelectMachine | null = null;
+  private machineOf(scale: number): DirectSelectMachine {
+    const st = this.state;
+    const transform = [
+      st.slide[0],
+      0,
+      0,
+      st.slide[1],
+      st.origin[0],
+      st.origin[1],
+    ];
+    const table = tableOfSegs(st.segs).table;
+    const slop = 2 / (scale || 1);
+    if (!this.machine) {
+      this.machine = new DirectSelectMachine({
+        table,
+        transform: transform as never,
+        slop,
+        nudgeStep: 1,
+      });
+    } else {
+      this.machine.sync(table, transform as never);
+      this.machine.setOptions({ slop });
+    }
+    return this.machine;
   }
+
+  /** A press of the path at page point `p` on `hit`. */
+  press(
+    hit: DirectSelectHit,
+    p: Pt,
+    modifiers: DirectSelectModifiers,
+    scale: number,
+  ): void {
+    if (!this.state.pageId) return;
+    this.preDrag = this.state.segs;
+    this.dragging = true;
+    const snap = this.machineOf(scale).handle({
+      type: "down",
+      point: p,
+      hit,
+      modifiers,
+    });
+    this.set({ ...this.state, selected: snap.selected });
+  }
+
+  /** The pointer moved: the path as the drag would leave it. */
+  move(p: Pt, modifiers: DirectSelectModifiers): void {
+    if (!this.machine || !this.dragging) return;
+    const snap = this.machine.handle({ type: "move", point: p, modifiers });
+    const segs = segsOfTable(
+      mapTable(snap.table, (q) => fromPage(this.state, q)),
+    );
+    this.set({ ...this.state, segs, selected: snap.selected });
+  }
+
+  /** Release: the machine's plan applied to the path and written, one
+   *  undo step; a click only selects. */
+  async release(p: Pt, modifiers: DirectSelectModifiers): Promise<boolean> {
+    if (!this.machine || !this.dragging) return false;
+    const before = this.preDrag;
+    const snap = this.machine.handle({ type: "up", point: p, modifiers });
+    this.dragging = false;
+    if (!snap.commit) {
+      this.set({ ...this.state, segs: before, selected: snap.selected });
+      return false;
+    }
+    const segs = segsOfTable(
+      applyPathOps(tableOfSegs(before).table, snap.commit.ops),
+    );
+    this.set({ ...this.state, segs, selected: snap.selected });
+    return this.commit(segs);
+  }
+
+  /** The path before the drag in flight (what a cancel restores). */
+  private preDrag: readonly PathSeg[] = [];
 
   /** Release: write `segs` into the timing, one undo step. */
   async commit(segs: readonly PathSeg[]): Promise<boolean> {
@@ -356,9 +516,16 @@ export class MotionPathModel implements Disposable {
     return this.commit(next);
   }
 
-  cancel(original: readonly PathSeg[]) {
+  /** A drag interrupted: the path as it was, nothing written. */
+  cancel() {
+    if (!this.dragging) return;
     this.dragging = false;
-    this.set({ ...this.state, segs: original });
+    this.machine?.handle({
+      type: "key",
+      key: "Escape",
+      modifiers: { shift: false, alt: false },
+    });
+    this.set({ ...this.state, segs: this.preDrag });
   }
 
   dispose() {
@@ -377,34 +544,57 @@ export function motionPathOverlay(model: MotionPathModel): OverlayContribution {
     if (!rect || s.segs.length === 0)
       return <g data-slide-motion-path="" data-count={0} />;
     const inv = 1 / (camera.scale || 1);
-    const onDown = (h: PathHandle) => (e: React.PointerEvent<SVGElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const svg = (e.currentTarget as SVGElement).ownerSVGElement;
+    const pageOf = (
+      svg: SVGSVGElement | null | undefined,
+      ev: { clientX: number; clientY: number },
+    ): Pt => {
       const box = svg?.getBoundingClientRect();
-      const page = (ev: PointerEvent | React.PointerEvent): Pt => [
+      return [
         (ev.clientX - (box?.left ?? 0) - camera.tx) / camera.scale - rect.x,
         (ev.clientY - (box?.top ?? 0) - camera.ty) / camera.scale - rect.y,
       ];
-      const original = s.segs;
-      let last: PathSeg[] | null = null;
-      const move = (ev: PointerEvent) => {
-        last = model.drag(h, page(ev));
-      };
-      const done = (ev: PointerEvent | null) => {
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-        window.removeEventListener("pointercancel", cancel);
-        if (ev) move(ev);
-        if (ev && last) void model.commit(last);
-        else model.cancel(original);
-      };
-      const up = (ev: PointerEvent) => done(ev);
-      const cancel = () => done(null);
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
-      window.addEventListener("pointercancel", cancel);
     };
+    const mods = (ev: { shiftKey: boolean; altKey: boolean }) => ({
+      shift: ev.shiftKey,
+      alt: ev.altKey,
+    });
+    /** A press on the path: the host's Direct Selection takes it. */
+    const onPress =
+      (hitAt: (p: Pt) => DirectSelectHit | null) =>
+      (e: React.PointerEvent<SVGElement>) => {
+        if (e.button !== 0) return;
+        const svg = (e.currentTarget as SVGElement).ownerSVGElement;
+        const p = pageOf(svg, e);
+        const hit = hitAt(p);
+        if (!hit) return;
+        e.preventDefault();
+        e.stopPropagation();
+        model.press(hit, p, mods(e), camera.scale);
+        const move = (ev: PointerEvent) =>
+          model.move(pageOf(svg, ev), mods(ev));
+        const done = (ev: PointerEvent | null) => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", cancel);
+          if (ev) void model.release(pageOf(svg, ev), mods(ev));
+          else model.cancel();
+        };
+        const up = (ev: PointerEvent) => done(ev);
+        const cancel = () => done(null);
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", cancel);
+      };
+    const onDown = (h: PathHandle) => onPress(() => hitOf(s.segs, h));
+    /** A press on a segment: its start anchor and the grabbed point. */
+    const onSegment = onPress((p) => {
+      const near = nearestOnPath(s.segs, fromPage(s, p), s.slide);
+      if (!near || near.dist > 8) return null;
+      const start = tableOfSegs(s.segs).anchorOf[near.seg - 1] ?? -1;
+      return start < 0 ? null : { kind: "segment", index: start, t: near.t };
+    });
+    const selected = new Set(s.selected ?? []);
+    const anchorIndex = tableOfSegs(s.segs).anchorOf;
     const ends = s.segs.filter(
       (x): x is Exclude<PathSeg, { kind: "close" }> => x.kind !== "close",
     );
@@ -447,6 +637,7 @@ export function motionPathOverlay(model: MotionPathModel): OverlayContribution {
           strokeWidth={10}
           vectorEffect="non-scaling-stroke"
           style={{ pointerEvents: "stroke" }}
+          onPointerDown={onSegment}
           onDoubleClick={(e) => {
             e.stopPropagation();
             const box =
@@ -507,7 +698,14 @@ export function motionPathOverlay(model: MotionPathModel): OverlayContribution {
                   ? `M${-HANDLE_PX} ${-HANDLE_PX} H${HANDLE_PX} V${HANDLE_PX} H${-HANDLE_PX} Z`
                   : `M${HANDLE_PX} 0 A${HANDLE_PX} ${HANDLE_PX} 0 1 1 ${-HANDLE_PX} 0 A${HANDLE_PX} ${HANDLE_PX} 0 1 1 ${HANDLE_PX} 0 Z`
               }
-              fill={anchor ? "#fff" : "#1a73e8"}
+              data-selected={
+                anchor && selected.has(anchorIndex[h.seg] ?? -1) ? "1" : "0"
+              }
+              fill={
+                anchor && !selected.has(anchorIndex[h.seg] ?? -1)
+                  ? "#fff"
+                  : "#1a73e8"
+              }
               stroke="#1a73e8"
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
