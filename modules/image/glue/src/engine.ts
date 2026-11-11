@@ -1409,6 +1409,15 @@ export interface ImageEngine
     rect: { x: number; y: number; w: number; h: number },
     mask?: FilterMask,
   ): Promise<Uint8Array>;
+  /** Engine ADR 1037 — straight RGBA8 pixels through a filter stack (a
+   *  list of `RasterOp`), on the engine's one evaluator: the same
+   *  operations as a picture's corrections in any module. */
+  adjustRasterOps(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    ops: readonly unknown[],
+  ): Uint8Array;
   /** Decode PSD/PNG/JPEG bytes (magic-sniffed) to an engine-held RGBA8
    *  image. Throws with the engine's honest message on unsupported
    *  inputs (16-bit, CMYK, ZIP composites, …). */
@@ -2503,6 +2512,12 @@ export interface ImageWasmModule
   perf_counters_reset(): void;
   init_gpu(): Promise<void>;
   gpu_ready(): boolean;
+  adjust_raster_ops_rgba8(
+    width: number,
+    height: number,
+    rgba: Uint8Array,
+    ops: string,
+  ): Uint8Array;
   filter_region_rgba8(
     width: number,
     height: number,
@@ -3348,6 +3363,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       }
     },
     gpuReady: () => wasm.gpu_ready(),
+    adjustRasterOps: (rgba, width, height, ops) =>
+      wasm.adjust_raster_ops_rgba8(width, height, rgba, JSON.stringify(ops)),
     filterRegion: (rgba, width, height, wire, r, mask) =>
       wasm.filter_region_rgba8(
         width,

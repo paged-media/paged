@@ -80,6 +80,7 @@ export type FrameSurfaceSession = Pick<
   | "frameView"
   | "setFrameSheet"
   | "pictureBytes"
+  | "adjustPicture"
   | "documentFontFace"
   | "documentTextDefault"
   | "documentSwatchColors"
@@ -916,7 +917,11 @@ function SheetFrameSurfaceView({
   }, [edit]);
 
   // W2.3 — the pictures' decoded images (a repaint when one arrives).
-  const pictures = usePictureImages(scene, session.pictureBytes);
+  const pictures = usePictureImages(
+    scene,
+    session.pictureBytes,
+    session.adjustPicture,
+  );
 
   // The grid, at screen resolution, and the formula's reference boxes.
   useLayoutEffect(() => {

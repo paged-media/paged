@@ -43,6 +43,7 @@
 // indexes into `styles`.
 
 import type {
+  RasterOp,
   SceneItem,
   SceneLayer,
   ScenePaint,
@@ -263,6 +264,23 @@ export interface GridPicture {
   w: number;
   h: number;
   inCell: boolean;
+  /** The part of the image a crop leaves (`a:srcRect`; `[x, y, w, h]` in
+   *  the image's own pixels, `dml_native::crop`); absent: all of it. */
+  src?: [number, number, number, number];
+  /** The picture's corrections as the engine's filter stack (engine ADR
+   *  1037), the ops the page draws it with. */
+  adjustments?: RasterOp[];
+}
+
+/** The key a picture's decoded image is kept under: its media part, and
+ *  its filter stack when it has one (the same part corrected twice is two
+ *  images). */
+export function pictureKey(
+  p: Pick<GridPicture, "media" | "adjustments">,
+): string {
+  return p.adjustments && p.adjustments.length > 0
+    ? `${p.media}#${JSON.stringify(p.adjustments)}`
+    : p.media;
 }
 
 /** The hyperlink under a viewport-local point, or null. */

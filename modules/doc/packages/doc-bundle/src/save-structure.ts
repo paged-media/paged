@@ -60,6 +60,9 @@ export interface PictureRead {
   frameId: string;
   offset: number;
   placement?: [number, number, number, number, number, number];
+  /** Engine ADR 1037 — the picture's filter stack, written back as its
+   *  blip's picture effects (`docx-export`, `dml_native::picture`). */
+  adjustments?: unknown[];
 }
 
 /** The pictures per read-back paragraph (the merged body's, in order) and

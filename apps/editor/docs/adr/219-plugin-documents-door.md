@@ -67,4 +67,4 @@ the SDK's one `exportPdfSession` (`plugin-sdk/src/doors-pdf-export.ts`) over `ed
 so it needs no backend: every host the SDK builds has it, and the headless harness's
 `exportDocument("pdf")` runs the same loop. paged.publish's `exportPdf` and `preflight` commands
 call the door instead of repeating the loop. The editor's own Export PDF dialog keeps
-`CanvasClient.exportPdf`, the client's loop beneath the plugin contract. Contract `0.74.3-canary.86`.
+`CanvasClient.exportPdf`, the client's loop beneath the plugin contract. Contract `0.74.3-canary.87`.

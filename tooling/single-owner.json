@@ -343,6 +343,18 @@
       ]
     },
     {
+      "name": "drawingml-crop",
+      "description": "map a picture's a:srcRect onto its placement and back with dml_native::crop",
+      "owner": ["platform/shared/dml-native/src/crop.rs"],
+      "extensions": [".rs", ".ts", ".tsx"],
+      "patterns": ["1\\.0 - (l|cl) - (r|cr)\\b", "1\\.0 - (t|ct) - (b|cb)\\b"],
+      "baseline": [
+        "engine/core/crates/paged-canvas/tests/it/anchored_picture_crop.rs",
+        "modules/doc/docx-conformance/tests/it/crop_saveback.rs",
+        "modules/doc/docx-export/src/crop.rs"
+      ]
+    },
+    {
       "name": "pdf-export-loop",
       "description": "drive the engine's PDF export session (begin, one exportPdfPage per page, finish, cancel on failure) with the plugin SDK's exportPdfSession, which host.documents.exportPdf and the headless harness run, or the editor client's exportPdf beneath the plugin contract",
       "owner": [

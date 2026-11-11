@@ -1800,6 +1800,12 @@ export interface PictureContent {
      * picture fills its frame.
      */
     placement?: [number, number, number, number, number, number];
+    /**
+     * Engine ADR 1037 (amendment 2026-11-11) — the picture\'s filter stack
+     * (`frameImageAdjustments`), always listed, so a save path tells a
+     * cleared stack from a host that does not read one.
+     */
+    adjustments?: RasterOp[];
 }
 
 /**
@@ -2795,7 +2801,7 @@ export interface SnapshotRun {
 /**
  * One step of an image frame\'s filter stack (engine ADR 1037).
  */
-export type RasterOp = { op: "exposure"; ev: number } | { op: "brightnessContrast"; brightness: number; contrast: number } | { op: "levels"; inBlack: number; inWhite: number; gamma: number; outBlack: number; outWhite: number } | { op: "curves"; points: [number, number][] } | { op: "hueSaturation"; hue: number; saturation: number; lightness: number } | { op: "recolor"; hue: number; saturation: number; lightness: number } | { op: "duotone"; shadow: [number, number, number]; highlight: [number, number, number] } | { op: "blackWhite"; reds: number; yellows: number; greens: number; cyans: number; blues: number; magentas: number } | { op: "sharpen"; amount: number; radius: number } | { op: "blur"; radius: number } | { op: "posterize"; levels: number } | { op: "threshold"; level: number } | { op: "invert" };
+export type RasterOp = { op: "exposure"; ev: number } | { op: "brightnessContrast"; brightness: number; contrast: number } | { op: "levels"; inBlack: number; inWhite: number; gamma: number; outBlack: number; outWhite: number } | { op: "curves"; points: [number, number][] } | { op: "hueSaturation"; hue: number; saturation: number; lightness: number } | { op: "recolor"; hue: number; saturation: number; lightness: number } | { op: "duotone"; shadow: [number, number, number]; highlight: [number, number, number] } | { op: "blackWhite"; reds: number; yellows: number; greens: number; cyans: number; blues: number; magentas: number } | { op: "sharpen"; amount: number; radius: number } | { op: "blur"; radius: number } | { op: "posterize"; levels: number } | { op: "threshold"; level: number } | { op: "invert" } | { op: "channelMixer"; red: [number, number, number, number]; green: [number, number, number, number]; blue: [number, number, number, number] } | { op: "colorReplace"; from: [number, number, number]; to: [number, number, number]; alpha: number; tolerance: number };
 
 /**
  * One stop of a gradient on the wire. Mirrors `GradientStopRef`.

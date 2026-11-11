@@ -481,16 +481,25 @@ fn powerpoint_fills_a_path_even_odd__feat__frames_paths_fill_rule_even_odd() {
 }
 
 #[test]
-fn picture_opacity_is_kept_and_other_picture_effects_reported__feat__plugin_slide_native_effects() {
+fn picture_opacity_is_kept_and_a_colour_change_becomes_a_colour_replace__feat__plugin_slide_native_effects(
+) {
     let el = parse(format!(r#"<a:blipFill {NS}><a:blip r:embed="r1"><a:alphaModFix amt="70000"/><a:clrChange><a:clrFrom><a:srgbClr val="FFFFFF"/></a:clrFrom><a:clrTo><a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr></a:clrTo></a:clrChange><a:extLst><a:ext uri="x"><a14:imgProps xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a14:imgLayer><a14:imgEffect><a14:artisticBlur radius="20"/></a14:imgEffect></a14:imgLayer></a14:imgProps></a:ext></a:extLst></a:blip></a:blipFill>"#).as_bytes()).unwrap();
     let pic = resolved::picture(&drawingml::blip(&el, &|_| None), &());
     let mut m = Mapper::default();
     let mapped = m.picture(&pic);
     assert_eq!(mapped.opacity, 0.7);
-    assert!(mapped.adjustments.is_empty());
-    let l = m.losses();
-    assert_eq!(l.len(), 1, "{l:?}");
-    assert!(l[0].contains("a:clrChange"), "{l:?}");
+    // PowerPoint's "Set Transparent Color": white becomes transparent.
+    assert_eq!(
+        mapped.adjustments,
+        vec![RasterOp::ColorReplace {
+            from: [1.0, 1.0, 1.0],
+            to: [1.0, 1.0, 1.0],
+            alpha: 0.0,
+            tolerance: 0.0,
+        }]
+    );
+    assert_eq!(mapped.elements, vec!["a:clrChange"]);
+    assert!(m.losses().is_empty(), "{:?}", m.losses());
 }
 
 #[test]

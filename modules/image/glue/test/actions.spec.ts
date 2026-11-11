@@ -463,6 +463,19 @@ describe.skipIf(!built)(
       ).rejects.toThrow(/no adjustment parameter "no.such"/);
     });
 
+    it("adjust takes a filter stack of RasterOps, the engine's one evaluator (engine ADR 1037) [image.editor.region-filter]", async () => {
+      const { runner } = hosts();
+      const inv = await runner.actions.run(IMAGE_ACTION_IDS.adjust, png, {
+        ops: [{ op: "invert" }],
+      });
+      expect(px(decoded(inv.output), 2, 5)).toEqual([35, 225, 215, 255]);
+      await expect(
+        runner.actions.run(IMAGE_ACTION_IDS.adjust, png, {
+          ops: [{ op: "threshold", level: 7 }],
+        }),
+      ).rejects.toThrow(/not a filter stack/);
+    });
+
     it("sharpen raises the contrast at the edge and leaves flat areas [image.editor.region-filter]", async () => {
       const { runner } = hosts();
       const r = await runner.actions.run(IMAGE_ACTION_IDS.sharpen, png, {

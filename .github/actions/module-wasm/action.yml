@@ -82,10 +82,10 @@ runs:
           if [ "$M" = publish ]; then git ls-files -s -- engine/core/crates engine/core/Cargo.toml engine/core/Cargo.lock; fi
           # A member of the engine's workspace is built from its lock and manifest.
           if [ "$M" = sheet ] || [ "$M" = slide ] || [ "$M" = doc ]; then
-            git ls-files -s -- engine/core/Cargo.toml engine/core/Cargo.lock platform/shared/ooxml platform/shared/dml-chart platform/shared/dml-geom platform/shared/dml-native engine/core/crates/paged-fmt platform/shared/test-resources engine/core/crates/paged-model engine/core/crates/paged-scene engine/core/crates/paged-store engine/core/crates/paged-colour-math
+            git ls-files -s -- engine/core/Cargo.toml engine/core/Cargo.lock platform/shared/ooxml platform/shared/dml-chart platform/shared/dml-geom platform/shared/dml-native engine/core/crates/paged-fmt platform/shared/test-resources engine/core/crates/paged-model engine/core/crates/paged-scene engine/core/crates/paged-store engine/core/crates/paged-colour-math engine/core/crates/paged-image-adjust engine/core/crates/paged-kernels engine/core/crates/paged-pixel
           fi
           if [ "$M" = draw ] || [ "$M" = data ] || [ "$M" = image ]; then git ls-files -s -- engine/core/Cargo.toml engine/core/Cargo.lock; fi
-          if [ "$M" = image ]; then git ls-files -s -- engine/core/crates/paged-pixel engine/core/crates/paged-psd engine/core/crates/paged-resample engine/core/crates/paged-kernels engine/core/crates/paged-raster engine/core/crates/paged-color engine/core/crates/paged-warp engine/core/crates/paged-blend; fi
+          if [ "$M" = image ]; then git ls-files -s -- engine/core/crates/paged-pixel engine/core/crates/paged-psd engine/core/crates/paged-resample engine/core/crates/paged-kernels engine/core/crates/paged-raster engine/core/crates/paged-color engine/core/crates/paged-warp engine/core/crates/paged-blend engine/core/crates/paged-image-adjust engine/core/crates/paged-model; fi
           if [ "$M" = data ]; then git ls-files -s -- 'engine/core/crates/paged-data-*' engine/core/crates/paged-action; fi
           git ls-files -s -- .cargo/config.toml
           # The shared build script and the source hash it stamps (tooling/).

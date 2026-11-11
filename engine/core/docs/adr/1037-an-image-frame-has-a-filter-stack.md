@@ -153,3 +153,75 @@ row `images-graphics.image-filter-stack`.
   source blip, a stack added in paged is lost on that save.
 - The image module's "Open in Image editor" ingests the picture as it is stored; turning the
   stack into adjustment layers needs a door the image module does not offer yet.
+
+## Amendment 2026-11-11 — one picture correction in every module, the encodings at the boundary
+
+A Photoshop adjustment layer, a Word, PowerPoint or Excel picture correction and a CSS filter on
+a web picture are the same engine operations; only the readers and writers of PSD, DrawingML and
+CSS know their encodings (capability register, "Differences belong at the format boundary").
+
+**Two ops.** `channelMixer { red, green, blue }` (each row `[from red, from green, from blue,
+constant]` as fractions, the result clamped to the gamut; `adjust.channel_mixer`) is Photoshop's
+Channel Mixer, and every CSS colour function is one exactly, since Filter Effects 1 defines
+`grayscale`, `sepia`, `saturate`, `hue-rotate`, `brightness`, `contrast` and `invert` as linear
+maps of the straight sRGB colour, clamped after each. `colorReplace { from, to, alpha, tolerance }`
+replaces the pixels within `tolerance` of `from` by `to`, their alpha multiplied by `alpha`:
+Office's `a:clrChange` (PowerPoint's "Set Transparent Color" is `alpha` 0). Its twin is
+`paged_kernels::cpu::color_replace`, which has no WGSL kernel yet (the filter stack evaluates on
+the CPU). Both are additive on the wire (an older engine refuses an op it does not know, as it
+refuses an unknown path); plugin-sdk 0.74.3-canary.86.
+
+**An anchored picture carries the stack.** `AnchoredFrame::image_adjustments` is a free
+frame's `image_adjustments` on the picture of an anchored frame (paged.doc's pictures, doc ADR
+600): the renderer's synthetic rectangle takes it (ADR 1045), `frameImageAdjustments` writes it
+through the anchored-frame finder and the canvas lists it with the picture's placement, so the
+Picture panel edits a Word picture as it edits any other. Serialised only when set: an anchored
+frame without a stack hashes as before.
+
+**DrawingML, both ways in one place.** `dml-native` is the one mapping of a picture's crop
+(`dml_native::crop`: `a:srcRect` as the placement, the placement back as `a:srcRect`; the
+fraction conversion is `paged_ooxml::drawingml::paint::rel_rect_fractions`), which paged.doc's
+lowering and crop save-back, paged.sheet's pictures, paged.slide's pictures and its save path
+called through five copies before (single-owner rule `drawingml-crop`). paged.doc lowers a
+picture's `a:lum`, `a:duotone`, `a:grayscl`, `a:biLevel`, `a:hsl`, `a:clrRepl`, `a:clrChange` and
+`a:blur` onto the frame's stack through `native::Lowering::picture_with_filters`, as slide and
+sheet do, in the standalone open (`docx-skeleton`) and in a placement (`doc-host-model`, the
+skeleton's batch), body and table cells; they are no longer reported as lost.
+
+**Saved back as DrawingML.** `dml_native::picture` is the inverse of the import's mapping:
+`effects_of` turns a stack into the resolved picture effects (`a:lum` with the slope's inverse,
+`a:duotone`, `a:clrRepl` for a one-colour duotone, `a:grayscl`, `a:biLevel`, `a:hsl`,
+`a:clrChange`, `a:blur` in points from the picture's own pixels), which
+`paged_ooxml::drawingml::write::blip_effects` writes, and `splice_blip` rewrites a picture's
+`a:blip`: its picture-effect children are replaced, `a:alphaModFix`, the alpha effects, `a:tint`
+and the extension list (Office 2010's image layer) are kept byte for byte. An op DrawingML has no
+element for (exposure, levels, curves, recolor, sharpen, posterize, invert, a channel mixer), a
+black & white with its own range weights and a colour replace's tolerance are reported on save.
+`pptx-export` writes a changed stack on an edited picture and the stack of a new one;
+`docx-export` writes the stack the canvas reads back (`PictureContent::adjustments`, always
+listed so a cleared stack is told from a host that does not read one) into the drawing's blip,
+beside the crop (doc ADR 623). paged.sheet keeps its drawing parts byte for byte (sheet ADR 529)
+and has no path that edits a picture's corrections, so it has nothing to write.
+
+**One evaluator.** The stack's evaluation (`apply_rgba8`, the ops over premultiplied f32
+pixels through `paged-kernels`' twins) moved out of the renderer into `paged-image-adjust`, unchanged;
+the renderer keeps its display density, cache key and adjusted twin and re-exports it. paged.sheet's
+in-frame grid draws a picture through it (`adjust_picture_rgba` of the sheet wasm) and cuts the crop's
+part of the image (`dml_native::crop::source_rect`, `GridPicture::src`), as the page draws it,
+instead of drawing the stored bytes whole. paged.image's `actions@1` `adjust` takes `ops`, a list of
+`RasterOp`, evaluated by it (`adjust_raster_ops_rgba8` of the image wasm); the older path form
+still runs the adjustment chain.
+
+**CSS.** paged.web's bake (`css-filter-ops.ts`) maps a picture's colour functions to channel
+mixers and `blur()` to a blur in the picture's own pixels, in the filter list's order; on
+anything but one picture they stay deferred by key as before.
+
+Evidence: `paged-renderer` `pipeline/image_adjust.rs` (the mixer clamps, the colour replace),
+`paged-kernels` `cpu.rs` (`color_replace`), `dml-native` `crop.rs` and `tests/map.rs` (`a:clrChange`),
+`web-bundle` `test/bake-effects.spec.ts` (a picture's filter list becomes its stack),
+`dml-native` `picture.rs` (the ops DrawingML holds round-trip; the splice keeps what it does
+not own), `paged-ooxml` `drawingml/write.rs` (`blip_effects` reads back), `pptx-export`
+`tests/pictures.rs` and `docx-conformance` `crop_saveback.rs` (a stack set in the editor is saved
+and reads back).
+
+This supersedes the Consequences' note that a pptx export loses a stack added in paged.

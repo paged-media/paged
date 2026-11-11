@@ -57,9 +57,9 @@ paged-math = { path = "../paged-math" }
 # Text warps: WordArt's preset shapes (engine ADR 1091).
 paged-warp = { path = "../paged-warp" }
 paged-color = { path = "../paged-color" }
-# Engine ADR 1037 — the image filter stack: the kernel twins, the curve
-# spline, the reduction to display size.
-paged-kernels = { path = "../paged-kernels" }
+# Engine ADR 1037 — the image filter stack: its one evaluator (the kernel
+# twins, the curve spline); paged-resample reduces to display size.
+paged-image-adjust = { path = "../paged-image-adjust" }
 paged-pixel = { path = "../paged-pixel" }
 paged-resample = { path = "../paged-resample" }
 # A placed EPS is drawn from its PostScript (engine ADR 1033).
