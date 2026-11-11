@@ -338,6 +338,37 @@ export interface LoweredShapeItem {
   closed: boolean;
   filled: boolean;
   stroked: boolean;
+  /** Engine ADR 1096 — the engine preset the anchors are drawn from, its
+   *  box (`frame`, `[x, y, w, h]`) relative to the anchor box like the
+   *  anchors: offset with them and set as `frameShapePreset`. Absent for a
+   *  custom geometry and a preset drawn turned in its anchors. */
+  preset?: LoweredPreset;
+  /** Engine ADR 1093 (amendment 2) — Office's line ends of an open item
+   *  (`frameStrokeStart/EndOfficeHead`), and the nearest InDesign arrowhead
+   *  (an `ArrowheadType` token) set beside them for IDML. */
+  startHead?: OfficeLineEnd;
+  endHead?: OfficeLineEnd;
+  startArrowhead?: string;
+  endArrowhead?: string;
+}
+
+/** Engine ADR 1096 — `paged_model::live_shape::PresetShape` on the wire
+ *  (the `frameShapePreset` value's JSON). */
+export interface LoweredPreset {
+  name: string;
+  adjusts?: [string, string][];
+  frame: [number, number, number, number];
+  flipH?: boolean;
+  flipV?: boolean;
+  part?: "all" | "fill" | "detail";
+  key?: string;
+}
+
+/** Engine ADR 1093 (amendment 2) — `paged_model::OfficeLineEnd`. */
+export interface OfficeLineEnd {
+  kind: "triangle" | "stealth" | "diamond" | "oval" | "arrow";
+  w?: "sm" | "med" | "lg";
+  len?: "sm" | "med" | "lg";
 }
 
 /** Sheet ADR 530 — one shape placed over a page table (see
@@ -353,6 +384,10 @@ export interface LoweredShape {
   wPt: number;
   hPt: number;
   items: LoweredShapeItem[];
+  /** Engine ADR 1096 — the items' transform `[a, b, c, d, tx, ty]` in the
+   *  anchor box's coordinates (a live preset's rotation about the box's
+   *  centre); absent when its anchors are drawn as placed. */
+  transform?: [number, number, number, number, number, number];
   /** The URL its click action opens (`a:hlinkClick`; sheet ADR 531): an
    *  item hyperlink on the shape's first path. */
   link?: string;

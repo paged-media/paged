@@ -258,3 +258,58 @@ impl XlsxDocument {
         out
     }
 }
+
+impl XlsxDocument {
+    /// Engine ADR 1096 — write a shape's preset back: the `a:prstGeom` (or
+    /// an `a:custGeom` it replaces) of shape `id` (`<drawing part>#<anchor
+    /// index>`, [`SheetShape::id`]) becomes preset `name` with `adjusts` as
+    /// its `a:avLst` (`("adj", "val 16667")`). Every other byte of the
+    /// drawing part stays. `Ok(false)` when it already says so.
+    pub fn set_shape_preset(
+        &mut self,
+        id: &str,
+        name: &str,
+        adjusts: &[(String, String)],
+    ) -> Result<bool, crate::error::XlsxError> {
+        use crate::error::XlsxError;
+        use crate::splice::{children_of, root_children, splice};
+        let missing = || XlsxError::Structure(format!("no shape {id}"));
+        if dml_geom::preset_geometry(name).is_none() {
+            return Err(XlsxError::Structure(format!("no preset named {name:?}")));
+        }
+        let (part, index) = id.rsplit_once('#').ok_or_else(missing)?;
+        let index: usize = index.parse().map_err(|_| missing())?;
+        let bytes = self.part_bytes(part).ok_or_else(missing)?;
+        let (anchors, _) = root_children(&bytes)?;
+        let anchor = anchors.get(index).ok_or_else(missing)?;
+        let child = |parent: &crate::splice::Span, names: &[&str]| {
+            children_of(&bytes, parent)
+                .map(|(kids, _)| kids.into_iter().find(|k| names.contains(&k.local.as_str())))
+        };
+        let sp = child(anchor, &["sp", "cxnSp"])?.ok_or_else(missing)?;
+        let sp_pr = child(&sp, &["spPr"])?.ok_or_else(missing)?;
+        let geom = child(&sp_pr, &["prstGeom", "custGeom"])?.ok_or_else(missing)?;
+        let a = paged_ooxml::xml::prefix_of(&geom.qname).to_string();
+        let esc = |v: &str| {
+            v.replace('&', "&amp;")
+                .replace('<', "&lt;")
+                .replace('"', "&quot;")
+        };
+        let av: String = adjusts
+            .iter()
+            .map(|(n, f)| format!(r#"<{a}gd name="{}" fmla="{}"/>"#, esc(n), esc(f)))
+            .collect();
+        let av = if av.is_empty() {
+            format!("<{a}avLst/>")
+        } else {
+            format!("<{a}avLst>{av}</{a}avLst>")
+        };
+        let xml = format!(r#"<{a}prstGeom prst="{}">{av}</{a}prstGeom>"#, esc(name));
+        if &bytes[geom.start..geom.end] == xml.as_bytes() {
+            return Ok(false);
+        }
+        let out = splice(&bytes, geom.start, geom.end, xml.as_bytes());
+        self.set_part_bytes(part, out);
+        Ok(true)
+    }
+}

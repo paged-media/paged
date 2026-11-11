@@ -405,6 +405,14 @@ export interface SheetEngine
   loadXlsx(bytes: Uint8Array): void;
   /** Re-emit the workbook as XLSX bytes (lazy-verbatim preservation). */
   saveXlsx(): Uint8Array;
+  /** Engine ADR 1096 — write the page's preset of drawing shape `id` into
+   *  the workbook (`a:prstGeom` + `a:avLst`); false when it already says so.
+   *  Absent on an older engine. */
+  setShapePreset?(
+    id: string,
+    name: string,
+    adjusts: [string, string][],
+  ): boolean;
   /** Commit one cell input (value or formula); returns every cell whose
    *  DISPLAY changed (the dirty cut, recomputed in Rust). */
   setCell(
@@ -1268,6 +1276,11 @@ export interface SheetWasmEngine
   extends SheetWasmEngineW2, SheetWasmEngineFiles, SheetWasmEngineDocStyles {
   load_xlsx(bytes: Uint8Array): void;
   save_xlsx(): Uint8Array;
+  set_shape_preset?(
+    id: string,
+    name: string,
+    adjusts: [string, string][],
+  ): boolean;
   set_cell(
     sheet: number,
     row: number,
@@ -1571,6 +1584,18 @@ export function wrapEngine(
       wasm.load_xlsx(bytes);
     },
     saveXlsx: () => wasm.save_xlsx(),
+    ...(wasm.set_shape_preset
+      ? {
+          setShapePreset: (
+            id: string,
+            name: string,
+            adjusts: [string, string][],
+          ) => {
+            tick();
+            return wasm.set_shape_preset!(id, name, adjusts);
+          },
+        }
+      : {}),
     setCell: (sheet, row, col, input) => {
       tick();
       return wasm.set_cell(sheet, row, col, input);

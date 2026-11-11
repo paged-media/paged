@@ -108,6 +108,21 @@ mod wasm {
             self.session.save_xlsx().map_err(map_err)
         }
 
+        /// Engine ADR 1096 — write the page's preset of drawing shape `id`
+        /// (`name`, `adjusts` as `[["adj", "val 16667"]]`) into the workbook.
+        pub fn set_shape_preset(
+            &mut self,
+            id: &str,
+            name: &str,
+            adjusts: JsValue,
+        ) -> Result<bool, JsValue> {
+            let adjusts: Vec<(String, String)> = serde_wasm_bindgen::from_value(adjusts)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            self.session
+                .set_shape_preset(id, name, &adjusts)
+                .map_err(map_err)
+        }
+
         /// Commit one cell input (value or formula). Returns
         /// `{changed:[{sheet,row,col,display}], circular:[{sheet,row,col}]}`.
         pub fn set_cell(

@@ -57,3 +57,37 @@ maps the paint (fills, gradients, outlines, effects) onto the engine's items.
   therefore starts at the box corner.
 - Evidence: `sheet-js/tests/it/w3_shapes.rs` (read, lowered paint, anchor box, turned and rounded
   outline, the page filter, losses), `packages/sheet-host-model/test/table-shapes.spec.ts`.
+
+## Amendment (2026-11-11): a preset is the engine's live preset, and a shape is kept
+
+Engine ADR 1096 makes an Office preset an engine live shape (`Polygon::preset`).
+
+- **Lowered as the engine's preset.** `sheet-js` gives each item of a preset shape its
+  `PresetShape` (the shape box centred in the anchor box, the flips, the item's part: `all`, or
+  `fill` and `detail` for a preset with a stroke-only detail path; the shape id as the key) and
+  draws its anchors with `paged_preset_geom::model::subpaths_in_box`, so they are what the engine
+  draws. A rotation is the items' transform about the anchor box's centre, not baked into the
+  anchors. A preset whose paths do not split into the engine's parts (a can's shaded lid, a
+  cube's faces: two or more filled paths) and a custom geometry are drawn as before, turned in
+  their anchors, without a preset. `table-shapes.ts` inserts the path as before and sets
+  `frameShapePreset` (and `frameTransform` for a turned shape) in the same batch; the raw writes
+  (`framePath`, `frameShapePreset`, `frameTransform`) take spread coordinates, so the page's
+  origin (`PageSummary.pageOrigin`) is added to them, which also fixes a multi-contour shape on a
+  page whose origin is not the spread's.
+- **Kept, not redrawn.** Every shape item carries a stamp in the plugin's metadata
+  (`{v: 1, shape: {id, item, hash, sheet, table}}`, no `data`, so no binding reader takes it).
+  A refresh reads the scene tree for the table's stamped items (`placedShapesIn`) and keeps a
+  shape whose hash (of what the workbook draws) is unchanged as the user left it, draws one whose
+  hash changed again, creates a missing one and removes one the workbook no longer has. The
+  shapes' items are left out of the bar ids a refresh deletes. A stamp made in the one-batch
+  placement cannot name its frame yet; the first refresh completes it.
+- **Line ends.** A line's `a:headEnd` / `a:tailEnd` map through `dml_geom::heads::office_end`
+  onto `startHead` / `endHead`, set as `frameStrokeStartOfficeHead` / `…EndOfficeHead`; the
+  nearest InDesign arrowhead is set beside them (`frameStrokeStartArrowhead` / `…EndArrowhead`)
+  for IDML. Sheet drew no heads before: an intended change.
+- **Save.** `XlsxDocument::set_shape_preset` (session `set_shape_preset`, wasm
+  `set_shape_preset`) writes a shape's `a:prstGeom` + `a:avLst` into its drawing part, every other
+  byte kept; the bundle's `writeShapePresets` reads the page's live presets and calls it. The
+  size and anchor of a resized shape are not written.
+- Evidence: `sheet-js/tests/it/w3_shapes.rs` (the live preset, the detail part, the heads, the
+  preset written into the drawing), `packages/sheet-host-model/test/table-shapes.spec.ts`.

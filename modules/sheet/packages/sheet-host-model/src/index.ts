@@ -39,6 +39,8 @@ export {
   type LoweredShape,
   type LoweredShapeAnchor,
   type LoweredShapeItem,
+  type LoweredPreset,
+  type OfficeLineEnd,
   type LoweredRun,
   type Merge,
   type Page,
@@ -295,4 +297,18 @@ export {
   tablePictureLosses,
   tablePictureOps,
 } from "./table-pictures";
-export { tableShapeBox, tableShapeLosses, tableShapeOps } from "./table-shapes";
+export {
+  parseShapeStamp,
+  placedShapesIn,
+  SHAPE_HANDLE_PREFIX,
+  shapeHash,
+  shapePresetWrite,
+  shapeStampValue,
+  tableShapeBox,
+  tableShapeLosses,
+  tableShapeOps,
+  type PlacedShape,
+  type SceneNode as ShapeSceneNode,
+  type ShapeStamp,
+  type TableShapeOptions,
+} from "./table-shapes";

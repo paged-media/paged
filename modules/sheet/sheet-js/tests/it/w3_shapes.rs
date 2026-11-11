@@ -127,7 +127,8 @@ fn a_page_carries_the_shapes_in_its_cells__feat__sheet_xlsx_shapes() {
 #[test]
 fn a_turned_flipped_rounded_shape_is_evaluated_in_its_box__feat__sheet_xlsx_shapes() {
     // A 100 x 50 pt rounded rectangle turned 90 degrees: its anchor is the
-    // 50 x 100 pt box it fills, the outline stays inside it.
+    // 50 x 100 pt box it fills; the outline, through the items' transform,
+    // stays inside it.
     let shape = r#"<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="6" name="Rounded"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm rot="5400000" flipH="1"><a:off x="0" y="0"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 25000"/></a:avLst></a:prstGeom><a:noFill/></xdr:spPr></xdr:sp>"#;
     let s = session_with(&anchored(2, 14, 635_000, 1_270_000, shape));
     let sh = &s.list_shapes(0).unwrap()[0];
@@ -138,11 +139,19 @@ fn a_turned_flipped_rounded_shape_is_evaluated_in_its_box__feat__sheet_xlsx_shap
         .anchors
         .iter()
         .any(|a| a.left != a.anchor || a.right != a.anchor));
+    let t = sh.transform.expect("the turn is the items' transform");
+    let at = |p: [f64; 2]| {
+        [
+            t[0] * p[0] + t[2] * p[1] + t[4],
+            t[1] * p[0] + t[3] * p[1] + t[5],
+        ]
+    };
     for a in &item.anchors {
         for p in [a.anchor, a.left, a.right] {
+            let q = at(p);
             assert!(
-                (-0.01..=50.01).contains(&p[0]) && (-0.01..=100.01).contains(&p[1]),
-                "{p:?}"
+                (-0.01..=50.01).contains(&q[0]) && (-0.01..=100.01).contains(&q[1]),
+                "{q:?}"
             );
         }
     }
@@ -153,9 +162,87 @@ fn a_turned_flipped_rounded_shape_is_evaluated_in_its_box__feat__sheet_xlsx_shap
     );
 }
 
+/// Engine ADR 1096 — a preset is the engine's live preset: its item names
+/// the program, the adjust values and the box it is drawn for (centred in
+/// the anchor box), its anchors are what the engine draws for that box
+/// (flips included), and a rotation is kept out of them.
+#[test]
+fn a_preset_item_is_the_engines_live_preset__feat__sheet_xlsx_shapes() {
+    let shape = r#"<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="6" name="Rounded"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm rot="5400000" flipH="1"><a:off x="0" y="0"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 25000"/></a:avLst></a:prstGeom><a:noFill/></xdr:spPr></xdr:sp>"#;
+    let s = session_with(&anchored(2, 14, 635_000, 1_270_000, shape));
+    let sh = &s.list_shapes(0).unwrap()[0];
+    let item = &sh.items[0];
+    let p = item.preset.as_ref().expect("a preset item");
+    assert_eq!(p.name, "roundRect");
+    assert_eq!(
+        p.adjusts,
+        vec![("adj".to_string(), "val 25000".to_string())]
+    );
+    // The 100 x 50 shape box centred in the 50 x 100 anchor box.
+    assert_eq!(p.frame, [-25.0, 25.0, 100.0, 50.0]);
+    assert!(p.flip_h && !p.flip_v);
+    let anchors: Vec<paged_model::PathAnchor> = item
+        .anchors
+        .iter()
+        .map(|a| paged_model::PathAnchor {
+            anchor: (a.anchor[0] as f32, a.anchor[1] as f32),
+            left: (a.left[0] as f32, a.left[1] as f32),
+            right: (a.right[0] as f32, a.right[1] as f32),
+        })
+        .collect();
+    assert!(paged_preset_geom::model::anchors_are(p, &anchors, &[0]));
+    // Upright anchors: they span the shape box, not the anchor box.
+    let xs = item.anchors.iter().map(|a| a.anchor[0]);
+    let (lo, hi) = xs.fold((f64::MAX, f64::MIN), |(l, h), x| (l.min(x), h.max(x)));
+    assert!(
+        (lo + 25.0).abs() < 1e-6 && (hi - 75.0).abs() < 1e-6,
+        "{lo} {hi}"
+    );
+    // An unturned preset needs no transform; a custom geometry has no preset.
+    let s = session_with(&anchored(3, 12, 1_270_000, 635_000, RECT));
+    let rect = &s.list_shapes(0).unwrap()[0];
+    assert!(rect.transform.is_none());
+    assert_eq!(
+        rect.items[0].preset.as_ref().unwrap().frame,
+        [0.0, 0.0, 100.0, 50.0]
+    );
+}
+
+/// A preset whose detail path is stroke-only (a callout's leader) is two
+/// items: the filled path and the detail over it, each its part of the
+/// program. A preset with two filled paths (a can's shaded lid) does not
+/// split into the engine's parts and is drawn as before, with no preset.
+#[test]
+fn a_detail_path_is_the_presets_detail_part__feat__sheet_xlsx_shapes() {
+    let callout = RECT.replacen(r#"prst="rect""#, r#"prst="borderCallout1""#, 1);
+    let s = session_with(&anchored(3, 12, 1_270_000, 635_000, &callout));
+    let sh = &s.list_shapes(0).unwrap()[0];
+    let parts: Vec<_> = sh
+        .items
+        .iter()
+        .map(|i| i.preset.as_ref().map(|p| p.part))
+        .collect();
+    use paged_model::live_shape::PresetPart;
+    assert_eq!(
+        parts,
+        vec![Some(PresetPart::Fill), Some(PresetPart::Detail)],
+        "{:?}",
+        sh.items
+    );
+    assert!(sh
+        .items
+        .iter()
+        .all(|i| i.preset.as_ref().unwrap().key.as_deref() == Some(sh.id.as_str())));
+    let can = RECT.replacen(r#"prst="rect""#, r#"prst="can""#, 1);
+    let s = session_with(&anchored(3, 12, 1_270_000, 635_000, &can));
+    let sh = &s.list_shapes(0).unwrap()[0];
+    assert_eq!(sh.items.len(), 3);
+    assert!(sh.items.iter().all(|i| i.preset.is_none()));
+}
+
 #[test]
 fn text_and_arrowheads_are_reported__feat__sheet_xlsx_shapes() {
-    let shape = r#"<xdr:cxnSp macro=""><xdr:nvCxnSpPr><xdr:cNvPr id="7" name="Arrow"/><xdr:cNvCxnSpPr/></xdr:nvCxnSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="0"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="12700"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:tailEnd type="triangle"/></a:ln></xdr:spPr></xdr:cxnSp>"#;
+    let shape = r#"<xdr:cxnSp macro=""><xdr:nvCxnSpPr><xdr:cNvPr id="7" name="Arrow"/><xdr:cNvCxnSpPr/></xdr:nvCxnSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="0"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="12700"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:headEnd type="oval" w="sm"/><a:tailEnd type="triangle"/></a:ln></xdr:spPr></xdr:cxnSp>"#;
     let text = r#"<xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="8" name="Box"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr><xdr:txBody><a:bodyPr/><a:p><a:r><a:t>Hello</a:t></a:r></a:p></xdr:txBody></xdr:sp>"#;
     let s = session_with(&format!(
         "{}{}",
@@ -164,8 +251,27 @@ fn text_and_arrowheads_are_reported__feat__sheet_xlsx_shapes() {
     ));
     let shapes = s.list_shapes(0).unwrap();
     assert_eq!(shapes.len(), 2);
-    assert!(shapes[0].losses.iter().any(|l| l.contains("arrowheads")));
+    // Engine ADR 1093 (amendment 2): the line carries Office's heads, and
+    // the nearest InDesign arrowhead beside them for IDML.
+    use paged_model::{OfficeHeadKind, OfficeHeadSize};
+    let line = &shapes[0].items[0];
+    let head = line.start_head.expect("the head end");
+    assert_eq!(
+        (head.kind, head.w),
+        (OfficeHeadKind::Oval, OfficeHeadSize::Sm)
+    );
+    assert_eq!(line.end_head.unwrap().kind, OfficeHeadKind::Triangle);
+    assert_eq!(
+        line.start_arrowhead.as_deref(),
+        Some("CircleSolidArrowHead")
+    );
+    assert_eq!(line.end_arrowhead.as_deref(), Some("TriangleArrowHead"));
+    // The line is still the whole preset (the renderer stops it under its
+    // heads), so it stays live.
+    assert_eq!(line.preset.as_ref().unwrap().name, "line");
+    assert!(shapes[0].losses.is_empty(), "{:?}", shapes[0].losses);
     assert!(shapes[1].losses.iter().any(|l| l.contains("text")));
+    assert!(shapes[1].items[0].start_head.is_none());
 }
 
 /// Sheet ADR 531 — a picture's and a shape's click action (`a:hlinkClick`)
@@ -235,4 +341,37 @@ fn an_items_click_action_is_its_external_url__feat__sheet_xlsx_shapes() {
     let shapes = s.list_shapes(0).unwrap();
     assert_eq!(shapes[0].link.as_deref(), Some("https://paged.media/b"));
     assert_eq!(shapes[1].link, None, "a link inside the workbook");
+}
+
+/// Engine ADR 1096 — a preset changed on the page is written into the
+/// workbook's drawing: the shape's `a:prstGeom` and its `a:avLst`, the rest
+/// of the part as it was; the saved file reads back with it.
+#[test]
+fn a_pages_preset_is_written_into_the_drawing__feat__sheet_xlsx_shapes() {
+    let rounded = RECT.replacen(r#"prst="rect""#, r#"prst="roundRect""#, 1);
+    let mut s = session_with(&format!(
+        "{}{}",
+        anchored(3, 12, 1_270_000, 635_000, &rounded),
+        anchored(4, 14, 1_270_000, 635_000, RECT)
+    ));
+    let shapes = s.list_shapes(0).unwrap();
+    let (id, other) = (shapes[0].id.clone(), shapes[1].id.clone());
+    let adj = vec![("adj".to_string(), "val 40000".to_string())];
+    assert!(s.set_shape_preset(&id, "roundRect", &adj).unwrap());
+    assert!(
+        !s.set_shape_preset(&id, "roundRect", &adj).unwrap(),
+        "already says so"
+    );
+    assert!(s.set_shape_preset(&id, "notAPreset", &[]).is_err());
+    let saved = s.save_xlsx().unwrap();
+    let drawing = part(&saved, id.split('#').next().unwrap());
+    assert!(drawing.contains(
+        r#"<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 40000"/></a:avLst></a:prstGeom>"#
+    ));
+    assert!(drawing.contains(r#"<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>"#));
+    let again = SheetSession::load_xlsx(&saved).unwrap();
+    let back = again.list_shapes(0).unwrap();
+    let p = back[0].items[0].preset.as_ref().unwrap();
+    assert_eq!((p.name.as_str(), p.adjusts.clone()), ("roundRect", adj));
+    assert_eq!(back[1].id, other);
 }

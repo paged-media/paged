@@ -33,6 +33,8 @@ paged-model = { path = "../../../engine/core/crates/paged-model" }
 paged-ooxml = { path = "../../../platform/shared/ooxml" }
 # A drawing shape's outline (the 187 presets and custom geometry, sheet ADR 530).
 dml-geom = { path = "../../../platform/shared/dml-geom" }
+# Engine ADR 1096 — a preset item's anchors as the engine draws its live preset.
+paged-preset-geom = { path = "../../../engine/core/crates/paged-preset-geom" }
 sheet-lower = { path = "../sheet-lower" }
 sheet-grid = { path = "../sheet-grid" }
 # The M2 charts track (spec §8.4): sheet-js resolves a parsed chart's series

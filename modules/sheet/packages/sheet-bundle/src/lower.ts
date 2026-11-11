@@ -83,6 +83,12 @@ import {
   tablePictureOps,
   tableShapeLosses,
   tableShapeOps,
+  placedShapesIn,
+  parseShapeStamp,
+  shapePresetWrite,
+  SHAPE_HANDLE_PREFIX,
+  type PlacedShape,
+  type ShapeSceneNode,
   cellRotationOps,
   needsRotationStyles,
   cellAlignApplies,
@@ -557,6 +563,45 @@ export interface BarPlacement {
   pageId: PageId;
   origin: [number, number];
   widths: readonly number[];
+  /** Sheet ADR 530 / engine ADR 1096 — the table frame and sheet the
+   *  shapes are stamped with, and the shapes of the table already on the
+   *  page (kept, not drawn again). */
+  table?: string;
+  sheet?: number;
+  placed?: ReadonlyMap<string, PlacedShape>;
+}
+
+/** The page's origin in its spread (the coordinates the raw path writes
+ *  take), `[0, 0]` when the host does not report it. */
+async function pageOriginOf(
+  host: BundleHost,
+  pageId: PageId,
+): Promise<[number, number]> {
+  try {
+    const pages = await host.document.collection<PageSummary>("pages");
+    const p = pages.find((x) => x.selfId === (pageId as unknown as string));
+    return p?.pageOrigin ?? [0, 0];
+  } catch (err) {
+    host.log.debug("lower: the page's origin could not be read", err);
+    return [0, 0];
+  }
+}
+
+/** The shapes a table already has on the page (sheet ADR 530): the items
+ *  stamped with its frame (or, not yet with a frame, with its sheet).
+ *  Empty when the scene tree cannot be read. */
+export async function placedTableShapes(
+  host: BundleHost,
+  frameId: string,
+  sheet?: number,
+): Promise<Map<string, PlacedShape>> {
+  try {
+    const roots = (await host.document.tree()) as unknown as ShapeSceneNode[];
+    return placedShapesIn(roots, frameId, sheet);
+  } catch (err) {
+    host.log.debug("lower: scene tree read for the table's shapes failed", err);
+    return new Map();
+  }
 }
 
 /** The ops that draw `content`'s data bars at `at` (their colour mints read
@@ -577,7 +622,16 @@ async function barOps(
   // effects, whose colours are chart swatches too. Sheet ADR 530: the
   // drawing shapes, painted with chart swatches as well.
   const styledPictures = (content.pictures ?? []).some((p) => p.fx);
-  const shapes = (content.shapes ?? []).length > 0;
+  const shapes =
+    (content.shapes ?? []).length > 0 || (at.placed?.size ?? 0) > 0;
+  const shapeOpts = shapes
+    ? {
+        pageOrigin: await pageOriginOf(host, at.pageId),
+        ...(at.placed ? { placed: at.placed } : {}),
+        ...(at.table !== undefined ? { table: at.table } : {}),
+        ...(at.sheet !== undefined ? { sheet: at.sheet } : {}),
+      }
+    : {};
   const pictureLosses = tablePictureLosses(content);
   if (pictureLosses.length > 0) {
     host.log.warn(`lower: pictures drawn without: ${pictureLosses.join("; ")}`);
@@ -595,6 +649,7 @@ async function barOps(
       at.pageId,
       at.origin,
       known,
+      shapeOpts,
     );
     return [
       ...diagonals,
@@ -623,6 +678,7 @@ async function barOps(
     at.pageId,
     at.origin,
     afterArt,
+    shapeOpts,
   );
   return [
     ...art,
@@ -706,19 +762,81 @@ export function sparklineOps(
   return ops;
 }
 
+/** Engine ADR 1096 — write the live presets of the shapes on the page into
+ *  the workbook's drawings (`a:prstGeom` + `a:avLst`), so an adjust handle
+ *  moved on the page reaches the saved xlsx. Reads the scene tree for the
+ *  stamped shape items and each first item's `frameShapePreset`. Returns
+ *  how many shapes changed in the workbook; 0 on an engine without the
+ *  door or when the document cannot be read. Call before `saveXlsx`. */
+export async function writeShapePresets(
+  host: BundleHost,
+  engine: SheetEngine,
+): Promise<number> {
+  if (!engine.setShapePreset) return 0;
+  let roots: ShapeSceneNode[];
+  try {
+    roots = (await host.document.tree()) as unknown as ShapeSceneNode[];
+  } catch (err) {
+    host.log.debug("shape presets: scene tree read failed", err);
+    return 0;
+  }
+  const items: {
+    id: ElementId;
+    stamp: NonNullable<ReturnType<typeof parseShapeStamp>>;
+  }[] = [];
+  const walk = (nodes: readonly ShapeSceneNode[]) => {
+    for (const n of nodes) {
+      const entry = n.pluginMetadata?.find((m) => m.key === BINDING_KEY);
+      const stamp = entry ? parseShapeStamp(entry.value) : null;
+      if (n.id && stamp && stamp.item === 0) items.push({ id: n.id, stamp });
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(roots);
+  let changed = 0;
+  const done = new Set<string>();
+  for (const { id, stamp } of items) {
+    if (done.has(stamp.id)) continue;
+    done.add(stamp.id);
+    try {
+      const props = await host.document.elementProperties(id);
+      const v = props?.entries.find(
+        (e) => (e.path as string) === "frameShapePreset",
+      )?.value;
+      const text =
+        v?.type === "text" && typeof v.value === "string" ? v.value : "";
+      const write = shapePresetWrite(stamp, text);
+      if (write && engine.setShapePreset(write.id, write.name, write.adjusts))
+        changed += 1;
+    } catch (err) {
+      host.log.warn(`shape presets: ${stamp.id} not written`, err);
+    }
+  }
+  return changed;
+}
+
 /** The page art a table's refresh replaces: drawn paths (bars, icons,
  *  sparklines, diagonals) and picture frames (W2.3). */
 const isPolygon = (id: ElementId) =>
   id.kind === "polygon" || id.kind === "rectangle";
 
+/** A minted element that is a shape's item (sheet ADR 530): kept across
+ *  refreshes, never one of the page art a refresh replaces. */
+const isShapeItem = (handle: string | null | undefined) =>
+  (handle ?? "").startsWith(SHAPE_HANDLE_PREFIX);
+
 /** The elements an applied batch minted (`MutationOutcome.minted`, in mint
- *  order), filtered by `keep`. Empty when the batch was refused. */
+ *  order), filtered by `keep`, the shapes' items left out. Empty when the
+ *  batch was refused. */
 function mintedElements(
   outcome: MutationOutcome,
   keep: (id: ElementId) => boolean,
 ): ElementId[] {
   return outcome.applied
-    ? (outcome.minted ?? []).map((m) => m.element).filter(keep)
+    ? (outcome.minted ?? [])
+        .filter((m) => !isShapeItem(m.handle))
+        .map((m) => m.element)
+        .filter(keep)
     : [];
 }
 
@@ -1634,6 +1752,8 @@ export async function lowerSelectionToFrame(
       pageId,
       origin: [placement.bounds[0], placement.bounds[1]],
       widths: columnWidths,
+      ...(frameId ? { table: frameId } : {}),
+      sheet,
     },
   );
 
@@ -1775,7 +1895,12 @@ async function placeInOneCall(
   const storyId = created.id.story_id;
   const tableId = created.id.table_id;
   const barIds =
-    drawn.length > 0 ? minted.map((m) => m.element).filter(isPolygon) : [];
+    drawn.length > 0
+      ? minted
+          .filter((m) => !isShapeItem(m.handle))
+          .map((m) => m.element)
+          .filter(isPolygon)
+      : [];
   opts.onLowered?.({
     frameId,
     storyId,
@@ -1808,6 +1933,7 @@ async function oneCallOps(
     range: string;
     contentVersion: number;
     sheetName: string;
+    sheet?: number;
   },
   frameHandle: string,
   tableHandle: string,
@@ -1820,6 +1946,7 @@ async function oneCallOps(
     pageId,
     origin,
     widths: columnWidths,
+    ...(opts.sheet !== undefined ? { sheet: opts.sheet } : {}),
   });
   const binding = makeBinding(
     sheetName,
@@ -1925,7 +2052,7 @@ export async function lowerAreasToFrames(
       placement.pageId,
       placement,
       sized.columnWidths,
-      { ...area.opts, range: area.range, contentVersion, sheetName },
+      { ...area.opts, range: area.range, contentVersion, sheetName, sheet },
       `${FRAME_HANDLE}${i}`,
       `${TABLE_HANDLE}${i}`,
     );
@@ -1962,7 +2089,12 @@ export async function lowerAreasToFrames(
       at = Number(f[1]);
       frames[at] = frameIdOf(m.element);
     } else if (t) tables[Number(t[1])] = m.element;
-    else if (at >= 0 && isPolygon(m.element) && built[at]?.bars)
+    else if (
+      at >= 0 &&
+      isPolygon(m.element) &&
+      !isShapeItem(m.handle) &&
+      built[at]?.bars
+    )
       bars[at]!.push(m.element);
   }
   for (const [i, b] of built.entries()) {
@@ -2163,6 +2295,8 @@ async function lowerPhased(
       pageId,
       origin: [placement.bounds[0], placement.bounds[1]],
       widths: columnWidths,
+      table: frameId,
+      sheet,
     },
   );
 
@@ -2524,16 +2658,30 @@ export async function refreshLoweredTable(
     viewOptionsOf(info),
   );
   const oldBars = info.barIds ?? [];
+  // Sheet ADR 530 — the table's shapes on the page are kept as the user
+  // left them; only what the workbook changed is drawn again.
+  const placed =
+    (next.shapes ?? []).length > 0 || (prev?.shapes ?? []).length > 0
+      ? await placedTableShapes(host, info.frameId, info.sheet)
+      : new Map<string, PlacedShape>();
   let drawn: Mutation[] = [];
   if (
     oldBars.length > 0 ||
+    placed.size > 0 ||
     (next.databars ?? []).length > 0 ||
     (next.sparklines ?? []).length > 0 ||
     (next.pictures ?? []).length > 0 ||
     (next.shapes ?? []).length > 0
   ) {
     const at = await frameOrigin(host, info.frameId);
-    if (at) drawn = await barOps(host, next, { ...at, widths: nextWidths });
+    if (at)
+      drawn = await barOps(host, next, {
+        ...at,
+        widths: nextWidths,
+        table: info.frameId,
+        sheet: info.sheet,
+        placed,
+      });
   }
   const removals: Mutation[] = oldBars.map((id) => ({
     op: "deleteFrame",
@@ -2766,6 +2914,8 @@ export async function replaceLoweredTable(
     if (r.applied && r.createdId?.kind === "table") {
       const tableId = tableIdOf(r.createdId);
       const at = await frameOrigin(host, info.frameId);
+      // The frame stays, and so do its shapes (sheet ADR 530).
+      const placed = await placedTableShapes(host, info.frameId, info.sheet);
       const { barIds } = await pourCellContent(
         host,
         next,
@@ -2784,7 +2934,9 @@ export async function replaceLoweredTable(
             viewOptionsOf(info),
           ),
         ],
-        at ? { ...at, widths } : undefined,
+        at
+          ? { ...at, widths, table: info.frameId, sheet: info.sheet, placed }
+          : undefined,
       );
       // A fresh table: no band of the host's above its rows.
       return {
