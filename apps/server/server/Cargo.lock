@@ -745,6 +745,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-ocf"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "zip",
+]
+
+[[package]]
 name = "paged-repo"
 version = "0.0.0"
 dependencies = [
@@ -752,6 +760,7 @@ dependencies = [
  "fastcdc",
  "flate2",
  "miniz_oxide",
+ "paged-ocf",
  "serde",
  "serde_json",
  "sha2",
