@@ -260,7 +260,6 @@
         "engine/core/crates/paged-perf/src/planar.rs",
         "engine/core/crates/paged-perf/tests/planar_budgets.rs",
         "engine/core/crates/paged-vector-fx/src/stroke_style.rs",
-        "modules/doc/docx-lower/src/shape_geom.rs",
         "modules/image/image-conformance/tests/it/psd_vector_paths_photoshop.rs"
       ]
     },

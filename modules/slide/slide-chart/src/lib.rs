@@ -101,10 +101,6 @@ const PAD_TOP: f64 = 7.0;
 const PAD_BOTTOM: f64 = 6.5;
 /// The end value labels overhang the plot by half their size plus this.
 const LABEL_OVERHANG: f64 = 1.1;
-/// Average advance of a digit, and of a letter, as a share of the size.
-const DIGIT_W: f64 = 0.6;
-const CHAR_W: f64 = 0.52;
-
 /// Lay `chart` out in a `w` × `h` pt frame.
 pub fn layout(chart: &Chart, w: f64, h: f64) -> Vec<Prim> {
     let mut out = Vec::new();
@@ -372,7 +368,7 @@ fn cartesian(
                     })
                     .collect();
                 for (si, s) in plot.series.iter().enumerate() {
-                    let (fill, line) = series_paint(s);
+                    let (fill, line) = series_paint(s, series_count(chart));
                     for c in 0..n_cat {
                         let Some(mut v) = s.values.get(c).copied().flatten() else {
                             continue;
@@ -392,8 +388,15 @@ fn cartesian(
                         } else {
                             (zero, val_pos(v))
                         };
-                        let (fill, line) =
-                            point_paint(s, c, fill.clone(), line.clone(), plot.vary_colors, c);
+                        let (fill, line) = point_paint(
+                            s,
+                            c,
+                            fill.clone(),
+                            line.clone(),
+                            plot.vary_colors,
+                            c,
+                            n_cat,
+                        );
                         let (x, y, ww, hh) = if horizontal {
                             // Bars grow right; slots run bottom-up.
                             let y = b0 + bw - (a - b0) - bar;
@@ -441,7 +444,7 @@ fn cartesian(
                 let stacked = grouping != "standard";
                 let mut acc = vec![0.0; n_cat];
                 for s in &plot.series {
-                    let (fill, line) = series_paint(s);
+                    let (fill, line) = series_paint(s, series_count(chart));
                     let mut pts = Vec::new();
                     for (c, total) in acc.iter_mut().enumerate() {
                         let Some(v) = s.values.get(c).copied().flatten() else {
@@ -493,7 +496,10 @@ fn cartesian(
                             .or_else(|| {
                                 Some(Line {
                                     width: Some(28_575),
-                                    fill: Some(Fill::Solid(auto_color(s.index as usize))),
+                                    fill: Some(Fill::Solid(auto_color(
+                                        s.index as usize,
+                                        series_count(chart),
+                                    ))),
                                     cap: Some("rnd".into()),
                                     ..Line::default()
                                 })
@@ -733,7 +739,15 @@ fn pie_layout(
     for (i, v) in s.values.iter().enumerate() {
         let Some(v) = v else { continue };
         let sweep = v.abs() / total * 360.0;
-        let (fill, line) = point_paint(s, i, None, None, true, i);
+        let (fill, line) = point_paint(
+            s,
+            i,
+            None,
+            None,
+            true,
+            i,
+            s.values.len().max(s.categories.len()),
+        );
         let line = line.or_else(|| Some(default_line("bg1", 100_000, 0)));
         out.push(Prim::Wedge {
             cx,
@@ -784,13 +798,24 @@ fn legend_entries(chart: &Chart) -> Vec<(String, Paint)> {
         if matches!(p.kind, PlotKind::Pie { .. }) {
             if let Some(s) = p.series.first() {
                 for (i, c) in s.categories.iter().enumerate() {
-                    out.push((c.clone(), point_paint(s, i, None, None, true, i)));
+                    out.push((
+                        c.clone(),
+                        point_paint(
+                            s,
+                            i,
+                            None,
+                            None,
+                            true,
+                            i,
+                            s.values.len().max(s.categories.len()),
+                        ),
+                    ));
                 }
             }
             continue;
         }
         for s in &p.series {
-            let paint = series_paint(s);
+            let paint = series_paint(s, series_count(chart));
             let paint = if matches!(p.kind, PlotKind::Line { .. }) {
                 (
                     s.props
@@ -904,24 +929,32 @@ fn no_line(l: &Line) -> bool {
     matches!(l.fill, Some(Fill::None))
 }
 
-/// Office's automatic series colour: accent 1–6, then the same darkened
-/// and lightened.
-fn auto_color(i: usize) -> Color {
-    let accent = format!("accent{}", i % 6 + 1);
-    match (i / 6) % 3 {
-        0 => scheme(&accent, 100_000, 0),
-        1 => scheme(&accent, 60_000, 0),
-        _ => scheme(&accent, 80_000, 20_000),
+/// Office's automatic colour of series (or varied point) `i` of `n`: the
+/// one table in `dml-chart` (measured in PowerPoint), as a scheme colour.
+fn auto_color(i: usize, n: usize) -> Color {
+    let (accent, variation) = dml_chart::auto::automatic(i, n);
+    Color {
+        base: ColorBase::Scheme(format!("accent{}", accent + 1)),
+        transforms: variation
+            .transform()
+            .map(|(name, v)| (name.to_string(), v))
+            .into_iter()
+            .collect(),
     }
 }
 
-/// A series' own paint, else its automatic colour (by `c:idx`).
-fn series_paint(s: &Series) -> Paint {
+/// How many series the chart's automatic colours are spread over.
+fn series_count(chart: &Chart) -> usize {
+    chart.plots.iter().map(|p| p.series.len()).sum()
+}
+
+/// A series' own paint, else its automatic colour (by `c:idx`, of `n`).
+fn series_paint(s: &Series, n: usize) -> Paint {
     let fill = s
         .props
         .fill
         .clone()
-        .or_else(|| Some(Fill::Solid(auto_color(s.index as usize))));
+        .or_else(|| Some(Fill::Solid(auto_color(s.index as usize, n))));
     (fill, s.props.line.clone())
 }
 
@@ -932,13 +965,14 @@ fn point_paint(
     line: Option<Line>,
     vary: bool,
     vary_index: usize,
+    vary_n: usize,
 ) -> Paint {
     if let Some((_, p)) = s.points.iter().find(|(i, _)| *i as usize == point) {
         return (p.fill.clone().or(fill), p.line.clone().or(line));
     }
     if vary {
         return (
-            Some(Fill::Solid(auto_color(vary_index))),
+            Some(Fill::Solid(auto_color(vary_index, vary_n))),
             line.or_else(|| s.props.line.clone()),
         );
     }
@@ -976,19 +1010,9 @@ fn size(p: &RunProps) -> f64 {
     p.size.unwrap_or(1197) as f64 / 100.0
 }
 
+/// A label's width in PowerPoint's chart profile (`dml-chart`).
 fn text_width(t: &str, s: f64) -> f64 {
-    t.chars()
-        .map(|c| {
-            if c.is_ascii_digit() {
-                DIGIT_W
-            } else if matches!(c, '.' | ',' | ' ' | '-') {
-                0.3
-            } else {
-                CHAR_W
-            }
-        })
-        .sum::<f64>()
-        * s
+    dml_chart::measure::powerpoint_text_width(t, s)
 }
 
 fn categories(chart: &Chart) -> Vec<String> {

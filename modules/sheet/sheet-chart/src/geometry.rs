@@ -275,8 +275,6 @@ pub(crate) const GRID_STROKE: &str = "#D9D9D9";
 pub(crate) const TEXT_GREY: &str = "#595959";
 pub(crate) const AXIS_STROKE_W: f64 = 0.75;
 pub(crate) const SERIES_STROKE_W: f64 = 2.25;
-/// The approximate advance of a character, em (the backend's estimate).
-pub(crate) const ADVANCE_EM: f64 = 0.55;
 
 /// Project a [`ChartModel`] + resolved [`PlotData`] into a [`ChartGeometry`].
 pub fn generate(
@@ -394,7 +392,7 @@ impl TextSpec {
 
 /// The approximate advance width of `s` at `size` pt.
 pub(crate) fn text_width(s: &str, size: f64) -> f64 {
-    s.chars().count() as f64 * ADVANCE_EM * size
+    dml_chart::measure::excel_text_width(s, size)
 }
 
 /// The emitter: a primitive sink plus the plotters drawing area text flows

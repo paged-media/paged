@@ -84,9 +84,9 @@ impl fmt::Display for GeomError {
 
 impl Error for GeomError {}
 
-/// Approximate per-character advance as a fraction of the em (the size in pt).
-/// 0.55 is a typical sans-serif average; see the module text-metrics note.
-const ADVANCE_EM: f64 = 0.55;
+/// Approximate per-character advance as a fraction of the em (the size in pt):
+/// Excel's chart profile in `dml-chart`; see the module text-metrics note.
+const ADVANCE_EM: f64 = dml_chart::measure::EXCEL_ADVANCE_EM;
 
 /// A custom [`plotters`] [`DrawingBackend`] capturing draw calls as vector
 /// [`Primitive`]s in pt space. See the module docs for the full mapping.

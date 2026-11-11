@@ -72,3 +72,14 @@ The cap does not move the cut: a round-capped 3 pt line stops exactly where a bu
 - `paged-geom` `trim` tests (straight, across segments, a quarter circle that stays on its circle, cuts
   that meet); `paged-renderer` `pipeline::shapes::tests` (the cut per head, a line cut at its two ends
   only, a pen path at each open contour, a closed contour never).
+
+## Amendment (2026-11-11): Office's heads have one owner
+
+Office's head geometry (the `sm` / `med` / `lg` sizes, the 2 pt sizing minimum, the `stealth`
+notch, the `arrow`'s two strokes, the inset of the stroke under each head) moved from paged.doc's
+`docx-lower` to `platform/shared/dml-geom` (`dml_geom::heads`), the DrawingML geometry crate the
+three Office modules share; doc draws its heads through it unchanged. Still open: paged.sheet
+draws no heads (its page shapes carry one paint per shape, a head needs the line's), and
+paged.slide maps DrawingML heads onto the engine's InDesign-shaped ends. Both wait on a per-end
+Office head in the engine model, whose geometry would move from `dml_geom::heads` into an engine
+crate on the same terms as ADR 1096's preset programs.

@@ -19,6 +19,9 @@ paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-fl
 # sheet ADR 527): chart fills and effects onto native page items.
 dml-native = { path = "../../../platform/shared/dml-native" }
 sheet-core = { path = "../sheet-core" }
+# Office's automatic series colours and Excel's label-width profile: one
+# table for slide, doc and sheet.
+dml-chart = { path = "../../../platform/shared/dml-chart" }
 sheet-format = { path = "../sheet-format" }
 # Trendlines fit with the function library's least-squares solver (the one
 # behind LINEST), so a trendline equals LINEST on its data.

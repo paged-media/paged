@@ -35,6 +35,8 @@
 //! The reader works on `paged_ooxml::tree`'s element tree and is tolerant:
 //! an element it does not know is skipped, never an error.
 
+pub mod auto;
+pub mod measure;
 pub mod model;
 pub mod read;
 pub mod read_ex;

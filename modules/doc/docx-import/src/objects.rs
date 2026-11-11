@@ -24,9 +24,9 @@
 //! in.
 
 use docx_core::{
-    BorderEdge, Borders, CellLook, ChartDrawing, CustomPath, DiagramDrawing, Float, FloatPosition,
-    FloatWrap, HeightRule, Language, Paragraph, PathCommand, PictureLook, PreferredWidth, Shape,
-    ShapeGeometry, TableLook, TableStyleProps, TextBox, Theme, WidthKind, WordArt,
+    BorderEdge, Borders, CellLook, ChartDrawing, DiagramDrawing, Float, FloatPosition, FloatWrap,
+    HeightRule, Language, Paragraph, PictureLook, PreferredWidth, Shape, ShapeGeometry, TableLook,
+    TableStyleProps, TextBox, Theme, WidthKind, WordArt,
 };
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_office_word as w10;
 use paged_ooxml::ooxmlsdk::schemas::schemas_microsoft_com_vml as vml;
@@ -256,8 +256,8 @@ pub(crate) fn complete_from_style(
     props
 }
 
-/// A shape's outline: the preset's name and guides, or a custom geometry whose
-/// points are literal numbers.
+/// A shape's outline: the preset's name and guides, or the authored custom
+/// geometry as `dml-geom` reads it (guides and arcs included).
 pub(crate) fn read_geometry(sp_pr: &paged_ooxml::tree::El) -> ShapeGeometry {
     if let Some(p) = sp_pr.children.iter().find(|c| c.local == "prstGeom") {
         let adjust = p
@@ -282,61 +282,9 @@ pub(crate) fn read_geometry(sp_pr: &paged_ooxml::tree::El) -> ShapeGeometry {
         };
     }
     if let Some(c) = sp_pr.children.iter().find(|c| c.local == "custGeom") {
-        return read_custom(c).map_or(ShapeGeometry::Unsupported, ShapeGeometry::Custom);
+        return ShapeGeometry::Custom(Box::new(dml_geom::read::custom_geometry(c)));
     }
     ShapeGeometry::default()
-}
-
-fn read_custom(cust: &paged_ooxml::tree::El) -> Option<Vec<CustomPath>> {
-    let list = cust.children.iter().find(|c| c.local == "pathLst")?;
-    let mut paths = Vec::new();
-    for path in list.children.iter().filter(|c| c.local == "path") {
-        let point = |el: &paged_ooxml::tree::El| -> Option<(i64, i64)> {
-            let pt = el.children.iter().find(|c| c.local == "pt")?;
-            Some((pt.attr("x")?.parse().ok()?, pt.attr("y")?.parse().ok()?))
-        };
-        let points = |el: &paged_ooxml::tree::El| -> Option<Vec<(i64, i64)>> {
-            el.children
-                .iter()
-                .filter(|c| c.local == "pt")
-                .map(|pt| Some((pt.attr("x")?.parse().ok()?, pt.attr("y")?.parse().ok()?)))
-                .collect()
-        };
-        let mut commands = Vec::new();
-        for cmd in &path.children {
-            match cmd.local.as_str() {
-                "moveTo" => {
-                    let (x, y) = point(cmd)?;
-                    commands.push(PathCommand::Move(x, y));
-                }
-                "lnTo" => {
-                    let (x, y) = point(cmd)?;
-                    commands.push(PathCommand::Line(x, y));
-                }
-                "quadBezTo" => {
-                    let p = points(cmd)?;
-                    let [a, b] = p[..] else { return None };
-                    commands.push(PathCommand::Quad([a.0, a.1, b.0, b.1]));
-                }
-                "cubicBezTo" => {
-                    let p = points(cmd)?;
-                    let [a, b, c] = p[..] else { return None };
-                    commands.push(PathCommand::Cubic([a.0, a.1, b.0, b.1, c.0, c.1]));
-                }
-                "close" => commands.push(PathCommand::Close),
-                // An arc is a guide computation: not taken.
-                _ => return None,
-            }
-        }
-        paths.push(CustomPath {
-            w: path.attr_i64("w").unwrap_or(0),
-            h: path.attr_i64("h").unwrap_or(0),
-            no_fill: path.attr("fill") == Some("none"),
-            no_stroke: path.attr_bool("stroke") == Some(false),
-            commands,
-        });
-    }
-    Some(paths)
 }
 
 /// Word's default text box insets: 0.1" left and right, 0.05" top and

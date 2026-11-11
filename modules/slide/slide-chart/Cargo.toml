@@ -13,6 +13,9 @@ workspace = true
 
 [dependencies]
 pptx-core.workspace = true
+# Office's automatic series colours and the label-width profiles: one
+# table for slide, doc and sheet.
+dml-chart = { path = "../../../platform/shared/dml-chart" }
 serde.workspace = true
 # Number-format labels: paged.sheet's Excel number-format engine. Built-in
 # modules depend on each other through the workspace (PM-0005).
