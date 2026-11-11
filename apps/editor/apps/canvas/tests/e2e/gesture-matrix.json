@@ -842,10 +842,6 @@
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },
     {
-      "tool": "media.paged.image.tool.eyedropper",
-      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/tool-gestures.spec.ts); matrix rows are the follow-up"
-    },
-    {
       "tool": "media.paged.image.tool.colorSampler",
       "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/tool-gestures.spec.ts); matrix rows are the follow-up"
     },

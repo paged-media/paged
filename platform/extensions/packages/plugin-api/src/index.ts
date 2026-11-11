@@ -350,6 +350,9 @@ export type {
   BindingReadoutSection,
   BindingReadoutRequest,
   BindingReadoutsRead,
+  BindingEyedropperRequest,
+  BindingEyedropperRead,
+  BindingEyedropperResult,
   BindingWorkspaceResult,
   BindingReadoutsResult,
 } from "./binding-provider.js";

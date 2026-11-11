@@ -113,6 +113,7 @@ describe("the host tool options", () => {
   it("are exactly the options this file covers", () => {
     expect(DECLARED.map((d) => `${d.toolId}.${d.field.key}`).sort()).toEqual([
       "paged.tool.eyedropper.mode",
+      "paged.tool.eyedropper.sampleSize",
       "paged.tool.gradientSwatch.mode",
       "paged.tool.gradientSwatch.spread",
       "paged.tool.pencil.closeDistance",
@@ -125,7 +126,9 @@ describe("the host tool options", () => {
     ]);
     for (const d of DECLARED)
       expect(d.field.kind).toBe(
-        d.field.key === "smoothing" || d.field.key === "mode"
+        d.field.key === "smoothing" ||
+          d.field.key === "mode" ||
+          d.field.key === "sampleSize"
           ? "select"
           : d.field.key === "star"
             ? "toggle"

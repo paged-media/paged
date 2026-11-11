@@ -35,6 +35,8 @@
 //                       picking it does not leave; a drag inside the box
 //                       moves the frame, also through a module's frame
 //                       surface (the sheet grid) — one undo step;
+//   Eyedropper          (inside an image) the host tool's click takes the
+//                       picture's colour into the image's foreground;
 //   History             Edit ▸ History opens on the document's steps; a
 //                       click on the step before the last goes back one
 //                       step (one `undoTo`).
@@ -324,6 +326,56 @@ test.describe("Shared host panels and tools in every edit context (editor ADR 31
           page.locator(`[data-tool-slot="${group}"][data-tool="${tool}"]`),
           tool,
         ).toHaveAttribute("data-active", "true");
+        await stillHere();
+      }
+
+      // EYEDROPPER — the same host tool everywhere; inside an image its
+      // target is the image (extensions ADR 1104): a click takes the
+      // picture's colour into the foreground, which is the image context's
+      // fill well, and writes nothing to the document.
+      if (ctx.type === "rasterImage") {
+        const slot = page.locator('[data-tool-slot="eyedropper"]').first();
+        if (
+          (await slot.getAttribute("data-tool")) === "paged.tool.eyedropper"
+        ) {
+          await slot.click();
+        } else {
+          await slot.click({ button: "right" });
+          await page
+            .locator(
+              '[data-tool-flyout="eyedropper"] [data-tool="paged.tool.eyedropper"]',
+            )
+            .click();
+        }
+        const fg = () =>
+          page.evaluate(async () => {
+            const r = await (
+              globalThis as unknown as {
+                __bindingProviders: {
+                  readSelectionProperty: (path: string) => Promise<{
+                    resolved: boolean;
+                    provider?: string;
+                    read?: { value?: { value?: { value?: number[] } } };
+                  }>;
+                };
+              }
+            ).__bindingProviders.readSelectionProperty("frameFillColor");
+            return r.resolved
+              ? { provider: r.provider, rgb: r.read?.value?.value?.value }
+              : null;
+          });
+        const before = await undoLen(page);
+        const shown = await fg();
+        expect(shown?.provider).toBe("media.paged.image");
+        // Inside the picture's yellow half.
+        const at = await screenPoint(page, FRAME.x0 + 130, FRAME.y0 + 60);
+        await page.mouse.click(at.x, at.y);
+        await expect
+          .poll(async () => JSON.stringify((await fg())?.rgb))
+          .not.toBe(JSON.stringify(shown?.rgb));
+        expect(await undoLen(page), "sampling is not a document edit").toBe(
+          before,
+        );
         await stillHere();
       }
 

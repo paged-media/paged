@@ -25,8 +25,10 @@
 
 import { describe, expect, it } from "bun:test";
 
+import type { BundleHost } from "@paged-media/plugin-api";
 import { covers, gestures } from "@paged-media/test-kit";
 
+import { makeColorBindingProvider } from "../src/binding-provider/color-provider";
 import { at, bundleOnFake, C, RED, sourcePixels, spyOn } from "./command-kit";
 
 const T = "media.paged.image.tool";
@@ -507,33 +509,51 @@ describe("colour tools [editor-shell.raster-color-binding]", () => {
   const rgb255 = (c: readonly number[] | null | undefined) =>
     c ? c.slice(0, 3).map((v) => Math.round(v * 255)) : null;
 
-  it("eyedropper: press takes the foreground, Alt the background, a drag follows the pointer", async () => {
-    covers("tool:media.paged.image.tool.eyedropper");
+  it("the host Eyedropper's sample: the image takes it into the foreground, Alt the background, at the tool's size", async () => {
+    covers("tool:paged.tool.eyedropper");
     const k = await ingested();
-    const g = gestures(k.toolTarget);
-    await g.tool(`${T}.eyedropper`).settle().click([125, 25]).settle();
+    // The frame the fake holds: 200×100 pt on pg1, 4×2 px.
+    const host = {
+      document: {
+        elementGeometry: async () => [
+          {
+            id: { kind: "rectangle", id: "u1" },
+            pageId: "pg1",
+            bounds: [0, 0, 100, 200],
+          },
+        ],
+      },
+      log: { debug() {}, warn() {} },
+    } as unknown as BundleHost;
+    const { provider } = makeColorBindingProvider(host, k.session);
+    expect(provider.provides.eyedropper).toBe(true);
+    const take = (
+      point: [number, number],
+      sampleSize = 1,
+      secondary = false,
+      pageId = "pg1",
+    ) =>
+      provider.takeEyedropperSample!({
+        pageId,
+        point,
+        sampleSize,
+        secondary,
+      });
+    expect(await take([125, 25])).toEqual({ kind: "taken", rgb: [0, 0, 200] });
     expect(rgb255(k.session.state().colors.fg)).toEqual([0, 0, 200]);
-    await g.click([25, 25], { mods: ["alt"] }).settle();
+    await take([25, 25], 1, true);
     expect(rgb255(k.session.state().colors.bg)).toEqual([200, 0, 0]);
-    // A drag keeps sampling: it ends on the colour under the release.
-    await g.drag({ from: [25, 75], to: [175, 75] }).settle();
-    expect(rgb255(k.session.state().colors.fg)).toEqual([0, 0, 200]);
+    // 5×5 around pixel (1, 0) clips to columns 0–3: half red, half blue.
+    expect(await take([75, 25], 5)).toEqual({
+      kind: "taken",
+      rgb: [100, 0, 100],
+    });
+    // Off the image, or on another page: declined, so the host samples
+    // the page.
+    expect((await take([500, 500])).kind).toBe("decline");
+    expect((await take([25, 25], 1, false, "pg2")).kind).toBe("decline");
     // Sampling is not a document edit.
     expect(k.docOps()).toEqual([]);
-    k.dispose();
-  });
-
-  it("eyedropper: the sample size averages the window around the point", async () => {
-    covers("tool:media.paged.image.tool.eyedropper");
-    const k = await ingested();
-    k.session.setEyedropperOptions({ size: 5 });
-    await gestures(k.toolTarget)
-      .tool(`${T}.eyedropper`)
-      .settle()
-      .click([75, 25])
-      .settle();
-    // 5×5 around pixel (1, 0) clips to columns 0–3: half red, half blue.
-    expect(rgb255(k.session.state().colors.fg)).toEqual([100, 0, 100]);
     k.dispose();
   });
 

@@ -69,6 +69,13 @@ export function publishDevHandles(instance: EditorInstance): () => void {
       active: () => bindingProviders.activeProviders(),
       readCollection: (collection: string) =>
         bindingProviders.readCollection({ collection: collection as never }),
+      // The selection's colour as the active context reads it (an image's
+      // foreground is its fill well): what the Eyedropper e2e checks.
+      readSelectionProperty: (path: string) =>
+        bindingProviders.readProperty({
+          path: path as never,
+          target: { kind: "selection", scope: "element" } as never,
+        }),
     },
     // A synthetic set prompt, and the persistence tier by passphrase.
     __secrets: {

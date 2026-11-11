@@ -368,6 +368,14 @@ Status (draw items, one line each; updated as they land):
   Free Distort (`paged-vector-fx` `free_distort`, the head `freeDistort` entry of the object effect
   stack; `liveDistortBatchFor`), not a rewritten path; both modes are the one projective map (the
   bilinear Free Distort is gone). Editor ADR 295 amended.
+- Eyedropper: DONE 2026-11-11. One tool, the host's (`paged.tool.eyedropper`, every context), with a
+  Sample size option (Photoshop's point and N×N averages; the window and the premultiplied mean are
+  `@paged-media/helpers` `sampleWindow` / `averageRgba8`, which paged.image's layers use too) and a
+  target door: the binding provider's eyedropper lane (`takeEyedropperSample`, extensions ADR 1104,
+  contract canary 86). paged.image's colour provider is the first target (its foreground, Alt the
+  background, sampled from its own layers); its Eyedropper tool, gesture and options are gone (id
+  through the deprecation window) and the Color Sampler, Ruler, Count and Note sit in the host
+  Eyedropper's flyout.
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
   and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
   opacity land on the selection in one batch, each target written only what its own snapshot

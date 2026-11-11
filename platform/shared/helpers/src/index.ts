@@ -100,6 +100,13 @@ export {
   type SampledTarget,
 } from "./sampled-style.ts";
 export {
+  SAMPLE_SIZES,
+  averageRgba8,
+  isSampleSize,
+  sampleWindow,
+  type SampleSize,
+} from "./sample-window.ts";
+export {
   LIVE_CORNER_KINDS,
   cornerPresetOps,
   supportsLiveCornerKind,

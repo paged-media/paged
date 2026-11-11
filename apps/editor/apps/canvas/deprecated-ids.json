@@ -416,6 +416,12 @@
       "removeIn": "0.80.0"
     },
     {
+      "id": "tool:media.paged.image.tool.eyedropper",
+      "replacement": "tool:paged.tool.eyedropper",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
       "id": "tool:media.paged.draw.tool.cornerRadius",
       "replacement": "tool:paged.tool.select",
       "deprecatedIn": "0.78.0",

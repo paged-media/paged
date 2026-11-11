@@ -189,7 +189,7 @@ test.describe("WP4.11 — Actions", () => {
 });
 
 test.describe("WP4.10 — colour for the raster context", () => {
-  test("the Eyedropper and Color Sampler reach the rail and activate @feat:editor-shell.raster-color-binding @level:smoke", async ({
+  test("the Color Sampler reaches the rail (in the host Eyedropper's flyout) and activates @feat:editor-shell.raster-color-binding @level:smoke", async ({
     page,
   }) => {
     await openShell(page, { doc: true });
@@ -198,10 +198,9 @@ test.describe("WP4.10 — colour for the raster context", () => {
         .list()
         .map((t) => t.id),
     );
-    for (const id of [
-      "media.paged.image.tool.eyedropper",
-      "media.paged.image.tool.colorSampler",
-    ]) {
+    // The Eyedropper is the host's in every context (its target inside an
+    // image is the image: host-panels-every-context.spec.ts).
+    for (const id of ["media.paged.image.tool.colorSampler"]) {
       expect(ids, `${id} is registered`).toContain(id);
       await invoke(page, `paged.tool.activate.${id}`);
       await expect(

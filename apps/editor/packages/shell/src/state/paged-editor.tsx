@@ -36,6 +36,10 @@ import { useScreenMode } from "./screen-mode-context";
 import { useOverlaySignals } from "./overlay-signals-context";
 import { useContentSelection } from "./content-selection-context";
 import { useToolSettings } from "./tool-settings-context";
+import {
+  useBindingProviderHost,
+  type ShellBindingProviderHost,
+} from "../catalog/binding-providers";
 import { useRegistryView } from "./live";
 import {
   useOptionalEditContextStack,
@@ -107,6 +111,11 @@ export interface PagedEditor {
    *  App-state keyed by tool id, NOT document mutations. Gesture
    *  handlers read it to parameterise the op they commit. */
   toolSettings: ReturnType<typeof useToolSettings>;
+
+  /** The shared binding-provider registry (ADR-023), or null when the
+   *  host wired none. A host tool asks it what the active edit context
+   *  takes (extensions ADR 1104: the Eyedropper's target). */
+  bindingProviders?: ShellBindingProviderHost | null;
 
   /** Text caret + range. */
   contentSelection: ReturnType<typeof useContentSelection>;
@@ -342,6 +351,7 @@ function PagedEditorBinder({
   const overlaySignals = useOverlaySignals();
   const contentSelection = useContentSelection();
   const toolSettings = useToolSettings();
+  const bindingProviders = useBindingProviderHost();
   const registries = useRegistries();
   const scope = useEditorScope();
   // OPTIONAL on purpose: this binder can mount outside the stack
@@ -372,6 +382,7 @@ function PagedEditorBinder({
       overlaySignals,
       contentSelection,
       toolSettings,
+      bindingProviders,
       text: {
         measure: (family, style, str, sizePt) =>
           client.measureText(family, style, str, sizePt),
@@ -433,6 +444,7 @@ function PagedEditorBinder({
       overlaySignals,
       contentSelection,
       toolSettings,
+      bindingProviders,
       editContext,
       documentContext,
       registries,

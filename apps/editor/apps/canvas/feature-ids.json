@@ -7,7 +7,7 @@
     "keybinding": 201,
     "menu": 665,
     "panel": 151,
-    "tool": 124
+    "tool": 123
   },
   "features": [
     {
@@ -10006,11 +10006,6 @@
       "owner": "media.paged.image"
     },
     {
-      "id": "tool:media.paged.image.tool.eyedropper",
-      "kind": "tool",
-      "owner": "media.paged.image"
-    },
-    {
       "id": "tool:media.paged.image.tool.freeformPen",
       "kind": "tool",
       "owner": "media.paged.image"
@@ -10759,6 +10754,12 @@
     {
       "id": "tool:media.paged.draw.tool.star",
       "replacement": "tool:paged.tool.polygon",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.image.tool.eyedropper",
+      "replacement": "tool:paged.tool.eyedropper",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
     }
