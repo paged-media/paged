@@ -136,20 +136,40 @@ fn in_box(anchors: &[PathAnchor], x: f64, y: f64) -> Vec<Anchor> {
         .collect()
 }
 
-/// `[sx, ox, sy, oy]` mapping the outline `p` draws onto `anchors`
-/// (box coordinates), or `None` when they are no scale of it.
-fn fit_anchors(p: &PresetShape, anchors: &[PathAnchor], starts: &[usize]) -> Option<[f64; 4]> {
+/// The fit of the outline `p` draws onto `anchors` (box coordinates):
+/// `[sx, ox, sy, oy]` and the outline's extent `[min x, max x, min y,
+/// max y]`, or `None` when the anchors are no scale of it.
+fn fit_anchors(
+    p: &PresetShape,
+    anchors: &[PathAnchor],
+    starts: &[usize],
+) -> Option<([f64; 4], [f64; 4])> {
     let expected = subpaths_in_box(p)?;
     if expected.is_empty() {
         return None;
     }
+    let mut ext = [f64::MAX, f64::MIN, f64::MAX, f64::MIN];
+    for q in expected.iter().flat_map(|s| &s.points) {
+        for (x, y) in [q.anchor, q.left, q.right] {
+            ext = [ext[0].min(x), ext[1].max(x), ext[2].min(y), ext[3].max(y)];
+        }
+    }
     let local = in_box(anchors, f64::from(p.frame[0]), f64::from(p.frame[1]));
-    live::fit(&expected, &local, starts)
+    live::fit(&expected, &local, starts).map(|f| (f, ext))
 }
 
-fn identity_fit(f: &[f64; 4]) -> bool {
-    let unit = |v: f64| (v - 1.0).abs() < 1e-4;
-    unit(f[0]) && unit(f[2]) && f[1].abs() < 1e-3 && f[3].abs() < 1e-3
+/// How far the fitted map may move any point of the outline and still be
+/// the identity (pt). Judged over the outline's own extent, not by the
+/// scale: on a short leader line the anchors' 0.001 pt rounding fits as a
+/// scale of 1.0001.
+const SAME_TOLERANCE: f64 = 0.01;
+
+fn identity_fit((f, ext): &([f64; 4], [f64; 4])) -> bool {
+    let dev = |s: f64, o: f64, lo: f64, hi: f64| {
+        ((s - 1.0) * lo + o).abs().max(((s - 1.0) * hi + o).abs())
+    };
+    dev(f[0], f[1], ext[0], ext[1]) < SAME_TOLERANCE
+        && dev(f[2], f[3], ext[2], ext[3]) < SAME_TOLERANCE
 }
 
 /// The polygon's preset while its anchors are what the preset draws for
@@ -248,9 +268,10 @@ fn normalise(
 pub fn refit(poly: &Polygon) -> Option<Refit> {
     let p = poly.preset.as_ref()?;
     preset_geometry(&p.name)?;
-    let Some(f) = fit_anchors(p, &poly.anchors, &poly.subpath_starts) else {
+    let Some(fitted) = fit_anchors(p, &poly.anchors, &poly.subpath_starts) else {
         return Some(Refit::Reshaped);
     };
+    let f = fitted.0;
     let t = to64(poly.item_transform);
     let [x, y, _, _] = p.frame.map(f64::from);
     // Old box coordinates → the container: the fitted local scale, the
@@ -263,7 +284,7 @@ pub fn refit(poly: &Polygon) -> Option<Refit> {
         ),
     );
     let unit = |v: f64| (v - 1.0).abs() < 1e-4;
-    if identity_fit(&f) && unit(t[0].hypot(t[1])) && unit(t[2].hypot(t[3])) {
+    if identity_fit(&fitted) && unit(t[0].hypot(t[1])) && unit(t[2].hypot(t[3])) {
         return Some(Refit::Same);
     }
     let (next, transform, scale) = normalise(p, m, poly.item_transform.is_some());
@@ -467,6 +488,26 @@ mod tests {
         poly.anchors[2].anchor.0 += 5.0;
         assert!(live_preset(&poly).is_none());
         assert_eq!(refit(&poly), Some(Refit::Reshaped));
+    }
+
+    /// A short leader line whose anchors are rounded to 0.001 pt fits as a
+    /// scale a little off 1, and is still the same outline.
+    #[test]
+    fn rounded_anchors_of_a_short_detail_stay_live() {
+        let p = PresetShape {
+            frame: [0.0, 0.0, 80.0, 50.0],
+            part: PresetPart::Detail,
+            ..PresetShape::new("callout3", 0.0, 0.0)
+        };
+        let mut poly = poly_of(p, None);
+        for a in &mut poly.anchors {
+            for q in [&mut a.anchor, &mut a.left, &mut a.right] {
+                q.0 = (q.0 * 1000.0).round() / 1000.0;
+                q.1 = (q.1 * 1000.0).round() / 1000.0;
+            }
+        }
+        assert!(live_preset(&poly).is_some());
+        assert_eq!(refit(&poly), Some(Refit::Same));
     }
 
     #[test]
