@@ -27,8 +27,9 @@
 //    samples its own content at that size and takes the colour (paged.image:
 //    its foreground, Alt its background), and a drag keeps sampling, as in
 //    Photoshop. A provider that declines leaves the click to the page.
-//  · OBJECT: click an element → sample its typed PROPERTIES (fill colour and
-//    tint, stroke colour and weight, opacity) → write them onto the
+//  · OBJECT: click an element → sample its typed appearance PROPERTIES
+//    (fill colour and tint, stroke colour and weight, opacity, and the rest
+//    of the look: gradients, effects, blend modes) → write them onto the
 //    selection in ONE batch. Alt+click samples only (the sample is held for
 //    inspection). Nothing under the click is a no-op. paged.draw carried
 //    this as a tool of its own; it is this mode now (PM-0017), and the

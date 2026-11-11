@@ -23,6 +23,15 @@
 // undo step. A slide shape is several elements (its outline, its stroke
 // detail, its text frame) that share one label key; each gets what it
 // holds. Geometry, size and text stay the target's.
+//
+// THE PAINT PART IS THE HOST'S: the look is sampled and written by
+// `@paged-media/helpers`' `sampled-style` (the host Eyedropper's object
+// mode samples and writes the same), each target taking only the paths it
+// exposes. What stays here is the slide part: finding a shape's elements
+// (its label key), and the TEXT part. sampled-style is the appearance of a
+// page item, written by `setElementProperty` on the item; a text run's
+// formatting lives on story ranges (or the live text selection through
+// `text.format@1`), which no host painter samples or writes yet.
 
 import type {
   BundleHost,
@@ -32,31 +41,13 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 
-import { LABEL_KEY } from "./object-model.js";
+import {
+  applySampledStyle,
+  sampledStyleFrom,
+  type SampledStyle,
+} from "@paged-media/helpers";
 
-/** The shape paths Copy formatting takes: fill, line, transparency and
- *  every effect. */
-const SHAPE_PREFIXES = [
-  "frameFill",
-  "frameStroke",
-  "frameGradient",
-  "frameDropShadow",
-  "frameInnerShadow",
-  "frameOuterGlow",
-  "frameInnerGlow",
-  "frameBevel",
-  "frameSatin",
-  "frameFeather",
-  "frameDirectionalFeather",
-] as const;
-const SHAPE_PATHS = new Set<string>([
-  "frameOpacity",
-  "frameBlendMode",
-  "frameContentOpacity",
-  "frameContentBlendMode",
-]);
-/** Not formatting: how a path is filled, which the outline decides. */
-const SHAPE_EXCLUDED = new Set<string>(["frameFillRule"]);
+import { LABEL_KEY } from "./object-model.js";
 
 /** The text paths: PowerPoint's format painter takes the font, its size,
  *  style, colour, spacing and position, and the paragraph's alignment,
@@ -84,13 +75,6 @@ export const TEXT_FORMAT_PATHS: readonly PropertyPath[] = [
 ];
 const TEXT_PATHS = new Set<string>(TEXT_FORMAT_PATHS);
 
-export function isShapeFormatPath(path: string): boolean {
-  return (
-    !SHAPE_EXCLUDED.has(path) &&
-    (SHAPE_PATHS.has(path) || SHAPE_PREFIXES.some((p) => path.startsWith(p)))
-  );
-}
-
 /** One property as copied: its path and its typed value. */
 export interface FormatEntry {
   path: PropertyPath;
@@ -99,8 +83,9 @@ export interface FormatEntry {
 
 /** What Copy formatting took. */
 export interface CopiedFormat {
-  /** The outline's (or a lone text box's) fill, line and effects. */
-  shape: FormatEntry[];
+  /** The outline's (or a lone text box's) fill, line and effects, as the
+   *  host's sampled style; null when it has none. */
+  shape: SampledStyle | null;
   /** The text's formatting (empty for a shape without text). */
   text: FormatEntry[];
 }
@@ -222,44 +207,6 @@ async function entries(
   );
 }
 
-/** The effects with a switch of their own: their prefix and the switch's
- *  path (`frameBevel…`, `frameBevelEnabled`). */
-const SWITCHED: readonly [string, string][] = [
-  ["frameDropShadow", "frameDropShadow"],
-  ["frameInnerShadow", "frameInnerShadowEnabled"],
-  ["frameOuterGlow", "frameOuterGlowEnabled"],
-  ["frameInnerGlow", "frameInnerGlowEnabled"],
-  ["frameBevel", "frameBevelEnabled"],
-  ["frameSatin", "frameSatinEnabled"],
-  ["frameFeather", "frameFeatherEnabled"],
-  ["frameDirectionalFeather", "frameDirectionalFeatherEnabled"],
-  ["frameGradientFeather", "frameGradientFeather"],
-];
-
-/** A shape's look without the settings of the effects it has switched off:
- *  writing one of them would switch the effect on in the target (the
- *  engine materialises an effect from any of its fields), so only the
- *  switch itself goes, off. */
-export function withoutOffEffects(
-  shape: readonly FormatEntry[],
-): FormatEntry[] {
-  const isOff = (path: string) =>
-    shape.some(
-      (e) =>
-        e.path === path && (e.value as { value?: unknown }).value === false,
-    );
-  const off = new Map(SWITCHED.filter(([, sw]) => isOff(sw)));
-  // The longest prefix a path starts with owns it.
-  const owner = (path: string) =>
-    SWITCHED.map(([p]) => p)
-      .filter((p) => path.startsWith(p))
-      .sort((a, b) => b.length - a.length)[0];
-  return shape.filter((e) => {
-    const o = owner(e.path);
-    return !o || !off.has(o) || e.path === off.get(o);
-  });
-}
-
 const textSelection = (host: BundleHost) =>
   host.supports("text.selection@1") ? host.text.selection() : null;
 
@@ -276,15 +223,17 @@ export async function copyFormat(
     const text = await entries(host, storyRange(sel.storyId, at, at + 1), (p) =>
       TEXT_PATHS.has(p),
     );
-    return text.length > 0 ? { shape: [], text } : null;
+    return text.length > 0 ? { shape: null, text } : null;
   }
   const id = source ?? host.selection.get()[0];
   if (!id) return null;
   const parts = partsOf((await host.document.tree()) as TreeNode[], [id]);
   const outline = parts.outlines[0] ?? parts.frames[0];
   if (!outline) return null;
-  const shape = withoutOffEffects(
-    await entries(host, outline, isShapeFormatPath),
+  const shape = sampledStyleFrom(
+    (await host.document.elementProperties(outline)) as {
+      entries: { path: string; value?: { type: string } | null }[];
+    } | null,
   );
   let text: FormatEntry[] = [];
   const frame = parts.frames[0];
@@ -298,28 +247,33 @@ export async function copyFormat(
   return { shape, text };
 }
 
-/** The writes Paste formatting makes on `parts`: the shape entries on each
- *  outline (on a text frame only where the shape has no outline), the text
- *  entries over every frame's whole story. */
+/** The writes Paste formatting makes on `parts`: the shape's look on each
+ *  outline (on a text frame only where the shape has no outline), each
+ *  taking the paths `supports` says it exposes, then the text entries over
+ *  every frame's whole story. */
 export function pasteOps(
   copied: CopiedFormat,
   parts: Parts,
   stories: ReadonlyMap<string, { story: string; length: number }>,
+  supports: (id: ElementId) => ReadonlySet<string>,
 ): MutationInput[] {
-  const ops: MutationInput[] = [];
-  const set = (elementId: ElementId, e: FormatEntry) =>
-    ops.push({
-      op: "setElementProperty",
-      args: { elementId, path: e.path, value: e.value },
-    } as MutationInput);
   const shapeTargets =
     parts.outlines.length > 0 ? parts.outlines : parts.frames;
-  for (const t of shapeTargets) for (const e of copied.shape) set(t, e);
+  const ops: MutationInput[] = copied.shape
+    ? ((applySampledStyle(
+        shapeTargets.map((id) => ({ id, supports: supports(id) })),
+        copied.shape,
+      )?.args.ops ?? []) as MutationInput[])
+    : [];
   for (const f of parts.frames) {
     const st = stories.get(String(f.id));
     if (!st || st.length === 0) continue;
     const range = storyRange(st.story, 0, st.length);
-    for (const e of copied.text) set(range, e);
+    for (const e of copied.text)
+      ops.push({
+        op: "setElementProperty",
+        args: { elementId: range, path: e.path, value: e.value },
+      } as MutationInput);
   }
   return ops;
 }
@@ -342,7 +296,25 @@ export async function pasteFormat(
   if (ids.length === 0) return false;
   const parts = partsOf((await host.document.tree()) as TreeNode[], ids);
   const stories = await storiesOf(host, parts.frames);
-  const ops = pasteOps(copied, parts, stories);
+  // What each shape target exposes (a line takes no fill).
+  const supports = new Map<string, Set<string>>();
+  if (copied.shape) {
+    for (const id of parts.outlines.length > 0
+      ? parts.outlines
+      : parts.frames) {
+      const props = await host.document.elementProperties(id);
+      supports.set(
+        String(id.id),
+        new Set((props?.entries ?? []).map((e) => e.path as string)),
+      );
+    }
+  }
+  const ops = pasteOps(
+    copied,
+    parts,
+    stories,
+    (id) => supports.get(String(id.id)) ?? new Set(),
+  );
   if (ops.length === 0) return false;
   const out = await host.document.mutate({
     op: "batch",

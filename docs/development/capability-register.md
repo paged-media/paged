@@ -382,8 +382,12 @@ Status (draw items, one line each; updated as they land):
   exposes; Alt+click samples only. This is exactly what draw's tool sampled (typed properties; it
   never copied effects, which an earlier note here got wrong). The sampling and the write are
   shared in `platform/shared/helpers` (`sampled-style`). Draw's tool, its `shift+d` key and its
-  feature id are gone (draw ADR 359 amended). Slide's format painter was not touched: it copies
-  slide text and shape formatting, not this set.
+  feature id are gone (draw ADR 359 amended).
+- Format painter: DONE 2026-11-11. Slide's painter samples and writes a shape's look through the same
+  `sampled-style` (now the whole look: fill, line, gradient, effects, blend, opacity; an off effect as
+  its switch alone), so the host Eyedropper's object mode and the painter are one implementation. The
+  text-run part stays slide's (runs live on story ranges and `text.format@1`, which no host painter
+  writes; slide ADR 723 amended).
 - Sheet format fallback: DONE 2026-11-03. The workbook panel's Format section no longer renders a
   second copy of number format, font, fill, alignment, wrap and iterative calculation on a host
   without the Sheet properties panel (`DuplicatedFormatRows`, its presets and 43 strings are gone).
@@ -422,7 +426,8 @@ Status (draw items, one line each; updated as they land):
   on a text selection with no form field holding focus (the canvas text surface is not one: it handles only Cmd+Z,
   A, C, X and the arrows), so they never shadow the text input. A guarded binding beats an unguarded one on a
   chord, so Cmd+U underlines while text is selected and stays Smart Guides otherwise; a Word document's scoped
-  Cmd+B / I / U (rank 100) still wins inside it. Not done: slide's own format painter was not touched.
+  Cmd+B / I / U (rank 100) still wins inside it. Slide's format painter: its paint part is the host's
+  `sampled-style` since 2026-11-11 (above).
 - PDF vectors dialog: DONE 2026-11-03. File > Import > PDF or AI as Vectors… is paged.pdf's now: a
   panel (`media.paged.pdf.panel.importVectors`, `vectors/import-panel.tsx`), the command
   `media.paged.pdf.command.importVectors` and the same menu row, all contributed by the bundle. The panel

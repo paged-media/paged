@@ -25,7 +25,7 @@ import { covers } from "@paged-media/test-kit";
 import { PAINTER_DOUBLE_MS, PainterMode } from "../src/format-painter";
 
 const FMT = {
-  shape: [{ path: "frameFill", value: "Color/red" }],
+  shape: { fillColor: "Color/red" },
   text: [],
 } as never;
 
@@ -59,29 +59,5 @@ describe("Format Painter", () => {
     expect(m.invoke(null, null, PAINTER_DOUBLE_MS + 1)).toBe("off");
     expect(m.invoke(null, null, 0)).toBe("off");
     expect(m.armed).toBe(false);
-  });
-});
-
-describe("Copy formatting", () => {
-  it("takes an effect that is off as off, without its settings", async () => {
-    const { withoutOffEffects } = await import("../src/format-painter");
-    const b = (v: boolean) => ({ type: "bool", value: v }) as never;
-    const n = (v: number) => ({ type: "length", value: v }) as never;
-    const kept = withoutOffEffects([
-      { path: "frameBevelEnabled", value: b(false) },
-      { path: "frameBevelSize", value: n(5) },
-      { path: "frameDropShadow", value: b(true) },
-      { path: "frameDropShadowSize", value: n(4) },
-      { path: "frameFeatherEnabled", value: b(false) },
-      { path: "frameFeatherWidth", value: n(5) },
-      { path: "frameFillColor", value: b(true) },
-    ] as never).map((e) => e.path);
-    expect(kept).toEqual([
-      "frameBevelEnabled",
-      "frameDropShadow",
-      "frameDropShadowSize",
-      "frameFeatherEnabled",
-      "frameFillColor",
-    ]);
   });
 });

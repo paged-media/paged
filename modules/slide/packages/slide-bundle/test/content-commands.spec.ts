@@ -36,7 +36,7 @@ import {
   type ContentDeps,
 } from "../src/content-commands";
 import type { SlideEngine } from "../src/engine";
-import { isShapeFormatPath, pasteOps } from "../src/format-painter";
+import { pasteOps } from "../src/format-painter";
 
 type Cmd = { id: string; when?: () => boolean; handler: () => Promise<void> };
 
@@ -163,7 +163,7 @@ describe("slide W4 content commands", () => {
     expect(f.commands.get(CONTENT_CMD.formatPainterOff)!.when!()).toBe(false);
     expect(f.commands.get(CONTENT_CMD.copyFormat)!.when!()).toBe(true);
     expect(f.commands.get(CONTENT_CMD.pasteFormat)!.when!()).toBe(false);
-    clip.copied = { shape: [], text: [] };
+    clip.copied = { shape: null, text: [] };
     expect(f.commands.get(CONTENT_CMD.pasteFormat)!.when!()).toBe(true);
     h.dispose();
     expect(f.commands.size + f.menus.length + f.keys.length).toBe(0);
@@ -303,40 +303,46 @@ describe("slide W4 content commands", () => {
     ).rejects.toThrow();
   });
 
-  it("paste formatting writes the shape's look to the outline and the text over the whole story", () => {
-    expect(isShapeFormatPath("frameFillColor")).toBe(true);
-    expect(isShapeFormatPath("frameOuterGlowSize")).toBe(true);
-    expect(isShapeFormatPath("frameFillRule")).toBe(false);
-    expect(isShapeFormatPath("frameBounds")).toBe(false);
-    const fill = {
-      path: "frameFillColor",
-      value: { type: "colorRef", value: "Color/x" },
-    } as const;
+  it("paste formatting writes the shape's look (the host's sampled style) to the outline and the text over the whole story", () => {
+    const shape = {
+      fillColor: "Color/x",
+      look: [
+        { path: "frameBlendMode", value: { type: "text", value: "Screen" } },
+      ],
+    };
     const size = {
       path: "characterFontSize",
       value: { type: "length", value: 30 },
     } as const;
+    const all = () =>
+      new Set(["frameFillColor", "frameBlendMode", "frameStrokeWeight"]);
     const ops = pasteOps(
-      { shape: [fill], text: [size] },
+      { shape, text: [size] },
       {
         outlines: [{ kind: "polygon", id: "p" } as ElementId],
         frames: [{ kind: "textFrame", id: "t" } as ElementId],
       },
       new Map([["t", { story: "s", length: 12 }]]),
+      all,
     ) as { args: { elementId: unknown; path: string } }[];
     expect(ops.map((o) => [o.args.elementId, o.args.path])).toEqual([
       [{ kind: "polygon", id: "p" }, "frameFillColor"],
+      [{ kind: "polygon", id: "p" }, "frameBlendMode"],
       [
         { kind: "storyRange", id: { story_id: "s", start: 0, end: 12 } },
         "characterFontSize",
       ],
     ]);
-    // A text box with no outline takes the look on its frame.
+    // A text box with no outline takes the look on its frame; a target
+    // takes only what it exposes.
     const box = pasteOps(
-      { shape: [fill], text: [] },
+      { shape, text: [] },
       { outlines: [], frames: [{ kind: "textFrame", id: "t" } as ElementId] },
       new Map(),
-    ) as { args: { elementId: { id: string } } }[];
-    expect(box.map((o) => o.args.elementId.id)).toEqual(["t"]);
+      () => new Set(["frameBlendMode"]),
+    ) as { args: { elementId: { id: string }; path: string } }[];
+    expect(box.map((o) => [o.args.elementId.id, o.args.path])).toEqual([
+      ["t", "frameBlendMode"],
+    ]);
   });
 });

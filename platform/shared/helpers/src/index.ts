@@ -94,7 +94,9 @@ export {
 } from "./gradient-stop.ts";
 export {
   applySampledStyle,
+  isAppearancePath,
   sampledStyleFrom,
+  withoutOffEffects,
   type SampledEntry,
   type SampledStyle,
   type SampledTarget,
