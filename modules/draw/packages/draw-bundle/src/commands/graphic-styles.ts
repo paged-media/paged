@@ -45,8 +45,7 @@
 // GraphicLine | Polygon, so there is no document-level metadata slot to
 // hang a library on (a Group cannot even carry metadata). `host.parts`
 // IS the document-resident door: bytes under `paged/<plugin-id>/` inside
-// the container, declared in `contributes.partTypes`, probed with
-// `supports("storage.parts@1")`.
+// the container, declared in `contributes.partTypes`.
 //
 // -------------------------------------------------------- the two shapes
 // THE LIBRARY (one part, `paged/media.paged.draw/graphic-styles.json`):
@@ -117,15 +116,15 @@
 //   a base-paint write would put the model and the page out of step.
 //   Release first. (`bakeAppearance` refuses the mirror case the same
 //   way.)
-// · ON NATIVE APPEARANCE (draw ADR 367, when the host's engine has
-//   `document.appearance@1`): a style also carries the item's native
+// · ON NATIVE APPEARANCE (draw ADR 367, `document.appearance@1`, which
+//   every host of a built-in has): a style also carries the item's native
 //   fills and strokes (`layers`, engine ADR 1043), its object effect
 //   stack (`effects`: drop shadows, live vector effects, envelopes) and
 //   its fill and stroke targets' opacity and blend (`targets`). Save and
 //   redefine read them, apply writes them (each only where the target's
 //   vocabulary has the path), and the digest covers them — an empty part
 //   digests as before, so a v1 style keeps its links' revisions. A v1
-//   library is converted when it is read on such a host (its stack
+//   library is converted when it is read (its stack
 //   becomes native layers, `graphic-styles-native.ts`), and written back
 //   as v2 by the appearance migration on open.
 // · IMPORT, EXPORT and MERGE are `graphic-styles-native.ts`. PREVIEW and
@@ -155,7 +154,6 @@ import {
   appearanceMutation,
   layersOfValue,
   nativeAppearanceOf,
-  nativeAppearanceOn,
   type NativePaintLayer,
 } from "./appearance-native";
 import {
@@ -224,9 +222,6 @@ export const GRAPHIC_STYLES_PART = "graphic-styles.json";
 export const GRAPHIC_STYLES_LIBRARY_VERSION = 1;
 /** The library version once a style carries native parts (draw ADR 367). */
 export const GRAPHIC_STYLES_LIBRARY_VERSION_NATIVE = 2;
-
-/** The capability this whole feature rides. */
-export const GRAPHIC_STYLES_FEATURE = "storage.parts@1";
 
 // ---------------------------------------------------------------- model
 
@@ -949,49 +944,30 @@ export function nativeLibraryOf(
 
 type PartsHost = RecipeHost;
 
-/** Read the library out of the container part. A host with no container
- *  writer (`supports("storage.parts@1")` false — an older editor) is not
- *  an error: it reads as an EMPTY library and WARNS once per call, so the
- *  degrade is visible in the log instead of looking like "no styles yet". */
+/** Read the library out of the container part (`storage.parts@1`). A
+ *  failed read is not an error: it reads as an EMPTY library and WARNS. */
 export async function readGraphicStyleLibrary(
   host: PartsHost,
 ): Promise<GraphicStyleLibrary> {
-  if (!host.supports(GRAPHIC_STYLES_FEATURE)) {
-    host.log.warn(
-      "graphic styles: this host wires no `.paged` container writer " +
-        `(supports("${GRAPHIC_STYLES_FEATURE}") is false) — the style ` +
-        "library cannot be read or saved here",
-    );
-    return emptyLibrary();
-  }
   try {
     const library = parseGraphicStyleLibrary(
       await readRecipeBytes(host, GRAPHIC_STYLES_PART),
     );
-    // On native appearance every style is read as a native one (draw ADR
-    // 367); the migration on open writes the converted library back.
-    return nativeAppearanceOn(host as BundleHost)
-      ? nativeLibraryOf(library)
-      : library;
+    // Every style is read as a native one (draw ADR 367); the migration
+    // on open writes the converted library back.
+    return nativeLibraryOf(library);
   } catch (e) {
     host.log.warn(`graphic styles: library read failed (${String(e)})`);
     return emptyLibrary();
   }
 }
 
-/** Write the library back. `false` = it did not persist (no container
- *  door, or the write was refused) — logged, never thrown. */
+/** Write the library back. `false` = the write was refused — logged,
+ *  never thrown. */
 export async function writeGraphicStyleLibrary(
   host: PartsHost,
   library: GraphicStyleLibrary,
 ): Promise<boolean> {
-  if (!host.supports(GRAPHIC_STYLES_FEATURE)) {
-    host.log.warn(
-      "graphic styles: no `.paged` container writer — the style library " +
-        "was NOT saved (nothing travels with this document)",
-    );
-    return false;
-  }
   try {
     await writeRecipeBytes(
       host,
@@ -1034,7 +1010,7 @@ export async function readGraphicAppearance(
   } catch {
     /* an unreadable element yields the empty base + no vocabulary */
   }
-  return graphicAppearanceFrom(envelope, props, nativeAppearanceOn(host));
+  return graphicAppearanceFrom(envelope, props, true);
 }
 
 /** One element's appearance read in a given lane — the migration
@@ -1062,7 +1038,7 @@ export async function graphicAppearanceOf(
   const index = linkIndex(host);
   const envelope = await index.envelopeOf(id);
   const props = await index.propertiesOf(id).catch(() => null);
-  return graphicAppearanceFrom(envelope, props, nativeAppearanceOn(host));
+  return graphicAppearanceFrom(envelope, props, true);
 }
 
 /** An appearance out of an envelope and a property table that have been

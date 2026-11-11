@@ -25,21 +25,85 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
+import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
-  applyDefineSymbol,
-  applyPlaceSymbolInstance,
   drawBundle,
+  insertPathMutationFor,
   migrateSymbolLibrary,
   readEngineSymbols,
   readInstanceStates,
   readSymbolLibrary,
+  symbolFinishBatchFor,
   symbolInstances,
+  symbolPlacePlanFor,
+  writeSymbolLibrary,
+  type SymbolDefinition,
 } from "../../src";
 import { packageWithSpread } from "../fixtures/build-idml";
 import { poly, squareItem } from "../panels/panel-document";
 import { openHost } from "./host";
+
+const corner = (x: number, y: number) => ({
+  anchor: [x, y] as [number, number],
+  left: [x, y] as [number, number],
+  right: [x, y] as [number, number],
+});
+
+/** The v0 definition of the 40 pt square "a" (top-left 50, 50): its
+ *  registration point the centre, its piece in definition space. */
+const TILE: SymbolDefinition = {
+  id: "sym-1",
+  name: "Tile",
+  registration: "center",
+  origin: [70, 70],
+  pieces: [
+    {
+      table: {
+        anchors: [
+          corner(-20, -20),
+          corner(20, -20),
+          corner(20, 20),
+          corner(-20, 20),
+        ],
+        subpathStarts: [0],
+        subpathOpen: [false],
+      },
+      paint: { fill: "Color/Black", stroke: null, weight: null },
+    },
+  ],
+};
+
+/** A v0 instance as a document made before the engine kept symbols
+ *  carries it: the definition re-emitted at `origin`, a link on each leaf. */
+async function placeV0(
+  host: BundleHost,
+  pageId: string,
+  instanceId: string,
+  origin: [number, number],
+): Promise<void> {
+  const plan = symbolPlacePlanFor({ symbol: TILE, pageId, instanceId, origin });
+  const leaves: ElementId[] = [];
+  for (const piece of plan.pieces) {
+    const out = await host.document.mutate(
+      insertPathMutationFor(pageId, piece.table.anchors, false),
+    );
+    if (!out.applied || !out.createdId) throw new Error("insert refused");
+    leaves.push(out.createdId);
+  }
+  const finished = await host.document.mutate(
+    symbolFinishBatchFor({
+      plan,
+      bindings: leaves.map((keep, pieceIndex) => ({
+        pieceIndex,
+        keep,
+        absorb: [],
+      })),
+    }),
+  );
+  expect(finished.applied).toBe(true);
+}
 
 describe("draw conformance — a v0 symbol library moves onto the engine (WP6.8) [plugin-draw.symbols]", () => {
   let h: HeadlessHost;
@@ -52,19 +116,18 @@ describe("draw conformance — a v0 symbol library moves onto the engine (WP6.8)
   afterAll(() => h?.dispose());
 
   it("definitions become engine symbols and v0 instances engine instances, in ONE undo step", async () => {
-    // Build the v0 state on a host that says it keeps no symbols.
-    const supports = h.host.supports.bind(h.host);
-    (h.host as { supports: (f: string) => boolean }).supports = (f) =>
-      f !== "document.symbols@1" && supports(f);
-    await h.host.selection.set([poly("a")]);
-    const def = (await applyDefineSymbol(h.host, { name: "Tile" }))!;
-    await applyPlaceSymbolInstance(h.host, def.id, { x: 300, y: 200 });
-    await applyPlaceSymbolInstance(h.host, def.id, { x: 120, y: 500 });
+    // The v0 state: the library part and two re-emitted instances.
+    const def = TILE;
+    const [square] = await h.host.document.elementGeometry([poly("a")]);
+    const pageId = square!.pageId!;
+    expect(await writeSymbolLibrary(h.host, { v: 1, symbols: [TILE] })).toBe(
+      true,
+    );
+    await placeV0(h.host, pageId, "si-1", [300, 200]);
+    await placeV0(h.host, pageId, "si-2", [120, 500]);
     const v0 = await symbolInstances(h.host, def.id);
     expect(v0).toHaveLength(2);
     const v0Leaves = v0.flatMap((i) => i.leaves);
-    // The engine is back.
-    (h.host as { supports: (f: string) => boolean }).supports = supports;
 
     const moved = await migrateSymbolLibrary(h.host);
     expect(moved).toEqual({ symbols: 1, instances: 2 });

@@ -118,28 +118,19 @@ export const openHost = async (): Promise<HeadlessHost> => {
   return h;
 };
 
-/** Engine ADR 1039 — a host whose engine is taken to carry no symbols, so
- *  the draw bundle runs its re-emitted-artwork lane (draw ADR 356), the
- *  fallback the interim specs pin. Call it AFTER `loadBundle`: it patches
- *  the host the bundle was activated with (the harness's current host). */
-export function withoutEngineSymbols(h: HeadlessHost): HeadlessHost {
-  const supports = h.host.supports.bind(h.host);
-  (h.host as { supports: (feature: string) => boolean }).supports = (
-    feature: string,
-  ) => feature !== "document.symbols@1" && supports(feature);
-  return h;
-}
-
-/** Engine ADR 1043 — a host whose engine is taken to draw no native
- *  appearance, so the draw bundle runs its metadata lane (draw ADR 354):
- *  the stack in the envelope, the front-most-layer bake and the group
- *  bake, which the specs of that lane pin. Call it AFTER `loadBundle`.
- *  Without it, the bundle's commands write `frameAppearance` and a
- *  document's stacks migrate on open (draw ADR 367). */
-export function withoutNativeAppearance(h: HeadlessHost): HeadlessHost {
-  const supports = h.host.supports.bind(h.host);
-  (h.host as { supports: (feature: string) => boolean }).supports = (
-    feature: string,
-  ) => feature !== "document.appearance@1" && supports(feature);
+/** Hold off the appearance migration on open (draw ADR 367) for a host
+ *  that only LOOKS at what a file holds: its batch is refused, so a
+ *  document's metadata stacks and baked groups stay as the file wrote
+ *  them. Call it right AFTER `loadBundle`, before anything is awaited. */
+export function withoutAppearanceMigration(h: HeadlessHost): HeadlessHost {
+  const doc = h.host.document;
+  const mutate = doc.mutate.bind(doc);
+  (doc as { mutate: typeof doc.mutate }).mutate = (mutation, options) =>
+    options?.label === "Migrate appearances"
+      ? Promise.resolve({
+          applied: false,
+          error: { kind: "refused", message: "held off by the spec" },
+        } as unknown as Awaited<ReturnType<typeof doc.mutate>>)
+      : mutate(mutation, options);
   return h;
 }

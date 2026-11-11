@@ -69,14 +69,9 @@ and declared in `contributes.partTypes`; the link is a reference on the
 element's own metadata envelope, a direct appearance edit marks the
 element OVERRIDDEN without breaking the link, and a redefine overwrites
 that override), SYMBOLS v0 (its sibling, same shape: a named artwork
-DEFINITION in a SECOND container part + INSTANCES re-emitted from it.
-Core has no symbol/instance model, IDML has no such primitive, and the
-`Mutation` union has no element-duplicate op — so an instance is
-`insertPath` geometry + flat paint carrying a per-LEAF link, because a
-group cannot hold metadata. Registration points are the §16.1 nine-point
-grid; redefine and reset REBUILD an instance rather than re-point it.
-TEXT is refused (no op copies a story), and the eight symbol-SET tools /
-nine-slice / 3D mapping are named as unbuilt rather than implied), LIVE
+DEFINITION in a SECOND container part + INSTANCES re-emitted from it with
+a per-LEAF link — superseded by the engine's symbols, see LIVE SYMBOLS
+below; a v0 document is migrated on open), LIVE
 PAINT v0 (the last unbuilt Illustrator Phase-2 row — and the third
 library-in-a-container-part feature. Read the word REGENERABLE before
 the word LIVE: the engine has NO `LivePaintGroup` node and no persistent
@@ -312,7 +307,8 @@ by `test/oracle/nine-slice.spec.ts` (setSymbol9SliceGrid's rectangle is
 read from the art's BOTTOM-LEFT, Y up — the probe's header). A v0 library
 (the second container part) moves onto the engine's store once, on open
 (`commands/symbols-migrate.ts`, one amended undo step), and keeps a
-`migrated` map; the v0 lane stays the fallback without the flag.
+`migrated` map; the v0 lane itself is gone (built-ins always run on a host
+with the flag).
 
 **`.paged` CONTAINER PARTS: there are now EIGHT** — graphic styles,
 symbols, live paint, pattern, repeat, blend (`blend.json`), objects-on-
@@ -382,10 +378,8 @@ and the group off the reply now (`commands/minted.ts`): a make reads no
 tree, an update only the link walk's one. The new GROUP's id relies on
 core minting it at translation time (the fixed edge above); on an engine
 that does not list it, the reply does not match the batch and both fall
-back to their links. A CLIPPED repeat stays two batches, and the reason
-moved: the paste could ride the build by handle now, but on a host whose
-reply lists nothing the tree diff is the only enumeration left, and a
-pasted-in instance is invisible to it — `repeatClipBatchFor` says so.
+back to their links. A CLIPPED repeat is one batch as well: its instances
+and the clip frame form a clip group (engine ADR 1010) in the build batch.
 
 PATTERN (make and re-plan) IS ONE BATCH TOO, and the first flow CONVERTED
 rather than built that way: the inserts are named, and the batch that was
@@ -411,15 +405,12 @@ other contour inserted, named and painted by name. It was two batches PER
 ELEMENT. Nothing is deleted, so no ordering rule binds; the two-per-
 element lane is the fallback.
 
-SYMBOLS — place, reset AND REDEFINE — ARE ONE BATCH, however many
-instances: a redefine of 50 instances was 100 mutations, 100 undo steps
-and 150 tree reads, and is 1, 1 and 1. `symbolBatchFor` sorts every
-instance's ops into the one order several rebuilds allow (inserts,
-dissolves, deletes, finishes, groups — below). That order also fixed an
-as-found failure: three two-piece instances rebuilt one after another hit
-the engine defect below and only the LAST was rebuilt; all their groups
-are dissolved before anything is deleted now. The two-batches-per-
-instance lane is the fallback.
+SYMBOLS RUN ON THE ENGINE (engine ADR 1039): each verb is one wire op,
+one undo step (`commands/symbols-engine.ts`). The re-emitted v0 lane is
+gone; its library and instances survive only as what a document made
+before the engine kept symbols carries, and `symbols-migrate.ts` moves
+them onto the engine on open with the place plan and finish batch of
+`commands/symbols.ts`.
 
 LIVE PAINT fill and regenerate are ONE BATCH (`livePaintBatchFor`): the
 face contours inserted and named, then the replaced fills deleted, the

@@ -62,7 +62,6 @@ import {
   livePaintArrangement,
   livePaintBatchFor,
 } from "../../src/commands/live-paint";
-import { symbolBatchFor, symbolPlacePlanFor } from "../../src/commands/symbols";
 import {
   bindTraceRegions,
   pixelToPageAffine,
@@ -691,46 +690,6 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
         const made = [...engine.items.keys()].filter((id) => !before.has(id));
         expect(made).toHaveLength(1);
         near(engine.pageOutline(made[0]!, VERSO), ring);
-      },
-    );
-
-    it.if(shape === "page")(
-      "Symbols: a compound piece rebuilt on a verso keeps its hole and its place",
-      () => {
-        // A rebuild plans at the instance's LIVE origin, read in page space,
-        // with that read's page origin.
-        const symbol = {
-          id: "sym-1",
-          name: "Ring",
-          registration: "center" as const,
-          origin: [0, 0] as [number, number],
-          pieces: [
-            {
-              table: {
-                anchors: RING.flat().map((p) => ({
-                  anchor: p,
-                  left: p,
-                  right: p,
-                })),
-                subpathStarts: [0, 4],
-              },
-              paint: { fill: null, stroke: null, weight: null },
-            },
-          ],
-        };
-        const plan = symbolPlacePlanFor({
-          symbol,
-          pageId: VERSO.id,
-          pageOrigin: VERSO.origin,
-          instanceId: "si-1",
-          origin: [300, 300],
-        });
-        const out = engine.mutate(symbolBatchFor([{ plan }]));
-        expect(out.applied).toBe(true);
-        near(
-          engine.pageOutline(String(out.minted[0]!.id), VERSO),
-          mapOutline(T(300, 300), RING),
-        );
       },
     );
   });

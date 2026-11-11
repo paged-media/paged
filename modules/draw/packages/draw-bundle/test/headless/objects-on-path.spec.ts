@@ -87,7 +87,6 @@ import {
   MAKE_OBJECTS_ON_PATH_COMMAND_ID,
   OBJECTS_ON_PATH_COMMAND_IDS,
   OBJECTS_ON_PATH_DEFAULTS,
-  OBJECTS_ON_PATH_FEATURE,
   OBJECTS_ON_PATH_LIBRARY_VERSION,
   OBJECTS_ON_PATH_NOTE,
   OBJECTS_ON_PATH_PANEL_ID,
@@ -583,10 +582,6 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
           ],
         },
       } as unknown as Mutation);
-    });
-
-    it("the host wires the container-parts door the PARAMETERS ride", () => {
-      expect(h.host.supports(OBJECTS_ON_PATH_FEATURE)).toBe(true);
     });
 
     it("THE DOOR: frameTransform REPLACES, and elementGeometry.bounds is NOT page space", async () => {

@@ -92,7 +92,6 @@ describe("Repeat options panel — rendered against the engine", () => {
     it("the CONTRIBUTED component mounts and shows the empty state", async () => {
       const panel = await mountContributed(h, REPEAT_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-repeat-panel")).toBe("0");
-      expect(panel.attr(PANEL, "data-draw-repeat-portable")).toBe("true");
       expect(panel.text()).toContain("Repeats (0)");
       expect(panel.text()).toContain(
         "No repeats yet. Select artwork and choose + Radial, + Grid or + Mirror.",

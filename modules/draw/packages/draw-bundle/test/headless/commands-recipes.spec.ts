@@ -44,9 +44,14 @@ import {
   expectRefuses,
   expectSelects,
   undoStepsOf,
+  writesDuring,
   type CommandRig,
 } from "./command-kit";
-import { commitAppearance, type AppearanceStack } from "../../src";
+import {
+  commitAppearance,
+  readEngineSymbols,
+  type AppearanceStack,
+} from "../../src";
 import { installPngRealm } from "./raster-realm";
 
 const C = "media.paged.draw.command";
@@ -422,52 +427,58 @@ describe("paged.draw commands — recipes (real engine)", () => {
   });
 
   describe("symbols", () => {
-    async function withSymbol(): Promise<void> {
+    // The engine keeps the symbols (engine ADR 1039): every verb is a
+    // document write, one undo step. A definition is not page artwork, so
+    // define, rename and delete are measured on the symbol store.
+    async function expectSymbolStep(
+      id: string,
+      payload: unknown,
+    ): Promise<void> {
+      const before = await readEngineSymbols(rig.h.host);
+      const writes = await writesDuring(rig, () => rig.run(id, payload));
+      expect(writes, `${id} is one write`).toBe(1);
+      expect(await readEngineSymbols(rig.h.host)).not.toEqual(before);
+      await rig.h.host.document.undo();
+      expect(await readEngineSymbols(rig.h.host)).toEqual(before);
+      await rig.h.host.document.redo();
+    }
+    async function withSymbol(): Promise<string> {
       await rig.open(F6(), [INNER]);
       await rig.run(`${C}.defineSymbol`, { name: "Tile" });
+      const [symbol] = await readEngineSymbols(rig.h.host);
+      if (!symbol) throw new Error("defineSymbol defined nothing");
+      return symbol.id;
     }
-    async function placed(): Promise<ElementId> {
+    async function placed(symbolId: string): Promise<ElementId> {
       const before = new Set(
-        (await rig.h.host.document.tree()).flatMap(function ids(n): string[] {
-          return [
-            ...(n.id ? [String(n.id.id)] : []),
-            ...(n.children ?? []).flatMap(ids),
-          ];
-        }),
+        (await readEngineSymbols(rig.h.host)).flatMap((s) => s.instances),
       );
-      await rig.run(`${C}.placeSymbolInstance`, {
-        symbolId: "sym-1",
-        x: 500,
-        y: 500,
-      });
-      const after = (await rig.h.host.document.tree()).flatMap(
-        function nodes(n): NonNullable<(typeof n)["id"]>[] {
-          return [
-            ...(n.id ? [n.id] : []),
-            ...(n.children ?? []).flatMap(nodes),
-          ];
-        },
-      );
-      const fresh = after.find((id) => !before.has(String(id.id)));
+      await rig.run(`${C}.placeSymbolInstance`, { symbolId, x: 500, y: 500 });
+      const fresh = (await readEngineSymbols(rig.h.host))
+        .flatMap((s) => s.instances)
+        .find((a) => !before.has(a));
       if (!fresh) throw new Error("placeSymbolInstance placed nothing");
-      return fresh;
+      return {
+        kind: "instance",
+        id: fresh.slice("instance:".length),
+      } as unknown as ElementId;
     }
 
-    it("Define symbol writes the selection into the symbol library and leaves the document alone; nothing selected is refused", async () => {
+    it("Define symbol makes a document symbol from the selection; nothing selected is refused", async () => {
       covers("command:media.paged.draw.command.defineSymbol");
       await rig.open(F6(), [INNER]);
-      const library = await expectLibraryOnly(rig, `${C}.defineSymbol`, {
-        name: "Tile",
-      });
-      expect(library).toContain("Tile");
+      await expectSymbolStep(`${C}.defineSymbol`, { name: "Tile" });
+      expect((await readEngineSymbols(rig.h.host)).map((s) => s.name)).toEqual([
+        "Tile",
+      ]);
       await expectRefuses(rig, F6(), [], `${C}.defineSymbol`);
     });
 
-    it("Place instance places a linked copy; an unknown symbol is refused", async () => {
+    it("Place instance places an instance of the symbol; an unknown symbol is refused", async () => {
       covers("command:media.paged.draw.command.placeSymbolInstance");
-      await withSymbol();
+      const symbolId = await withSymbol();
       await expectApplies(rig, `${C}.placeSymbolInstance`, {
-        symbolId: "sym-1",
+        symbolId,
         x: 500,
         y: 500,
       });
@@ -478,12 +489,12 @@ describe("paged.draw commands — recipes (real engine)", () => {
       });
     });
 
-    it("Redefine symbol rebuilds every placed instance from the selection; an unknown symbol is refused", async () => {
+    it("Redefine symbol redefines it from the selection; an unknown symbol is refused", async () => {
       covers("command:media.paged.draw.command.redefineSymbol");
-      await withSymbol();
-      await placed();
+      const symbolId = await withSymbol();
+      await placed(symbolId);
       await rig.h.host.selection.set([OUTER]);
-      await expectApplies(rig, `${C}.redefineSymbol`, { symbolId: "sym-1" });
+      await expectApplies(rig, `${C}.redefineSymbol`, { symbolId });
       await expectRefuses(rig, F6(), [OUTER], `${C}.redefineSymbol`, {
         symbolId: "sym-404",
       });
@@ -491,8 +502,7 @@ describe("paged.draw commands — recipes (real engine)", () => {
 
     it("Break link turns an instance into plain art; a plain path is refused", async () => {
       covers("command:media.paged.draw.command.breakSymbolLink");
-      await withSymbol();
-      const instance = await placed();
+      const instance = await placed(await withSymbol());
       await rig.h.host.selection.set([instance]);
       await expectApplies(rig, `${C}.breakSymbolLink`);
       await expectRefuses(rig, F6(), [OUTER], `${C}.breakSymbolLink`);
@@ -500,8 +510,7 @@ describe("paged.draw commands — recipes (real engine)", () => {
 
     it("Reset transform undoes an instance's transform; a plain path is refused", async () => {
       covers("command:media.paged.draw.command.resetSymbolTransform");
-      await withSymbol();
-      const instance = await placed();
+      const instance = await placed(await withSymbol());
       await rig.h.host.selection.set([instance]);
       await rig.h.host.document.mutate({
         op: "setElementProperty",
@@ -516,27 +525,24 @@ describe("paged.draw commands — recipes (real engine)", () => {
       await expectRefuses(rig, F6(), [OUTER], `${C}.resetSymbolTransform`);
     });
 
-    it("Rename symbol renames it in the library only; an unknown symbol is refused", async () => {
+    it("Rename symbol renames it; an unknown symbol is refused", async () => {
       covers("command:media.paged.draw.command.renameSymbol");
-      await withSymbol();
-      const library = await expectLibraryOnly(rig, `${C}.renameSymbol`, {
-        symbolId: "sym-1",
-        name: "Badge",
-      });
-      expect(library).toContain("Badge");
+      const symbolId = await withSymbol();
+      await expectSymbolStep(`${C}.renameSymbol`, { symbolId, name: "Badge" });
+      expect((await readEngineSymbols(rig.h.host)).map((s) => s.name)).toEqual([
+        "Badge",
+      ]);
       await expectRefuses(rig, F6(), [], `${C}.renameSymbol`, {
         symbolId: "sym-404",
         name: "Badge",
       });
     });
 
-    it("Delete symbol removes an unplaced symbol from the library only; an unknown symbol is refused", async () => {
+    it("Delete symbol removes it; an unknown symbol is refused", async () => {
       covers("command:media.paged.draw.command.deleteSymbol");
-      await withSymbol();
-      const library = await expectLibraryOnly(rig, `${C}.deleteSymbol`, {
-        symbolId: "sym-1",
-      });
-      expect(library).not.toContain("Tile");
+      const symbolId = await withSymbol();
+      await expectSymbolStep(`${C}.deleteSymbol`, { symbolId });
+      expect(await readEngineSymbols(rig.h.host)).toEqual([]);
       await expectRefuses(rig, F6(), [], `${C}.deleteSymbol`, {
         symbolId: "sym-404",
       });

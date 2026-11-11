@@ -54,7 +54,6 @@ import {
   resolveBlend,
   BLEND_DEFAULTS,
   BLEND_MAX_STEPS,
-  BLEND_FEATURE,
   BLEND_ORIENTATIONS,
   BLEND_SPACINGS,
   type BlendOrientation,
@@ -96,8 +95,6 @@ const M = defineMessages("draw.blendPanel", {
   heading: "Blends",
   blendTwo: "Blend the two selected objects",
   plusBlend: "+ Blend",
-  degraded:
-    "This editor cannot save data into the document, so blend settings are not kept. A blend can still be expanded or released.",
   spacing: "Spacing",
   mode: "Mode",
   steps: "Steps",
@@ -225,7 +222,6 @@ export function makeBlendPanel(host: BundleHost): {
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [selected, setSelected] = React.useState(0);
-    const [portable, setPortable] = React.useState(true);
     const [draft, setDraft, followDraft] =
       useFollowedDraft<BlendParams>(BLEND_DEFAULTS);
 
@@ -250,7 +246,6 @@ export function makeBlendPanel(host: BundleHost): {
         }
         // Everything is known; show it in one go, so the panel never
         // renders half of one reload and half of another.
-        setPortable(host.supports(BLEND_FEATURE));
         setRecords(library.blends);
         setSelected(selection.length);
         setActive(id);
@@ -319,7 +314,6 @@ export function makeBlendPanel(host: BundleHost): {
       <div
         style={{ padding: 12 }}
         data-draw-blend-panel={records.length}
-        data-draw-blend-portable={portable ? "true" : "false"}
         data-draw-blend-active={active ?? ""}
       >
         <PanelIntro summary={s.t(BLEND_SUMMARY)} attr="data-draw-blend-intro" />
@@ -347,12 +341,6 @@ export function makeBlendPanel(host: BundleHost): {
         )}
 
         <Refusal text={refusal} />
-
-        {!portable && (
-          <div style={mutedStyle} data-draw-blend-degraded>
-            {s.t(M.degraded)}
-          </div>
-        )}
 
         <div style={sectionStyle}>{s.t(M.spacing)}</div>
         <div style={rowStyle}>

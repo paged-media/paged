@@ -195,10 +195,6 @@ export function unitRig(
     zoom?: number;
     /** What `collection(name)` answers (`stories`, …). */
     collections?: Partial<Record<string, readonly unknown[]>>;
-    /** Leave `document.symbols@1` on (WP6.8): the rig's `instance`
-     *  elements and the `symbols` collection stand in for the engine's
-     *  store. Off by default — the re-emitted lane. */
-    engineSymbols?: boolean;
     /** Extra scripted replies (`requestPlanarRegions`, …). */
     reply?: (message: {
       kind: string;
@@ -593,25 +589,26 @@ export function unitRig(
         }
       : {}),
   });
-  // The recording fake answers no engine symbol op: these specs run the
-  // re-emitted lane (draw ADR 356), as a host without the flag does.
-  // Nor does it keep a native appearance (engine ADR 1043): these specs
-  // run the metadata lane (draw ADR 354), as a host without the flag does;
-  // the native lane is test/headless/appearance-native-commands.spec.ts.
-  {
-    const supports = host.supports.bind(host);
-    const off = new Set<string>();
-    if (!options.engineSymbols) off.add("document.symbols@1");
-    off.add("document.appearance@1");
-    (host as { supports: (feature: string) => boolean }).supports = (
-      feature: string,
-    ) => !off.has(feature) && supports(feature);
-  }
   // The automatic recipe update rebuilds in the background after a commit
   // (a timer, not the command's own promise), so in a rig that counts a
   // command's exact writes it is a race: off here. Its own spec runs it on
   // the engine (test/headless/recipe-auto-update.spec.ts).
   setRecipeAutoUpdate(host, false);
+  // The appearance migration on open (draw ADR 367) is background work
+  // too: it would move a seeded metadata stack before the command under
+  // test runs. Off here; its own specs run it on the engine
+  // (test/headless/graphic-styles-native.spec.ts).
+  {
+    const doc = host.document;
+    const mutate = doc.mutate.bind(doc);
+    (doc as { mutate: typeof doc.mutate }).mutate = (mutation, opts) =>
+      opts?.label === "Migrate appearances"
+        ? Promise.resolve({
+            applied: false,
+            error: { kind: "refused", message: "held off by the rig" },
+          } as unknown as Awaited<ReturnType<typeof doc.mutate>>)
+        : mutate(mutation, opts);
+  }
   drawBundle.activate(host);
 
   let mark = fake.mutations().length;

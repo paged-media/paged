@@ -674,10 +674,6 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     expect(all).not.toContain("shift+l");
   });
 
-  it("the host wires the container parts door this feature rides", () => {
-    expect(h.host.supports("storage.parts@1")).toBe(true);
-  });
-
   // ------------------------------------------------------- make a group
 
   it("MAKE GROUP records the ORDERED members and stamps them — ONE undo step", async () => {

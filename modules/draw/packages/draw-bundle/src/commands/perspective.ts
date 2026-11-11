@@ -24,8 +24,7 @@
 // through the recipe store's COMMAND lane (`recipe-store.ts`): a grid edit
 // is a view setting, not artwork, so — like Illustrator, where moving a
 // vanishing point is not an undoable document change — it stays OFF the
-// undo stack. A host with no container writer keeps the grids for the
-// session only, and says so once.
+// undo stack.
 //
 // THE GRID IS DRAWN in a RETAINED overlay layer of this bundle
 // (`host.overlay.layer`), so it stays on the canvas whatever tool is
@@ -132,7 +131,6 @@ export const PERSPECTIVE_COMMAND = {
 export const PERSPECTIVE_COMMAND_IDS = Object.values(PERSPECTIVE_COMMAND);
 
 export const PERSPECTIVE_PART = "perspective-grid.json";
-export const PERSPECTIVE_FEATURE = "storage.parts@1";
 export const PERSPECTIVE_LAYER_ID = "perspective-grid";
 
 // ------------------------------------------------------------ the store
@@ -168,15 +166,9 @@ export const serializePerspectiveLibrary = (
   lib: PerspectiveLibrary,
 ): Uint8Array => new TextEncoder().encode(JSON.stringify(lib));
 
-/** The session copy for hosts with no container writer. */
-const sessionLibraries = new WeakMap<object, PerspectiveLibrary>();
-const warned = new WeakSet<object>();
-
 export async function readPerspectiveLibrary(
   host: BundleHost,
 ): Promise<PerspectiveLibrary> {
-  if (!host.supports(PERSPECTIVE_FEATURE))
-    return sessionLibraries.get(host) ?? empty();
   try {
     return parsePerspectiveLibrary(
       await readRecipeBytes(host, PERSPECTIVE_PART),
@@ -191,25 +183,15 @@ export async function writePerspectiveLibrary(
   host: BundleHost,
   lib: PerspectiveLibrary,
 ): Promise<void> {
-  if (!host.supports(PERSPECTIVE_FEATURE)) {
-    sessionLibraries.set(host, lib);
-    if (!warned.has(host)) {
-      warned.add(host);
-      host.log.warn(
-        `perspective grid: this host wires no \`.paged\` container writer (supports("${PERSPECTIVE_FEATURE}") is false) — the grids last for this session only`,
-      );
-    }
-  } else {
-    try {
-      await writeRecipeBytes(
-        host,
-        PERSPECTIVE_PART,
-        serializePerspectiveLibrary(lib),
-      );
-      announceRecipeChange(host);
-    } catch (e) {
-      host.log.warn(`perspective grid: write failed (${String(e)})`);
-    }
+  try {
+    await writeRecipeBytes(
+      host,
+      PERSPECTIVE_PART,
+      serializePerspectiveLibrary(lib),
+    );
+    announceRecipeChange(host);
+  } catch (e) {
+    host.log.warn(`perspective grid: write failed (${String(e)})`);
   }
   await renderPerspectiveLayer(host, lib);
 }

@@ -109,7 +109,6 @@ describe("Objects on path panel — rendered against the engine", () => {
     it("the CONTRIBUTED component mounts and shows the empty state", async () => {
       const panel = await mountContributed(h, OBJECTS_ON_PATH_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-onpath-panel")).toBe("0");
-      expect(panel.attr(PANEL, "data-draw-onpath-portable")).toBe("true");
       expect(panel.text()).toContain("Objects on path (0)");
       expect(panel.text()).toContain(
         "Nothing on a path yet. Select some objects, then the path, and choose + On path.",

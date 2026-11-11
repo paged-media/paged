@@ -43,7 +43,7 @@ import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../../src";
-import { openHost, withoutNativeAppearance } from "../headless/host";
+import { openHost, withoutAppearanceMigration } from "../headless/host";
 import { caseById, authorCase, type AuthoredCase } from "./author";
 import { bothValues, classify, defectsOf, expand, report } from "./classify";
 import {
@@ -81,7 +81,7 @@ for (const id of REIMPORT_CASES) {
       await back.load(new Uint8Array(readFileSync(reexportPath(id))));
       back.loadBundle(drawBundle);
       // What InDesign wrote, as read: no migration onto native appearance.
-      withoutNativeAppearance(back);
+      withoutAppearanceMigration(back);
       const ours = await engineView(authored.h);
       const theirs = await engineView(back);
       diffs = compareViews(ours, theirs);

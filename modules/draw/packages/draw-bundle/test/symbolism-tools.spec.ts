@@ -83,7 +83,6 @@ function rig(
 ): { r: UnitRig; g: GestureDsl } {
   const r = unitRig([instance("i1", 100, 100), instance("i2", 400, 400)], {
     selection,
-    engineSymbols: true,
     collections: { symbols: symbols(nineSlice) },
   });
   return { r, g: gestures(r.fake) };
@@ -270,7 +269,6 @@ describe("Replace Symbol and Symbol Options as commands [plugin-draw.symbols]", 
       },
     ]);
     const shell = unitRig([instance("i1", 100, 100)], {
-      engineSymbols: true,
       shell: true,
       collections: { symbols: symbols() },
     });
