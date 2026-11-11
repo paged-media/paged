@@ -194,7 +194,7 @@ pub enum Refit {
     /// The item still holds the preset for its box: nothing to do.
     Same,
     /// It was resized: here is the preset for the new box.
-    Refitted(Refitted),
+    Refitted(Box<Refitted>),
     /// Its anchors are no scale of the preset (reshaped by hand), or the
     /// new size changes the preset's contours: it is no longer live.
     Reshaped,
@@ -272,12 +272,12 @@ pub fn refit(poly: &Polygon) -> Option<Refit> {
     if drawn.starts.len() != old_count {
         return Some(Refit::Reshaped);
     }
-    Some(Refit::Refitted(Refitted {
+    Some(Refit::Refitted(Box::new(Refitted {
         preset: next,
         drawn,
         transform,
         scale,
-    }))
+    })))
 }
 
 /// A companion of a refitted item (its detail item) drawn for the new box.

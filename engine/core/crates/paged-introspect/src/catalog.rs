@@ -917,6 +917,10 @@ property_paths! {
         FrameShapePreset => "frameShapePreset" : text(),
         FrameShapePresetAdjust => "frameShapePresetAdjust" : text(),
         FrameShapePresetHandle => "frameShapePresetHandle" : operation("PathPoint", Wire::PathPoint),
+        FrameShapePresetText => "frameShapePresetText" : text(),
+        // Engine ADR 1093, amendment 2 — Office's line ends; IDML writes the nearest InDesign arrowhead.
+        FrameStrokeStartOfficeHead => "frameStrokeStartOfficeHead" : text(),
+        FrameStrokeEndOfficeHead => "frameStrokeEndOfficeHead" : text(),
         // Engine ADR 1048 — the native mesh fill (no IDML attribute: a
         // label carries it through an IDML round trip).
         FrameFillMesh => "frameFillMesh" : structure("MeshFillSpec", Wire::FillMesh),
@@ -1657,9 +1661,10 @@ mod tests {
         //
         // 287 -> 288: ADR 1054 — a paragraph style's PDF export tag.
         //
-        // 288 -> 291: ADR 1096 — a path's preset, its adjust values and
-        // its adjust handle drag.
-        assert_eq!(cat.settable_paths.len(), 291, "settable path count drifted");
+        // 288 -> 294: ADR 1096 — a path's preset, its adjust values, its
+        // adjust handle drag and a shape's text frame; ADR 1093 amendment
+        // 2 — Office's two line ends.
+        assert_eq!(cat.settable_paths.len(), 294, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

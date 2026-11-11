@@ -85,6 +85,14 @@ fn apply_set_property_core(
         ) => {
             return super::preset_shape::apply_preset(doc, node, id, path, value);
         }
+        (
+            NodeId::TextFrame(_) | NodeId::Polygon(_) | NodeId::GraphicLine(_),
+            PropertyPath::FrameShapePresetText
+            | PropertyPath::FrameStrokeStartOfficeHead
+            | PropertyPath::FrameStrokeEndOfficeHead,
+        ) => {
+            return super::preset_shape::apply_side_field(doc, node, path, value);
+        }
         // Track J fan-out — path-topology ops accept any path-bearing
         // page item kind (Polygon, TextFrame, Rectangle, GraphicLine).
         // The four kinds carry identical `anchors` + `subpath_starts`

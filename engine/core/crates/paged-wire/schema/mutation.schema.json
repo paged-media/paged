@@ -9459,6 +9459,21 @@
           "const": "frameShapePresetHandle"
         },
         {
+          "description": "Engine ADR 1096 — the text frame of a shape lowered from a preset\n(`Value::Text`: the key its preset items share, `\"\"` clears). A refit\nof the shape scales the frame with it.",
+          "type": "string",
+          "const": "frameShapePresetText"
+        },
+        {
+          "description": "Engine ADR 1093, amendment 2 — Office's head at a path's or a line's\nfirst anchor (`Value::Text`: an `OfficeLineEnd` as JSON,\n`{\"kind\":\"triangle\",\"w\":\"lg\",\"len\":\"sm\"}`; `\"\"` clears). Drawn\ninstead of `frameStrokeStartArrowhead`, which keeps the nearest\nInDesign kind for IDML.",
+          "type": "string",
+          "const": "frameStrokeStartOfficeHead"
+        },
+        {
+          "description": "Office's head at the last anchor; see `FrameStrokeStartOfficeHead`.",
+          "type": "string",
+          "const": "frameStrokeEndOfficeHead"
+        },
+        {
           "description": "A paragraph's base direction: `Value::Text` of `ltr`, `rtl` or\n`auto` (from the first strong character); `\"\"` clears (inherit).\nOn a `StoryRange` or a paragraph style. Reflows.",
           "type": "string",
           "const": "paragraphDirection"

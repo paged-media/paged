@@ -1858,6 +1858,9 @@
     "frameShapePreset",
     "frameShapePresetAdjust",
     "frameShapePresetHandle",
+    "frameShapePresetText",
+    "frameStrokeStartOfficeHead",
+    "frameStrokeEndOfficeHead",
     "frameFillMesh",
     "framePatternTransform",
     "frameStrokeType",
@@ -4443,6 +4446,39 @@
       "nullable": false,
       "access": "readWrite",
       "bindable": false
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameShapePresetText",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameStrokeStartOfficeHead",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameStrokeEndOfficeHead",
+      "type": {
+        "kind": "text"
+      },
+      "wire": "text",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true
     },
     {
       "addressKind": "frame",
@@ -19082,6 +19118,39 @@
       {
         "addressKind": "frame",
         "path": "frameShapePresetAdjust",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameShapePresetText",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameStrokeStartOfficeHead",
+        "type": {
+          "kind": "text"
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameStrokeEndOfficeHead",
         "type": {
           "kind": "text"
         },

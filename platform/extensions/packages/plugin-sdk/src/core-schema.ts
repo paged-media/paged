@@ -813,6 +813,10 @@ export const CORE_PATHS: Record<
   frameShapePreset: V71,
   frameShapePresetAdjust: V71,
   frameShapePresetHandle: OP,
+  frameShapePresetText: V71,
+  // Office's line ends (engine ADR 1093, amendment 2), JSON text.
+  frameStrokeStartOfficeHead: V71,
+  frameStrokeEndOfficeHead: V71,
   // A movie or sound frame's medium is protocol 78 (engine ADR 1027).
   frameMedia: V71,
   // Engine ADR 1007: "Within" / "Along" / "Across".

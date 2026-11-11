@@ -1793,6 +1793,18 @@ pub enum PropertyPath {
     /// handle's range and draws the preset again. Write-only: the handles
     /// are read with the preset (`frameShapePreset`).
     FrameShapePresetHandle,
+    /// Engine ADR 1096 — the text frame of a shape lowered from a preset
+    /// (`Value::Text`: the key its preset items share, `""` clears). A refit
+    /// of the shape scales the frame with it.
+    FrameShapePresetText,
+    /// Engine ADR 1093, amendment 2 — Office's head at a path's or a line's
+    /// first anchor (`Value::Text`: an `OfficeLineEnd` as JSON,
+    /// `{"kind":"triangle","w":"lg","len":"sm"}`; `""` clears). Drawn
+    /// instead of `frameStrokeStartArrowhead`, which keeps the nearest
+    /// InDesign kind for IDML.
+    FrameStrokeStartOfficeHead,
+    /// Office's head at the last anchor; see `FrameStrokeStartOfficeHead`.
+    FrameStrokeEndOfficeHead,
 
     // ---- engine ADR 1051 — direction and script slots -----------------
     /// A paragraph's base direction: `Value::Text` of `ltr`, `rtl` or
@@ -2275,6 +2287,9 @@ impl PropertyPath {
             PropertyPath::FrameShapePreset => "frame.shapePreset",
             PropertyPath::FrameShapePresetAdjust => "frame.shapePresetAdjust",
             PropertyPath::FrameShapePresetHandle => "frame.shapePresetHandle",
+            PropertyPath::FrameShapePresetText => "frame.shapePresetText",
+            PropertyPath::FrameStrokeStartOfficeHead => "frame.strokeStartOfficeHead",
+            PropertyPath::FrameStrokeEndOfficeHead => "frame.strokeEndOfficeHead",
             PropertyPath::ParagraphDirection => "paragraph.direction",
             PropertyPath::CharacterDirection => "character.direction",
             PropertyPath::CharacterEastAsianFont => "character.eastAsianFont",

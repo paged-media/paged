@@ -497,3 +497,36 @@ fn an_anchored_shape_takes_a_preset_and_its_handle_drags() {
         before
     );
 }
+
+/// Office's line ends and a shape's text frame are plain writes with an
+/// exact undo, read back as JSON / the key.
+#[test]
+fn office_heads_and_the_text_key_are_written_and_undone() {
+    let mut m = load();
+    let head = r#"{"kind":"stealth","w":"lg","len":"sm"}"#;
+    set(
+        &mut m,
+        "c",
+        "frameStrokeEndOfficeHead",
+        Value::Text(head.into()),
+    )
+    .expect("head");
+    assert_eq!(
+        polygon(&m, "c").end_office_head.map(|h| h.kind),
+        Some(paged_model::OfficeHeadKind::Stealth)
+    );
+    let read: serde_json::Value =
+        serde_json::from_str(&text(&m, "c", "frameStrokeEndOfficeHead")).unwrap();
+    assert_eq!(read["kind"], "stealth");
+    assert_eq!(read["w"], "lg");
+    m.undo().expect("undo");
+    assert_eq!(polygon(&m, "c").end_office_head, None);
+    assert_eq!(text(&m, "c", "frameStrokeEndOfficeHead"), "");
+    assert!(set(
+        &mut m,
+        "c",
+        "frameStrokeStartOfficeHead",
+        Value::Text("zigzag".into())
+    )
+    .is_err());
+}

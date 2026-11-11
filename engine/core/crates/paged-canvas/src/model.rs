@@ -8450,8 +8450,11 @@ impl CanvasModel {
                 value: Some(Value::ImageAdjustments(frame.image_adjustments.clone())),
             });
         }
-        // Engine ADR 1096 — a Word shape's live preset, its handles (in the
-        // frame's own box) and its adjust values.
+        // Engine ADR 1096 — a Word shape's outline (its own box) and its
+        // live preset, its handles and its adjust values.
+        if !frame.anchors.is_empty() {
+            entries.push(frame_path_entry(&frame.anchors, &frame.subpath_starts));
+        }
         if frame.preset.is_some() {
             let live = frame.preset.as_ref().filter(|p| {
                 paged_preset_geom::model::anchors_are(p, &frame.anchors, &frame.subpath_starts)
@@ -8851,6 +8854,14 @@ impl CanvasModel {
                                 path: PropertyPath::FrameInsetSpacing,
                                 value: Some(Value::Bounds(
                                     f.inset_spacing.unwrap_or([0.0; 4]),
+                                )),
+                            },
+                            // Engine ADR 1096 — the key of the preset shape
+                            // whose text the frame holds.
+                            PropertyEntry {
+                                path: PropertyPath::FrameShapePresetText,
+                                value: Some(Value::Text(
+                                    f.preset_text.as_ref().map(|t| t.key.clone()).unwrap_or_default(),
                                 )),
                             },
                             // W0.3 — text-frame prefs.
@@ -9739,6 +9750,14 @@ impl CanvasModel {
                                 value: Some(Value::Text(arrowhead_text(p.end_arrow))),
                             },
                             PropertyEntry {
+                                path: PropertyPath::FrameStrokeStartOfficeHead,
+                                value: Some(Value::Text(office_head_text(p.start_office_head))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeEndOfficeHead,
+                                value: Some(Value::Text(office_head_text(p.end_office_head))),
+                            },
+                            PropertyEntry {
                                 path: PropertyPath::AppliedObjectStyle,
                                 value: Some(Value::Text(
                                     p.applied_object_style.clone().unwrap_or_default(),
@@ -9926,6 +9945,14 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeEndArrowhead,
                                 value: Some(Value::Text(arrowhead_text(l.end_arrow))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeStartOfficeHead,
+                                value: Some(Value::Text(office_head_text(l.start_office_head))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeEndOfficeHead,
+                                value: Some(Value::Text(office_head_text(l.end_office_head))),
                             },
                             // C-62 — the line's cap (read only on a
                             // rectangle before).
@@ -17623,6 +17650,40 @@ fn script_content(s: &paged_model::ScriptProperties) -> Option<crate::channel::R
     })
 }
 
+/// Engine ADR 1093, amendment 2 — an Office line end as its read (`""`
+/// for none).
+fn office_head_text(h: Option<paged_model::OfficeLineEnd>) -> String {
+    h.map(|h| serde_json::to_string(&h).unwrap_or_default())
+        .unwrap_or_default()
+}
+
+/// Engine ADR 1096 — a polygon's live preset as the reads give it: the
+/// preset with its adjust handles (own coordinates), and every adjust value
+/// of its program; both `""` when the path is no live preset.
+fn preset_entries(p: &paged_model::Polygon) -> (String, String) {
+    preset_reads(paged_preset_geom::model::live_preset(p))
+}
+
+/// A live preset (or none) as the two reads.
+fn preset_reads(live: Option<&paged_model::live_shape::PresetShape>) -> (String, String) {
+    use paged_preset_geom::model as pm;
+    let Some(preset) = live else {
+        return (String::new(), String::new());
+    };
+    let mut v = serde_json::to_value(preset).unwrap_or_default();
+    let handles: Vec<serde_json::Value> = pm::handles(preset)
+        .into_iter()
+        .map(
+            |h| serde_json::json!({ "x": h.pos.0, "y": h.pos.1, "polar": h.polar, "refs": h.refs }),
+        )
+        .collect();
+    v["handles"] = serde_json::Value::Array(handles);
+    (
+        v.to_string(),
+        serde_json::to_string(&pm::adjusts_resolved(preset)).unwrap_or_default(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -19373,31 +19434,4 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
             "MoveFrame is display geometry — must NOT re-paginate"
         );
     }
-}
-
-/// Engine ADR 1096 — a polygon's live preset as the reads give it: the
-/// preset with its adjust handles (own coordinates), and every adjust value
-/// of its program; both `""` when the path is no live preset.
-fn preset_entries(p: &paged_model::Polygon) -> (String, String) {
-    preset_reads(paged_preset_geom::model::live_preset(p))
-}
-
-/// A live preset (or none) as the two reads.
-fn preset_reads(live: Option<&paged_model::live_shape::PresetShape>) -> (String, String) {
-    use paged_preset_geom::model as pm;
-    let Some(preset) = live else {
-        return (String::new(), String::new());
-    };
-    let mut v = serde_json::to_value(preset).unwrap_or_default();
-    let handles: Vec<serde_json::Value> = pm::handles(preset)
-        .into_iter()
-        .map(
-            |h| serde_json::json!({ "x": h.pos.0, "y": h.pos.1, "polar": h.polar, "refs": h.refs }),
-        )
-        .collect();
-    v["handles"] = serde_json::Value::Array(handles);
-    (
-        v.to_string(),
-        serde_json::to_string(&pm::adjusts_resolved(preset)).unwrap_or_default(),
-    )
 }

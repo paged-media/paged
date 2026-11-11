@@ -44,7 +44,7 @@ use paged_preset_geom::Site;
 use paged_scene::Document;
 use serde::{Deserialize, Serialize};
 
-use super::helpers::find_polygon_mut;
+use super::helpers::{find_graphic_line_mut, find_polygon_mut};
 use crate::error::OperationError;
 use crate::operation::{
     AppliedOperation, InvalidationHint, NodeId, Operation, PathPointRole, PropertyPath, Value,
@@ -629,4 +629,104 @@ pub(super) fn follow(
     }
     all.extend(ops);
     Some((Operation::Batch { ops: all }, touched))
+}
+
+// ─── the side fields: a shape's text frame, Office's line ends ──────
+
+/// `frameShapePresetText` on a TextFrame and the two Office line-end
+/// paths on a Polygon or a GraphicLine: plain field writes whose inverse
+/// is the value they replaced.
+pub(super) fn apply_side_field(
+    doc: &mut Document,
+    node: &NodeId,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<AppliedOperation, OperationError> {
+    use paged_model::live_shape::PresetText;
+    use paged_model::OfficeLineEnd;
+    let Value::Text(text) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Text".into(),
+        });
+    };
+    let invalid = |reason: String| OperationError::InvalidValue {
+        node: node.clone(),
+        path,
+        reason,
+    };
+    let missing = || OperationError::NodeNotFound(node.clone());
+    let text = text.trim();
+    let head = |t: &str| -> Result<Option<OfficeLineEnd>, OperationError> {
+        if t.is_empty() {
+            return Ok(None);
+        }
+        serde_json::from_str(t)
+            .map(Some)
+            .map_err(|e| invalid(format!("not an Office line end: {e}")))
+    };
+    let show = |h: Option<OfficeLineEnd>| {
+        h.map(|h| serde_json::to_string(&h).unwrap_or_default())
+            .unwrap_or_default()
+    };
+    let start = path == PropertyPath::FrameStrokeStartOfficeHead;
+    let prev = match (node, path) {
+        (NodeId::TextFrame(id), PropertyPath::FrameShapePresetText) => {
+            let f = super::helpers::find_text_frame_mut(doc, id).ok_or_else(missing)?;
+            let prev = f
+                .preset_text
+                .as_ref()
+                .map(|t| t.key.clone())
+                .unwrap_or_default();
+            f.preset_text = (!text.is_empty()).then(|| PresetText {
+                key: text.to_string(),
+            });
+            prev
+        }
+        (
+            NodeId::Polygon(id),
+            PropertyPath::FrameStrokeStartOfficeHead | PropertyPath::FrameStrokeEndOfficeHead,
+        ) => {
+            let next = head(text)?;
+            let p = find_polygon_mut(doc, id).ok_or_else(missing)?;
+            let slot = if start {
+                &mut p.start_office_head
+            } else {
+                &mut p.end_office_head
+            };
+            show(std::mem::replace(slot, next))
+        }
+        (
+            NodeId::GraphicLine(id),
+            PropertyPath::FrameStrokeStartOfficeHead | PropertyPath::FrameStrokeEndOfficeHead,
+        ) => {
+            let next = head(text)?;
+            let l = find_graphic_line_mut(doc, id).ok_or_else(missing)?;
+            let slot = if start {
+                &mut l.start_office_head
+            } else {
+                &mut l.end_office_head
+            };
+            show(std::mem::replace(slot, next))
+        }
+        _ => {
+            return Err(OperationError::UnsupportedProperty {
+                node: node.clone(),
+                path,
+            })
+        }
+    };
+    Ok(AppliedOperation {
+        op: Operation::SetProperty {
+            node: node.clone(),
+            path,
+            value: value.clone(),
+        },
+        inverse: Operation::SetProperty {
+            node: node.clone(),
+            path,
+            value: Value::Text(prev),
+        },
+        invalidation: geometry(vec![node.clone()]),
+    })
 }
