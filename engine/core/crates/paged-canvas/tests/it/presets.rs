@@ -379,3 +379,121 @@ fn idml_and_paged_keep_the_preset() {
         CanvasModel::load("presets-reloaded", &bytes, CanvasOptions::default()).expect("reload");
     assert_eq!(polygon(&reloaded, "a").preset.as_ref(), Some(&p));
 }
+
+/// A story in a frame, for a Word shape anchored in its text.
+fn story_idml() -> Vec<u8> {
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        let mut put = |name: &str, body: &[u8]| {
+            zip.start_file(name, opts).unwrap();
+            zip.write_all(body).unwrap();
+        };
+        put("mimetype", b"application/vnd.adobe.indesign-idml-package");
+        put(
+            "designmap.xml",
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Story src="Stories/Story_st1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+        );
+        put(
+            "Spreads/Spread_s1.xml",
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<TextFrame Self="tf1" ParentStory="st1" GeometricBounds="72 72 600 540" ItemTransform="1 0 0 1 0 0"/>
+</Spread></idPkg:Spread>"#,
+        );
+        put(
+            "Stories/Story_st1.xml",
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Story Self="st1"><ParagraphStyleRange><CharacterStyleRange>
+<Content>Hello world</Content>
+</CharacterStyleRange></ParagraphStyleRange></Story></idPkg:Story>"#,
+        );
+        zip.finish().unwrap();
+    }
+    buf
+}
+
+/// A Word shape is an anchored frame: its preset is set, read with its
+/// handles, dragged by a handle and undone exactly, the outline drawn in
+/// the frame's own box.
+#[test]
+fn an_anchored_shape_takes_a_preset_and_its_handle_drags() {
+    use paged_mutate::PropertyPath;
+    let mut m = CanvasModel::load("presets-anchored", &story_idml(), CanvasOptions::default())
+        .expect("load");
+    let at = |m: &CanvasModel| m.scene().stories[0].story.paragraphs[0].anchored_frames[0].clone();
+    let shape = ElementId::Rectangle("$h:shape".into());
+    let p = round_rect([0.0, 0.0, 120.0, 60.0]);
+    m.apply_mutation(&Mutation::Batch {
+        ops: vec![
+            Mutation::InsertAnchoredFrame {
+                paragraph: None,
+                story_id: "st1".into(),
+                offset: 0,
+                width: 120.0,
+                height: 60.0,
+                image_uri: None,
+                kind: None,
+                layout: None,
+                cell: None,
+            },
+            Mutation::BindCreated {
+                handle: "shape".into(),
+            },
+            Mutation::SetElementProperty {
+                element_id: shape.clone(),
+                path: PropertyPath::FrameShapePreset,
+                value: Value::Text(serde_json::to_string(&p).unwrap()),
+            },
+        ],
+    })
+    .expect("insert");
+    let f = at(&m);
+    assert_eq!(f.preset.as_ref(), Some(&p));
+    assert!(
+        !f.anchors.is_empty(),
+        "the outline is drawn in the frame's box"
+    );
+    let before = format!("{:?} {:?} {:?}", f.preset, f.anchors, f.bounds);
+    let id = ElementId::Rectangle(f.self_id.clone().unwrap());
+    let read = match m.get_property(
+        &VirtualTarget::Element {
+            element_id: id.clone(),
+        },
+        "frameShapePreset",
+    ) {
+        Ok(Value::Text(t)) => t,
+        other => panic!("{other:?}"),
+    };
+    assert!(read.contains("\"handles\""), "{read}");
+    m.apply_mutation(&Mutation::SetElementProperty {
+        element_id: id,
+        path: PropertyPath::FrameShapePresetHandle,
+        value: Value::PathPoint {
+            address: PathPointAddress {
+                index: 0,
+                role: PathPointRole::Anchor,
+            },
+            position: [6.0, 0.0],
+        },
+    })
+    .expect("drag");
+    let dragged = at(&m);
+    assert_eq!(dragged.bounds, f.bounds, "the frame's box stays");
+    assert_ne!(dragged.anchors, f.anchors);
+    m.undo().expect("undo");
+    let g = at(&m);
+    assert_eq!(
+        format!("{:?} {:?} {:?}", g.preset, g.anchors, g.bounds),
+        before
+    );
+}

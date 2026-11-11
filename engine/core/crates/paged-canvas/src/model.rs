@@ -8450,6 +8450,22 @@ impl CanvasModel {
                 value: Some(Value::ImageAdjustments(frame.image_adjustments.clone())),
             });
         }
+        // Engine ADR 1096 — a Word shape's live preset, its handles (in the
+        // frame's own box) and its adjust values.
+        if frame.preset.is_some() {
+            let live = frame.preset.as_ref().filter(|p| {
+                paged_preset_geom::model::anchors_are(p, &frame.anchors, &frame.subpath_starts)
+            });
+            let (preset, adjusts) = preset_reads(live);
+            entries.push(PropertyEntry {
+                path: PropertyPath::FrameShapePreset,
+                value: Some(Value::Text(preset)),
+            });
+            entries.push(PropertyEntry {
+                path: PropertyPath::FrameShapePresetAdjust,
+                value: Some(Value::Text(adjusts)),
+            });
+        }
         Some(ElementProperties {
             id: id.clone(),
             kind: id.kind_label().to_string(),
@@ -19363,8 +19379,13 @@ nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
 /// preset with its adjust handles (own coordinates), and every adjust value
 /// of its program; both `""` when the path is no live preset.
 fn preset_entries(p: &paged_model::Polygon) -> (String, String) {
+    preset_reads(paged_preset_geom::model::live_preset(p))
+}
+
+/// A live preset (or none) as the two reads.
+fn preset_reads(live: Option<&paged_model::live_shape::PresetShape>) -> (String, String) {
     use paged_preset_geom::model as pm;
-    let Some(preset) = pm::live_preset(p) else {
+    let Some(preset) = live else {
         return (String::new(), String::new());
     };
     let mut v = serde_json::to_value(preset).unwrap_or_default();

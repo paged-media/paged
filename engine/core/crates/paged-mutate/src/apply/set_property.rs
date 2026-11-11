@@ -78,7 +78,7 @@ fn apply_set_property_core(
         }
         // Engine ADR 1096 — presets (see `preset_shape`).
         (
-            NodeId::Polygon(id),
+            NodeId::Polygon(id) | NodeId::Rectangle(id),
             PropertyPath::FrameShapePreset
             | PropertyPath::FrameShapePresetAdjust
             | PropertyPath::FrameShapePresetHandle,

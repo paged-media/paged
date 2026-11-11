@@ -61,7 +61,10 @@ struct Restore {
     starts: Vec<usize>,
     #[serde(default)]
     open: Vec<bool>,
-    bounds: [f32; 4],
+    /// `[top, left, bottom, right]`; `None` for an anchored frame without
+    /// a box of its own.
+    #[serde(default)]
+    bounds: Option<[f32; 4]>,
     #[serde(default)]
     transform: Option<[f32; 6]>,
 }
@@ -89,38 +92,122 @@ fn bounds_array(b: Bounds) -> [f32; 4] {
     [b.top, b.left, b.bottom, b.right]
 }
 
+fn bounds_of(a: [f32; 4]) -> Bounds {
+    let [top, left, bottom, right] = a;
+    Bounds {
+        top,
+        left,
+        bottom,
+        right,
+    }
+}
+
+/// A path item that can carry a preset: a page `Polygon`, or a Word
+/// shape's `AnchoredFrame` (its anchors in its own box, which stays the
+/// box the text flow placed when the outline is drawn again).
+trait PresetItem {
+    fn preset(&self) -> Option<&PresetShape>;
+    fn path(&self) -> (&[PathAnchor], &[usize]);
+    fn snapshot(&self) -> Restore;
+    fn put(&mut self, r: Restore);
+    fn set_preset(&mut self, p: Option<PresetShape>);
+    /// Put drawn anchors on the item.
+    fn set_drawn(&mut self, d: pm::Drawn);
+    /// The preset while the anchors are what it draws.
+    fn live(&self) -> Option<PresetShape> {
+        let (anchors, starts) = self.path();
+        self.preset()
+            .filter(|p| pm::anchors_are(p, anchors, starts))
+            .cloned()
+    }
+}
+
+impl PresetItem for Polygon {
+    fn preset(&self) -> Option<&PresetShape> {
+        self.preset.as_ref()
+    }
+    fn path(&self) -> (&[PathAnchor], &[usize]) {
+        (&self.anchors, &self.subpath_starts)
+    }
+    fn snapshot(&self) -> Restore {
+        snapshot(self)
+    }
+    fn put(&mut self, r: Restore) {
+        self.preset = r.preset;
+        self.anchors = r.anchors.iter().map(unflat).collect();
+        self.subpath_starts = r.starts;
+        self.subpath_open = r.open;
+        if let Some(b) = r.bounds {
+            self.bounds = bounds_of(b);
+        }
+        self.item_transform = r.transform;
+    }
+    fn set_preset(&mut self, p: Option<PresetShape>) {
+        self.preset = p;
+    }
+    fn set_drawn(&mut self, d: pm::Drawn) {
+        set_drawn(self, d);
+    }
+}
+
+impl PresetItem for paged_model::AnchoredFrame {
+    fn preset(&self) -> Option<&PresetShape> {
+        self.preset.as_ref()
+    }
+    fn path(&self) -> (&[PathAnchor], &[usize]) {
+        (&self.anchors, &self.subpath_starts)
+    }
+    fn snapshot(&self) -> Restore {
+        Restore {
+            preset: self.preset.clone(),
+            anchors: self.anchors.iter().map(flat).collect(),
+            starts: self.subpath_starts.clone(),
+            open: self.subpath_open.clone(),
+            bounds: self.bounds.map(bounds_array),
+            transform: self.item_transform,
+        }
+    }
+    fn put(&mut self, r: Restore) {
+        self.preset = r.preset;
+        self.anchors = r.anchors.iter().map(unflat).collect();
+        self.subpath_starts = r.starts;
+        self.subpath_open = r.open;
+        self.bounds = r.bounds.map(bounds_of);
+        self.item_transform = r.transform;
+    }
+    fn set_preset(&mut self, p: Option<PresetShape>) {
+        self.preset = p;
+    }
+    fn set_drawn(&mut self, d: pm::Drawn) {
+        // The frame's box is its place in the text flow: only the outline
+        // inside it changes.
+        self.anchors = d.anchors;
+        self.subpath_starts = d.starts;
+        self.subpath_open = d.open;
+    }
+}
+
 fn snapshot(p: &Polygon) -> Restore {
     Restore {
         preset: p.preset.clone(),
         anchors: p.anchors.iter().map(flat).collect(),
         starts: p.subpath_starts.clone(),
         open: p.subpath_open.clone(),
-        bounds: bounds_array(p.bounds),
+        bounds: Some(bounds_array(p.bounds)),
         transform: p.item_transform,
     }
 }
 
-fn put(p: &mut Polygon, r: Restore) {
-    p.preset = r.preset;
-    p.anchors = r.anchors.iter().map(unflat).collect();
-    p.subpath_starts = r.starts;
-    p.subpath_open = r.open;
-    let [top, left, bottom, right] = r.bounds;
-    p.bounds = Bounds {
-        top,
-        left,
-        bottom,
-        right,
-    };
-    p.item_transform = r.transform;
-}
-
-fn restore_op(id: &str, r: &Restore) -> Operation {
+fn restore_on(node: NodeId, r: &Restore) -> Operation {
     Operation::SetProperty {
-        node: NodeId::Polygon(id.to_string()),
+        node,
         path: PropertyPath::FrameShapePreset,
         value: Value::Text(serde_json::json!({ "restore": r }).to_string()),
     }
+}
+
+fn restore_op(id: &str, r: &Restore) -> Operation {
+    restore_on(NodeId::Polygon(id.to_string()), r)
 }
 
 fn geometry(nodes: Vec<NodeId>) -> InvalidationHint {
@@ -140,7 +227,8 @@ fn set_drawn(p: &mut Polygon, d: pm::Drawn) {
     p.subpath_open = d.open;
 }
 
-/// The three preset writes on a Polygon.
+/// The three preset writes on a Polygon, or on a Word shape's anchored
+/// frame addressed by its id.
 pub(super) fn apply_preset(
     doc: &mut Document,
     node: &NodeId,
@@ -148,22 +236,45 @@ pub(super) fn apply_preset(
     path: PropertyPath,
     value: &Value,
 ) -> Result<AppliedOperation, OperationError> {
+    let before = if let Some(poly) = find_polygon_mut(doc, id) {
+        write(poly, node, path, value)?
+    } else if let Some(frame) = super::helpers::find_anchored_frame_mut(doc, id) {
+        write(frame, node, path, value)?
+    } else {
+        return Err(OperationError::NodeNotFound(node.clone()));
+    };
+    Ok(AppliedOperation {
+        op: Operation::SetProperty {
+            node: node.clone(),
+            path,
+            value: value.clone(),
+        },
+        inverse: restore_on(node.clone(), &before),
+        invalidation: geometry(vec![node.clone()]),
+    })
+}
+
+/// One preset write on `item`; returns what restores it.
+fn write(
+    item: &mut impl PresetItem,
+    node: &NodeId,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<Restore, OperationError> {
     let invalid = |reason: String| OperationError::InvalidValue {
         node: node.clone(),
         path,
         reason,
     };
-    let poly =
-        find_polygon_mut(doc, id).ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
-    let before = snapshot(poly);
+    let before = item.snapshot();
     match (path, value) {
         (PropertyPath::FrameShapePreset, Value::Text(text)) => {
             let text = text.trim();
             if text.is_empty() {
                 // Expand Shape: the path stays.
-                poly.preset = None;
+                item.set_preset(None);
             } else if let Ok(env) = serde_json::from_str::<RestoreEnvelope>(text) {
-                put(poly, env.restore);
+                item.put(env.restore);
             } else {
                 let p: PresetShape = serde_json::from_str(text)
                     .map_err(|e| invalid(format!("not a preset shape: {e}")))?;
@@ -176,16 +287,17 @@ pub(super) fn apply_preset(
                 {
                     return Err(invalid("a preset's box has a finite size".into()));
                 }
-                if !pm::anchors_are(&p, &poly.anchors, &poly.subpath_starts) {
+                let (anchors, starts) = item.path();
+                if !pm::anchors_are(&p, anchors, starts) {
                     let d =
                         pm::draw(&p).ok_or_else(|| invalid("the preset draws nothing".into()))?;
-                    set_drawn(poly, d);
+                    item.set_drawn(d);
                 }
-                poly.preset = Some(p);
+                item.set_preset(Some(p));
             }
         }
         (PropertyPath::FrameShapePresetAdjust, Value::Text(text)) => {
-            let Some(mut p) = pm::live_preset(poly).cloned() else {
+            let Some(mut p) = item.live() else {
                 return Err(invalid(
                     "the path is not a live preset; set its preset (frameShapePreset) first".into(),
                 ));
@@ -199,14 +311,14 @@ pub(super) fn apply_preset(
                 }
             }
             let d = pm::draw(&p).ok_or_else(|| invalid("the preset draws nothing".into()))?;
-            set_drawn(poly, d);
-            poly.preset = Some(p);
+            item.set_drawn(d);
+            item.set_preset(Some(p));
         }
         (PropertyPath::FrameShapePresetHandle, Value::PathPoint { address, position }) => {
             if address.role != PathPointRole::Anchor {
                 return Err(invalid("an adjust handle is addressed by its index".into()));
             }
-            let Some(mut p) = pm::live_preset(poly).cloned() else {
+            let Some(mut p) = item.live() else {
                 return Err(invalid("the path is not a live preset".into()));
             };
             let adj = pm::drag_handle(
@@ -217,8 +329,8 @@ pub(super) fn apply_preset(
             .ok_or_else(|| invalid(format!("the preset has no handle {}", address.index)))?;
             p.adjusts = adj;
             let d = pm::draw(&p).ok_or_else(|| invalid("the preset draws nothing".into()))?;
-            set_drawn(poly, d);
-            poly.preset = Some(p);
+            item.set_drawn(d);
+            item.set_preset(Some(p));
         }
         _ => {
             return Err(OperationError::TypeMismatch {
@@ -231,15 +343,7 @@ pub(super) fn apply_preset(
             })
         }
     }
-    Ok(AppliedOperation {
-        op: Operation::SetProperty {
-            node: node.clone(),
-            path,
-            value: value.clone(),
-        },
-        inverse: restore_op(id, &before),
-        invalidation: geometry(vec![node.clone()]),
-    })
+    Ok(before)
 }
 
 // ─── follow ─────────────────────────────────────────────────────────
