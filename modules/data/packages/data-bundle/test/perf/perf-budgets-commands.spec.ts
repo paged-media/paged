@@ -196,7 +196,7 @@ describe.skipIf(!RUN_BUDGETS)(
         fingerprints: 0,
         storeQueries: 1,
       },
-      { mutationOps: 1507, hostCalls: 10, wasmCalls: 7 },
+      { mutationOps: 1507, hostCalls: 7, wasmCalls: 7 },
     );
     it("W1 imports a 500-row CSV and lowers it as one table [data.perf.gates]", async () => {
       h = await openDataHost();
