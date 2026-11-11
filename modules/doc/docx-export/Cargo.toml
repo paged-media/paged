@@ -14,6 +14,8 @@ workspace = true
 [dependencies]
 docx-core.workspace = true
 docx-lower.workspace = true
+# The one DrawingML crop mapping and picture-effect writer (dml_native::crop, ::picture).
+dml-native.workspace = true
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
 quick-xml = "0.41"
 serde.workspace = true

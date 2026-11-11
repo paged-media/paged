@@ -765,6 +765,12 @@ impl SheetSession {
                 w: p.w,
                 h: p.h,
                 in_cell: p.in_cell,
+                // Engine ADR 1037: the grid draws the picture as the page
+                // does, cropped and through its filter stack.
+                src: p
+                    .placement
+                    .and_then(|m| dml_native::crop::source_rect(m, (p.w, p.h))),
+                adjustments: p.adjustments,
             });
         }
     }

@@ -247,6 +247,29 @@ mod wasm {
         GPU.with(|g| g.borrow().is_some())
     }
 
+    /// Engine ADR 1037 (amendment 2026-11-11) — straight RGBA8 pixels
+    /// through a filter stack (`ops`: the JSON list of `RasterOp`), on the
+    /// engine's one evaluator (`paged-image-adjust`, the CPU twins of the
+    /// adjustment kernels): what `actions@1`'s `adjust` takes, so a picture
+    /// correction is the same operation in every module.
+    #[wasm_bindgen]
+    pub fn adjust_raster_ops_rgba8(
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+        ops: &str,
+    ) -> Result<Vec<u8>, JsValue> {
+        let ops = paged_model::image_adjust::adjustments_from_json(ops)
+            .ok_or_else(|| JsValue::from_str("not a filter stack (a list of RasterOp in range)"))?;
+        if rgba.len() != width as usize * height as usize * 4 {
+            return Err(JsValue::from_str(&format!(
+                "expected {width}×{height} RGBA8, got {} bytes",
+                rgba.len()
+            )));
+        }
+        Ok(paged_image_adjust::apply_rgba8(&rgba, width, height, &ops, 1.0))
+    }
+
     /// A filter on a region (ADR 465): the adjustment chain whose
     /// parameters are the adjustment-layer wire block (`AdjustParams::
     /// to_wire`) applied to the rectangle `x, y, w, h` of a straight

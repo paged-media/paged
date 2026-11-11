@@ -8378,6 +8378,12 @@ pub struct AnchoredFrame {
     /// box's `wps:bodyPr/a:prstTxWarp`); see [`TextFrame::text_warp`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_warp: Option<text_warp::TextWarp>,
+    /// Engine ADR 1037 (amendment 2026-11-11) — an anchored picture's filter
+    /// stack, applied in order as a free frame's is (a Word picture's
+    /// corrections, `a:lum`, `a:duotone` …); see
+    /// [`Rectangle::image_adjustments`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_adjustments: Vec<RasterOp>,
 }
 
 /// Engine ADR 1050 — how a custom-positioned anchored object stands

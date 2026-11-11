@@ -162,6 +162,7 @@ fn lower_image(img: &docx_core::Image) -> LoweredImage {
         anchor: None,
         fx: None,
         losses: Vec::new(),
+        adjustments: Vec::new(),
         layout: None,
         crop: img.crop.and_then(|c| lower_crop(c, img)),
         drawing: img.drawing,
@@ -169,50 +170,31 @@ fn lower_image(img: &docx_core::Image) -> LoweredImage {
 }
 
 /// Doc ADR 623 — an `a:srcRect` (1/1000 percent per side) as fractions,
-/// with the picture's placement in its frame; `None` for a rectangle that
+/// with the picture's placement in its frame (`dml_native::crop`, the
+/// mapping slide's and sheet's pictures use); `None` for a rectangle that
 /// crops nothing or would leave no picture (the sides of a crop that
-/// overlap, or a negative one, which pads rather than crops).
-fn lower_crop((l, t, r, b): docx_core::Crop, img: &docx_core::Image) -> Option<ir::LoweredCrop> {
-    let f = |v: i32| v as f32 / 100_000.0;
-    let (l, t, r, b) = (f(l), f(t), f(r), f(b));
-    let valid = [l, t, r, b].iter().all(|v| *v >= 0.0) && l + r < 1.0 && t + b < 1.0;
-    if !valid || (l, t, r, b) == (0.0, 0.0, 0.0, 0.0) {
+/// overlap, or a negative one, which pads rather than crops). The
+/// placement is `None` without a pixel size from the bytes.
+fn lower_crop(c: docx_core::Crop, img: &docx_core::Image) -> Option<ir::LoweredCrop> {
+    use dml_native::crop;
+    let sides = crop::fractions(c);
+    if !crop::is_plain(sides) {
         return None;
     }
+    let [l, t, r, b] = sides.map(|v| v as f32);
+    let frame = (
+        f64::from(emu_to_pt(img.width_emu)),
+        f64::from(emu_to_pt(img.height_emu)),
+    );
     Some(ir::LoweredCrop {
         l,
         t,
         r,
         b,
-        placement: crop_placement(
-            (l, t, r, b),
-            (emu_to_pt(img.width_emu), emu_to_pt(img.height_emu)),
-            paged_ooxml::media::pixel_size(&img.bytes),
-        ),
+        placement: paged_ooxml::media::pixel_size(&img.bytes)
+            .and_then(|px| crop::placement(sides, frame, px))
+            .map(|m| m.map(|v| v as f32)),
     })
-}
-
-/// The picture's placement in a frame of `size` points (`wp:extent`, the
-/// CROPPED picture): the image is shown at `w / (1 - l - r)` by
-/// `h / (1 - t - b)` with its top left corner `l` and `t` of that outside
-/// the frame, over `pixels` source pixels: the mapping slide's pictures use
-/// (`slide-native`, `image_item_transform`). `None` without a pixel size.
-fn crop_placement(
-    (l, t, r, b): (f32, f32, f32, f32),
-    (w, h): (f32, f32),
-    pixels: Option<(u32, u32)>,
-) -> Option<[f32; 6]> {
-    let (pw, ph) = pixels.filter(|&(pw, ph)| pw > 0 && ph > 0)?;
-    let disp_w = w / (1.0 - l - r);
-    let disp_h = h / (1.0 - t - b);
-    Some([
-        disp_w / pw as f32,
-        0.0,
-        0.0,
-        disp_h / ph as f32,
-        -l * disp_w,
-        -t * disp_h,
-    ])
 }
 
 /// Where a picture with `before` chars of its paragraph's `total` in front
@@ -1451,13 +1433,19 @@ impl Lowering {
             return;
         };
         let mut mapper = dml_native::native::Lowering::new(self.dml_slots.clone());
-        let fx = mapper.picture(
-            &look.blip,
-            &look.shape,
-            li.width_pt as f64,
-            li.height_pt as f64,
-        );
+        // A picture blur's radius is in the image's own pixels: its pixels
+        // per point as shown (the whole image, before the crop cuts it).
+        let frame = (f64::from(li.width_pt), f64::from(li.height_pt));
+        let sides = li
+            .crop
+            .map_or([0.0; 4], |c| [c.l, c.t, c.r, c.b].map(f64::from));
+        let px_per_pt = paged_ooxml::media::pixel_size(&img.bytes).and_then(|px| {
+            dml_native::crop::px_per_pt(px, dml_native::crop::display_size(sides, frame))
+        });
+        let (fx, adjustments) =
+            mapper.picture_with_filters(&look.blip, &look.shape, frame.0, frame.1, px_per_pt);
         li.losses = mapper.take_losses();
+        li.adjustments = adjustments;
         if self.in_cell {
             // Not poured at all; the cell-picture diagnostic says so.
         } else {

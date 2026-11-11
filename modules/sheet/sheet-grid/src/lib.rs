@@ -156,6 +156,14 @@ pub struct GridPicture {
     pub w: f64,
     pub h: f64,
     pub in_cell: bool,
+    /// The part of the image its crop leaves (`[x, y, w, h]`, the image's
+    /// own pixels; `dml_native::crop`); absent: all of it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src: Option<[f64; 4]>,
+    /// The picture's corrections, the engine's filter stack (engine ADR
+    /// 1037): the grid draws the picture through them as the page does.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub adjustments: Vec<sheet_chart::native::RasterOp>,
 }
 
 /// One sparkline drawn in a grid viewport: its cell, the cell's box in

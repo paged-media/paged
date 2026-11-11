@@ -150,7 +150,16 @@ TypeScript lowerings) still carries the feather and the two-colour mix until its
 stops and pattern swatches; slide's pattern fill stays a picture of PowerPoint-measured tiles (an engine
 pattern would need the slide-grid phase through `pattern_transform` per frame and would move the
 goldens); a translucent pattern has no swatch (a tile item paints a colour without alpha). `a:clrChange`
-stays a recorded loss: the filter stack (`RasterOp`) has no colour-replace op.
+is the filter stack's `colorReplace` (engine ADR 1037, amendment 2026-11-11).
+Picture corrections and crop (engine ADR 1037, amendment 2026-11-11): one model, `paged_model::RasterOp`, for a
+Word, PowerPoint and Excel picture correction and a CSS `filter:` on a web picture; DrawingML's reader and writer
+are `dml-native` (`Mapper::picture_at`, `picture::effects_of` / `splice_blip`, used by slide, doc and pptx/docx
+export), CSS's is web-bundle's `css-filter-ops.ts`. The crop is `dml_native::crop` (forward for doc, slide,
+sheet; inverse for docx-export and pptx-export; single-owner rule `drawingml-crop`, its baseline the tests that
+restate the OOXML definition). sheet-xlsx keeps drawings byte for byte and edits no picture, so it writes none.
+The stack's evaluator is `paged-image-adjust` (renderer, sheet's in-frame grid, image's `actions@1` `adjust`).
+Open: paged.image's adjustment layers keep their own Photoshop-unit model (`image-js` `layers::kinds::Adjustment`,
+evaluated by the GPU chain) beside `RasterOp`; `paged-psd-fx` is wired nowhere (no "PSD layer as a page item" flow).
 `a:custGeom` / `a:xfrm` writer and the placement maths: `dml-geom::place` (`Xfrm`, `Placed`, `Space`, `xfrm_xml`, `cust_geom`; `pptx-export`'s `geom` re-exports it, `pptx-core::Xfrm` is the same type), for doc and sheet writers too. Pie wedge ×3: examined, left open, they are not copies of one another: `slide-chart`'s `outline` (slide-resolve's and doc's charts, doc ADR 628) builds clockwise-from-12-o'clock `SubPath`s with arcs split at 90° by `ceil(|sweep|/90)`, `sheet-chart` emits a `Primitive::Wedge` that its renderer draws, and the engine's `pie_anchors` is f32, counter-clockwise from 3 o'clock with a `ceil(sweep/(pi/2) - 1e-9)` split; a shared primitive would move anchors in the last bits and the slide goldens with them. Chart label width ×2: also left open, `sheet-chart` counts characters at one advance (`ADVANCE_EM`), `slide-chart` weighs digits, separators and letters apart, so they measure differently on purpose (neither goes through `paged-text`). Default Office palette and theme readers: `pptx-import` and `slide-resolve` re-examined 2026-11-08 (see the OOXML foundation row): fonts and `SLOTS` shared, the colour reader kept for the unresolved `Color` the goldens rest on.
 Line ends (2026-11-09): a stroke shortened under its heads, along its curve, is `paged_geom::trim::trim_run` (engine ADR 1093): the renderer cuts the engine's own line ends with it (IDML, and paged.slide's DrawingML heads through `dml-native`), paged.doc the Office heads it draws (doc ADR 629, amendment 1). Open: Office's head geometry (the `sm` / `med` / `lg` sizes, the 2 pt sizing minimum, the `stealth` notch, the `arrow`'s two strokes) lives only in `docx-lower`'s `shape_geom`; slide draws DrawingML heads in the engine's InDesign proportions and sheet draws none. Its owner is the engine model (a per-end Office head) or `dml-geom` (the heads as paths).
 Draw's TS geometry and vector-tool machines moved to `platform/shared/vector-geometry` and `platform/shared/vector-tools` (C15), so the host `tools` package and draw both import shared packages; draw keeps only its Illustrator workflows in `draw-bundle`.
@@ -480,8 +489,8 @@ Status (draw items, one line each; updated as they land):
   preset and custom outlines evaluated by `dml-geom` and their paint mapped by `dml-native`, and drawn
   as native paths over the placed table; a picture's or shape's `a:hlinkClick` is the engine's item
   hyperlink (`insertItemHyperlink`; cell links stay sheet's). Open, reported as losses: the text of a
-  shape or text box, arrowheads, shapes in groups, the in-frame grid (draws pictures raw and no
-  shapes), a rotated `xdr:pic`.
+  shape or text box, arrowheads, shapes in groups, the in-frame grid (draws no shapes; its
+  pictures are cropped and corrected as on the page, engine ADR 1037), a rotated `xdr:pic`.
 - **slide:** autofit DONE 2026-11-09: `normAutofit` is the engine's shrink-to-fit (engine ADR 1061): the
   text keeps its written sizes, the saved `fontScale` / `lnSpcReduction` is the fit the renderer starts
   from and it shrinks further when edited text no longer fits; `pptx-export` writes the fit back. Chart

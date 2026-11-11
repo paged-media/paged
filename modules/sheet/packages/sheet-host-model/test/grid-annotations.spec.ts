@@ -140,4 +140,33 @@ describe("hyperlinks and pictures in the grid [sheet.xlsx.pictures]", () => {
     });
     expect(none.images).toEqual([]);
   });
+
+  it("draws a cropped, corrected picture from its own image (engine ADR 1037)", () => {
+    const { ctx, images } = recorder();
+    const img = { width: 200, height: 100 } as unknown as CanvasImageSource & {
+      width: number;
+      height: number;
+    };
+    const pic = {
+      ...scene.pictures![0],
+      src: [50, 0, 100, 100] as [number, number, number, number],
+      adjustments: [{ op: "invert" as const }],
+    };
+    const keys: string[] = [];
+    paintGridScene(
+      ctx,
+      { ...scene, pictures: [pic] },
+      {
+        headings: false,
+        rowHeadingWidthPt: 0,
+        widthPt: 200,
+        heightPt: 100,
+        pictureImage: (k) => (keys.push(k), img),
+      },
+    );
+    expect(keys).toEqual([`${pic.media}#[{"op":"invert"}]`]);
+    expect(images.map((a) => a.slice(1))).toEqual([
+      [50, 0, 100, 100, pic.x, pic.y, pic.w, pic.h],
+    ]);
+  });
 });

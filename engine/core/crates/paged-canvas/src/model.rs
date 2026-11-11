@@ -8443,6 +8443,12 @@ impl CanvasModel {
                 path: PropertyPath::ImageContentTransform,
                 value: Some(Value::Transform(frame.image_item_transform)),
             });
+            // Engine ADR 1037 (amendment 2026-11-11) — and its filter stack,
+            // which the Picture panel edits as on a free frame.
+            entries.push(PropertyEntry {
+                path: PropertyPath::FrameImageAdjustments,
+                value: Some(Value::ImageAdjustments(frame.image_adjustments.clone())),
+            });
         }
         Some(ElementProperties {
             id: id.clone(),
@@ -17508,6 +17514,7 @@ fn picture_contents(para: &paged_model::Paragraph) -> Vec<crate::channel::Pictur
                 frame_id: f.self_id.clone()?,
                 offset: para.anchored_frame_offsets.get(i).copied().unwrap_or(0),
                 placement: f.image_item_transform,
+                adjustments: f.image_adjustments.clone(),
             })
         })
         .collect();

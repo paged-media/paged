@@ -22,8 +22,8 @@
 // ADR 1037). It edits the image frame's filter stack, `frameImageAdjustments`:
 // an ordered list of ops (exposure, brightness/contrast, levels, curves,
 // hue/saturation, recolor, duotone, black & white, sharpen, blur,
-// posterize, threshold, invert) the engine evaluates when it draws and
-// exports the picture.
+// posterize, threshold, invert, channel mixer, colour replace) the engine
+// evaluates when it draws and exports the picture.
 //
 //   [Add adjustment ⌄] [Preset ⌄]            appends to the stack
 //   ── one row per op ──  name   ↑ ↓ ✕       reorder / remove
@@ -79,6 +79,15 @@ const M = defineMessages("app.pictureAdjustmentsPanel", {
   posterize: "Posterize",
   threshold: "Threshold",
   invert: "Invert",
+  channelMixer: "Channel Mixer",
+  colorReplace: "Replace Color",
+  red: "Red (R G B const)",
+  green: "Green (R G B const)",
+  blue: "Blue (R G B const)",
+  from: "From",
+  to: "To",
+  alpha: "Opacity",
+  tolerance: "Tolerance",
   ev: "Stops",
   brightness: "Brightness",
   contrast: "Contrast",
@@ -128,7 +137,15 @@ type FieldSpec =
       step: number;
     }
   | { key: string; label: MessageKey; kind: "color" }
-  | { key: string; label: MessageKey; kind: "points" };
+  | { key: string; label: MessageKey; kind: "points" }
+  | {
+      key: string;
+      label: MessageKey;
+      kind: "numbers";
+      count: number;
+      min: number;
+      max: number;
+    };
 
 const num = (
   key: string,
@@ -279,6 +296,41 @@ export const OPS: ReadonlyArray<{
     fields: [num("level", "level", 0, 1, 0.01)],
   },
   { op: "invert", label: "invert", make: () => ({ op: "invert" }), fields: [] },
+  {
+    op: "channelMixer",
+    label: "channelMixer",
+    make: () => ({
+      op: "channelMixer",
+      red: [1, 0, 0, 0],
+      green: [0, 1, 0, 0],
+      blue: [0, 0, 1, 0],
+    }),
+    fields: (["red", "green", "blue"] as const).map((k): FieldSpec => ({
+      key: k,
+      label: k,
+      kind: "numbers",
+      count: 4,
+      min: -2,
+      max: 2,
+    })),
+  },
+  {
+    op: "colorReplace",
+    label: "colorReplace",
+    make: () => ({
+      op: "colorReplace",
+      from: [1, 1, 1],
+      to: [1, 1, 1],
+      alpha: 0,
+      tolerance: 0.05,
+    }),
+    fields: [
+      { key: "from", label: "from", kind: "color" },
+      { key: "to", label: "to", kind: "color" },
+      num("alpha", "alpha", 0, 1, 0.01),
+      num("tolerance", "tolerance", 0, 1, 0.01),
+    ],
+  },
 ];
 
 /** The artistic presets: ready-made stacks of the ops above, so a preset
@@ -393,6 +445,28 @@ export function parsePoints(text: string): number[][] | null {
     out.push(nums);
   }
   return out;
+}
+
+const numbersText = (v: unknown): string =>
+  Array.isArray(v) ? (v as number[]).join(" ") : "";
+
+/** `"1 0 0 0"` → `[1, 0, 0, 0]`, each held to `min..max`; `null` unless
+ *  there are exactly `count` numbers. */
+export function parseNumbers(
+  text: string,
+  count: number,
+  min: number,
+  max: number,
+): number[] | null {
+  const nums = text
+    .trim()
+    .split(/[\s,]+/)
+    .filter((t) => t !== "")
+    .map(Number);
+  if (nums.length !== count || nums.some((n) => !Number.isFinite(n))) {
+    return null;
+  }
+  return nums.map((n) => Math.min(max, Math.max(min, n)));
 }
 
 /** A field that commits on Enter or blur; `key` reseeds it whenever the
@@ -557,6 +631,22 @@ function OpRow({
               value={toHex(op[f.key])}
               disabled={disabled}
               onCommit={(hex) => onChange({ ...op, [f.key]: fromHex(hex) })}
+            />
+          );
+        }
+        if (f.kind === "numbers") {
+          return (
+            <CommitInput
+              key={key}
+              dataKey={f.key}
+              label={label}
+              type="text"
+              value={numbersText(op[f.key])}
+              disabled={disabled}
+              onCommit={(text) => {
+                const nums = parseNumbers(text, f.count, f.min, f.max);
+                if (nums) onChange({ ...op, [f.key]: nums });
+              }}
             />
           );
         }

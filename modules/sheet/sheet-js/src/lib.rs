@@ -966,6 +966,28 @@ mod wasm {
             self.session.picture_bytes(media).map_err(map_err)
         }
 
+        /// Engine ADR 1037 — straight RGBA pixels (`width` × `height`)
+        /// through a picture's filter stack (`ops`, the JSON list of
+        /// `RasterOp`), evaluated by the engine's one evaluator
+        /// (`paged-image-adjust`): the grid draws a corrected picture as
+        /// the page does.
+        pub fn adjust_picture_rgba(
+            &self,
+            rgba: &[u8],
+            width: u32,
+            height: u32,
+            ops: &str,
+        ) -> Result<Vec<u8>, JsValue> {
+            let ops = paged_model::image_adjust::adjustments_from_json(ops)
+                .ok_or_else(|| JsValue::from_str("not a filter stack"))?;
+            if rgba.len() != (width as usize) * (height as usize) * 4 {
+                return Err(JsValue::from_str("the pixels are not width × height RGBA"));
+            }
+            Ok(paged_image_adjust::apply_rgba8(
+                rgba, width, height, &ops, 1.0,
+            ))
+        }
+
         // ── W2.5: conditional-format authoring (sheet ADR 523) ──────────
 
         /// The sheet's conditional-format rules, highest priority first:

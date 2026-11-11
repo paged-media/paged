@@ -34,6 +34,7 @@
 // Until the artifact exists the dynamic import REJECTS — bootEngine
 // surfaces that honestly so the panel can say "engine wasm not built".
 
+import type { RasterOp } from "@paged-media/plugin-api";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 
 import {
@@ -754,6 +755,13 @@ export interface SheetEngine
   /** W2.3 — the pictures of a sheet and a picture's bytes. */
   listPictures?(sheet: number): PictureInfo[];
   pictureBytes?(media: string): Uint8Array;
+  /** Engine ADR 1037 — straight RGBA pixels through a filter stack. */
+  adjustPictureRgba?(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    ops: readonly RasterOp[],
+  ): Uint8Array;
   /** W2.5 — the conditional-format rules of a sheet, highest priority
    *  first; `index` is the handle the other calls take until the next
    *  change. */
@@ -1459,6 +1467,12 @@ export interface SheetWasmEngine
   ): boolean;
   list_pictures?(sheet: number): PictureInfo[];
   picture_bytes?(media: string): Uint8Array;
+  adjust_picture_rgba?(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    ops: string,
+  ): Uint8Array;
   cf_rules?(sheet: number): CfRuleInfo[];
   add_cf_rule?(sheet: number, spec: CfRuleSpec): number;
   update_cf_rule?(sheet: number, index: number, spec: CfRuleSpec): void;
@@ -1738,6 +1752,13 @@ export function wrapEngine(
       need("set_thread_done")(sheet, row, col, done) as boolean,
     listPictures: (sheet) => need("list_pictures")(sheet) as PictureInfo[],
     pictureBytes: (media) => need("picture_bytes")(media) as Uint8Array,
+    adjustPictureRgba: (rgba, width, height, ops) =>
+      need("adjust_picture_rgba")(
+        rgba,
+        width,
+        height,
+        JSON.stringify(ops),
+      ) as Uint8Array,
     cfRules: (sheet) => need("cf_rules")(sheet) as CfRuleInfo[],
     addCfRule: (sheet, spec) => need("add_cf_rule")(sheet, spec) as number,
     updateCfRule: (sheet, index, spec) => {

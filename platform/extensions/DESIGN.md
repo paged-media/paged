@@ -805,10 +805,12 @@ repeat asks it before choosing a clip group over paste-into.
 and catalog carry `frameImageAdjustments`, an image frame's filter stack:
 a list of `RasterOp` (`{ op: "exposure", ev }`, `levels`, `curves`,
 `hueSaturation`, `recolor`, `duotone`, `blackWhite`, `sharpen`, `blur`,
-`posterize`, `threshold`, `invert`) written whole as the `imageAdjustments`
-value, on a rectangle, oval or polygon. The engine draws and exports the
-picture through it; IDML keeps it in a label. Additive at protocol 77:
-an older engine refuses the write as an unknown path and reads no row.
+`posterize`, `threshold`, `invert`, `channelMixer`, `colorReplace`) written
+whole as the `imageAdjustments` value, on a rectangle, oval, polygon or
+anchored picture. The engine draws and exports the picture through it; IDML
+keeps it in a label. Additive at protocol 77: an older engine refuses the
+write as an unknown path and reads no row (an op it does not know, added by
+ADR 1037's amendments, is refused the same way).
 
 `"document.liveShapes@1"` (engine ADR 1047) says the vendored wire and
 catalog carry the live-shape paths: `frameShapeSides` and

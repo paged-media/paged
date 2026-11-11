@@ -827,13 +827,9 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             let crop = p
                 .blip
                 .src_rect
-                .map(|(l, t, r, b)| {
-                    (
-                        l as f64 / 100_000.0,
-                        t as f64 / 100_000.0,
-                        r as f64 / 100_000.0,
-                        b as f64 / 100_000.0,
-                    )
+                .map(|r| {
+                    let [l, t, r, b] = paged_ooxml::drawingml::paint::rel_rect_fractions(r);
+                    (l, t, r, b)
                 })
                 .unwrap_or((0.0, 0.0, 0.0, 0.0));
             let look = resolved::picture(&p.blip, &ctx.colors(None));

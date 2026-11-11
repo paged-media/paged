@@ -174,6 +174,39 @@ fn last_picture(out: &[u8]) -> (String, String, Option<String>) {
 }
 
 #[test]
+fn a_pictures_filter_stack_is_written_as_blip_effects_and_reads_back__feat__images_graphics_image_filter_stack(
+) {
+    // Engine ADR 1037, amendment 2026-11-11: the ops DrawingML holds are the
+    // blip's effects; one it has no element for is reported.
+    let bytes = fixture("geometry");
+    let mut doc = imported(&bytes);
+    place(&mut doc, "newpic", png(40, 20));
+    let ops = vec![
+        paged_model::RasterOp::Threshold { level: 0.4 },
+        paged_model::RasterOp::ColorReplace {
+            from: [1.0, 1.0, 1.0],
+            to: [1.0, 1.0, 1.0],
+            alpha: 0.0,
+            tolerance: 0.0,
+        },
+        paged_model::RasterOp::Invert,
+    ];
+    doc.spreads[0].spread.rectangles.last_mut().unwrap().image_adjustments = ops.clone();
+    let out = export(&bytes, &doc, &BTreeMap::new());
+    let (pic, ..) = last_picture(&out.bytes);
+    assert!(pic.contains(r#"<a:biLevel thresh="40000"/>"#), "{pic}");
+    assert!(pic.contains("<a:clrChange>"), "{pic}");
+    assert!(
+        out.not_exported.iter().any(|n| format!("{n:?}").contains("invert")),
+        "{:?}",
+        out.not_exported
+    );
+    let back = imported(&out.bytes);
+    let r = back.spreads[0].spread.rectangles.last().unwrap();
+    assert_eq!(r.image_adjustments, ops[..2].to_vec());
+}
+
+#[test]
 fn deck_formats_are_written_as_they_are_with_their_content_types() {
     let bytes = fixture("geometry");
     for (name, pic, ext, ct) in [

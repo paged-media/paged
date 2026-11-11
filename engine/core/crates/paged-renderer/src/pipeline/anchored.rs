@@ -1693,7 +1693,8 @@ fn synthetic_rectangle(
         subpath_starts: af.subpath_starts.clone(),
         subpath_open: af.subpath_open.clone(),
         fill_rule: paged_model::FillRule::NonZero,
-        image_adjustments: Vec::new(),
+        // Engine ADR 1037, amendment 2026-11-11: the picture's filter stack.
+        image_adjustments: af.image_adjustments.clone(),
         media: None,
         fill_mesh: None,
         pattern_transform: None,

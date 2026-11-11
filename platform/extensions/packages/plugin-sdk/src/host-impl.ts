@@ -595,8 +595,9 @@ export const HOST_FEATURES: readonly string[] = [
   // Engine ADR 1037 — an image frame's filter stack: `frameImageAdjustments`
   // (a list of `RasterOp`: exposure, levels, curves, hue/saturation,
   // recolor, duotone, black & white, sharpen, blur, posterize, threshold,
-  // invert) reads and writes through the ordinary property doors on a
-  // rectangle, oval or polygon. STATIC, like `document.fillRule@1`: the
+  // invert, channel mixer, colour replace) reads and writes through the
+  // ordinary property doors on a rectangle, oval, polygon or anchored
+  // picture. STATIC, like `document.fillRule@1`: the
   // path and its `imageAdjustments` value are additive at protocol 77, so
   // an older engine refuses the write as an unknown path (an outcome) and
   // reads no row. A bundle that would otherwise bake a picture fix into

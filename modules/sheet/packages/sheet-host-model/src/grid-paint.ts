@@ -30,6 +30,7 @@ import {
   DEFAULT_GRID_SVG_OPTIONS,
   fillHandleRect,
   pictureBox,
+  pictureKey,
   rowAt,
   selectionRect,
   type GridScene,
@@ -78,6 +79,19 @@ export interface PaintContext {
   /** Pictures (W2.3; without it pictures are not drawn). */
   drawImage?(
     image: CanvasImageSource,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): void;
+  /** A cropped picture: the part `sx, sy, sw, sh` of the image (its own
+   *  pixels) drawn into `x, y, w, h`. */
+  drawImage?(
+    image: CanvasImageSource,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
     x: number,
     y: number,
     w: number,
@@ -160,10 +174,11 @@ export interface PaintOptions {
   partialCol?: number | null;
   grid?: Partial<GridSvgOptions>;
   heading?: Partial<HeadingStyle>;
-  /** W2.3 — the decoded image of a picture's media part, when it is ready
-   *  (a picture without one is not drawn yet). */
+  /** W2.3 — the decoded image of a picture (by `pictureKey`: its media
+   *  part, corrected by its filter stack), when it is ready (a picture
+   *  without one is not drawn yet). */
   pictureImage?: (
-    media: string,
+    key: string,
   ) => (CanvasImageSource & { width: number; height: number }) | undefined;
 }
 
@@ -757,16 +772,23 @@ export function paintGridScene(
   // images in cells fitted into the cell.
   if (ctx.drawImage && options.pictureImage) {
     for (const p of scene.pictures ?? []) {
-      const img = options.pictureImage(p.media);
+      const img = options.pictureImage(pictureKey(p));
       if (!img) continue;
-      const [x, y, w, hh] = pictureBox(p, img);
+      // The crop's part of the image (engine ADR 1037's picture: the
+      // engine's crop and filter stack, not the raw bytes).
+      const src = p.src;
+      const [x, y, w, hh] = pictureBox(
+        p,
+        src ? { width: src[2], height: src[3] } : img,
+      );
       ctx.save();
       if (p.inCell) {
         ctx.beginPath();
         ctx.rect(p.x, p.y, p.w, p.h);
         ctx.clip();
       }
-      ctx.drawImage(img, x, y, w, hh);
+      if (src) ctx.drawImage(img, src[0], src[1], src[2], src[3], x, y, w, hh);
+      else ctx.drawImage(img, x, y, w, hh);
       ctx.restore();
     }
   }

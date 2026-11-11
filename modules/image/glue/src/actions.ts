@@ -62,7 +62,11 @@
 //                picture inside the box) | "cover" (the box filled, the
 //                overflow cut centred), enlarge (false: never scale up),
 //                filter
-//   adjust     — adjust: { <adjustment-layer path>: value }
+//   adjust     — ops: [RasterOp, …], the engine's filter stack (engine ADR
+//                1037: the same operations as a picture's corrections in
+//                any module, on the engine's one evaluator); the older
+//                form adjust: { <adjustment-layer path>: value } still runs
+//                the adjustment chain
 //   greyscale  — (none)
 //   sharpen    — amount
 //   remove-background — (none) the host's ML service (`host.ml.matting`,
@@ -538,9 +542,20 @@ export function imageActions(
     ),
     asset(
       IMAGE_ACTION_IDS.adjust,
-      "Adjust (the adjustment layer's parameters by path)",
-      { adjust: {} },
+      "Adjust (a filter stack of RasterOps)",
+      { ops: [] },
       (e, a, p) => {
+        if (p.ops !== undefined && !Array.isArray(p.ops))
+          throw new Error(
+            `${IMAGE_ACTION_IDS.adjust}: ops is a list of RasterOp`,
+          );
+        if (Array.isArray(p.ops) && p.ops.length > 0) {
+          const r = decode(e, a);
+          return {
+            ...r,
+            rgba: e.adjustRasterOps(r.rgba, r.width, r.height, p.ops),
+          };
+        }
         const paths = p.adjust ?? {};
         if (typeof paths !== "object" || Array.isArray(paths))
           throw new Error(

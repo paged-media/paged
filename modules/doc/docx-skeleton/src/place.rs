@@ -509,11 +509,20 @@ fn picture_op(
                 "value": { "type": "transform", "value": t } } })
         })
     };
+    // Engine ADR 1037 — the picture's corrections, its filter stack.
+    let adjust = |handle: &str| {
+        (!img.adjustments.is_empty()).then(|| {
+            json!({ "op": "setElementProperty", "args": {
+                "elementId": { "kind": "rectangle", "id": format!("$h:{handle}") },
+                "path": "frameImageAdjustments",
+                "value": { "type": "imageAdjustments", "value": img.adjustments } } })
+        })
+    };
     let (handle, mut ops) = if let Some(a) = &img.anchor {
         let h = format!("docFloat{k}");
         let sets = anchor_sets(a, &h);
         (h, sets)
-    } else if img.crop.is_some_and(|c| c.placement.is_some()) {
+    } else if img.crop.is_some_and(|c| c.placement.is_some()) || !img.adjustments.is_empty() {
         (format!("docxPicture{k}"), Vec::new())
     } else {
         return insert;
@@ -526,6 +535,7 @@ fn picture_op(
         ],
     );
     ops.extend(crop(&handle));
+    ops.extend(adjust(&handle));
     json!({ "op": "batch", "args": { "ops": ops } })
 }
 
