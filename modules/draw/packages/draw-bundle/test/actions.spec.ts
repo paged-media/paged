@@ -19,19 +19,17 @@
 // The draw module's actions (PM-0015; extensions ADR 344): the bundle
 // registers them on a shared registry and ANOTHER bundle runs them.
 //
-// The trace runs the REAL trace wasm. Its decode is the platform's
-// (createImageBitmap + OffscreenCanvas), which Node does not have, so the
-// trace lane stands one in — a fake container (`FAKE`, the size, then
-// RGBA) with a nearest-neighbour `drawImage` — exactly as the Image Trace
-// command's spec does; without it the action refuses with the decoder's
-// sentence, which is pinned too. The recolour is pure TS over the SVG.
+// The trace runs the REAL trace wasm. Its decode is the engine's, through
+// the host's decoded-pixels door (`host.assets.decodeImage`); this fake
+// editor has no engine, so it offers a stand-in decoder for a fake
+// container (`FAKE`, the size, then RGBA); a host without the door refuses
+// with the decoder's sentence, which is pinned too. The recolour is pure TS over the SVG.
 
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "bun:test";
-import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
+import { describe, expect, it } from "bun:test";
 
 import type { ActionAsset, PluginManifest } from "@paged-media/plugin-api";
 import {
@@ -65,9 +63,12 @@ const RUNNER: PluginManifest = {
   capabilities: { actions: { run: true } },
 };
 
-function hosts() {
+function hosts(decoder = true) {
   const registry = createActionRegistry();
   const fake = createFakeEditor();
+  // The engine's decoder the editor offers (`assets.decodeImage@1`).
+  if (decoder)
+    (fake.editor as { decodeImage?: unknown }).decodeImage = fakeDecode;
   const draw = loadBundle(() => fake.editor, drawBundle, {
     console: silent,
     storage: mapBacking(),
@@ -107,61 +108,28 @@ function fakePicture(size: number): ActionAsset {
   return { bytes, mediaType: "image/x-fake" };
 }
 
-interface FakeBitmap {
-  width: number;
-  height: number;
-  rgba: Uint8Array;
-  close(): void;
+/** The stand-in for the engine's decoder (`PagedEditor.decodeImage`): the
+ *  fake container's pixels, nearest-neighbour fitted to `maxDim`. */
+async function fakeDecode(
+  bytes: Uint8Array,
+  maxDim?: number,
+): Promise<{ width: number; height: number; rgba: Uint8Array } | null> {
+  if (new TextDecoder().decode(bytes.subarray(0, 4)) !== "FAKE") return null;
+  const v = new DataView(bytes.buffer, bytes.byteOffset);
+  const sw = v.getUint32(4, true);
+  const sh = v.getUint32(8, true);
+  const src = bytes.subarray(12);
+  const k = maxDim && Math.max(sw, sh) > maxDim ? maxDim / Math.max(sw, sh) : 1;
+  const w = Math.max(1, Math.round(sw * k));
+  const h = Math.max(1, Math.round(sh * k));
+  const rgba = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const s4 = (Math.floor((y * sh) / h) * sw + Math.floor((x * sw) / w)) * 4;
+      rgba.set(src.subarray(s4, s4 + 4), (y * w + x) * 4);
+    }
+  return { width: w, height: h, rgba };
 }
-
-function stubDecoder(): void {
-  stubGlobal("createImageBitmap", async (blob: Blob): Promise<FakeBitmap> => {
-    const b = new Uint8Array(await blob.arrayBuffer());
-    if (new TextDecoder().decode(b.subarray(0, 4)) !== "FAKE")
-      throw new Error("not a fake picture");
-    const v = new DataView(b.buffer, b.byteOffset);
-    return {
-      width: v.getUint32(4, true),
-      height: v.getUint32(8, true),
-      rgba: b.subarray(12),
-      close() {},
-    };
-  });
-  stubGlobal(
-    "OffscreenCanvas",
-    class {
-      data: Uint8ClampedArray;
-      constructor(
-        readonly width: number,
-        readonly height: number,
-      ) {
-        this.data = new Uint8ClampedArray(width * height * 4);
-      }
-      getContext() {
-        return {
-          drawImage: (
-            bm: FakeBitmap,
-            _x: number,
-            _y: number,
-            w: number,
-            h: number,
-          ) => {
-            for (let y = 0; y < h; y++)
-              for (let x = 0; x < w; x++) {
-                const sx = Math.floor((x * bm.width) / w);
-                const sy = Math.floor((y * bm.height) / h);
-                const s = (sy * bm.width + sx) * 4;
-                this.data.set(bm.rgba.subarray(s, s + 4), (y * w + x) * 4);
-              }
-          },
-          getImageData: () => ({ data: this.data }),
-        };
-      }
-    },
-  );
-}
-
-afterEach(() => unstubAllGlobals());
 
 /** The attributes of each `<tag …>` of `svg`, in order. */
 const elements = (svg: string, tag: string): Record<string, string>[] =>
@@ -202,7 +170,6 @@ describe("media.paged.draw actions on a shared registry [plugin-platform.actions
   it.skipIf(!built)(
     "trace turns a picture into an SVG of its size, whose region is the square [plugin-draw.image-trace]",
     async () => {
-      stubDecoder();
       const { runner } = hosts();
       const r = await runner.actions.run(
         DRAW_ACTION_IDS.trace,
@@ -225,7 +192,6 @@ describe("media.paged.draw actions on a shared registry [plugin-platform.actions
   it.skipIf(!built)(
     "a picture over the trace budget is traced downsampled and written at its own size [plugin-draw.image-trace]",
     async () => {
-      stubDecoder();
       const { runner } = hosts();
       const r = await runner.actions.run(
         DRAW_ACTION_IDS.trace,
@@ -244,9 +210,9 @@ describe("media.paged.draw actions on a shared registry [plugin-platform.actions
   );
 
   it.skipIf(!built)(
-    "without a platform decoder the trace refuses with the decoder's sentence",
+    "without the host's decoder the trace refuses with the decoder's sentence",
     async () => {
-      const { runner } = hosts();
+      const { runner } = hosts(false);
       await expect(
         runner.actions.run(DRAW_ACTION_IDS.trace, fakePicture(8)),
       ).rejects.toThrow(RASTER_DECODER_UNAVAILABLE.slice(0, 40));
@@ -256,7 +222,6 @@ describe("media.paged.draw actions on a shared registry [plugin-platform.actions
   it.skipIf(!built)(
     "trace → recolor chains, and the second run is cached [plugin-draw.recolor-artwork]",
     async () => {
-      stubDecoder();
       const { runner } = hosts();
       const steps = [
         { action: DRAW_ACTION_IDS.trace, params: { pathMode: "polygon" } },

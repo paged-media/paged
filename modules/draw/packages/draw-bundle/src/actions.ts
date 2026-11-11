@@ -23,12 +23,11 @@
 //
 //   · trace — a raster picture in, an SVG out. The kernel is the trace wasm
 //     (`trace-engine.ts`), in a `host.workers` worker when the host has one,
-//     on the calling thread otherwise. The DECODE is the platform's
-//     (`io/raster-decode.ts`: createImageBitmap + OffscreenCanvas), so the
-//     action runs where those exist — the editor's window or worker realm —
-//     and refuses with the decoder's own sentence where they do not (Node,
-//     the headless host). A picture over the trace budget is downsampled
-//     first; the SVG is written at the picture's own pixel size either way.
+//     on the calling thread otherwise. The DECODE is the engine's, through
+//     the host's decoded-pixels door (`io/raster-decode.ts`,
+//     `host.assets.decodeImage`); a host without it refuses with the
+//     decoder's own sentence. A picture over the trace budget is decoded
+//     downsampled; the SVG is written at the picture's own pixel size either way.
 //   · recolor — an SVG in, an SVG out: its declared colours reduced to N,
 //     moved to a harmony, or mapped. The colours are found and replaced IN
 //     THE SOURCE by the engine's SVG paint reader (`paged-svg::paint`, in
