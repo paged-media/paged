@@ -81,7 +81,6 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 export async function readIndex(host: BundleHost): Promise<ChartsIndex | null> {
-  if (!host.supports("storage.parts@1")) return null;
   try {
     const bytes = await host.parts.read(CHARTS_INDEX_PART);
     if (!bytes) return null;
@@ -278,7 +277,6 @@ export async function keepCharts(
   charts: readonly ChartReport[] | undefined,
   workbooks: Uint8Array,
 ): Promise<void> {
-  if (!host.supports("storage.parts@1")) return;
   const { index, parts } = importedCharts(charts ?? [], workbooks);
   for (const [part, bytes] of parts) await host.parts.write(part, bytes);
   await writeIndex(host, index);

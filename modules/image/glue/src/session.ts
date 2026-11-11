@@ -1686,8 +1686,6 @@ const S = defineMessages("image.status", {
     "Frame deselected — in-frame preview cleared.",
   selectExactlyOnePlacedImageFrame: "Select exactly one placed image frame.",
   selectionCarriesNoElementId: "Selection carries no element id.",
-  hostServesNoPlacedImageBytes:
-    "Host serves no placed-image bytes (assets.images@1 is false).",
   readingPlacedBytes: "Reading placed bytes…",
   noPlacedImageOnThisFrame:
     "No placed image on this frame (or the link is unresolved).",
@@ -1704,8 +1702,6 @@ const S = defineMessages("image.status", {
     "WebGPU unavailable — the adjusted export needs a device.",
   commitNeedsAnImageIngestedFrom:
     "Commit needs an image ingested from a frame in the document.",
-  thisHostStoresNoPluginData:
-    "This host stores no plugin data in the document (storage.parts@1 is false) — the layers cannot be kept, so nothing was committed.",
   committingTheImageToTheDocument: "Committing the image to the document…",
   noPatternDefinedUseDefinePattern:
     "No pattern defined — use Define pattern first.",
@@ -2464,10 +2460,9 @@ export function createImageSession(host: BundleHost): ImageSession {
 
   /** True when the frame holds no placed image: an empty frame, or one
    *  whose link no longer resolves. False when it holds one, and false
-   *  when this host cannot say — a frame we cannot read is never
-   *  overwritten on a guess. */
+   *  when the read fails — a frame we cannot read is never overwritten
+   *  on a guess. */
   const frameIsEmpty = async (id: string): Promise<boolean> => {
-    if (!host.supports("assets.images@1")) return false;
     try {
       return (await host.assets.getPlacedImage(id)) === null;
     } catch {
@@ -3768,9 +3763,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   // leaves the selection, the in-frame layer clears — the preview is
   // session-scoped, the document untouched.
   // Frame ids are per document: another document's frames are not these.
-  const openSub = host.supports("document.onDidOpen@1")
-    ? host.document.onDidOpen(() => keptSelections.clear())
-    : null;
+  const openSub = host.document.onDidOpen(() => keptSelections.clear());
 
   const selectionSub = host.selection.onDidChange((ids) => {
     if (!state.compositedFrame) return;
@@ -4474,10 +4467,6 @@ export function createImageSession(host: BundleHost): ImageSession {
       const id = elementIdOf(ids[0]);
       if (!id) {
         setStatus(t(S.selectionCarriesNoElementId));
-        return false;
-      }
-      if (!host.supports("assets.images@1")) {
-        setStatus(t(S.hostServesNoPlacedImageBytes));
         return false;
       }
       if (!(await ensureEngine())) {
@@ -5942,11 +5931,6 @@ export function createImageSession(host: BundleHost): ImageSession {
       const src = state.source;
       if (!src || !engine || !src.elementId || !sourceRef) {
         setStatus(t(S.commitNeedsAnImageIngestedFrom));
-        emit();
-        return false;
-      }
-      if (!host.supports("storage.parts@1")) {
-        setStatus(t(S.thisHostStoresNoPluginData));
         emit();
         return false;
       }
@@ -7689,10 +7673,6 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return null;
       }
-      if (!host.supports("render.story@1")) {
-        setStatus(t(L.noStoryDoor));
-        return null;
-      }
       lastTypePoint = [frame.x, frame.y];
       const body = text ?? (state.type.text || t(L.typePlaceholder));
       const src = sourceFromTypeState(
@@ -7748,7 +7728,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       const next = edit(structuredClone(current));
       next.runs = fitRuns(next.runs, next.text);
       const pageId = await storyPage();
-      if (!pageId || !host.supports("render.story@1")) {
+      if (!pageId) {
         setStatus(t(L.noStoryDoor));
         return false;
       }
@@ -8382,7 +8362,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (settleTimer) clearTimeout(settleTimer);
       dropFilterDialog();
       selectionSub.dispose();
-      openSub?.dispose();
+      openSub.dispose();
       discardStroke();
       releaseTiles();
       // K-3 — terminate the decode pool's workers (the host ALSO

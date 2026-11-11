@@ -45,8 +45,6 @@ export const OUTLINE = defineMessages("doc.outline", {
   live: "Your edits are written back into the .docx when you export it.",
   notCaptured:
     "Export writes the original .docx unchanged: this document's text was not captured.",
-  cannotReadBack:
-    "Export writes the original .docx unchanged: this editor cannot read edited text back.",
   empty: "Insert a Word document to see its outline, styles and diagnostics.",
   paragraphs: "{count, plural, one {# paragraph} other {# paragraphs}}",
   tables: "{count, plural, one {# table} other {# tables}}",

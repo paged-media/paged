@@ -461,11 +461,8 @@ export async function openIdml(
   );
 }
 
-/** Register the typed commands. `null` on a host without the door. */
-export function contributePublishCommands(
-  host: BundleHost,
-): ObjectModelHandle | null {
-  if (!host.supports("contribute.objectModel@1")) return null;
+/** Register the typed commands. */
+export function contributePublishCommands(host: BundleHost): ObjectModelHandle {
   const commands: TypedCommandContribution[] = [
     {
       id: EXPORT_PDF_COMMAND,

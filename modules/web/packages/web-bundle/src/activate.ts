@@ -204,17 +204,14 @@ export function activate(host: BundleHost): BundleHandle {
   // ADR 323 — the object properties as host-rendered PropertyFields (a
   // schema panel of property rows; needs the object model + bindings).
   const propertiesPanel = webPropertiesPanel();
-  const propertyLists =
-    objectModel && host.supports("contribute.schemaPanel@1")
-      ? (contributeSchemaPanel(host, {
-          id: PROPERTIES_PANEL_ID,
-          title: propertiesPanel.title,
-          icon: propertiesPanel.icon,
-          defaultDock: "right",
-          schema: propertiesPanel,
-        }),
-        publishPropertyLists(host))
-      : null;
+  contributeSchemaPanel(host, {
+    id: PROPERTIES_PANEL_ID,
+    title: propertiesPanel.title,
+    icon: propertiesPanel.icon,
+    defaultDock: "right",
+    schema: propertiesPanel,
+  });
+  const propertyLists = publishPropertyLists(host);
   host.log.info(`activated (apiVersion ${manifest.apiVersion})`);
 
   // F1 — the menu bar. Before plugin-api 0.2.33 there was no menu door,
@@ -232,8 +229,8 @@ export function activate(host: BundleHost): BundleHandle {
       faces.dispose();
       collector.dispose();
       auto.dispose();
-      propertyLists?.dispose();
-      objectModel?.dispose();
+      propertyLists.dispose();
+      objectModel.dispose();
       menuSub.dispose();
       releaseOverlayLayers(host);
       void releaseSceneFaces(host);

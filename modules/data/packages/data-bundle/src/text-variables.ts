@@ -23,7 +23,6 @@ import {
   textVariableField,
   type PlaceholderField,
 } from "../../data-host-model/src";
-import { objectsOf } from "./property-lane";
 
 const detected = new WeakMap<object, Promise<boolean>>();
 
@@ -39,11 +38,10 @@ export function textVariablesOn(host: BundleHost): Promise<boolean> {
   const known = objectsProp(host);
   const hit = known ? detected.get(known) : undefined;
   if (hit) return hit;
-  const objects = objectsOf(host);
-  if (!objects || !known) return Promise.resolve(false);
+  if (!known) return Promise.resolve(false);
   const p = (async () => {
     try {
-      return (await objects.kinds()).some(
+      return (await known.kinds()).some(
         (k) => k.owner === "core" && k.kind === "textVariable",
       );
     } catch {

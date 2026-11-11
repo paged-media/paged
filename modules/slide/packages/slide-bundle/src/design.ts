@@ -439,10 +439,8 @@ export class DesignStore implements Disposable {
     this.listeners.add(listener);
     if (this.subs.length === 0) {
       const again = () => void this.refresh();
-      if (this.host.supports("document.onDidChange@1"))
-        this.subs.push(this.host.document.onDidChange(again));
-      if (this.host.supports("document.onDidOpen@1"))
-        this.subs.push(this.host.document.onDidOpen(again));
+      this.subs.push(this.host.document.onDidChange(again));
+      this.subs.push(this.host.document.onDidOpen(again));
       again();
     }
     return () => {
@@ -453,7 +451,6 @@ export class DesignStore implements Disposable {
   }
 
   private async label(): Promise<Label | null> {
-    if (!this.host.supports("document.documentMetadata@1")) return null;
     try {
       return parseLabel<Label>(await this.host.document.getDocumentMetadata());
     } catch {

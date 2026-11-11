@@ -500,16 +500,16 @@ describe("bindings panel — every binding kind is reachable [data.bind.authorin
 });
 
 describe("sources panel says whether the session is saved [data.plugin.persistence]", () => {
-  it.each([
-    ["saved", /saved with the document/],
-    ["unavailable", /cannot save/],
-  ] as const)("%s", async (status, re) => {
-    const session = stubSession({}, { persistence: { status, hash: null } });
-    const { makeSourcesPanel } = await import("../panels/sources-panel");
-    const tree = render(makeSourcesPanel(host, session));
-    const p = tree.find((e) => "data-data-persistence" in e.props)!;
-    expect(text(p)).toMatch(re);
-  });
+  it.each([["saved", /saved with the document/]] as const)(
+    "%s",
+    async (status, re) => {
+      const session = stubSession({}, { persistence: { status, hash: null } });
+      const { makeSourcesPanel } = await import("../panels/sources-panel");
+      const tree = render(makeSourcesPanel(host, session));
+      const p = tree.find((e) => "data-data-persistence" in e.props)!;
+      expect(text(p)).toMatch(re);
+    },
+  );
 });
 
 describe("bindings panel — the record-preview stepper [data.bind.preview-step]", () => {

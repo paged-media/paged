@@ -385,8 +385,7 @@ export function schemaFileRows(kind: ImageKind) {
 export { KIND_CONTENT };
 
 /**
- * Register the object model. Null when the host has no object registry
- * (`contribute.objectModel@1` false) — the bundle then works as before.
+ * Register the object model.
  * `selection` reads the editor session's live selection for
  * `filterRegion`'s `selection: true` (absent headless, where it refuses);
  * `selectionFollow` carries the selections the session kept along the
@@ -399,8 +398,7 @@ export function contributeImageObjectModel(
   live?: () => boolean,
   selection?: SelectionSource,
   selectionFollow?: SelectionFollow,
-): { handle: ObjectModelHandle; objects: ImageObjects } | null {
-  if (!host.supports("contribute.objectModel@1")) return null;
+): { handle: ObjectModelHandle; objects: ImageObjects } {
   const objects = createImageObjects(host, codec, selection, selectionFollow);
   const handle = host.contribute.objectModel({
     kinds: objects.kinds,

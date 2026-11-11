@@ -37,18 +37,14 @@ const byData = (r: ReactTestRenderer, attr: string, value?: string) =>
       (value === undefined || n.props[attr] === value),
   );
 
-function boundHost(
-  html: string,
-  { documentMetadata = true }: { documentMetadata?: boolean } = {},
-) {
+function boundHost(html: string) {
   const h = reachHost();
   h.labels.set("uA", envelopeFor({ ...DEFAULT_SOURCE, html }));
   const parts = new Map<string, Uint8Array>();
   const doc: { envelope: unknown } = { envelope: null };
   const host = h.host as unknown as Record<string, any>;
   host.supports = (f: string) =>
-    f === "storage.parts@1" ||
-    (documentMetadata && f === "document.documentMetadata@1");
+    f === "storage.parts@1" || f === "document.documentMetadata@1";
   // The document metadata door: a write is a document change.
   host.document.getDocumentMetadata = async () => doc.envelope;
   host.document.setDocumentMetadata = async (envelope: unknown) => {
@@ -113,31 +109,6 @@ describe("bound data in the panel @feat:plugin-web.data-binding", () => {
     });
     expect(parts.has("web/document-values.json")).toBe(false);
     await act(async () => new Promise((res) => setTimeout(res, 350))); // the preview debounce
-    await settle();
-    expect(byData(r, "data-web-preview").props.srcDoc).toContain(
-      "<p>Spring</p>",
-    );
-  });
-
-  it("on a host without document metadata the value goes to the container part", async () => {
-    const { h, parts } = boundHost("<p>{{doc.edition}}</p>", {
-      documentMetadata: false,
-    });
-    const r = await mountPanel(h);
-    await act(async () =>
-      byData(r, "data-web-bound-input", "doc.edition").props.onChange({
-        target: { value: "Spring" },
-      }),
-    );
-    await act(async () =>
-      byData(r, "data-web-bound-set", "doc.edition").props.onClick(),
-    );
-    await settle();
-    const saved = JSON.parse(
-      new TextDecoder().decode(parts.get("web/document-values.json")!),
-    );
-    expect(saved).toEqual({ edition: "Spring" });
-    await act(async () => new Promise((res) => setTimeout(res, 350)));
     await settle();
     expect(byData(r, "data-web-preview").props.srcDoc).toContain(
       "<p>Spring</p>",

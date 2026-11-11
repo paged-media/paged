@@ -27,15 +27,13 @@
 // the portable home + the read PREFERENCE.
 //
 // Singleton, mirroring S-08: the LAST imported workbook is the one persisted
-// (per-plugin, not per-frame). Forward/backward-safe: a host with no container
-// writer (`supports("storage.parts@1")` is false — an older editor) is a clean
-// no-op, and a document with no part falls back to the blob, so existing
-// documents keep working unchanged.
+// (per-plugin, not per-frame). Backward-safe: a document with no part falls
+// back to the blob, so existing documents keep working unchanged.
 
 import { fnv1a32 } from "@paged-media/helpers";
 import type { BundleHost } from "@paged-media/plugin-api";
 
-type PartsHost = Pick<BundleHost, "parts" | "supports">;
+type PartsHost = Pick<BundleHost, "parts">;
 
 /** The workbook bytes + its display name, each a part relative to this
  *  plugin's `paged/media.paged.sheet/` namespace (the host prepends it). */
@@ -57,7 +55,6 @@ export async function writeWorkbookPart(
    *  no chart was deleted from) leaves the part alone. */
   chartSlots: readonly number[] | null = null,
 ): Promise<void> {
-  if (!host.supports("storage.parts@1")) return;
   await host.parts.write(WORKBOOK_PART, bytes);
   await host.parts.write(WORKBOOK_NAME_PART, new TextEncoder().encode(name));
   if (chartSlots) {
@@ -80,7 +77,6 @@ const CHART_SLOTS_PART = "workbook.chart-slots.json";
 export async function readWorkbookPart(
   host: PartsHost,
 ): Promise<{ bytes: Uint8Array; name: string; chartSlots: number[] } | null> {
-  if (!host.supports("storage.parts@1")) return null;
   const bytes = await host.parts.read(WORKBOOK_PART);
   if (!bytes) return null;
   const nameBytes = await host.parts.read(WORKBOOK_NAME_PART);
@@ -125,7 +121,6 @@ export async function writeFilterViewsPart(
   host: PartsHost,
   views: readonly unknown[],
 ): Promise<void> {
-  if (!host.supports("storage.parts@1")) return;
   await host.parts.write(
     FILTER_VIEWS_PART,
     new TextEncoder().encode(JSON.stringify(views)),
@@ -134,7 +129,6 @@ export async function writeFilterViewsPart(
 
 /** Read the named filter views, `[]` when absent or unreadable. */
 export async function readFilterViewsPart(host: PartsHost): Promise<unknown[]> {
-  if (!host.supports("storage.parts@1")) return [];
   try {
     const bytes = await host.parts.read(FILTER_VIEWS_PART);
     if (!bytes) return [];

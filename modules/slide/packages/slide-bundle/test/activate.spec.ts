@@ -24,6 +24,7 @@
 
 import { ICONS_PANEL_ID } from "../src/icons";
 import { ANIMATIONS_PANEL_ID } from "../src/anim/pane";
+import { CUSTOM_SHOWS_PANEL } from "../src/output/commands";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
@@ -199,12 +200,8 @@ describe("paged.slide importer", () => {
     const noop = { dispose() {} };
     const host = {
       log: { debug() {}, info() {}, warn() {}, error() {} },
-      supports: (f: string) =>
-        [
-          "contribute.panel@1",
-          "render.snapshot@1",
-          "viewport.pages@1",
-        ].includes(f),
+      manifest: { capabilities: {} },
+      supports: (f: string) => f === "viewport.pages@1",
       contribute: inertSurface({
         panel(c: { id: string }) {
           panels.push(c);
@@ -222,8 +219,10 @@ describe("paged.slide importer", () => {
     // The Shapes panel (Insert ▸ Shapes, ADR 717), the Icons panel
     // (Insert ▸ Icons, ADR 723), the SmartArt text pane
     // (slide W4) and the Animations pane (ADR 714) beside them.
-    // The Design panel (Design ▸ Themes, ADR 713) too, never in the rail.
+    // The Design panel (Design ▸ Themes, ADR 713) too, never in the rail,
+    // and the Custom Shows panel (slide ADR 720) before them.
     expect(panels.map((p) => p.id)).toEqual([
+      CUSTOM_SHOWS_PANEL,
       SLIDES_PANEL_ID,
       SHAPES_PANEL_ID,
       ICONS_PANEL_ID,
@@ -234,6 +233,7 @@ describe("paged.slide importer", () => {
     ]);
     // A document that is not a deck keeps them out of the panel rail.
     expect(panels.map((p) => (p as { rail?: boolean }).rail)).toEqual([
+      false,
       false,
       undefined,
       false,
@@ -249,12 +249,8 @@ describe("paged.slide importer", () => {
     const live = new Map<string, { rail?: boolean }>();
     const host = {
       log: { debug() {}, info() {}, warn() {}, error() {} },
-      supports: (f: string) =>
-        [
-          "contribute.panel@1",
-          "render.snapshot@1",
-          "viewport.pages@1",
-        ].includes(f),
+      manifest: { capabilities: {} },
+      supports: (f: string) => f === "viewport.pages@1",
       contribute: inertSurface({
         panel(c: { id: string; rail?: boolean }) {
           if (live.has(c.id)) throw new Error(`${c.id} registered twice`);

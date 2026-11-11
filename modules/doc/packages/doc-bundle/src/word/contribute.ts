@@ -403,16 +403,14 @@ export function contributeWord(
       void review.store.refresh();
     }
   };
-  if (host.supports("document.onDidOpen@1")) {
-    disposers.push(
-      host.document.onDidOpen(() => {
-        const mine = ++asked;
-        void deps.isWordDocument().then((word) => {
-          if (mine === asked && word) setDocumentContext(true);
-        });
-      }).dispose,
-    );
-  }
+  disposers.push(
+    host.document.onDidOpen(() => {
+      const mine = ++asked;
+      void deps.isWordDocument().then((word) => {
+        if (mine === asked && word) setDocumentContext(true);
+      });
+    }).dispose,
+  );
 
   const byId = new Map(
     (Object.keys(WORD_COMMAND) as WordCommandName[]).map((n) => [

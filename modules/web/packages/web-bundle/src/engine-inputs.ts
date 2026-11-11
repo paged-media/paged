@@ -555,7 +555,6 @@ export async function registerSourceResources(
     let bytes: Uint8Array | null = null;
     if (!known) {
       if (asset) {
-        if (!host.supports("assets.images@1")) continue;
         try {
           bytes = (await host.assets.getPlacedImage(asset[1]))?.bytes ?? null;
         } catch {

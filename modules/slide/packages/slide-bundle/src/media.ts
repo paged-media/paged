@@ -234,10 +234,6 @@ export async function insertMedia(
     );
     return null;
   }
-  if (!host.supports("document.media@1")) {
-    host.log.warn("paged.slide insert media: this host keeps no media");
-    return null;
-  }
   const probe = await probeMedia(args.bytes, type.mime, type.kind);
   const poster =
     args.poster ??
@@ -363,7 +359,6 @@ export async function pageMedia(
     string,
     { item: PageShapes["items"][number]; media: MediaItem }[]
   >();
-  if (!host.supports("document.media@1")) return out;
   for (const [pageId, page] of pages) {
     for (const item of page.items) {
       if (item.id.kind !== "rectangle") continue;

@@ -43,7 +43,7 @@ const big = (tag: string): WebFrameSource => ({
   html: `<p>${tag}</p>` + "<p>lorem ipsum dolor</p>".repeat(5000),
 });
 
-function modelHost(opts: { canDelete?: boolean; docMeta?: boolean } = {}) {
+function modelHost() {
   // The host announces an opened document through `document.onDidOpen`.
   const opened: (() => void)[] = [];
   const parts = new Map<string, Uint8Array>();
@@ -56,9 +56,9 @@ function modelHost(opts: { canDelete?: boolean; docMeta?: boolean } = {}) {
   const host = {
     supports: (f: string) =>
       f === "storage.parts@1" ||
-      (f === "storage.parts@2" && opts.canDelete !== false) ||
+      f === "storage.parts@2" ||
       f === "document.onDidOpen@1" ||
-      (f === "document.documentMetadata@1" && opts.docMeta !== false),
+      f === "document.documentMetadata@1",
     document: {
       tree: async () =>
         [...items].map((id) => ({
@@ -175,14 +175,6 @@ describe("source-part collector (modelled host)", () => {
     expect(m.parts.has(path)).toBe(true);
   });
 
-  it("without the delete door nothing is dropped", async () => {
-    const m = modelHost({ canDelete: false });
-    m.parts.set("sources/00000000deadbeef.json", enc("{}"));
-    startPartsCollector(m.host);
-    await m.open();
-    await m.save();
-    expect(m.parts.has("sources/00000000deadbeef.json")).toBe(true);
-  });
   it("a file opened after activation is collected (document.onDidOpen)", async () => {
     const m = modelHost();
     startPartsCollector(m.host);
@@ -225,7 +217,7 @@ describe("the migrated document-values part", () => {
     expect(await readDocumentValues(m.host)).toEqual({ edition: "Legacy" });
   });
 
-  it("stays when the metadata carries no values, or the host has no metadata door", async () => {
+  it("stays when the metadata carries no values", async () => {
     const other = modelHost();
     other.parts.set(DOCUMENT_VALUES_PART, legacy());
     other.docMeta.now = { v: 1, data: { somethingElse: true } };
@@ -233,14 +225,6 @@ describe("the migrated document-values part", () => {
     await other.open();
     await other.save();
     expect(other.parts.has(DOCUMENT_VALUES_PART)).toBe(true);
-
-    const old = modelHost({ docMeta: false });
-    old.parts.set(DOCUMENT_VALUES_PART, legacy());
-    old.docMeta.now = { v: 1, data: { documentValues: { edition: "Legacy" } } };
-    startPartsCollector(old.host);
-    await old.open();
-    await old.save();
-    expect(old.parts.has(DOCUMENT_VALUES_PART)).toBe(true);
   });
 
   it("stays when an undo before the save took the migrated values away again", async () => {

@@ -108,7 +108,6 @@ import {
   lastRenderReport,
   subscribeRenderReport,
 } from "../render-report";
-import { autoRendererFor } from "../auto-render";
 import { resolveBindings, watchProviders, type Bindings } from "../bindings";
 import {
   clearOutlineHighlight,
@@ -116,7 +115,6 @@ import {
   onCanvasPick,
 } from "../outline-highlight";
 import {
-  documentValuesNotify,
   loadWebSource,
   readDocumentValues,
   writeDocumentValues,
@@ -880,7 +878,7 @@ function useBindings(
   host: BundleHost,
   id: ElementId,
   source: WebFrameSource,
-): { bindings: Bindings; refresh(): void } {
+): { bindings: Bindings } {
   const [bindings, setBindings] = useState<Bindings>(NO_BINDINGS);
   const [tick, bump] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
@@ -902,7 +900,7 @@ function useBindings(
       stale = true;
     };
   }, [source.html, source.css, tick]);
-  return { bindings, refresh: bump };
+  return { bindings };
 }
 
 /** The bound names the draft uses and their values; a `doc.<key>` with no
@@ -911,15 +909,10 @@ function BoundData({
   host,
   names,
   bindings,
-  onChanged,
 }: {
   host: BundleHost;
   names: string[];
   bindings: Bindings;
-  /** A document value was written to a host without the document metadata
-   *  door (a part write raises no document change; the metadata write does,
-   *  and that change refreshes the bindings and the canvas by itself). */
-  onChanged(): void;
 }): ReactElement | null {
   const { t } = useStrings();
   const [values, setValues] = useState<Record<string, string>>({});
@@ -937,10 +930,6 @@ function BoundData({
         ? null
         : t(S.boundNotSaved, { reason: out.reason ?? t(S.refused) }),
     );
-    if (!out.applied || documentValuesNotify(host)) return;
-    onChanged();
-    // The canvas re-renders the frames that name the value.
-    void autoRendererFor(host)?.reconcile("change");
   };
   return (
     <div data-web-bound>
@@ -1119,7 +1108,7 @@ function SourceEditor({
   // `frame.` and `data.`, re-read when the document changes and when a data
   // provider announces a new revision — the preview substitutes them as
   // the canvas does.
-  const { bindings, refresh: refreshBindings } = useBindings(host, id, preview);
+  const { bindings } = useBindings(host, id, preview);
   const rendered = renderWebFrameSource(preview, bindings.vars);
   // W-06 — document faces the host asset store served BYTES for and we
   // composed into real `@font-face` rules (data URLs — see
@@ -1675,12 +1664,7 @@ function SourceEditor({
           })}
         </About>
       </div>
-      <BoundData
-        host={host}
-        names={boundNamesIn(draft)}
-        bindings={bindings}
-        onChanged={refreshBindings}
-      />
+      <BoundData host={host} names={boundNamesIn(draft)} bindings={bindings} />
       <div style={kicker}>{t(S.preview)}</div>
       {/* Font badge: W1 honesty + the W-06 flip. When the asset store
           serves a used family's BYTES, the panel composes a real

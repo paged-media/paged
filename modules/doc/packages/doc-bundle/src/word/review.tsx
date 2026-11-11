@@ -949,9 +949,7 @@ export function contributeReview(
     }, 150);
   };
   disposers.push(host.document.onDidChange(refreshSoon).dispose);
-  if (host.supports("document.onDidOpen@1")) {
-    disposers.push(host.document.onDidOpen(refreshSoon).dispose);
-  }
+  disposers.push(host.document.onDidOpen(refreshSoon).dispose);
   const byId = new Map(
     (Object.keys(REVIEW_COMMAND) as ReviewCommandName[]).map((n) => [
       REVIEW_COMMAND[n] as string,

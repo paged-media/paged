@@ -16,9 +16,7 @@ import {
   storeData,
   type PersistedSession,
 } from "../persist";
-import { createSession } from "../session";
 
-import { silentConsole as silent } from "@paged-media/plugin-sdk";
 describe("the session part schema [data.plugin.persistence]", () => {
   const sample: PersistedSession = {
     v: 1,
@@ -72,35 +70,6 @@ describe("the session part schema [data.plugin.persistence]", () => {
     expect(written).toHaveLength(1);
     expect(written[0]).toMatch(/^data\/[0-9a-f]{32}\.csv$/);
     expect(await loadData(a, async () => null)).toBeNull();
-  });
-});
-
-describe("a host without container parts [data.plugin.persistence]", () => {
-  it("says the session is not saved, once, and never writes", async () => {
-    const host = {
-      log: silent,
-      supports: () => false,
-      parts: {
-        write: async () => {
-          throw new Error("no container");
-        },
-        read: async () => null,
-      },
-      document: {
-        onWillSave: () => ({ dispose() {} }),
-        onDidChange: () => ({ dispose() {} }),
-      },
-    } as never;
-    const s = createSession(host, 0);
-    await s.restore();
-    s.addQuery("q", "SELECT 1", "scalar");
-    s.addQuery("q2", "SELECT 2", "scalar");
-    await s.flushPersist();
-    const st = s.getState();
-    expect(st.persistence.status).toBe("unavailable");
-    expect(st.diagnostics.filter((d) => d.source === "persist")).toHaveLength(
-      1,
-    );
   });
 });
 

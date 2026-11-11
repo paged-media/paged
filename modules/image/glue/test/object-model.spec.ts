@@ -516,7 +516,7 @@ lane("the object model on the real plugin, headless", () => {
  *  (and a part-write count) are reachable. */
 async function omDoc() {
   const probe = {
-    om: null as ReturnType<typeof contributeImageObjectModel>,
+    om: null as ReturnType<typeof contributeImageObjectModel> | null,
     partWrites: 0,
   };
   const bundle = defineBundle({

@@ -82,8 +82,7 @@ class Thumbs {
     const key = `${pageId}@${widthPx}`;
     const hit = this.urls.get(key);
     if (hit) return hit;
-    if (this.pending.has(key) || !this.host.supports("render.snapshot@1"))
-      return null;
+    if (this.pending.has(key)) return null;
     this.pending.add(key);
     void this.host.render
       .snapshot(pageId, { widthPx })

@@ -56,8 +56,7 @@ interface FakeEngine {
 }
 
 /** A host with the engine's two persistence rules and nothing else. */
-function fakeEngine(opts: { parts?: boolean } = {}): FakeEngine {
-  const withParts = opts.parts ?? true;
+function fakeEngine(): FakeEngine {
   const labels = new Map<string, string>();
   const parts = new Map<string, Uint8Array>();
   const undoStack: Array<() => void> = [];
@@ -93,7 +92,7 @@ function fakeEngine(opts: { parts?: boolean } = {}): FakeEngine {
   };
 
   const host = {
-    supports: (f: string) => withParts && f.startsWith("storage.parts@"),
+    supports: (f: string) => f.startsWith("storage.parts@"),
     document: {
       getMetadata: async (id: ElementId) => {
         const v = labels.get(key(id));
@@ -127,10 +126,9 @@ function fakeEngine(opts: { parts?: boolean } = {}): FakeEngine {
     },
     parts: {
       write: async (p: string, b: Uint8Array) => {
-        if (!withParts) throw new Error("no container writer");
         parts.set(p, b); // NOT undoable — the host contract
       },
-      read: async (p: string) => (withParts ? (parts.get(p) ?? null) : null),
+      read: async (p: string) => parts.get(p) ?? null,
       list: async () => [...parts.keys()],
       delete: async (p: string) => void parts.delete(p),
     },
@@ -248,25 +246,6 @@ describe("sources over the 64 KiB label cap", () => {
     await writeWebSource(e.host, frame, big("pointer"));
     const metadata = await e.host.document.getMetadata(frame);
     expect(webFrameObjectType.matches({ metadata } as never)).toBe(true);
-  });
-
-  it("a host without container parts refuses a large save visibly, writing nothing", async () => {
-    const e = fakeEngine({ parts: false });
-    await writeWebSource(e.host, frame, src("<p>kept</p>"));
-    const out = await writeWebSource(e.host, frame, big("refused"));
-    expect(out.applied).toBe(false);
-    expect(out.reason).toMatch(/64 KiB/);
-    // The previous source is untouched.
-    expect((await loadWebSource(e.host, frame))?.html).toBe("<p>kept</p>");
-  });
-
-  it("a refused insert/import is a visible diagnostic, not only a log line", async () => {
-    const e = fakeEngine({ parts: false });
-    await insertWebFrame(e.host, "panel", big("refused-import"));
-    const all = [...e.diagnostics.values()].flat();
-    expect(
-      all.some((d) => d.severity === "error" && /64 KiB/.test(d.message)),
-    ).toBe(true);
   });
 });
 

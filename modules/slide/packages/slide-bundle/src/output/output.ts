@@ -276,9 +276,7 @@ export class Output {
         const v = await renderVideo(show, frames, opts, {
           signal,
           onProgress: (p) => progress(p.done, p.total),
-          media: this.host.supports("document.media@1")
-            ? (id) => this.host.media.read(id)
-            : undefined,
+          media: (id) => this.host.media.read(id),
           animation: async (slide, scale) => {
             if (!slide.anim) return null;
             const scene = await drawScene(
