@@ -24,14 +24,19 @@
 // (core ADR 168, protocol 72): the engine writes the index into a story,
 // replacing its text, as InDesign's Replace Existing Index does. The
 // story is the one holding the text cursor, so the panel asks for one
-// rather than guessing which story is the index.
+// rather than guessing which story is the index. New page reference marks
+// the cursor with a topic (`Main:Sub`, up to four levels) through the
+// host's `paged.insert.indexEntry` (P2), which paged.doc's Mark Entry
+// dialog calls too.
 
 import { useState } from "react";
+import { REFERENCE_INSERT_COMMANDS, topicOf } from "@paged-media/helpers";
 import {
   ListRows,
   useCanvasClient,
   useCollection,
   useContentSelection,
+  useRegistries,
 } from "@paged-media/shell";
 import type { IndexTopicSummary } from "@paged-media/client";
 import { defineMessages, useStrings } from "@paged-media/strings";
@@ -44,6 +49,8 @@ const M = defineMessages("app.indexPanel", {
     "Generate the index into the story with the text cursor (its text is replaced)",
   placeCursor: "Place the text cursor in the story that will hold the index",
   generate: "+ Generate index",
+  topic: "Topic (Main:Sub)",
+  newReference: "+ New page reference",
 });
 
 export function IndexPanel() {
@@ -52,6 +59,8 @@ export function IndexPanel() {
   const client = useCanvasClient();
   const { contentSelection } = useContentSelection();
   const [failed, setFailed] = useState<string | null>(null);
+  const [topic, setTopic] = useState("");
+  const registries = useRegistries();
   // A story's body text, not a table cell's: the index is a story.
   const target =
     contentSelection && !contentSelection.cell
@@ -96,6 +105,33 @@ export function IndexPanel() {
           />
         </div>
       )}
+      <div className="px-3 pb-2 flex flex-col gap-2" data-index-entry-insert>
+        <input
+          className="w-full text-xs h-[26px] rounded-[6px] border bg-transparent px-2"
+          style={{ borderColor: "var(--chrome-divider)" }}
+          placeholder={strings.t(M.topic)}
+          aria-label={strings.t(M.topic)}
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          data-index-topic
+        />
+        <button
+          type="button"
+          disabled={!target || topicOf(topic).length === 0}
+          title={target ? undefined : strings.t(M.placeCursor)}
+          onClick={() =>
+            void registries.commands.invoke(
+              REFERENCE_INSERT_COMMANDS.indexEntry,
+              { topic: topicOf(topic) },
+            )
+          }
+          data-new-page-reference
+          className="w-full text-xs h-[30px] rounded-[7px] border text-muted-foreground disabled:opacity-55"
+          style={{ borderColor: "var(--chrome-divider)" }}
+        >
+          {strings.t(M.newReference)}
+        </button>
+      </div>
       <div className="px-3 pb-3">
         <button
           type="button"

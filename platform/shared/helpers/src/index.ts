@@ -188,3 +188,15 @@ export {
   type EmbeddedFace,
   type FontRefusal,
 } from "./embedded-fonts.ts";
+export {
+  MAX_INDEX_LEVELS,
+  REFERENCE_INSERT_COMMANDS,
+  insertReference,
+  referenceTypedCommands,
+  topicOf,
+  type CrossReferenceKind,
+  type CrossReferenceTarget,
+  type ReferenceCaret,
+  type ReferenceDoor,
+  type ReferenceInsert,
+} from "./text-references.ts";

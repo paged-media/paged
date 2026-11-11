@@ -379,6 +379,11 @@ Status (draw items, one line each; updated as they land):
 - Slide motion path: DONE 2026-11-11. The motion-path editor's presses go through the host's
   `DirectSelectMachine` (`@paged-media/vector-tools`) over the path as an anchor table; its own
   move-handle code is gone. The storage stays slide's (slide ADR 714 amended).
+- Reference inserts: DONE 2026-11-11. Footnotes, endnotes, destinations (Word's bookmarks),
+  cross-references and index entries are host commands (`paged.insert.*`, editor ADR 315) with Type menu
+  rows and forms in the host Cross-References and Index panels, over one shared insert
+  (`@paged-media/helpers` `insertReference`); paged.doc's Word-styled References dialogs call them
+  (doc ADR 612 amended).
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
   and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
   opacity land on the selection in one batch, each target written only what its own snapshot

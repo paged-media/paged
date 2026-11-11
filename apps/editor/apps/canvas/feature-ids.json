@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 921,
+    "command": 926,
     "keybinding": 201,
-    "menu": 665,
+    "menu": 670,
     "panel": 151,
     "tool": 123
   },
@@ -4056,6 +4056,16 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.insert.bookmark",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.insert.crossReference",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.insert.deletePage",
       "kind": "command",
       "owner": "editor"
@@ -4066,7 +4076,22 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.insert.endnote",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.insert.footnote",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.insert.generateImage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.insert.indexEntry",
       "kind": "command",
       "owner": "editor"
     },
@@ -8667,6 +8692,31 @@
     },
     {
       "id": "menu:Type/Glyphs…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Insert bookmark…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Insert cross-reference…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Insert endnote",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/Insert footnote",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Type/New index entry…",
       "kind": "menu",
       "owner": "editor"
     },
