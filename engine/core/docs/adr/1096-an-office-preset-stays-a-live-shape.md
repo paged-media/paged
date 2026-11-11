@@ -88,43 +88,65 @@ and re-exports the evaluator under its old paths. `dml-geom`'s `the_table_is_ann
 the XML with the DrawingML reader the modules used before and asserts that every preset's program
 and text rectangle equal the table's, so every preset evaluates bit-identically.
 
-- **The model.** A path item (`Polygon`) gains `preset: Option<PresetShape>`: the preset's name,
-  its adjust values as authored (`adj`, `adj1`, … with their values), the box the outline was
-  drawn for, the flips, and for a connector the two glued ends (the item and the site index).
-  `serde(default)`, absent when `None`, so documents without presets write and hash as before.
-- **Live while the anchors are its shape** (ADR 1047's rule): the reads answer the preset only
-  while the anchors are what the program makes for the stated box under an axis-aligned scale
-  (the refit of slide ADR 717, 0.05 pt). A point edit ends it without a write.
-- **The writes.** A resize of a live preset is refitted in the same apply: the program is drawn
-  again for the new box, so a rounded rectangle keeps its radius. `frameShapePresetAdjust` sets
-  one adjust value (or all of them) and redraws; `frameShapePreset` sets or clears the preset
-  (clearing is Expand Shape). The inverse is a batch, as for the polygon writes, so undo restores
-  the model exactly. A connector glued to an item is routed again when that item moves, in the
-  same apply.
-- **Handles.** The adjust handles are an engine read (position, polar or xy, the values they
-  move); the host draws and drags them through the handles door (`overlay.handles@1`, extensions
-  ADR 339 and 1103) for every module, and a drag writes `frameShapePresetAdjust`.
-- **The boundary.** pptx, docx and xlsx readers map `a:prstGeom` + `a:avLst` (and `a:stCxn` /
-  `a:endCxn`) onto the field; their writers write `a:prstGeom` from it while it is live and
-  `a:custGeom` (`dml_geom::place::cust_geom`) otherwise. IDML keeps the outline and stamps the
-  parameters in a label, as ADR 1047 does for polygons.
-- **Migration.** A `.paged` document with slide ADR 717's labels is lifted on open: the label's
-  `preset` and `box` become the field and the label is dropped, as IDML's `paged:liveShape` is.
-  Slide's `live` follow, `live-presets.ts` and `adjust-handles.ts` are then removed; sheet's
-  `table-shapes.ts` stops drawing shapes again on refresh.
+- **The model** (`paged_model::live_shape`). `Polygon::preset: Option<PresetShape>`: the program's
+  name, its adjust values as authored (`("adj", "val 16667")`, overriding the program's defaults),
+  the box the outline is drawn for (`frame`, `[x, y, w, h]` in the item's own anchor coordinates),
+  the flips (anchors mirrored within the box), the `part` the item draws (every path, the filled
+  paths, or the stroke-only detail paths over a filled shape, which is a second item because one
+  item has one paint), a `key` the items one shape was lowered to share, and for a connector its
+  glued ends (`PresetConnector`: the item's `Self` and the site index). A shape's text frame
+  carries `TextFrame::preset_text` (`PresetText { key }`); Word's anchored shapes carry
+  `AnchoredFrame::preset`. Every field is `serde(default)` and absent when unset, so documents
+  without presets write and hash as before. In the lead's words this is `LiveShape::Preset`: it
+  sits beside ADR 1047's `Polygon::live_shape`, which keeps its `.paged` form untouched.
+- **Live while the anchors are its shape** (ADR 1047's rule). `paged_preset_geom::model::live_preset`
+  answers the preset only while the anchors are what the program draws for its box (fitted by
+  least squares, `live::FIT_TOLERANCE`); a point edit ends it without a write and a stale preset
+  reads as nothing. Rotation lives in the item transform, never in the anchors.
+- **The writes** (`paged-mutate`, `apply/preset_shape.rs`). `frameShapePreset` (`Value::Text`, the
+  preset as JSON) sets it and draws the anchors for it unless they already are what it draws; `""`
+  ends it and keeps the path (Expand Shape). `frameShapePresetAdjust` merges adjust values and
+  draws again. `frameShapePresetHandle` (`Value::PathPoint`: handle `address.index` to `position`)
+  lets the engine solve the adjust values the handle sets (`live::drag_handle`, within the
+  handle's range). After any write that moves or resizes an item (its path, transform, scale,
+  rotation, flips or box) the engine follows in the same apply: a live preset on it is refitted
+  (the scale moved out of the transform into the box and the program drawn again, so a rounded
+  rectangle keeps its radius), its companions on the same box follow (detail items redrawn with
+  their own part, text frames scaled with the box), and every connector glued to a moved item is
+  routed again between its sites. Every inverse restores the touched items verbatim through the
+  raw form of `frameShapePreset` (`{"restore": …}`, which neither redraws nor follows), so undo
+  restores the model exactly (ADR 197). Anchored frames take the three writes (their box stays the
+  box the text flow placed); their move and resize follow is left to later work.
+- **Reads.** `frameShapePreset` reads the live preset with its adjust handles (`handles`: position
+  in the item's own coordinates, polar or xy, the values they move); `frameShapePresetAdjust`
+  every adjust value of the program. Protocol 78, additive (three settable paths, 291 in all).
+- **Handles in every module.** The host's live-shape overlay (editor ADR 310) draws a live
+  preset's handles, yellow as in Office, under the Selection and Direct Selection tools in every
+  module's context, and a drag commits one `frameShapePresetHandle` write. No module draws its own.
+- **The boundary.** The pptx, docx and xlsx readers map `a:prstGeom` + `a:avLst` (and `a:stCxn` /
+  `a:endCxn`) onto the fields; their writers write `a:prstGeom` + `a:avLst` back while the preset is
+  live and `a:custGeom` otherwise. Office's line ends map onto the model's Office head (engine
+  ADR 1093, amendment 2). IDML keeps the outline and stamps the preset in the item's
+  `paged:liveShape` label, as ADR 1047 does for polygons; the reader lifts it back.
+- **Migration.** A `.paged` document with slide ADR 717's labels is lifted once when it opens: the
+  labels' preset, box and connector become the fields and leave the label. Slide's `live` follow,
+  `live-presets.ts` and `adjust-handles.ts` are removed; sheet's `table-shapes.ts` keeps a shape
+  across a refresh instead of drawing it again.
 
-## Open questions for the build
+## Open questions
 
-- A preset with a stroke-only detail path (a cube's edges, a can's lid) is two items in slide
-  today, since one engine item has one paint. Either the preset lives on the filled item and
-  owns its detail item (redrawn with it), or the engine draws a per-contour paint mode
-  (`darken`, `lighten`, no fill), which also covers the shaded faces slide now draws as separate
-  items.
-- The text rectangle (`a:rect`) of a preset places the shape's text frame; whether the frame
-  follows a refit through the engine or stays a companion item.
+- A shaded face (`darken`, `lighten` paths of ribbons, action buttons, curved arrows) is still drawn
+  as its own item by the modules that draw it; a per-contour paint mode in the engine would make
+  it part of the preset.
+- Anchored frames (Word) take the preset writes and reads but not the follow after a move or
+  resize; a resized Word shape is redrawn by the docx lowering, not refitted by the engine.
 
 ## Consequences
 
-- Once built, every host (the editor, the command line, scripts, the server) keeps an Office
-  preset a preset, and doc and sheet shapes get adjust handles from the host's Selection tools.
-- Until the owner chooses, slide keeps its metadata mechanism, doc and sheet draw presets once.
+- Every host (the editor, the command line, scripts, the server) keeps an Office preset a preset:
+  a resize keeps its corners, a connector follows its shapes, an adjust value or a handle drag
+  redraws it, with exact undo.
+- Doc, sheet and slide shapes are edited by the same host handles; vector editing is the same on an
+  Illustrator path, a PowerPoint preset or a Word shape.
+- The preset table is data in every wasm that evaluates presets (the engine's now, too); no XML
+  reader or XML text ships for it.
