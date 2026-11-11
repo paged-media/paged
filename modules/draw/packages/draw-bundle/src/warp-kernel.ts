@@ -24,11 +24,11 @@
 // drag sample crosses it on every pointer move. The layouts below are
 // `warp.rs`'s, field for field.
 //
-// COST (Apple M-series): a Liquify step on a few hundred anchors took
-// 0.23 ms in the release wasm. A Puppet Warp drag sample (the whole pin
-// set solved, every control point mapped) solves with a direct banded
-// factorisation (`paged_warp::puppet::VECTOR_SOLVE`): 1.7 ms natively on
-// a 264-vertex mesh; `test/warp-machines.spec.ts` bounds the wasm's.
+// COST, measured in the release wasm (Apple M-series, 2026-11-11): a
+// Puppet Warp drag sample on a 264-vertex mesh (the whole pin set solved
+// with `paged_warp::puppet::VECTOR_SOLVE`'s direct banded factorisation,
+// every control point mapped) 1.96 ms; a Liquify step 0.17 ms.
+// `test/warp-machines.spec.ts` measures and bounds both.
 
 import type {
   AnchorTable,
