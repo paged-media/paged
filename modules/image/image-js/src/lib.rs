@@ -267,7 +267,9 @@ mod wasm {
                 rgba.len()
             )));
         }
-        Ok(paged_image_adjust::apply_rgba8(&rgba, width, height, &ops, 1.0))
+        Ok(paged_image_adjust::apply_rgba8(
+            &rgba, width, height, &ops, 1.0,
+        ))
     }
 
     /// A filter on a region (ADR 465): the adjustment chain whose

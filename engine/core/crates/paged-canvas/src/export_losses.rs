@@ -1154,7 +1154,10 @@ pub(crate) fn image_adjustment_losses(scene: &Document) -> Vec<String> {
             anchored(&p.anchored_frames, &mut frames);
         }
     }
-    for f in frames.into_iter().filter(|f| !f.image_adjustments.is_empty()) {
+    for f in frames
+        .into_iter()
+        .filter(|f| !f.image_adjustments.is_empty())
+    {
         let names: Vec<&str> = f.image_adjustments.iter().map(|op| op.name()).collect();
         out.push(format!(
             "image filter stack on anchored frame `{}` ({}) is a paged-native construct — \
