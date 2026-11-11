@@ -497,7 +497,7 @@ Status (draw items, one line each; updated as they land):
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
   font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
   right: PowerPoint does not hyphenate.
-- **all:** path tools in every context (DONE 2026-11-03: `CONTEXT_SHARED_TOOL_IDS` adds Pen, Direct Selection, Line, Rectangle, Ellipse, Polygon; editor ADR 311 amended);
+- **all:** path tools in every context (DONE 2026-11-03: `CONTEXT_SHARED_TOOL_IDS` adds Pen, Direct Selection, Line, Rectangle, Ellipse, Polygon; 2026-11-11: Rotate, Scale, Shear, Pencil, Smooth, Scissors, Gradient, Eyedropper and Measure too; editor ADR 311 amended);
   image filters as `actions@1` steps on any picture; barcode insert; ML service and door.
 
 ### Small helpers
