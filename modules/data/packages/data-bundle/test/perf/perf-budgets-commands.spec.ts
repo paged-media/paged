@@ -136,7 +136,7 @@ describe.skipIf(!RUN_BUDGETS)(
     // in one batch.
     // Wave 4 (persistence): +1 consent read — the session snapshot reports remote-source consent.
     const W1_IMPORT: Measured = {
-      hostCalls: 1,
+      hostCalls: 0,
       hostReads: 0,
       mutates: 0,
       mutationOps: 0,
@@ -310,7 +310,7 @@ describe.skipIf(!RUN_BUDGETS)(
         },
         { mutationOps: 101, hostCalls: 6, wasmCalls: 4 },
       ),
-      { hostCalls: LABELLED ? 7 : 4 },
+      { hostCalls: LABELLED ? 5 : 4 },
     );
     it("W2 refreshes 100 fields in one story [data.perf.gates]", async () => {
       h = await openDataHost();
@@ -445,7 +445,7 @@ describe.skipIf(!RUN_BUDGETS)(
         },
         { mutationOps: 40, wasmCalls: 60 },
       ),
-      { hostCalls: 102, placeholdersRead: 0 },
+      { hostCalls: 62, placeholdersRead: 0 },
     );
     it("W3 steps the preview through 20 records [data.perf.gates]", async () => {
       h = await openDataHost();
@@ -501,7 +501,7 @@ describe.skipIf(!RUN_BUDGETS)(
     // the command): -1 parts.write.
     const W4: Measured = onLabelled(
       {
-        hostCalls: 8,
+        hostCalls: 7,
         hostReads: 5,
         mutates: 1,
         mutationOps: 673,
@@ -615,7 +615,7 @@ describe.skipIf(!RUN_BUDGETS)(
         },
         { mutationOps: 41, hostCalls: 10, wasmCalls: 24 },
       ),
-      { hostCalls: LABELLED ? 11 : 8, mutationOps: 61 },
+      { hostCalls: LABELLED ? 9 : 8, mutationOps: 61 },
     );
     it("W5 lowers 20 variable bindings at once [data.perf.gates]", async () => {
       h = await openDataHost();
