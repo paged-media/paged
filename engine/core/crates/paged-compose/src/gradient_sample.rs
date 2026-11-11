@@ -85,21 +85,12 @@ pub fn sample_ramp(stops: &[GradientStop], t: f32) -> Color {
 
 /// Linear light → the sRGB-encoded value (0..=1, clamped).
 pub fn srgb_encode(v: f32) -> f32 {
-    let v = v.clamp(0.0, 1.0);
-    if v <= 0.003_130_8 {
-        12.92 * v
-    } else {
-        1.055 * v.powf(1.0 / 2.4) - 0.055
-    }
+    paged_color::math::linear_to_srgb(v.clamp(0.0, 1.0))
 }
 
 /// An sRGB-encoded value → linear light.
 pub fn srgb_decode(v: f32) -> f32 {
-    if v <= 0.040_45 {
-        v / 12.92
-    } else {
-        ((v + 0.055) / 1.055).powf(2.4)
-    }
+    paged_color::math::srgb_to_linear(v)
 }
 
 #[cfg(test)]

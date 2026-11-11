@@ -116,7 +116,7 @@ import {
   type GraphicStyleBase,
 } from "./graphic-styles";
 import { symbolInstanceOf } from "./symbols";
-import { engineSymbols, readEngineSymbols } from "./symbols-engine";
+import { readEngineSymbols } from "./symbols-engine";
 
 /** Command titles, message keys `registerCommand` reads in the editor's locale. */
 const M = defineMessages("draw.selectSame", {
@@ -475,7 +475,7 @@ export async function selectSameMatches(
   }
   // WP6.8 (draw ADR 365) — an engine instance is one page item that names
   // its symbol; the store lists every instance of each.
-  if (c === "symbol" && engineSymbols(host) && reference.kind === "instance") {
+  if (c === "symbol" && reference.kind === "instance") {
     const address = `instance:${String(reference.id)}`;
     const row = (await readEngineSymbols(host)).find((r) =>
       r.instances.includes(address),

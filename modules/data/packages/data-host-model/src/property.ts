@@ -7,6 +7,7 @@
 
 import type { Mutation, ObjectOp } from "@paged-media/plugin-api";
 import { asciiJson } from "@paged-media/helpers";
+import { nativeSwatchMintOps } from "@paged-media/plugin-sdk";
 
 /** `data-core` `TargetRef`: `"host"` or `{ selector }`. */
 export type TargetRef = "host" | { selector: string };
@@ -102,18 +103,16 @@ export function findSwatch(
  *  InDesign gives an unnamed colour (`R=255 G=0 B=0`). */
 export function mintSwatch(intent: ColorIntent): Mutation | null {
   if (!intent.spec) return null;
-  return {
-    op: "createSwatch",
-    args: {
-      spec: {
-        selfId: `Color/${intent.name}`,
-        name: intent.name,
-        space: intent.spec.space,
-        value: intent.spec.value,
-        model: "Process",
-      },
+  const [op] = nativeSwatchMintOps([
+    {
+      selfId: `Color/${intent.name}`,
+      name: intent.name,
+      space: intent.spec.space,
+      value: [...intent.spec.value],
+      model: "Process",
     },
-  } as Mutation;
+  ]);
+  return op ?? null;
 }
 
 /**

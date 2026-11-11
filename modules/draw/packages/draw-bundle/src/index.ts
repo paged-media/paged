@@ -149,12 +149,6 @@ export {
   type KnifeTarget,
 } from "./commands/knife";
 export { createKnifeHandler, type KnifeHandlerOptions } from "./handlers/knife";
-// SCISSORS AT ANY POINT — split the clicked segment, open the path there.
-export {
-  applyScissorsAt,
-  createScissorsHandler,
-  type ScissorsResult,
-} from "./handlers/scissors";
 export {
   PATH_OPS_COMMAND_IDS,
   PATH_OPS_COMMAND_CATEGORY,
@@ -300,10 +294,8 @@ export {
   DELETE_PATTERN_TILES_COMMAND_ID,
   RELEASE_PATTERN_COMMAND_ID,
   SAVE_PATTERN_SWATCH_COMMAND_ID,
-  PATTERN_PAINT_FEATURE,
   PATTERN_PART,
   PATTERN_LIBRARY_VERSION,
-  PATTERN_FEATURE,
   PATTERN_LEGACY_FIELD,
   PATTERN_MAX_TILES,
   PATTERN_DEFAULTS,
@@ -381,9 +373,8 @@ export {
 // The catalog's sibling of pattern, not the same thing: a pattern is a
 // swatch-shaped FILL, a repeat is an object TRANSFORM. The first feature
 // in this repo that builds in ONE undo step (C-15 `bindCreated` is in
-// the contract as of plugin-sdk `bc52766`); clipping rides B-18's
-// pasteInto and costs the second, because that op is also what hides an
-// instance from the scene tree. Pure model + the exact wire builders
+// the contract as of plugin-sdk `bc52766`), clipped or not (a clip group,
+// engine ADR 1010). Pure model + the exact wire builders
 // exported for the conformance spec (the no-second-copy rule).
 export {
   REPEAT_COMMAND_IDS,
@@ -397,14 +388,12 @@ export {
   RELEASE_REPEAT_COMMAND_ID,
   REPEAT_PART,
   REPEAT_LIBRARY_VERSION,
-  REPEAT_FEATURE,
   REPEAT_MAX_INSTANCES,
   REPEAT_DEFAULTS,
   REPEAT_KINDS,
   REPEAT_CLIP_HANDLE,
   REPEAT_LIVE_NOTE,
   REPEAT_CLIP_NOTE,
-  CLIP_GROUP_FEATURE,
   repeatParamsFrom,
   repeatPlacementsFor,
   radialCenterOfDraft,
@@ -423,7 +412,6 @@ export {
   repeatClipOf,
   withRepeatKey,
   repeatBatchFor,
-  repeatClipBatchFor,
   repeatExpandBatchFor,
   repeatReleaseBatchFor,
   readRepeatLibrary,
@@ -516,7 +504,6 @@ export {
   LIVE_PAINT_COMMAND_CATEGORY,
   LIVE_PAINT_PART,
   LIVE_PAINT_LIBRARY_VERSION,
-  LIVE_PAINT_FEATURE,
   LIVE_PAINT_KINDS,
   LIVE_PAINT_DEFAULT_FILL,
   BIND_LIVE_PAINT_FACE,
@@ -703,9 +690,7 @@ export {
   nativeAppearanceOf,
   migrateAppearanceMutations,
   type NativePaintLayer,
-  NATIVE_APPEARANCE_FEATURE,
   APPEARANCE_KINDS,
-  nativeAppearanceOn,
   layersOfValue,
   readNativeAppearance,
   explicitLayers,
@@ -741,7 +726,6 @@ export {
   GRAPHIC_STYLES_COMMAND_CATEGORY,
   GRAPHIC_STYLES_PART,
   GRAPHIC_STYLES_LIBRARY_VERSION,
-  GRAPHIC_STYLES_FEATURE,
   GRAPHIC_STYLE_BASE_PATHS,
   EMPTY_GRAPHIC_STYLE_BASE,
   SAVE_GRAPHIC_STYLE_COMMAND_ID,
@@ -797,21 +781,14 @@ export {
   GRAPHIC_STYLES_PANEL_ID,
   GRAPHIC_STYLES_NOTE,
 } from "./panels/graphic-styles-panel";
-// Illustrator Phase 2 (§16.1) — SYMBOLS v0: a named DEFINITION in a
-// document-resident container part + INSTANCES re-emitted from it and
-// stamped with a link. The engine has no symbol primitive and no
-// element-duplicate op, so an instance is re-emitted geometry + flat
-// paint — see commands/symbols.ts for the persistence shape, the
-// measured undo counts and everything v0 deliberately does NOT build
-// (the eight symbol-SET tools, nine-slice, 3D mapping). Pure model +
-// the exact wire builders exported for the conformance spec (the
-// no-second-copy rule).
+// SYMBOLS — the commands (on the engine's symbols, engine ADR 1039) and
+// the v0 library model a document made before them carries, with the
+// wire builders its migration emits (commands/symbols.ts).
 export {
   SYMBOLS_COMMAND_IDS,
   SYMBOLS_COMMAND_CATEGORY,
   SYMBOLS_PART,
   SYMBOLS_LIBRARY_VERSION,
-  SYMBOLS_FEATURE,
   SYMBOL_REGISTRATIONS,
   DEFAULT_SYMBOL_REGISTRATION,
   DEFINE_SYMBOL_COMMAND_ID,
@@ -825,31 +802,14 @@ export {
   parseSymbolPaint,
   parseSymbolLibrary,
   serializeSymbolLibrary,
-  mintSymbolId,
-  mintSymbolInstanceId,
-  findSymbol,
-  upsertSymbol,
-  renameSymbolIn,
-  removeSymbolFrom,
-  symbolBoundsOf,
   registrationPointOf,
-  symbolDefinitionFrom,
   symbolInstanceOf,
-  withSymbolInstance,
   symbolPlacePlanFor,
   symbolContourCounts,
-  bindSymbolPieces,
-  symbolInsertBatchFor,
   symbolFinishBatchFor,
-  symbolUnlinkBatchFor,
   readSymbolLibrary,
   writeSymbolLibrary,
   symbolInstances,
-  expandToLeaves,
-  selectedSymbolInstances,
-  liveInstanceOrigin,
-  captureSymbolSources,
-  emitSymbolInstance,
   applyDefineSymbol,
   applyPlaceSymbolInstance,
   applyRedefineSymbol,
@@ -874,9 +834,8 @@ export {
   type SymbolReplacement,
 } from "./commands/symbols";
 // The SYMBOLS panel (React, the Layers / Appearance / Graphic Styles
-// idiom) — the view over the library + whether the selection is an
-// instance, with the not-undoable library and the unbuilt P2 symbol-set
-// tools stated inline.
+// idiom) — the view over the document's symbols + the instances the
+// selection holds.
 export {
   makeSymbolsPanel,
   symbolRowLabel,
@@ -894,8 +853,6 @@ export {
   type SymbolismScope,
 } from "./commands/symbolism";
 export {
-  ENGINE_SYMBOLS_FEATURE,
-  engineSymbols,
   readEngineSymbols,
   readInstanceStates,
   engineInstanceIds,
@@ -1120,7 +1077,6 @@ export {
   BLEND_MAX_STEPS,
   BLEND_PART,
   BLEND_LIBRARY_VERSION,
-  BLEND_FEATURE,
   BLEND_DEFAULTS,
   BLEND_SPACINGS,
   BLEND_ORIENTATIONS,
@@ -1214,7 +1170,6 @@ export {
   RELEASE_OBJECTS_ON_PATH_COMMAND_ID,
   OBJECTS_ON_PATH_PART,
   OBJECTS_ON_PATH_LIBRARY_VERSION,
-  OBJECTS_ON_PATH_FEATURE,
   OBJECTS_ON_PATH_MAX,
   OBJECTS_ON_PATH_DEFAULTS,
   OBJECTS_ON_PATH_NOTE,

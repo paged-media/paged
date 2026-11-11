@@ -226,13 +226,7 @@ fn cfa_dng() -> Vec<u8> {
     )
 }
 
-fn srgb(v: f32) -> f32 {
-    if v <= 0.003_130_8 {
-        v * 12.92
-    } else {
-        1.055 * v.powf(1.0 / 2.4) - 0.055
-    }
-}
+use paged_color::math::linear_to_srgb as srgb;
 
 /// Every pixel at least one away from a patch edge develops to its patch.
 fn assert_patches(samples: &Samples, w: usize, tolerance: f32) {

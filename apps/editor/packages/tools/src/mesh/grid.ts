@@ -38,6 +38,11 @@
 // the cut, which is what the engine's bilinear colour blend shows there.
 
 import {
+  bernstein,
+  evalCubic,
+  splitSegmentDeCasteljau,
+} from "@paged-media/vector-geometry";
+import {
   cloneColor,
   DOWN,
   LEFT,
@@ -66,11 +71,6 @@ const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => [
 const sub = (a: Vec2, b: Vec2): Vec2 => [a[0] - b[0], a[1] - b[1]];
 const add = (a: Vec2, b: Vec2): Vec2 => [a[0] + b[0], a[1] + b[1]];
 const dist = (a: Vec2, b: Vec2) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-
-function bernstein(t: number): [number, number, number, number] {
-  const s = 1 - t;
-  return [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
-}
 
 export function nodeIndex(grid: MeshGridSpec, r: number, c: number): number {
   return r * (grid.cols + 1) + c;
@@ -326,12 +326,13 @@ export function locate(
 /** de Casteljau: `curve` cut at `t` into its two halves. */
 export function splitCubic(curve: Cubic, t: number): [Cubic, Cubic] {
   const [p0, p1, p2, p3] = curve;
-  const a = lerp(p0, p1, t);
-  const b = lerp(p1, p2, t);
-  const c = lerp(p2, p3, t);
-  const d = lerp(a, b, t);
-  const e = lerp(b, c, t);
-  const m = lerp(d, e, t);
+  const {
+    startRight: a,
+    midLeft: d,
+    midAnchor: m,
+    midRight: e,
+    endLeft: c,
+  } = splitSegmentDeCasteljau(p0, p1, p2, p3, t);
   return [
     [p0, a, d, m],
     [m, e, c, p3],
@@ -664,18 +665,7 @@ export function gridEdges(grid: MeshGridSpec): Cubic[] {
 export function sampleCubic(curve: Cubic, segments = 16): Vec2[] {
   const out: Vec2[] = [];
   for (let k = 0; k <= segments; k++) {
-    const t = k / segments;
-    const b = bernstein(t);
-    out.push([
-      curve[0][0] * b[0] +
-        curve[1][0] * b[1] +
-        curve[2][0] * b[2] +
-        curve[3][0] * b[3],
-      curve[0][1] * b[0] +
-        curve[1][1] * b[1] +
-        curve[2][1] * b[2] +
-        curve[3][1] * b[3],
-    ]);
+    out.push(evalCubic(curve[0], curve[1], curve[2], curve[3], k / segments));
   }
   return out;
 }

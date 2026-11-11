@@ -707,101 +707,30 @@ fn blend(mode: usvg::BlendMode, a: &Buf, b: &Buf) -> Buf {
     out
 }
 
+/// `B(Cb, Cs)` of an SVG blend mode: the shared formulas, with colour
+/// burn in the W3C order SVG specifies.
 fn blend_rgb(mode: usvg::BlendMode, cb: [f32; 3], cs: [f32; 3]) -> [f32; 3] {
+    use paged_blend::formulas as f;
     use usvg::BlendMode as M;
-    let sep = |f: fn(f32, f32) -> f32| std::array::from_fn(|c| f(cb[c], cs[c]));
+    let sep = |b: fn(f32, f32) -> f32| std::array::from_fn(|c| b(cb[c], cs[c]));
     match mode {
         M::Normal => cs,
-        M::Multiply => sep(|b, s| b * s),
-        M::Screen => sep(screen),
-        M::Overlay => sep(|b, s| hard_light(s, b)),
-        M::Darken => sep(f32::min),
-        M::Lighten => sep(f32::max),
-        M::ColorDodge => sep(|b, s| {
-            if b <= 0.0 {
-                0.0
-            } else if s >= 1.0 {
-                1.0
-            } else {
-                (b / (1.0 - s)).min(1.0)
-            }
-        }),
-        M::ColorBurn => sep(|b, s| {
-            if b >= 1.0 {
-                1.0
-            } else if s <= 0.0 {
-                0.0
-            } else {
-                1.0 - ((1.0 - b) / s).min(1.0)
-            }
-        }),
-        M::HardLight => sep(hard_light),
-        M::SoftLight => sep(|b, s| {
-            if s <= 0.5 {
-                b - (1.0 - 2.0 * s) * b * (1.0 - b)
-            } else {
-                let d = if b <= 0.25 {
-                    ((16.0 * b - 12.0) * b + 4.0) * b
-                } else {
-                    b.sqrt()
-                };
-                b + (2.0 * s - 1.0) * (d - b)
-            }
-        }),
-        M::Difference => sep(|b, s| (b - s).abs()),
-        M::Exclusion => sep(|b, s| b + s - 2.0 * b * s),
-        M::Hue => set_lum(set_sat(cs, sat(cb)), lum(cb)),
-        M::Saturation => set_lum(set_sat(cb, sat(cs)), lum(cb)),
-        M::Color => set_lum(cs, lum(cb)),
-        M::Luminosity => set_lum(cb, lum(cs)),
+        M::Multiply => sep(f::b_multiply),
+        M::Screen => sep(f::b_screen),
+        M::Overlay => sep(f::b_overlay),
+        M::Darken => sep(f::b_darken),
+        M::Lighten => sep(f::b_lighten),
+        M::ColorDodge => sep(f::b_color_dodge),
+        M::ColorBurn => sep(f::b_color_burn_w3c),
+        M::HardLight => sep(f::b_hard_light),
+        M::SoftLight => sep(f::b_soft_light),
+        M::Difference => sep(f::b_difference),
+        M::Exclusion => sep(f::b_exclusion),
+        M::Hue => f::b_hue(cb, cs),
+        M::Saturation => f::b_saturation(cb, cs),
+        M::Color => f::b_color(cb, cs),
+        M::Luminosity => f::b_luminosity(cb, cs),
     }
-}
-
-fn screen(b: f32, s: f32) -> f32 {
-    b + s - b * s
-}
-
-fn hard_light(b: f32, s: f32) -> f32 {
-    if s <= 0.5 {
-        b * 2.0 * s
-    } else {
-        screen(b, 2.0 * s - 1.0)
-    }
-}
-
-fn lum(c: [f32; 3]) -> f32 {
-    0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
-}
-
-fn clip_color(c: [f32; 3]) -> [f32; 3] {
-    let l = lum(c);
-    let n = c[0].min(c[1]).min(c[2]);
-    let x = c[0].max(c[1]).max(c[2]);
-    let mut c = c;
-    if n < 0.0 {
-        c = c.map(|v| l + (v - l) * l / (l - n));
-    }
-    if x > 1.0 {
-        c = c.map(|v| l + (v - l) * (1.0 - l) / (x - l));
-    }
-    c
-}
-
-fn set_lum(c: [f32; 3], l: f32) -> [f32; 3] {
-    let d = l - lum(c);
-    clip_color(c.map(|v| v + d))
-}
-
-fn sat(c: [f32; 3]) -> f32 {
-    c[0].max(c[1]).max(c[2]) - c[0].min(c[1]).min(c[2])
-}
-
-fn set_sat(c: [f32; 3], s: f32) -> [f32; 3] {
-    let (mx, mn) = (c[0].max(c[1]).max(c[2]), c[0].min(c[1]).min(c[2]));
-    if mx <= mn {
-        return [0.0; 3];
-    }
-    c.map(|v| (v - mn) * s / (mx - mn))
 }
 
 fn color_matrix(kind: &fe::ColorMatrixKind, buf: &mut Buf) {

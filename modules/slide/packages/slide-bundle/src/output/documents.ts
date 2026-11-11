@@ -95,10 +95,9 @@ async function pixels(
   pageId: string,
   dpi: number,
 ): Promise<{ rgba: Uint8Array; width: number; height: number } | null> {
-  if (host.supports("render.snapshot@2")) {
-    const r = await host.render.snapshot(pageId, { dpi, format: "rgba" });
-    if (r?.rgba) return { rgba: r.rgba, width: r.widthPx, height: r.heightPx };
-  }
+  const rgba = await host.render.snapshot(pageId, { dpi, format: "rgba" });
+  if (rgba?.rgba)
+    return { rgba: rgba.rgba, width: rgba.widthPx, height: rgba.heightPx };
   const r = await host.render.snapshot(pageId, { dpi });
   if (
     !r ||

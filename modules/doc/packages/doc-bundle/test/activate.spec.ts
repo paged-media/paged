@@ -64,6 +64,19 @@ function fakeHost() {
     // Every contribution door exists (ADR 305); the ones this spec does not
     // inspect are inert.
     document: { onDidChange: noop, onDidOpen: noop, onWillSave: noop },
+    // The property lists read the selection and the object model; empty.
+    selection: { get: () => [], onDidChange: noop },
+    objects: {
+      onDidChange: noop,
+      query: async () => [],
+      get: async () => ({ kind: "absent" }),
+    },
+    bindings: {
+      publish() {},
+      get: () => undefined,
+      delete() {},
+      onDidChange: noop,
+    },
     contribute: inertSurface({
       panel: noop,
       command: noop,

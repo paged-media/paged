@@ -35,7 +35,8 @@
 //    trip each — and keeping the ones that carry its key. AS FOUND: six
 //    features, six copies of the same loop (`blendLinks`, `repeatLinks`,
 //    `patternLinks`, `livePaintLinks`, `objectsOnPathLinks`,
-//    `symbolInstances`), each blind to the other five's leaves and to
+//    `symbolInstances`, the v0 instances the symbol migration reads),
+//    each blind to the other five's leaves and to
 //    the 500 that belong to nobody, and run again by every command.
 //    NOW: one shared walk per document REVISION (`src/link-index.ts`),
 //    so a command costs one walk at most and the next command on an
@@ -71,11 +72,8 @@ import {
   applyMakeCompoundPath,
   applyMakePattern,
   applyMakeRepeat,
-  applyPlaceSymbolInstance,
-  applyRedefineSymbol,
   applyRegenerateLivePaint,
   applyReleaseCompoundPath,
-  applyResetSymbolTransform,
   applySelectBlendObjects,
   applySelectLivePaintFaces,
   applySelectObjectsOnPath,
@@ -730,92 +728,6 @@ describe("perf budgets — commands over a busy document", () => {
       expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
       // The link walk's. As found: 3. TARGET 0.
       expect(work.count("document.tree")).toBe(1);
-    });
-  });
-
-  // COVERS: `commands/symbols.ts` — `symbolInstances`, `emitSymbolInstances`
-  // and `rebuildPlanFor`, which redefine runs once PER INSTANCE before
-  // committing every rebuild in one batch.
-  describe("symbols — place, reset, and a redefine that rebuilds every instance", () => {
-    it("place one instance: ONE batch", async () => {
-      const { work, undoSteps, result, added, selected, restored } =
-        await countedWrite(w, "symbol place", [], (host) =>
-          applyPlaceSymbolInstance(host, w.linked.symbols!.symbolId, {
-            x: 100,
-            y: 700,
-            pageId: w.pageId,
-          }),
-        );
-      expect(result).toHaveLength(1);
-      // insert, bind, fill, stroke, weight, link. As found: TWO batches
-      // (1, then 4) and 2 undo steps.
-      expect(work.mutations).toEqual([{ op: "batch", ops: 6 }]);
-      expect(undoSteps).toBe(1);
-      expect(added).toEqual(["polygon"]);
-      expect(selected).toEqual(result);
-      expect(restored).toBe(true);
-      // Every leaf is read to mint an instance id nobody else holds.
-      // TARGET 0 — a counter in the recipe.
-      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
-      // That walk's tree. As found: 3 — the walk's, and the before/after
-      // diff around the insert. TARGET 0.
-      expect(work.count("document.tree")).toBe(1);
-    });
-
-    it("reset one selected instance: ONE batch", async () => {
-      const { work, undoSteps, result, added, restored } = await countedWrite(
-        w,
-        "symbol reset",
-        [handleOf("symbols")],
-        (host) => applyResetSymbolTransform(host),
-      );
-      expect(result).toBe(1);
-      // insert, bind, the old leaf deleted, fill, stroke, weight, link.
-      // As found: TWO batches (1, then 5).
-      expect(work.mutations).toEqual([{ op: "batch", ops: 7 }]);
-      // As found: 2.
-      expect(undoSteps).toBe(1);
-      expect(added).toEqual(["polygon"]);
-      expect(restored).toBe(true);
-      // TARGET 1 — the selected leaf's own link.
-      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
-      // The index's one tree, shared by the selection's expansion, the
-      // walk and the group lookup. As found: 5, then 3 — the
-      // before/after diff on top. TARGET 0.
-      expect(work.count("document.tree")).toBe(1);
-    });
-
-    it("redefine: 50 instances are ONE mutation, ONE undo step and ONE tree read", async () => {
-      const { work, undoSteps, result, added, restored } = await countedWrite(
-        w,
-        "symbol redefine",
-        [w.plain[0]!],
-        (host) => applyRedefineSymbol(host, w.linked.symbols!.symbolId),
-      );
-      expect(result).not.toBeNull();
-      // Every rebuild in one batch: 50 × (insert, bind, the old leaf
-      // deleted, fill, stroke, weight, link). As found: 100 mutations —
-      // two batches per instance, in a loop.
-      expect(work.mutations).toEqual([{ op: "batch", ops: 50 * 7 }]);
-      // As found: ONE command, a HUNDRED presses of undo to take it back.
-      expect(undoSteps).toBe(1);
-      // Fifty new leaves for fifty old ones, and one undo restores.
-      expect(added).toEqual(Array.from({ length: 50 }, () => "polygon"));
-      expect(restored).toBe(true);
-      // The capture, the instance walk and every rebuild's group lookup
-      // share ONE read now: all fifty rebuilds are planned against the
-      // same revision. As found: 152, then 150 — a group lookup and a
-      // before/after diff per instance.
-      expect(work.count("document.tree")).toBe(1);
-      // The one thing redefine does once.
-      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
-      // The capture's one read, and ONE per instance: the instance's
-      // page and its live origin come from the same read now. As found:
-      // 101 — the first leaf was read twice.
-      expect(work.count("document.pathAnchors")).toBe(51);
-      // The C-23 "is it on a page" check, for all fifty at once. As
-      // found: 50, one per instance.
-      expect(work.count("document.elementGeometry")).toBe(1);
     });
   });
 

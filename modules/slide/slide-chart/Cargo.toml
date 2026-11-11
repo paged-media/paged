@@ -17,6 +17,8 @@ pptx-core.workspace = true
 # table for slide, doc and sheet.
 dml-chart = { path = "../../../platform/shared/dml-chart" }
 serde.workspace = true
+# The arc handle of a wedge (one owner: paged-geom).
+paged-geom = { path = "../../../engine/core/crates/paged-geom" }
 # Number-format labels: paged.sheet's Excel number-format engine. Built-in
 # modules depend on each other through the workspace (PM-0005).
 sheet-format = { path = "../../sheet/sheet-format" }

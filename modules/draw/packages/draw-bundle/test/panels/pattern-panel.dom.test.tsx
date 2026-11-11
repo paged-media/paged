@@ -93,7 +93,6 @@ describe("Pattern options panel — rendered against the engine", () => {
     it("the CONTRIBUTED component mounts and shows the empty state", async () => {
       const panel = await mountContributed(h, PATTERN_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-pattern-panel")).toBe("0");
-      expect(panel.attr(PANEL, "data-draw-pattern-portable")).toBe("true");
       expect(panel.text()).toContain("Patterns (0)");
       expect(panel.text()).toContain(
         "No patterns yet. Select artwork and choose + From selection.",

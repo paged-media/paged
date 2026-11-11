@@ -81,3 +81,8 @@ export {
 } from "./labels";
 export { humanize, refusalText } from "./text";
 export { enumMemberLabel, humaniseIdentifier } from "./enum-labels";
+export {
+  ColorInput,
+  setHostColorPicker,
+  type ColorInputProps,
+} from "./color-input";

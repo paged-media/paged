@@ -199,7 +199,6 @@ export async function keepSource(
   comments?: CommentsStore | null,
   workbooks: Uint8Array = new Uint8Array(),
 ): Promise<void> {
-  if (!host.supports("storage.parts@1")) return;
   await host.parts.write(SOURCE_PART, bytes);
   await host.parts.write(
     REPORT_PART,
@@ -228,7 +227,6 @@ export async function keepSource(
  * still holds them. Does nothing for a document that is not a deck.
  */
 export async function reloadEmbeddedFonts(host: BundleHost): Promise<void> {
-  if (!host.supports("storage.parts@1")) return;
   let source: Uint8Array | null;
   try {
     source = await host.parts.read(SOURCE_PART);
@@ -362,7 +360,6 @@ export function activate(host: BundleHost): BundleHandle {
 
   /** The import report the deck kept (its own timings), or null. */
   async function readReport(): Promise<ImportReport | null> {
-    if (!host.supports("storage.parts@1")) return null;
     try {
       const bytes = await host.parts.read(REPORT_PART);
       return bytes
@@ -471,9 +468,7 @@ export function activate(host: BundleHost): BundleHandle {
       ),
     );
   };
-  if (host.supports("document.onDidOpen@1")) {
-    disposers.push(host.document.onDidOpen(reload).dispose);
-  }
+  disposers.push(host.document.onDidOpen(reload).dispose);
   reload();
 
   disposers.push(
@@ -505,7 +500,6 @@ export function activate(host: BundleHost): BundleHandle {
   // the document's slides (order, duplicates, deletions, hidden, notes) and
   // what is on them (ADR 704, ADR 711).
   async function exportDeck(format: "pptx" | "potx" = "pptx") {
-    if (!host.supports("storage.parts@1")) return null;
     const original = await host.parts.read(SOURCE_PART);
     if (!original) {
       host.diagnostics.set(EXPORT_DIAGNOSTICS, [
@@ -553,32 +547,27 @@ export function activate(host: BundleHost): BundleHandle {
     };
   }
 
-  if (
-    host.supports("contribute.exporter@1") &&
-    host.supports("storage.parts@1")
-  ) {
-    disposers.push(
-      host.contribute.exporter({
-        id: EXPORTER_ID,
-        title: t(DECK.format),
-        extension: ".pptx",
-        mimeType: PPTX_MIME,
-        export: () => exportDeck("pptx"),
-      }).dispose,
-      // File ▸ Save as template (slide ADR 720).
-      host.contribute.exporter({
-        id: TEMPLATE_EXPORTER_ID,
-        title: t(DECK.templateFormat),
-        extension: ".potx",
-        mimeType: POTX_MIME,
-        export: () => exportDeck("potx"),
-      }).dispose,
-    );
-  }
+  disposers.push(
+    host.contribute.exporter({
+      id: EXPORTER_ID,
+      title: t(DECK.format),
+      extension: ".pptx",
+      mimeType: PPTX_MIME,
+      export: () => exportDeck("pptx"),
+    }).dispose,
+    // File ▸ Save as template (slide ADR 720).
+    host.contribute.exporter({
+      id: TEMPLATE_EXPORTER_ID,
+      title: t(DECK.templateFormat),
+      extension: ".potx",
+      mimeType: POTX_MIME,
+      export: () => exportDeck("potx"),
+    }).dispose,
+  );
 
   // The slide panels and the palette commands share one store: the pages,
   // their state, thumbnails and the active slide. It needs the v70 page
-  // doors; the panels also need the panel and snapshot doors.
+  // doors.
   store = host.supports("viewport.pages@1") ? new SlidesStore(host) : null;
   if (store) {
     const s = store;
@@ -602,11 +591,7 @@ export function activate(host: BundleHost): BundleHandle {
   // double-click); the host drops it when the document is replaced, and
   // the store says again whether the new one is a deck.
   let deckContext = false;
-  if (
-    store &&
-    host.supports("contribute.editContext@1") &&
-    host.supports("shell.documentContext@1")
-  ) {
+  if (store && host.supports("shell.documentContext@1")) {
     const s = store;
     disposers.push(
       host.contribute.editContext({
@@ -623,20 +608,14 @@ export function activate(host: BundleHost): BundleHandle {
       held = want;
       host.shell.setDocumentContext(want ? DECK_CONTEXT : null);
     };
-    if (host.supports("document.onDidOpen@1")) {
-      disposers.push(
-        host.document.onDidOpen(() => {
-          held = false; // the host dropped it with the old document
-        }).dispose,
-      );
-    }
+    disposers.push(
+      host.document.onDidOpen(() => {
+        held = false; // the host dropped it with the old document
+      }).dispose,
+    );
     disposers.push(s.subscribe(sync));
     sync();
   }
-  const richPanels =
-    store !== null &&
-    host.supports("contribute.panel@1") &&
-    host.supports("render.snapshot@1");
 
   // The user's verbs for the palette and the menu bar (commands.ts,
   // menu.ts): open and export a deck; new, duplicate, delete and move the
@@ -669,7 +648,7 @@ export function activate(host: BundleHost): BundleHandle {
     ...(comments && host.supports("shell.openPanel@1")
       ? { openComments: () => host.shell.openPanel(COMMENTS_PANEL_ID) }
       : {}),
-    shapesPanel: richPanels ? SHAPES_PANEL_ID : undefined,
+    shapesPanel: store ? SHAPES_PANEL_ID : undefined,
   });
   const menu = contributeMenu(host, (id) => commands.ids.has(id));
   const contentCommands = contributeContentCommands(host, content, clipboard, {
@@ -690,7 +669,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Slide ADR 716 — Slide Show, Presenter View, Rehearse Timings (one
   // presentation, extensions ADR 345) and View ▸ Slide Sorter (a module
   // view in place of the canvas).
-  if (store && host.supports("contribute.command@1")) {
+  if (store) {
     const show = contributeShow(
       host,
       {
@@ -702,14 +681,12 @@ export function activate(host: BundleHost): BundleHandle {
           return shows.find((c) => c.name === name)?.pages ?? null;
         },
       },
-      host.supports("contribute.view@1") && host.supports("render.snapshot@1")
-        ? () =>
-            host.contribute.view({
-              id: SORTER_VIEW,
-              title: t(SHOW.slideSorter),
-              render: makeSlideSorter(host, store),
-            })
-        : null,
+      () =>
+        host.contribute.view({
+          id: SORTER_VIEW,
+          title: t(SHOW.slideSorter),
+          render: makeSlideSorter(host, store),
+        }),
     );
     runShow = show.run;
     playCustom = show.playCustomShow;
@@ -721,12 +698,8 @@ export function activate(host: BundleHost): BundleHandle {
   }
 
   // Slide ADR 712 — View ▸ Slide Master (a module view) and Reset Slide.
-  if (store && host.supports("contribute.command@1")) {
-    if (
-      host.supports("contribute.view@1") &&
-      host.supports("shell.views@1") &&
-      host.supports("render.snapshot@1")
-    ) {
+  if (store) {
+    if (host.supports("shell.views@1")) {
       disposers.push(
         host.contribute.view({
           id: MASTER_VIEW,
@@ -742,11 +715,10 @@ export function activate(host: BundleHost): BundleHandle {
 
   // File ▸ Export… (a module view), Save as template, Custom Shows… and
   // Add Section (slide ADR 720).
-  if (store && output && host.supports("contribute.command@1")) {
+  if (store && output) {
     const s = store;
     const o = output;
-    const views =
-      host.supports("contribute.view@1") && host.supports("shell.views@1");
+    const views = host.supports("shell.views@1");
     if (views) {
       disposers.push(
         host.contribute.view({
@@ -756,26 +728,23 @@ export function activate(host: BundleHost): BundleHandle {
         }).dispose,
       );
     }
-    const panels = host.supports("contribute.panel@1");
-    if (panels) {
-      disposers.push(
-        host.contribute.panel({
-          id: CUSTOM_SHOWS_PANEL,
-          title: t(OUTPUT.showsTitle),
-          component: makeCustomShowsPanel(host, s, o),
-          defaultDock: "right",
-          rail: false,
-          // A play triangle over a list.
-          iconSvg:
-            '<path d="M4 6h9M4 10h9M4 14h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
-            '<path d="M14 13l6 3.5-6 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
-        }).dispose,
-      );
-    }
+    disposers.push(
+      host.contribute.panel({
+        id: CUSTOM_SHOWS_PANEL,
+        title: t(OUTPUT.showsTitle),
+        component: makeCustomShowsPanel(host, s, o),
+        defaultDock: "right",
+        rail: false,
+        // A play triangle over a list.
+        iconSvg:
+          '<path d="M4 6h9M4 10h9M4 14h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
+          '<path d="M14 13l6 3.5-6 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+      }).dispose,
+    );
     outputUi = {
       openExport: () => (views ? host.shell.showView(EXPORT_VIEW) : false),
       openCustomShows: () => {
-        if (panels && host.supports("shell.openPanel@1"))
+        if (host.supports("shell.openPanel@1"))
           host.shell.openPanel(CUSTOM_SHOWS_PANEL);
       },
     };
@@ -791,7 +760,7 @@ export function activate(host: BundleHost): BundleHandle {
     });
   }
 
-  if (store && richPanels) {
+  if (store) {
     const s = store;
     // In the panel rail only while a deck is open: in any other document
     // the Slides and Notes launchers would sit beside the host's panels
@@ -901,9 +870,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Animation Painter and their commands.
   if (store) {
     const anims = contributeAnimations(host, store, slideEngine, {
-      panel: richPanels,
-      overlay:
-        host.supports("contribute.overlay@1") && renders(host, "overlay"),
+      overlay: renders(host, "overlay"),
     });
     animBinding = anims.binding;
     disposers.push(() => {
@@ -915,19 +882,17 @@ export function activate(host: BundleHost): BundleHandle {
   // Live charts (ADR 715): a chart frame is entered by double-click; its
   // workbook opens in the chart data sheet (the context's frame surface)
   // and the chart is redrawn when the user leaves.
-  if (host.supports("storage.parts@1")) {
-    const editing = new ChartEditing(host);
-    disposers.push(...contributeCharts(host, editing), () => editing.dispose());
-  }
+  const editing = new ChartEditing(host);
+  disposers.push(...contributeCharts(host, editing), () => editing.dispose());
 
   // ADR 323 — the slide, transition, notes, placeholder and deck fields as
   // host-rendered PropertyFields (schema panels of property rows; they need
   // the object model the rows address). The Notes panel above owns the
   // notes panel id where it is contributed; the notes property row is the
   // fallback for hosts without the page doors.
-  if (model && host.supports("contribute.schemaPanel@1")) {
+  if (model) {
     for (const schema of slidePanels()) {
-      if (richPanels && schema.id === NOTES_PANEL_ID) continue;
+      if (store && schema.id === NOTES_PANEL_ID) continue;
       const d = host.contribute.schemaPanel({
         id: schema.id,
         title: schema.title,

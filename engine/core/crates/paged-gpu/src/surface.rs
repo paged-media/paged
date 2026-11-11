@@ -38,7 +38,6 @@
 
 #![cfg(target_arch = "wasm32")]
 
-use image::ImageEncoder;
 use paged_compose::{Color, DisplayList};
 use vello::kurbo;
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
@@ -1173,11 +1172,8 @@ impl PendingReadback {
     pub async fn into_png(self) -> Result<Vec<u8>, SurfaceError> {
         let (width_px, height_px) = (self.width_px, self.height_px);
         let rgba = self.into_rgba().await?;
-        let mut png_bytes = Vec::with_capacity(rgba.len() / 4);
-        image::codecs::png::PngEncoder::new(&mut png_bytes)
-            .write_image(&rgba, width_px, height_px, image::ExtendedColorType::Rgba8)
-            .map_err(|e| SurfaceError::PngEncode(e.to_string()))?;
-        Ok(png_bytes)
+        paged_raster::encode_rgba8_png(&rgba, width_px, height_px)
+            .map_err(|e| SurfaceError::PngEncode(e.to_string()))
     }
 }
 

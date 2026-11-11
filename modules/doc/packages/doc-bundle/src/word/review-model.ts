@@ -358,14 +358,12 @@ export function createReviewStore(host: BundleHost): ReviewStore {
         ...comments.map((c) => c.storyId),
       ]);
       const texts = new Map<string, readonly string[]>();
-      if (host.supports("document.readStory@1")) {
-        for (const id of stories) {
-          try {
-            const content = await host.document.storyContent(id);
-            if (content) texts.set(id, paragraphTexts(content));
-          } catch {
-            // A story that does not read keeps its characters as offsets.
-          }
+      for (const id of stories) {
+        try {
+          const content = await host.document.storyContent(id);
+          if (content) texts.set(id, paragraphTexts(content));
+        } catch {
+          // A story that does not read keeps its characters as offsets.
         }
       }
       if (mine !== ask) return;

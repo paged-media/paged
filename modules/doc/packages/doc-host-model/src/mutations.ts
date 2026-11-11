@@ -11,7 +11,9 @@ import {
   nativeFxOps,
   nativeGradientId,
   nativeGradientMintOps,
+  nativeSwatchMintOps,
   type NativeFx,
+  type NativeSwatch,
   type NativeGradient,
 } from "@paged-media/plugin-sdk";
 
@@ -58,20 +60,20 @@ export function buildStyleMutations(
   if (ir.theme && themed) {
     ops.push({ op: "setTheme", args: { theme: ir.theme } } as Mutation);
   }
-  for (const sw of ir.swatches) {
-    ops.push({
-      op: "createSwatch",
-      args: {
-        spec: {
-          selfId: sw.id,
-          name: sw.name,
-          space: sw.space,
-          value: sw.value,
-          ...(themed && sw.themeRef ? { themeRef: sw.themeRef } : {}),
-        },
-      },
-    } as Mutation);
-  }
+  ops.push(
+    ...nativeSwatchMintOps(
+      ir.swatches.map((sw) => ({
+        selfId: sw.id,
+        name: sw.name,
+        space: sw.space,
+        value: sw.value,
+        // The IR's reference as it is (an absent `transforms` stays absent).
+        ...(themed && sw.themeRef
+          ? { themeRef: sw.themeRef as NativeSwatch["themeRef"] }
+          : {}),
+      })),
+    ),
+  );
   // Doc ADR 619 — the picture looks' gradients, once their stops' swatches
   // exist.
   ops.push(...lookGradientMintOps(ir));

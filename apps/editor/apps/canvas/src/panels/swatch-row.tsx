@@ -42,6 +42,7 @@
 // marked `data-swatch-preview="unresolved"` rather than shown as a
 // plausible grey, which would be a colour panel lying about a colour.
 
+import { hexToRgb } from "@paged-media/helpers";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -430,12 +431,7 @@ export function SwatchRow({
   );
 }
 
-function hexChannels(hex: string): number[] {
-  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
-  if (!m) return [128, 128, 128];
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-}
+const hexChannels = (hex: string): number[] => hexToRgb(hex) ?? [128, 128, 128];
 
 /** Seed mixer state from the RAW authored channels carried on the
  *  preview (protocol 25's lossless read); falls back to display-

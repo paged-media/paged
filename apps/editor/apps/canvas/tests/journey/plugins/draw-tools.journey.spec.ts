@@ -383,8 +383,9 @@ test.describe("journey · paged.draw pro tools", () => {
       )
       .toBe(JSON.stringify([150, 350]));
 
-    // ── 3. SCISSORS (ANY POINT) — click the MIDDLE of an open path's
-    //    first segment, far from either anchor. ──
+    // ── 3. SCISSORS (ANY POINT, the host's tool since it cuts anywhere) —
+    //    click the MIDDLE of an open path's first segment, far from either
+    //    anchor. ──
     const sid = await designer.drawPath([
       [400, 450],
       [550, 450],
@@ -398,10 +399,7 @@ test.describe("journey · paged.draw pro tools", () => {
     expect(uncut?.subpathStarts).toEqual([0]);
     const polysBeforeCut = await designer.count("polygon");
 
-    await invokeCommand(
-      page,
-      "paged.tool.activate.media.paged.draw.tool.scissorsAnyPoint",
-    );
+    await invokeCommand(page, "paged.tool.activate.paged.tool.scissors");
     const click = await screenPoint(page, 475, 450);
     await page.mouse.click(click.x, click.y);
 

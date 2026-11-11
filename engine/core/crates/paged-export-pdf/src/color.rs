@@ -50,12 +50,7 @@ use crate::{ExportInkSettings, ExportInput};
 
 /// Linear-light → sRGB-encoded component.
 pub fn linear_to_srgb(v: f32) -> f32 {
-    let v = v.clamp(0.0, 1.0);
-    if v <= 0.003_130_8 {
-        12.92 * v
-    } else {
-        1.055 * v.powf(1.0 / 2.4) - 0.055
-    }
+    paged_color::math::linear_to_srgb(v.clamp(0.0, 1.0))
 }
 
 fn srgb_of(c: Color) -> [f32; 3] {
@@ -460,13 +455,7 @@ fn sanitize_name(s: &str) -> String {
 }
 
 fn short_hash(s: &str) -> u32 {
-    // FNV-1a, deterministic.
-    let mut h: u32 = 0x811c_9dc5;
-    for b in s.as_bytes() {
-        h ^= *b as u32;
-        h = h.wrapping_mul(0x0100_0193);
-    }
-    h
+    paged_pixel::fnv1a_32(s.as_bytes())
 }
 
 /// Engine ADR 1007 — what a shading carries: the stops' colour

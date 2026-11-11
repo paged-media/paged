@@ -202,7 +202,6 @@ export class LiveFollower implements Disposable {
     if (seq === undefined) return; // an undo, a redo, an older host
     if (this.own.has(seq)) return;
     if (!this.isDeck()) return;
-    if (!this.host.supports("document.mutate.amend@1")) return;
     const pages = e.pagesUnknown ? null : new Set(e.pageIds);
     if (pages && pages.size === 0) return;
     this.chain = this.chain

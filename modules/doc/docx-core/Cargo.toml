@@ -13,6 +13,8 @@ workspace = true
 
 [dependencies]
 serde.workspace = true
+# Roman and letter numbering: the engine model's one implementation.
+paged-model = { path = "../../../engine/core/crates/paged-model" }
 # The shared OOXML foundation without its typed DOM: the DrawingML reader's
 # authored IR a picture keeps (serde derives on), and the HSL arithmetic of
 # Word's theme tint and shade (doc ADR 618).

@@ -956,14 +956,7 @@ pub(super) fn font_id(bytes: &Bytes) -> u32 {
 pub(super) fn fnv_1a_u32(bytes: &[u8]) -> u32 {
     // Stable per-render font-cache key; the u32 range collides in
     // ~2B fonts — enough for any realistic document.
-    const FNV_OFFSET: u32 = 0x811c_9dc5;
-    const FNV_PRIME: u32 = 0x0100_0193;
-    let mut h = FNV_OFFSET;
-    for &b in bytes {
-        h ^= b as u32;
-        h = h.wrapping_mul(FNV_PRIME);
-    }
-    h
+    paged_pixel::fnv1a_32(bytes)
 }
 
 #[cfg(test)]

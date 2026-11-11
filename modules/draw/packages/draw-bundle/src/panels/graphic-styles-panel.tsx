@@ -59,7 +59,6 @@ import {
   graphicStyleRefOf,
   graphicStyleRefusalOf,
   readGraphicStyleLibrary,
-  GRAPHIC_STYLES_FEATURE,
   type GraphicStyle,
   type GraphicStyleRef,
 } from "../commands/graphic-styles";
@@ -99,8 +98,6 @@ const M = defineMessages("draw.graphicStylesPanel", {
   breakHint: "Keep the selection's look and drop its link to the style",
   notLinked: "The selection is not linked to a style",
   breakLink: "Break link",
-  degraded:
-    "This editor cannot save data into the document, so graphic styles are not available here.",
   bakedNote:
     "The selection's appearance is baked. Release it in the Appearance panel before saving or applying a graphic style.",
   selectToLink:
@@ -236,7 +233,6 @@ export function makeGraphicStylesPanel(host: BundleHost): {
     const [styles, setStyles] = React.useState<GraphicStyle[]>([]);
     const [counts, setCounts] = React.useState<Record<string, number>>({});
     const [link, setLink] = React.useState<SelectionLink>(NO_LINK);
-    const [portable, setPortable] = React.useState(true);
     // The rows checked for a merge (draw ADR 367), in the order checked.
     const [picked, setPicked] = React.useState<string[]>([]);
 
@@ -261,7 +257,6 @@ export function makeGraphicStylesPanel(host: BundleHost): {
           next = await selectionLinkOf(host, first);
           if (!live()) return;
         }
-        setPortable(host.supports(GRAPHIC_STYLES_FEATURE));
         setStyles(library.styles);
         setCounts(tally);
         setLink(next);
@@ -280,7 +275,6 @@ export function makeGraphicStylesPanel(host: BundleHost): {
       <div
         style={{ padding: 12 }}
         data-draw-graphic-styles-panel={styles.length}
-        data-draw-graphic-styles-portable={portable ? "true" : "false"}
         data-draw-graphic-style-linked={link.ref?.id ?? ""}
         data-draw-graphic-style-overridden={link.overridden ? "true" : "false"}
       >
@@ -327,7 +321,6 @@ export function makeGraphicStylesPanel(host: BundleHost): {
             style={iconBtn}
             title={s.t(M.importHint)}
             data-draw-graphic-styles-import
-            disabled={!portable}
             onClick={() => void run(() => importGraphicStyles(host))}
           >
             {s.t(M.importLibrary)}
@@ -360,12 +353,6 @@ export function makeGraphicStylesPanel(host: BundleHost): {
         </div>
 
         <Refusal text={refusal} />
-
-        {!portable && (
-          <div style={mutedStyle} data-draw-graphic-styles-degraded>
-            {s.t(M.degraded)}
-          </div>
-        )}
 
         {link.baked && <div style={mutedStyle}>{s.t(M.bakedNote)}</div>}
 

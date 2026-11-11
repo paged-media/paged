@@ -172,7 +172,7 @@ describe("the slide show's commands, keys and menus [plugin-slide.slideshow]", (
   it("From Beginning presents on the screen from the first slide shown", async () => {
     covers("command:media.paged.slide.command.slideShowFromBeginning");
     const r = recordingHost(ALL);
-    contributeShow(r.host, deps(fakeStore()), null);
+    contributeShow(r.host, deps(fakeStore()), () => ({ dispose() {} }));
     await r.commands.get(SHOW_CMD.fromBeginning)!.handler(undefined as never);
     expect(r.presented).toEqual([
       { id: SHOW_PRESENTATION, target: "screen", options: {} },
@@ -184,7 +184,7 @@ describe("the slide show's commands, keys and menus [plugin-slide.slideshow]", (
   it("From Current Slide starts at the active slide", async () => {
     covers("command:media.paged.slide.command.slideShowFromCurrent");
     const r = recordingHost(ALL);
-    contributeShow(r.host, deps(fakeStore(true, 2)), null);
+    contributeShow(r.host, deps(fakeStore(true, 2)), () => ({ dispose() {} }));
     await r.commands.get(SHOW_CMD.fromCurrent)!.handler(undefined as never);
     expect(r.presented[0]).toEqual({
       id: SHOW_PRESENTATION,
@@ -196,7 +196,7 @@ describe("the slide show's commands, keys and menus [plugin-slide.slideshow]", (
   it("Presenter View asks for the secondary target with the presenter console", async () => {
     covers("command:media.paged.slide.command.presenterView");
     const r = recordingHost(ALL);
-    contributeShow(r.host, deps(fakeStore(true, 1)), null);
+    contributeShow(r.host, deps(fakeStore(true, 1)), () => ({ dispose() {} }));
     await r.commands.get(SHOW_CMD.presenterView)!.handler(undefined as never);
     expect(r.presented[0]).toEqual({
       id: SHOW_PRESENTATION,
@@ -208,7 +208,7 @@ describe("the slide show's commands, keys and menus [plugin-slide.slideshow]", (
   it("Rehearse Timings runs a timed show", async () => {
     covers("command:media.paged.slide.command.rehearseTimings");
     const r = recordingHost(ALL);
-    contributeShow(r.host, deps(fakeStore()), null);
+    contributeShow(r.host, deps(fakeStore()), () => ({ dispose() {} }));
     await r.commands.get(SHOW_CMD.rehearseTimings)!.handler(undefined as never);
     expect(r.presented[0].options).toEqual({ rehearse: true });
   });
@@ -231,7 +231,7 @@ describe("the slide show's commands, keys and menus [plugin-slide.slideshow]", (
     const run = contributeShow(
       recordingHost(["contribute.command@1"]).host,
       deps(fakeStore()),
-      null,
+      () => ({ dispose() {} }),
     ).run;
     expect(await run(SHOW_CMD.fromBeginning)).toBe(false);
     expect(await run(SHOW_CMD.slideSorter)).toBe(false);

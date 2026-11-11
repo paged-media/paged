@@ -53,7 +53,6 @@ import {
   livePaintLinks,
   readLivePaintLibrary,
   selectedLivePaintGroup,
-  LIVE_PAINT_FEATURE,
   type LivePaintRecipe,
 } from "../commands/live-paint";
 import { getLivePaintFill, setLivePaintFill } from "../handlers/live-paint";
@@ -80,8 +79,6 @@ const M = defineMessages("draw.livePaintPanel", {
   makeHint: "Make a live paint group from the selected paths (up to 1000)",
   selectPathsFirst: "Select two or more overlapping paths first",
   fromSelection: "+ From selection",
-  degraded:
-    "This editor cannot save data into the document, so a live paint group could not be regenerated later.",
   bucketFill: "Bucket fill",
   none: "None",
   empty:
@@ -159,7 +156,6 @@ export function makeLivePaintPanel(host: BundleHost): {
     const [swatches, setSwatches] = React.useState<SwatchSummary[]>([]);
     const [fill, setFill] = React.useState<string | null>(getLivePaintFill());
     const [hasSelection, setHasSelection] = React.useState(false);
-    const [portable, setPortable] = React.useState(true);
     const [painted, setPainted] = React.useState<Record<string, string[]>>({});
 
     // WHAT A RELOAD COSTS (`test/panels/live-paint-panel.dom.test.tsx`, and
@@ -190,7 +186,6 @@ export function makeLivePaintPanel(host: BundleHost): {
           tally[f.ref.group] = faces;
           faces.push(f.ref.face);
         }
-        setPortable(host.supports(LIVE_PAINT_FEATURE));
         setGroups(library.groups);
         setHasSelection(selection.length > 0);
         setActive(group?.id ?? null);
@@ -205,7 +200,6 @@ export function makeLivePaintPanel(host: BundleHost): {
       <div
         style={{ padding: 12 }}
         data-draw-live-paint-panel={groups.length}
-        data-draw-live-paint-portable={portable ? "true" : "false"}
         data-draw-live-paint-active={active ?? ""}
       >
         <PanelIntro
@@ -230,12 +224,6 @@ export function makeLivePaintPanel(host: BundleHost): {
         </div>
 
         <Refusal text={refusal} />
-
-        {!portable && (
-          <div style={mutedStyle} data-draw-live-paint-degraded>
-            {s.t(M.degraded)}
-          </div>
-        )}
 
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>{s.t(M.bucketFill)}</span>

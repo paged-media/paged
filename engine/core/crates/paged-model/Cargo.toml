@@ -17,6 +17,7 @@ wire = ["dep:tsify-next", "dep:wasm-bindgen"]
 schema = ["dep:schemars"]
 
 [dependencies]
+paged-pixel = { path = "../paged-pixel" }
 serde = { workspace = true }
 # The theme swatches' colour transforms (engine ADR 1056).
 paged-colour-math = { path = "../paged-colour-math" }

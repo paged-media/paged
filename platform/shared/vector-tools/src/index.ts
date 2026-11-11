@@ -220,6 +220,9 @@ export {
 export {
   planScissorsAt,
   scissorsMutation,
+  applyScissorsAt,
+  SCISSORS_CUTTABLE,
+  type ScissorsDoor,
   type ScissorsPlan,
   type ScissorsBatchWire,
   type PathOpenAtWire,

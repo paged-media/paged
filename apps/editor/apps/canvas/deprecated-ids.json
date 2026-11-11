@@ -408,6 +408,12 @@
       "replacement": "command:media.paged.pdf.command.importVectors",
       "deprecatedIn": "0.78.0",
       "removeIn": "0.80.0"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.scissorsAnyPoint",
+      "replacement": "tool:paged.tool.scissors",
+      "deprecatedIn": "0.78.0",
+      "removeIn": "0.80.0"
     }
   ]
 }

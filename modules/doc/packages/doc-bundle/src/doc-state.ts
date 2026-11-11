@@ -170,7 +170,6 @@ export async function readDocBytes(
   host: BundleHost,
   s: DocState,
 ): Promise<Uint8Array | null> {
-  if (!host.supports("storage.parts@1")) return null;
   try {
     return await host.parts.read(s.data.part);
   } catch {
@@ -190,7 +189,7 @@ export async function readLowered(
   const memo = lowerings.get(s.labelText);
   if (memo) return memo;
   let ir: LoweredDoc | null = null;
-  if (s.data.lowered && host.supports("storage.parts@1")) {
+  if (s.data.lowered) {
     try {
       const bytes = await host.parts.read(s.data.lowered);
       if (bytes) ir = parseLoweredDoc(new TextDecoder().decode(bytes));

@@ -154,7 +154,7 @@ export async function renderRasters(
   needs: readonly RasterNeed[],
 ): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
-  if (needs.length === 0 || !host.supports("render.snapshot@2")) return out;
+  if (needs.length === 0) return out;
   for (const n of needs) {
     try {
       const r = await host.render.element(

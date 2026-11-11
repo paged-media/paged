@@ -509,7 +509,6 @@ async function planCreate(
     );
   }
   const plan = planSourceWrite(host, source);
-  if ("refused" in plan) throw new Rejected(plan.refused);
   if (plan.parts.length > 0) {
     // A create's label rides the batch as a plain mutation (the frame has
     // no address yet), so its part is written here, ahead of the commit —
@@ -762,11 +761,6 @@ async function planWebOps(
         const key = name.slice(4);
         if (!DOCUMENT_VALUE_KEY.test(key))
           throw new Rejected(`"${key}" is not a document value key`);
-        if (!host.supports("document.documentMetadata@1")) {
-          throw new Rejected(
-            "this editor version cannot store document values",
-          );
-        }
         values ??= { ...(await readDocumentValues(host)) };
         if (op.value === null) delete values[key];
         else values[key] = op.value as string;
@@ -779,7 +773,6 @@ async function planWebOps(
     const parts: PartChange[] = [];
     for (const [id, source] of planned) {
       const plan = planSourceWrite(host, source);
-      if ("refused" in plan) throw new Rejected(plan.refused);
       labels.push({ id: frames.get(id)!, labelValue: plan.labelValue });
       parts.push(...plan.parts);
     }
@@ -877,7 +870,6 @@ function typedCommands(host: BundleHost): TypedCommandContribution[] {
     if (!pageId)
       throw new Error(`invalidValue: ${page} is not a page of this document`);
     const plan = planSourceWrite(host, source);
-    if ("refused" in plan) throw new Error(`failed: ${plan.refused}`);
     for (const p of plan.parts) await host.parts.write(p.path, p.bytes!);
     const outcome = await host.document.mutate({
       op: "batch",
@@ -1096,11 +1088,7 @@ export function createWebObjectModel(
   };
 }
 
-/** Register the object model when the host has the door (plugin-api
- *  0.2.43); `null` on an older host. */
-export function contributeObjectModel(
-  host: BundleHost,
-): ObjectModelHandle | null {
-  if (!host.supports("contribute.objectModel@1")) return null;
+/** Register the object model with the host. */
+export function contributeObjectModel(host: BundleHost): ObjectModelHandle {
   return host.contribute.objectModel(createWebObjectModel(host));
 }

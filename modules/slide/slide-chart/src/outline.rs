@@ -131,7 +131,7 @@ fn wedge(cx: f64, cy: f64, r: f64, hole: f64, start: f64, sweep: f64) -> Contour
             let a = a.to_radians();
             (a.cos(), a.sin())
         };
-        let k = 4.0 / 3.0 * (step.to_radians() / 4.0).tan() * radius;
+        let k = paged_geom::arc_handle(step.to_radians()) * radius;
         let mut out: Vec<Point> = Vec::new();
         for s in 0..=segs {
             let a = a0 + step * s as f64;

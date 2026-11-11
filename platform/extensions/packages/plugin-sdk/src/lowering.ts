@@ -34,6 +34,7 @@ import type {
   ElementId,
   Mutation,
   PropertyPath,
+  SwatchSpec,
   Value,
 } from "@paged-media/plugin-api";
 
@@ -305,14 +306,27 @@ function idNumber(v: number): string {
   return String(Math.round(v * 1000) / 1000).replace(".", "p");
 }
 
-/** `#rgb` / `#RRGGBB` (any case) as `RRGGBB`, or null. */
-function hexBody(hex: string): string | null {
+/** `#rgb` / `#RRGGBB` (any case, `#` optional, surrounding space ignored)
+ *  as the upper-case `RRGGBB`, or null when it is not a hex colour. The one
+ *  hex reader of the lowering kit, the built-ins and the editor. */
+export function nativeHexBody(hex: string): string | null {
   const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(hex.trim());
   if (!m) return null;
   const b = m[1]!;
   const full = b.length === 3 ? b[0]! + b[0] + b[1] + b[1] + b[2] + b[2] : b;
   return full.toUpperCase();
 }
+
+/** A hex colour ({@link nativeHexBody}) as its 0..255 RGB channels, or
+ *  null. */
+export function nativeHexRgb(hex: string): [number, number, number] | null {
+  const body = nativeHexBody(hex);
+  if (body === null) return null;
+  const n = Number.parseInt(body, 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
+
+const hexBody = nativeHexBody;
 
 /** The content-addressed id of a gradient swatch under `prefix`
  *  (`Gradient/u…`): its kind and its stops, so the same ramp is ONE swatch
@@ -322,6 +336,30 @@ export function nativeGradientId(prefix: string, g: NativeGradient): string {
     .map(([at, hex]) => `${idNumber(at)}-${hexBody(hex) ?? "000000"}`)
     .join("-");
   return `${prefix}${g.kind === "radial" ? "R" : "L"}-${stops}`;
+}
+
+/** A colour swatch to mint: the `createSwatch` spec, its id fixed. */
+export type NativeSwatch = SwatchSpec & { selfId: string };
+
+/** The `createSwatch` ops for every distinct swatch of `swatches` the
+ *  document does not hold yet, in first-use order. Core refuses a
+ *  duplicate create, and the refusal fails the whole batch, so a module
+ *  reads the document's swatch ids first and passes them as `known`:
+ *  `null` (the read failed) mints nothing, which costs the colours but
+ *  never the batch; omitted mints everything. */
+export function nativeSwatchMintOps(
+  swatches: Iterable<NativeSwatch>,
+  opts: { known?: ReadonlySet<string> | null } = {},
+): Mutation[] {
+  if (opts.known === null) return [];
+  const seen = new Set<string>();
+  const ops: Mutation[] = [];
+  for (const spec of swatches) {
+    if (seen.has(spec.selfId) || opts.known?.has(spec.selfId)) continue;
+    seen.add(spec.selfId);
+    ops.push({ op: "createSwatch", args: { spec } });
+  }
+  return ops;
 }
 
 /** What {@link nativeGradientMintOps} needs from the module. */

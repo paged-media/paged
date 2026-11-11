@@ -146,7 +146,8 @@ pub use eps::bounding_box as eps_bounding_box;
 
 pub use convert::{to_rgba8, ColourConvert, NaiveColour, PagedColour};
 pub use encode::{
-    encode, resize, rgb_to_cmyk, srgb8_to_cmyk8, srgb_icc, EncodeFormat, EncodeOptions, WEBP_LOSSY,
+    encode, encode_rgba8_png, resize, rgb_to_cmyk, srgb8_to_cmyk8, srgb_icc, EncodeFormat,
+    EncodeOptions, WEBP_LOSSY,
 };
 pub use icc::extract_icc;
 pub use jpeg::{jpeg_header, JpegHeader};
@@ -457,7 +458,7 @@ pub fn decode_rgba8_with(
 
 /// [`decode_rgba8`] at exactly `width` x `height`: decoded within the
 /// larger of the two (so a TIFF or PSD shrinks while it decodes), then
-/// resampled (triangle filter) when the result is another size. The call
+/// resampled (bilinear, premultiplied: `paged-resample`) when the result is another size. The call
 /// paged-gpu's raster-time decode makes, on both of its lanes.
 pub fn decode_rgba8_at(bytes: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
     decode_rgba8_at_with(bytes, width, height, &PagedColour::default())
@@ -475,9 +476,15 @@ pub fn decode_rgba8_at_with(
     if decoded.width == width && decoded.height == height {
         return Some(decoded.data);
     }
-    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, decoded.data)?;
-    let raw = image::imageops::resize(&img, width, height, image::imageops::FilterType::Triangle);
-    Some(raw.into_raw())
+    paged_resample::resize_rgba8(
+        &decoded.data,
+        decoded.width,
+        decoded.height,
+        width,
+        height,
+        paged_resample::Filter::Bilinear,
+    )
+    .ok()
 }
 
 /// The formats [`decode_rgba8`] reads through this crate's own decoders

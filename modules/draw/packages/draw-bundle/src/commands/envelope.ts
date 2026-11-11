@@ -66,6 +66,7 @@ import type {
   Mutation,
 } from "@paged-media/plugin-api";
 import {
+  applyAffine,
   ellipseToPath,
   ENVELOPE_MAX_CELLS,
   flatNet,
@@ -451,9 +452,7 @@ export async function makeWithMesh(
 }
 
 const mapAffine = (m: Affine | null, p: Vec2): [number, number] =>
-  m
-    ? [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]]
-    : [p[0], p[1]];
+  applyAffine(m, p[0], p[1]);
 
 /** The page-space box of a target (its own box through its transform). */
 function pageBox(t: EnvelopeTarget): EnvelopeBox {

@@ -64,3 +64,13 @@ The additions are additive: no wire change, no protocol bump. The contract versi
   resolver): `nativeFxOps` writes the stack last as `frameEffectStack`, its InDesign entries taking
   the parameters written before it, its colours as swatches; an unfilled item names no gradient
   feather in it.
+
+## Amendment (2026-11-11): colour swatch mints and the hex reader
+
+`nativeSwatchMintOps(swatches, { known })` joins `nativeGradientMintOps`: the `createSwatch` ops for
+every distinct swatch the document lacks, in first-use order, nothing when the read of the document's
+ids failed (`known: null`; core refuses a duplicate create and the refusal fails the whole batch).
+paged.sheet's palette mints, paged.doc's style swatches, paged.web's bake and paged.data's property
+colours mint through it. `nativeHexBody` / `nativeHexRgb` are the kit's hex reader, now exported:
+`@paged-media/helpers`' `hexToRgb` and sheet's palette normaliser are this one function
+(`0.74.3-canary.85`).

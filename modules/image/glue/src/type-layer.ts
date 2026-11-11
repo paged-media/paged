@@ -342,7 +342,7 @@ function storyRun(r: TypeRun, text: string, k: number): RenderStoryRun {
 /**
  * Lay out and draw `src` through the engine, on page `pageId` (any page
  * of the document: the story is drawn alone, the document is not
- * changed). `null` when the host has no story door, or nothing is drawn
+ * changed). `null` when nothing is drawn
  * (an empty text): the caller keeps the layer's pixels as they are.
  */
 export async function renderTypeSource(
@@ -350,7 +350,6 @@ export async function renderTypeSource(
   pageId: string,
   src: TypeSource,
 ): Promise<TypeRenderPixels | null> {
-  if (!host.supports("render.story@1")) return null;
   const k = drawScale(src);
   const story = storyOf(src, k);
   const b = layoutBox(src);

@@ -70,7 +70,6 @@ describe("one verb for placing a Word document", () => {
       insert: () => {},
       canInsert: () => true,
       selectFrame: () => {},
-      readiness: () => ({ readStory: false }),
     });
     expect(panel.icon).toBe("panel-outline");
   });

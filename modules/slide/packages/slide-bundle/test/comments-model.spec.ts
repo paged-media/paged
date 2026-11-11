@@ -113,6 +113,7 @@ function fakeHost(initial: EngineCommentRow[] = []) {
   const parts = new Map<string, Uint8Array>();
   const kv = new Map<string, unknown>();
   const sent: Mutation[] = [];
+  const doorCalls: unknown[][] = [];
   const opened = new Set<() => void>();
   const changed = new Set<() => void>();
   const host = {
@@ -145,12 +146,27 @@ function fakeHost(initial: EngineCommentRow[] = []) {
         return { applied: true };
       },
     },
+    comments: {
+      reply: async (...a: unknown[]) => {
+        doorCalls.push(["reply", ...a]);
+        return { ok: true, commentId: "c9" };
+      },
+      resolve: async (...a: unknown[]) => {
+        doorCalls.push(["resolve", ...a]);
+        return { ok: true };
+      },
+      remove: async (...a: unknown[]) => {
+        doorCalls.push(["remove", ...a]);
+        return { ok: true };
+      },
+    },
   } as unknown as BundleHost;
   return {
     host,
     parts,
     kv,
     sent,
+    doorCalls,
     setRows: (r: EngineCommentRow[]) => void (rows = r),
     reopen: () => opened.forEach((l) => l()),
   };
@@ -370,25 +386,23 @@ describe("[plugin-slide.comments] the comments model", () => {
     ]);
     expect((batch.args.ops as Mutation[])[1]!.args.comment.id).toBe(made.id);
 
+    // Replies, resolve and delete go through the host's comments door.
     const reply = await store.reply("p1", "{C1}", "Agreed", "Ana Lima");
     expect(reply?.text).toBe("Agreed");
-    expect((f.sent.at(-1)!.args.ops as Mutation[]).at(-1)!.args.parentId).toBe(
+    expect(reply?.id).toBe("c9");
+    expect(f.doorCalls.at(-1)!.slice(0, 3)).toEqual([
+      "reply",
       "{C1}",
-    );
+      "Agreed",
+    ]);
     expect(await store.reply("p1", "{missing}", "x", "Ana Lima")).toBeNull();
 
     expect(await store.setResolved("p1", "{C1}", true)).toBe(true);
-    expect(f.sent.at(-1)).toEqual({
-      op: "resolveComment",
-      args: { commentId: "{C1}", resolved: true },
-    });
+    expect(f.doorCalls.at(-1)).toEqual(["resolve", "{C1}", true]);
     expect(await store.setResolved("p1", "{missing}", true)).toBe(false);
 
     expect(await store.remove("p1", "{C1}")).toBe(true);
-    expect(f.sent.at(-1)).toEqual({
-      op: "deleteComment",
-      args: { commentId: "{C1}" },
-    });
+    expect(f.doorCalls.at(-1)).toEqual(["remove", "{C1}"]);
     expect(await store.remove("p1", "{C1}", "{nope}")).toBe(false);
     store.dispose();
   });

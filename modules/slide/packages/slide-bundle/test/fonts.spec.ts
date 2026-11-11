@@ -208,22 +208,6 @@ describe("a deck's embedded fonts", () => {
     expect(warnings[0].message).toContain("substitute");
   });
 
-  it("are reported, not lost silently, on a host without the document-font door", async () => {
-    const r = fontHost({ door: false });
-    activate(r.host);
-    await r.importers[0].import({
-      name: "fonts.pptx",
-      bytes: FONTS,
-      mimeType: "",
-    });
-    expect(r.calls).toEqual([]);
-    expect(r.events).toEqual(["open"]);
-    const line = (r.diagnostics.get(IMPORT_DIAGNOSTICS) ?? []).find((d) =>
-      d.message.includes("cannot give"),
-    );
-    expect(line?.message).toContain("Caveat, Gloria Hallelujah, Lato");
-  });
-
   it("come back from the kept source deck when a deck document is opened again", async () => {
     // A deck document already open when the bundle activates.
     const r = fontHost({ source: FONTS });

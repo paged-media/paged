@@ -32,6 +32,9 @@ import {
   nativeGradientId,
   nativeGradientMintOps,
   type NativeFx,
+  nativeHexBody,
+  nativeHexRgb,
+  nativeSwatchMintOps,
 } from "../src/index.js";
 
 type Op = {
@@ -320,5 +323,36 @@ describe("[plugin-platform.lowering-kit] the one label escape", () => {
     expect(escapeLabelValue("~ plain ASCII")).toBe("~ plain ASCII");
     const v = { note: "Grüße\u007f" };
     expect(JSON.parse(escapeLabelValue(JSON.stringify(v)))).toEqual(v);
+  });
+});
+
+describe("[plugin-platform.lowering-kit] colour swatches", () => {
+  const sw = (selfId: string) => ({
+    selfId,
+    name: selfId,
+    space: "RGB",
+    value: [1, 2, 3],
+  });
+
+  it("mints each distinct swatch the document lacks, in first-use order", () => {
+    const ops = nativeSwatchMintOps(
+      [sw("Color/a"), sw("Color/b"), sw("Color/a"), sw("Color/c")],
+      { known: new Set(["Color/b"]) },
+    );
+    expect(ops.map((o) => (o.args as any).spec.selfId)).toEqual([
+      "Color/a",
+      "Color/c",
+    ]);
+    expect(ops.every((o) => o.op === "createSwatch")).toBe(true);
+  });
+
+  it("a failed read (known null) mints nothing", () => {
+    expect(nativeSwatchMintOps([sw("Color/a")], { known: null })).toEqual([]);
+  });
+
+  it("reads #rgb and #RRGGBB, any case, or nothing", () => {
+    expect(nativeHexBody(" #abc ")).toBe("AABBCC");
+    expect(nativeHexRgb("ff8000")).toEqual([255, 128, 0]);
+    expect(nativeHexRgb("#12345")).toBeNull();
   });
 });

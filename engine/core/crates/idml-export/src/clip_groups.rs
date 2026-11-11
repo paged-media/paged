@@ -64,18 +64,7 @@ const NONE_SWATCH: &str = "Swatch/None";
 fn compose(a: Option<[f32; 6]>, b: Option<[f32; 6]>) -> Option<[f32; 6]> {
     match (a, b) {
         (None, x) | (x, None) => x,
-        (Some(a), Some(b)) => {
-            let [a1, b1, c1, d1, tx1, ty1] = a;
-            let [a2, b2, c2, d2, tx2, ty2] = b;
-            Some([
-                a1 * a2 + c1 * b2,
-                b1 * a2 + d1 * b2,
-                a1 * c2 + c1 * d2,
-                b1 * c2 + d1 * d2,
-                a1 * tx2 + c1 * ty2 + tx1,
-                b1 * tx2 + d1 * ty2 + ty1,
-            ])
-        }
+        (Some(a), Some(b)) => Some(paged_geom::affine::multiply(a, b)),
     }
 }
 

@@ -1173,7 +1173,7 @@ mod tests {
 
     /// A closed circle as four cubic arcs (the standard 0.5523 kappa).
     fn circle(cx: f32, cy: f32, r: f32) -> Vec<PathAnchor> {
-        let k = r * 0.552_284_8;
+        let k = r * crate::KAPPA_F32;
         vec![
             PathAnchor {
                 anchor: (cx, cy - r),

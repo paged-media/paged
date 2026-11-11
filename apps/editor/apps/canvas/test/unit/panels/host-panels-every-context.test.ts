@@ -38,15 +38,25 @@ const PANELS = [
   "paged.history",
 ];
 const FREE_TRANSFORM = "paged.tool.freeTransform";
-/** Editor ADR 311, amended: path and shape tools are shared too. */
+/** Editor ADR 311, amended: the path, shape, transform, paint, sample and
+ *  measure tools are shared too. */
 const SHARED_TOOLS = [
   FREE_TRANSFORM,
+  "paged.tool.rotate",
+  "paged.tool.scale",
+  "paged.tool.shear",
   "paged.tool.pen",
+  "paged.tool.pencil",
+  "paged.tool.smooth",
+  "paged.tool.scissors",
   "paged.tool.directSelect",
   "paged.tool.line",
   "paged.tool.rectangle",
   "paged.tool.ellipse",
   "paged.tool.polygon",
+  "paged.tool.gradientSwatch",
+  "paged.tool.eyedropper",
+  "paged.tool.measure",
 ];
 
 /** Each module's edit contexts, as registered. */
@@ -97,14 +107,12 @@ describe("the shared host panels and Free Transform in every edit context [edito
         for (const id of SHARED_TOOLS)
           expect(toolStaysInContext(id, ctx.toolIds), id).toBe(true);
         // The rule is real: another editing tool is still the way out.
-        expect(toolStaysInContext("paged.tool.scissors", ctx.toolIds)).toBe(
-          false,
-        );
+        expect(toolStaysInContext("paged.tool.gap", ctx.toolIds)).toBe(false);
       }
     });
   }
 
-  test("Free Transform, the Pen, Direct Selection and the shape tools are shared; the view tools stay too", () => {
+  test("Free Transform and the vector tool set are shared; the view tools stay too", () => {
     for (const id of SHARED_TOOLS)
       expect(CONTEXT_SHARED_TOOL_IDS).toContain(id);
     expect(toolStaysInContext("paged.tool.hand", [])).toBe(true);

@@ -81,35 +81,14 @@ fn encode(img: &Rgba) -> Option<Vec<u8>> {
 
 // ── PNG ──────────────────────────────────────────────────────────────────
 
-fn crc32(chunks: &[&[u8]]) -> u32 {
-    static TABLE: std::sync::OnceLock<[u32; 256]> = std::sync::OnceLock::new();
-    let t = TABLE.get_or_init(|| {
-        let mut t = [0u32; 256];
-        for (n, slot) in t.iter_mut().enumerate() {
-            let mut c = n as u32;
-            for _ in 0..8 {
-                c = if c & 1 != 0 {
-                    0xEDB8_8320 ^ (c >> 1)
-                } else {
-                    c >> 1
-                };
-            }
-            *slot = c;
-        }
-        t
-    });
-    let mut c = 0xFFFF_FFFFu32;
-    for b in chunks.iter().flat_map(|c| c.iter()) {
-        c = t[((c ^ *b as u32) & 0xFF) as usize] ^ (c >> 8);
-    }
-    c ^ 0xFFFF_FFFF
-}
-
 fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
     out.extend_from_slice(&(data.len() as u32).to_be_bytes());
     out.extend_from_slice(kind);
     out.extend_from_slice(data);
-    out.extend_from_slice(&crc32(&[kind, data]).to_be_bytes());
+    let mut crc = crc32fast::Hasher::new();
+    crc.update(kind);
+    crc.update(data);
+    out.extend_from_slice(&crc.finalize().to_be_bytes());
 }
 
 /// A PNG of `rows` (each `stride` bytes, filtered as type 0) with the

@@ -24,6 +24,7 @@
 // 1048: one write, one undo step), the overlay markers, and the Color
 // panel's paint target (`PAINT_TARGET`, shell `tools/paint-target.ts`).
 
+import { hexToRgb } from "@paged-media/helpers";
 import type { ElementId, Mutation } from "@paged-media/client";
 import {
   PAINT_TARGET,
@@ -204,10 +205,8 @@ export function previewToMeshColor(
   if (space && preview.value && preview.value.length === CHANNELS[space]) {
     return { space, value: [...preview.value] };
   }
-  const hex = /^#?([0-9a-f]{6})$/i.exec(preview.rgbHex ?? "")?.[1];
-  if (!hex) return null;
-  const n = parseInt(hex, 16);
-  return { space: "RGB", value: [(n >> 16) & 255, (n >> 8) & 255, n & 255] };
+  const rgb = hexToRgb(preview.rgbHex ?? "");
+  return rgb ? { space: "RGB", value: rgb } : null;
 }
 
 /** The frame's fill as a mesh colour; mid grey when it has none or it

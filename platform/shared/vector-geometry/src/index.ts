@@ -41,6 +41,7 @@ export {
 export { smoothAnchorsThrough } from "./spline";
 export {
   splitSegmentDeCasteljau,
+  bernstein,
   evalCubic,
   closestTOnCubic,
   flattenAnchorRun,
@@ -310,12 +311,23 @@ export {
 export { reshapeTable, reshapeWeight, pathDistancesFrom } from "./reshape";
 export {
   starPath,
+  starAnchors,
+  polygonAnchors,
   regularPolygonPath,
+  unitLivePolygon,
   flareParts,
   STAR_MIN_POINTS,
   STAR_MAX_POINTS,
+  STAR_DEFAULTS,
+  MAX_LIVE_STAR_INSET,
+  liveStarInset,
+  liveStarMutationFor,
+  starMutationFor,
+  starParamsFrom,
   FLARE_MAX_RAYS,
   FLARE_MAX_RINGS,
+  type StarAnchor,
+  type StarParams,
   type StarSpec,
   type FlareSpec,
   type FlareParts,

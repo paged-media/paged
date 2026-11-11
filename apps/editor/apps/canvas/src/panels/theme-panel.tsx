@@ -30,6 +30,7 @@
 // dropped (a swatch or a face edited outside paged) is listed from the
 // `importNotes` collection. The panel uses engine operations only.
 
+import { ColorInput } from "@paged-media/panel-kit";
 import { useState } from "react";
 
 import { useCanvasClient, useCollection } from "@paged-media/shell";
@@ -287,15 +288,15 @@ export function ThemePanel() {
             <ul className="grid grid-cols-2 gap-1 text-xs">
               {THEME_SLOT_LABELS.map(([slot, label]) => (
                 <li key={slot} className="flex items-center gap-2">
-                  <input
-                    type="color"
+                  <ColorInput
+                    compact
                     data-theme-slot={slot}
-                    aria-label={strings.t(label)}
+                    ariaLabel={strings.t(label)}
                     value={`#${colorOf(current, slot)}`}
-                    onChange={(e) =>
+                    onChange={(hex) =>
                       run({
                         op: "setThemeColor",
-                        args: { slot, value: e.target.value.slice(1) },
+                        args: { slot, value: hex.slice(1) },
                       })
                     }
                   />

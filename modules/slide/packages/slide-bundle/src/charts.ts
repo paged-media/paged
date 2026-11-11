@@ -149,7 +149,6 @@ export class ChartEditing {
   // ── a session ───────────────────────────────────────────────────────
 
   private async engine(): Promise<LiveCharts | null> {
-    if (!this.host.supports("storage.parts@1")) return null;
     const source = await this.host.parts.read(SOURCE_PART);
     if (!source) return null;
     if (this.live && this.liveFor === source) return this.live;
@@ -263,12 +262,9 @@ export function contributeCharts(
   editing: ChartEditing,
 ): Array<() => void> {
   const out: Array<() => void> = [];
-  if (!host.supports("contribute.editContext@1")) return out;
   const refresh = () => void editing.refresh();
-  if (host.supports("document.onDidChange@1"))
-    out.push(host.document.onDidChange(refresh).dispose);
-  if (host.supports("document.onDidOpen@1"))
-    out.push(host.document.onDidOpen(refresh).dispose);
+  out.push(host.document.onDidChange(refresh).dispose);
+  out.push(host.document.onDidOpen(refresh).dispose);
   refresh();
   out.push(
     host.contribute.editContext({
@@ -295,20 +291,18 @@ export function contributeCharts(
       onCancel: () => editing.cancel(),
     }).dispose,
   );
-  if (host.supports("contribute.objectType@1")) {
-    out.push(
-      host.contribute.objectType({
-        type: CHART_OBJECT_TYPE,
-        matches: (c) =>
-          editing.frameOf(
-            (c.id as unknown as { id: string }).id,
-            c.groupChain,
-          ) !== null,
-        editContextType: CHART_CONTEXT,
-        bakedFallback: "group",
-      }).dispose,
-    );
-  }
+  out.push(
+    host.contribute.objectType({
+      type: CHART_OBJECT_TYPE,
+      matches: (c) =>
+        editing.frameOf(
+          (c.id as unknown as { id: string }).id,
+          c.groupChain,
+        ) !== null,
+      editContextType: CHART_CONTEXT,
+      bakedFallback: "group",
+    }).dispose,
+  );
   if (host.supports("editContext.frameSurface@1")) {
     out.push(
       host.contribute.frameSurface({

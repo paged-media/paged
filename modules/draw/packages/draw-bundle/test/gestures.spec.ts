@@ -135,7 +135,6 @@ describe("paged.draw tools through the gesture DSL", () => {
     "typeOnPath",
     "repeat",
     "knife",
-    "scissorsAnyPoint",
   ]) {
     it(`media.paged.draw.tool.${id}: the gesture battery (≤ 1 commit a gesture; Escape commits nothing; no throw) @level:gesture`, async () => {
       const { fake, g } = drawHarness();

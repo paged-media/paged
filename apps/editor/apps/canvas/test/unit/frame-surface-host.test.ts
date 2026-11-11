@@ -30,7 +30,7 @@ import {
   invert,
 } from "../../src/ui/frame-surface-math";
 
-type Mat = [number, number, number, number, number, number];
+type Mat = readonly [number, number, number, number, number, number];
 const apply = (m: Mat, x: number, y: number): [number, number] => [
   m[0] * x + m[2] * y + m[4],
   m[1] * x + m[3] * y + m[5],

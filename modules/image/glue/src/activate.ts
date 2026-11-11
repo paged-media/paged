@@ -2097,20 +2097,18 @@ export function activate(host: BundleHost): BundleHandle {
 
   // K-2 — the raster importer: opening/dropping a raster file routes
   // its bytes HERE (decode into the session, raise the panel; it does
-  // NOT replace the document). Degrades honestly on an older host.
-  if (host.supports("contribute.importer@1")) {
-    host.contribute.importer({
-      id: "media.paged.image.importer.raster",
-      title: t(IO.imagePsdPngJpeg),
-      // Every format the engine's paged-raster decodes (ADR 468).
-      extensions: [...RASTER_IMPORT_EXTENSIONS],
-      mimeTypes: [...RASTER_IMPORT_MIME_TYPES],
-      import: async ({ name, bytes }) => {
-        host.shell.openPanel(PANEL_ID);
-        await session.importBytes(name, bytes);
-      },
-    });
-  }
+  // NOT replace the document).
+  host.contribute.importer({
+    id: "media.paged.image.importer.raster",
+    title: t(IO.imagePsdPngJpeg),
+    // Every format the engine's paged-raster decodes (ADR 468).
+    extensions: [...RASTER_IMPORT_EXTENSIONS],
+    mimeTypes: [...RASTER_IMPORT_MIME_TYPES],
+    import: async ({ name, bytes }) => {
+      host.shell.openPanel(PANEL_ID);
+      await session.importBytes(name, bytes);
+    },
+  });
   // SAVE-BACK exporters — the delivery lane for the adjusted pixels.
   //
   // PSD: re-emits the (possibly layer-edited) PSD with full
@@ -2127,50 +2125,48 @@ export function activate(host: BundleHost): BundleHandle {
   // to file" button picks the source's own format (JPEG only when the
   // ingested bytes WERE a JPEG — a re-encode never invents a lossy
   // format); these two let the user ask for either explicitly.
-  if (host.supports("contribute.exporter@1")) {
-    host.contribute.exporter({
-      id: "media.paged.image.exporter.psd",
-      title: t(IO.psdAdjustedPixelsEditedLayers),
-      extension: ".psd",
-      mimeType: "image/vnd.adobe.photoshop",
-      export: () => session.psdExportBytes(),
-    });
-    host.contribute.exporter({
-      id: "media.paged.image.exporter.png",
-      title: t(IO.pngAdjustedPixels),
-      extension: ".png",
-      mimeType: "image/png",
-      export: () => session.rasterExportBytes("png"),
-    });
-    host.contribute.exporter({
-      id: "media.paged.image.exporter.jpeg",
-      title: t(IO.jpegAdjustedPixels),
-      extension: ".jpg",
-      mimeType: "image/jpeg",
-      export: () => session.rasterExportBytes("jpeg"),
-    });
-    host.contribute.exporter({
-      id: "media.paged.image.exporter.tiff",
-      title: t(IO.tiffAdjustedPixels),
-      extension: ".tif",
-      mimeType: "image/tiff",
-      export: () => session.rasterExportBytes("tiff"),
-    });
-    host.contribute.exporter({
-      id: "media.paged.image.exporter.tiffLayers",
-      title: t(IO.tiffWithLayers),
-      extension: ".tif",
-      mimeType: "image/tiff",
-      export: () => session.layeredTiffExportBytes(),
-    });
-    host.contribute.exporter({
-      id: "media.paged.image.exporter.webp",
-      title: t(IO.webpAdjustedPixels),
-      extension: ".webp",
-      mimeType: "image/webp",
-      export: () => session.rasterExportBytes("webp"),
-    });
-  }
+  host.contribute.exporter({
+    id: "media.paged.image.exporter.psd",
+    title: t(IO.psdAdjustedPixelsEditedLayers),
+    extension: ".psd",
+    mimeType: "image/vnd.adobe.photoshop",
+    export: () => session.psdExportBytes(),
+  });
+  host.contribute.exporter({
+    id: "media.paged.image.exporter.png",
+    title: t(IO.pngAdjustedPixels),
+    extension: ".png",
+    mimeType: "image/png",
+    export: () => session.rasterExportBytes("png"),
+  });
+  host.contribute.exporter({
+    id: "media.paged.image.exporter.jpeg",
+    title: t(IO.jpegAdjustedPixels),
+    extension: ".jpg",
+    mimeType: "image/jpeg",
+    export: () => session.rasterExportBytes("jpeg"),
+  });
+  host.contribute.exporter({
+    id: "media.paged.image.exporter.tiff",
+    title: t(IO.tiffAdjustedPixels),
+    extension: ".tif",
+    mimeType: "image/tiff",
+    export: () => session.rasterExportBytes("tiff"),
+  });
+  host.contribute.exporter({
+    id: "media.paged.image.exporter.tiffLayers",
+    title: t(IO.tiffWithLayers),
+    extension: ".tif",
+    mimeType: "image/tiff",
+    export: () => session.layeredTiffExportBytes(),
+  });
+  host.contribute.exporter({
+    id: "media.paged.image.exporter.webp",
+    title: t(IO.webpAdjustedPixels),
+    extension: ".webp",
+    mimeType: "image/webp",
+    export: () => session.rasterExportBytes("webp"),
+  });
 
   // ── the rasterImage edit context (ADR-023 / K-13) ────────────────
   //
@@ -2222,191 +2218,183 @@ export function activate(host: BundleHost): BundleHandle {
       })
     : null;
 
-  if (host.supports("contribute.editContext@1")) {
-    host.contribute.editContext({
-      // The Edit menu reads "Undo <step>".
-      undoLabel: () => session.state().history?.undoLabel ?? null,
-      redoLabel: () => session.state().history?.redoLabel ?? null,
-      // Editor ADR 285 — the host's History panel lists the image's own
-      // journal while the context is active (pixel steps, which the
-      // document's timeline does not see), and a click walks it.
-      historySteps: () => contextHistory(session),
-      onDidChangeHistory: (listener: () => void) => {
-        const sub = session.onDidChange(listener);
-        return () => sub.dispose();
-      },
-      type: "rasterImage",
-      entry: "doubleClick",
-      // Claimed by OUR OWN METADATA, never by kind. The candidate is a
-      // pure snapshot (id / kind / groupChain / this plugin's envelope)
-      // and cannot be asked "does this rectangle hold placed raster
-      // bytes?" — so matching on kind would claim every rectangle in
-      // the document and steal a gesture that belongs to the host. The
-      // marker is written at ingest (session `stampOwnership`).
-      matches: (c) => c.metadata !== null,
-      // THE SURFACE FOLLOWS THE CONTEXT. Inside a raster frame the
-      // editing surface should be the RASTER one — its tools, its
-      // panel, and (through the binding providers below) its layers.
-      // A context that changes what you are editing without changing
-      // what you are editing it WITH is only half a context.
-      //
-      // This is not a trap: the rail treats a non-context tool as an
-      // EXIT rather than a dead end (ToolRail commits the context, then
-      // activates), so picking the host's pointer walks you back out.
-      // Order matters — `toolIds[0]` is the tool the shell focuses on
-      // entry, and brush is the one a user who just double-clicked an
-      // image almost always wants.
-      toolIds: [
-        BRUSH_TOOL_ID,
-        PENCIL_TOOL_ID,
-        ERASER_TOOL_ID,
-        CLONE_TOOL_ID,
-        HEAL_TOOL_ID,
-        TYPE_TOOL_ID,
-        MARQUEE_RECT_TOOL_ID,
-        MARQUEE_ELLIPSE_TOOL_ID,
-        LASSO_TOOL_ID,
-        MAGIC_WAND_TOOL_ID,
-        CROP_TOOL_ID,
-        TRANSFORM_TOOL_ID,
-        MOVE_TOOL_ID,
-        BUCKET_TOOL_ID,
-        GRADIENT_TOOL_ID,
-        RED_EYE_TOOL_ID,
-        EYEDROPPER_TOOL_ID,
-        COLOR_SAMPLER_TOOL_ID,
-        DODGE_TOOL_ID,
-        BURN_TOOL_ID,
-        SPONGE_TOOL_ID,
-        BLUR_TOOL_ID,
-        SHARPEN_TOOL_ID,
-        SPOT_HEAL_TOOL_ID,
-        PATCH_TOOL_ID,
-        SMUDGE_TOOL_ID,
-        MIXER_TOOL_ID,
-        COLOR_REPLACE_TOOL_ID,
-        HISTORY_TOOL_ID,
-        ART_HISTORY_TOOL_ID,
-        BG_ERASER_TOOL_ID,
-        MAGIC_ERASER_TOOL_ID,
-        CA_MOVE_TOOL_ID,
-        REMOVE_TOOL_ID,
-        CAF_SAMPLING_TOOL_ID,
-        PEN_TOOL_ID,
-        PATH_SELECT_TOOL_ID,
-        RECT_SHAPE_TOOL_ID,
-        ...WORKSPACE_TOOL_IDS,
-      ],
-      // The context's OWN panel. Deliberately NOT the host panels it
-      // serves (Layers, Character) — naming those here would put host
-      // panel IDs in plugin code, the exact coupling ADR-023 removed
-      // from the value lane, and the host already infers "serves" from
-      // `provides` to decide whether to withhold a raise.
-      panelIds: [PANEL_ID],
-      onEnter: () => {
-        host.log.debug("rasterImage context entered");
-        workspaceSub.setContextActive(true);
-      },
-      onExit: () => {
-        host.log.debug("rasterImage context exited");
-        // An open transform box does not outlive the context.
-        host.transformBox.active()?.cancel();
-        workspaceSub.setContextActive(false);
-        // Leaving the image hands its edits to the document.
-        if (session.state().uncommitted) void session.commitToDocument();
-      },
-      onCommit: () => {
-        if (session.state().uncommitted) void session.commitToDocument();
-      },
-      // HOST UNDO (ADR 012, the in-context tier). While the context is
-      // active, Cmd+Z / Shift+Cmd+Z and Edit ▸ Undo/Redo step the image's
-      // OWN journal instead of the document's — the document has not
-      // changed, the pixels have. The host does NOT fall through to the
-      // document's undo mid-session (ADR 012: the boundary is entering
-      // and leaving the context), so `onCanUndo` answering false greys
-      // Undo out rather than reaching the document; leaving the image
-      // (which commits it) is what hands undo back. The step itself is
-      // async (a recomposite); the hook only has to say it took it.
-      onCanUndo: () => session.state().history?.canUndo ?? false,
-      onCanRedo: () => session.state().history?.canRedo ?? false,
-      onUndo: () => {
-        if (!session.state().history?.canUndo) return false;
-        void session.undo();
-        return true;
-      },
-      onRedo: () => {
-        if (!session.state().history?.canRedo) return false;
-        void session.redo();
-        return true;
-      },
-    });
-
-    // ADR-023 phase D — the two providers that make the HOST panels
-    // show RASTER content while this context is active.
+  host.contribute.editContext({
+    // The Edit menu reads "Undo <step>".
+    undoLabel: () => session.state().history?.undoLabel ?? null,
+    redoLabel: () => session.state().history?.redoLabel ?? null,
+    // Editor ADR 285 — the host's History panel lists the image's own
+    // journal while the context is active (pixel steps, which the
+    // document's timeline does not see), and a click walks it.
+    historySteps: () => contextHistory(session),
+    onDidChangeHistory: (listener: () => void) => {
+      const sub = session.onDidChange(listener);
+      return () => sub.dispose();
+    },
+    type: "rasterImage",
+    entry: "doubleClick",
+    // Claimed by OUR OWN METADATA, never by kind. The candidate is a
+    // pure snapshot (id / kind / groupChain / this plugin's envelope)
+    // and cannot be asked "does this rectangle hold placed raster
+    // bytes?" — so matching on kind would claim every rectangle in
+    // the document and steal a gesture that belongs to the host. The
+    // marker is written at ingest (session `stampOwnership`).
+    matches: (c) => c.metadata !== null,
+    // THE SURFACE FOLLOWS THE CONTEXT. Inside a raster frame the
+    // editing surface should be the RASTER one — its tools, its
+    // panel, and (through the binding providers below) its layers.
+    // A context that changes what you are editing without changing
+    // what you are editing it WITH is only half a context.
     //
-    // Registered INSIDE the editContext branch on purpose, following
-    // paged.sheet: a provider's lifetime is BORROWED from the context's
-    // enter/exit, so a host that cannot host the context must not get a
-    // provider either. The door is probed separately and degrades to
-    // "no provider" — on a pre-ADR host the panels keep reading core,
-    // which is the old behaviour and not a failure.
-    if (host.supports("contribute.bindingProvider@1")) {
-      // LAYERS — the collection axis. The host Layers panel shows the
-      // RASTER stack (groups as tree rows) instead of the document's,
-      // which is ADR 024's rule for a plugin content type.
-      providerHandles.push(
-        host.contribute.bindingProvider(
-          "rasterImage",
-          makeLayersBindingProvider(session).provider,
-        ),
-      );
-      // CHARACTER — the value axis, and the first provider anywhere
-      // with a non-empty `writablePaths` (see its module header).
-      providerHandles.push(
-        host.contribute.bindingProvider(
-          "rasterImage",
-          makeTextBindingProvider(session, () =>
-            typeToolActive ? TYPE_TOOL_ID : null,
-          ).provider,
-        ),
-      );
-      // COLOUR (WP4.10) — the host Color panel's fill / stroke wells are
-      // the foreground / background, and a host swatch picks one.
-      providerHandles.push(
-        host.contribute.bindingProvider(
-          "rasterImage",
-          makeColorBindingProvider(host, session).provider,
-        ),
-      );
-      // WORKSPACE (WP5.12, extensions ADR 340) — the host rulers measure
-      // the image in its unit, its guides are the host's guides, the host
-      // grid covers it, and the Info panel shows its pixel, selection and
-      // Ruler rows.
-      providerHandles.push(
-        host.contribute.bindingProvider(
-          "rasterImage",
-          makeWorkspaceBindingProvider(() => session.workspace()),
-        ),
-      );
-      // LINKS (image ADR 482) — the host Links panel lists the smart
-      // objects' files; its Relink / Update / Embed run our commands.
-      providerHandles.push(
-        host.contribute.bindingProvider(
-          "rasterImage",
-          makeLinksBindingProvider(session).provider,
-        ),
-      );
-      // A provider's values change without an ENGINE mutation — a layer
-      // toggled inside the plugin's own wasm stack moves nothing on the
-      // document, so `host.document.onDidChange` never fires and a
-      // panel bound through the seam would show a stale row until
-      // something unrelated happened. The handle's own invalidate is
-      // the signal for exactly this.
-      providerInvalidate = session.onDidChange(() => {
-        for (const h of providerHandles) h.invalidate?.();
-      });
-    }
-  }
+    // This is not a trap: the rail treats a non-context tool as an
+    // EXIT rather than a dead end (ToolRail commits the context, then
+    // activates), so picking the host's pointer walks you back out.
+    // Order matters — `toolIds[0]` is the tool the shell focuses on
+    // entry, and brush is the one a user who just double-clicked an
+    // image almost always wants.
+    toolIds: [
+      BRUSH_TOOL_ID,
+      PENCIL_TOOL_ID,
+      ERASER_TOOL_ID,
+      CLONE_TOOL_ID,
+      HEAL_TOOL_ID,
+      TYPE_TOOL_ID,
+      MARQUEE_RECT_TOOL_ID,
+      MARQUEE_ELLIPSE_TOOL_ID,
+      LASSO_TOOL_ID,
+      MAGIC_WAND_TOOL_ID,
+      CROP_TOOL_ID,
+      TRANSFORM_TOOL_ID,
+      MOVE_TOOL_ID,
+      BUCKET_TOOL_ID,
+      GRADIENT_TOOL_ID,
+      RED_EYE_TOOL_ID,
+      EYEDROPPER_TOOL_ID,
+      COLOR_SAMPLER_TOOL_ID,
+      DODGE_TOOL_ID,
+      BURN_TOOL_ID,
+      SPONGE_TOOL_ID,
+      BLUR_TOOL_ID,
+      SHARPEN_TOOL_ID,
+      SPOT_HEAL_TOOL_ID,
+      PATCH_TOOL_ID,
+      SMUDGE_TOOL_ID,
+      MIXER_TOOL_ID,
+      COLOR_REPLACE_TOOL_ID,
+      HISTORY_TOOL_ID,
+      ART_HISTORY_TOOL_ID,
+      BG_ERASER_TOOL_ID,
+      MAGIC_ERASER_TOOL_ID,
+      CA_MOVE_TOOL_ID,
+      REMOVE_TOOL_ID,
+      CAF_SAMPLING_TOOL_ID,
+      PEN_TOOL_ID,
+      PATH_SELECT_TOOL_ID,
+      RECT_SHAPE_TOOL_ID,
+      ...WORKSPACE_TOOL_IDS,
+    ],
+    // The context's OWN panel. Deliberately NOT the host panels it
+    // serves (Layers, Character) — naming those here would put host
+    // panel IDs in plugin code, the exact coupling ADR-023 removed
+    // from the value lane, and the host already infers "serves" from
+    // `provides` to decide whether to withhold a raise.
+    panelIds: [PANEL_ID],
+    onEnter: () => {
+      host.log.debug("rasterImage context entered");
+      workspaceSub.setContextActive(true);
+    },
+    onExit: () => {
+      host.log.debug("rasterImage context exited");
+      // An open transform box does not outlive the context.
+      host.transformBox.active()?.cancel();
+      workspaceSub.setContextActive(false);
+      // Leaving the image hands its edits to the document.
+      if (session.state().uncommitted) void session.commitToDocument();
+    },
+    onCommit: () => {
+      if (session.state().uncommitted) void session.commitToDocument();
+    },
+    // HOST UNDO (ADR 012, the in-context tier). While the context is
+    // active, Cmd+Z / Shift+Cmd+Z and Edit ▸ Undo/Redo step the image's
+    // OWN journal instead of the document's — the document has not
+    // changed, the pixels have. The host does NOT fall through to the
+    // document's undo mid-session (ADR 012: the boundary is entering
+    // and leaving the context), so `onCanUndo` answering false greys
+    // Undo out rather than reaching the document; leaving the image
+    // (which commits it) is what hands undo back. The step itself is
+    // async (a recomposite); the hook only has to say it took it.
+    onCanUndo: () => session.state().history?.canUndo ?? false,
+    onCanRedo: () => session.state().history?.canRedo ?? false,
+    onUndo: () => {
+      if (!session.state().history?.canUndo) return false;
+      void session.undo();
+      return true;
+    },
+    onRedo: () => {
+      if (!session.state().history?.canRedo) return false;
+      void session.redo();
+      return true;
+    },
+  });
+
+  // ADR-023 phase D — the two providers that make the HOST panels
+  // show RASTER content while this context is active.
+  // A provider's lifetime is BORROWED from the context's enter/exit
+  // (following paged.sheet), so they register right after it.
+  //
+  // LAYERS — the collection axis. The host Layers panel shows the
+  // RASTER stack (groups as tree rows) instead of the document's,
+  // which is ADR 024's rule for a plugin content type.
+  providerHandles.push(
+    host.contribute.bindingProvider(
+      "rasterImage",
+      makeLayersBindingProvider(session).provider,
+    ),
+  );
+  // CHARACTER — the value axis, and the first provider anywhere
+  // with a non-empty `writablePaths` (see its module header).
+  providerHandles.push(
+    host.contribute.bindingProvider(
+      "rasterImage",
+      makeTextBindingProvider(session, () =>
+        typeToolActive ? TYPE_TOOL_ID : null,
+      ).provider,
+    ),
+  );
+  // COLOUR (WP4.10) — the host Color panel's fill / stroke wells are
+  // the foreground / background, and a host swatch picks one.
+  providerHandles.push(
+    host.contribute.bindingProvider(
+      "rasterImage",
+      makeColorBindingProvider(host, session).provider,
+    ),
+  );
+  // WORKSPACE (WP5.12, extensions ADR 340) — the host rulers measure
+  // the image in its unit, its guides are the host's guides, the host
+  // grid covers it, and the Info panel shows its pixel, selection and
+  // Ruler rows.
+  providerHandles.push(
+    host.contribute.bindingProvider(
+      "rasterImage",
+      makeWorkspaceBindingProvider(() => session.workspace()),
+    ),
+  );
+  // LINKS (image ADR 482) — the host Links panel lists the smart
+  // objects' files; its Relink / Update / Embed run our commands.
+  providerHandles.push(
+    host.contribute.bindingProvider(
+      "rasterImage",
+      makeLinksBindingProvider(session).provider,
+    ),
+  );
+  // A provider's values change without an ENGINE mutation — a layer
+  // toggled inside the plugin's own wasm stack moves nothing on the
+  // document, so `host.document.onDidChange` never fires and a
+  // panel bound through the seam would show a stale row until
+  // something unrelated happened. The handle's own invalidate is
+  // the signal for exactly this.
+  providerInvalidate = session.onDidChange(() => {
+    for (const h of providerHandles) h.invalidate?.();
+  });
 
   // The probe behind the save-back delivery seam (see the applyToFile
   // command): `shell.pickFile@1` is the only file door the contract has,
@@ -2437,17 +2425,14 @@ export function activate(host: BundleHost): BundleHandle {
   // ADR 323 — the layer stack's properties as host-rendered PropertyFields
   // (a schema panel of property rows; needs the object model + bindings).
   const propertiesSchema = imagePropertiesPanel();
-  const propertyLists =
-    objectModel && host.supports("contribute.schemaPanel@1")
-      ? (contributeSchemaPanel(host, {
-          id: PROPERTIES_PANEL_ID,
-          title: propertiesSchema.title,
-          icon: propertiesSchema.icon,
-          defaultDock: "right",
-          schema: propertiesSchema,
-        }),
-        publishPropertyLists(host))
-      : null;
+  contributeSchemaPanel(host, {
+    id: PROPERTIES_PANEL_ID,
+    title: propertiesSchema.title,
+    icon: propertiesSchema.icon,
+    defaultDock: "right",
+    schema: propertiesSchema,
+  });
+  const propertyLists = publishPropertyLists(host);
 
   // PM-0015 — the CPU-lane steps over an encoded picture as actions
   // (actions@1, extensions ADR 344), for data's asset columns and scripts.
@@ -2460,9 +2445,9 @@ export function activate(host: BundleHost): BundleHandle {
       // the session they read. Reverse registration order: a handle
       // disposed after its session would be a live provider over a
       // closed engine for however long the host takes to notice.
-      propertyLists?.dispose();
-      objectModel?.handle.dispose();
-      objectModel?.objects.dispose();
+      propertyLists.dispose();
+      objectModel.handle.dispose();
+      objectModel.objects.dispose();
       providerInvalidate?.dispose();
       willSave?.dispose();
       toolSettingsSub?.dispose();

@@ -38,6 +38,9 @@ export = [
 ]
 
 [dependencies]
+paged-fmt = { path = "../paged-fmt" }
+paged-pixel = { path = "../paged-pixel" }
+paged-colour-math = { path = "../paged-colour-math" }
 # usvg resolves what an SVG means before we read it: <use>, <defs> and
 # <symbol>, CSS stylesheets and classes, units, nested transforms,
 # markers. The `import` feature turns on its `text` feature, which lays

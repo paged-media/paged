@@ -45,8 +45,6 @@ export const OUTLINE = defineMessages("doc.outline", {
   live: "Your edits are written back into the .docx when you export it.",
   notCaptured:
     "Export writes the original .docx unchanged: this document's text was not captured.",
-  cannotReadBack:
-    "Export writes the original .docx unchanged: this editor cannot read edited text back.",
   empty: "Insert a Word document to see its outline, styles and diagnostics.",
   paragraphs: "{count, plural, one {# paragraph} other {# paragraphs}}",
   tables: "{count, plural, one {# table} other {# tables}}",
@@ -96,9 +94,6 @@ export const DOC = defineMessages("doc.bundle", {
     "This editor version cannot change columns mid-page: each Word section that does opens a new page instead.",
   cannotApply: "This engine cannot apply {what}: {reason}",
   noModelField: "The document model has no field for it.",
-  noFontDoor:
-    "This host cannot give the document the fonts it embeds ({families}" +
-    "); text set in them is drawn in a substitute.",
   fontRefused:
     "The embedded font “{family}” ({style}" +
     ") was not loaded: {reason}. Text set in it is drawn in a substitute.",

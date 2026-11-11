@@ -191,14 +191,17 @@ describe("media.paged.pdf.importPdf (unit)", () => {
     none.dispose();
   });
 
-  it("the image path needs a canvas: under Node it rejects and opens nothing", async () => {
+  it("the image path rasterises without a canvas: under Node it opens the page images", async () => {
     covers("command:media.paged.pdf.importPdf");
     const opened: Uint8Array[] = [];
     const b = boot({ nativeDocument: nativeDoor(opened) });
-    await expect(
-      b.host.objects.invoke(IMPORT_PDF_COMMAND, { bytes: PDF, mode: "image" }),
-    ).rejects.toThrow();
-    expect(opened).toEqual([]);
+    const out = (await b.host.objects.invoke(IMPORT_PDF_COMMAND, {
+      bytes: PDF,
+      mode: "image",
+    })) as { mode: string; pageCount: number };
+    expect(out.mode).toBe("image");
+    expect(out.pageCount).toBe(2);
+    expect(opened).toHaveLength(1);
     b.dispose();
   }, 60_000);
 });

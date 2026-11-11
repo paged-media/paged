@@ -303,6 +303,19 @@ fn enc_err(e: impl std::fmt::Display) -> Error {
     Error::Encode(e.to_string())
 }
 
+/// A PNG of `w × h` straight RGBA8 pixels (rows top down, no padding)
+/// with no metadata: the page snapshots and GPU read-backs. The same
+/// encoder and settings as [`encode`] without a copy into a
+/// [`RasterImage`].
+pub fn encode_rgba8_png(rgba: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
+    use image::ImageEncoder;
+    let mut out = Vec::with_capacity(rgba.len() / 4);
+    image::codecs::png::PngEncoder::new(&mut out)
+        .write_image(rgba, w, h, image::ExtendedColorType::Rgba8)
+        .map_err(enc_err)?;
+    Ok(out)
+}
+
 fn encode_png(img: &RasterImage, opts: &EncodeOptions) -> Result<Vec<u8>> {
     use image::ExtendedColorType as C;
     let alpha = img.alpha != Alpha::None;

@@ -98,10 +98,7 @@ function openDoor(
   return null;
 }
 
-export function contributePdfCommands(
-  host: BundleHost,
-): ObjectModelHandle | null {
-  if (!host.supports("contribute.objectModel@1")) return null;
+export function contributePdfCommands(host: BundleHost): ObjectModelHandle {
   const importPdf: TypedCommandContribution<
     PdfImportArgs,
     { mode: "editable" | "image"; pageCount: number; sourcePageCount: number }

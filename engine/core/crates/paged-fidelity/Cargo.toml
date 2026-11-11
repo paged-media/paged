@@ -15,6 +15,7 @@ name = "paged-diff"
 path = "src/bin/diff.rs"
 
 [dependencies]
+paged-colour-math = { path = "../paged-colour-math" }
 anyhow = { workspace = true }
 image = { workspace = true }
 clap = { version = "4", features = ["derive"] }

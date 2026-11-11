@@ -69,6 +69,7 @@ function makeHost(opts: { metadata: unknown; supportsSceneLayer?: boolean }): {
     diagnostics: {
       set: (key: string, items: unknown) => diags.push({ key, items }),
     },
+    parts: { read: async () => null },
     contribute: { sceneLayer },
     supports: (f: string) =>
       f === "rendering.sceneLayer@1" ? !!opts.supportsSceneLayer : false,
@@ -154,6 +155,7 @@ describe("bakeWebFlow — the threaded-flow bake (ADR-020 rung 2)", () => {
           })),
       },
       diagnostics: { set: () => {} },
+      parts: { read: async () => null },
       contribute: { sceneLayer },
       supports: (f: string) =>
         f === "rendering.sceneLayer@1" ? !!opts.supportsSceneLayer : false,

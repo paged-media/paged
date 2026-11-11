@@ -311,20 +311,7 @@ pub struct ExtOut {
 // ── XML helpers ─────────────────────────────────────────────────────────────
 
 /// Escape text and attribute values.
-pub fn esc(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            _ => out.push(c),
-        }
-    }
-    out
-}
-
+pub use paged_fmt::xml::escape_attr as esc;
 fn num(v: f64) -> String {
     if v.fract() == 0.0 && v.abs() < 1e15 {
         format!("{}", v as i64)

@@ -17,11 +17,10 @@
  */
 
 use std::collections::BTreeMap;
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Read};
 
 use sha2::{Digest, Sha256};
-use zip::write::SimpleFileOptions;
-use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
+use zip::ZipArchive;
 
 use crate::object::check_path;
 use crate::pack::{read_records, write_record};
@@ -204,29 +203,20 @@ pub fn project(
     extra: &[(String, Vec<u8>)],
 ) -> Result<Vec<u8>, Error> {
     let tree = read_tree(store, tree)?;
-    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
-    let opts = SimpleFileOptions::default().last_modified_time(DateTime::default());
-    let stored = opts.compression_method(CompressionMethod::Stored);
-    let deflated = opts.compression_method(CompressionMethod::Deflated);
+    let mut zip = paged_ocf::OcfZip::bare();
     let pkg = |e: zip::result::ZipError| Error::Package(e.to_string());
-    let io = |e: std::io::Error| Error::Package(e.to_string());
 
     let mimetype = tree.get("mimetype");
     let rest = tree.entries.iter().filter(|e| e.path != "mimetype");
     for e in mimetype.into_iter().chain(rest) {
-        let o = if e.path == "mimetype" {
-            stored
-        } else {
-            deflated
-        };
-        zip.start_file(e.path.as_str(), o).map_err(pkg)?;
-        zip.write_all(&read_part(store, e)?).map_err(io)?;
+        let bytes = read_part(store, e)?;
+        zip.put(e.path.as_str(), &bytes, e.path == "mimetype")
+            .map_err(pkg)?;
     }
     for (path, bytes) in extra {
-        zip.start_file(path.as_str(), deflated).map_err(pkg)?;
-        zip.write_all(bytes).map_err(io)?;
+        zip.deflated(path, bytes).map_err(pkg)?;
     }
-    Ok(zip.finish().map_err(pkg)?.into_inner())
+    zip.finish().map_err(pkg)
 }
 
 /// The parts that carry `bundle` in a file: objects as records of a kind tag,

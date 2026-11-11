@@ -82,7 +82,6 @@ const TOOLS = [
   // canary.14 — the cutting pair in the host's Scissors flyout (driven
   // end to end in journey/plugins/vector-tools.journey.spec.ts).
   "media.paged.draw.tool.knife",
-  "media.paged.draw.tool.scissorsAnyPoint",
   // WP6.1 — keyless, in the host's transform / pencil / shape flyouts.
   "media.paged.draw.tool.reshape",
   "media.paged.draw.tool.shaper",
@@ -343,7 +342,6 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.typeOnPath": "type",
   "media.paged.draw.tool.repeat": "repeat",
   "media.paged.draw.tool.knife": "scissors",
-  "media.paged.draw.tool.scissorsAnyPoint": "scissors",
   "media.paged.draw.tool.reshape": "transform",
   "media.paged.draw.tool.shaper": "pencil",
   "media.paged.draw.tool.pathEraser": "pencil",
@@ -667,7 +665,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 41 registered.
+    // TOOLS — all 40 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -726,14 +724,14 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(41);
+    expect(TOOLS).toHaveLength(40);
     expect(PANELS).toHaveLength(13);
     expect(COMMANDS).toHaveLength(138);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 41 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 40 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);

@@ -260,8 +260,6 @@ export const SOURCES = defineMessages("data.sources", {
   persistencePending: "Saving the data definitions with the document…",
   persistenceSaved:
     "Sources, bindings and imported data are saved with the document.",
-  persistenceUnavailable:
-    "This editor cannot save data definitions with the document — reopening it needs a new import.",
   refresh: "refresh",
   policyManual: "manual",
   policyOnOpen: "on open",

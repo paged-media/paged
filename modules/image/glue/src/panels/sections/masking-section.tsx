@@ -8,6 +8,7 @@
 // Each piece is PURE (props in, elements out) so the DOM specs can drive
 // it; `MaskingSections` wires them to the session's masking controller.
 
+import { hexToRgb } from "@paged-media/helpers";
 import { ColorInput } from "./color-input";
 import { useEffect, useRef, useState } from "react";
 
@@ -867,11 +868,8 @@ export function ChannelsListSection({
 }) {
   const [ink, setInk] = useState("#00a0e0");
   const [solidity, setSolidity] = useState(0);
-  const rgb = (hex: string): [number, number, number] => [
-    parseInt(hex.slice(1, 3), 16) || 0,
-    parseInt(hex.slice(3, 5), 16) || 0,
-    parseInt(hex.slice(5, 7), 16) || 0,
-  ];
+  const rgb = (hex: string): [number, number, number] =>
+    hexToRgb(hex) ?? [0, 0, 0];
   const hex = (c: [number, number, number]) =>
     "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
   const viewing = (v: DisplayView) =>

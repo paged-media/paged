@@ -70,6 +70,13 @@ export function splitSegmentDeCasteljau(
   };
 }
 
+/** The four cubic Bernstein weights at `t` (a cubic's point, a bicubic
+ *  patch's row and column weights). */
+export function bernstein(t: number): [number, number, number, number] {
+  const s = 1 - t;
+  return [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
+}
+
 /** Evaluate the cubic at `t`. */
 export function evalCubic(
   start: Vec2,
@@ -78,11 +85,7 @@ export function evalCubic(
   end: Vec2,
   t: number,
 ): Vec2Mut {
-  const u = 1 - t;
-  const w0 = u * u * u;
-  const w1 = 3 * u * u * t;
-  const w2 = 3 * u * t * t;
-  const w3 = t * t * t;
+  const [w0, w1, w2, w3] = bernstein(t);
   return [
     w0 * start[0] + w1 * startRight[0] + w2 * endLeft[0] + w3 * end[0],
     w0 * start[1] + w1 * startRight[1] + w2 * endLeft[1] + w3 * end[1],

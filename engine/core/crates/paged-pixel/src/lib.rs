@@ -53,8 +53,8 @@ pub use format::{
     Transfer, TransferCurve, PIXEL_FORMAT_VERSION,
 };
 pub use generation::{
-    fnv1a_64, fnv1a_64_update, ContentHash, GenerationId, ParamsHash, FNV1A_64_OFFSET,
-    FNV1A_64_PRIME,
+    fnv1a_32, fnv1a_32_update, fnv1a_64, fnv1a_64_update, ContentHash, Fnv1a64, GenerationId,
+    ParamsHash, FNV1A_32_OFFSET, FNV1A_32_PRIME, FNV1A_64_OFFSET, FNV1A_64_PRIME,
 };
 pub use region::Region;
 pub use slice::{TileSliceMut, TileSliceRef};

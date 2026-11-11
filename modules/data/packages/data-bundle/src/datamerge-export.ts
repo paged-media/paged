@@ -21,8 +21,8 @@
 //
 // Data Merge placeholders SHOW `<<field>>`, not a value, so this is an
 // explicit export — never what a save writes (the document keeps its baked
-// values, ADR 559 point 1). Pure + browser-safe: the zip codec uses
-// `CompressionStream("deflate-raw")`.
+// values, ADR 559 point 1). Pure + browser-safe: the zip codec is
+// `@paged-media/helpers`' (`CompressionStream("deflate-raw")`).
 
 export interface ZipEntry {
   name: string;
@@ -31,7 +31,13 @@ export interface ZipEntry {
 
 /** A placed text field to turn into a Data Merge placeholder. */
 
-import { crc32, escapeXmlAttr, escapeXmlText } from "@paged-media/helpers";
+import {
+  deflateRaw,
+  escapeXmlAttr,
+  escapeXmlText,
+  unzip,
+  zipAsync,
+} from "@paged-media/helpers";
 export interface TextField {
   /** The story's `Self` as the engine lists it (`Story/u0` or `u0`). */
   storyId: string;
@@ -309,123 +315,17 @@ export function utf16Csv(
   return out;
 }
 
-// ── zip (stored + deflate), browser-safe ────────────────────────────────────
-
-async function pipe(
-  bytes: Uint8Array,
-  stream: {
-    readable: ReadableStream<Uint8Array>;
-    writable: WritableStream<BufferSource>;
-  },
-): Promise<Uint8Array> {
-  const out = new Response(
-    new Blob([bytes as BlobPart])
-      .stream()
-      .pipeThrough(
-        stream as unknown as TransformStream<Uint8Array, Uint8Array>,
-      ),
-  );
-  return new Uint8Array(await out.arrayBuffer());
-}
+// ── zip: `@paged-media/helpers`' codec (an OCF package for the IDML) ────────
 
 /** Read every entry of a zip (stored or deflated; no zip64). */
 export async function readZip(zip: Uint8Array): Promise<ZipEntry[]> {
-  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
-  let eocd = -1;
-  for (let i = zip.length - 22; i >= 0; i--) {
-    if (view.getUint32(i, true) === 0x06054b50) {
-      eocd = i;
-      break;
-    }
-  }
-  if (eocd < 0) throw new Error("not a zip");
-  const count = view.getUint16(eocd + 10, true);
-  let p = view.getUint32(eocd + 16, true);
-  const out: ZipEntry[] = [];
-  for (let i = 0; i < count; i++) {
-    const method = view.getUint16(p + 10, true);
-    const size = view.getUint32(p + 20, true);
-    const nameLen = view.getUint16(p + 28, true);
-    const extra = view.getUint16(p + 30, true);
-    const comment = view.getUint16(p + 32, true);
-    const local = view.getUint32(p + 42, true);
-    const name = dec.decode(zip.subarray(p + 46, p + 46 + nameLen));
-    const start =
-      local +
-      30 +
-      view.getUint16(local + 26, true) +
-      view.getUint16(local + 28, true);
-    const raw = zip.subarray(start, start + size);
-    out.push({
-      name,
-      bytes:
-        method === 0
-          ? raw.slice()
-          : await pipe(
-              raw,
-              new DecompressionStream("deflate-raw" as CompressionFormat),
-            ),
-    });
-    p += 46 + nameLen + extra + comment;
-  }
-  return out;
+  return (await unzip(zip)).map(([name, bytes]) => ({ name, bytes }));
 }
 
 /** Write a zip: `mimetype` first and stored (IDML requires it), the rest deflated. */
-export async function writeZip(
-  entries: readonly ZipEntry[],
-): Promise<Uint8Array> {
-  const ordered = [...entries].sort((a, b) =>
-    a.name === "mimetype" ? -1 : b.name === "mimetype" ? 1 : 0,
+export function writeZip(entries: readonly ZipEntry[]): Promise<Uint8Array> {
+  return zipAsync(
+    entries.map((e) => [e.name, e.bytes] as const),
+    { ocf: true, deflate: deflateRaw },
   );
-  const local: Uint8Array[] = [];
-  const central: Uint8Array[] = [];
-  let offset = 0;
-  for (const e of ordered) {
-    const name = enc.encode(e.name);
-    const store = e.name === "mimetype";
-    const data = store
-      ? e.bytes
-      : await pipe(
-          e.bytes,
-          new CompressionStream("deflate-raw" as CompressionFormat),
-        );
-    const crc = crc32(e.bytes);
-    const h = new DataView(new ArrayBuffer(30));
-    h.setUint32(0, 0x04034b50, true);
-    h.setUint16(4, 20, true);
-    h.setUint16(8, store ? 0 : 8, true);
-    h.setUint32(14, crc, true);
-    h.setUint32(18, data.length, true);
-    h.setUint32(22, e.bytes.length, true);
-    h.setUint16(26, name.length, true);
-    local.push(new Uint8Array(h.buffer), name, data);
-    const c = new DataView(new ArrayBuffer(46));
-    c.setUint32(0, 0x02014b50, true);
-    c.setUint16(4, 20, true);
-    c.setUint16(6, 20, true);
-    c.setUint16(10, store ? 0 : 8, true);
-    c.setUint32(16, crc, true);
-    c.setUint32(20, data.length, true);
-    c.setUint32(24, e.bytes.length, true);
-    c.setUint16(28, name.length, true);
-    c.setUint32(42, offset, true);
-    central.push(new Uint8Array(c.buffer), name);
-    offset += 30 + name.length + data.length;
-  }
-  const size = central.reduce((s, b) => s + b.length, 0);
-  const end = new DataView(new ArrayBuffer(22));
-  end.setUint32(0, 0x06054b50, true);
-  end.setUint16(8, ordered.length, true);
-  end.setUint16(10, ordered.length, true);
-  end.setUint32(12, size, true);
-  end.setUint32(16, offset, true);
-  const parts = [...local, ...central, new Uint8Array(end.buffer)];
-  const out = new Uint8Array(parts.reduce((s, b) => s + b.length, 0));
-  let at = 0;
-  for (const b of parts) {
-    out.set(b, at);
-    at += b.length;
-  }
-  return out;
 }

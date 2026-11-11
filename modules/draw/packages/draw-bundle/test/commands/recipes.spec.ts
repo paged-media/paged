@@ -516,105 +516,134 @@ describe("paged.draw commands, no engine — live paint", () => {
 });
 
 describe("paged.draw commands, no engine — symbols", () => {
-  async function defined() {
-    const r = unitRig(doc(), { selection: [A] });
-    await r.run(`${C}.defineSymbol`, { name: "Tile" });
-    r.reset();
-    return r;
-  }
-  async function placed() {
-    const r = await defined();
-    await r.run(`${C}.placeSymbolInstance`, {
-      symbolId: "sym-1",
-      x: 500,
-      y: 500,
-    });
-    const instance = r.fake.selection()[0]!;
-    r.reset();
-    return { r, instance };
-  }
+  // The verbs run on the engine's symbols (engine ADR 1039): the fake's
+  // `instance` element and `symbols` collection stand in for its store,
+  // and each verb sends the one op it maps onto.
+  const SYM = "Symbol/s1";
+  const I1 = { kind: "instance", id: "i1" } as ElementId;
+  const withInstance = (selection: ElementId[]) =>
+    unitRig(
+      [
+        ...doc(),
+        {
+          id: I1,
+          bounds: [-10, -10, 10, 10],
+          transform: [2, 0, 0, 2, 500, 500],
+          props: {
+            frameTransform: {
+              type: "transform",
+              value: [2, 0, 0, 2, 500, 500],
+            },
+            symbolInstanceSymbol: { type: "text", value: SYM },
+          },
+        },
+      ],
+      {
+        selection,
+        collections: {
+          symbols: [
+            {
+              id: SYM,
+              name: "Tile",
+              revision: 0,
+              bounds: [-10, -10, 10, 10],
+              nineSlice: null,
+              itemCount: 1,
+              instances: ["instance:i1"],
+            },
+          ],
+        },
+      },
+    );
 
-  it("Define symbol writes the selection into the library and nothing into the document; nothing selected sends nothing", async () => {
+  it("Define symbol makes a symbol of the selection in one write; nothing selected sends nothing", async () => {
     covers("command:media.paged.draw.command.defineSymbol");
     const r = unitRig(doc(), { selection: [A] });
     await r.run(`${C}.defineSymbol`, { name: "Tile" });
-    expect(r.sent()).toEqual([]);
-    expect(part(r, "symbols")).toContain("Tile");
-    const none = unitRig(doc(), { selection: [] });
-    await none.run(`${C}.defineSymbol`, { name: "Tile" });
-    expect(part(none, "symbols")).not.toContain("Tile");
+    expect(r.sent()).toEqual([
+      {
+        op: "createSymbol",
+        args: { name: "Tile", elementIds: [A], replace: false },
+      },
+    ]);
+    await refuses([], `${C}.defineSymbol`, { name: "Tile" });
   });
 
-  it("Place instance inserts a linked copy in one batch and selects it; an unknown symbol sends nothing", async () => {
+  it("Place instance places one instance at the point, in one write", async () => {
     covers("command:media.paged.draw.command.placeSymbolInstance");
-    const r = await defined();
-    await r.run(`${C}.placeSymbolInstance`, {
-      symbolId: "sym-1",
-      x: 500,
-      y: 500,
-    });
+    const r = withInstance([]);
+    r.reset();
+    await r.run(`${C}.placeSymbolInstance`, { symbolId: SYM, x: 500, y: 500 });
     expect(r.steps()).toBe(1);
-    expect(count(r.leaves(), "insertPath")).toBe(1);
-    const instance = r.fake.selection()[0]!;
-    expect(r.metaOf(instance)?.data).toHaveProperty("symbolInstance");
-    await refuses([], `${C}.placeSymbolInstance`, {
-      symbolId: "sym-404",
-      x: 0,
-      y: 0,
-    });
+    const [sent] = r.sent() as { op: string; args: Record<string, unknown> }[];
+    expect(sent!.op).toBe("placeSymbolInstance");
+    expect(sent!.args.symbolId).toBe(SYM);
+    expect(sent!.args.at).toEqual([500, 500]);
   });
 
-  it("Redefine symbol rebuilds the placed instance from the selection in one batch; an unknown symbol sends nothing", async () => {
+  it("Redefine symbol makes the selection the symbol's artwork in one write; nothing selected sends nothing", async () => {
     covers("command:media.paged.draw.command.redefineSymbol");
-    const { r } = await placed();
-    r.fake.setSelection([B]);
-    await r.run(`${C}.redefineSymbol`, { symbolId: "sym-1" });
-    expect(r.steps()).toBe(1);
-    expect(count(r.leaves(), "insertPath")).toBe(1);
-    expect(count(r.leaves(), "deleteFrame")).toBe(1);
-    await refuses([B], `${C}.redefineSymbol`, { symbolId: "sym-404" });
+    const r = withInstance([B]);
+    r.reset();
+    await r.run(`${C}.redefineSymbol`, { symbolId: SYM });
+    expect(r.sent()).toEqual([
+      {
+        op: "redefineSymbol",
+        args: { symbolId: SYM, elementIds: [B], replace: false },
+      },
+    ]);
+    await refuses([], `${C}.redefineSymbol`, { symbolId: SYM });
   });
 
-  it("Break link unlinks the instance and keeps its art, in one write; a plain path sends nothing", async () => {
+  it("Break link breaks the selected instance in one write; a plain path sends nothing", async () => {
     covers("command:media.paged.draw.command.breakSymbolLink");
-    const { r, instance } = await placed();
-    r.fake.setSelection([instance]);
+    const r = withInstance([I1]);
+    r.reset();
     await r.run(`${C}.breakSymbolLink`);
     expect(r.steps()).toBe(1);
-    expect(ops(r.leaves())).toEqual(["setPluginMetadata"]);
-    expect(r.metaOf(instance)?.data ?? {}).not.toHaveProperty("symbolInstance");
+    expect(r.leaves()).toEqual([
+      { op: "breakSymbolLink", args: { elementId: I1 } },
+    ]);
     await refuses([B], `${C}.breakSymbolLink`);
   });
 
-  it("Reset transform re-emits the instance from its definition in one batch; a plain path sends nothing", async () => {
+  it("Reset transform keeps the instance's place and drops its scale, in one write; a plain path sends nothing", async () => {
     covers("command:media.paged.draw.command.resetSymbolTransform");
-    const { r, instance } = await placed();
-    r.fake.setSelection([instance]);
+    const r = withInstance([I1]);
+    r.reset();
     await r.run(`${C}.resetSymbolTransform`);
     expect(r.steps()).toBe(1);
-    expect(count(r.leaves(), "insertPath")).toBe(1);
+    expect(r.leaves()).toEqual([
+      {
+        op: "setElementProperty",
+        args: {
+          elementId: I1,
+          path: "frameTransform",
+          value: { type: "transform", value: [1, 0, 0, 1, 500, 500] },
+        },
+      },
+    ]);
     await refuses([B], `${C}.resetSymbolTransform`);
   });
 
-  it("Rename symbol renames it in the library and writes nothing; an unknown symbol leaves the library alone", async () => {
+  it("Rename symbol renames it in one write; an empty name sends nothing", async () => {
     covers("command:media.paged.draw.command.renameSymbol");
-    const r = await defined();
-    await r.run(`${C}.renameSymbol`, { symbolId: "sym-1", name: "Badge" });
-    expect(r.sent()).toEqual([]);
-    expect(part(r, "symbols")).toContain("Badge");
-    const before = part(r, "symbols");
-    await r.run(`${C}.renameSymbol`, { symbolId: "sym-404", name: "x" });
-    expect(part(r, "symbols")).toBe(before);
+    const r = withInstance([]);
+    r.reset();
+    await r.run(`${C}.renameSymbol`, { symbolId: SYM, name: "Badge" });
+    expect(r.sent()).toEqual([
+      { op: "redefineSymbol", args: { symbolId: SYM, name: "Badge" } },
+    ]);
+    await refuses([], `${C}.renameSymbol`, { symbolId: SYM, name: " " });
   });
 
-  it("Delete symbol unlinks its instances in one write and drops it from the library; an unknown symbol sends nothing", async () => {
+  it("Delete symbol deletes it in one write; no symbol named sends nothing", async () => {
     covers("command:media.paged.draw.command.deleteSymbol");
-    const { r } = await placed();
-    await r.run(`${C}.deleteSymbol`, { symbolId: "sym-1" });
-    expect(r.steps()).toBe(1);
-    expect(ops(r.leaves())).toEqual(["setPluginMetadata"]);
-    expect(part(r, "symbols")).not.toContain("Tile");
-    await refuses([], `${C}.deleteSymbol`, { symbolId: "sym-404" });
+    const r = withInstance([]);
+    r.reset();
+    await r.run(`${C}.deleteSymbol`, { symbolId: SYM });
+    expect(r.sent()).toEqual([{ op: "deleteSymbol", args: { symbolId: SYM } }]);
+    await refuses([], `${C}.deleteSymbol`, {});
   });
 });
 

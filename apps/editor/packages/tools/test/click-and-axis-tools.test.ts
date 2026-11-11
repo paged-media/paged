@@ -103,6 +103,30 @@ describe("Scissors tool", () => {
   });
 });
 
+describe("Scissors tool: any point, through the path's transform", () => {
+  it("a click on a segment of a moved path inserts there and opens it, one batch @level:gesture", async () => {
+    covers("tool:paged.tool.scissors");
+    const { fake, g } = harness({
+      hitTest: () => PATH,
+      // The square drawn 50 pt to the right of its own space.
+      pathAnchors: () =>
+        ({ ...SQUARE, itemTransform: [1, 0, 0, 1, 50, 0] }) as never,
+    });
+    await g.tool(createScissorsHandler).click([200, 101]).settle();
+    const [m] = fake.mutations() as {
+      op: string;
+      args: { ops: { op: string; args: Record<string, unknown> }[] };
+    }[];
+    expect(m!.op).toBe("batch");
+    const ops = m!.args.ops;
+    expect(ops.at(-1)).toEqual({
+      op: "pathOpenAt",
+      args: { elementId: PATH, index: 1 },
+    });
+    expect(ops.some((o) => o.op === "pathPointInsert")).toBe(true);
+  });
+});
+
 describe("Smooth tool", () => {
   it("a click simplifies the hit path with the tool's tolerance (default 1.5 pt) @level:gesture", async () => {
     covers("tool:paged.tool.smooth");

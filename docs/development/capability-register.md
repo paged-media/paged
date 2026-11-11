@@ -35,27 +35,36 @@ case, `match`-form escapers); before that, several rows read "0 (done)" while co
 Copies in tests and generators count: they are baselined, and move to the owner when the code
 they test does.
 
-| Capability                     | Owner                                                                                                      | Copies outside it (baseline)                                                                                                                                                                                                      |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| XML escaping                   | `paged-ooxml` `xml::escape_attr` / `escape_text`; `@paged-media/helpers` `escapeXmlText` / `escapeXmlAttr` | 7 (open): `dml-chart` (can use `paged-ooxml`); engine crates `paged-gen`, `paged-store`, `paged-svg`, `idml-export`, `paged-data-dataset`; `draw-dxf`                                                                             |
-| `[Content_Types].xml`          | `paged-ooxml` `content_types`                                                                              | 15 (open): every writer moved; what remains is hand-written minimal packages used as independent reader input                                                                                                                     |
-| Roman and alphabetic numbering | `paged-model` `roman` / `alpha`                                                                            | 1 (open): `docx-core` (lower-case table; Word's repeated letters AA, BB belong in the model)                                                                                                                                      |
-| sRGB transfer                  | `paged-color::math`, `paged-colour-math`; `@paged-media/helpers` `srgbToLinear` / `linearToSrgb` (TS)      | 19 (open): `paged-gpu` ×4, `paged-compose` ×2, `paged-model`, `paged-canvas`, `paged-export-pdf`, `paged-svg`, `paged-fidelity`, `paged-raster` dng, `paged-kernels` families ×3, image-conformance; the WGSL sources are allowed |
-| Blend modes                    | `paged-blend` (`compose_twin::Blend` is now `paged_blend::BlendMode`)                                      | 0 (done); the wire vocabularies `SceneBlendMode` and `web-render`'s two mirrors, and the ABR wrapper, are allowed. The non-separable formulas in `paged-gpu/svg_filter.rs` are a copy the enum rule does not see (open)           |
-| FNV hash                       | `@paged-media/helpers` `fnv1a32` / `fnv1a32Utf16` (TS); `paged_pixel::fnv1a_64` (Rust)                     | 28 (open), most of them engine crates; two Playwright `page.evaluate` bodies are allowed                                                                                                                                          |
-| CRC-32                         | `crc32fast` (Rust), `@paged-media/helpers` `crc32` (TS)                                                    | 6 (open): `image-js` readouts, `pptx-core` transcode, `paged-gen`, three test helpers                                                                                                                                             |
-| Base64                         | `base64` crate, `platform/shared/helpers`                                                                  | 14 (open): `btoa` loops in the canvas clipboard, data assets, draw rasterize and test drivers; `web-render`'s decoder                                                                                                             |
-| Bézier kappa                   | `paged_geom::KAPPA` / `KAPPA_F32`; `@paged-media/helpers` geometry                                         | 18 (open): ellipse builders in `paged-mutate`, `idml-export`, `paged-canvas`, `paged-gpu`, `paged-model`, `paged-vector-fx`, `paged-gen`                                                                                          |
-| Affine product                 | `paged_geom::affine` / `affine64`                                                                          | 3 (open): `compose_matrix` in `idml-import` and `idml-export` (×2)                                                                                                                                                                |
-| Arc to cubics                  | `paged-geom` (to add `arc_cubics`)                                                                         | 5 (open): `dml-geom`, `slide-chart`, `draw-dxf`, `paged-model` live shapes, renderer ruby                                                                                                                                         |
-| PNG encode                     | `paged_raster::encode`                                                                                     | 7 (open): `paged-canvas` snapshot, `paged-gpu` surface, `paged-introspect`; four image tests                                                                                                                                      |
-| Resample                       | `paged-resample` (premultiplied)                                                                           | 2 (open): `paged-export-pdf` image, `paged-raster` (`image::imageops` on straight alpha)                                                                                                                                          |
-| Four-point homography          | `vector-geometry` `warp/homography.ts` (TS), `paged-warp` (Rust)                                           | 3 (open): plugin-sdk `transform-box.ts`, `image-js` smart objects, an image test                                                                                                                                                  |
-| Star and polygon anchors       | `vector-geometry` `star.ts`, mirror of `paged_model::live_shape`                                           | 1 (open): `@paged-media/helpers` `star.ts`                                                                                                                                                                                        |
-| Colour input                   | host `ColorPicker` / `widgets.ColorPicker`                                                                 | 6 (open): raw `<input type="color">` in four host panels and two sheet panels                                                                                                                                                     |
+| Capability                     | Owner                                                                                                                                                                                                                                                         | Copies outside it (baseline)                                                                                                                                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| XML escaping                   | `paged_fmt::xml` (`escape_text`, `escape_attr`, `escape_attr_with`); `paged_ooxml::xml` re-exports it; `@paged-media/helpers` `escapeXmlText` / `escapeXmlAttr`                                                                                               | 0 (done): a format's difference is an `AttrEscape` setting chosen at its writer (IDML: `'` and whitespace as references; SVG drops control characters; DXF writes them as spaces; data sets escape `'`)                         |
+| `[Content_Types].xml`          | `paged-ooxml` `content_types`                                                                                                                                                                                                                                 | 15 (open): every writer moved; what remains is hand-written minimal packages used as independent reader input                                                                                                                   |
+| Roman and alphabetic numbering | `paged-model` `roman` / `alpha` / `repeated_letters`                                                                                                                                                                                                          | 0 (done): `docx-core` note numbers call `roman` and `repeated_letters` (Word's AA, BB)                                                                                                                                          |
+| sRGB transfer                  | `paged-colour-math` (f64 and the `_f32` pair); `paged-color::math` re-exports the f32 pair; `@paged-media/helpers` `srgbToLinear` / `linearToSrgb` (TS)                                                                                                       | 0 (done); the WGSL sources are allowed. `paged-color`'s Lab keeps a negative (out-of-gamut) channel's sign before calling the shared curve                                                                                      |
+| Blend modes                    | `paged-blend` (`compose_twin::Blend` is now `paged_blend::BlendMode`; the formulas in `formulas`)                                                                                                                                                             | 0 (done); the wire vocabularies `SceneBlendMode` and `web-render`'s two mirrors, and the ABR wrapper, are allowed. `paged-gpu`'s SVG `feBlend` calls `paged_blend::formulas`, colour burn in the W3C order (`b_color_burn_w3c`) |
+| FNV hash                       | `@paged-media/helpers` `fnv1a32` / `fnv1a32Utf16` (TS); `paged_pixel` `fnv1a_64`, `fnv1a_32`, `Fnv1a64` (Rust)                                                                                                                                                | 0 (done); mixers that are not FNV-1a (a word hash, the CLI's combined digest, a glyph-id subset tag, the inspect lanes, two GUID mixers) use `paged_pixel`'s constants; two Playwright `page.evaluate` bodies are allowed       |
+| CRC-32                         | `crc32fast` (Rust), `@paged-media/helpers` `crc32` (TS)                                                                                                                                                                                                       | 1 (open): an `ml-host` test helper (its own Cargo workspace)                                                                                                                                                                    |
+| Base64                         | `base64` crate, `platform/shared/helpers`                                                                                                                                                                                                                     | 10 (open): test drivers and Playwright `page.evaluate` bodies, the plugin-sdk's own `bytes.ts` (the public SDK cannot import helpers); the canvas clipboard, data assets and draw rasterize use helpers (2026-11-11)            |
+| Bézier kappa                   | `paged_geom::KAPPA` / `KAPPA_F32`, `paged_geom::oval_anchors`; `@paged-media/helpers` geometry                                                                                                                                                                | 0 (done): `docx-lower`'s oval head takes `KAPPA_F32` (2026-11-11). `paged-model`'s live shapes are allowed (below `paged-geom`)                                                                                                 |
+| Affine product                 | `paged_model::affine` (as `paged_geom::affine`) / `paged_geom::affine64`                                                                                                                                                                                      | 0 (done): `compose_matrix` in `idml-import` and `idml-export` and `clip_groups` call `affine::multiply`                                                                                                                         |
+| Affine product (TS)            | `@paged-media/helpers` `transform` (`compose`, `invert`, `apply`); `vector-geometry` `applyAffine` / `composeAffine` delegate                                                                                                                                 | 6 (open): test fixtures and two e2e specs; the canvas frame surface, slide show scene, pdf place, mesh tool, live-shape widgets and draw envelope / blend use helpers (2026-11-11)                                              |
+| Arc to cubics                  | `paged_geom::ellipse` (`arc_handle`, `arc_split`, `arc_cubics`)                                                                                                                                                                                               | 0 (done): `dml-geom`, `slide-chart`, `draw-dxf`, renderer ruby; `paged-model` live shapes are allowed (below `paged-geom`)                                                                                                      |
+| PNG encode                     | `paged_raster::encode` / `encode_rgba8_png`                                                                                                                                                                                                                   | 0 (done): snapshot, GPU surface, introspect. Allowed: decoder tests that encode their input with zune-png. `pptx-core`'s minimal PNG writer stays (the slide crates may not link `paged-raster`); its CRC is `crc32fast`        |
+| Resample                       | `paged-resample` (premultiplied; bilinear, Lanczos-3, Catmull-Rom)                                                                                                                                                                                            | 0 (done): `paged-export-pdf` downsampling (Catmull-Rom), `paged-raster` `decode_rgba8_at` (bilinear)                                                                                                                            |
+| Four-point homography          | `vector-geometry` `warp/homography.ts` and the plugin-sdk `transform-box.ts` (the public SDK cannot import platform/shared, and the shared packages do not load the SDK at run time: a worker or a Node test would pull the contract in), `paged-warp` (Rust) | 2 (open): `image-js` smart objects, an image test. The three solves are held to the same numbers (`vector-geometry/test/warp/homography-parity.spec.ts`, `paged-warp/tests/ts_parity.rs`)                                       |
+| Star and polygon anchors       | `vector-geometry` `star.ts` (`unitLivePolygon`, `starAnchors`, `polygonAnchors`, the star insert), mirror of `paged_model::live_shape`                                                                                                                        | 0 (done, 2026-11-11): helpers' `star.ts` is gone and the host Polygon tool draws through `unitLivePolygon`; two DOM specs that compute expected points on their own are allowed                                                 |
+| Colour input                   | panel-kit `ColorInput` (the host `ColorPicker` behind `setHostColorPicker`, a chip and popover when `compact`) / `widgets.ColorPicker`                                                                                                                        | 0 (done, 2026-11-11): the gradient editor, picture adjustments, theme and view preferences panels, sheet's border colour and data cards, and image's sections all use it                                                        |
 
 ## Landed (do not redo)
 
+- **Consolidation pass 2, Rust (2026-11-11):** the oval outline is `paged_geom::oval_anchors`
+  (`paged-mutate` re-exports it; IDML writers, snapping, the generators); `slide-resolve` and
+  `sheet-js` place shapes through `dml_geom::place` (`Space`, `orient`); the layer colour adjustment's
+  HSL is `paged_kernels::cpu::rgb_to_hsl` / `hsl_to_rgb`; OCF packages written from scratch (the blank
+  IDML, `.paged`, the generator, the repository projection) go through `paged_ocf::OcfZip` (the
+  `idml-export` rewrite raw-copies its source and keeps that layout); the embedded-font sniff and the
+  `fsType` table are `pptx-fonts` (`Embedding`, `is_sfnt`, `sfnt_fs_type`), which `paged_ooxml::fonts`
+  maps onto `FaceUse`; `web-render`'s `data:` URLs and `sheet-js`'s writer use the `base64` crate.
 - **Comments** (engine ADR 1055): one model for every module. Document threads with item, page,
   region and cell anchors; people; tasks, reactions, review state; source blobs; derived
   orphaning; the host Comments panel and canvas pins; slide comments on engine threads; PDF
@@ -84,14 +93,14 @@ they test does.
 
 ### Colour
 
-sRGB and linear light, naive CMYK, HSL, HSB and ΔE copies in `paged-gpu`, `paged-model`,
-`paged-compose`, `paged-fidelity`, `slide-anim`, `image-conformance`, the image kernels and
-three TS files → `paged-color::math` (bit-exactness against the goldens first). Office tint:
+sRGB and linear light: one curve, `paged-colour-math` (`paged-color::math` re-exports the f32 pair;
+the ratchet rule is empty). Open: naive CMYK, HSB and ΔE copies in `slide-anim`, `image-conformance`
+and the image kernels. Office tint:
 one function in `paged-colour-math` (f64; `paged-ooxml::colour` re-exports it, engine ADR 1056), wrappers in
 sheet-chart, sheet-format and docx-core. `paged-colour-math` also owns the DrawingML colour-transform chain
 (`transform`: lumMod, satOff, tint, shade, alpha …) and `Rgba`, proved bit-identical to the former
 `paged-ooxml` code by `tests/oracle.rs`; the `srgb-transfer` single-owner rule baselines the other copies.
-The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-owner rule `office-theme-palette`; sheet-chart and sheet-xlsx take it from there; engine ADR 1057 moves the presets into `paged_model::theme::presets`). TS colour (hex, HSB, Lab, harmony) → `platform/shared/helpers`.
+The default Office palette is `paged_ooxml::drawingml::theme::OFFICE` (single-owner rule `office-theme-palette`; sheet-chart and sheet-xlsx take it from there; engine ADR 1057 moves the presets into `paged_model::theme::presets`). TS colour: DONE 2026-11-11. HSB, HSL, Lab (one function, `white` D65 or D50) and the harmony rules are `platform/shared/helpers` (`colour.ts`); `vector-geometry` re-exports them beside its k-means, the host `ui` colour fields wrap them in 0..100 units, the Info panel's Lab is `rgbToLab(…, "D50")`, and the Color Wheel's harmonies are the Color Guide's (`harmonyOf`, eight rules, base first), so the two agree. Hex parsing in the gradient editor, swatch row, mesh target, slide show effects and image dialogs is helpers' `hexToRgb`; the public SDK keeps its own (`lowering.ts`).
 
 ### Raster, kernels, blend
 
@@ -162,7 +171,9 @@ Draw's TS geometry and vector-tool machines moved to `platform/shared/vector-geo
 does not take `paged-text` (it would pull the model and composer into the image wasm, and its
 1/64 pt advance rounding is not pixel-identical); the fontations stack is pinned once in the
 engine workspace (engine ADR 1058). `pptx-fonts` and `paged-fmt` now live at L2 (`engine/core/crates/pptx-fonts`, `engine/core/crates/paged-fmt`).
-Number and date formats: `paged-numfmt` out of `sheet-format`.
+Number and date formats: `paged-numfmt` out of `sheet-format`. Embedded-font hand-off (TS,
+2026-11-11): `@paged-media/helpers` `giveEmbeddedFonts` / `usableFaces`, used by paged.doc and paged.slide (each
+keeps only its diagnostics wording); the dead no-door path (`assets.documentFont@1` is a static SDK feature) is gone.
 
 ### Office / OOXML / ODF
 
@@ -227,7 +238,10 @@ and endnotes (the endnote story and its page), comments and tracked changes, boo
 inside a paragraph, headers and footers. They open as a prefilled skeleton when the whole body is native
 (`NATIVE_BODY.enabled`, on); no `paged-mutate` is linked into the doc wasm. Still the old pour (the whole
 document, never half): content controls, hyperlinked or reviewed fields, an endnote in a table cell. Sheet and
-data each have their own lowering. Sheet and data each have their own lowering.
+data each have their own lowering. Swatch mints (2026-11-11): one rule, the SDK lowering kit's
+`nativeSwatchMintOps` (beside `nativeGradientMintOps`; read the ids first, mint only what is absent, nothing
+when the read failed), used by sheet's palette, doc's style swatches, web's bake and data's property colours;
+the kit's `nativeHexRgb` is the SDK's hex reader; helpers' `hexToRgb` is its twin, held equal by a test (the shared packages do not load the SDK at run time).
 
 ### Charts, data, scripting, PDF
 
@@ -342,6 +356,9 @@ Status (draw items, one line each; updated as they land):
   so no anchor table is read). It drives `MeasureMachine` from `@paged-media/vector-tools`. Draw's
   tool, handler, the raw nearest-point read, its readout binding (nothing read it) and specs are
   gone; the tool id leaves through the deprecation window.
+- Scissors: DONE 2026-11-11. One tool, the host's (`paged.tool.scissors`, every context): any point,
+  through the path's transform (`@paged-media/vector-tools` `applyScissorsAt`, also behind draw's
+  `scissorsAt` command). Draw's "Scissors (any point)" tool and handler are gone (draw ADR 359 amended).
 - Copy appearance: DONE 2026-11-02. The host Eyedropper has a `mode` option (Pixel, as before,
   and Object appearance): click an element, its fill colour and tint, stroke colour and weight and
   opacity land on the selection in one batch, each target written only what its own snapshot
@@ -492,12 +509,19 @@ Status (draw items, one line each; updated as they land):
   date and time fields (the 13 `datetimeN` types are engine date fields, written back as `a:fld`), bullet
   font/colour/size (the marker's character style, written back as `buFont`/`buClr`/`buSzPct`). Hyphenation off is
   right: PowerPoint does not hyphenate.
-- **all:** path tools in every context (DONE 2026-11-03: `CONTEXT_SHARED_TOOL_IDS` adds Pen, Direct Selection, Line, Rectangle, Ellipse, Polygon; editor ADR 311 amended);
+- **all:** path tools in every context (DONE 2026-11-03: `CONTEXT_SHARED_TOOL_IDS` adds Pen, Direct Selection, Line, Rectangle, Ellipse, Polygon; 2026-11-11: Rotate, Scale, Shear, Pencil, Smooth, Scissors, Gradient, Eyedropper and Measure too; editor ADR 311 amended);
   image filters as `actions@1` steps on any picture; barcode insert; ML service and door.
 
 ### Small helpers
 
-FNV, CRC-32 and base64: see the ratchet table (`sheet-xlsx` protection uses `sha2` now). Loss and
+ZIP (TS): DONE 2026-11-11. `@paged-media/helpers` `zip` / `zipAsync` (with `ocf`: `mimetype` first and
+stored) and `unzip`; Data Merge's IDML export and paged.pdf's raster IDML fallback write through it (the
+fallback no longer needs JSZip). Cubic Bézier evaluation and splitting (TS): `vector-geometry` `bernstein`,
+`evalCubic`, `splitSegmentDeCasteljau`, used by the mesh grid, image warp preview and pen fitting, and slide's
+motion path. PNG encode (TS): paged.pdf's page rasters encode through helpers' `encodePng` (no canvas).
+Draw's image-trace decode (`io/raster-decode.ts`) stays on the browser's decoders: the contract has no
+decoded-pixels door yet (open). Slide comments: the typed reply, resolve and delete verbs and the panel's
+are thin calls to `comments@1`; a new slide comment is still written with its PowerPoint fields. FNV, CRC-32 and base64: see the ratchet table (`sheet-xlsx` protection uses `sha2` now). Loss and
 diagnostic report shapes (10+: only `paged-pdf-annots` and the PDF bundle use `LossReport`); the
 Excel oracle runner lives in `sheet-conformance/oracle/excel`, outside `tooling/oracle/office`.
 

@@ -97,9 +97,9 @@ impl IngestOutcome {
 struct WordHash(u64);
 
 impl WordHash {
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    const PRIME: u64 = paged_pixel::FNV1A_64_PRIME;
     fn new() -> Self {
-        WordHash(0xcbf2_9ce4_8422_2325)
+        WordHash(paged_pixel::FNV1A_64_OFFSET)
     }
     fn word(&mut self, w: u64) {
         self.0 = (self.0 ^ w).wrapping_mul(Self::PRIME).rotate_left(29);

@@ -79,14 +79,12 @@ import {
   mintRepeatId,
   mirrorDefaultOffset,
   parseRepeatLibrary,
-  pasteIntoMutationFor,
   radialCenterOfDraft,
   readRepeatLibrary,
   releaseFromMutationFor,
   removeRepeatRecordFrom,
   repeatBatchFor,
   repeatBoundsOf,
-  repeatClipBatchFor,
   repeatClipOf,
   repeatCopiesFor,
   repeatExpandBatchFor,
@@ -113,10 +111,8 @@ import {
   MAKE_RADIAL_REPEAT_COMMAND_ID,
   REPEAT_CLIP_HANDLE,
   REPEAT_CLIP_NOTE,
-  CLIP_GROUP_FEATURE,
   REPEAT_COMMAND_IDS,
   REPEAT_DEFAULTS,
-  REPEAT_FEATURE,
   REPEAT_KINDS,
   REPEAT_LIBRARY_VERSION,
   REPEAT_LIVE_NOTE,
@@ -434,7 +430,6 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         repeatBatchFor({
           plan: { ...SQUARE_PLAN, clipRect: [0, 0, 792, 612] },
           sourceEnvelopes: [null],
-          clipGroup: true,
         }),
       );
       const frameAt = ops.findIndex(
@@ -460,37 +455,6 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         },
       });
       expect(ops.filter((o) => o.op === "createGroup")).toHaveLength(1);
-    });
-
-    it("a PASTE-INTO clipped plan mints the clip frame first, clears its stroke, and emits NO group", () => {
-      const ops = opsOf(
-        repeatBatchFor({
-          plan: { ...SQUARE_PLAN, clipRect: [0, 0, 792, 612] },
-          sourceEnvelopes: [null],
-          clipGroup: false,
-        }),
-      );
-      expect(ops[0].op).toBe("insertPath");
-      expect(ops[1]).toEqual(bindCreatedMutationFor(REPEAT_CLIP_HANDLE));
-      // An inserted path defaults to a 1 pt BLACK stroke (measured), so
-      // a clip frame that did not clear it would paint its own outline.
-      expect(ops[2]).toEqual({
-        op: "setElementProperty",
-        args: {
-          elementId: handleRef(REPEAT_CLIP_HANDLE),
-          path: "frameStrokeColor",
-          value: { type: "colorRef", value: null },
-        },
-      });
-      // NO createGroup anywhere: pasteInto refuses a grouped child.
-      expect(ops.some((o) => o.op === "createGroup")).toBe(false);
-      // …and NO pasteInto either — that rides its own batch, because it
-      // is what hides the instances from the tree diff. (The cast is
-      // the v59 seam's: the PUBLISHED contract's `Mutation` union has no
-      // `pasteInto` arm, so `o.op` is not typed to reach it.)
-      expect(ops.some((o) => (o.op as string) === "pasteInto")).toBe(false);
-      const clipOps = opsOf(repeatClipBatchFor(poly("u1"), [poly("u2")]));
-      expect(clipOps).toEqual([pasteIntoMutationFor(poly("u1"), poly("u2"))]);
     });
 
     it("the release batch dissolves, THEN releases, THEN deletes, THEN drops the container", () => {
@@ -597,10 +561,6 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         v: REPEAT_LIBRARY_VERSION,
         repeats: [],
       });
-    });
-
-    it("the host wires the container-parts door this feature rides", () => {
-      expect(h.host.supports(REPEAT_FEATURE)).toBe(true);
     });
 
     it("the engine speaks C-15 and B-18 — the two doors this row is built on", async () => {
@@ -905,7 +865,6 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
     // ------------------------------------------------------ clipping
 
     it("CLIPPING — ONE undo step, ONE clip group of the instances under the clip frame, everything in the tree", async () => {
-      expect(h.host.supports(CLIP_GROUP_FEATURE)).toBe(true);
       await h.host.selection.set([INNER]);
       const made = await applyMakeRepeat(h.host, "radial", {
         count: 4,
@@ -1252,130 +1211,6 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
     });
   });
 
-  // -------------------------------------------------- the honest degrade
-
-  describe("a host with NO container writer", () => {
-    let h: HeadlessHost;
-    const warnings: string[] = [];
-
-    beforeAll(async () => {
-      h = await openHost();
-      await h.load(F6_RING_PAIR.bytes());
-      h.loadBundle(drawBundle);
-      // Take the door away, the graphic-styles precedent.
-      const supports = h.host.supports.bind(h.host);
-      (h.host as { supports: (f: string) => boolean }).supports = (
-        f: string,
-      ) => (f === REPEAT_FEATURE ? false : supports(f));
-      (h.host.log as { warn: (m: string) => void }).warn = (m: string) => {
-        warnings.push(m);
-      };
-    });
-    afterAll(() => h?.dispose());
-
-    it("CLIPPING still clips, by a clip group: nothing is hidden, so no recipe is needed to find it", async () => {
-      await h.host.selection.set([INNER]);
-      const made = await applyMakeRepeat(h.host, "radial", {
-        count: 3,
-        radiusPt: 120,
-        startDeg: -90,
-        clip: true,
-      });
-      expect(made).toHaveLength(2);
-      const visible = await leafIds(h);
-      for (const id of made) expect(visible).toContain(id.id);
-      expect((await groupShape(h))?.clip).toBe(true);
-      expect(
-        warnings.some((w) =>
-          w.includes("clipping needs the `.paged` container writer"),
-        ),
-      ).toBe(false);
-      // …and the repeat is still releasable through its LINKS — only the
-      // parameters were lost.
-      expect((await readRepeatLibrary(h.host)).repeats).toEqual([]);
-      expect(await applyReleaseRepeat(h.host, { repeatId: "rep-1" })).toBe(2);
-      expect(await sortedLeafIds(h)).toEqual(PRISTINE);
-    });
-  });
-
-  describe("the paste-into lane: a host without clip groups", () => {
-    let h: HeadlessHost;
-    const warnings: string[] = [];
-
-    beforeAll(async () => {
-      h = await openHost();
-      await h.load(F6_RING_PAIR.bytes());
-      h.loadBundle(drawBundle);
-      const supports = h.host.supports.bind(h.host);
-      (h.host as { supports: (f: string) => boolean }).supports = (
-        f: string,
-      ) => (f === CLIP_GROUP_FEATURE ? false : supports(f));
-      (h.host.log as { warn: (m: string) => void }).warn = (m: string) => {
-        warnings.push(m);
-      };
-    });
-    afterAll(() => h?.dispose());
-
-    beforeEach(async () => {
-      await h.host.selection.set([]);
-      await writeRepeatLibrary(h.host, {
-        v: REPEAT_LIBRARY_VERSION,
-        repeats: [],
-      });
-    });
-
-    it("CLIPPING — 2 undo steps, NO group, the instances pasted into the clip frame (listed under it since engine ADR 1010)", async () => {
-      await h.host.selection.set([INNER]);
-      const made = await applyMakeRepeat(h.host, "radial", {
-        count: 4,
-        radiusPt: 120,
-        startDeg: -90,
-        clip: true,
-      });
-      expect(made).toHaveLength(3);
-      expect(await groupShape(h)).toBeNull();
-      const record = findRepeatRecord(
-        await readRepeatLibrary(h.host),
-        "rep-1",
-      )!;
-      const frame = poly(record.clipFrame!.id);
-      expect(await h.host.document.parentOf(made[0]!)).toEqual(frame);
-      // `deleteFrame` REFUSES a pasted-in child, with the engine's words.
-      const refused = await h.host.document.mutate({
-        op: "deleteFrame",
-        args: { frameId: String(made[0].id) },
-      } as Mutation);
-      expect(refused.applied).toBe(false);
-      expect(JSON.stringify(refused)).toContain(
-        "pasted into a container — release it before removing",
-      );
-      // TWO undo steps — the build, then the clip.
-      await h.host.document.undo();
-      expect(await h.host.document.parentOf(made[0]!)).toBeNull();
-      await h.host.document.undo();
-      expect(await sortedLeafIds(h)).toEqual(PRISTINE);
-    });
-
-    it("RELEASING a pasted-in repeat releases, removes, and drops the frame last, in one step", async () => {
-      await h.host.selection.set([INNER]);
-      const made = await applyMakeRepeat(h.host, "radial", {
-        count: 3,
-        radiusPt: 120,
-        startDeg: -90,
-        clip: true,
-      });
-      const generation = await repeatGenerationOf(h.host, "rep-1");
-      expect(generation.clipped).toBe(true);
-      expect(await applyReleaseRepeat(h.host, {})).toBe(2);
-      expect(await sortedLeafIds(h)).toEqual(PRISTINE);
-      for (const id of made) {
-        expect(await h.host.document.elementGeometry([id])).toHaveLength(0);
-      }
-      await undoTo(h, 3); // release, clip, build
-      expect(await sortedLeafIds(h)).toEqual(PRISTINE);
-    });
-  });
-
   // --------------------------------------------- the registration surface
 
   describe("the contributions", () => {
@@ -1426,9 +1261,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(REPEAT_LIVE_NOTE).toContain("rebuilt once, on release");
       expect(REPEAT_CLIP_NOTE).toContain("CLIP GROUP");
       expect(REPEAT_CLIP_NOTE).toContain("ONE undo step");
-      expect(REPEAT_CLIP_NOTE).toContain("NO GROUP");
-      expect(REPEAT_CLIP_NOTE).toContain("deleteFrame REFUSES");
-      expect(REPEAT_CLIP_NOTE).toContain("orphaned");
+      expect(REPEAT_CLIP_NOTE).toContain("Release releases them");
       // The panel repeats both AND states the undo arithmetic.
       // The panel's About text says the same things in plain words.
       expect(t(REPEAT_PANEL_NOTE)).toContain(

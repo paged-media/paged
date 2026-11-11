@@ -28,7 +28,11 @@
 //     [w']   [h6 h7 h8] [1]        x_out = x'/w', y_out = y'/w'.
 //
 // `homographyFromQuads` solves the 8 × 8 linear system of four point
-// correspondences (Gaussian elimination with partial pivoting).
+// correspondences (Gaussian elimination with partial pivoting). It is one of
+// three solves held to the same numbers (test/warp/homography-parity.spec.ts):
+// this one, the public SDK's `transform-box` (which cannot import this
+// package) and `paged_warp::from_quads`. This package does not load the SDK
+// at run time, so a worker or a Node test that maps a point stays light.
 //
 // CURVES. A projective map does not keep a cubic Bézier a cubic; mapping
 // only its control points is exact for straight segments and wrong by a

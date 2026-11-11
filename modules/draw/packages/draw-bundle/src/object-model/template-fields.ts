@@ -58,24 +58,11 @@ import type {
 import { formatAddress } from "@paged-media/plugin-sdk";
 
 import { appearanceOf } from "../commands/appearance";
-import { stampDrawMetadata } from "../commands/appearance-bake";
-import { framePathMutationFor } from "../commands/compound-path";
 import {
   graphicStyleRefOf,
   readGraphicStyleLibrary,
 } from "../commands/graphic-styles";
-import { offsetTable } from "../commands/pattern";
 import {
-  readSymbolLibrary,
-  registrationPointOf,
-  symbolBoundsOf,
-  symbolInstanceOf,
-  withSymbolInstance,
-  DEFAULT_SYMBOL_REGISTRATION,
-  type SymbolDefinition,
-} from "../commands/symbols";
-import {
-  engineSymbols,
   readEngineSymbols,
   readInstanceStates,
 } from "../commands/symbols-engine";
@@ -100,10 +87,7 @@ const P = defineMessages("draw.templateField", {
   textString: "the text must be a string",
   oneLine: "text on a path is one line: remove the line breaks",
   noText: "{target} carries no text on its path",
-  multiPiece: `"{name}" has {count} pieces; a symbol field swaps one-piece symbols`,
   notInstance: "{id} is not a symbol instance",
-  noPath: "{id} has no path to re-shape",
-  noMeasurablePath: "{id} has no measurable path",
   paintTitle: "Fill or stroke colour",
   graphicStyleTitle: "Graphic style",
   textOnPathTitle: "Text on a path",
@@ -404,10 +388,8 @@ const textOnPathKind = (host: BundleHost): TemplateFieldKindContribution => ({
 // -------------------------------------------------------- symbolChoice
 
 async function symbolChoices(host: BundleHost, field: TemplateFieldRef) {
-  // WP6.8 (draw ADR 365) — the engine's store when the host keeps symbols.
-  const entries: { id: string; name: string }[] = engineSymbols(host)
-    ? await readEngineSymbols(host)
-    : (await readSymbolLibrary(host)).symbols;
+  // WP6.8 (draw ADR 365) — the engine's store.
+  const entries: { id: string; name: string }[] = await readEngineSymbols(host);
   return choicesOf(entries, strings(defOf(field)["allowed"]));
 }
 
@@ -421,67 +403,6 @@ async function engineInstanceSymbol(
   return state?.symbol ?? null;
 }
 
-/** The one batch that turns the instance leaf `el` into `symbol`, in
- *  place: its path (definition space anchored at the leaf's current
- *  registration point, in the leaf's own inner coordinates, so its
- *  transform carries over), its paint and its link. */
-async function rePlaceBatch(
-  host: BundleHost,
-  el: ElementId,
-  env: PluginMetadataEnvelope | null,
-  from: SymbolDefinition | null,
-  to: SymbolDefinition,
-): Promise<string | object> {
-  if (to.pieces.length !== 1)
-    return t(P.multiPiece, { name: to.name, count: to.pieces.length });
-  const link = symbolInstanceOf(env);
-  if (!link) return t(P.notInstance, { id: String(el.id) });
-  const read = await host.document.pathAnchors(el).catch(() => null);
-  if (!read || read.anchors.length < 2)
-    return t(P.noPath, { id: String(el.id) });
-  const bounds = symbolBoundsOf([
-    {
-      anchors: read.anchors.map((a) => ({
-        anchor: a.anchor,
-        left: a.left,
-        right: a.right,
-      })),
-      subpathStarts: [...read.subpathStarts],
-    },
-  ]);
-  if (!bounds) return t(P.noMeasurablePath, { id: String(el.id) });
-  const [ox, oy] = registrationPointOf(
-    bounds,
-    from?.registration ?? DEFAULT_SYMBOL_REGISTRATION,
-  );
-  const piece = to.pieces[0]!;
-  const colour = (path: "frameFillColor" | "frameStrokeColor", v: unknown) => ({
-    op: "setElementProperty",
-    args: { elementId: el, path, value: { type: "colorRef", value: v } },
-  });
-  const ops: object[] = [
-    framePathMutationFor(el, offsetTable(piece.table, ox, oy)),
-    colour("frameFillColor", piece.paint.fill),
-    colour("frameStrokeColor", piece.paint.stroke),
-  ];
-  if (typeof piece.paint.weight === "number")
-    ops.push({
-      op: "setElementProperty",
-      args: {
-        elementId: el,
-        path: "frameStrokeWeight",
-        value: { type: "length", value: piece.paint.weight },
-      },
-    });
-  ops.push(
-    stampDrawMetadata(
-      el,
-      withSymbolInstance(env, { ...link, symbol: to.id, piece: 0 }),
-    ),
-  );
-  return { op: "batch", args: { ops } };
-}
-
 const symbolChoiceKind = (host: BundleHost): TemplateFieldKindContribution => ({
   kind: SYMBOL_CHOICE_FIELD,
   title: t(P.symbolTitle),
@@ -492,65 +413,40 @@ const symbolChoiceKind = (host: BundleHost): TemplateFieldKindContribution => ({
   },
   async read(_ctx, field) {
     const el = await itemOf(host, field.targetId);
-    if (engineSymbols(host)) return engineInstanceSymbol(host, el);
-    return symbolInstanceOf(await envelopeOf(host, el))?.symbol ?? null;
+    return engineInstanceSymbol(host, el);
   },
   async write(_ctx, field, value) {
     const choices = await symbolChoices(host, field);
     const pick = chosen(choices, value, "symbol");
     if (typeof pick === "string") return refused(pick);
     const el = await itemOf(host, field.targetId);
-    if (engineSymbols(host)) {
-      // Replace Symbol on the instance itself: its id, transform and
-      // overrides stay, one undo step.
-      if ((el as { kind: string }).kind !== "instance")
-        return refused(t(P.notInstance, { id: String(el.id) }));
-      if ((await engineInstanceSymbol(host, el)) === pick.id)
-        return { ok: true };
-      return writeProblem(
-        await host.document
-          .mutate({
-            op: "setElementProperty",
-            args: {
-              elementId: el,
-              path: "symbolInstanceSymbol",
-              value: { type: "text", value: pick.id },
-            },
-          } as never)
-          .then((o) =>
-            o.applied
-              ? { applied: true }
-              : {
-                  applied: false,
-                  reason:
-                    typeof o.error === "string"
-                      ? o.error
-                      : JSON.stringify({ error: o.error }),
-                },
-          ),
-      );
-    }
-    const env = await envelopeOf(host, el);
-    const current = symbolInstanceOf(env)?.symbol;
-    if (current === pick.id) return { ok: true };
-    const library = await readSymbolLibrary(host);
-    const from = library.symbols.find((s) => s.id === current) ?? null;
-    const to = library.symbols.find((s) => s.id === pick.id);
-    if (!to) return refused(t(NOT_ONE.symbol, { value: pick.id }));
-    const batch = await rePlaceBatch(host, el, env, from, to);
-    if (typeof batch === "string") return refused(batch);
-    const out = await host.document.mutate(batch as never);
-    return out.applied
-      ? { ok: true }
-      : refused(
-          refusalSentence(
-            out.error === undefined
-              ? undefined
-              : typeof out.error === "string"
-                ? out.error
-                : JSON.stringify({ error: out.error }),
-          ),
-        );
+    // Replace Symbol on the instance itself: its id, transform and
+    // overrides stay, one undo step.
+    if ((el as { kind: string }).kind !== "instance")
+      return refused(t(P.notInstance, { id: String(el.id) }));
+    if ((await engineInstanceSymbol(host, el)) === pick.id) return { ok: true };
+    return writeProblem(
+      await host.document
+        .mutate({
+          op: "setElementProperty",
+          args: {
+            elementId: el,
+            path: "symbolInstanceSymbol",
+            value: { type: "text", value: pick.id },
+          },
+        } as never)
+        .then((o) =>
+          o.applied
+            ? { applied: true }
+            : {
+                applied: false,
+                reason:
+                  typeof o.error === "string"
+                    ? o.error
+                    : JSON.stringify({ error: o.error }),
+              },
+        ),
+    );
   },
 });
 

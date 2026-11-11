@@ -18,6 +18,9 @@ default = ["cpu"]
 cpu = ["paged-renderer/cpu", "paged-gpu/cpu"]
 
 [dependencies]
+# The OCF package writer (one owner).
+paged-ocf = { path = "../paged-ocf" }
+paged-pixel = { path = "../paged-pixel" }
 paged-blend = { path = "../paged-blend" }
 paged-renderer = { path = "../paged-renderer", default-features = false }
 # v77 — the view settings name the rasterizers' `RasterView` (editor ADR 287).

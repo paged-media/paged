@@ -58,7 +58,7 @@ fn shapes(indices: &[usize]) -> Vec<Input> {
         seed / 2_147_483_647.0
     };
     let q = |v: f64| (v * 4.0).round() / 4.0;
-    const K: f64 = 0.552_284_749_8;
+    const K: f64 = paged_geom::KAPPA;
     let corner = |x: f64, y: f64| PathAnchor {
         anchor: (x as f32, y as f32),
         left: (x as f32, y as f32),

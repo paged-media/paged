@@ -121,7 +121,6 @@ export class CustomShows {
   constructor(private readonly host: BundleHost) {}
 
   private async label(): Promise<Record<string, unknown> | null> {
-    if (!this.host.supports("document.documentMetadata@1")) return null;
     try {
       return parseLabel<Record<string, unknown>>(
         await this.host.document.getDocumentMetadata(),

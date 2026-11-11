@@ -499,9 +499,8 @@ impl Builder {
             delta += delta.signum() * tau * turns;
         }
         let (cx, cy) = (self.pen.0 - wr * ts.cos(), self.pen.1 - hr * ts.sin());
-        let n = (delta.abs() / std::f64::consts::FRAC_PI_2).ceil().max(1.0) as usize;
-        let step = delta / n as f64;
-        let k = 4.0 / 3.0 * (step / 4.0).tan();
+        let (n, step) = paged_geom::ellipse::arc_split(delta);
+        let k = paged_geom::arc_handle(step);
         let mut t = ts;
         for _ in 0..n {
             let t2 = t + step;

@@ -35,13 +35,7 @@
 /// A CIELAB colour (D65 reference white).
 pub type Lab = [f64; 3];
 
-fn srgb_to_linear(v: f64) -> f64 {
-    if v <= 0.040_45 {
-        v / 12.92
-    } else {
-        ((v + 0.055) / 1.055).powf(2.4)
-    }
-}
+use paged_colour_math::srgb_to_linear;
 
 /// sRGB-encoded `[0,1]` RGB → CIELAB (D65).
 pub fn srgb_to_lab(rgb: [f64; 3]) -> Lab {

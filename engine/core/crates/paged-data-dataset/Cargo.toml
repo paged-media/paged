@@ -16,6 +16,7 @@ name = "data_dataset"
 workspace = true
 
 [dependencies]
+paged-fmt = { path = "../paged-fmt" }
 paged-data-core = { path = "../paged-data-core" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"

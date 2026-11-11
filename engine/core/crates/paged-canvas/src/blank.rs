@@ -35,8 +35,6 @@
 //! is assembled with the same `zip` crate the parser reads and the
 //! writer emits — no hand-rolled archive.
 
-use std::io::{Cursor, Write};
-
 /// IDML/OCF package mimetype. MUST be the first ZIP entry and STORED.
 const MIME: &str = "application/vnd.adobe.indesign-idml-package";
 
@@ -148,22 +146,14 @@ pub fn blank_idml(width_pt: f32, height_pt: f32) -> Vec<u8> {
     let master = master_spread(&bounds);
     let spread = spread(&bounds);
 
-    let mut zip = zip::write::ZipWriter::new(Cursor::new(Vec::<u8>::new()));
-    let stored =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    let deflated = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-
-    // In-memory writes are infallible; `expect` documents that invariant
-    // rather than threading a Result through a deterministic builder.
+    // mimetype first + STORED (OCF convention). In-memory writes are
+    // infallible; `expect` documents that invariant rather than threading
+    // a Result through a deterministic builder.
+    let mut zip = paged_ocf::OcfZip::new(MIME.as_bytes()).expect("zip mimetype");
     let mut put = |name: &str, body: &str, stored_entry: bool| {
-        let opts = if stored_entry { stored } else { deflated };
-        zip.start_file(name, opts).expect("zip start_file");
-        zip.write_all(body.as_bytes()).expect("zip write_all");
+        zip.put(name, body.as_bytes(), stored_entry)
+            .expect("zip part");
     };
-
-    // mimetype first + STORED (OCF convention).
-    put("mimetype", MIME, true);
     put("designmap.xml", &designmap, false);
     put("META-INF/container.xml", &container(), false);
     put("Resources/Graphic.xml", &graphic(), false);
@@ -196,7 +186,7 @@ PageBinding=\"LeftToRight\" ColumnDirection=\"Horizontal\" Intent=\"PrintIntent\
     put("XML/Tags.xml", &tags(), false);
     put("XML/BackingStory.xml", &backing(), false);
 
-    zip.finish().expect("zip finish").into_inner()
+    zip.finish().expect("zip finish")
 }
 
 #[cfg(test)]

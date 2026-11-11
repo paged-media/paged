@@ -135,6 +135,14 @@ export async function recordBake(
   const host = {
     log: silent,
     supports: () => false,
+    // The lane records wire ops only: the document-font door takes nothing
+    // (the InDesign script sets the faces the oracle has installed).
+    assets: {
+      registerDocumentFont: async () => ({
+        status: "refused" as const,
+        reason: "the InDesign lane records ops only",
+      }),
+    },
     selection: { get: () => [WEB_ID] },
     diagnostics: { set: () => {} },
     text: {

@@ -88,15 +88,17 @@ fn items_of(shape: &SheetShape, w: f64, h: f64, aw: f64, ah: f64) -> Vec<ShapeIt
     let Some(outline) = outline else {
         return Vec::new();
     };
-    let (ox, oy) = ((aw - w) / 2.0, (ah - h) / 2.0);
-    let (cx, cy) = (aw / 2.0, ah / 2.0);
-    let theta = (shape.rot as f64 / 60_000.0).to_radians();
-    let (sin, cos) = theta.sin_cos();
+    // The shape box sits centred in the anchor box; it turns and flips
+    // about that centre, as every DrawingML placement does.
+    use dml_geom::place::{apply, mul, orient, translate};
+    let turn = orient(shape.rot as f64 / 60_000.0, shape.flip_h, shape.flip_v);
+    let m = mul(
+        &translate(aw / 2.0, ah / 2.0),
+        &mul(&turn, &translate(-w / 2.0, -h / 2.0)),
+    );
     let map = |p: (f64, f64)| -> [f64; 2] {
-        let x = if shape.flip_h { w - p.0 } else { p.0 } + ox;
-        let y = if shape.flip_v { h - p.1 } else { p.1 } + oy;
-        let (dx, dy) = (x - cx, y - cy);
-        [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]
+        let (x, y) = apply(&m, p);
+        [x, y]
     };
     let mut items: Vec<(usize, ShapeItem)> = Vec::new();
     for sub in &outline.subpaths {

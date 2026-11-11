@@ -15,6 +15,7 @@ workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+base64.workspace = true
 sheet-core = { path = "../sheet-core" }
 # The calendar, the locale table and digit grouping (engine/core/crates/paged-fmt).
 paged-fmt = { path = "../../../engine/core/crates/paged-fmt" }

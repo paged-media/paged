@@ -11,6 +11,7 @@ description = "Scene graph → flat display list (the GPU handoff format)."
 workspace = true
 
 [dependencies]
+paged-pixel = { path = "../paged-pixel" }
 paged-blend = { path = "../paged-blend" }
 # The mask blurs' box pass (engine ADR 1013, amendment "Blur").
 paged-kernels = { path = "../paged-kernels" }

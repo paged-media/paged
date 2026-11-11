@@ -19,9 +19,9 @@
 // MIGRATION of a v0 symbol library onto the engine's symbols (WP6.8,
 // draw ADR 365). A document made before engine ADR 1039 keeps its
 // symbols in draw's container part (`symbols.json`) and its instances as
-// re-emitted artwork whose leaves carry a `symbolInstance` link. When the
-// host's engine keeps symbols (`supports("document.symbols@1")`), opening
-// such a document moves them over, ONCE:
+// re-emitted artwork whose leaves carry a `symbolInstance` link. The
+// engine keeps symbols now, so opening such a document moves them over,
+// ONCE:
 //
 //   1. each definition's pieces are inserted as temporary artwork (the
 //      v0 place batch without its links) where the definition was
@@ -71,13 +71,12 @@ import {
   symbolHandleBindings,
   symbolInstances,
   symbolPlacePlanFor,
-  SYMBOLS_FEATURE,
   writeSymbolLibrary,
   type SymbolDefinition,
   type SymbolInstance,
   type SymbolPlacePlan,
 } from "./symbols";
-import { engineSymbols, readEngineSymbols } from "./symbols-engine";
+import { readEngineSymbols } from "./symbols-engine";
 
 /** What a migration moved. */
 export interface SymbolMigration {
@@ -146,7 +145,6 @@ export async function migrateSymbolLibrary(
   host: BundleHost,
 ): Promise<SymbolMigration | null> {
   const label = "Migrate symbols";
-  if (!engineSymbols(host) || !host.supports(SYMBOLS_FEATURE)) return null;
   const library = await readSymbolLibrary(host);
   const done = library.migrated ?? {};
   const todo = library.symbols.filter(

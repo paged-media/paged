@@ -20,6 +20,7 @@ serde = ["dep:serde"]
 standalone = ["paged-ooxml/deflate"]
 
 [dependencies]
+paged-fmt = { path = "../../../engine/core/crates/paged-fmt" }
 paged-ooxml = { path = "../ooxml" }
 serde = { version = "1", features = ["derive"], optional = true }
 
