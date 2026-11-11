@@ -2683,7 +2683,6 @@ dependencies = [
  "base64",
  "bytes",
  "flate2",
- "paged-geom",
  "paged-model",
  "paged-scene",
  "quick-xml 0.41.0",

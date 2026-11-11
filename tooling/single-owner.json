@@ -201,7 +201,7 @@
     },
     {
       "name": "affine-product",
-      "description": "multiply 2x3 affines with paged_geom::affine (f32) or paged_geom::affine64 (f64); the pattern is the first term of the product, m[0] * n[0] + m[2] * n[1]",
+      "description": "multiply 2x3 affines with paged_model::affine (f32; paged_geom::affine re-exports it) or paged_geom::affine64 (f64); the pattern is the first term of the product, m[0] * n[0] + m[2] * n[1]",
       "allowReason": "test oracles that compute the product independently of the code they check (idml-export and paged-canvas integration tests), and the renderer's text-on-path scale, which multiplies a rotation by a diagonal matrix and is not a general product",
       "allow": [
         "engine/core/crates/idml-export/tests/it/group_transform_saveback.rs",
@@ -210,7 +210,7 @@
         "engine/core/crates/paged-renderer/src/pipeline/text_path.rs"
       ],
       "owner": [
-        "engine/core/crates/paged-geom/src/affine.rs",
+        "engine/core/crates/paged-model/src/affine.rs",
         "engine/core/crates/paged-geom/src/affine64.rs"
       ],
       "patterns": [
@@ -224,7 +224,7 @@
       "name": "affine-inverse",
       "description": "invert a 2x3 affine with paged_geom::affine::invert_if (f32) or paged_geom::affine64::invert (f64); the pattern is the reciprocal determinant scaling the adjugate",
       "owner": [
-        "engine/core/crates/paged-geom/src/affine.rs",
+        "engine/core/crates/paged-model/src/affine.rs",
         "engine/core/crates/paged-geom/src/affine64.rs"
       ],
       "patterns": ["-\\w+ \\* inv_det"],

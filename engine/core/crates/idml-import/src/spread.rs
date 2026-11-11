@@ -3191,7 +3191,7 @@ fn record_image_metadata(
 /// Compose two affine matrices `a ∘ b` (apply `b` first, then `a`): the
 /// one product the renderer and the writer use too.
 fn compose_matrix(a: &[f32; 6], b: &[f32; 6]) -> [f32; 6] {
-    paged_geom::affine::multiply(*a, *b)
+    paged_model::affine::multiply(*a, *b)
 }
 
 /// Resolve the effective `ItemTransform` for a frame nested inside

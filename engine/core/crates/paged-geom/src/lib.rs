@@ -35,7 +35,9 @@ pub const KAPPA: f64 = 0.552_284_749_830_793_4;
 /// it replaces denote (checked by `tests::kappa_f32_is_the_old_literal`).
 pub const KAPPA_F32: f32 = KAPPA as f32;
 
-pub mod affine;
+/// The 2x3 `f32` affine (IDML `ItemTransform`) lives in the model, so a crate
+/// that may not link the curve libraries (the IDML reader) multiplies with it.
+pub use paged_model::affine;
 pub mod affine64;
 pub mod bezier_conv;
 pub mod ellipse;

@@ -30,6 +30,7 @@
 //! primitive. `paged-parse` re-exports everything moved here, so its dependents
 //! compile unchanged.
 
+pub mod affine;
 pub mod appearance;
 pub mod comments;
 pub mod content_control;
