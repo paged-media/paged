@@ -141,10 +141,8 @@ fn a_turned_flipped_rounded_shape_is_evaluated_in_its_box__feat__sheet_xlsx_shap
         .any(|a| a.left != a.anchor || a.right != a.anchor));
     let t = sh.transform.expect("the turn is the items' transform");
     let at = |p: [f64; 2]| {
-        [
-            t[0] * p[0] + t[2] * p[1] + t[4],
-            t[1] * p[0] + t[3] * p[1] + t[5],
-        ]
+        let (x, y) = dml_geom::place::apply(&t.map(f64::from), (p[0], p[1]));
+        [x, y]
     };
     for a in &item.anchors {
         for p in [a.anchor, a.left, a.right] {

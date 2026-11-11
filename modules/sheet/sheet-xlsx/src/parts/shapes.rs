@@ -290,11 +290,7 @@ impl XlsxDocument {
         let sp_pr = child(&sp, &["spPr"])?.ok_or_else(missing)?;
         let geom = child(&sp_pr, &["prstGeom", "custGeom"])?.ok_or_else(missing)?;
         let a = paged_ooxml::xml::prefix_of(&geom.qname).to_string();
-        let esc = |v: &str| {
-            v.replace('&', "&amp;")
-                .replace('<', "&lt;")
-                .replace('"', "&quot;")
-        };
+        let esc = |v: &str| paged_ooxml::xml::escape_attr(v);
         let av: String = adjusts
             .iter()
             .map(|(n, f)| format!(r#"<{a}gd name="{}" fmla="{}"/>"#, esc(n), esc(f)))

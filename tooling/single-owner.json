@@ -242,8 +242,7 @@
         "apps/editor/apps/canvas/tests/e2e/mesh-tool.spec.ts",
         "modules/draw/packages/draw-bundle/test/headless/shape-builder-regions.spec.ts",
         "modules/draw/packages/draw-bundle/test/page-space/fake-engine.ts",
-        "modules/draw/packages/draw-bundle/test/roundtrip/view.ts",
-        "modules/slide/packages/slide-bundle/test/headless/live-presets.spec.ts"
+        "modules/draw/packages/draw-bundle/test/roundtrip/view.ts"
       ]
     },
     {
