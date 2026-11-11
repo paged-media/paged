@@ -106,7 +106,6 @@ describe("Live paint panel — rendered against the engine", () => {
     it("the CONTRIBUTED component mounts and shows the empty state", async () => {
       const panel = await mountContributed(h, LIVE_PAINT_PANEL_ID);
       expect(panel.attr(PANEL, "data-draw-live-paint-panel")).toBe("0");
-      expect(panel.attr(PANEL, "data-draw-live-paint-portable")).toBe("true");
       expect(panel.text()).toContain("Live paint (0)");
       expect(panel.text()).toContain(
         "No live paint groups yet. Select two or more overlapping paths and choose + From selection.",

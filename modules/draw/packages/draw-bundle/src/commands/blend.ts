@@ -282,9 +282,6 @@ export const BLEND_PART = "blend.json";
  *  library rather than a crash — the graphic-styles convention). */
 export const BLEND_LIBRARY_VERSION = 1;
 
-/** The capability the recipe rides. */
-export const BLEND_FEATURE = "storage.parts@1";
-
 /** What "live" does and does not mean here. Exported so the panel shows
  *  it and a conformance test pins the WORDING. */
 export const BLEND_LIVE_NOTE =
@@ -1385,18 +1382,8 @@ export function blendReleaseBatchFor(args: {
 
 type PartsHost = RecipeHost;
 
-/** Read the records out of the container part. A host with no container
- *  writer is not an error: it reads as an EMPTY library and WARNS. */
+/** Read the records out of the container part (empty on a read failure). */
 export async function readBlendLibrary(host: PartsHost): Promise<BlendLibrary> {
-  if (!host.supports(BLEND_FEATURE)) {
-    host.log.warn(
-      "blend: this host wires no `.paged` container writer " +
-        `(supports("${BLEND_FEATURE}") is false) — a blend's options cannot ` +
-        "be saved here, so it can be expanded or released through its links " +
-        "but not updated without naming them again",
-    );
-    return emptyLibrary();
-  }
   try {
     return parseBlendLibrary(await readRecipeBytes(host, BLEND_PART));
   } catch (e) {
@@ -1409,7 +1396,6 @@ export async function writeBlendLibrary(
   host: PartsHost,
   library: BlendLibrary,
 ): Promise<boolean> {
-  if (!host.supports(BLEND_FEATURE)) return false;
   try {
     await writeRecipeBytes(host, BLEND_PART, serializeBlendLibrary(library));
     // A part write is not a document event: without this an open panel
@@ -2104,7 +2090,7 @@ export async function applyMakeBlend(
       `${built.undoSteps} undo step(s). ` +
       (saved
         ? "The options are saved, so the blend can be updated."
-        : "The options were NOT saved (no container writer) — the blend can " +
+        : "The options were NOT saved (the write failed) — the blend can " +
           "be expanded or released, but an update must name them again.") +
       " Editing a key object does not re-render the intermediates; Update does.",
   );

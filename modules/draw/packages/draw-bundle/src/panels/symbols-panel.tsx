@@ -16,9 +16,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The SYMBOLS panel — the view over the document-resident symbol library
-// that `commands/symbols.ts` models, and over the INSTANCE the selection
-// is (or is not) part of.
+// The SYMBOLS panel — the view over the document's symbols (the engine's
+// `symbols` collection, engine ADR 1039) and over the INSTANCES the
+// selection holds.
 //
 // An expert-leaf REACT panel for the Layers / Appearance / Graphic Styles
 // reason (B-01): a LIST of named records with per-row actions is above
@@ -28,16 +28,12 @@
 // writes through the EXACT appliers the commands use — no second write
 // path to drift from.
 //
-// WHAT THE ROWS SAY, and why each word is load-bearing:
-//   · the INSTANCE count per row — how many objects a Redefine will
-//     rebuild. Redefine is destructive to every one of them (an instance
-//     is static in v0), so the number is the blast radius and the panel
-//     shows it before the click.
-//   · "registration" — the nine-point anchor the definition was captured
-//     around. It is where Place puts the instance and what Reset
-//     re-anchors to, so it is not decoration.
-//   · Reset transform is enabled only when the SELECTION is an instance,
-//     because it operates on the selection, not on the row.
+// WHAT THE ROWS SAY:
+//   · the INSTANCE count per row — how many objects a Redefine changes.
+//   · the piece count — how many items the definition holds.
+//   · Reset transform and Break link are enabled only when the SELECTION
+//     holds an instance, because they operate on the selection, not on
+//     the row.
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
@@ -49,10 +45,6 @@ import {
   applyPlaceSymbolInstance,
   applyRedefineSymbol,
   applyResetSymbolTransform,
-  readSymbolLibrary,
-  selectedSymbolInstances,
-  symbolInstances,
-  SYMBOLS_FEATURE,
   type SymbolDefinition,
 } from "../commands/symbols";
 import {
@@ -63,7 +55,6 @@ import {
 import {
   chooseSymbol,
   currentSymbol,
-  engineSymbols,
   instancesIn,
   readEngineSymbols,
   type EngineSymbol,
@@ -84,7 +75,6 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 const M = defineMessages("draw.symbolsPanel", {
   summary:
     "Save artwork as a named symbol and place linked copies of it; Redefine updates every copy.",
-  note: "Placing a symbol adds an instance linked to its definition. Redefine rebuilds every instance, so changes made to an instance are lost. Reset transform rebuilds the selected instance where it is, undoing any scaling or edits. Break link keeps the artwork and drops the link. The library is saved in the document. Defining, renaming and deleting a symbol cannot be undone. Text cannot go into a symbol, and live corners, placed images, gradients and appearance stacks are not kept.",
   rowLabel:
     "{pieces, plural, one {# piece} other {# pieces}} · {registration} registration · {instances, plural, one {# instance} other {# instances}}",
   heading: "Symbols",
@@ -98,8 +88,6 @@ const M = defineMessages("draw.symbolsPanel", {
   resetTransform: "Reset transform",
   breakHint: "Keep the selected instance's artwork and drop its link",
   breakLink: "Break link",
-  degraded:
-    "This editor cannot save data into the document, so symbols are not available here.",
   selectHint:
     "Select artwork to capture it as a symbol, or select an instance to reset or unlink it.",
   library: "Library",
@@ -138,7 +126,7 @@ export { SYMBOLS_PANEL_ID } from "../commands/symbols";
 export const SYMBOLS_SUMMARY = M.summary;
 
 /** The "About" text. Exported so the conformance spec pins the wording. */
-export const SYMBOLS_NOTE = M.note;
+export const SYMBOLS_NOTE = M.noteEngine;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -203,10 +191,8 @@ export function makeSymbolsPanel(host: BundleHost): {
     const [counts, setCounts] = React.useState<Record<string, number>>({});
     const [selected, setSelected] = React.useState<string[]>([]);
     const [hasSelection, setHasSelection] = React.useState(false);
-    const [portable, setPortable] = React.useState(true);
     // Engine ADR 1039 — the engine keeps the symbols (`document.symbols@1`);
-    // the rows then come from its `symbols` collection.
-    const [engine, setEngine] = React.useState(false);
+    // the rows come from its `symbols` collection.
     const [pieceCounts, setPieceCounts] = React.useState<
       Record<string, number>
     >({});
@@ -231,74 +217,49 @@ export function makeSymbolsPanel(host: BundleHost): {
       host,
       "symbols",
       async ({ live, selection }) => {
-        if (engineSymbols(host)) {
-          const rows = await readEngineSymbols(host);
-          const current = await currentSymbol(host);
-          if (!live()) return;
-          setRows(rows);
-          setHasInstances(instancesIn(selection).length > 0);
-          setChosen(current?.id ?? null);
-          setForm((f) => {
-            const keep = f && current && f.id === current.id;
-            if (keep || !current) return keep ? f : null;
-            const [top, left, bottom, right] = current.bounds;
-            return {
-              id: current.id,
-              name: current.name,
-              guides: current.nineSlice !== null,
-              insets: current.nineSlice
-                ? [...current.nineSlice]
-                : defaultNineSlice([left, top, right, bottom]),
-            };
-          });
-          const picked = new Set(
-            instancesIn(selection).map((e) => `instance:${e.id}`),
-          );
-          setEngine(true);
-          setPortable(true);
-          setSymbols(
-            rows.map((r) => ({
-              id: r.id,
-              name: r.name,
-              registration: "center",
-              origin: [0, 0],
-              pieces: [],
-            })),
-          );
-          setPieceCounts(
-            Object.fromEntries(rows.map((r) => [r.id, r.itemCount])),
-          );
-          setCounts(
-            Object.fromEntries(rows.map((r) => [r.id, r.instances.length])),
-          );
-          setHasSelection(selection.length > 0);
-          setSelected(
-            rows
-              .filter((r) => r.instances.some((i) => picked.has(i)))
-              .map((r) => r.id),
-          );
-          return;
-        }
-        setEngine(false);
-        const library = await readSymbolLibrary(host);
+        const rows = await readEngineSymbols(host);
+        const current = await currentSymbol(host);
         if (!live()) return;
-        const tally: Record<string, number> = {};
-        for (const instance of await symbolInstances(host)) {
-          tally[instance.symbol] = (tally[instance.symbol] ?? 0) + 1;
-        }
-        if (!live()) return;
-        let touched: string[] = [];
-        try {
-          touched = (await selectedSymbolInstances(host)).map((i) => i.symbol);
-        } catch {
-          touched = [];
-        }
-        if (!live()) return;
-        setPortable(host.supports(SYMBOLS_FEATURE));
-        setSymbols(library.symbols);
-        setCounts(tally);
+        setRows(rows);
+        setHasInstances(instancesIn(selection).length > 0);
+        setChosen(current?.id ?? null);
+        setForm((f) => {
+          const keep = f && current && f.id === current.id;
+          if (keep || !current) return keep ? f : null;
+          const [top, left, bottom, right] = current.bounds;
+          return {
+            id: current.id,
+            name: current.name,
+            guides: current.nineSlice !== null,
+            insets: current.nineSlice
+              ? [...current.nineSlice]
+              : defaultNineSlice([left, top, right, bottom]),
+          };
+        });
+        const picked = new Set(
+          instancesIn(selection).map((e) => `instance:${e.id}`),
+        );
+        setSymbols(
+          rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            registration: "center",
+            origin: [0, 0],
+            pieces: [],
+          })),
+        );
+        setPieceCounts(
+          Object.fromEntries(rows.map((r) => [r.id, r.itemCount])),
+        );
+        setCounts(
+          Object.fromEntries(rows.map((r) => [r.id, r.instances.length])),
+        );
         setHasSelection(selection.length > 0);
-        setSelected(touched);
+        setSelected(
+          rows
+            .filter((r) => r.instances.some((i) => picked.has(i)))
+            .map((r) => r.id),
+        );
       },
     );
 
@@ -326,8 +287,6 @@ export function makeSymbolsPanel(host: BundleHost): {
       <div
         style={{ padding: 12 }}
         data-draw-symbols-panel={symbols.length}
-        data-draw-symbols-portable={portable ? "true" : "false"}
-        data-draw-symbols-engine={engine ? "true" : "false"}
         data-draw-symbol-selected={selected[0] ?? ""}
       >
         <PanelIntro
@@ -374,12 +333,6 @@ export function makeSymbolsPanel(host: BundleHost): {
 
         <Refusal text={refusal} />
 
-        {!portable && (
-          <div style={mutedStyle} data-draw-symbols-degraded>
-            {s.t(M.degraded)}
-          </div>
-        )}
-
         {!hasSelection && <div style={mutedStyle}>{s.t(M.selectHint)}</div>}
 
         <div style={sectionStyle}>{s.t(M.library)}</div>
@@ -407,43 +360,39 @@ export function makeSymbolsPanel(host: BundleHost): {
                   title={symbolRowLabel(
                     symbol,
                     instances,
-                    engine ? pieceCounts[symbol.id] : undefined,
+                    pieceCounts[symbol.id],
                   )}
                 >
                   {symbol.name}
                 </span>
                 {followed && <span style={tagStyle}>{s.t(M.instance)}</span>}
-                {engine && (
-                  <button
-                    type="button"
-                    style={{
-                      ...iconBtn,
-                      fontWeight: chosen === symbol.id ? 600 : 400,
-                    }}
-                    title={s.t(M.choose)}
-                    aria-pressed={chosen === symbol.id}
-                    data-draw-symbol-choose={symbol.id}
-                    onClick={() => choose(symbol.id)}
-                  >
-                    {chosen === symbol.id ? "●" : "○"}
-                  </button>
-                )}
-                {engine && (
-                  <button
-                    type="button"
-                    style={iconBtn}
-                    title={
-                      hasInstances ? s.t(M.replaceHint) : s.t(M.selectInstance)
-                    }
-                    data-draw-symbol-replace
-                    disabled={!hasInstances}
-                    onClick={() =>
-                      void run(() => applyReplaceSymbol(host, symbol.id))
-                    }
-                  >
-                    {s.t(M.replace)}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  style={{
+                    ...iconBtn,
+                    fontWeight: chosen === symbol.id ? 600 : 400,
+                  }}
+                  title={s.t(M.choose)}
+                  aria-pressed={chosen === symbol.id}
+                  data-draw-symbol-choose={symbol.id}
+                  onClick={() => choose(symbol.id)}
+                >
+                  {chosen === symbol.id ? "●" : "○"}
+                </button>
+                <button
+                  type="button"
+                  style={iconBtn}
+                  title={
+                    hasInstances ? s.t(M.replaceHint) : s.t(M.selectInstance)
+                  }
+                  data-draw-symbol-replace
+                  disabled={!hasInstances}
+                  onClick={() =>
+                    void run(() => applyReplaceSymbol(host, symbol.id))
+                  }
+                >
+                  {s.t(M.replace)}
+                </button>
                 <button
                   type="button"
                   style={iconBtn}
@@ -485,7 +434,7 @@ export function makeSymbolsPanel(host: BundleHost): {
           })
         )}
 
-        {engine && chosenRow && form && (
+        {chosenRow && form && (
           <div data-draw-symbol-options={chosenRow.id}>
             <div style={sectionStyle}>{s.t(M.options)}</div>
             <label style={rowStyle}>
@@ -565,9 +514,7 @@ export function makeSymbolsPanel(host: BundleHost): {
           </div>
         )}
 
-        <About attr="data-draw-symbols-note">
-          {s.t(engine ? M.noteEngine : SYMBOLS_NOTE)}
-        </About>
+        <About attr="data-draw-symbols-note">{s.t(SYMBOLS_NOTE)}</About>
       </div>
     );
   };

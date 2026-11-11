@@ -43,7 +43,6 @@ import {
   readObjectsOnPathLibrary,
   resolveObjectsOnPath,
   OBJECTS_ON_PATH_DEFAULTS,
-  OBJECTS_ON_PATH_FEATURE,
   ON_PATH_DISTRIBUTIONS,
   ON_PATH_PIVOTS,
   type ObjectsOnPathParams,
@@ -82,8 +81,6 @@ const M = defineMessages("draw.objectsOnPathPanel", {
   heading: "Objects on path",
   makeHint: "Move the selected objects onto the object you selected last",
   onPath: "+ On path",
-  degraded:
-    "This editor cannot save data into the document, so the distribution settings are not kept. Release and update still work.",
   distribute: "Distribute",
   by: "By",
   count: "Count (evenly)",
@@ -200,7 +197,6 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
     const [lastSelected, setLastSelected] = React.useState<ElementId | null>(
       null,
     );
-    const [portable, setPortable] = React.useState(true);
     const [draft, setDraft, followDraft] =
       useFollowedDraft<ObjectsOnPathParams>(OBJECTS_ON_PATH_DEFAULTS);
 
@@ -223,7 +219,6 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         for (const object of links.objects) {
           tally[object.ref.onPath] = (tally[object.ref.onPath] ?? 0) + 1;
         }
-        setPortable(host.supports(OBJECTS_ON_PATH_FEATURE));
         setRecords(library.associations);
         setSelected(selection.length);
         setLastSelected(selection[selection.length - 1] ?? null);
@@ -280,7 +275,6 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
       <div
         style={{ padding: 12 }}
         data-draw-onpath-panel={records.length}
-        data-draw-onpath-portable={portable ? "true" : "false"}
         data-draw-onpath-active={active ?? ""}
       >
         <PanelIntro
@@ -311,12 +305,6 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         </div>
 
         <Refusal text={refusal} />
-
-        {!portable && (
-          <div style={mutedStyle} data-draw-onpath-degraded>
-            {s.t(M.degraded)}
-          </div>
-        )}
 
         <div style={sectionStyle}>{s.t(M.distribute)}</div>
         <div style={rowStyle}>

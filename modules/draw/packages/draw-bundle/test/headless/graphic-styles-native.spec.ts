@@ -49,8 +49,13 @@ import {
   readGraphicStyleLibrary,
   readNativeAppearance,
   readObjectStack,
+  graphicAppearanceDigest,
+  projectGraphicAppearance,
+  serializeGraphicStyleLibrary,
+  withGraphicStyleRef,
   GRAPHIC_STYLES_PART,
 } from "../../src";
+import { readGraphicAppearanceAs } from "../../src/commands/graphic-styles";
 import { packageWithSpread } from "../fixtures/build-idml";
 import { poly, squareItem } from "../panels/panel-document";
 import { openHost } from "./host";
@@ -180,10 +185,9 @@ describe("graphic styles on native appearance (draw ADR 367) [plugin-draw.graphi
   });
 
   it("a v1 library and its links move over on open, in sync", async () => {
-    // Made on a host without native appearance (draw ADR 354's lane).
-    const supports = h.host.supports.bind(h.host);
-    (h.host as { supports: (f: string) => boolean }).supports = (f) =>
-      f !== "document.appearance@1" && supports(f);
+    // A document saved before native appearance (draw ADR 354): a
+    // metadata stack, a v1 library, and a link in sync with the stack's
+    // reading.
     await commitAppearance(
       h.host,
       A,
@@ -193,12 +197,26 @@ describe("graphic styles on native appearance (draw ADR 367) [plugin-draw.graphi
       },
       await h.host.document.getMetadata(A),
     );
-    await h.host.selection.set([A]);
-    const style = (await applySaveGraphicStyle(h.host, { name: "Old" }))!;
+    const read = await readGraphicAppearanceAs(h.host, A, false);
+    const style = {
+      id: "gs-1",
+      name: "Old",
+      appearance: projectGraphicAppearance(read.appearance, read.supported),
+    };
+    await h.host.parts.write(
+      GRAPHIC_STYLES_PART,
+      serializeGraphicStyleLibrary({ v: 1, styles: [style] }),
+    );
+    await h.host.document.setMetadata(
+      A,
+      withGraphicStyleRef(read.envelope, {
+        id: style.id,
+        rev: graphicAppearanceDigest(read.appearance),
+      }),
+    );
     expect(
       parseGraphicStyleLibrary(await h.host.parts.read(GRAPHIC_STYLES_PART)).v,
     ).toBe(1);
-    (h.host as { supports: (f: string) => boolean }).supports = supports;
 
     const moved = await migrateAppearanceStacks(h.host);
     expect(moved).toMatchObject({ moved: 1, restamped: 1, library: true });

@@ -19,19 +19,14 @@
 // `symbol` (a DEFINITION in the symbol library) and `symbolInstance` (a
 // placed copy) — ADR 323.
 //
-// A DEFINITION is plugin state (label-hash pattern, src/recipe-store.ts):
-// its name is writable; its artwork is captured from page items, so it is
+// Both live in the engine (engine ADR 1039, draw ADR 365). A DEFINITION's
+// name is writable; its artwork is captured from page items, so it is
 // created by the typed `defineSymbol` command (and replaced by
 // `redefineSymbol`), never by an object-model `create`. Deleting one
-// unlinks every instance in the SAME commit — the artwork stays.
+// breaks every instance first — the artwork stays.
 //
-// An INSTANCE is core-backed: real artwork whose leaves each carry a
-// `symbolInstance` link. Draw has no override RECORD — an instance's
-// per-instance deviations ARE its leaves' own core properties (fill,
-// stroke, transform…, at their core addresses), and Reset transform /
-// Redefine rebuild from the definition. So the instance's own writable
-// row is `linked` (false = break the link, keep the artwork); an
-// override model with per-property tracking is recorded as a gap.
+// An INSTANCE is one engine page item that draws its symbol. Its own
+// writable row is `linked` (false = break the link, keep the artwork).
 
 import type {
   BundleHost,
@@ -45,24 +40,9 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
-import { stampDrawMetadata } from "../commands/appearance-bake";
-import {
-  SYMBOLS_PART,
-  SYMBOL_REGISTRATIONS,
-  findSymbol,
-  readSymbolLibrary,
-  removeSymbolFrom,
-  renameSymbolIn,
-  serializeSymbolLibrary,
-  symbolBoundsOf,
-  symbolInstances,
-  withSymbolInstance,
-  type SymbolInstance,
-} from "../commands/symbols";
-import { linkIndex } from "../link-index";
+import { SYMBOL_REGISTRATIONS, type SymbolInstance } from "../commands/symbols";
 import {
   engineInstanceIds,
-  engineSymbols,
   readEngineSymbols,
   readInstanceStates,
   type EngineSymbol,
@@ -142,24 +122,6 @@ export const SYMBOL_INSTANCE_SCHEMA: readonly PropertySchema[] = [
   }),
 ];
 
-/** The unlink stamps for an instance's leaves. */
-async function unlinkOps(
-  host: BundleHost,
-  instance: SymbolInstance,
-): Promise<MutationInput[]> {
-  const index = linkIndex(host);
-  const out: MutationInput[] = [];
-  for (const leaf of instance.leaves) {
-    out.push(
-      stampDrawMetadata(
-        leaf,
-        withSymbolInstance(await index.envelopeOf(leaf), null),
-      ),
-    );
-  }
-  return out;
-}
-
 export function makeSymbolKind(
   host: BundleHost,
 ): ObjectKindContribution & Planner {
@@ -171,76 +133,22 @@ export function makeSymbolKind(
     content: { kind: "vector" },
     hostOf: () => "doc",
     async list() {
-      if (engineSymbols(host))
-        return (await readEngineSymbols(host)).map((s) =>
-          addressOf(SYMBOL_KIND, s.id),
-        );
-      return (await readSymbolLibrary(host)).symbols.map((s) =>
+      return (await readEngineSymbols(host)).map((s) =>
         addressOf(SYMBOL_KIND, s.id),
       );
     },
     async get(address, path): Promise<ObjectValue> {
       const id = idOf(address);
-      if (engineSymbols(host)) {
-        const row = id
-          ? (await readEngineSymbols(host)).find((s) => s.id === id)
-          : undefined;
-        if (!row) return refuse("unknownAddress", `no symbol ${address}`);
-        return engineSymbolValue(row, path);
-      }
-      const def = id ? findSymbol(await readSymbolLibrary(host), id) : null;
-      if (!def) return refuse("unknownAddress", `no symbol ${address}`);
-      switch (path) {
-        case "name":
-          return val(def.name);
-        case "registration":
-          return val(def.registration);
-        case "origin":
-          return val(def.origin);
-        case "pieceCount":
-          return val(def.pieces.length);
-        case "bounds": {
-          const b = symbolBoundsOf(def.pieces.map((p) => p.table));
-          return b ? val(b) : { kind: "absent" };
-        }
-        case "instanceCount":
-          return val((await symbolInstances(host, def.id)).length);
-        default:
-          return refuse("unknownPath", `symbol has no "${path}"`);
-      }
+      const row = id
+        ? (await readEngineSymbols(host)).find((s) => s.id === id)
+        : undefined;
+      if (!row) return refuse("unknownAddress", `no symbol ${address}`);
+      return engineSymbolValue(row, path);
     },
     batch: (ops: readonly ObjectOp[]) =>
       kindBatch(host, (o) => symbolKind.plan(o))(ops),
     async plan(ops: readonly ObjectOp[]): Promise<Planned> {
-      if (engineSymbols(host)) return planEngineSymbols(host, ops, idOf);
-      let library = await readSymbolLibrary(host);
-      const mutations: MutationInput[] = [];
-      for (const op of ops) {
-        if (op.op === "create") {
-          return rejected(
-            `a symbol is captured from artwork — invoke ${"media.paged.draw.command.defineSymbol"} with its targets`,
-          );
-        }
-        if (op.op === "invoke") return rejected("symbol cannot invoke");
-        const id = idOf(op.address);
-        const def = id ? findSymbol(library, id) : null;
-        if (!def) return rejected(`no symbol ${op.address}`);
-        if (op.op === "delete") {
-          for (const inst of await symbolInstances(host, def.id))
-            mutations.push(...(await unlinkOps(host, inst)));
-          library = removeSymbolFrom(library, def.id);
-        } else if (op.path === "name") {
-          library = renameSymbolIn(library, def.id, String(op.value));
-        } else {
-          return rejected(`symbol has no writable "${op.path}"`);
-        }
-      }
-      return plan({
-        mutations,
-        libraries: [
-          { legacyPart: SYMBOLS_PART, bytes: serializeSymbolLibrary(library) },
-        ],
-      });
+      return planEngineSymbols(host, ops, idOf);
     },
   };
   return symbolKind;
@@ -253,21 +161,18 @@ export function makeSymbolInstanceKind(
   const find = async (address: string): Promise<SymbolInstance | null> => {
     const id = idOf(address);
     if (!id) return null;
-    if (engineSymbols(host)) {
-      const [state] = await readInstanceStates(host, [
-        { kind: "instance", id } as unknown as ElementId,
-      ]);
-      if (!state) return null;
-      // An engine instance is ONE page item: it is its own leaf, and its
-      // origin is where its registration point lands.
-      return {
-        symbol: state.symbol ?? "",
-        instance: id,
-        origin: [state.matrix[4], state.matrix[5]],
-        leaves: [state.id],
-      };
-    }
-    return (await symbolInstances(host)).find((i) => i.instance === id) ?? null;
+    const [state] = await readInstanceStates(host, [
+      { kind: "instance", id } as unknown as ElementId,
+    ]);
+    if (!state) return null;
+    // An engine instance is ONE page item: it is its own leaf, and its
+    // origin is where its registration point lands.
+    return {
+      symbol: state.symbol ?? "",
+      instance: id,
+      origin: [state.matrix[4], state.matrix[5]],
+      leaves: [state.id],
+    };
   };
   return {
     kind: SYMBOL_INSTANCE_KIND,
@@ -282,26 +187,13 @@ export function makeSymbolInstanceKind(
       return leaf ? coreAddressOf(leaf) : null;
     },
     async list(query) {
-      if (engineSymbols(host)) {
-        let ids = await engineInstanceIds(host);
-        const within = query.within ? parseAddress(query.within) : null;
-        if (within?.kind === "item") {
-          const item = formatAddress(within);
-          ids = ids.filter((i) => coreAddressOf(i) === item);
-        }
-        return ids.map((i) => addressOf(SYMBOL_INSTANCE_KIND, String(i.id)));
-      }
-      let all = await symbolInstances(host);
-      // An item scope (`<item> > symbolInstance`, a panel's selection):
-      // the instance that item is a leaf of.
+      let ids = await engineInstanceIds(host);
       const within = query.within ? parseAddress(query.within) : null;
       if (within?.kind === "item") {
         const item = formatAddress(within);
-        all = all.filter((i) =>
-          i.leaves.some((l) => coreAddressOf(l) === item),
-        );
+        ids = ids.filter((i) => coreAddressOf(i) === item);
       }
-      return all.map((i) => addressOf(SYMBOL_INSTANCE_KIND, i.instance));
+      return ids.map((i) => addressOf(SYMBOL_INSTANCE_KIND, String(i.id)));
     },
     async get(address, path): Promise<ObjectValue> {
       const inst = await find(address);
@@ -338,22 +230,17 @@ export function makeSymbolInstanceKind(
       if (!inst)
         return { kind: "rejected", reason: `no symbol instance ${op.address}` };
       if (op.value === true) continue; // already linked (it is listed)
-      if (engineSymbols(host)) {
-        mutations.push({
-          op: "breakSymbolLink",
-          args: { elementId: inst.leaves[0]! },
-        } as MutationInput);
-        continue;
-      }
-      mutations.push(...(await unlinkOps(host, inst)));
+      mutations.push({
+        op: "breakSymbolLink",
+        args: { elementId: inst.leaves[0]! },
+      } as MutationInput);
     }
     return { kind: "mutations", mutations };
   }
 }
 
 // ------------------------------------------------------------- WP6.8
-// Draw ADR 365 — on a host whose engine keeps symbols the `symbol` kind
-// reads the engine's store: name and delete are `redefineSymbol` /
+// Draw ADR 365 — the `symbol` kind reads the engine's store: name and delete are `redefineSymbol` /
 // `deleteSymbol` (one undo step each, the engine breaks every instance
 // first); registration is the engine's (the centre) and the piece count
 // is its item count.

@@ -43,7 +43,6 @@ import { batchMutationFor } from "./batch-handles";
 import {
   currentSymbol,
   engineInstanceIds,
-  engineSymbols,
   instancesIn,
   readInstanceStates,
   storedInstanceTransform,
@@ -156,10 +155,6 @@ export async function writeSymbolism(
   scope: SymbolismScope,
   commit: SymbolismCommit,
 ): Promise<boolean> {
-  if (!engineSymbols(host)) {
-    host.log.warn(`${label}: the Symbolism tools need the engine's symbols`);
-    return false;
-  }
   const batch = symbolismBatchFor(scope, commit);
   if (!batch) return false;
   const out = await host.document.mutate(batch);

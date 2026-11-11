@@ -61,14 +61,12 @@ import type { AnchorTriple } from "@paged-media/vector-geometry";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
-  applyDefineSymbol,
   applyFillLivePaintFace,
   applyMakeBlend,
   applyMakeLivePaintGroup,
   applyMakeObjectsOnPath,
   applyMakePattern,
   applyMakeRepeat,
-  applyPlaceSymbolInstance,
   drawBundle,
   insertPathMutationFor,
   leafIdsOf,
@@ -76,9 +74,12 @@ import {
   readObjectsOnPathLibrary,
   readPatternLibrary,
   readRepeatLibrary,
-  symbolInstanceOf,
+  symbolFinishBatchFor,
+  symbolPlacePlanFor,
+  writeSymbolLibrary,
+  type SymbolDefinition,
 } from "../../src";
-import { openHost, withoutEngineSymbols } from "../headless/host";
+import { openHost } from "../headless/host";
 import { F4_OVERLAP, type CorpusFixture } from "../fixtures/corpus";
 
 // ------------------------------------------------------------- geometry
@@ -281,9 +282,6 @@ export async function openWorkload(
   const h = await openHost();
   await h.load(fixture.bytes());
   h.loadBundle(drawBundle);
-  // These specs pin the re-emitted symbols lane (draw ADR 356); the engine
-  // lane has its own (symbols-engine.spec.ts).
-  withoutEngineSymbols(h);
   return {
     h,
     pageId: fixture.pageId,
@@ -614,33 +612,62 @@ export async function addLinkedRecords(
       break;
     }
     case "symbols": {
-      // ONE definition, `count` instances: an instance is the linked
-      // record here (the definition lives only in the library part).
+      // ONE v0 definition, `count` v0 instances — the linked records a
+      // document made before the engine kept symbols carries, which the
+      // migration enumerates (`symbolInstances`). The definition lives
+      // only in the library part; each instance is re-emitted artwork with
+      // a link, built here as the v0 place built it.
       const [x0, y0] = cells[0]!;
       const [source] = await insertPaths(w, "symbol source", [
         rectPath(x0 + 1, y0 + 3, 6, 6),
       ]);
       if (!source) break;
-      await host.selection.set([source]);
-      const symbol = await applyDefineSymbol(host, { name: "Perf symbol" });
-      if (!symbol) {
+      const symbol: SymbolDefinition = {
+        id: "sym-1",
+        name: "Perf symbol",
+        registration: "center",
+        origin: [x0 + 4, y0 + 6],
+        pieces: [
+          {
+            table: {
+              anchors: rectPath(-3, -3, 6, 6).anchors,
+              subpathStarts: [0],
+              subpathOpen: [false],
+            },
+            paint: { fill: WORKLOAD_FILL, stroke: null, weight: null },
+          },
+        ],
+      };
+      if (!(await writeSymbolLibrary(host, { v: 1, symbols: [symbol] }))) {
         refuse("symbol definition");
         break;
       }
       out.symbolId = symbol.id;
       for (const [i, [x, y]] of cells.entries()) {
-        const leaves = await applyPlaceSymbolInstance(host, symbol.id, {
-          x: x + 24,
-          y: y + 8,
+        const instance = `si-${i + 1}`;
+        const plan = symbolPlacePlanFor({
+          symbol,
           pageId: w.pageId,
+          instanceId: instance,
+          origin: [x + 24, y + 8],
         });
-        const link = leaves[0]
-          ? symbolInstanceOf(await host.document.getMetadata(leaves[0]))
+        const piece = plan.pieces[0]!;
+        const inserted = await host.document.mutate(
+          insertPathMutationFor(w.pageId, piece.table.anchors, false),
+        );
+        const leaf = inserted.applied ? inserted.createdId : undefined;
+        const finished = leaf
+          ? await host.document.mutate(
+              symbolFinishBatchFor({
+                plan,
+                bindings: [{ pieceIndex: 0, keep: leaf, absorb: [] }],
+              }),
+            )
           : null;
-        if (!leaves[0] || !link) refuse(`symbol instance #${i + 1}`);
+        if (!leaf || !finished?.applied) refuse(`symbol instance #${i + 1}`);
         else {
-          out.records.push(link.instance);
-          out.handles.push(leaves[0]);
+          out.records.push(instance);
+          out.handles.push(leaf);
         }
       }
       break;

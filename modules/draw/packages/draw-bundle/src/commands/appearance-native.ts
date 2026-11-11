@@ -30,10 +30,10 @@
 //
 // WP6.3 (draw ADR 367) moved the appearance commands and the graphic
 // styles onto the native appearance when the host's engine has it
-// (`document.appearance@1`): the list helpers below are what they edit,
-// and `installAppearanceMigration` (appearance-migrate.ts) moves a
-// document's metadata stacks over when it opens. The metadata stack stays
-// the lane of a host without the flag.
+// (`document.appearance@1`, which every host of a built-in has): the list
+// helpers below are what they edit, and `installAppearanceMigration`
+// (appearance-migrate.ts) moves a document's metadata stacks over when it
+// opens.
 
 import type {
   BundleHost,
@@ -64,10 +64,6 @@ export interface NativePaintLayer {
   [field: string]: unknown;
 }
 
-/** The feature a host's engine advertises when it draws native
- *  appearance (engine ADR 1043). */
-export const NATIVE_APPEARANCE_FEATURE = "document.appearance@1";
-
 /** The page items that carry `frameAppearance`. */
 export const APPEARANCE_KINDS: ReadonlySet<string> = new Set([
   "textFrame",
@@ -75,15 +71,6 @@ export const APPEARANCE_KINDS: ReadonlySet<string> = new Set([
   "oval",
   "polygon",
 ]);
-
-/** Whether the host's engine draws native appearance. */
-export function nativeAppearanceOn(host: BundleHost): boolean {
-  try {
-    return host.supports(NATIVE_APPEARANCE_FEATURE);
-  } catch {
-    return false;
-  }
-}
 
 /** The layers of a read `appearance` value (`{ type, value: { layers } }`,
  *  or the list itself), or null. */

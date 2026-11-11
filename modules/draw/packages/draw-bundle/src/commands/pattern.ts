@@ -27,8 +27,8 @@
 // A PATTERN SWATCH is a PAINT: the engine's pattern paint (engine ADR
 // 1041), a `Pattern/…` swatch in the document's palette that any frame
 // names as its fill or stroke, drawn by both canvas lanes, written to PDF
-// as a tiling pattern. `createSwatch` takes it as `SwatchSpec.pattern`
-// (`supports("document.patternPaint@1")`). Save swatch
+// as a tiling pattern. `createSwatch` takes it as `SwatchSpec.pattern`.
+// Save swatch
 // (`applySavePatternSwatch`) maps the field's tile, lattice, spacing and
 // overlap onto it in one undo step; Done saves and removes the copies.
 // Before ADR 1041 this was RFI C-31's wall — no pattern paint in the
@@ -271,11 +271,6 @@ export const PATTERN_COMMAND_IDS = [
   SAVE_PATTERN_SWATCH_COMMAND_ID,
 ];
 
-/** The flag a host sets when its engine has the pattern paint (engine
- *  ADR 1041): `createSwatch` takes a `pattern`, and a frame's fill or
- *  stroke may name a `Pattern/…` swatch. */
-export const PATTERN_PAINT_FEATURE = "document.patternPaint@1";
-
 /** The container part the recipes live in, RELATIVE to this plugin's
  *  `paged/media.paged.draw/` namespace (the host prepends it). */
 export const PATTERN_PART = "pattern.json";
@@ -283,10 +278,6 @@ export const PATTERN_PART = "pattern.json";
 /** The recipe envelope version (an unknown version reads as an EMPTY
  *  library rather than a crash — the graphic-styles convention). */
 export const PATTERN_LIBRARY_VERSION = 1;
-
-/** The capability the PARAMETER persistence rides. The links (and so
- *  Release / Delete tiles) do not need it. */
-export const PATTERN_FEATURE = "storage.parts@1";
 
 /** The field id a v0 `patternTile` stamp (which carried none) reads as.
  *  Releasable and un-bakeable; not re-plannable, because v0 stored no
@@ -1104,22 +1095,10 @@ export function patternDeleteBatchFor(args: {
 
 type PartsHost = RecipeHost;
 
-/** Read the fields out of the container part. A host with no container
- *  writer (`supports("storage.parts@1")` false — an older editor) is not
- *  an error: it reads as an EMPTY library and WARNS, so the degrade is
- *  visible in the log instead of looking like "no fields yet". */
+/** Read the fields out of the container part (empty on a read failure). */
 export async function readPatternLibrary(
   host: PartsHost,
 ): Promise<PatternLibrary> {
-  if (!host.supports(PATTERN_FEATURE)) {
-    host.log.warn(
-      "pattern: this host wires no `.paged` container writer " +
-        `(supports("${PATTERN_FEATURE}") is false) — a field's PARAMETERS ` +
-        "cannot be saved here, so it can be released or un-baked but not " +
-        "re-planned without naming the parameters again",
-    );
-    return emptyLibrary();
-  }
   try {
     return parsePatternLibrary(await readRecipeBytes(host, PATTERN_PART));
   } catch (e) {
@@ -1128,13 +1107,12 @@ export async function readPatternLibrary(
   }
 }
 
-/** Write the fields back. `false` = it did not persist (no container
- *  door, or the write was refused) — logged, never thrown. */
+/** Write the fields back. `false` = it did not persist (the write was
+ *  refused) — logged, never thrown. */
 export async function writePatternLibrary(
   host: PartsHost,
   library: PatternLibrary,
 ): Promise<boolean> {
-  if (!host.supports(PATTERN_FEATURE)) return false;
   try {
     await writeRecipeBytes(
       host,
@@ -1605,7 +1583,7 @@ export async function applyMakePattern(
       `layout${plan.dropped.length > 0 ? ` (${plan.dropped.length} dropped off-page)` : ""}. ` +
       (saved
         ? "The parameters are saved, so the field can be re-planned."
-        : "The parameters were NOT saved (no container writer) — the field " +
+        : "The parameters were NOT saved (the write failed) — the field " +
           "can be released or un-baked, but a re-plan must name them again.") +
       " This is pattern ARTWORK; Save swatch turns it into a pattern " +
       "swatch any object can take as a fill.",
