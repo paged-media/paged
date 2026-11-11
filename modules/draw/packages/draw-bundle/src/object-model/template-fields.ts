@@ -28,18 +28,19 @@
 //                                                                    appearance stack's top layer
 //   graphicStyle   { allowed?, targets? }               style id     the style apply batch
 //   textOnPath     { path? }                            text         the attached story's text
-//   symbolChoice   { allowed? }                         symbol id    the instance leaf re-shaped
-//                                                                    in place (one-piece symbols)
+//   symbolChoice   { allowed? }                         symbol id    the symbol the engine
+//                                                                    instance draws
 //
 // `allowed` lists ids or names; absent, every swatch / style / symbol the
 // document holds is a choice. A value is answered as an id and taken as
 // an id or a name.
 //
 // Two limits, both the engine's permission model rather than this code:
-//   · a symbol is re-placed IN PLACE, by rewriting the instance leaf's
-//     path, paint and link. A rebuild (delete + insert) would mint a new
-//     element, which needs `document.add-item` and `item.delete` and loses
-//     the field's own label — so only one-piece symbols can be chosen.
+//   · a symbol is re-placed IN PLACE: `symbolInstanceSymbol` points the
+//     instance at another definition, keeping its id and so the field's
+//     own label (the engine takes plugin metadata on an instance). The
+//     engine counts that write as `appearance.other`, which is the
+//     field's one grant.
 //   · a text-on-path story is not hosted by a text frame, and the engine
 //     decides a story's permissions by its text frame (`frame_for`). A
 //     filler's write to it is refused unless the template grants
@@ -407,7 +408,7 @@ const symbolChoiceKind = (host: BundleHost): TemplateFieldKindContribution => ({
   kind: SYMBOL_CHOICE_FIELD,
   title: t(P.symbolTitle),
   control: { kind: "choice", options: [] },
-  grants: ["item.resize", "appearance.fill", "appearance.stroke"],
+  grants: ["appearance.other"],
   async describe(_ctx, field) {
     return choiceControl(await symbolChoices(host, field));
   },

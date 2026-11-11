@@ -704,6 +704,7 @@ pub(super) fn find_spread_for_leaf(doc: &Document, node: &NodeId) -> Option<usiz
                 has(s.graphic_lines.iter().map(|f| f.self_id.as_deref()), id)
             }
             NodeId::Polygon(id) => has(s.polygons.iter().map(|f| f.self_id.as_deref()), id),
+            NodeId::Instance(id) => has(s.instances.iter().map(|f| f.self_id.as_deref()), id),
             _ => false,
         };
         if found {

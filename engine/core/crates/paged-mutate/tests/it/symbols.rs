@@ -428,6 +428,64 @@ fn the_idml_expansion_is_undone_by_the_label_restore__feat__frames_paths_symbol_
         .all(|(k, _)| k != paged_mutate::SYMBOL_INSTANCE_LABEL)));
 }
 
+/// A symbol instance carries plugin metadata like any page item (a
+/// template field's mark sits on it): the write undoes exactly, and the
+/// IDML expansion carries the instance's labels on its leaves and gives
+/// them back to the restored instance.
+#[test]
+fn an_instance_carries_plugin_metadata_through_undo_and_the_idml_restore__feat__frames_paths_symbol_instance(
+) {
+    use paged_mutate::{PropertyPath, Value};
+    let mut doc = sample("geometry");
+    {
+        let op = create(&doc, true);
+        apply(&mut doc, &op)
+    }
+    .expect("create");
+    let id = doc.spreads[0].spread.instances[0]
+        .self_id
+        .clone()
+        .expect("instance id");
+    let key = "x-paged:template".to_string();
+    let mark = r#"{"v":1,"data":{"kind":"media.paged.draw.symbolChoice"}}"#.to_string();
+    let applied = apply(
+        &mut doc,
+        &Operation::SetProperty {
+            node: NodeId::Instance(id.clone()),
+            path: PropertyPath::PluginMetadata,
+            value: Value::PluginMetadata {
+                key: key.clone(),
+                value: Some(mark.clone()),
+                caller: None,
+                prev: None,
+            },
+        },
+    )
+    .expect("an instance takes plugin metadata");
+    let label = |doc: &Document| {
+        doc.spreads[0]
+            .spread
+            .labels
+            .get(&id)
+            .and_then(|e| e.iter().find(|(k, _)| *k == key).map(|(_, v)| v.clone()))
+    };
+    assert_eq!(label(&doc), Some(mark.clone()));
+
+    // Through IDML and back: the restored instance has its label again,
+    // and no leaf keeps the carrier.
+    let mut written = doc.clone();
+    expand_symbols_for_interchange(&mut written);
+    assert!(written.spreads[0].spread.labels.get(&id).is_none());
+    restore_symbols_from_labels(&mut written);
+    assert_eq!(label(&written), Some(mark));
+    assert!(written.spreads[0].spread.labels.values().all(|v| v
+        .iter()
+        .all(|(k, _)| k != paged_mutate::SYMBOL_INSTANCE_LABELS_LABEL)));
+
+    apply(&mut doc, &applied.inverse).expect("undo");
+    assert_eq!(label(&doc), None);
+}
+
 #[test]
 fn symbol_ops_refuse_what_they_cannot_do__feat__frames_paths_symbol_instance() {
     let mut doc = sample("geometry");

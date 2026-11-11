@@ -4925,7 +4925,14 @@ impl CanvasModel {
                 value,
                 caller,
             } => Some(Operation::SetProperty {
-                node: element_to_leaf_node_id(element_id)?,
+                // A symbol instance carries labels too (its template
+                // field's mark); the other carriers are the leaf items.
+                node: match element_id {
+                    crate::element_selection::ElementId::Instance(s) => {
+                        paged_mutate::NodeId::Instance(s.clone())
+                    }
+                    other => element_to_leaf_node_id(other)?,
+                },
                 path: PropertyPath::PluginMetadata,
                 value: Value::PluginMetadata {
                     key: key.clone(),
