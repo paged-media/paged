@@ -134,8 +134,26 @@ impl Reader<'_> {
     }
 }
 
+thread_local! {
+    /// The interned strings, in first-use order.
+    static POOL: std::cell::RefCell<(Vec<String>, std::collections::HashMap<String, u16>)> =
+        Default::default();
+}
+
+/// A string as its index in the pool (the table holds `u16`s, not
+/// pointers: a quarter of the size in a wasm32 binary).
 fn lit(out: &mut String, s: &str) {
-    write!(out, "{s:?}").unwrap();
+    let i = POOL.with(|p| {
+        let mut p = p.borrow_mut();
+        if let Some(&i) = p.1.get(s) {
+            return i;
+        }
+        let i = u16::try_from(p.0.len()).expect("fewer than 65536 strings");
+        p.0.push(s.to_string());
+        p.1.insert(s.to_string(), i);
+        i
+    });
+    write!(out, "{i}").unwrap();
 }
 
 fn pair(out: &mut String, a: &str, b: &str) {
@@ -335,6 +353,14 @@ fn main() {
         shape(&mut out, s);
     }
     out.push_str("];\n");
+    POOL.with(|p| {
+        let p = p.borrow();
+        write!(out, "pub(crate) static STRS: [&str; {}] = [", p.0.len()).unwrap();
+        for v in &p.0 {
+            write!(out, "{v:?},").unwrap();
+        }
+        out.push_str("];\n");
+    });
     let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("presets.rs");
     std::fs::write(dest, out).unwrap();
 }

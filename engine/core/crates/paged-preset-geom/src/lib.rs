@@ -218,7 +218,7 @@ fn definitions() -> &'static HashMap<&'static str, Definition> {
     DEFS.get_or_init(|| {
         table::PRESETS
             .iter()
-            .map(|p| (p.name, p.definition()))
+            .map(|p| (p.name(), p.definition()))
             .collect()
     })
 }

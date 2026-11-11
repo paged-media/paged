@@ -20,7 +20,12 @@
 
 use crate::{AdjustHandle, ConnectionSite, CustomGeometry, GeomPath, HandleRef, PathCmd};
 
-type S = &'static str;
+/// A string of the table: its index in [`STRS`].
+type S = u16;
+
+fn st(i: S) -> &'static str {
+    STRS[i as usize]
+}
 
 /// One preset as the build wrote it.
 pub(crate) struct P {
@@ -64,18 +69,23 @@ enum H {
 include!(concat!(env!("OUT_DIR"), "/presets.rs"));
 
 fn own(p: &(S, S)) -> (String, String) {
-    (p.0.to_string(), p.1.to_string())
+    (st(p.0).to_string(), st(p.1).to_string())
 }
 
 fn r(r: &Option<R>) -> Option<HandleRef> {
     r.as_ref().map(|R(g, lo, hi)| HandleRef {
-        guide: g.to_string(),
-        min: lo.to_string(),
-        max: hi.to_string(),
+        guide: st(*g).to_string(),
+        min: st(*lo).to_string(),
+        max: st(*hi).to_string(),
     })
 }
 
 impl P {
+    /// The preset's name.
+    pub(crate) fn name(&self) -> &'static str {
+        st(self.name)
+    }
+
     /// The preset's program and its text rectangle (`l t r b` guides).
     pub(crate) fn definition(&self) -> (CustomGeometry, Option<[String; 4]>) {
         let paths = self
@@ -84,19 +94,19 @@ impl P {
             .map(|q| GeomPath {
                 w: q.w,
                 h: q.h,
-                fill: q.fill.map(str::to_string),
+                fill: q.fill.map(|f| st(f).to_string()),
                 stroke: q.stroke,
                 commands: q
                     .cmds
                     .iter()
                     .map(|c| match c {
-                        C::M(x, y) => PathCmd::MoveTo(x.to_string(), y.to_string()),
-                        C::L(x, y) => PathCmd::LineTo(x.to_string(), y.to_string()),
+                        C::M(x, y) => PathCmd::MoveTo(st(*x).to_string(), st(*y).to_string()),
+                        C::L(x, y) => PathCmd::LineTo(st(*x).to_string(), st(*y).to_string()),
                         C::A(a, b, c, d) => PathCmd::ArcTo(
-                            a.to_string(),
-                            b.to_string(),
-                            c.to_string(),
-                            d.to_string(),
+                            st(*a).to_string(),
+                            st(*b).to_string(),
+                            st(*c).to_string(),
+                            st(*d).to_string(),
                         ),
                         C::Q(p) => PathCmd::QuadTo(p.each_ref().map(own)),
                         C::B(p) => PathCmd::CubicTo(p.each_ref().map(own)),
@@ -125,7 +135,7 @@ impl P {
             .cxn
             .iter()
             .map(|(ang, pos)| ConnectionSite {
-                ang: ang.to_string(),
+                ang: st(*ang).to_string(),
                 pos: own(pos),
             })
             .collect();
@@ -137,7 +147,7 @@ impl P {
                 handles,
                 connections,
             },
-            self.rect.map(|r| r.map(str::to_string)),
+            self.rect.map(|r| r.map(|v| st(v).to_string())),
         )
     }
 }
