@@ -245,6 +245,14 @@ fn picture_adjustments_set_in_the_editor_are_saved_as_blip_effects__feat__images
         )
         .unwrap();
     assert!(skips.is_empty(), "{skips:?}");
+    // For the Word oracle (`PAGED_DOC_EXPORT_DIR`).
+    if let Ok(dir) = std::env::var("PAGED_DOC_EXPORT_DIR") {
+        std::fs::write(
+            std::path::Path::new(&dir).join("picture-filter-stack.docx"),
+            &saved,
+        )
+        .unwrap();
+    }
     assert!(text(&saved, MAIN).contains("<a:biLevel thresh=\"40000\"/>"));
     identical_except(&original, &saved, &[MAIN]);
     let again = DocSession::load(&saved).unwrap().lowered();

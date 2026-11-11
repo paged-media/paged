@@ -191,13 +191,21 @@ fn a_pictures_filter_stack_is_written_as_blip_effects_and_reads_back__feat__imag
         },
         paged_model::RasterOp::Invert,
     ];
-    doc.spreads[0].spread.rectangles.last_mut().unwrap().image_adjustments = ops.clone();
+    doc.spreads[0]
+        .spread
+        .rectangles
+        .last_mut()
+        .unwrap()
+        .image_adjustments = ops.clone();
     let out = export(&bytes, &doc, &BTreeMap::new());
+    keep(&out.bytes, "picture-filter-stack");
     let (pic, ..) = last_picture(&out.bytes);
     assert!(pic.contains(r#"<a:biLevel thresh="40000"/>"#), "{pic}");
-    assert!(pic.contains("<a:clrChange>"), "{pic}");
+    assert!(pic.contains("<a:clrChange"), "{pic}");
     assert!(
-        out.not_exported.iter().any(|n| format!("{n:?}").contains("invert")),
+        out.not_exported
+            .iter()
+            .any(|n| format!("{n:?}").contains("invert")),
         "{:?}",
         out.not_exported
     );
