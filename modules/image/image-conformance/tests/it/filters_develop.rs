@@ -56,13 +56,7 @@ fn to_lin(c: f32) -> f32 {
     paged_color::math::srgb_to_linear(c)
 }
 
-fn to_srgb(v: f32) -> f32 {
-    if v <= 0.003_130_8 {
-        12.92 * v
-    } else {
-        1.055 * v.powf(1.0 / 2.4) - 0.055
-    }
-}
+use paged_color::math::linear_to_srgb as to_srgb;
 
 const CENTRES: [f32; 8] = [0.0, 30.0, 60.0, 120.0, 180.0, 240.0, 270.0, 300.0];
 

@@ -54,12 +54,7 @@ struct Fonts(HashMap<u32, ExportFont>);
 
 /// The renderer's font id of a face: FNV-1a over the whole file.
 fn font_id(bytes: &[u8]) -> u32 {
-    let mut h: u32 = 0x811c_9dc5;
-    for &b in bytes {
-        h ^= b as u32;
-        h = h.wrapping_mul(0x0100_0193);
-    }
-    h
+    paged_pixel::fnv1a_32(bytes)
 }
 
 impl Fonts {

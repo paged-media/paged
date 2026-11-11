@@ -289,22 +289,11 @@ fn parse_matrix(s: &str) -> Option<[f32; 6]> {
     Some(m)
 }
 
-/// `a ∘ b` — compose two affine matrices, byte-for-byte matching
-/// `idml_import`'s `compose_matrix` (apply `b` first, then `a`). Used to
-/// rebuild the group-transform accumulation the parser composes into a
-/// group member's `item_transform`, so the writer can invert it back to
-/// the on-disk member transform (W1.15 lane 4).
+/// `a ∘ b` (apply `b` first, then `a`): the product the parser composes a
+/// group member's `item_transform` with, so the writer can invert it back
+/// to the on-disk member transform (W1.15 lane 4).
 fn compose_matrix(a: &[f32; 6], b: &[f32; 6]) -> [f32; 6] {
-    let [a1, b1, c1, d1, tx1, ty1] = *a;
-    let [a2, b2, c2, d2, tx2, ty2] = *b;
-    [
-        a1 * a2 + c1 * b2,
-        b1 * a2 + d1 * b2,
-        a1 * c2 + c1 * d2,
-        b1 * c2 + d1 * d2,
-        a1 * tx2 + c1 * ty2 + tx1,
-        b1 * tx2 + d1 * ty2 + ty1,
-    ]
+    paged_geom::affine::multiply(*a, *b)
 }
 
 /// Accumulate a group-transform stack the way the parser does (outer
@@ -478,29 +467,8 @@ where
 /// document, all of them multi-line, all of them flattened one save at a
 /// time. InDesign writes `&#xa;` there for exactly this reason.
 pub(crate) fn escape_attr(s: &str) -> std::borrow::Cow<'_, str> {
-    if s.bytes()
-        .any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\'' | b'\t' | b'\n' | b'\r'))
-    {
-        let mut out = String::with_capacity(s.len());
-        for c in s.chars() {
-            match c {
-                '&' => out.push_str("&amp;"),
-                '<' => out.push_str("&lt;"),
-                '>' => out.push_str("&gt;"),
-                '"' => out.push_str("&quot;"),
-                '\'' => out.push_str("&apos;"),
-                '\t' => out.push_str("&#x9;"),
-                '\n' => out.push_str("&#xA;"),
-                '\r' => out.push_str("&#xD;"),
-                _ => out.push(c),
-            }
-        }
-        std::borrow::Cow::Owned(out)
-    } else {
-        std::borrow::Cow::Borrowed(s)
-    }
+    paged_fmt::xml::escape_attr_with(s, paged_fmt::xml::AttrEscape::IDML)
 }
-
 // ---------------------------------------------------------------------
 // Path geometry
 // ---------------------------------------------------------------------
@@ -589,43 +557,10 @@ fn rect_corners(b: Bounds) -> Vec<PathAnchor> {
     ]
 }
 
-/// The four-arc Bézier circle constant.
-const OVAL_KAPPA: f32 = 0.552_284_8;
-
-/// InDesign's own `<Oval>` path (measured 2026-09-06 on a fresh oval
-/// exported from InDesign 20.0.1): four anchors at the edge midpoints
-/// in the order bottom, right, top, left, each with handles κ·r along
-/// its edge. An `<Oval>` is only an ellipse by its path — InDesign drew
-/// the four-corner box this used to write as a rectangle (the annual's
-/// blend-mode plates).
-fn oval_anchors(b: Bounds) -> Vec<PathAnchor> {
-    let cx = (b.left + b.right) * 0.5;
-    let cy = (b.top + b.bottom) * 0.5;
-    let kx = (b.right - b.left) * 0.5 * OVAL_KAPPA;
-    let ky = (b.bottom - b.top) * 0.5 * OVAL_KAPPA;
-    vec![
-        PathAnchor {
-            anchor: (cx, b.bottom),
-            left: (cx - kx, b.bottom),
-            right: (cx + kx, b.bottom),
-        },
-        PathAnchor {
-            anchor: (b.right, cy),
-            left: (b.right, cy + ky),
-            right: (b.right, cy - ky),
-        },
-        PathAnchor {
-            anchor: (cx, b.top),
-            left: (cx + kx, b.top),
-            right: (cx - kx, b.top),
-        },
-        PathAnchor {
-            anchor: (b.left, cy),
-            left: (b.left, cy - ky),
-            right: (b.left, cy + ky),
-        },
-    ]
-}
+/// InDesign's own `<Oval>` path: an `<Oval>` is only an ellipse by its
+/// path — InDesign drew the four-corner box this used to write as a
+/// rectangle (the annual's blend-mode plates).
+use paged_geom::oval_anchors;
 
 /// The model's path geometry for one spread page item, plus a hint at
 /// how to reconcile a divergence.

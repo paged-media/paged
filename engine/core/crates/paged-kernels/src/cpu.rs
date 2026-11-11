@@ -259,74 +259,80 @@ pub fn channel_mixer(a: Px, p: &AdjustChannelMixerParams) -> Px {
     )
 }
 
+/// RGB (0..=1) as HSL: hue in degrees (0..360), saturation and lightness
+/// 0..=1. The `adjust.hue_saturation` kernel's own conversion, term for term
+/// its WGSL, and the one the engine's layer colour adjustment uses.
+pub fn rgb_to_hsl(c: [f32; 3]) -> [f32; 3] {
+    let mx = c[0].max(c[1].max(c[2]));
+    let mn = c[0].min(c[1].min(c[2]));
+    let l = (mx + mn) * 0.5;
+    let d = mx - mn;
+    if d <= 0.0 {
+        return [0.0, 0.0, l];
+    }
+    let s = if l > 0.5 {
+        d / (2.0 - mx - mn)
+    } else {
+        d / (mx + mn)
+    };
+    let h = if mx == c[0] {
+        let h = (c[1] - c[2]) / d;
+        if c[1] < c[2] {
+            h + 6.0
+        } else {
+            h
+        }
+    } else if mx == c[1] {
+        (c[2] - c[0]) / d + 2.0
+    } else {
+        (c[0] - c[1]) / d + 4.0
+    };
+    [h * 60.0, s, l]
+}
+fn channel(p: f32, q: f32, t0: f32) -> f32 {
+    let mut t = t0;
+    if t < 0.0 {
+        t += 1.0;
+    }
+    if t > 1.0 {
+        t -= 1.0;
+    }
+    if t < 1.0 / 6.0 {
+        return p + (q - p) * 6.0 * t;
+    }
+    if t < 0.5 {
+        return q;
+    }
+    if t < 2.0 / 3.0 {
+        return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    }
+    p
+}
+/// HSL (hue in degrees, one turn either side) as RGB: the inverse of
+/// [`rgb_to_hsl`].
+pub fn hsl_to_rgb(h: f32, s: f32, l: f32) -> [f32; 3] {
+    if s <= 0.0 {
+        return [l, l, l];
+    }
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
+    let pp = 2.0 * l - q;
+    let hh = h / 360.0;
+    [
+        channel(pp, q, hh + 1.0 / 3.0),
+        channel(pp, q, hh),
+        channel(pp, q, hh - 1.0 / 3.0),
+    ]
+}
+
 /// `adjust.hue_saturation`: the HSL round trip, the six range weights,
 /// colorize.
 pub fn hue_saturation(a: Px, p: &AdjustHueSaturationParams) -> Px {
-    fn to_hsl(c: [f32; 3]) -> [f32; 3] {
-        let mx = c[0].max(c[1].max(c[2]));
-        let mn = c[0].min(c[1].min(c[2]));
-        let l = (mx + mn) * 0.5;
-        let d = mx - mn;
-        if d <= 0.0 {
-            return [0.0, 0.0, l];
-        }
-        let s = if l > 0.5 {
-            d / (2.0 - mx - mn)
-        } else {
-            d / (mx + mn)
-        };
-        let h = if mx == c[0] {
-            let h = (c[1] - c[2]) / d;
-            if c[1] < c[2] {
-                h + 6.0
-            } else {
-                h
-            }
-        } else if mx == c[1] {
-            (c[2] - c[0]) / d + 2.0
-        } else {
-            (c[0] - c[1]) / d + 4.0
-        };
-        [h * 60.0, s, l]
-    }
-    fn channel(p: f32, q: f32, t0: f32) -> f32 {
-        let mut t = t0;
-        if t < 0.0 {
-            t += 1.0;
-        }
-        if t > 1.0 {
-            t -= 1.0;
-        }
-        if t < 1.0 / 6.0 {
-            return p + (q - p) * 6.0 * t;
-        }
-        if t < 0.5 {
-            return q;
-        }
-        if t < 2.0 / 3.0 {
-            return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-        }
-        p
-    }
-    fn to_rgb(h: f32, s: f32, l: f32) -> [f32; 3] {
-        if s <= 0.0 {
-            return [l, l, l];
-        }
-        let q = if l < 0.5 {
-            l * (1.0 + s)
-        } else {
-            l + s - l * s
-        };
-        let pp = 2.0 * l - q;
-        let hh = h / 360.0;
-        [
-            channel(pp, q, hh + 1.0 / 3.0),
-            channel(pp, q, hh),
-            channel(pp, q, hh - 1.0 / 3.0),
-        ]
-    }
     let c = unpremul_rgb(a).map(|x| x.clamp(0.0, 1.0));
-    let hsl = to_hsl(c);
+    let hsl = rgb_to_hsl(c);
     let (mut dh, mut ds, mut dl) = (p.master[0], p.master[1], p.master[2]);
     if hsl[1] > 0.0 {
         for (k, r) in p.ranges.iter().enumerate() {
@@ -358,7 +364,7 @@ pub fn hue_saturation(a: Px, p: &AdjustHueSaturationParams) -> Px {
         s * (1.0 + ds)
     };
     s = s.clamp(0.0, 1.0);
-    let o = to_rgb(h, s, hsl[2]).map(|c| {
+    let o = hsl_to_rgb(h, s, hsl[2]).map(|c| {
         let c = if dl >= 0.0 {
             c + (1.0 - c) * dl
         } else {

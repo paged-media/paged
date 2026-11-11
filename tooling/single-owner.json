@@ -2,9 +2,9 @@
   "rules": [
     {
       "name": "xml-escape-by-hand",
-      "description": "escape XML with paged_ooxml::xml::escape_attr / escape_text, not a replace chain",
+      "description": "escape XML with paged_fmt::xml (escape_text, escape_attr, escape_attr_with and a format's AttrEscape settings; paged_ooxml::xml re-exports it) or @paged-media/helpers, not a replace chain or a match",
       "owner": [
-        "platform/shared/ooxml/src/xml.rs",
+        "engine/core/crates/paged-fmt/src/xml.rs",
         "platform/shared/helpers/src/escape.ts"
       ],
       "patterns": [
@@ -13,15 +13,7 @@
         "'&'\\s*=>.*&amp;"
       ],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": [
-        "engine/core/crates/idml-export/src/rewrite.rs",
-        "engine/core/crates/paged-data-dataset/src/xml.rs",
-        "engine/core/crates/paged-gen/src/samples/xref.rs",
-        "engine/core/crates/paged-store/src/package.rs",
-        "engine/core/crates/paged-svg/src/export.rs",
-        "modules/draw/crates/draw-dxf/src/lib.rs",
-        "platform/shared/dml-chart/src/write.rs"
-      ]
+      "baseline": []
     },
     {
       "name": "content-types-by-hand",
@@ -53,7 +45,7 @@
       "owner": ["engine/core/crates/paged-model/src/lib.rs"],
       "patterns": ["\\(1000,\\s*\"[Mm]\"\\)"],
       "extensions": [".rs"],
-      "baseline": ["modules/doc/docx-core/src/lib.rs"]
+      "baseline": []
     },
     {
       "name": "srgb-transfer",
@@ -71,27 +63,7 @@
       ],
       "patterns": ["0\\.040_?45", "0\\.003_?130_?8"],
       "extensions": [".rs", ".ts", ".tsx"],
-      "baseline": [
-        "engine/core/crates/paged-canvas/src/model.rs",
-        "engine/core/crates/paged-color/src/lab.rs",
-        "engine/core/crates/paged-color/src/lib.rs",
-        "engine/core/crates/paged-color/tests/parity.rs",
-        "engine/core/crates/paged-compose/src/gradient_sample.rs",
-        "engine/core/crates/paged-compose/src/scene_layer.rs",
-        "engine/core/crates/paged-export-pdf/src/color.rs",
-        "engine/core/crates/paged-fidelity/src/color.rs",
-        "engine/core/crates/paged-gpu/src/lib.rs",
-        "engine/core/crates/paged-gpu/src/vcpu.rs",
-        "engine/core/crates/paged-gpu/src/vello_map.rs",
-        "engine/core/crates/paged-gpu/src/vello_rs.rs",
-        "engine/core/crates/paged-model/src/lib.rs",
-        "engine/core/crates/paged-raster/src/dng.rs",
-        "engine/core/crates/paged-raster/tests/it/dng.rs",
-        "engine/core/crates/paged-renderer/tests/it/spot_tint.rs",
-        "engine/core/crates/paged-svg/src/export.rs",
-        "modules/image/image-conformance/src/delta_e.rs",
-        "modules/image/image-conformance/tests/it/filters_develop.rs"
-      ]
+      "baseline": []
     },
     {
       "name": "blend-mode-enum",
@@ -110,7 +82,7 @@
     },
     {
       "name": "fnv-hash",
-      "description": "hash with fnv1a32 / fnv1a32Utf16 from @paged-media/helpers (TypeScript) and paged_pixel::fnv1a_64 / fnv1a_64_update (Rust, 64 bit; every engine crate can depend on paged-pixel)",
+      "description": "hash with fnv1a32 / fnv1a32Utf16 from @paged-media/helpers (TypeScript) and paged_pixel (Rust: fnv1a_64 / fnv1a_64_update / Fnv1a64, fnv1a_32, and the FNV1A_* constants for a mixer built on them; every crate can depend on dependency-free paged-pixel)",
       "owner": [
         "platform/shared/helpers/src/hash.ts",
         "platform/shared/helpers/test/fnv.test.ts",
@@ -135,36 +107,7 @@
         "(?i)0x0100_?0193\\b"
       ],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": [
-        "engine/core/crates/idml-export/src/paged.rs",
-        "engine/core/crates/idml-export/tests/it/zip_layout.rs",
-        "engine/core/crates/paged-canvas/src/svg_io.rs",
-        "engine/core/crates/paged-canvas/tests/it/indesign_lane.rs",
-        "engine/core/crates/paged-cli/src/session.rs",
-        "engine/core/crates/paged-compose/src/display_list.rs",
-        "engine/core/crates/paged-compose/src/mesh.rs",
-        "engine/core/crates/paged-compose/src/pattern.rs",
-        "engine/core/crates/paged-data-query/src/lib.rs",
-        "engine/core/crates/paged-data-session/src/columns.rs",
-        "engine/core/crates/paged-data-session/src/record_status.rs",
-        "engine/core/crates/paged-data-sources/src/remote.rs",
-        "engine/core/crates/paged-export-pdf/src/color.rs",
-        "engine/core/crates/paged-export-pdf/src/text.rs",
-        "engine/core/crates/paged-export-pdf/src/transparency.rs",
-        "engine/core/crates/paged-model/src/review.rs",
-        "engine/core/crates/paged-renderer/src/bin/inspect.rs",
-        "engine/core/crates/paged-renderer/src/pipeline/build_engine.rs",
-        "engine/core/crates/paged-renderer/src/pipeline/font_table.rs",
-        "engine/core/crates/paged-svg/src/import/mod.rs",
-        "engine/core/crates/pptx-fonts/tests/fixtures.rs",
-        "modules/image/image-gpu/src/coverage.rs",
-        "modules/image/image-js/src/smart.rs",
-        "modules/publish/crates/pdf-import/src/lower.rs",
-        "modules/sheet/sheet-conformance/tests/it/calc_model.rs",
-        "modules/sheet/sheet-xlsx/src/cf_edit.rs",
-        "modules/slide/pptx-export/src/comments.rs",
-        "modules/web/packages/web-render/src/fonts.rs"
-      ]
+      "baseline": []
     },
     {
       "name": "crc32-polynomial",
@@ -172,14 +115,7 @@
       "owner": ["platform/shared/helpers/"],
       "patterns": ["(?i)0xedb8_?8320"],
       "extensions": [".rs", ".ts", ".tsx", ".mjs"],
-      "baseline": [
-        "apps/ml-host/crates/paged-ml-host/tests/it/support.rs",
-        "engine/core/crates/paged-cli/tests/it/data_cli.rs",
-        "engine/core/crates/paged-cli/tests/it/place_image.rs",
-        "engine/core/crates/paged-gen/src/samples/transparency_targets.rs",
-        "modules/image/image-js/src/readouts.rs",
-        "modules/slide/pptx-core/src/transcode.rs"
-      ]
+      "baseline": ["apps/ml-host/crates/paged-ml-host/tests/it/support.rs"]
     },
     {
       "name": "base64-alphabet",
@@ -202,7 +138,6 @@
         "modules/data/packages/data-bundle/src/__tests__/assets.test.ts",
         "modules/data/packages/data-bundle/src/assets.ts",
         "modules/draw/packages/draw-bundle/src/commands/rasterize.ts",
-        "modules/sheet/sheet-js/src/core/annotations.rs",
         "modules/web/packages/web-bundle/test/engine-inputs.spec.ts",
         "platform/extensions/packages/plugin-sdk/src/bytes.ts",
         "tests/gpu/slide-transitions/harness.ts"
@@ -229,12 +164,13 @@
     {
       "name": "bezier-kappa",
       "description": "the circle's cubic control distance is paged_geom::KAPPA / KAPPA_F32; arcs and ellipses come from kurbo / paged-geom (capability register, geometry)",
-      "allowReason": "test fixtures that pin a literal, truncated number on purpose (the oracle recordings and the bake fidelity case); the full-precision uses import KAPPA",
+      "allowReason": "test fixtures that pin a literal, truncated number on purpose (the oracle recordings and the bake fidelity case); the full-precision uses import KAPPA; paged-model's live shapes sit below paged-geom (paged-geom depends on the model), so their pie test pins the constant itself",
       "allow": [
         "modules/draw/packages/draw-bundle/test/roundtrip/author.ts",
         "platform/shared/vector-geometry/test/bench-data.ts",
         "platform/shared/vector-geometry/test/polygon.spec.ts",
-        "modules/web/packages/web-bundle/test/bake-fidelity.spec.ts"
+        "modules/web/packages/web-bundle/test/bake-fidelity.spec.ts",
+        "engine/core/crates/paged-model/src/live_shape.rs"
       ],
       "owner": [
         "engine/core/crates/paged-geom/src/lib.rs",
@@ -242,27 +178,7 @@
       ],
       "patterns": ["0?\\.552_?28"],
       "extensions": [".rs", ".ts", ".tsx"],
-      "baseline": [
-        "engine/core/crates/idml-export/src/rewrite.rs",
-        "engine/core/crates/paged-canvas/src/snap_point.rs",
-        "engine/core/crates/paged-canvas/tests/it/oval_path_geometry.rs",
-        "engine/core/crates/paged-gen/src/builders/page_item.rs",
-        "engine/core/crates/paged-gen/src/samples/shaped_bands.rs",
-        "engine/core/crates/paged-gen/src/samples/text_in_shape.rs",
-        "engine/core/crates/paged-gen/src/samples/text_on_path.rs",
-        "engine/core/crates/paged-gen/src/samples/text_wrap_sides.rs",
-        "engine/core/crates/paged-geom/src/flatten.rs",
-        "engine/core/crates/paged-geom/src/planar.rs",
-        "engine/core/crates/paged-gpu/src/vello_map.rs",
-        "engine/core/crates/paged-model/src/live_shape.rs",
-        "engine/core/crates/paged-mutate/src/apply/mod.rs",
-        "engine/core/crates/paged-mutate/tests/it/geometry_fuzz.rs",
-        "engine/core/crates/paged-perf/src/planar.rs",
-        "engine/core/crates/paged-perf/tests/planar_budgets.rs",
-        "engine/core/crates/paged-vector-fx/src/stroke_style.rs",
-        "modules/doc/docx-lower/src/shape_geom.rs",
-        "modules/image/image-conformance/tests/it/psd_vector_paths_photoshop.rs"
-      ]
+      "baseline": ["modules/doc/docx-lower/src/shape_geom.rs"]
     },
     {
       "name": "sha2-constants",
@@ -285,7 +201,7 @@
     },
     {
       "name": "affine-product",
-      "description": "multiply 2x3 affines with paged_geom::affine (f32) or paged_geom::affine64 (f64); the pattern is the first term of the product, m[0] * n[0] + m[2] * n[1]",
+      "description": "multiply 2x3 affines with paged_model::affine (f32; paged_geom::affine re-exports it) or paged_geom::affine64 (f64); the pattern is the first term of the product, m[0] * n[0] + m[2] * n[1]",
       "allowReason": "test oracles that compute the product independently of the code they check (idml-export and paged-canvas integration tests), and the renderer's text-on-path scale, which multiplies a rotation by a diagonal matrix and is not a general product",
       "allow": [
         "engine/core/crates/idml-export/tests/it/group_transform_saveback.rs",
@@ -294,7 +210,7 @@
         "engine/core/crates/paged-renderer/src/pipeline/text_path.rs"
       ],
       "owner": [
-        "engine/core/crates/paged-geom/src/affine.rs",
+        "engine/core/crates/paged-model/src/affine.rs",
         "engine/core/crates/paged-geom/src/affine64.rs"
       ],
       "patterns": [
@@ -302,17 +218,13 @@
         "\\ba1 \\* a2 \\+ c1 \\* b2\\b"
       ],
       "extensions": [".rs"],
-      "baseline": [
-        "engine/core/crates/idml-export/src/clip_groups.rs",
-        "engine/core/crates/idml-export/src/rewrite.rs",
-        "engine/core/crates/idml-import/src/spread.rs"
-      ]
+      "baseline": []
     },
     {
       "name": "affine-inverse",
       "description": "invert a 2x3 affine with paged_geom::affine::invert_if (f32) or paged_geom::affine64::invert (f64); the pattern is the reciprocal determinant scaling the adjugate",
       "owner": [
-        "engine/core/crates/paged-geom/src/affine.rs",
+        "engine/core/crates/paged-model/src/affine.rs",
         "engine/core/crates/paged-geom/src/affine64.rs"
       ],
       "patterns": ["-\\w+ \\* inv_det"],
@@ -329,31 +241,26 @@
     },
     {
       "name": "arc-to-cubic",
-      "description": "approximate a circular arc with cubics (4/3·tan(θ/4)) through paged_geom, not a local formula",
+      "description": "approximate a circular arc with cubics (4/3·tan(θ/4)) through paged_geom::ellipse (arc_handle, arc_split, arc_cubics), not a local formula",
       "owner": ["engine/core/crates/paged-geom/"],
       "extensions": [".rs"],
       "patterns": [
         "4\\.0\\s*/\\s*3\\.0\\)?\\s*\\*\\s*\\(?[\\w.]*\\s*\\(?[\\w. /*]*\\)?\\.tan\\(\\)",
         "4\\.0\\s*/\\s*3\\.0\\s*\\*\\s*\\(.*\\)\\.tan\\("
       ],
-      "baseline": [
-        "engine/core/crates/paged-model/src/live_shape.rs",
-        "engine/core/crates/paged-renderer/src/pipeline/ruby.rs",
-        "modules/draw/crates/draw-dxf/src/curves.rs",
-        "modules/slide/slide-chart/src/outline.rs",
-        "platform/shared/dml-geom/src/lib.rs"
-      ]
+      "baseline": [],
+      "allowReason": "paged-model's live shapes sit below paged-geom (paged-geom depends on the model) and keep their own handle",
+      "allow": ["engine/core/crates/paged-model/src/live_shape.rs"]
     },
     {
       "name": "png-encode",
-      "description": "encode PNG with paged_raster::encode, not image::PngEncoder",
+      "description": "encode PNG with paged_raster::encode / encode_rgba8_png, not image::PngEncoder",
       "owner": ["engine/core/crates/paged-raster/"],
       "extensions": [".rs"],
       "patterns": ["PngEncoder"],
-      "baseline": [
-        "engine/core/crates/paged-canvas/src/snapshot.rs",
-        "engine/core/crates/paged-gpu/src/surface.rs",
-        "engine/core/crates/paged-introspect/src/render.rs",
+      "baseline": [],
+      "allowReason": "decoder tests and a bench that encode their input with an independent encoder (zune-png), so the codec under test is not its own oracle",
+      "allow": [
         "modules/image/image-conformance/benches/png_d4.rs",
         "modules/image/image-conformance/tests/it/codec_png.rs",
         "modules/image/image-conformance/tests/it/codec_png_16bit.rs",
@@ -369,10 +276,7 @@
         "imageops::(resize|thumbnail)",
         "\\.resize(_exact)?\\([^)]*FilterType::"
       ],
-      "baseline": [
-        "engine/core/crates/paged-export-pdf/src/image.rs",
-        "engine/core/crates/paged-raster/src/lib.rs"
-      ]
+      "baseline": []
     },
     {
       "name": "raw-color-input",

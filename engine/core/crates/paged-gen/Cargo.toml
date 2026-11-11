@@ -11,11 +11,18 @@ description = "Test-corpus generator. Emits multi-page mega-files where each pag
 workspace = true
 
 [dependencies]
+# The OCF package writer (one owner).
+paged-ocf = { path = "../paged-ocf" }
+paged-fmt = { path = "../paged-fmt" }
+# The oval outline and the circle constant (one owner: paged-geom).
+paged-geom = { path = "../paged-geom" }
+paged-model = { path = "../paged-model" }
 zip = { workspace = true }
 flate2 = { workspace = true }
 quick-xml = { workspace = true }
 anyhow = { workspace = true }
 base64 = { workspace = true }
+crc32fast = { workspace = true }
 blake3 = "1"
 clap = { version = "4", features = ["derive"] }
 

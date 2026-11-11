@@ -27,7 +27,6 @@
 //! moderately-sized fixtures this is acceptable; profiling will tell
 //! us when it isn't.
 
-use image::ImageEncoder;
 use paged_compose::Color;
 use paged_renderer::pipeline;
 use paged_scene::Document;
@@ -39,7 +38,7 @@ pub enum RenderError {
     #[error("render pipeline failure: {0}")]
     Pipeline(#[from] anyhow::Error),
     #[error("png encode failure: {0}")]
-    PngEncode(#[from] image::ImageError),
+    PngEncode(#[from] paged_raster::Error),
 }
 
 pub fn render_page_png(
@@ -53,12 +52,9 @@ pub fn render_page_png(
         return Err(RenderError::PageOutOfRange(page_index, images.len()));
     }
     let img = &images[page_index];
-    let mut buf = Vec::with_capacity((img.width() * img.height() * 4) as usize);
-    image::codecs::png::PngEncoder::new(&mut buf).write_image(
+    Ok(paged_raster::encode_rgba8_png(
         img.as_raw(),
         img.width(),
         img.height(),
-        image::ExtendedColorType::Rgba8,
-    )?;
-    Ok(buf)
+    )?)
 }

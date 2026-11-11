@@ -24,6 +24,7 @@ paged-math = { workspace = true, features = ["serde"] }
 # Pictures PowerPoint cannot open, written as PNG (`transcode`, ADR 723):
 # the PNG writer's deflate, and WebP's decoder (the engine's own, pure Rust).
 flate2.workspace = true
+crc32fast.workspace = true
 image-webp = "0.2"
 
 [dev-dependencies]

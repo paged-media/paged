@@ -1171,12 +1171,12 @@ pub fn new_uuid(seed: &[u8]) -> String {
         c.set(n.wrapping_add(1));
         n
     });
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ n;
+    let mut h: u64 = image_core::FNV1A_64_OFFSET ^ n;
     let mut g: u64 = 0x8422_2325_cbf2_9ce4 ^ n.rotate_left(17);
     for &b in seed {
-        h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        h = (h ^ u64::from(b)).wrapping_mul(image_core::FNV1A_64_PRIME);
         g = (g ^ u64::from(b))
-            .wrapping_mul(0x0000_0100_0000_01b3)
+            .wrapping_mul(image_core::FNV1A_64_PRIME)
             .rotate_left(5);
     }
     let a = h.to_be_bytes();

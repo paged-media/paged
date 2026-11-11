@@ -183,13 +183,20 @@ pub fn write_image(
         return None;
     }
 
-    // Bicubic resample to the downsampling target (Catmull-Rom).
+    // Bicubic resample to the downsampling target (Catmull-Rom),
+    // premultiplied as every engine resample is.
     let (out_w, out_h, rgba) = match downsample_to {
         Some((w, h)) => {
-            let buf = image::RgbaImage::from_raw(img.width, img.height, rgba.to_vec())?;
-            let resized =
-                image::imageops::resize(&buf, w, h, image::imageops::FilterType::CatmullRom);
-            (w, h, bytes::Bytes::from(resized.into_raw()))
+            let resized = paged_resample::resize_rgba8(
+                &rgba,
+                img.width,
+                img.height,
+                w,
+                h,
+                paged_resample::Filter::CatmullRom,
+            )
+            .ok()?;
+            (w, h, bytes::Bytes::from(resized))
         }
         None => (img.width, img.height, rgba),
     };

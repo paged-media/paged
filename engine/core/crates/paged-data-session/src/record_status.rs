@@ -360,14 +360,8 @@ pub fn applied_for(
 /// FNV-1a over the typed cells `cols` of row `r` (a missing column is an
 /// empty cell). Stable across builds and platforms: documents store it.
 fn row_hash(rs: &RecordSet, r: usize, cols: impl Iterator<Item = Option<usize>>) -> u64 {
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    let mut eat = |bytes: &[u8]| {
-        for &b in bytes {
-            h ^= u64::from(b);
-            h = h.wrapping_mul(PRIME);
-        }
-    };
+    let mut h: u64 = paged_pixel::FNV1A_64_OFFSET;
+    let mut eat = |bytes: &[u8]| h = paged_pixel::fnv1a_64_update(h, bytes);
     for c in cols {
         match c.and_then(|c| rs.value(r, c)) {
             None => eat(b"-"),

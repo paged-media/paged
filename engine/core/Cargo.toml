@@ -20,6 +20,7 @@ members = [
     "crates/paged-resample",
     "crates/paged-raster",
     "crates/paged-sniff",
+    "crates/paged-ocf",
     "crates/paged-pdf-annots",
     "crates/paged-pdf-page",
     "crates/paged-svg",
@@ -181,6 +182,8 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 # jpeg, lzw), so the graph keeps one build of the crate.
 tiff = { version = "0.11", default-features = false, features = ["deflate", "fax", "jpeg", "lzw"] }
 base64 = "0.23"
+# CRC-32 (PNG chunks, zip entries): the build zip and flate2 already use.
+crc32fast = "1.5"
 # paged-raster's JPEG decode keeps a CMYK/YCCK JPEG's inks (zune-jpeg, the
 # decoder `image` itself uses, so the graph keeps one build of it), its WebP
 # encode writes ICC, EXIF and XMP (image-webp, `image`'s WebP crate), and its

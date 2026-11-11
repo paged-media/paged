@@ -30,6 +30,7 @@
 //! primitive. `paged-parse` re-exports everything moved here, so its dependents
 //! compile unchanged.
 
+pub mod affine;
 pub mod appearance;
 pub mod comments;
 pub mod content_control;
@@ -4289,13 +4290,7 @@ impl ReservedSwatch {
     }
 }
 
-fn srgb_to_linear(c: f32) -> f32 {
-    if c <= 0.040_45 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
+use paged_colour_math::srgb_to_linear_f32 as srgb_to_linear;
 
 // ---------------------------------------------------------------------------
 // DesignMap value types — sections, layers, hyperlinks, preferences, footnote
@@ -4522,6 +4517,18 @@ pub fn alpha(n: u32, lower: bool) -> String {
     } else {
         a
     }
+}
+
+/// Word's letter numbering (`w:numFmt` `lowerLetter` / `upperLetter`): the
+/// letter repeats past Z instead of counting on, 27 → AA, 28 → BB, 53 →
+/// AAA. Upper case, or lower with `lower`; 0 is the empty string.
+pub fn repeated_letters(n: u32, lower: bool) -> String {
+    if n == 0 {
+        return String::new();
+    }
+    let base = if lower { b'a' } else { b'A' };
+    let c = char::from(base + ((n - 1) % 26) as u8);
+    std::iter::repeat_n(c, ((n - 1) / 26 + 1) as usize).collect()
 }
 
 fn to_roman(n: u32) -> String {

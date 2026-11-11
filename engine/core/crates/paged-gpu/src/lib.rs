@@ -47,13 +47,7 @@ pub fn cmyk_unit_to_linear_rgb(c: f32, m: f32, y: f32, k: f32) -> Color {
     let r = (1.0 - c) * (1.0 - k);
     let g = (1.0 - m) * (1.0 - k);
     let b = (1.0 - y) * (1.0 - k);
-    fn srgb_to_linear(v: f32) -> f32 {
-        if v <= 0.040_45 {
-            v / 12.92
-        } else {
-            ((v + 0.055) / 1.055).powf(2.4)
-        }
-    }
+    use paged_colour_math::srgb_to_linear_f32 as srgb_to_linear;
     Color::rgba(srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b), 1.0)
 }
 

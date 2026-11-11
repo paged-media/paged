@@ -441,12 +441,7 @@ pub struct ScenePaint {
 /// composites in linear light, so plugin sRGB colours must be linearised
 /// to match document colours.
 fn srgb_to_linear(c: f32) -> f32 {
-    let c = c.clamp(0.0, 1.0);
-    if c <= 0.040_45 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
+    paged_color::math::srgb_to_linear(c.clamp(0.0, 1.0))
 }
 
 /// Convert a plugin sRGB [`ScenePaint`] to the display list's linear-light

@@ -98,14 +98,7 @@ impl QcmsNative {
         ];
         let mut output = [0u8; 3];
         self.transform.convert(&input, &mut output);
-        let to_linear = |b: u8| -> f32 {
-            let s = b as f32 / 255.0;
-            if s <= 0.040_45 {
-                s / 12.92
-            } else {
-                ((s + 0.055) / 1.055).powf(2.4)
-            }
-        };
+        let to_linear = |b: u8| -> f32 { paged_color::math::srgb_to_linear(b as f32 / 255.0) };
         LinearRgb([
             to_linear(output[0]),
             to_linear(output[1]),
@@ -114,13 +107,7 @@ impl QcmsNative {
     }
 }
 
-fn linear_to_srgb(v: f32) -> f32 {
-    if v <= 0.003_130_8 {
-        12.92 * v
-    } else {
-        1.055 * v.powf(1.0 / 2.4) - 0.055
-    }
-}
+use paged_color::math::linear_to_srgb;
 
 fn delta_e(a: LinearRgb, b: LinearRgb) -> f32 {
     let enc = |LinearRgb(c): LinearRgb| {

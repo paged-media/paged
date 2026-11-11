@@ -291,12 +291,7 @@ struct Case {
 }
 
 fn fnv1a(text: &str) -> String {
-    let mut h: u64 = 0xCBF2_9CE4_8422_2325;
-    for b in text.bytes() {
-        h ^= u64::from(b);
-        h = h.wrapping_mul(0x0000_0100_0000_01B3);
-    }
-    format!("{h:016x}")
+    format!("{:016x}", paged_pixel::fnv1a_64(text.as_bytes()))
 }
 
 fn split_sheet(a: &str) -> (String, String) {

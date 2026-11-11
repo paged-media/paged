@@ -17,6 +17,7 @@ crate-type = ["cdylib", "rlib"]
 workspace = true
 
 [dependencies]
+paged-pixel = { path = "../../../../engine/core/crates/paged-pixel" }
 paged-scene = { workspace = true }
 paged-model = { workspace = true }
 paged-store = { workspace = true }

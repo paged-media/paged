@@ -691,13 +691,7 @@ fn invert(m: [[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
 }
 
 /// The sRGB transfer curve, linear light to encoded.
-pub(crate) fn srgb_encode(v: f32) -> f32 {
-    if v <= 0.003_130_8 {
-        v * 12.92
-    } else {
-        1.055 * v.powf(1.0 / 2.4) - 0.055
-    }
-}
+pub(crate) use paged_color::math::linear_to_srgb as srgb_encode;
 
 #[cfg(test)]
 mod tests {

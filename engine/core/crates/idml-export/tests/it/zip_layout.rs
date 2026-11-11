@@ -34,11 +34,7 @@ fn fixture(name: &str) -> Vec<u8> {
     std::fs::read(format!("{FIXTURES}/{name}")).expect("fixture")
 }
 
-fn fnv1a(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| {
-        (h ^ u64::from(*b)).wrapping_mul(0x0000_0100_0000_01b3)
-    })
-}
+use paged_pixel::fnv1a_64 as fnv1a;
 
 /// Every entry of `source.zip` raw-copied, then one part added: the
 /// result is the archive zip 2.4.2 wrote for the same calls.

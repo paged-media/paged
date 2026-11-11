@@ -22,14 +22,7 @@
 //! `paged-color`. Accuracy is sufficient for ΔE2000 scoring.
 
 /// Linearise a gamma-encoded sRGB channel (0..=1).
-#[inline]
-pub fn srgb_to_linear(c: f64) -> f64 {
-    if c <= 0.040_45 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
+pub use paged_colour_math::srgb_to_linear;
 
 /// sRGB (0..=1) → CIE XYZ (D65).
 pub fn srgb_to_xyz(r: f64, g: f64, b: f64) -> [f64; 3] {

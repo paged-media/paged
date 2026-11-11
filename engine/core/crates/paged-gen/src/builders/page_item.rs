@@ -1445,9 +1445,6 @@ impl Rect {
     }
 }
 
-/// The four-arc Bézier circle constant.
-const OVAL_KAPPA: f32 = 0.552_284_8;
-
 /// `<PathGeometry>` for an `<Oval>`: the ellipse inscribed in
 /// `w × h` at inner origin, spelled the way InDesign spells it —
 /// midpoint anchors bottom → right → top → left with κ·r handles.
@@ -1457,14 +1454,14 @@ fn write_oval_path_geometry(b: &mut XmlBuilder, w: f32, h: f32) {
     b.start("PathGeometry", &[]);
     b.start("GeometryPathType", &[("PathOpen", "false")]);
     b.start("PathPointArray", &[]);
-    let (cx, cy) = (w * 0.5, h * 0.5);
-    let (kx, ky) = (cx * OVAL_KAPPA, cy * OVAL_KAPPA);
-    let points = [
-        ((cx, h), (cx - kx, h), (cx + kx, h)),
-        ((w, cy), (w, cy + ky), (w, cy - ky)),
-        ((cx, 0.0), (cx + kx, 0.0), (cx - kx, 0.0)),
-        ((0.0, cy), (0.0, cy - ky), (0.0, cy + ky)),
-    ];
+    let points = paged_geom::oval_anchors(paged_model::Bounds {
+        top: 0.0,
+        left: 0.0,
+        bottom: h,
+        right: w,
+    })
+    .into_iter()
+    .map(|a| (a.anchor, a.left, a.right));
     let xy = |p: (f32, f32)| format!("{} {}", format_f32(p.0), format_f32(p.1));
     for (anchor, left, right) in points {
         b.empty(

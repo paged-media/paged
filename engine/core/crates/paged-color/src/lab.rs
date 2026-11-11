@@ -156,11 +156,13 @@ fn lab_from_linear(lin: [f32; 3]) -> [f32; 3] {
     [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
 }
 
+/// The OETF, keeping an out-of-gamut (negative) channel's sign so the
+/// caller sees the excursion; the shared OETF answers 0 there.
 fn linear_to_srgb(v: f32) -> f32 {
-    if v <= 0.003_130_8 {
+    if v < 0.0 {
         12.92 * v
     } else {
-        1.055 * v.powf(1.0 / 2.4) - 0.055
+        crate::math::linear_to_srgb(v)
     }
 }
 

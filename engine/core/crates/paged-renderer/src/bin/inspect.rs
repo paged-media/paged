@@ -942,7 +942,7 @@ fn hash_rgba(raw: &[u8]) -> [u8; 32] {
     // pixel-equality gate; this is not a security boundary).
     const SEEDS: [u64; 4] = [
         paged_pixel::FNV1A_64_OFFSET,
-        0x100000001b3,
+        paged_pixel::FNV1A_64_PRIME,
         0x9e3779b97f4a7c15,
         0xff51afd7ed558ccd,
     ];
@@ -952,7 +952,7 @@ fn hash_rgba(raw: &[u8]) -> [u8; 32] {
             // Fold the index in so a transposition (same bytes, moved)
             // also changes the digest.
             h ^= b as u64 ^ (i as u64).rotate_left(lane as u32 * 7);
-            h = h.wrapping_mul(0x100000001b3);
+            h = h.wrapping_mul(paged_pixel::FNV1A_64_PRIME);
         }
         out[lane * 8..lane * 8 + 8].copy_from_slice(&h.to_le_bytes());
     }

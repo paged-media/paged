@@ -20,25 +20,12 @@
 //! sRGB transfer curve, the naive CMYK conversion, HSB. One definition
 //! for the engine; the CMS uses the same curve and naive CMYK.
 
-/// sRGB-encoded `c` (0..=1) in linear light (the sRGB EOTF).
-pub fn srgb_to_linear(c: f32) -> f32 {
-    if c <= 0.040_45 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-/// Linear light `c` as sRGB-encoded (the sRGB OETF, the inverse of
-/// [`srgb_to_linear`]). Not clamped: a scene-referred value above 1 stays
-/// above 1 (the caller clamps for a display); below 0 answers 0.
-pub fn linear_to_srgb(c: f32) -> f32 {
-    if c <= 0.003_130_8 {
-        c.max(0.0) * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    }
-}
+/// The sRGB EOTF and OETF in single precision. One definition with the
+/// OOXML readers' double-precision pair, in `paged-colour-math`; the
+/// OETF is not clamped above and answers 0 below 0.
+pub use paged_colour_math::{
+    linear_to_srgb_f32 as linear_to_srgb, srgb_to_linear_f32 as srgb_to_linear,
+};
 
 /// CMYK (each 0..=1) as sRGB-encoded RGB, multiplicatively: the
 /// conversion the engine uses wherever no CMYK profile is configured.

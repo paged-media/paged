@@ -61,90 +61,11 @@ use paged_ooxml::drawingml::resolved;
 
 /// `[a, b, c, d, tx, ty]`: x' = a·x + c·y + tx, y' = b·x + d·y + ty.
 pub use paged_geom::affine64::Affine64 as Affine;
-use paged_geom::affine64::{apply, invert, multiply as mul, IDENTITY};
+use paged_geom::affine64::{apply, invert, IDENTITY};
 
-fn translate(x: f64, y: f64) -> Affine {
-    [1.0, 0.0, 0.0, 1.0, x, y]
-}
-
-/// Rotation (degrees, clockwise on a y-down page) and flips about the origin.
-fn orient(rot_deg: f64, flip_h: bool, flip_v: bool) -> Affine {
-    let (s, c) = rot_deg.to_radians().sin_cos();
-    let r = [c, s, -s, c, 0.0, 0.0];
-    let f = [
-        if flip_h { -1.0 } else { 1.0 },
-        0.0,
-        0.0,
-        if flip_v { -1.0 } else { 1.0 },
-        0.0,
-        0.0,
-    ];
-    mul(&r, &f)
-}
-
-/// Where a shape tree's coordinates land: `map` takes a point of the
-/// current coordinate space to the page, `scale` is how much a length in it
-/// is stretched (group child spaces scale), `orient` is the accumulated
-/// rotation / flip.
-#[derive(Clone, Copy)]
-struct Space {
-    map: Affine,
-    scale: (f64, f64),
-    orient: Affine,
-}
-
-impl Space {
-    const PAGE: Space = Space {
-        map: IDENTITY,
-        scale: (1.0, 1.0),
-        orient: IDENTITY,
-    };
-
-    /// The page transform and size of a box placed by `x` in this space.
-    fn place(&self, x: &Xfrm) -> (Affine, f64, f64) {
-        let (ox, oy) = (x.off.0 as f64 / EMU_PER_PT, x.off.1 as f64 / EMU_PER_PT);
-        let (w, h) = (x.ext.0 as f64 / EMU_PER_PT, x.ext.1 as f64 / EMU_PER_PT);
-        let centre = apply(&self.map, (ox + w / 2.0, oy + h / 2.0));
-        let (w, h) = (w * self.scale.0, h * self.scale.1);
-        let o = mul(
-            &self.orient,
-            &orient(x.rot as f64 / 60_000.0, x.flip_h, x.flip_v),
-        );
-        let t = mul(
-            &translate(centre.0, centre.1),
-            &mul(&o, &translate(-w / 2.0, -h / 2.0)),
-        );
-        (t, w, h)
-    }
-
-    /// The space of a group's children.
-    fn child(&self, x: &Xfrm) -> Space {
-        let (t, w, h) = self.place(x);
-        let ext = (x.ext.0 as f64 / EMU_PER_PT, x.ext.1 as f64 / EMU_PER_PT);
-        let ch_off = x
-            .ch_off
-            .map(|o| (o.0 as f64 / EMU_PER_PT, o.1 as f64 / EMU_PER_PT))
-            .unwrap_or((0.0, 0.0));
-        let ch_ext = x
-            .ch_ext
-            .map(|e| (e.0 as f64 / EMU_PER_PT, e.1 as f64 / EMU_PER_PT))
-            .unwrap_or(ext);
-        let sx = if ch_ext.0 > 0.0 { w / ch_ext.0 } else { 1.0 };
-        let sy = if ch_ext.1 > 0.0 { h / ch_ext.1 } else { 1.0 };
-        // child space → the group's box (0..w, 0..h) → page.
-        let to_box = [sx, 0.0, 0.0, sy, -ch_off.0 * sx, -ch_off.1 * sy];
-        Space {
-            map: mul(&t, &to_box),
-            // A child-space length lands on the page stretched by the
-            // group's (already page-scaled) box over its child extent.
-            scale: (sx, sy),
-            orient: mul(
-                &self.orient,
-                &orient(x.rot as f64 / 60_000.0, x.flip_h, x.flip_v),
-            ),
-        }
-    }
-}
+/// Rotation and flips, and a shape tree's coordinate space: the one
+/// `a:xfrm` placement the slide, doc and sheet readers share.
+use slide_geom::place::{orient, Space};
 
 // ─── context ────────────────────────────────────────────────────────
 
@@ -689,7 +610,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             let prompt = sp.nv.placeholder.is_some() && ctx.level != Level::Slide;
             let chain = chain(sp, ctx);
             let x = chain.iter().find_map(|s| s.props.xfrm.clone())?;
-            let (t, w, h) = space.place(&x);
+            let slide_geom::place::Placed { map: t, w, h } = space.place(&x);
             let geometry = chain.iter().find_map(|s| s.props.geometry.as_ref());
             let o = outline(geometry, w, h);
             // Fill / line / effects: the shape's own, else the placeholder chain's.
@@ -813,7 +734,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 .xfrm
                 .clone()
                 .or_else(|| up.iter().find_map(|a| a.props.xfrm.clone()))?;
-            let (t, w, h) = space.place(&x);
+            let slide_geom::place::Placed { map: t, w, h } = space.place(&x);
             let geometry = p
                 .props
                 .geometry
@@ -867,7 +788,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
             if children.is_empty() {
                 return None;
             }
-            let (t, w, h) = space.place(&x);
+            let slide_geom::place::Placed { map: t, w, h } = space.place(&x);
             Some(Item {
                 id: ctx.id(),
                 name: g.nv.name.clone(),
@@ -887,7 +808,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
         Shape::Frame(f) => match &f.content {
             FrameContent::Table(tbl) => {
                 let x = f.xfrm.clone()?;
-                let (t, w, h) = space.place(&x);
+                let slide_geom::place::Placed { map: t, w, h } = space.place(&x);
                 Some(Item {
                     id: ctx.id(),
                     name: f.nv.name.clone(),
@@ -909,7 +830,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                     return None;
                 };
                 let x = f.xfrm.clone()?;
-                let (t, w, h) = space.place(&x);
+                let slide_geom::place::Placed { map: t, w, h } = space.place(&x);
                 let prims = part
                     .as_deref()
                     .and_then(|p| (ctx.draw)(p, w, h))
@@ -959,7 +880,7 @@ fn shape(s: &Shape, space: &Space, ctx: &Ctx) -> Option<Item> {
                 if let Some(m) = model {
                     label_diagram_text(&mut children, m);
                 }
-                let (t, w, h) = space.place(&x);
+                let slide_geom::place::Placed { map: t, w, h } = space.place(&x);
                 Some(Item {
                     id: ctx.id(),
                     name: f.nv.name.clone(),

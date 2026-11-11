@@ -61,46 +61,23 @@ impl FaceUse {
     }
 }
 
-/// OS/2 `fsType` bit: only the face's bitmaps may be embedded.
-pub const FS_BITMAP_ONLY: u16 = 0x0200;
+pub use pptx_fonts::eot::FS_BITMAP_ONLY;
+/// The sniff and the `fsType` reader of every embedded face (`pptx-fonts`).
+pub use pptx_fonts::{is_sfnt, sfnt_fs_type};
 
-/// The use an OS/2 `fsType` grants a document that opens for editing. Older
-/// fonts may set several of bits 0 to 3; the least restrictive one applies.
+/// The use an OS/2 `fsType` grants a document that opens for editing: the
+/// licence levels of [`pptx_fonts::Embedding`] (the one `fsType` table), an
+/// installable face used as an editable one.
 pub fn use_for_fs_type(fs_type: u16) -> FaceUse {
+    use pptx_fonts::Embedding;
     if fs_type & FS_BITMAP_ONLY != 0 {
-        FaceUse::BitmapOnly
-    } else if fs_type & 0x000E == 0 || fs_type & 0x0008 != 0 {
-        FaceUse::Editable
-    } else if fs_type & 0x0004 != 0 {
-        FaceUse::PreviewAndPrint
-    } else {
-        FaceUse::Restricted
+        return FaceUse::BitmapOnly;
     }
-}
-
-/// Whether `bytes` start like an OpenType or TrueType file.
-pub fn is_sfnt(bytes: &[u8]) -> bool {
-    matches!(bytes.get(0..4), Some([0, 1, 0, 0] | b"true" | b"OTTO"))
-}
-
-/// The OS/2 `fsType` of an OpenType file: zero (the least restrictive) when
-/// it has no OS/2 table, `None` when `font` is not one.
-pub fn sfnt_fs_type(font: &[u8]) -> Option<u16> {
-    if !is_sfnt(font) {
-        return None;
+    match Embedding::from_fs_type(fs_type) {
+        Embedding::Installable | Embedding::Editable => FaceUse::Editable,
+        Embedding::PreviewAndPrint => FaceUse::PreviewAndPrint,
+        Embedding::Restricted => FaceUse::Restricted,
     }
-    let tables = u16::from_be_bytes([*font.get(4)?, *font.get(5)?]) as usize;
-    for k in 0..tables {
-        let rec = 12 + k * 16;
-        let tag = font.get(rec..rec + 4)?;
-        if tag == b"OS/2" {
-            let off = u32::from_be_bytes(font.get(rec + 8..rec + 12)?.try_into().ok()?) as usize;
-            let at = off.checked_add(8)?;
-            let b = font.get(at..at + 2)?;
-            return Some(u16::from_be_bytes([b[0], b[1]]));
-        }
-    }
-    Some(0)
 }
 
 /// Undo Word's obfuscation of an embedded font part: the 16 bytes of the

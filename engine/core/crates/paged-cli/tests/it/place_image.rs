@@ -75,20 +75,7 @@ fn png_of(w: u32, h: u32) -> Vec<u8> {
         out.extend_from_slice(&crc32(&crc_input).to_be_bytes());
         out
     }
-    fn crc32(data: &[u8]) -> u32 {
-        let mut crc = 0xffff_ffffu32;
-        for byte in data {
-            crc ^= u32::from(*byte);
-            for _ in 0..8 {
-                crc = if crc & 1 != 0 {
-                    (crc >> 1) ^ 0xedb8_8320
-                } else {
-                    crc >> 1
-                };
-            }
-        }
-        !crc
-    }
+    use crc32fast::hash as crc32;
     // Stored (uncompressed) deflate blocks, so the pixels need no
     // encoder: `h` scanlines of filter-0 + `w` RGB triples each.
     let scanline: Vec<u8> = std::iter::once(0)

@@ -24,8 +24,8 @@
 //! is the Lanczos `sin`, evaluated in f64, so platforms agree after the
 //! 8-bit round):
 //!
-//! - [`resize_rgba8`] — a separable resize, Lanczos-3 (the default) or
-//!   bilinear.
+//! - [`resize_rgba8`] — a separable resize, Lanczos-3 (the default),
+//!   Catmull-Rom or bilinear.
 //! - [`rotate_crop_rgba8`] — a straightened crop: the picture turned
 //!   about the crop rectangle's centre and the rectangle cut out,
 //!   bilinear.
@@ -77,6 +77,9 @@ pub enum Filter {
     /// `sinc(t) · sinc(t / 3)` for `|t| < 3`, support 3. The default.
     #[default]
     Lanczos3,
+    /// The Catmull-Rom cubic (Keys, `a = −0.5`), support 2: the bicubic
+    /// a PDF export downsamples its pictures with.
+    CatmullRom,
 }
 
 impl Filter {
@@ -85,6 +88,7 @@ impl Filter {
         match name {
             "bilinear" => Some(Self::Bilinear),
             "lanczos3" => Some(Self::Lanczos3),
+            "catmull-rom" => Some(Self::CatmullRom),
             _ => None,
         }
     }
@@ -94,6 +98,7 @@ impl Filter {
         match self {
             Self::Bilinear => "bilinear",
             Self::Lanczos3 => "lanczos3",
+            Self::CatmullRom => "catmull-rom",
         }
     }
 
@@ -101,6 +106,7 @@ impl Filter {
         match self {
             Self::Bilinear => 1.0,
             Self::Lanczos3 => 3.0,
+            Self::CatmullRom => 2.0,
         }
     }
 
@@ -111,6 +117,15 @@ impl Filter {
             Self::Lanczos3 => {
                 if x < 3.0 {
                     sinc(t) * sinc(t / 3.0)
+                } else {
+                    0.0
+                }
+            }
+            Self::CatmullRom => {
+                if x < 1.0 {
+                    (1.5 * x - 2.5) * x * x + 1.0
+                } else if x < 2.0 {
+                    ((-0.5 * x + 2.5) * x - 4.0) * x + 2.0
                 } else {
                     0.0
                 }

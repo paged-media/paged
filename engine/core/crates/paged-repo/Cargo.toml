@@ -11,6 +11,8 @@ description = "The paged repository: content-addressed parts, commits, refs and 
 workspace = true
 
 [dependencies]
+# The OCF package writer (one owner).
+paged-ocf = { path = "../paged-ocf" }
 blake3 = "1"
 fastcdc = "5"
 # zip's `deflate-flate2` names no backend: list flate2 beside it (see the root Cargo.toml).

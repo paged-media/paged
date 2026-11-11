@@ -764,11 +764,8 @@ impl Kenten {
 /// `a1` (radians; y down, so a positive turn runs clockwise on the page),
 /// each at most a quarter turn. The pen stands at the arc's start.
 fn arc(p: &mut PathData, c: (f32, f32), r: f32, a0: f32, a1: f32) {
-    let n = ((a1 - a0).abs() / std::f32::consts::FRAC_PI_2)
-        .ceil()
-        .max(1.0) as usize;
-    let step = (a1 - a0) / n as f32;
-    let k = 4.0 / 3.0 * (step / 4.0).tan();
+    let (n, step) = paged_geom::ellipse::arc_split_f32(a1 - a0);
+    let k = paged_geom::ellipse::arc_handle_f32(step);
     for i in 0..n {
         let (s0, c0) = (a0 + step * i as f32).sin_cos();
         let (s1, c1) = (a0 + step * (i + 1) as f32).sin_cos();

@@ -135,9 +135,21 @@ impl Permissions {
     }
 }
 
-/// A bare OpenType file (some producers embed one instead of EOT).
-fn is_sfnt(bytes: &[u8]) -> bool {
+/// Whether `bytes` start like an OpenType or TrueType file (a bare font,
+/// which some producers embed instead of EOT, and Word's de-obfuscated
+/// font parts).
+pub fn is_sfnt(bytes: &[u8]) -> bool {
     matches!(bytes.get(0..4), Some([0, 1, 0, 0] | b"true" | b"OTTO"))
+}
+
+/// The OS/2 `fsType` of an OpenType file: zero (the least restrictive) when
+/// it has no OS/2 table, `None` when `font` is not one or its table
+/// directory runs past it.
+pub fn sfnt_fs_type(font: &[u8]) -> Option<u16> {
+    if !is_sfnt(font) {
+        return None;
+    }
+    sfnt::fs_type(font).ok()
 }
 
 /// The permissions of an embedded face, Embedded OpenType or a bare

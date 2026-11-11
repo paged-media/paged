@@ -423,20 +423,7 @@ fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
     out.extend_from_slice(&crc.to_be_bytes());
 }
 
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xffff_ffffu32;
-    for &b in data {
-        crc ^= u32::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0xedb8_8320
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    !crc
-}
+use crc32fast::hash as crc32;
 
 fn zlib_stored(data: &[u8]) -> Vec<u8> {
     let mut out = vec![0x78, 0x01];

@@ -34,6 +34,27 @@
 //! in HSL ([`rgb_to_hsl`], [`hsl_to_rgb`]). Channels are 0–1 floats; hue is a
 //! fraction of a turn.
 
+/// [`srgb_to_linear`] in single precision: the engine's paint pipeline
+/// (`paged_color::math` re-exports it).
+pub fn srgb_to_linear_f32(c: f32) -> f32 {
+    if c <= 0.040_45 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// [`linear_to_srgb`] in single precision. Not clamped above: a
+/// scene-referred value over 1 stays over 1 (the caller clamps for a
+/// display); below 0 answers 0.
+pub fn linear_to_srgb_f32(c: f32) -> f32 {
+    if c <= 0.003_130_8 {
+        c.max(0.0) * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
 /// An sRGB channel (0–1) as linear light.
 pub fn srgb_to_linear(c: f64) -> f64 {
     if c <= 0.04045 {
