@@ -401,7 +401,7 @@ describe.skipIf(!ENGINE_BUILT)(
       expectBudget("type 20 chars in-frame + commit", work, {
         "engine.getGridScene": 1, // was 21: the whole window, per keystroke
         "sceneLayer.submit": 1, // was 21: coalesced per frame
-        supports: 3,
+        supports: 2,
         // The commit is a typed entry through validation (sheet ADR 517):
         // the cell's protection (read once, memoised while typing), the
         // journal's prior input, and enterCell, which also grows a table
@@ -460,7 +460,7 @@ describe.skipIf(!ENGINE_BUILT)(
       expectBudget("type 20 chars in-frame, per frame", work, {
         "engine.getGridScene": 1, // the commit's re-window; keystrokes reuse the memo
         "sceneLayer.submit": 21, // one per frame — the contract replaces the whole layer
-        supports: 23,
+        supports: 22,
         // A typed entry through validation (sheet ADR 517; see above).
         "engine.cellProtection": 1,
         "engine.getCellInput": 1,
@@ -503,7 +503,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "blob.write": 1,
         "parts.write": 2,
         "storage.set": 1,
-        supports: 2,
+        supports: 1,
         "=mutations": 0,
         "=engineCalls": 2,
         "=reads": 0,
@@ -550,7 +550,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "blob.write": 1,
         "parts.write": 2,
         "storage.set": 1,
-        supports: 2,
+        supports: 1,
         "=mutations": 0,
         "=engineCalls": 3, // was 2001; 2 + the selection (Wave 5)
         "=reads": 0,
@@ -593,7 +593,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "blob.write": 1,
         "parts.write": 2,
         "storage.set": 1,
-        supports: 2,
+        supports: 1,
         "=mutations": 0,
         "=engineCalls": 3, // fillRange + the selection + the persist save
         "=reads": 0,
@@ -630,7 +630,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "blob.write": 1,
         "parts.write": 2,
         "storage.set": 1,
-        supports: 2,
+        supports: 1,
         "=mutations": 0,
         "=engineCalls": 2, // one setCells + the persist save
         "=reads": 0,
