@@ -29,6 +29,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
+use paged_model::live_shape::{PresetConnector, PresetPart, PresetShape};
 use paged_model::Spread;
 use paged_ooxml::rels::{part_dir, Relationship, Relationships};
 use paged_scene::Document;
@@ -471,6 +472,7 @@ fn changed_keys(a: &Value, b: &Value) -> BTreeSet<String> {
 
 const PLACE: &[&str] = &[
     "item_transform",
+    "preset",
     "bounds",
     "anchors",
     "subpath_starts",
@@ -492,6 +494,8 @@ const LINE: &[&str] = &[
     "end_join",
     "start_arrow",
     "end_arrow",
+    "start_office_head",
+    "end_office_head",
     "stroke_dash",
     "miter_limit",
     "stroke_dash",
@@ -526,6 +530,9 @@ const IMAGE: &[&str] = &[
     "image_adjustments",
 ];
 const IGNORE: &[&str] = &[
+    // Which shape a text frame follows (engine ADR 1096): nothing of the
+    // deck's.
+    "preset_text",
     "self_id",
     "parent_story",
     "next_text_frame",
@@ -1282,14 +1289,14 @@ impl<'a> Writer<'a, '_> {
         ctx: &Ctx,
         name: &str,
     ) -> Result<String, String> {
-        // A live preset (slide ADR 717) is placed by its box, and stays a
+        // A live preset (engine ADR 1096) is placed by its box, and stays a
         // preset: drawn again for a new box or with new adjust values.
         let live = c
             .elems
             .iter()
             .find(|e| e.kind == Kind::Polygon)
-            .and_then(|e| live_box(&c.label, e).map(|bx| (e, bx)))
-            .zip(c.label.preset.as_ref());
+            .and_then(|e| Some((e, e.live_preset()?)))
+            .filter(|(_, p)| p.part != PresetPart::Detail);
         let (d, reshaped) = match live {
             Some(_) => (IDENTITY, false),
             None => self.delta(b, c, ctx)?,
@@ -1306,10 +1313,10 @@ impl<'a> Writer<'a, '_> {
                 &[],
             )?;
         }
-        if let Some(((poly, (w, h)), (prst, adj))) = live {
+        if let Some((poly, preset)) = &live {
             let m = geom::mul(&ctx.fx_cur, &poly.transform());
             let p =
-                Placed::normalised(m, w, h).ok_or("it is skewed, which DrawingML cannot place")?;
+                preset_placed(&m, preset).ok_or("it is skewed, which DrawingML cannot place")?;
             let nx = ctx.space.xfrm_of(&p).ok_or("its group cannot hold it")?;
             let was = o
                 .item
@@ -1327,11 +1334,17 @@ impl<'a> Writer<'a, '_> {
                     &[],
                 )?;
             }
-            if b.label.preset.as_ref() != Some(&(prst.clone(), adj.clone())) {
+            let was = b
+                .elems
+                .iter()
+                .find(|e| e.kind == Kind::Polygon)
+                .and_then(Elem::live_preset);
+            if was.as_ref().map(|w| (&w.name, &w.adjusts)) != Some((&preset.name, &preset.adjusts))
+            {
                 x = set_sppr(
                     &x,
                     &["a:prstGeom", "a:custGeom"],
-                    Some(&preset_xml(prst, adj)),
+                    Some(&preset_xml(&preset.name, &preset.adjusts)),
                     &["a:xfrm"],
                 )?;
             }
@@ -1482,9 +1495,64 @@ impl<'a> Writer<'a, '_> {
                 ),
             );
         }
+        // A connector's glue (engine ADR 1096).
+        if o.el.name == "p:cxnSp" {
+            x = self.patch_glue(x, b, c)?;
+        }
         // Text.
         if let (Some(fb), Some(fc)) = (b.text_frame(), c.text_frame()) {
             x = self.patch_text(x, o, fb, fc, name)?;
+        }
+        Ok(x)
+    }
+
+    /// A connector's `a:stCxn` / `a:endCxn` from the engine's glue
+    /// (`PresetConnector`, engine ADR 1096): an end glued to the element of
+    /// another slide shape than at import names that shape's `cNvPr` id
+    /// (the last step of its key) and the site; an end no longer glued to
+    /// a shape on the page loses its element. An unchanged end keeps its
+    /// bytes.
+    fn patch_glue(&self, mut x: String, b: &NShape, c: &NShape) -> Result<String, String> {
+        fn glue(s: &NShape) -> PresetConnector {
+            s.elems
+                .iter()
+                .find(|e| e.kind == Kind::Polygon)
+                .and_then(|e| e.v.get("preset")?.get("connector").cloned())
+                .and_then(|v| serde_json::from_value(v).ok())
+                .unwrap_or_default()
+        }
+        fn key_of(shapes: &[NShape], id: &str) -> Option<String> {
+            shapes.iter().find_map(|s| {
+                if s.elems.iter().any(|e| e.id == id) {
+                    s.key.clone()
+                } else {
+                    key_of(&s.children, id)
+                }
+            })
+        }
+        let base_shapes = self.job.base.map(native::page_shapes).unwrap_or_default();
+        let (gb, gc) = (glue(b), glue(c));
+        let ends = [
+            ("a:stCxn", gb.start, gc.start, &["a:cxnSpLocks"][..]),
+            ("a:endCxn", gb.end, gc.end, &["a:cxnSpLocks", "a:stCxn"][..]),
+        ];
+        for (tag, was, now, after) in ends {
+            let was = was.and_then(|g| Some((key_of(&base_shapes, &g.item)?, g.site)));
+            let now = now.and_then(|g| Some((key_of(&self.job.cur, &g.item)?, g.site)));
+            if was == now {
+                continue;
+            }
+            let cnv = now.and_then(|(k, site)| {
+                let id = k.rsplit(['#', '/']).next()?.parse::<u32>().ok()?;
+                Some(format!(r#"<{tag} id="{id}" idx="{site}"/>"#))
+            });
+            x = set_child(
+                &x,
+                &["p:nvCxnSpPr", "p:cNvCxnSpPr"],
+                &[tag],
+                cnv.as_deref(),
+                after,
+            )?;
         }
         Ok(x)
     }
@@ -1764,7 +1832,24 @@ impl<'a> Writer<'a, '_> {
             Some("MiterEndJoin") => format!(r#"<a:miter lim="{lim}"/>"#),
             _ => String::new(),
         };
+        let heads = e.office_heads();
         let arrow = |k: &str, tag: &str| -> String {
+            // Office's own head (engine ADR 1093, amendment 2), with its
+            // width and length; else the InDesign arrowhead's nearest type.
+            let office = if tag == "headEnd" { heads[0] } else { heads[1] };
+            if let Some(o) = office {
+                let le = slide_geom::heads::line_end(&o);
+                let size = |n: &str, v: &Option<String>| match v.as_deref() {
+                    Some(v) if v != "med" => format!(r#" {n}="{v}""#),
+                    _ => String::new(),
+                };
+                return format!(
+                    r#"<a:{tag} type="{}"{}{}/>"#,
+                    le.kind,
+                    size("w", &le.w),
+                    size("len", &le.len)
+                );
+            }
             match e.s(k).as_deref() {
                 None | Some("None") => String::new(),
                 Some(a) => {
@@ -2334,8 +2419,15 @@ impl<'a> Writer<'a, '_> {
         for e in &c.elems {
             // A preset's stroke-only detail is in the preset its outline
             // element writes.
-            if c.label.detail && live_box(&c.label, e).is_some() {
-                continue;
+            if let Some(p) = e.live_preset().filter(|p| p.part == PresetPart::Detail) {
+                let outline = c.elems.iter().any(|o| {
+                    o.id != e.id
+                        && o.live_preset()
+                            .is_some_and(|q| q.part == PresetPart::Fill && q.name == p.name)
+                });
+                if outline {
+                    continue;
+                }
             }
             match self.generate_elem(e, c, ctx) {
                 Ok(s) => out.push_str(&s),
@@ -2404,10 +2496,12 @@ impl<'a> Writer<'a, '_> {
 
     fn generate_elem(&self, e: &Elem, c: &NShape, ctx: &Ctx) -> Result<String, String> {
         let m = geom::mul(&ctx.fx_cur, &e.transform());
-        // A live preset is placed by its box (slide ADR 717), which its
-        // outline need not fill (a callout's tip, an arc).
-        let placed = match live_box(&c.label, e) {
-            Some((w, h)) => Placed::normalised(m, w, h),
+        // A live preset is placed by its box (engine ADR 1096), which its
+        // outline need not fill (a callout's tip, an arc). A stroke-only
+        // detail on its own is written as the path it is.
+        let live = e.live_preset().filter(|p| p.part != PresetPart::Detail);
+        let placed = match &live {
+            Some(p) => preset_placed(&m, p),
             None => {
                 let (l, t, r, b) = bbox(e);
                 Placed::normalised(geom::mul(&m, &geom::translate(l, t)), r - l, b - t)
@@ -2562,8 +2656,8 @@ impl<'a> Writer<'a, '_> {
                 ))
             }
             _ => {
-                let geom_xml = match (&c.label.preset, e.kind) {
-                    (Some((prst, adj)), Kind::Polygon) => preset_xml(prst, adj),
+                let geom_xml = match (&live, e.kind) {
+                    (Some(p), Kind::Polygon) => preset_xml(&p.name, &p.adjusts),
                     (_, Kind::Oval) => preset_xml("ellipse", &[]),
                     (_, Kind::Rectangle) => preset_xml("rect", &[]),
                     _ if is_plain_box(e) => preset_xml("rect", &[]),
@@ -2611,23 +2705,21 @@ fn pairs<'s>(b: &'s NShape, c: &'s NShape) -> Result<Vec<(&'s Elem, Option<&'s E
     Ok(out)
 }
 
-/// The box of a live preset element (slide ADR 717): its label names a
-/// preset and the box it was drawn for, and its anchors are still that
-/// preset drawn for that box (not reshaped by hand since).
-fn live_box(label: &native::Label, e: &Elem) -> Option<(f64, f64)> {
-    let ((prst, adj), (w, h)) = (label.preset.as_ref()?, label.size?);
-    if e.kind != Kind::Polygon {
-        return None;
-    }
-    let anchors: Vec<slide_geom::live::Anchor> = e.anchors().into_iter().collect();
-    let (starts, _) = e.contours();
-    // Only the element's own anchors count here; a scale in its transform
-    // is moved into the box when it is placed.
-    matches!(
-        slide_geom::live::refit_preset(prst, adj, w, h, &anchors, &starts, &IDENTITY),
-        Some(slide_geom::live::Refit::Same)
-    )
-    .then_some((w, h))
+/// Where a live preset's box is (engine ADR 1096): its own box `frame`
+/// placed by `m` (the element's transform onto the slide), mirrored within
+/// the box by the preset's own flips.
+fn preset_placed(m: &Affine, p: &PresetShape) -> Option<Placed> {
+    let [x, y, w, h] = p.frame.map(f64::from);
+    let mirror = [
+        if p.flip_h { -1.0 } else { 1.0 },
+        0.0,
+        0.0,
+        if p.flip_v { -1.0 } else { 1.0 },
+        if p.flip_h { w } else { 0.0 },
+        if p.flip_v { h } else { 0.0 },
+    ];
+    let at = geom::mul(m, &geom::mul(&geom::translate(x, y), &mirror));
+    Placed::normalised(at, w, h)
 }
 
 fn preset_xml(prst: &str, adj: &[(String, String)]) -> String {

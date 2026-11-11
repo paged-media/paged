@@ -40,6 +40,7 @@ use dml_native::{
     axis_start, compound_type, placement, Mapper, Picture, Placement, StrokeFields, Transparency,
     NONE_SWATCH,
 };
+use paged_model::live_shape::{PresetConnector, PresetGlue, PresetPart, PresetShape, PresetText};
 use paged_model::{
     ArrowheadType, AutoSizingReferencePoint, AutoSizingType, Bounds, CellStyleDef, CharacterRun,
     CharacterStyleDef, ColorEntry, ColorModel, ColorSpace, DesignMap, DocumentPreference,
@@ -49,8 +50,10 @@ use paged_model::{
     TextFrame as NativeFrame, VerticalJustification, XmlTag, AUTO_PAGE_NUMBER_MARKER,
 };
 use paged_scene::{Document, ParsedMasterSpread, ParsedSpread, ParsedStory};
+use slide_geom::live::Part;
 use slide_geom::SubPath;
 pub mod live;
+pub mod migrate;
 
 use slide_resolve::model::*;
 use slide_resolve::theme::{self as live_theme, Key, ThemeIr};
@@ -424,10 +427,11 @@ pub fn link_json(h: &pptx_core::Hyperlink) -> serde_json::Value {
 /// An item's metadata (slide ADR 703, ADR 711): the shape it came from
 /// (`key`: its slide part, `#`, then the `cNvPr` ids from the slide's tree
 /// down: `ppt/slides/slide2.xml#4/12` for shape 12 in group 4, `…#bg` for
-/// the background), its placeholder
-/// type and index, its preset geometry and adjust values, its click
-/// action and what a graphic frame drawn as a group holds. Export reads
-/// it to write the shape back. `None` when there is nothing to say.
+/// the background), its placeholder type and index, its click action and
+/// what a graphic frame drawn as a group holds. Export reads it to write
+/// the shape back. A preset's geometry, its box and a connector's glue
+/// are the engine's (`Polygon::preset`, engine ADR 1096), not the
+/// label's. `None` when there is nothing to say.
 pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
     let mut data = serde_json::Map::new();
     if let Some(k) = key {
@@ -440,41 +444,6 @@ pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
                 serde_json::json!({ "type": kind, "idx": idx }),
             );
         }
-    }
-    if let Some((prst, adj)) = &it.meta.preset {
-        let mut p = serde_json::json!({ "prst": prst, "adj": adj });
-        // A live preset (slide ADR 717): its flips, as the deck wrote them.
-        if it.meta.flip != (false, false) {
-            p["flip"] = serde_json::json!([it.meta.flip.0, it.meta.flip.1]);
-        }
-        data.insert("preset".into(), p);
-    }
-    // The box the shape's outline was drawn for (slide ADR 717): the
-    // element's own coordinates, `(0, 0)`–`(w, h)`. A live preset is drawn
-    // again from it when the element is resized, and a connector glued to
-    // the shape finds its sites on it.
-    if key.is_some() && !matches!(it.kind, ItemKind::Group { .. }) {
-        data.insert(
-            "box".into(),
-            serde_json::json!([round3(it.w), round3(it.h)]),
-        );
-    }
-    if let Some(c) = &it.meta.connector {
-        let end = |e: &slide_resolve::model::CxnEnd| {
-            let mut v = serde_json::json!({ "id": e.id, "idx": e.idx });
-            if let Some((x, y)) = e.at {
-                v["at"] = serde_json::json!([round3(x), round3(y)]);
-            }
-            v
-        };
-        let mut v = serde_json::Map::new();
-        if let Some(e) = &c.st {
-            v.insert("st".into(), end(e));
-        }
-        if let Some(e) = &c.end {
-            v.insert("end".into(), end(e));
-        }
-        data.insert("connector".into(), serde_json::Value::Object(v));
     }
     if let Some(h) = &it.meta.link {
         data.insert("link".into(), link_json(h));
@@ -517,11 +486,6 @@ pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
     Some(ascii(
         &serde_json::json!({ "v": 1, "data": data }).to_string(),
     ))
-}
-
-/// A length to the thousandth of a point, as labels keep it.
-fn round3(v: f64) -> f64 {
-    (v * 1000.0).round() / 1000.0
 }
 
 /// A name as the model keeps it: no control characters, and the white
@@ -707,6 +671,108 @@ impl Outline {
         xs.sort_by(f32::total_cmp);
         ys.sort_by(f32::total_cmp);
         eq(xs[0], xs[1]) && eq(xs[2], xs[3]) && eq(ys[0], ys[1]) && eq(ys[2], ys[3])
+    }
+}
+
+/// The engine's live preset (engine ADR 1096) of an element drawing `part`
+/// of item `it`'s preset geometry: the program, its authored adjust values
+/// and the box `(0, 0)`–`(w, h)` in the element's own coordinates (the
+/// flips stay in the item's transform). Every element of one shape shares
+/// its key: the slide shape key, else the item's id (a master's shape). A
+/// connector's glue is filled in once the slide's elements are known
+/// ([`glue_connectors`]). `None` for custom geometry or a name the engine
+/// does not know (drawn as a rectangle).
+fn live_preset(it: &Item, key: Option<&str>, part: Part) -> Option<PresetShape> {
+    let (name, adjusts) = it.meta.preset.as_ref()?;
+    paged_preset_geom::preset_geometry(name)?;
+    if !(it.w.is_finite() && it.h.is_finite()) || it.w < 0.0 || it.h < 0.0 {
+        return None;
+    }
+    Some(PresetShape {
+        adjusts: adjusts.clone(),
+        part: match part {
+            Part::Fill => PresetPart::Fill,
+            Part::All => PresetPart::All,
+            Part::Detail => PresetPart::Detail,
+        },
+        key: Some(key.map_or_else(|| it.id.clone(), str::to_string)),
+        ..PresetShape::new(name.clone(), it.w as f32, it.h as f32)
+    })
+}
+
+/// A DrawingML line end as the engine's Office head; `None` for none or a
+/// type Office does not define (the InDesign arrowhead stays).
+fn office_head(e: Option<&paged_ooxml::drawingml::LineEnd>) -> Option<paged_model::OfficeLineEnd> {
+    slide_geom::heads::office_end(e?).ok().flatten()
+}
+
+/// Glue the slide's connectors (engine ADR 1096): each glued end of a
+/// connector item names the `cNvPr` id of a shape on the same slide; the
+/// engine's glue names the element that shape became, its outline first,
+/// then its picture frame, then its text frame (the element `elements`
+/// recorded first for it), with the site's index.
+fn glue_connectors(
+    spread: &mut Spread,
+    items: &[Item],
+    elements: &BTreeMap<String, (&'static str, String)>,
+) {
+    fn ids(items: &[Item], out: &mut HashMap<u32, String>) {
+        for it in items {
+            out.entry(it.meta.shape_id).or_insert_with(|| it.id.clone());
+            if let ItemKind::Group { children } = &it.kind {
+                if it.meta.frame.is_none() {
+                    ids(children, out);
+                }
+            }
+        }
+    }
+    fn connectors<'a>(items: &'a [Item], out: &mut Vec<&'a Item>) {
+        for it in items {
+            if it.meta.connector.is_some() {
+                out.push(it);
+            }
+            if let ItemKind::Group { children } = &it.kind {
+                if it.meta.frame.is_none() {
+                    connectors(children, out);
+                }
+            }
+        }
+    }
+    let mut by_shape = HashMap::new();
+    ids(items, &mut by_shape);
+    let mut glued = Vec::new();
+    connectors(items, &mut glued);
+    for it in glued {
+        let Some(c) = &it.meta.connector else {
+            continue;
+        };
+        let glue = |e: &Option<slide_resolve::model::CxnEnd>| {
+            let e = e.as_ref()?;
+            let item = by_shape.get(&e.id)?;
+            let (_, element) = elements.get(item)?;
+            Some(PresetGlue {
+                item: element.clone(),
+                site: e.idx,
+            })
+        };
+        let connector = PresetConnector {
+            start: glue(&c.st),
+            end: glue(&c.end),
+        };
+        if connector.start.is_none() && connector.end.is_none() {
+            continue;
+        }
+        for p in spread.polygons.iter_mut() {
+            let mine = p
+                .self_id
+                .as_deref()
+                .is_some_and(|id| id == it.id || id.strip_suffix('p') == Some(it.id.as_str()));
+            if let (true, Some(preset)) = (mine, p.preset.as_mut()) {
+                if preset.part != PresetPart::Detail {
+                    preset.connector = Some(connector.clone());
+                }
+            }
+        }
     }
 }
 
@@ -1012,6 +1078,7 @@ impl Builder<'_> {
                         tr,
                         label,
                         os.as_deref(),
+                        live_preset(it, key, if has_fill { Part::Fill } else { Part::All }),
                     );
                     if let Some(t) = tile {
                         if let Some(poly) = sb
@@ -1043,11 +1110,34 @@ impl Builder<'_> {
                             tr,
                             label,
                             None,
+                            live_preset(it, key, Part::Detail),
                         );
                     }
                 }
                 if let Some(tf) = text {
                     self.text_frame(sb, it, tf, label);
+                    // The shape's text frame follows its preset's box
+                    // (engine ADR 1096): the key of its outline's preset.
+                    let pid = format!("{}p", it.id);
+                    let outline_key = sb
+                        .spread
+                        .polygons
+                        .iter()
+                        .rev()
+                        .find(|p| p.self_id.as_deref() == Some(pid.as_str()))
+                        .and_then(|p| p.preset.as_ref()?.key.clone());
+                    if let Some(key) = outline_key {
+                        let fid = format!("{}t", it.id);
+                        if let Some(f) = sb
+                            .spread
+                            .text_frames
+                            .iter_mut()
+                            .rev()
+                            .find(|f| f.self_id.as_deref() == Some(fid.as_str()))
+                        {
+                            f.preset_text = Some(PresetText { key });
+                        }
+                    }
                 }
             }
             ItemKind::Picture {
@@ -1228,6 +1318,7 @@ impl Builder<'_> {
         tr: Transparency,
         label: Option<&str>,
         object_style: Option<&str>,
+        preset: Option<PresetShape>,
     ) {
         sb.name(id, &it.name);
         sb.label(id, label);
@@ -1257,6 +1348,12 @@ impl Builder<'_> {
             stroke_dash: sf.dash.clone(),
             start_arrow: sf.head.unwrap_or(ArrowheadType::None),
             end_arrow: sf.tail.unwrap_or(ArrowheadType::None),
+            // Office's own heads (engine ADR 1093, amendment 2): the
+            // renderer draws them in place of the InDesign arrowhead above,
+            // which stays the nearest kind for IDML.
+            start_office_head: office_head(it.meta.line_ends.0.as_ref()),
+            end_office_head: office_head(it.meta.line_ends.1.as_ref()),
+            preset,
             gradient_fill_angle: gp.angle,
             gradient_fill_length: gp.length,
             gradient_fill_start: gp.start,
@@ -1272,6 +1369,12 @@ impl Builder<'_> {
             subpath_open: path.open,
             ..Polygon::new(id.to_string(), Bounds::ZERO)
         };
+        // A preset is kept only while the element draws it: what the
+        // engine's live arithmetic cannot fit back onto it stays a path.
+        let mut poly = poly;
+        if poly.preset.is_some() && paged_preset_geom::model::live_preset(&poly).is_none() {
+            poly.preset = None;
+        }
         let idx = sb.spread.polygons.len();
         sb.spread.polygons.push(poly);
         sb.register(FrameRef::Polygon(idx));
@@ -2124,6 +2227,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         for it in &s.items {
             w.item(&mut sb, it, Some(&format!("{}#{}", s.part, slide_key(it))));
         }
+        glue_connectors(&mut sb.spread, &s.items, &w.elements);
         // After the items: the timing names the elements they became.
         sb.label(&s.id, slide_label_with(s, &w.elements).as_deref());
         spreads.push(ParsedSpread {

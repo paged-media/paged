@@ -312,41 +312,18 @@ export interface SlidePlan {
   timing?: Timing;
 }
 
-/** One labelled page element as the live-preset door takes it
- *  (slide-native `live::Element`, slide ADR 717). */
-export interface LiveElement {
+/** What one element of a document saved with the earlier live-preset
+ *  labels takes (slide-native `migrate::Lift`, slide ADR 717 amendment of
+ *  2026-11-11): the engine's preset (engine ADR 1096) on a path, the preset
+ *  key on a text frame, and its label without the old keys (`null`: none
+ *  left). */
+export interface PresetLift {
+  kind:
+    "polygon" | "rectangle" | "textFrame" | "oval" | "graphicLine" | "group";
   id: string;
-  /** The host's element kind: `polygon`, `rectangle`, `textFrame`, … */
-  kind: string;
-  /** The slide label's envelope JSON. */
-  label: string;
-  /** A path's anchors (`anchor`, `left`, `right`), own coordinates. */
-  anchors?: [number, number][][];
-  starts?: number[];
-  /** Own coordinates → page. */
-  transform: [number, number, number, number, number, number];
-  /** `[top, left, bottom, right]`, own coordinates (a text frame). */
-  bounds?: [number, number, number, number] | null;
-}
-
-/** What to write to one element (slide-native `live::Write`). */
-export interface LiveWrite {
-  id: string;
-  kind: string;
-  anchors?: [number, number][][];
-  starts?: number[];
-  transform?: [number, number, number, number, number, number];
-  bounds?: [number, number, number, number];
-  label?: string;
-  /** The element's new outline on the page, SVG path data (a preview). */
-  path?: string;
-}
-
-/** An adjust handle on the page. */
-export interface PageHandle {
-  index: number;
-  pos: [number, number];
-  polar: boolean;
+  preset?: Record<string, unknown>;
+  presetText?: string;
+  label: string | null;
 }
 
 /** A preset drawn as a new shape: the paste door's snippet. */
@@ -531,34 +508,20 @@ export class SlideEngine {
     return this.theme({ op: "read", data: bytesToBase64(bytes) });
   }
 
-  /** Live presets and connectors (slide ADR 717): one JSON request to the
-   *  Rust side, which knows the labels and the geometry. */
+  /** Presets and pictures (slide ADR 717): one JSON request to the Rust
+   *  side. A preset on the document is the engine's live shape (engine ADR
+   *  1096): it refits, routes and serves its handles itself. */
   private live<T>(request: object): T {
     return JSON.parse(this.mod.live(JSON.stringify(request))) as T;
   }
 
-  /** What an edit to these page elements asks of their live presets and
-   *  connectors: resized presets drawn again, connectors re-routed. */
-  follow(elements: readonly LiveElement[]): LiveWrite[] {
-    return this.live({ op: "follow", elements });
+  /** What a `.paged` document saved with the earlier live-preset labels
+   *  lifts onto the engine's fields (empty: nothing). */
+  migrate(paged: Uint8Array): PresetLift[] {
+    return this.live({ op: "migrate", paged: bytesToBase64(paged) });
   }
 
-  /** A live preset's adjust handles on the page (none for a reshaped one). */
-  handles(element: LiveElement): PageHandle[] {
-    return this.live({ op: "handles", element });
-  }
-
-  /** The writes a drag of handle `index` of `target` to `point` makes. */
-  adjust(
-    elements: readonly LiveElement[],
-    target: string,
-    index: number,
-    point: [number, number],
-  ): LiveWrite[] {
-    return this.live({ op: "adjust", elements, target, index, point });
-  }
-
-  /** Preset `prst` drawn as a new `w` × `h` shape labelled `key`. */
+  /** Preset `prst` drawn as a new `w` × `h` shape keyed `key`. */
   newShape(prst: string, w: number, h: number, key: string): NewShape | null {
     return this.live({ op: "newShape", prst, w, h, key });
   }

@@ -23,23 +23,29 @@
 //!
 //! The importer labels every element of a slide's shape with the shape's
 //! key (`cNvPr` ids from the slide's tree down, `bg` for the background)
-//! and what export needs to write it back (placeholder, preset, click
-//! action). A duplicated slide carries the same labels, so its items are
-//! still the shapes of its source slide; an item without a key was made in
-//! the editor.
+//! and what export needs to write it back (placeholder, click action). A
+//! preset's geometry and a connector's glue are the engine's
+//! (`Polygon::preset`, engine ADR 1096). A duplicated slide carries the
+//! same labels, so its items are still the shapes of its source slide; an
+//! item without a key was made in the editor.
 
 use std::collections::BTreeMap;
 
-use paged_model::{FrameRef, Group, Paragraph, Spread};
+use paged_model::live_shape::PresetShape;
+use paged_model::{FrameRef, Group, OfficeLineEnd, Paragraph, PathAnchor, Spread};
 use paged_scene::Document;
 use serde_json::Value;
 
 /// The plugin-metadata key slide labels live under.
 pub const LABEL_KEY: &str = "x-paged:media.paged.slide";
 
-/// Read a `.paged` container's native document.
+/// Read a `.paged` container's native document. A document saved with
+/// slide ADR 717's live-preset labels is lifted onto the engine's live
+/// shapes as it is read (`slide_native::migrate`).
 pub fn read(paged: &[u8]) -> Result<Document, String> {
-    paged_store::package::read_document(paged)
+    let mut doc = paged_store::package::read_document(paged)?;
+    slide_native::migrate::document(&mut doc);
+    Ok(doc)
 }
 
 /// A `.paged` container's media parts (`paged/core/media/…`, engine ADR
@@ -76,14 +82,8 @@ pub struct Link {
 pub struct Label {
     pub shape: Option<String>,
     pub placeholder: Option<(String, Option<u32>)>,
-    pub preset: Option<(String, Vec<(String, String)>)>,
     pub link: Option<Link>,
     pub frame: Option<String>,
-    /// The box the shape's outline was drawn for (slide ADR 717).
-    pub size: Option<(f64, f64)>,
-    /// A stroke-only element of a preset made in the editor: its preset is
-    /// written by the shape's outline element.
-    pub detail: bool,
     /// The chart part a chart frame draws (ADR 715).
     pub chart: Option<String>,
     /// A SmartArt drawing shape (slide W4): its `modelId` and the data
@@ -109,25 +109,6 @@ pub fn parse_label(json: &str) -> Label {
                 p.get("idx").and_then(Value::as_u64).map(|i| i as u32),
             ))
         }),
-        preset: d.get("preset").and_then(|p| {
-            let prst = s(p, "prst")?;
-            let adj = p
-                .get("adj")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|g| {
-                            let g = g.as_array()?;
-                            Some((
-                                g.first()?.as_str()?.to_string(),
-                                g.get(1)?.as_str()?.to_string(),
-                            ))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            Some((prst, adj))
-        }),
         link: d.get("link").map(|l| Link {
             url: s(l, "url"),
             slide: s(l, "slide"),
@@ -135,11 +116,6 @@ pub fn parse_label(json: &str) -> Label {
             tooltip: s(l, "tooltip"),
         }),
         frame: s(&d, "frame"),
-        size: d
-            .get("box")
-            .and_then(Value::as_array)
-            .and_then(|b| Some((b.first()?.as_f64()?, b.get(1)?.as_f64()?))),
-        detail: s(&d, "part").as_deref() == Some("detail"),
         chart: s(&d, "chart"),
         dgm: d.get("dgm").and_then(|g| {
             let points = g
@@ -265,6 +241,39 @@ impl Elem {
     }
     pub fn story(&self) -> Option<String> {
         self.s("parent_story")
+    }
+    /// A path's preset (engine ADR 1096) while its anchors are still what
+    /// the preset draws for its box; `None` otherwise (no preset, or a path
+    /// reshaped by hand since: it is written as custom geometry).
+    pub fn live_preset(&self) -> Option<PresetShape> {
+        if self.kind != Kind::Polygon {
+            return None;
+        }
+        let p: PresetShape = serde_json::from_value(self.v.get("preset")?.clone()).ok()?;
+        let anchors: Vec<PathAnchor> = self
+            .anchors()
+            .into_iter()
+            .map(|a| {
+                let f = |q: (f64, f64)| (q.0 as f32, q.1 as f32);
+                PathAnchor {
+                    anchor: f(a[0]),
+                    left: f(a[1]),
+                    right: f(a[2]),
+                }
+            })
+            .collect();
+        let (starts, _) = self.contours();
+        paged_preset_geom::model::anchors_are(&p, &anchors, &starts).then_some(p)
+    }
+    /// Office's line ends (engine ADR 1093, amendment 2): at the first and
+    /// the last anchor.
+    pub fn office_heads(&self) -> [Option<OfficeLineEnd>; 2] {
+        let get = |k: &str| {
+            self.v
+                .get(k)
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+        };
+        [get("start_office_head"), get("end_office_head")]
     }
 }
 

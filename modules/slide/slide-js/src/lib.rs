@@ -702,13 +702,12 @@ impl PdfOut {
     }
 }
 
-/// Live presets and connectors (slide ADR 717): one JSON request, one JSON
-/// answer. `op` is
-/// - `follow` (`elements`): what an edit to those page elements asks of
-///   the live presets and connectors on them (`slide_native::live::follow`),
-/// - `handles` (`element`): a preset's adjust handles on the page,
-/// - `adjust` (`elements`, `target`, `index`, `point`): the writes a drag of
-///   that handle to that page point makes,
+/// Presets and pictures (slide ADR 717): one JSON request, one JSON
+/// answer. A preset on the document is the engine's live shape (engine ADR
+/// 1096), which refits, routes and serves the adjust handles itself. `op` is
+/// - `migrate` (`paged`, base64): what a document saved with the earlier
+///   live-preset labels lifts onto the engine's fields
+///   (`slide_native::migrate`),
 /// - `newShape` (`prst`, `w`, `h`, `key`): a preset drawn as new elements,
 /// - `gallery`: every preset by Insert ▸ Shapes category with a thumbnail,
 /// - `picture` (`head`, base64): a picture's format and pixel size,
@@ -723,23 +722,14 @@ pub fn live_json(request: &str) -> Result<String, String> {
     use slide_native::live as l;
     let v: serde_json::Value = serde_json::from_str(request).map_err(|e| e.to_string())?;
     let op = v.get("op").and_then(|o| o.as_str()).unwrap_or("");
-    let field = |k: &str| v.get(k).cloned().unwrap_or(serde_json::Value::Null);
-    let elements = || -> Result<Vec<l::Element>, String> {
-        serde_json::from_value(field("elements")).map_err(|e| format!("elements: {e}"))
-    };
     let out = match op {
-        "follow" => serde_json::to_value(l::follow(&elements()?)),
-        "handles" => {
-            let e: l::Element =
-                serde_json::from_value(field("element")).map_err(|e| format!("element: {e}"))?;
-            serde_json::to_value(l::handles(&e))
-        }
-        "adjust" => {
-            let target = v.get("target").and_then(|t| t.as_str()).unwrap_or("");
-            let index = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
-            let point: [f64; 2] =
-                serde_json::from_value(field("point")).map_err(|e| format!("point: {e}"))?;
-            serde_json::to_value(l::adjust(&elements()?, target, index, point))
+        "migrate" => {
+            use base64::Engine;
+            let paged = v.get("paged").and_then(|h| h.as_str()).unwrap_or("");
+            let b = base64::engine::general_purpose::STANDARD
+                .decode(paged)
+                .map_err(|e| format!("paged: {e}"))?;
+            serde_json::to_value(slide_native::migrate::plan_paged(&b)?)
         }
         "newShape" => {
             let prst = v.get("prst").and_then(|p| p.as_str()).unwrap_or("");
@@ -925,7 +915,20 @@ mod tests {
         )
         .unwrap();
         assert_eq!(s["elements"], 1);
-        assert_eq!(live_json(r#"{"op":"follow","elements":[]}"#).unwrap(), "[]");
+        // A document with nothing to lift answers no writes.
+        let bytes = std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../slide-conformance/fixtures/connectors.pptx"),
+        )
+        .unwrap();
+        let deck = slide_resolve::resolve(&pptx_import::import_pptx(&bytes).unwrap());
+        let paged = slide_native::write(&deck, &|_| None, "deck").unwrap().paged;
+        use base64::Engine;
+        let req = serde_json::json!({
+            "op": "migrate",
+            "paged": base64::engine::general_purpose::STANDARD.encode(paged),
+        });
+        assert_eq!(live_json(&req.to_string()).unwrap(), "[]");
         assert!(live_json(r#"{"op":"nope"}"#).unwrap_err().contains("nope"));
     }
 }

@@ -94,8 +94,7 @@ import {
   masterTypedCommands,
   type MasterDeps,
 } from "./masters-commands.js";
-import { HandlesModel, mountAdjustHandles } from "./adjust-handles.js";
-import { LiveFollower } from "./live-presets.js";
+import { liftOldLabels } from "./preset-migration.js";
 import { makeShapesPanel } from "./panels/shapes-panel.js";
 import { makeIconsPanel } from "./panels/icons-panel.js";
 import { ICONS_PANEL_ID } from "./icons.js";
@@ -620,24 +619,16 @@ export function activate(host: BundleHost): BundleHandle {
   // The user's verbs for the palette and the menu bar (commands.ts,
   // menu.ts): open and export a deck; new, duplicate, delete and move the
   // active slide.
-  // Live presets and connectors (ADR 717): a resized preset is drawn
-  // again, a connector follows the shapes it is glued to, in the edit's
-  // undo step; the selected preset's adjust handles are a host handle set
-  // the host's Selection tools drag (extensions ADR 1103).
-  // The follow-up write needs the amend door; without it a redraw would be
-  // an undo step of its own, so nothing follows.
-  const follower = new LiveFollower(host, slideEngine, () =>
-    store ? store.isDeck() : true,
-  );
-  disposers.push(() => follower.dispose());
-  if (host.supports("overlay.handles.hostDrag@1") && renders(host, "overlay")) {
-    const handles = new HandlesModel(host, slideEngine);
-    const mounted = mountAdjustHandles(host, handles);
-    disposers.push(
-      () => mounted.dispose(),
-      () => handles.dispose(),
+  // Live presets and connectors are the engine's (engine ADR 1096): it
+  // refits a resized preset, routes a glued connector and draws the adjust
+  // handles. A document saved with the earlier labels (ADR 717) is lifted
+  // onto the engine's fields once, when it opens.
+  const lift = () =>
+    void liftOldLabels(host, slideEngine).catch((err: unknown) =>
+      host.log.warn(`paged.slide preset labels: ${String(err)}`),
     );
-  }
+  disposers.push(host.document.onDidOpen(lift).dispose);
+  lift();
 
   const commands = contributeSlideCommands(host, {
     store,

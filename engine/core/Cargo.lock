@@ -1488,6 +1488,7 @@ dependencies = [
 name = "docx-conformance"
 version = "0.0.0"
 dependencies = [
+ "dml-geom",
  "dml-native",
  "docx-core",
  "docx-export",
@@ -1497,7 +1498,9 @@ dependencies = [
  "docx-skeleton",
  "flate2",
  "paged-math",
+ "paged-model",
  "paged-ooxml",
+ "paged-preset-geom",
  "paged-test-resources",
  "serde_json",
  "zip 9.0.5",
@@ -1519,11 +1522,14 @@ dependencies = [
 name = "docx-export"
 version = "0.0.0"
 dependencies = [
+ "dml-geom",
  "dml-native",
  "docx-core",
  "docx-lower",
  "flate2",
+ "paged-model",
  "paged-ooxml",
+ "paged-preset-geom",
  "quick-xml 0.41.0",
  "serde",
  "zip 9.0.5",
@@ -1572,6 +1578,7 @@ dependencies = [
  "paged-math",
  "paged-model",
  "paged-ooxml",
+ "paged-preset-geom",
  "pptx-core",
  "serde",
  "slide-chart",
@@ -5402,8 +5409,10 @@ dependencies = [
  "dml-native",
  "paged-geom",
  "paged-model",
+ "paged-mutate",
  "paged-ooxml",
  "paged-pixel",
+ "paged-preset-geom",
  "paged-scene",
  "paged-store",
  "paged-test-resources",
@@ -6509,6 +6518,7 @@ dependencies = [
  "paged-image-adjust",
  "paged-model",
  "paged-ooxml",
+ "paged-preset-geom",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -6731,6 +6741,7 @@ dependencies = [
  "paged-geom",
  "paged-model",
  "paged-ooxml",
+ "paged-preset-geom",
  "paged-scene",
  "paged-store",
  "pptx-core",

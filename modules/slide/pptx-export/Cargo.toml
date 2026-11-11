@@ -20,6 +20,9 @@ pptx-import.workspace = true
 slide-resolve.workspace = true
 slide-native.workspace = true
 slide-geom.workspace = true
+# The engine's live presets (engine ADR 1096): whether a path still draws
+# its preset, so it is written back as `a:prstGeom`.
+paged-preset-geom = { path = "../../../engine/core/crates/paged-preset-geom" }
 # Live charts (ADR 715): the chart workbooks, read and written by paged.sheet.
 slide-sheet.workspace = true
 # The shared DrawingML mapper's inverse (slide ADR 722).
@@ -34,4 +37,6 @@ base64.workspace = true
 slide-output.workspace = true
 
 [dev-dependencies]
+# Edits through the engine (its live-preset follow, engine ADR 1096).
+paged-mutate = { path = "../../../engine/core/crates/paged-mutate" }
 paged-test-resources.workspace = true

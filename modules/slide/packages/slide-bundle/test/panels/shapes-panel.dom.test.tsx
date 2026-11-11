@@ -25,7 +25,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { covers } from "@paged-media/test-kit";
 
-import { liveElements } from "../../src/live-presets";
+import type { ElementId, SceneTreeNode } from "@paged-media/plugin-api";
+
+import { LABEL_KEY } from "../../src/object-model";
 import { SHAPES_PANEL_ID } from "../../src/shapes";
 import { drive, mount, openDeck, settle, type DeckHarness } from "./harness";
 
@@ -49,10 +51,29 @@ async function shown() {
   return view;
 }
 
+/** The slide labels on the first page of the shapes made in the editor
+ *  (shape keys `new:…`): one per element a new preset became. */
 const presetsOnFirstPage = async () => {
   const pages = await d.host.document.collection<{ selfId: string }>("pages");
-  const byPage = await liveElements(d.host, new Set([pages[0]!.selfId]));
-  return (byPage.get(pages[0]!.selfId) ?? []).map((x) => x.element.label);
+  const found: { id: ElementId; label: string }[] = [];
+  const walk = (nodes: readonly SceneTreeNode[] | undefined) => {
+    for (const n of nodes ?? []) {
+      const label = n.pluginMetadata?.find((m) => m.key === LABEL_KEY)?.value;
+      if (n.id && label?.includes('"shape":"new:'))
+        found.push({ id: n.id, label });
+      walk(n.children);
+    }
+  };
+  walk(await d.host.document.tree());
+  if (found.length === 0) return [];
+  const key = (e: ElementId) => JSON.stringify(e);
+  const geometry = await d.host.document.elementGeometry(
+    found.map((f) => f.id),
+  );
+  const page = new Map(geometry.map((g) => [key(g.id), g.pageId]));
+  return found
+    .filter((f) => page.get(key(f.id)) === pages[0]!.selfId)
+    .map((f) => f.label);
 };
 
 describe("the Shapes panel", () => {
@@ -93,8 +114,10 @@ describe("the Shapes panel", () => {
     await waitFor(async () =>
       expect((await presetsOnFirstPage()).length).toBe(before + 1),
     );
+    // The preset itself is the engine's (engine ADR 1096); the label keeps
+    // only the shape key.
     const labels = await presetsOnFirstPage();
-    expect(labels.some((l) => l.includes('"prst":"heart"'))).toBe(true);
+    expect(labels.every((l) => !l.includes('"prst"'))).toBe(true);
     // It is selected.
     expect(d.host.selection.get().length).toBe(1);
     await d.host.document.undo();

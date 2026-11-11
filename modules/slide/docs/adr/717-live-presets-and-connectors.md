@@ -195,3 +195,60 @@ its own layout definitions) and the words PowerPoint drew in its PDF (`rotated-t
 `slide-resolve` `oracle_diagrams::smartart_text_turns_as_powerpoint_drew_it` finds every word
 inside the text frame we resolve for it and standing as that frame turns (the root's turned, the
 rest upright). Slide 1 holds turned WordArt (engine ADR 1091, amendment 2).
+
+## Amendment (2026-11-11): the live preset is the engine's
+
+The mechanism of this ADR moved into the engine: an Office preset is an engine live shape
+(engine [ADR 1096](../../../../engine/core/docs/adr/1096-an-office-preset-stays-a-live-shape.md)).
+`Polygon::preset` holds the program, its authored adjust values, the box it is drawn for (in
+the element's own coordinates), the part an element draws (the filled paths, all of them, or
+the stroke-only detail), the key the elements of one shape share and, on a connector, its glue
+(the glued element's `Self` id and the site). `TextFrame::preset_text` names the key of the
+shape a text frame belongs to. After a write that moves or resizes an element the engine refits
+a live preset with its companions and routes every connector glued to it, in the same apply
+and undo step; it reads and drags the adjust handles (`frameShapePreset`,
+`frameShapePresetAdjust`, `frameShapePresetHandle`), and the host's live-shape overlay draws
+them in every module. Office's line ends are the engine's too (engine ADR 1093, amendment 2):
+`start_office_head` / `end_office_head` beside the nearest InDesign arrowhead.
+
+What slide keeps:
+
+- **Lowering.** `slide-native` sets the engine's fields as it lowers a shape: on each path of a
+  preset shape its preset (the box `(0, 0)`–`(w, h)`; the flips stay in the item's transform,
+  as before), on the shape's text frame its key, on a connector the glue mapped from the
+  `cNvPr` ids of `a:stCxn` / `a:endCxn` onto the element the glued shape became (its outline,
+  else its picture frame, else its text frame). A path whose anchors the engine's live
+  arithmetic does not fit back onto its preset (the leader of the three-segment callouts)
+  stays a plain path. `a:headEnd` / `a:tailEnd` become Office heads with their `w` and `len`
+  (`dml_geom::heads::office_end`; `slide-resolve` keeps the shape's own line ends for it). The
+  anchors, transforms and bounds a deck lowers to are unchanged: every fixture lowers to the
+  same geometry as before.
+- **The label** keeps what export needs that the engine does not hold (the shape key, the
+  placeholder, the click action, a chart's frame and box, SmartArt); `preset`, `box`,
+  `connector` and `part` are gone from it.
+- **Export** writes a path whose anchors are still its preset (`paged_preset_geom::model`)
+  as `a:prstGeom` with its adjust values, placed by its box; a reshaped one as `a:custGeom`,
+  as before. A connector's `a:stCxn` / `a:endCxn` keep their bytes while the glue names the
+  same shapes, name the new shape when it changed, and are dropped when the glued element is no
+  longer on the page. Office heads are written back with their sizes.
+- **Insert ▸ Shapes** (`live::new_shape`, the gallery, the Shapes panel) draws the new shape's
+  elements as engine live presets sharing a key `new:…`.
+- **The earlier labels are lifted once.** A document saved with them is lifted onto the
+  engine's fields by `slide_native::migrate`: a path still drawing its preset for the
+  labelled box takes the preset (its part found by which of the program's paths its anchors
+  are), the glue's `cNvPr` ids map onto elements as at import, the shape's text frame takes
+  its key, and the old keys leave the label. Export reads every document through the lift.
+  When such a document opens in the editor, the bundle (`preset-migration.ts`) asks the slide
+  engine for the lift of the document's `.paged` bytes and writes it in one batch: the
+  engine's preset on each path (`frameShapePreset`), the shape key on its text frame
+  (`frameShapePresetText`), so the text frame follows a resize at once, and the new labels.
+  The host has no write outside the undo history, so the batch is one named undo step of its
+  own ("Update shapes"); undoing it brings the old labels back, and export still lifts them.
+
+Deleted: the bundle's follower (`live-presets.ts`) and adjust handles (`adjust-handles.ts`)
+with their tests, `slide-native`'s `follow`, `handles` and `adjust`, the `follow`,
+`handles` and `adjust` operations of the slide wasm, and `slide-resolve`'s record of where each
+glued site was at import. The tests of a resized preset, a re-routed connector and an adjust
+drag now drive the engine's mutations (`pptx-export` `tests/live.rs`, against the same
+`connectors` fixture and PowerPoint's slide 2); the engine's own are in `paged-canvas`
+`tests/it/presets.rs`.

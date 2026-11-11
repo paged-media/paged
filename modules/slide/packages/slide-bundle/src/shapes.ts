@@ -19,10 +19,10 @@
 // Insert ▸ Shapes (slide ADR 717): any of the 187 DrawingML presets as a
 // live preset. The slide engine draws the preset for its box and answers
 // the page items for the host's paste door (`pasteElements`): the outline
-// and, for a preset with stroke-only details, the detail element, each
-// labelled as a live preset, in one undo step. A resize then draws it
-// again (live-presets.ts), its adjust handles work (adjust-handles.ts), and
-// export writes it as `a:prstGeom`.
+// and, for a preset with stroke-only details, the detail element, each the
+// engine's live preset (engine ADR 1096) sharing one key, in one undo step.
+// The engine then refits it when it is resized, the host draws its adjust
+// handles, and export writes it as `a:prstGeom`.
 
 import type {
   BundleHost,

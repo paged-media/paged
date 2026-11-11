@@ -18,6 +18,9 @@ slide-resolve.workspace = true
 slide-geom.workspace = true
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2", "serde"] }
 paged-model.workspace = true
+# The engine's preset programs (engine ADR 1096): a live preset's name is
+# checked against them when a shape is lowered.
+paged-preset-geom = { path = "../../../engine/core/crates/paged-preset-geom" }
 dml-native.workspace = true
 paged-scene.workspace = true
 paged-store.workspace = true

@@ -16,21 +16,23 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Live presets and connectors through export (slide ADR 717), against
-//! PowerPoint: the `connectors` fixture holds the same shapes on both
-//! slides, and on slide 2 PowerPoint itself moved "Box B" (re-routing the
-//! three connectors glued to it) and resized "Rounded Rectangle 1" to
-//! 4 × 1 in. Here slide 1 is edited the same way through the document, the
-//! live presets and connectors follow (`slide_native::live`, what the
-//! bundle runs after an edit), and the exported slide 1 must hold what
-//! PowerPoint wrote on slide 2.
+//! Live presets and connectors through export (engine ADR 1096; slide ADR
+//! 717), against PowerPoint: the `connectors` fixture holds the same shapes
+//! on both slides, and on slide 2 PowerPoint itself moved "Box B"
+//! (re-routing the three connectors glued to it) and resized "Rounded
+//! Rectangle 1" to 4 × 1 in. Here slide 1 is edited the same way through the
+//! engine's mutations, whose live-preset follow refits the preset and routes
+//! the connectors, and the exported slide 1 must hold what PowerPoint wrote
+//! on slide 2.
 
 use std::path::PathBuf;
 
-use paged_model::{Bounds, FrameRef, PathAnchor};
+use paged_model::live_shape::{PresetPart, PresetShape};
+use paged_model::{Polygon, Spread};
+use paged_mutate::operation::{PathAnchorSpec, PathPointAddress, PathPointRole};
+use paged_mutate::{NodeId, Operation, PropertyPath, Value};
 use paged_scene::Document;
 use pptx_export::{export_with, native, ExportPlan, Exported, SlidePlan};
-use slide_native::live::{self, Element, Write};
 
 fn fixture(name: &str) -> Vec<u8> {
     let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -87,145 +89,42 @@ fn part_text(bytes: &[u8], part: &str) -> String {
     String::from_utf8(pkg.part(part).unwrap().to_vec()).unwrap()
 }
 
-fn raw_label(doc: &Document, page: usize, id: &str) -> Option<String> {
-    doc.spreads[page]
+/// The ids of the elements whose slide label names shape `key` on `page`.
+fn ids_of(doc: &Document, page: usize, key: &str) -> Vec<String> {
+    let mut ids: Vec<String> = doc.spreads[page]
         .spread
         .labels
-        .get(id)?
         .iter()
-        .find(|(k, _)| k == native::LABEL_KEY)
-        .map(|(_, v)| v.clone())
+        .filter(|(_, e)| {
+            e.iter()
+                .any(|(k, v)| k == native::LABEL_KEY && v.contains(&format!("\"shape\":\"{key}\"")))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    ids.sort();
+    ids
 }
 
-fn t64(t: Option<[f32; 6]>) -> [f64; 6] {
-    t.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]).map(f64::from)
+fn spread(doc: &Document, page: usize) -> &Spread {
+    &doc.spreads[page].spread
 }
 
-fn wire(a: &[PathAnchor]) -> Vec<[[f64; 2]; 3]> {
-    let p = |q: (f32, f32)| [q.0 as f64, q.1 as f64];
-    a.iter()
-        .map(|x| [p(x.anchor), p(x.left), p(x.right)])
-        .collect()
+/// The outline element of the shape `key` on `page`.
+fn outline<'a>(doc: &'a Document, page: usize, key: &str) -> &'a Polygon {
+    let ids = ids_of(doc, page, key);
+    spread(doc, page)
+        .polygons
+        .iter()
+        .find(|p| ids.contains(p.self_id.as_ref().unwrap()))
+        .unwrap_or_else(|| panic!("no outline of {key}"))
 }
 
-/// The labelled elements of page `page`, as the bundle hands them over.
-fn elements(doc: &Document, page: usize) -> Vec<Element> {
-    let sp = &doc.spreads[page].spread;
-    let mut out = Vec::new();
-    fn walk(doc: &Document, page: usize, refs: &[FrameRef], out: &mut Vec<Element>) {
-        let sp = &doc.spreads[page].spread;
-        for r in refs {
-            let e = match *r {
-                FrameRef::Polygon(i) => {
-                    let p = &sp.polygons[i];
-                    let id = p.self_id.clone().unwrap_or_default();
-                    raw_label(doc, page, &id).map(|label| Element {
-                        id,
-                        kind: "polygon".into(),
-                        label,
-                        anchors: wire(&p.anchors),
-                        starts: p.subpath_starts.clone(),
-                        transform: t64(p.item_transform),
-                        bounds: Some(
-                            [p.bounds.top, p.bounds.left, p.bounds.bottom, p.bounds.right]
-                                .map(f64::from),
-                        ),
-                    })
-                }
-                FrameRef::TextFrame(i) => {
-                    let f = &sp.text_frames[i];
-                    let id = f.self_id.clone().unwrap_or_default();
-                    let b = f.bounds;
-                    raw_label(doc, page, &id).map(|label| Element {
-                        id,
-                        kind: "textFrame".into(),
-                        label,
-                        anchors: Vec::new(),
-                        starts: Vec::new(),
-                        transform: t64(f.item_transform),
-                        bounds: Some([b.top, b.left, b.bottom, b.right].map(f64::from)),
-                    })
-                }
-                FrameRef::Group(i) => {
-                    walk(doc, page, &sp.groups[i].members.clone(), out);
-                    None
-                }
-                _ => None,
-            };
-            out.extend(e);
-        }
-    }
-    walk(doc, page, &sp.frames_in_order.clone(), &mut out);
-    out
+fn live(p: &Polygon) -> &PresetShape {
+    paged_preset_geom::model::live_preset(p).expect("a live preset")
 }
 
-/// Write what `follow` / `adjust` answered, as the bundle's batch does.
-fn write(doc: &mut Document, page: usize, writes: &[Write]) {
-    let sp = &mut doc.spreads[page].spread;
-    let f = |v: f64| v as f32;
-    for w in writes {
-        if let Some(l) = &w.label {
-            let e = sp.labels.entry(w.id.clone()).or_default();
-            e.retain(|(k, _)| k != native::LABEL_KEY);
-            e.push((native::LABEL_KEY.to_string(), l.clone()));
-        }
-        if let Some(p) = sp
-            .polygons
-            .iter_mut()
-            .find(|p| p.self_id.as_deref() == Some(&w.id))
-        {
-            if let Some(a) = &w.anchors {
-                p.anchors = a
-                    .iter()
-                    .map(|x| PathAnchor {
-                        anchor: (f(x[0][0]), f(x[0][1])),
-                        left: (f(x[1][0]), f(x[1][1])),
-                        right: (f(x[2][0]), f(x[2][1])),
-                    })
-                    .collect();
-            }
-            if let Some(s) = &w.starts {
-                p.subpath_starts = s.clone();
-            }
-            if let Some(t) = w.transform {
-                p.item_transform = Some(t.map(f));
-            }
-            if let Some([t, l, b, r]) = w.bounds {
-                p.bounds = Bounds {
-                    top: f(t),
-                    left: f(l),
-                    bottom: f(b),
-                    right: f(r),
-                };
-            }
-        }
-        if let Some(tf) = sp
-            .text_frames
-            .iter_mut()
-            .find(|p| p.self_id.as_deref() == Some(&w.id))
-        {
-            if let Some(t) = w.transform {
-                tf.item_transform = Some(t.map(f));
-            }
-            if let Some([t, l, b, r]) = w.bounds {
-                tf.bounds = Bounds {
-                    top: f(t),
-                    left: f(l),
-                    bottom: f(b),
-                    right: f(r),
-                };
-            }
-        }
-    }
-}
-
-/// The ids of the elements of the shape with `key` on `page`.
-fn ids_of(doc: &Document, page: usize, key: &str) -> Vec<String> {
-    elements(doc, page)
-        .into_iter()
-        .filter(|e| e.label.contains(&format!("\"shape\":\"{key}\"")))
-        .map(|e| e.id)
-        .collect()
+fn set(doc: &mut Document, node: NodeId, path: PropertyPath, value: Value) {
+    paged_mutate::apply(doc, &Operation::SetProperty { node, path, value }).unwrap();
 }
 
 /// `name`'s element (XML) in a slide part.
@@ -283,18 +182,57 @@ const S1: &str = "ppt/slides/slide1.xml";
 const S2: &str = "ppt/slides/slide2.xml";
 
 #[test]
+fn imported_shapes_are_the_engines_live_presets() {
+    let doc = imported(&fixture("connectors"));
+    // The rounded rectangle: its program, authored adjust value and box,
+    // keyed as its shape; its text frame follows the same key.
+    let key = format!("{S1}#2");
+    let rr = outline(&doc, 0, &key);
+    let p = live(rr);
+    assert_eq!(p.name, "roundRect");
+    assert_eq!(
+        p.adjusts,
+        vec![("adj".to_string(), "val 30000".to_string())]
+    );
+    assert_eq!(p.frame, [0.0, 0.0, 180.0, 108.0]);
+    assert_eq!((p.flip_h, p.flip_v), (false, false));
+    assert_eq!(p.key.as_deref(), Some(key.as_str()));
+    assert!(spread(&doc, 0).text_frames.iter().any(|f| f
+        .preset_text
+        .as_ref()
+        .map(|t| t.key.as_str())
+        == Some(key.as_str())));
+    // The elbow connector (`cNvPr` 9) is glued to the elements Box A (6)
+    // and Box B (7) became.
+    let elbow = outline(&doc, 0, &format!("{S1}#9"));
+    let c = live(elbow).connector.as_ref().expect("glued");
+    let a = outline(&doc, 0, &format!("{S1}#6"))
+        .self_id
+        .clone()
+        .unwrap();
+    let b = outline(&doc, 0, &format!("{S1}#7"))
+        .self_id
+        .clone()
+        .unwrap();
+    let (st, end) = (c.start.as_ref().unwrap(), c.end.as_ref().unwrap());
+    assert_eq!((st.item.as_str(), st.site), (a.as_str(), 3));
+    assert_eq!((end.item.as_str(), end.site), (b.as_str(), 2));
+    // The label keeps the shape, not the geometry.
+    for l in spread(&doc, 0).labels.values().flatten() {
+        assert!(
+            !l.1.contains("\"preset\"") && !l.1.contains("\"connector\""),
+            "{}",
+            l.1
+        );
+    }
+}
+
+#[test]
 fn the_unedited_connectors_deck_exports_its_own_bytes() {
     let bytes = fixture("connectors");
     let doc = imported(&bytes);
     let out = export_doc(&bytes, &doc);
     assert!(out.bytes == bytes);
-    // Nothing on an unedited page asks to be followed.
-    for page in 0..doc.spreads.len() {
-        assert!(
-            live::follow(&elements(&doc, page)).is_empty(),
-            "page {page}"
-        );
-    }
 }
 
 #[test]
@@ -302,30 +240,31 @@ fn a_moved_shape_reroutes_its_connectors_as_powerpoint_does() {
     let bytes = fixture("connectors");
     let mut doc = imported(&bytes);
     // Box B moved as PowerPoint moved it on slide 2: right 36 pt, down 72.
+    // The engine routes the connectors glued to it in the same apply.
     for id in ids_of(&doc, 0, &format!("{S1}#7")) {
-        let sp = &mut doc.spreads[0].spread;
-        for t in sp
-            .polygons
-            .iter_mut()
-            .filter(|p| p.self_id.as_deref() == Some(&id))
-            .map(|p| &mut p.item_transform)
-            .chain(
-                sp.text_frames
-                    .iter_mut()
-                    .filter(|p| p.self_id.as_deref() == Some(&id))
-                    .map(|p| &mut p.item_transform),
-            )
-        {
-            let m = t.get_or_insert([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
-            m[4] += 36.0;
-            m[5] += 72.0;
-        }
+        let sp = spread(&doc, 0);
+        let (node, t) =
+            if let Some(p) = sp.polygons.iter().find(|p| p.self_id.as_ref() == Some(&id)) {
+                (NodeId::Polygon(id.clone()), p.item_transform)
+            } else if let Some(f) = sp
+                .text_frames
+                .iter()
+                .find(|p| p.self_id.as_ref() == Some(&id))
+            {
+                (NodeId::TextFrame(id.clone()), f.item_transform)
+            } else {
+                continue;
+            };
+        let mut m = t.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        m[4] += 36.0;
+        m[5] += 72.0;
+        set(
+            &mut doc,
+            node,
+            PropertyPath::FrameTransform,
+            Value::Transform(Some(m)),
+        );
     }
-    let w = live::follow(&elements(&doc, 0));
-    // The three connectors glued to Box B, nothing else.
-    assert_eq!(w.len(), 3, "{w:?}");
-    write(&mut doc, 0, &w);
-    assert!(live::follow(&elements(&doc, 0)).is_empty());
     let out = export_doc(&bytes, &doc);
     keep(&out.bytes, "live-connectors-moved");
     assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
@@ -344,11 +283,42 @@ fn a_moved_shape_reroutes_its_connectors_as_powerpoint_does() {
     let c = shape_xml(&mine, "Elbow Connector 8");
     assert!(c.contains(r#"<a:prstGeom prst="bentConnector3">"#), "{c}");
     assert!(
-        c.contains(r#"<a:stCxn id="6" idx="3"/>"#) && c.contains(r#"<a:endCxn id="7" idx="2"/>"#)
+        c.contains(r#"<a:stCxn id="6" idx="3"/>"#) && c.contains(r#"<a:endCxn id="7" idx="2"/>"#),
+        "{c}"
     );
-    // Re-imported, each connector is glued where it now ends.
+    // Re-imported, each connector is still a live, glued preset.
     let again = imported(&out.bytes);
-    assert!(live::follow(&elements(&again, 0)).is_empty());
+    assert!(live(outline(&again, 0, &format!("{S1}#9")))
+        .connector
+        .is_some());
+}
+
+#[test]
+fn a_connector_glued_to_a_deleted_shape_loses_that_end() {
+    let bytes = fixture("connectors");
+    let mut doc = imported(&bytes);
+    // Box B's element named by the glue is gone from the page: the engine's
+    // glue now names nothing there, so the end is written unglued.
+    let b = outline(&doc, 0, &format!("{S1}#7"))
+        .self_id
+        .clone()
+        .unwrap();
+    let elbow = outline(&doc, 0, &format!("{S1}#9"))
+        .self_id
+        .clone()
+        .unwrap();
+    let sp = &mut doc.spreads[0].spread;
+    let p = sp
+        .polygons
+        .iter_mut()
+        .find(|p| p.self_id.as_ref() == Some(&elbow))
+        .unwrap();
+    let c = p.preset.as_mut().unwrap().connector.as_mut().unwrap();
+    c.end.as_mut().unwrap().item = format!("{b}-gone");
+    let out = export_doc(&bytes, &doc);
+    let x = shape_xml(&part_text(&out.bytes, S1), "Elbow Connector 8").to_string();
+    assert!(x.contains(r#"<a:stCxn id="6" idx="3"/>"#), "{x}");
+    assert!(!x.contains("endCxn"), "{x}");
 }
 
 #[test]
@@ -356,34 +326,35 @@ fn a_resized_rounded_rectangle_stays_a_preset_as_powerpoint_keeps_it() {
     let bytes = fixture("connectors");
     let mut doc = imported(&bytes);
     // Resized to 4 × 1 in from its top left, as PowerPoint did on slide 2:
-    // the host scales the outline's anchors (and the text frame's box).
+    // a host's resize scales the outline's anchors; the engine refits the
+    // preset (the corners keep their radius) and its text frame follows.
     let key = format!("{S1}#2");
-    let ids = ids_of(&doc, 0, &key);
-    let poly = doc.spreads[0]
-        .spread
-        .polygons
-        .iter()
-        .find(|p| ids.contains(p.self_id.as_ref().unwrap()))
-        .unwrap()
-        .clone();
+    let poly = outline(&doc, 0, &key).clone();
     let (sx, sy) = (288.0 / 180.0, 72.0 / 108.0);
-    let id = poly.self_id.clone().unwrap();
-    {
-        let p = doc.spreads[0]
-            .spread
-            .polygons
-            .iter_mut()
-            .find(|p| p.self_id.as_deref() == Some(&id))
-            .unwrap();
-        for a in &mut p.anchors {
-            for q in [&mut a.anchor, &mut a.left, &mut a.right] {
-                *q = (q.0 * sx, q.1 * sy);
+    let anchors = poly
+        .anchors
+        .iter()
+        .map(|a| {
+            let f = |q: (f32, f32)| [q.0 * sx, q.1 * sy];
+            PathAnchorSpec {
+                anchor: f(a.anchor),
+                left: f(a.left),
+                right: f(a.right),
             }
-        }
-    }
-    let w = live::follow(&elements(&doc, 0));
-    assert!(w.iter().any(|x| x.id == id), "{w:?}");
-    write(&mut doc, 0, &w);
+        })
+        .collect();
+    set(
+        &mut doc,
+        NodeId::Polygon(poly.self_id.clone().unwrap()),
+        PropertyPath::FramePath,
+        Value::FramePath {
+            anchors,
+            subpath_starts: poly.subpath_starts.clone(),
+        },
+    );
+    let p = live(outline(&doc, 0, &key));
+    assert_eq!(p.part, PresetPart::Fill);
+    assert!((p.frame[2] - 288.0).abs() < 0.01 && (p.frame[3] - 72.0).abs() < 0.01);
     let out = export_doc(&bytes, &doc);
     keep(&out.bytes, "live-roundrect-resized");
     let mine = shape_xml(&part_text(&out.bytes, S1), "Rounded Rectangle 1").to_string();
@@ -402,20 +373,13 @@ fn a_resized_rounded_rectangle_stays_a_preset_as_powerpoint_keeps_it() {
     // Read back, it is the shape PowerPoint drew on slide 2: same box, same
     // outline.
     let again = imported(&out.bytes);
-    let a = &elements(&again, 0);
-    let b = &elements(&imported(&bytes), 1);
-    let outline = |els: &[Element]| {
-        els.iter()
-            .find(|e| e.kind == "polygon" && e.label.contains("roundRect"))
-            .unwrap()
-            .anchors
-            .clone()
-    };
-    let (oa, ob) = (outline(a), outline(b));
-    assert_eq!(oa.len(), ob.len());
-    for (p, q) in oa.iter().zip(&ob) {
+    let a = &outline(&again, 0, &key).anchors;
+    let orig = imported(&bytes);
+    let b = &outline(&orig, 1, &format!("{S2}#2")).anchors;
+    assert_eq!(a.len(), b.len());
+    for (p, q) in a.iter().zip(b) {
         assert!(
-            (p[0][0] - q[0][0]).abs() < 0.01 && (p[0][1] - q[0][1]).abs() < 0.01,
+            (p.anchor.0 - q.anchor.0).abs() < 0.01 && (p.anchor.1 - q.anchor.1).abs() < 0.01,
             "{p:?} {q:?}"
         );
     }
@@ -425,19 +389,22 @@ fn a_resized_rounded_rectangle_stays_a_preset_as_powerpoint_keeps_it() {
 fn an_adjust_handle_drag_writes_the_new_adjust_value() {
     let bytes = fixture("connectors");
     let mut doc = imported(&bytes);
-    let els = elements(&doc, 0);
-    let target = els
-        .iter()
-        .find(|e| e.kind == "polygon" && e.label.contains("roundRect"))
-        .unwrap()
-        .clone();
-    let hs = live::handles(&target);
+    let rr = outline(&doc, 0, &format!("{S1}#2")).clone();
+    let hs = paged_preset_geom::model::handles(live(&rr));
     assert_eq!(hs.len(), 1);
-    // Drag it 10 pt to the right.
-    let w = live::adjust(&els, &target.id, 0, [hs[0].pos[0] + 10.0, hs[0].pos[1]]);
-    assert!(!w.is_empty());
-    write(&mut doc, 0, &w);
-    assert!(live::follow(&elements(&doc, 0)).is_empty());
+    // Drag it 10 pt to the right (the item's own coordinates).
+    set(
+        &mut doc,
+        NodeId::Polygon(rr.self_id.clone().unwrap()),
+        PropertyPath::FrameShapePresetHandle,
+        Value::PathPoint {
+            address: PathPointAddress {
+                index: 0,
+                role: PathPointRole::Anchor,
+            },
+            position: [(hs[0].pos.0 + 10.0) as f32, hs[0].pos.1 as f32],
+        },
+    );
     let out = export_doc(&bytes, &doc);
     keep(&out.bytes, "live-roundrect-adjusted");
     let mine = shape_xml(&part_text(&out.bytes, S1), "Rounded Rectangle 1").to_string();
@@ -452,4 +419,159 @@ fn an_adjust_handle_drag_writes_the_new_adjust_value() {
     ));
     // Only slide 1 changed.
     assert_eq!(part_text(&out.bytes, S2), part_text(&bytes, S2));
+}
+
+#[test]
+fn a_reshaped_preset_is_written_as_custom_geometry() {
+    let bytes = fixture("connectors");
+    let mut doc = imported(&bytes);
+    let rr = outline(&doc, 0, &format!("{S1}#2")).clone();
+    // One anchor dragged by hand: the preset is no longer what it draws.
+    set(
+        &mut doc,
+        NodeId::Polygon(rr.self_id.clone().unwrap()),
+        PropertyPath::FramePathPoint,
+        Value::PathPoint {
+            address: PathPointAddress {
+                index: 0,
+                role: PathPointRole::Anchor,
+            },
+            position: [rr.anchors[0].anchor.0 + 9.0, rr.anchors[0].anchor.1 + 9.0],
+        },
+    );
+    assert!(paged_preset_geom::model::live_preset(outline(&doc, 0, &format!("{S1}#2"))).is_none());
+    let out = export_doc(&bytes, &doc);
+    let mine = shape_xml(&part_text(&out.bytes, S1), "Rounded Rectangle 1").to_string();
+    assert!(mine.contains("<a:custGeom>"), "{mine}");
+    assert!(!mine.contains("prstGeom"), "{mine}");
+}
+
+#[test]
+fn office_line_ends_are_written_and_read_back() {
+    use paged_model::{ArrowheadType, OfficeHeadKind, OfficeHeadSize, OfficeLineEnd};
+    let bytes = fixture("connectors");
+    let mut doc = imported(&bytes);
+    // The straight connector (`cNvPr` 10) takes a large-wide, short stealth
+    // head at its end (engine ADR 1093, amendment 2).
+    let id = outline(&doc, 0, &format!("{S1}#10"))
+        .self_id
+        .clone()
+        .unwrap();
+    let head = OfficeLineEnd {
+        kind: OfficeHeadKind::Stealth,
+        w: OfficeHeadSize::Lg,
+        len: OfficeHeadSize::Sm,
+    };
+    let p = doc.spreads[0]
+        .spread
+        .polygons
+        .iter_mut()
+        .find(|p| p.self_id.as_ref() == Some(&id))
+        .unwrap();
+    p.end_office_head = Some(head);
+    p.end_arrow = head.nearest_arrowhead();
+    let out = export_doc(&bytes, &doc);
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    let x = shape_xml(&part_text(&out.bytes, S1), "Straight Arrow Connector 9").to_string();
+    assert!(
+        x.contains(r#"<a:tailEnd type="stealth" w="lg" len="sm"/>"#),
+        "{x}"
+    );
+    // Imported again, the head is Office's, with the nearest InDesign kind.
+    let again = imported(&out.bytes);
+    let p = outline(&again, 0, &format!("{S1}#10"));
+    assert_eq!(p.end_office_head, Some(head));
+    assert_eq!(p.end_arrow, ArrowheadType::Barbed);
+    assert_eq!(p.start_office_head, None);
+}
+
+#[test]
+fn a_document_saved_with_the_old_labels_exports_as_one_with_the_engines_fields() {
+    let bytes = fixture("connectors");
+    let now = imported(&bytes);
+    // The earlier labels: the preset, its box and the glue as `cNvPr` ids,
+    // with none of the engine's fields.
+    let mut old = now.clone();
+    for s in &mut old.spreads {
+        let sp = &mut s.spread;
+        let shape_of = |sp: &Spread, id: &str| -> Option<String> {
+            let v: serde_json::Value = serde_json::from_str(
+                &sp.labels
+                    .get(id)?
+                    .iter()
+                    .find(|(k, _)| k == native::LABEL_KEY)?
+                    .1,
+            )
+            .ok()?;
+            Some(v["data"]["shape"].as_str()?.to_string())
+        };
+        let mut labels = Vec::new();
+        for p in &sp.polygons {
+            let Some(pr) = &p.preset else { continue };
+            let id = p.self_id.clone().unwrap();
+            let mut d = serde_json::json!({
+                "shape": shape_of(sp, &id),
+                "preset": { "prst": pr.name, "adj": pr.adjusts },
+                "box": [pr.frame[2], pr.frame[3]],
+            });
+            if let Some(c) = &pr.connector {
+                let end = |g: &Option<paged_model::live_shape::PresetGlue>| {
+                    let k = shape_of(sp, &g.as_ref()?.item)?;
+                    let cnv: u32 = k.rsplit('#').next()?.parse().ok()?;
+                    Some(serde_json::json!({ "id": cnv, "idx": g.as_ref()?.site }))
+                };
+                d["connector"] = serde_json::json!({ "st": end(&c.start), "end": end(&c.end) });
+            }
+            labels.push((id, d));
+        }
+        for p in &mut sp.polygons {
+            p.preset = None;
+        }
+        for f in &mut sp.text_frames {
+            f.preset_text = None;
+        }
+        for (id, d) in labels {
+            let e = sp.labels.get_mut(&id).unwrap();
+            e.retain(|(k, _)| k != native::LABEL_KEY);
+            e.push((
+                native::LABEL_KEY.to_string(),
+                serde_json::json!({ "v": 1, "data": d }).to_string(),
+            ));
+        }
+    }
+    // Unedited, it exports the deck's own bytes, as the new one does.
+    assert!(export_doc(&bytes, &old).bytes == bytes);
+    assert!(export_doc(&bytes, &now).bytes == bytes);
+    // The rounded rectangle as the earlier version left it after a resize
+    // to 4 × 1 in: drawn again for the new box, the label's box updated.
+    let key = format!("{S1}#2");
+    let id = outline(&old, 0, &key).self_id.clone().unwrap();
+    let drawn = paged_preset_geom::model::draw(&PresetShape {
+        adjusts: vec![("adj".into(), "val 30000".into())],
+        part: PresetPart::Fill,
+        ..PresetShape::new("roundRect", 288.0, 72.0)
+    })
+    .unwrap();
+    let sp = &mut old.spreads[0].spread;
+    let p = sp
+        .polygons
+        .iter_mut()
+        .find(|p| p.self_id.as_ref() == Some(&id))
+        .unwrap();
+    p.bounds = drawn.bounds().unwrap();
+    p.anchors = drawn.anchors;
+    let slot = sp
+        .labels
+        .get_mut(&id)
+        .unwrap()
+        .iter_mut()
+        .find(|(k, _)| k == native::LABEL_KEY)
+        .unwrap();
+    slot.1 = slot.1.replace("[180.0,108.0]", "[288.0,72.0]");
+    assert!(slot.1.contains("[288.0,72.0]"), "{}", slot.1);
+    let out = export_doc(&bytes, &old);
+    let mine = shape_xml(&part_text(&out.bytes, S1), "Rounded Rectangle 1").to_string();
+    let ppt = shape_xml(&part_text(&bytes, S2), "Rounded Rectangle 1").to_string();
+    assert!(same_box(xfrm(&mine), xfrm(&ppt)), "{mine}");
+    assert!(mine.contains(r#"<a:prstGeom prst="roundRect">"#), "{mine}");
 }

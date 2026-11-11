@@ -21,7 +21,7 @@ Range 700–749.
 | [714](714-timeline-model-and-full-effect-set.md) | Timeline model and full effect set: the timing as a tree, a Rust player, layers composited on WebGPU, presets from PowerPoint | Accepted 2026-10-28; amended 2026-10-30 (motion paths on the canvas) |
 | [715](715-live-charts-via-paged-sheet.md) | Live charts via paged.sheet: the chart's workbook in the slide wasm, slide-chart for the kinds it lays out, paged.sheet for the rest | Accepted 2026-10-25 |
 | [716](716-slide-show-and-presenter-view.md) | Slide show and presenter view: one presentation in three roles, PowerPoint's keys, the slide sorter as a module view | Accepted 2026-10-25 |
-| [717](717-live-presets-and-connectors.md) | Live presets and connectors | Accepted 2026-10-25; amended 2026-10-28 (pictures, format painter, SmartArt text), 2026-11-09 (adjust handles; SmartArt text turns); pictures amended by ADR 723 |
+| [717](717-live-presets-and-connectors.md) | Live presets and connectors | Accepted 2026-10-25; amended 2026-10-28 (pictures, format painter, SmartArt text), 2026-11-09 (adjust handles; SmartArt text turns), 2026-11-11 (the live preset is the engine's, engine ADR 1096); pictures amended by ADR 723 |
 | [718](718-media.md) | Media: video and audio imported, played in the show, inserted, exported to PowerPoint and into the MP4 | Accepted 2026-10-30 |
 | [719](719-document-styles.md) | Document styles: placeholders, table styles and shape styles as the document's styles | Accepted 2026-10-29 |
 | [720](720-output-formats-including-mp4.md) | Output formats, including MP4: .potx, PDF handouts and notes pages, the outline, video; sections and custom shows | Accepted 2026-10-28 |
