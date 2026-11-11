@@ -724,7 +724,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(40);
     expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(138);
+    expect(COMMANDS).toHaveLength(136);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
