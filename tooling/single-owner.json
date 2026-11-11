@@ -138,7 +138,6 @@
         "modules/data/packages/data-bundle/src/__tests__/assets.test.ts",
         "modules/data/packages/data-bundle/src/assets.ts",
         "modules/draw/packages/draw-bundle/src/commands/rasterize.ts",
-        "modules/sheet/sheet-js/src/core/annotations.rs",
         "modules/web/packages/web-bundle/test/engine-inputs.spec.ts",
         "platform/extensions/packages/plugin-sdk/src/bytes.ts",
         "tests/gpu/slide-transitions/harness.ts"
